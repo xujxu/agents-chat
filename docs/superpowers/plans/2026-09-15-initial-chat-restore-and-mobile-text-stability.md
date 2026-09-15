@@ -853,3 +853,95 @@ On physical iPhone Safari:
 Expected: all six acceptance checks succeed. If the physical font still grows,
 capture whether browser chrome/page dimensions also scale; do not add
 `maximum-scale=1` or `user-scalable=no`.
+
+### Task 2B: Apply text stability directly to the application subtree
+
+**Files:**
+- Modify: `tests/mobile-responsive.spec.ts:247-355`
+- Modify: `app/globals.css:38-42`
+
+- [ ] **Step 1: Extend the failing test across immediate and delayed reflow**
+
+In `prevents automatic zoom across repeated orientation changes`, record the
+initial computed font sizes of `.messageContent.markdownBody`,
+`.chatPageRoot .header h1`, and `.composerTextarea`. After each existing
+orientation lifecycle, assert all three still match. After the final lifecycle,
+wait 2.5 seconds and assert all three again so the test covers the delayed iOS
+Chrome reflow:
+
+```ts
+const stableTypography = page.locator(
+  '.messageContent.markdownBody, .chatPageRoot .header h1, .composerTextarea',
+);
+const initialTypography = await stableTypography.evaluateAll((elements) =>
+  elements.map((element) => getComputedStyle(element).fontSize)
+);
+
+const expectStableTypography = async () => {
+  await expect.poll(() => stableTypography.evaluateAll((elements) =>
+    elements.map((element) => getComputedStyle(element).fontSize)
+  )).toEqual(initialTypography);
+};
+```
+
+Call `await expectStableTypography()` inside the viewport loop and again after:
+
+```ts
+await page.waitForTimeout(2_500);
+await expectStableTypography();
+```
+
+Extend the authored-policy check so matching rules for `html`,
+`.chatPageRoot`, and `.messageContent.markdownBody` all resolve to `none`.
+
+- [ ] **Step 2: Run the targeted mobile test and capture the current gap**
+
+Run:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://localhost:3011 \
+npx playwright test --config tests/playwright.config.ts \
+tests/mobile-responsive.spec.ts \
+--project=android-chromium --project=iphone-webkit --workers=1 \
+-g "prevents automatic zoom across repeated orientation changes"
+```
+
+Expected: FAIL because `none` is currently authored only for `html`, not the
+application root and Markdown content evaluated by WebKit during later reflow.
+
+- [ ] **Step 3: Apply the policy directly to the whole application**
+
+In `app/globals.css`, replace the current `html` rule with:
+
+```css
+html,
+.chatPageRoot,
+.chatPageRoot * {
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+}
+```
+
+Keep the viewport metadata and 16px mobile editable-control rule unchanged.
+
+- [ ] **Step 4: Run both mobile projects**
+
+Run:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://localhost:3011 \
+npx playwright test --config tests/playwright.config.ts \
+tests/mobile-responsive.spec.ts \
+--project=android-chromium --project=iphone-webkit --workers=1 \
+-g "prevents automatic zoom across repeated orientation changes"
+```
+
+Expected: 2 passed, including immediate and delayed typography checks.
+
+- [ ] **Step 5: Commit the direct application policy**
+
+```bash
+git add app/globals.css tests/mobile-responsive.spec.ts
+git commit -m "fix: stabilize iOS orientation typography" \
+  -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+```

@@ -47,6 +47,21 @@ inflation algorithm. On a physical iPhone, Safari can recalculate inflated
 text during orientation changes, so repeated transitions may visually enlarge
 Chat content even though the CSS font-size declarations have not changed.
 
+Physical-device verification after applying `none` only to `html` showed that
+the inherited root declaration is not sufficient:
+
+- Safari enlarges Markdown body text in landscape and restores it in portrait.
+- Safari may briefly enlarge framework text such as the header and Composer
+  controls before restoring it.
+- iOS Chrome enlarges Markdown in landscape; after returning to portrait it
+  briefly restores the original size, then enlarges again one or two seconds
+  later.
+
+The delayed iOS Chrome behavior aligns with a second WebKit viewport reflow
+after browser chrome settles. Both browsers therefore require the policy on
+the application and content elements that WebKit reevaluates, not only on the
+document root.
+
 The viewport intentionally allows user scaling and must continue to do so.
 Disabling pinch zoom with `maximum-scale=1` or `user-scalable=no` is outside
 the scope of this fix.
@@ -127,16 +142,21 @@ ID and real title.
 
 ### Disable automatic text inflation, not user zoom
 
-Change the document policy to:
+Set the policy directly on both the application subtree and the document:
 
 ```css
--webkit-text-size-adjust: none;
-text-size-adjust: none;
+html,
+.chatPageRoot,
+.chatPageRoot * {
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+}
 ```
 
-This disables Safari's automatic text inflation across viewport and
-orientation changes. It does not change declared message font sizes or
-breakpoint typography.
+The explicit application-subtree rule prevents Safari and iOS Chrome from
+reapplying automatic text inflation to Markdown blocks or framework text
+during immediate and delayed orientation reflows. It does not change declared
+font sizes or breakpoint typography.
 
 Keep the existing viewport metadata unchanged:
 
@@ -196,9 +216,12 @@ For Android Chromium and iPhone WebKit mobile projects:
 
 - record a Chat message's computed font size;
 - drive repeated portrait/landscape viewport lifecycles;
-- assert the computed message font size remains unchanged;
+- assert Markdown and representative framework font sizes remain unchanged
+  immediately after each lifecycle;
+- wait longer than the observed two-second iOS Chrome settling window and
+  assert those font sizes remain unchanged again;
 - where the browser implements `text-size-adjust`, assert its computed value
-  is `none`;
+  is `none` on the document, application root, and Markdown content;
 - assert mobile editable controls remain at least 16px; and
 - assert the viewport still contains no setting that disables pinch zoom.
 
@@ -225,7 +248,8 @@ responsive suites serially against one development server.
   deterministically without stale responses overwriting newer state.
 - Initial loading ends when historical messages are rendered; orchestration
   and agent-session resume continue without blocking the Chat UI.
-- Repeated orientation changes do not automatically enlarge Chat text on
-  mobile Safari.
+- Repeated orientation changes do not automatically enlarge Markdown or
+  framework text in Safari or iOS Chrome, including one or two seconds after
+  returning to portrait.
 - User pinch zoom remains enabled, mobile input auto-zoom protection remains
   active, and existing scroll-position stability is preserved.
