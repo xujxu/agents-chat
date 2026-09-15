@@ -252,18 +252,54 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
   const viewportContent = await page.locator('meta[name="viewport"]').getAttribute('content');
   expect(viewportContent).not.toMatch(/maximum-scale=1|user-scalable=no/);
   await expect.poll(() => page.locator('html').evaluate((element) => {
+    const supported = CSS.supports('text-size-adjust', 'none')
+      || CSS.supports('-webkit-text-size-adjust', 'none');
+    if (!supported) return { supported, value: '' };
+
+    let declaredValue = '';
+    const visitRules = (rules: CSSRuleList) => {
+      for (const rule of Array.from(rules)) {
+        if (rule instanceof CSSStyleRule && element.matches(rule.selectorText)) {
+          const value = rule.style.getPropertyValue('text-size-adjust')
+            || rule.style.getPropertyValue('-webkit-text-size-adjust');
+          if (value) declaredValue = value;
+        } else if ('cssRules' in rule) {
+          visitRules((rule as CSSGroupingRule).cssRules);
+        }
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      visitRules(sheet.cssRules);
+    }
+
+    const probe = document.createElement('div');
+    probe.style.setProperty('text-size-adjust', 'none');
+    probe.style.setProperty('-webkit-text-size-adjust', 'none');
+    document.body.append(probe);
+    const probeStyle = getComputedStyle(probe);
+    const computedSupported = probeStyle.getPropertyValue('text-size-adjust') === 'none'
+      || probeStyle.getPropertyValue('-webkit-text-size-adjust') === 'none';
+    probe.remove();
+
     const style = getComputedStyle(element);
-    const supported = CSS.supports('text-size-adjust', '100%')
-      || CSS.supports('-webkit-text-size-adjust', '100%');
-    const value = style.getPropertyValue('text-size-adjust')
+    const computedValue = style.getPropertyValue('text-size-adjust')
       || style.getPropertyValue('-webkit-text-size-adjust');
-    return { supported, value };
+    return {
+      supported,
+      value: computedSupported ? computedValue : declaredValue,
+    };
   })).toEqual(await page.evaluate(() => (
-    CSS.supports('text-size-adjust', '100%')
-      || CSS.supports('-webkit-text-size-adjust', '100%')
-      ? { supported: true, value: '100%' }
+    CSS.supports('text-size-adjust', 'none')
+      || CSS.supports('-webkit-text-size-adjust', 'none')
+      ? { supported: true, value: 'none' }
       : { supported: false, value: '' }
   )));
+
+  const message = page.locator('.message').first();
+  const initialMessageFontSize = await message.evaluate((element) =>
+    getComputedStyle(element).fontSize
+  );
+
   await expect.poll(() => textarea.evaluate((element) =>
     Number.parseFloat(getComputedStyle(element).fontSize)
   )).toBeGreaterThanOrEqual(16);
@@ -304,6 +340,9 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
       containedByViewport: true,
       height: viewport.height,
     });
+    await expect.poll(() => message.evaluate((element) =>
+      getComputedStyle(element).fontSize
+    )).toBe(initialMessageFontSize);
     layoutWidths.push(await page.locator('.chatPageRoot .page').evaluate((element) =>
       Math.round(element.getBoundingClientRect().width)
     ));
