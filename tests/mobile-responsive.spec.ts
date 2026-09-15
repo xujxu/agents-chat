@@ -364,11 +364,7 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
       containedByViewport: true,
       height: viewport.height,
     });
-    const expectedTypography = [...initialTypography];
-    if (browserName !== 'webkit' && viewport.width > 560) {
-      expectedTypography[1] = '18px';
-    }
-    await expectStableTypography(expectedTypography);
+    await expectStableTypography();
     layoutWidths.push(await page.locator('.chatPageRoot .page').evaluate((element) =>
       Math.round(element.getBoundingClientRect().width)
     ));
