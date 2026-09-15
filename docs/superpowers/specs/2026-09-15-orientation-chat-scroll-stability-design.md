@@ -107,7 +107,7 @@ Extend mobile Playwright coverage with a long conversation:
    and assert the distance from the bottom remains within four pixels.
 2. Scroll to a historical position, record the top-intersecting `.message` and
    its offset, trigger the portrait viewport lifecycle, and assert the same
-element remains at the same offset within four CSS pixels.
+   element remains at the same offset within four CSS pixels.
 3. Confirm the jump-to-latest button is visible in the historical case.
 4. Repeat coverage in Android Chromium and iPhone WebKit. Where Playwright
    WebKit cannot mutate the fixed mobile screen width reliably, drive the
