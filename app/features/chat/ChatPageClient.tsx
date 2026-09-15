@@ -6,6 +6,7 @@ import { acpApi } from './chatApi';
 import { getDefaultAgentId, getExistingAgentId, getMentionedAgentIds, SCHEDULER_AGENT_ID } from './chatHelpers';
 import { useAgentRegistry } from './runtime/useAgentRegistry';
 import { useChatRuntime } from './runtime/useChatRuntime';
+import { useChatOrientationScrollStability } from './runtime/useChatOrientationScrollStability';
 import { useComposerState } from './runtime/useComposerState';
 import { useSlashCommands } from './runtime/useSlashCommands';
 import { usePageUIState } from './runtime/usePageUIState';
@@ -80,6 +81,12 @@ export function ChatPageClient() {
   const { messages, chatHistory, currentChatId, activeSidebarChatId, chatName, runVersion, shareDialog, expandedMessages, orchestrationMode, pendingWorkflowPlan, dismissedFollowUpOrchId, setDismissedFollowUpOrchId, dismissedWorkflowBarOrchId, setChatHistory, setChatName, setCurrentChatId, setActiveSidebarChatId, setShareDialog, setExpandedMessages, setOrchestrationMode, setPendingWorkflowPlan, currentChatIdRef, sessionRunsRef, currentAgentSessionsRef, inputHistoryRef, orchestrationsRef, addMessage, updateMessage, notifyRunStateChanged, dispatchToAgent, saveCurrentChatToHistory, clearChatMessages, shareCurrentChat, handleStop, retryFailedSend, sendWorkflowFollowUpReply, answerAgentUserRequest, dismissAgentUserRequest, fileCommentCallbacksRef, panelCallbacksRef, loadChat: runtimeLoadChat, createNewChat: runtimeCreateNewChat, renameChatById: runtimeRenameChatById, deleteChatById: runtimeDeleteChatById, handleSend: runtimeHandleSend, loadChatIntoCache, getChatSidebarStatus } = runtime;
   const [showWorkflowPicker, setShowWorkflowPicker] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const orientationScroll = useChatOrientationScrollStability({
+    containerRef: chatContainerRef,
+    shouldStickToBottomRef,
+    lastScrollTopRef: lastChatScrollTopRef,
+    setShowScrollToBottom,
+  });
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [chatSearchResults, setChatSearchResults] = useState<{ id: string; name: string; ts: number; agentId?: string }[] | null>(null);
   const [chatSearchLoading, setChatSearchLoading] = useState(false);
@@ -237,12 +244,16 @@ export function ChatPageClient() {
   useEffect(() => { const el = chatContainerRef.current; if (!el) return; const onScroll = () => updateChatStickiness(el); onScroll(); el.addEventListener('scroll', onScroll, { passive: true }); return () => el.removeEventListener('scroll', onScroll); }, []);
 
   function updateChatStickiness(container: HTMLElement) {
+    if (orientationScroll.handleRelayoutScroll()) return;
     const previous = lastChatScrollTopRef.current;
     const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
     const nearBottom = distance <= 4;
-    shouldStickToBottomRef.current = container.scrollTop < previous - 1 ? false : nearBottom;
+    const movedUp = container.scrollTop < previous - 1;
+    shouldStickToBottomRef.current = nearBottom
+      || (shouldStickToBottomRef.current && !movedUp);
     setShowScrollToBottom(!nearBottom);
     lastChatScrollTopRef.current = container.scrollTop;
+    orientationScroll.captureStableAnchor(container);
   }
   function scrollToLatest() {
     const container = chatContainerRef.current;

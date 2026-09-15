@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import type { MobileOverlay } from '../hooks/useMobileOverlayState';
+import { APP_VIEWPORT_WILL_CHANGE_EVENT } from '../viewportEvents';
 
 export type ChatShellProps = {
   sidebar: ReactNode;
@@ -55,6 +56,7 @@ export function ChatShell({
     const syncViewport = () => {
       const height = visualViewport?.height ?? window.innerHeight;
       const offsetTop = visualViewport?.offsetTop ?? 0;
+      window.dispatchEvent(new Event(APP_VIEWPORT_WILL_CHANGE_EVENT));
       page.style.setProperty('--app-viewport-height', `${Math.round(height)}px`);
       page.style.setProperty('--app-viewport-offset-top', `${Math.round(offsetTop)}px`);
     };

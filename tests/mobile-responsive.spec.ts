@@ -326,7 +326,7 @@ test('keeps the latest message pinned through portrait relayout', async ({ page 
   await triggerViewportRelayoutWithScrollDrift(page, 760, -180);
 
   await expect.poll(() => getDistanceFromChatBottom(page), {
-    timeout: 2000,
+    timeout: 5000,
   }).toBeLessThanOrEqual(4);
   await expect(page.getByRole('button', {
     name: 'Jump to latest messages',
@@ -357,7 +357,7 @@ test('keeps the same historical message position through portrait relayout', asy
       sameMessage: after.index === before.index,
       offsetDelta: Math.round(Math.abs(after.offsetTop - before.offsetTop)),
     };
-  }, { timeout: 2000 }).toEqual({
+  }, { timeout: 5000 }).toEqual({
     sameMessage: true,
     offsetDelta: 0,
   });

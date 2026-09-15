@@ -170,6 +170,8 @@ git commit -m "test: cover chat position during orientation" \
 
 **Files:**
 - Create: `app/features/chat/runtime/useChatOrientationScrollStability.ts`
+- Create: `app/features/layout/viewportEvents.ts`
+- Modify: `app/features/layout/components/ChatShell.tsx:50-72`
 - Modify: `app/features/chat/ChatPageClient.tsx:1-90,217-252`
 - Test: `tests/mobile-responsive.spec.ts`
 
@@ -298,13 +300,38 @@ Continue the hook with:
 
 - [ ] **Step 3: Implement debounced viewport lifecycle handling**
 
+Create `app/features/layout/viewportEvents.ts`:
+
+```ts
+export const APP_VIEWPORT_WILL_CHANGE_EVENT = 'agents-chat:viewport-will-change';
+```
+
+In `ChatShell.tsx`, import the constant and dispatch it immediately before
+writing the viewport CSS variables:
+
+```ts
+window.dispatchEvent(new Event(APP_VIEWPORT_WILL_CHANGE_EVENT));
+page.style.setProperty('--app-viewport-height', `${Math.round(height)}px`);
+page.style.setProperty('--app-viewport-offset-top', `${Math.round(offsetTop)}px`);
+```
+
+This captures the stable anchor before the CSS write can synchronously reflow
+the chat and generate a scroll event.
+
 Continue:
 
 ```ts
   const scheduleRestore = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    if (!stableAnchorRef.current) captureStableAnchor(container);
+    if (shouldStickToBottomRef.current) {
+      stableAnchorRef.current = {
+        kind: 'bottom',
+        scrollTop: container.scrollTop,
+      };
+    } else if (!stableAnchorRef.current) {
+      captureStableAnchor(container);
+    }
     relayoutActiveRef.current = true;
 
     if (settleTimerRef.current !== null) {
@@ -320,19 +347,31 @@ Continue:
         );
       });
     }, VIEWPORT_SETTLE_MS);
-  }, [captureStableAnchor, containerRef, restoreStableAnchor]);
+  }, [
+    captureStableAnchor,
+    containerRef,
+    restoreStableAnchor,
+    shouldStickToBottomRef,
+  ]);
 
   useEffect(() => {
     const visualViewport = window.visualViewport;
+    const captureBeforeRelayout = () => {
+      const container = containerRef.current;
+      if (container) captureStableAnchor(container);
+      scheduleRestore();
+    };
     const continueActiveRelayout = () => {
       if (relayoutActiveRef.current) scheduleRestore();
     };
 
+    window.addEventListener(APP_VIEWPORT_WILL_CHANGE_EVENT, captureBeforeRelayout);
     window.addEventListener('resize', scheduleRestore);
     window.addEventListener('orientationchange', scheduleRestore);
     visualViewport?.addEventListener('resize', scheduleRestore);
     visualViewport?.addEventListener('scroll', continueActiveRelayout);
     return () => {
+      window.removeEventListener(APP_VIEWPORT_WILL_CHANGE_EVENT, captureBeforeRelayout);
       window.removeEventListener('resize', scheduleRestore);
       window.removeEventListener('orientationchange', scheduleRestore);
       visualViewport?.removeEventListener('resize', scheduleRestore);
@@ -343,7 +382,7 @@ Continue:
       window.cancelAnimationFrame(firstFrameRef.current);
       window.cancelAnimationFrame(secondFrameRef.current);
     };
-  }, [scheduleRestore]);
+  }, [captureStableAnchor, containerRef, scheduleRestore]);
 
   const handleRelayoutScroll = useCallback(() =>
     relayoutActiveRef.current, []);
@@ -387,8 +426,9 @@ Update `updateChatStickiness`:
     const distance =
       container.scrollHeight - container.scrollTop - container.clientHeight;
     const nearBottom = distance <= 4;
-    shouldStickToBottomRef.current =
-      container.scrollTop < previous - 1 ? false : nearBottom;
+    const movedUp = container.scrollTop < previous - 1;
+    shouldStickToBottomRef.current = nearBottom
+      || (shouldStickToBottomRef.current && !movedUp);
     setShowScrollToBottom(!nearBottom);
     lastChatScrollTopRef.current = container.scrollTop;
     orientationScroll.captureStableAnchor(container);
@@ -449,6 +489,8 @@ Expected: both existing tests pass.
 ```bash
 git add \
   app/features/chat/runtime/useChatOrientationScrollStability.ts \
+  app/features/layout/viewportEvents.ts \
+  app/features/layout/components/ChatShell.tsx \
   app/features/chat/ChatPageClient.tsx
 git commit -m "fix: preserve chat position on orientation change" \
   -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"

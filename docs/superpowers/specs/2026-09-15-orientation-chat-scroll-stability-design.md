@@ -51,6 +51,14 @@ instead of recalculating from already-reflowed geometry. While relayout is
 active, scroll events caused by browser geometry changes do not update
 bottom-stickiness or replace the anchor.
 
+The generic pre-relayout event always refreshes the snapshot from current DOM
+geometry before `ChatShell` writes viewport CSS variables. Later resize events
+only extend the settling window and cannot replace that pre-change snapshot.
+
+The existing `shouldStickToBottomRef` remains authoritative. If it is true
+when relayout begins, the hook refreshes the snapshot as bottom-pinned even if
+an older message anchor was recorded during an unrelated asynchronous reflow.
+
 Each viewport event restarts a short settling timer. After the timer, two
 animation frames allow CSS layout and the visual viewport variables to settle
 before restoration:
@@ -82,12 +90,15 @@ message data, chat persistence, Composer focus, overlays, or viewport metadata.
   viewport relayout.
 - `MessageList` and `MessageBubble` require no new state. Existing `.message`
   elements are sufficient as stable DOM anchors.
-- `ChatShell` continues to synchronize application viewport height/offset; it
-  does not manage chat scroll.
+- `ChatShell` emits a generic pre-relayout lifecycle event immediately before
+  synchronizing application viewport height/offset. It does not inspect or
+  manage chat scroll.
 
 ## Interaction Rules
 
 - A chat within four pixels of its bottom counts as bottom-pinned.
+- Being within that threshold is authoritative even when the new bottom
+  `scrollTop` is numerically lower after viewport or content reflow.
 - Browser-generated scroll changes during viewport relayout do not count as
   user intent.
 - Normal wheel/touch scrolling after restoration continues to detach or
