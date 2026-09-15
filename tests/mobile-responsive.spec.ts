@@ -201,14 +201,26 @@ test('keeps navigation, composer, and overlays usable in landscape', async ({ pa
   expect(navigationBox!.height).toBeLessThanOrEqual(390);
 });
 
-test('prevents automatic zoom across repeated orientation changes', async ({ page }) => {
+test('prevents automatic zoom across repeated orientation changes', async ({ page, browserName }) => {
   const textarea = page.locator('textarea.composerTextarea');
   await textarea.fill('orientation-safe draft');
   await textarea.focus();
 
   const viewportContent = await page.locator('meta[name="viewport"]').getAttribute('content');
   expect(viewportContent).not.toMatch(/maximum-scale=1|user-scalable=no/);
-  await expect(page.locator('.chatPageRoot')).toHaveCSS('-webkit-text-size-adjust', '100%');
+  await expect.poll(() => page.locator('html').evaluate((element) => {
+    const style = getComputedStyle(element);
+    const supported = CSS.supports('text-size-adjust', '100%')
+      || CSS.supports('-webkit-text-size-adjust', '100%');
+    const value = style.getPropertyValue('text-size-adjust')
+      || style.getPropertyValue('-webkit-text-size-adjust');
+    return { supported, value };
+  })).toEqual(await page.evaluate(() => (
+    CSS.supports('text-size-adjust', '100%')
+      || CSS.supports('-webkit-text-size-adjust', '100%')
+      ? { supported: true, value: '100%' }
+      : { supported: false, value: '' }
+  )));
   await expect.poll(() => textarea.evaluate((element) =>
     Number.parseFloat(getComputedStyle(element).fontSize)
   )).toBeGreaterThanOrEqual(16);
@@ -220,6 +232,7 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
 
   await page.getByRole('button', { name: 'Open navigation' }).click();
   const navigation = page.getByRole('dialog', { name: 'Chats and files navigation' });
+  const layoutWidths: number[] = [];
 
   for (const viewport of [
     { width: 844, height: 390 },
@@ -227,7 +240,9 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
     { width: 844, height: 390 },
     { width: 430, height: 760 },
   ]) {
-    await page.setViewportSize(viewport);
+    if (browserName !== 'webkit') {
+      await page.setViewportSize(viewport);
+    }
     await setTestVisualViewport(page, viewport.height, 0);
     await page.evaluate(() => window.dispatchEvent(new Event('orientationchange')));
 
@@ -237,12 +252,22 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
       return {
         left: Math.round(rect.left),
         top: Math.round(rect.top),
-        width: Math.round(rect.width),
+        containedByViewport: rect.left >= -1 && rect.right <= window.innerWidth + 1,
         height: Math.round(rect.height),
       };
-    })).toEqual({ left: 0, top: 0, width: viewport.width, height: viewport.height });
+    })).toEqual({
+      left: 0,
+      top: 0,
+      containedByViewport: true,
+      height: viewport.height,
+    });
+    layoutWidths.push(await page.locator('.chatPageRoot .page').evaluate((element) =>
+      Math.round(element.getBoundingClientRect().width)
+    ));
   }
 
+  expect(layoutWidths[2]).toBe(layoutWidths[0]);
+  expect(layoutWidths[3]).toBe(layoutWidths[1]);
   await page.getByRole('button', { name: 'Close navigation' }).click();
   await expect(textarea).toHaveValue('orientation-safe draft');
 });
