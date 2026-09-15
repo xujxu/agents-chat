@@ -40,6 +40,49 @@ async function expectExactlyOneActiveModal(page: import('@playwright/test').Page
   await expect(page.locator('[role="dialog"][aria-modal="true"]:not([aria-hidden="true"])')).toHaveCount(1);
 }
 
+async function getDistanceFromChatBottom(page: import('@playwright/test').Page) {
+  return page.locator('.chatContainer').evaluate((element) =>
+    element.scrollHeight - element.scrollTop - element.clientHeight
+  );
+}
+
+async function getTopMessageAnchor(page: import('@playwright/test').Page) {
+  return page.locator('.chatContainer').evaluate((container) => {
+    const containerTop = container.getBoundingClientRect().top;
+    const messages = Array.from(container.querySelectorAll<HTMLElement>('.message'));
+    const index = messages.findIndex((message) =>
+      message.getBoundingClientRect().bottom > containerTop
+    );
+    if (index < 0) return null;
+    return {
+      index,
+      offsetTop: messages[index].getBoundingClientRect().top - containerTop,
+    };
+  });
+}
+
+async function triggerViewportRelayoutWithScrollDrift(
+  page: import('@playwright/test').Page,
+  nextHeight: number,
+  scrollDrift: number,
+) {
+  await setTestVisualViewport(page, nextHeight, 0);
+  await page.evaluate(({ drift }) => {
+    window.dispatchEvent(new Event('resize'));
+    window.dispatchEvent(new Event('orientationchange'));
+    const container = document.querySelector<HTMLElement>('.chatContainer');
+    if (!container) throw new Error('Chat container not found');
+    container.scrollTop = Math.max(
+      0,
+      Math.min(
+        container.scrollTop + drift,
+        container.scrollHeight - container.clientHeight,
+      ),
+    );
+    container.dispatchEvent(new Event('scroll'));
+  }, { drift: scrollDrift });
+}
+
 test('separates left navigation from management actions', async ({ page }) => {
   const navigation = page.getByRole('button', { name: 'Open navigation' });
   await expect(navigation).toBeVisible();
@@ -270,6 +313,57 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
   expect(layoutWidths[3]).toBe(layoutWidths[1]);
   await page.getByRole('button', { name: 'Close navigation' }).click();
   await expect(textarea).toHaveValue('orientation-safe draft');
+});
+
+test('keeps the latest message pinned through portrait relayout', async ({ page }) => {
+  const chat = page.locator('.chatContainer');
+  await chat.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    element.dispatchEvent(new Event('scroll'));
+  });
+  await expect.poll(() => getDistanceFromChatBottom(page)).toBeLessThanOrEqual(4);
+
+  await triggerViewportRelayoutWithScrollDrift(page, 760, -180);
+
+  await expect.poll(() => getDistanceFromChatBottom(page), {
+    timeout: 2000,
+  }).toBeLessThanOrEqual(4);
+  await expect(page.getByRole('button', {
+    name: 'Jump to latest messages',
+  })).toHaveCount(0);
+});
+
+test('keeps the same historical message position through portrait relayout', async ({ page }) => {
+  const chat = page.locator('.chatContainer');
+  await chat.evaluate((element) => {
+    element.scrollTop = Math.round(
+      (element.scrollHeight - element.clientHeight) * 0.55,
+    );
+    element.dispatchEvent(new Event('scroll'));
+  });
+
+  const before = await getTopMessageAnchor(page);
+  expect(before).not.toBeNull();
+  await expect(page.getByRole('button', {
+    name: 'Jump to latest messages',
+  })).toBeVisible();
+
+  await triggerViewportRelayoutWithScrollDrift(page, 760, 140);
+
+  await expect.poll(async () => {
+    const after = await getTopMessageAnchor(page);
+    if (!before || !after) return null;
+    return {
+      sameMessage: after.index === before.index,
+      offsetDelta: Math.round(Math.abs(after.offsetTop - before.offsetTop)),
+    };
+  }, { timeout: 2000 }).toEqual({
+    sameMessage: true,
+    offsetDelta: 0,
+  });
+  await expect(page.getByRole('button', {
+    name: 'Jump to latest messages',
+  })).toBeVisible();
 });
 
 test('restores the inline body overflow that existed before mobile scroll lock', async ({ page }) => {
