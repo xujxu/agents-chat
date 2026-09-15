@@ -36,7 +36,9 @@ body {
   font-family: 'Segoe UI Variable Text', 'Segoe UI', 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
 }
 
-html {
+html,
+.chatPageRoot,
+.chatPageRoot * {
   -webkit-text-size-adjust: none;
   text-size-adjust: none;
 }

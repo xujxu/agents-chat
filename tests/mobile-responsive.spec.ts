@@ -251,18 +251,28 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
 
   const viewportContent = await page.locator('meta[name="viewport"]').getAttribute('content');
   expect(viewportContent).not.toMatch(/maximum-scale=1|user-scalable=no/);
-  await expect.poll(() => page.locator('html').evaluate((element) => {
+  await expect.poll(() => page.evaluate(() => {
+    const selectors = ['html', '.chatPageRoot', '.messageContent.markdownBody'];
+    const elements = selectors.map((selector) => {
+      const element = document.querySelector(selector);
+      if (!element) throw new Error(`Text-adjust target not found: ${selector}`);
+      return element;
+    });
     const supported = CSS.supports('text-size-adjust', 'none')
       || CSS.supports('-webkit-text-size-adjust', 'none');
-    if (!supported) return { supported, value: '' };
+    if (!supported) return { supported, values: elements.map(() => '') };
 
-    let declaredValue = '';
+    const declaredValues = elements.map(() => '');
     const visitRules = (rules: CSSRuleList) => {
       for (const rule of Array.from(rules)) {
-        if (rule instanceof CSSStyleRule && element.matches(rule.selectorText)) {
+        if (rule instanceof CSSStyleRule) {
           const value = rule.style.getPropertyValue('text-size-adjust')
             || rule.style.getPropertyValue('-webkit-text-size-adjust');
-          if (value) declaredValue = value;
+          if (value) {
+            elements.forEach((element, index) => {
+              if (element.matches(rule.selectorText)) declaredValues[index] = value;
+            });
+          }
         } else if ('cssRules' in rule) {
           visitRules((rule as CSSGroupingRule).cssRules);
         }
@@ -281,24 +291,38 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
       || probeStyle.getPropertyValue('-webkit-text-size-adjust') === 'none';
     probe.remove();
 
-    const style = getComputedStyle(element);
-    const computedValue = style.getPropertyValue('text-size-adjust')
-      || style.getPropertyValue('-webkit-text-size-adjust');
     return {
       supported,
-      value: computedSupported ? computedValue : declaredValue,
+      values: computedSupported
+        ? elements.map((element) => {
+          const style = getComputedStyle(element);
+          return style.getPropertyValue('text-size-adjust')
+            || style.getPropertyValue('-webkit-text-size-adjust');
+        })
+        : declaredValues,
     };
   })).toEqual(await page.evaluate(() => (
     CSS.supports('text-size-adjust', 'none')
       || CSS.supports('-webkit-text-size-adjust', 'none')
-      ? { supported: true, value: 'none' }
-      : { supported: false, value: '' }
+      ? { supported: true, values: ['none', 'none', 'none'] }
+      : { supported: false, values: ['', '', ''] }
   )));
 
-  const message = page.locator('.message').first();
-  const initialMessageFontSize = await message.evaluate((element) =>
-    getComputedStyle(element).fontSize
-  );
+  const typographySelectors = [
+    '.messageContent.markdownBody',
+    '.chatPageRoot .header h1',
+    '.composerTextarea',
+  ];
+  const readTypography = () => page.evaluate((selectors) =>
+    selectors.map((selector) => {
+      const element = document.querySelector(selector);
+      if (!element) throw new Error(`Typography target not found: ${selector}`);
+      return getComputedStyle(element).fontSize;
+    }), typographySelectors);
+  const initialTypography = await readTypography();
+  const expectStableTypography = async (expected = initialTypography) => {
+    await expect.poll(readTypography).toEqual(expected);
+  };
 
   await expect.poll(() => textarea.evaluate((element) =>
     Number.parseFloat(getComputedStyle(element).fontSize)
@@ -340,14 +364,18 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
       containedByViewport: true,
       height: viewport.height,
     });
-    await expect.poll(() => message.evaluate((element) =>
-      getComputedStyle(element).fontSize
-    )).toBe(initialMessageFontSize);
+    const expectedTypography = [...initialTypography];
+    if (browserName !== 'webkit' && viewport.width > 560) {
+      expectedTypography[1] = '18px';
+    }
+    await expectStableTypography(expectedTypography);
     layoutWidths.push(await page.locator('.chatPageRoot .page').evaluate((element) =>
       Math.round(element.getBoundingClientRect().width)
     ));
   }
 
+  await page.waitForTimeout(2_500);
+  await expectStableTypography();
   expect(layoutWidths[2]).toBe(layoutWidths[0]);
   expect(layoutWidths[3]).toBe(layoutWidths[1]);
   await page.getByRole('button', { name: 'Close navigation' }).click();
