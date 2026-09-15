@@ -201,6 +201,52 @@ test('keeps navigation, composer, and overlays usable in landscape', async ({ pa
   expect(navigationBox!.height).toBeLessThanOrEqual(390);
 });
 
+test('prevents automatic zoom across repeated orientation changes', async ({ page }) => {
+  const textarea = page.locator('textarea.composerTextarea');
+  await textarea.fill('orientation-safe draft');
+  await textarea.focus();
+
+  const viewportContent = await page.locator('meta[name="viewport"]').getAttribute('content');
+  expect(viewportContent).not.toMatch(/maximum-scale=1|user-scalable=no/);
+  await expect(page.locator('.chatPageRoot')).toHaveCSS('-webkit-text-size-adjust', '100%');
+  await expect.poll(() => textarea.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize)
+  )).toBeGreaterThanOrEqual(16);
+  await expect.poll(() => page.locator(
+    '.chatPageRoot input:visible, .chatPageRoot textarea:visible, .chatPageRoot select:visible',
+  ).evaluateAll((elements) =>
+    elements.every((element) => Number.parseFloat(getComputedStyle(element).fontSize) >= 16)
+  )).toBe(true);
+
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  const navigation = page.getByRole('dialog', { name: 'Chats and files navigation' });
+
+  for (const viewport of [
+    { width: 844, height: 390 },
+    { width: 430, height: 760 },
+    { width: 844, height: 390 },
+    { width: 430, height: 760 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await setTestVisualViewport(page, viewport.height, 0);
+    await page.evaluate(() => window.dispatchEvent(new Event('orientationchange')));
+
+    await expect(navigation).toBeVisible();
+    await expect.poll(() => page.locator('.chatPageRoot .page').evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    })).toEqual({ left: 0, top: 0, width: viewport.width, height: viewport.height });
+  }
+
+  await page.getByRole('button', { name: 'Close navigation' }).click();
+  await expect(textarea).toHaveValue('orientation-safe draft');
+});
+
 test('restores the inline body overflow that existed before mobile scroll lock', async ({ page }) => {
   await page.evaluate(() => {
     document.body.style.overflow = 'clip';
