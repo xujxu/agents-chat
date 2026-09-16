@@ -70,9 +70,12 @@ Delete:
 - `app/features/layout/hooks/useIOSOrientationScaleRecovery.ts`; and
 - `tests/orientation-scale-recovery.spec.ts`.
 
-Remove the hook import and invocation from `ChatShell`. Remove viewport
-mutation recording, dynamic recovery, rapid-generation, and missing-meta tests
-from `tests/mobile-responsive.spec.ts`.
+Remove the hook import and invocation from `ChatShell`. Remove the standalone
+viewport-mutation helper functions and the recovery-specific lifecycle,
+rapid-generation, platform-isolation, and missing-meta tests from
+`tests/mobile-responsive.spec.ts`. The existing repeated-orientation test may
+use a local `MutationObserver` to assert that no transient viewport mutation
+occurs.
 
 Keep the existing `ChatShell` native viewport synchronization and
 `useChatOrientationScrollStability` behavior. The bottom and historical-message
