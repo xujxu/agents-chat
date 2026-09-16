@@ -423,6 +423,7 @@ test('keeps the latest message pinned through portrait relayout', async ({ page 
 
 test('keeps the same historical message position through portrait relayout', async ({ page }) => {
   const chat = page.locator('.chatContainer');
+  await page.waitForTimeout(500);
   await chat.evaluate((element) => {
     element.scrollTop = Math.round(
       (element.scrollHeight - element.clientHeight) * 0.55,
