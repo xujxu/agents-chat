@@ -1,4 +1,9 @@
-import { expect, test, type Locator } from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 import {
   installMobileChatFixture,
   loginMobileFixture,
@@ -58,6 +63,39 @@ async function getTopMessageAnchor(page: import('@playwright/test').Page) {
       index,
       offsetTop: messages[index].getBoundingClientRect().top - containerTop,
     };
+  });
+}
+
+type ViewportMutationTestWindow = Window & {
+  __viewportContentMutations?: string[];
+};
+
+async function startViewportMutationRecording(page: Page) {
+  await page.evaluate(() => {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    if (!meta) throw new Error('Viewport meta not found');
+    const testWindow = window as ViewportMutationTestWindow;
+    testWindow.__viewportContentMutations = [];
+    new MutationObserver(() => {
+      testWindow.__viewportContentMutations?.push(
+        meta.getAttribute('content') ?? '',
+      );
+    }).observe(meta, {
+      attributes: true,
+      attributeFilter: ['content'],
+    });
+  });
+}
+
+async function getViewportMutations(page: Page) {
+  return page.evaluate(() =>
+    (window as ViewportMutationTestWindow).__viewportContentMutations ?? []
+  );
+}
+
+async function clearViewportMutations(page: Page) {
+  await page.evaluate(() => {
+    (window as ViewportMutationTestWindow).__viewportContentMutations = [];
   });
 }
 
@@ -376,6 +414,66 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
   expect(layoutWidths[3]).toBe(layoutWidths[1]);
   await page.getByRole('button', { name: 'Close navigation' }).click();
   await expect(textarea).toHaveValue('orientation-safe draft');
+});
+
+test('temporarily recovers iOS scale and restores the zoom-enabled viewport', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'webkit', 'iOS recovery requires the iPhone project');
+
+  const viewport = page.locator('meta[name="viewport"]');
+  const originalContent = await viewport.getAttribute('content');
+  expect(originalContent).not.toBeNull();
+  await startViewportMutationRecording(page);
+
+  const textarea = page.locator('textarea.composerTextarea');
+  await textarea.fill('draft survives viewport recovery');
+  await textarea.focus();
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event('orientationchange'))
+  );
+
+  await expect.poll(async () =>
+    (await getViewportMutations(page)).filter((content) =>
+      /maximum-scale\s*=\s*1/i.test(content)
+    )
+  ).toHaveLength(1);
+  await expect.poll(() => viewport.getAttribute('content')).toBe(originalContent);
+  await expect(textarea).toBeFocused();
+  await expect(textarea).toHaveValue('draft survives viewport recovery');
+  expect(await viewport.getAttribute('content')).not.toMatch(
+    /maximum-scale\s*=\s*1|user-scalable\s*=\s*no/i,
+  );
+
+  await clearViewportMutations(page);
+  await page.evaluate(async () => {
+    for (let index = 0; index < 3; index += 1) {
+      window.dispatchEvent(new Event('orientationchange'));
+      await new Promise((resolve) => window.setTimeout(resolve, 75));
+    }
+  });
+  await expect.poll(async () =>
+    (await getViewportMutations(page)).filter((content) =>
+      /maximum-scale\s*=\s*1/i.test(content)
+    )
+  ).toHaveLength(1);
+  await expect.poll(() => viewport.getAttribute('content')).toBe(originalContent);
+});
+
+test('does not mutate viewport metadata for Android orientation events', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName === 'webkit', 'Android isolation uses the Chromium project');
+  await startViewportMutationRecording(page);
+
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event('orientationchange'))
+  );
+  await page.waitForTimeout(500);
+
+  expect(await getViewportMutations(page)).toEqual([]);
 });
 
 test('keeps the latest message pinned through portrait relayout', async ({ page }) => {
