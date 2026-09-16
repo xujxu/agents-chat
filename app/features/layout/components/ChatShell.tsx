@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import type { MobileOverlay } from '../hooks/useMobileOverlayState';
-import { useIOSOrientationScaleRecovery } from '../hooks/useIOSOrientationScaleRecovery';
 import { APP_VIEWPORT_WILL_CHANGE_EVENT } from '../viewportEvents';
 
 export type ChatShellProps = {
@@ -46,7 +45,6 @@ export function ChatShell({
   agentsSidebarOpen,
   onSidebarResizeStart,
 }: ChatShellProps) {
-  useIOSOrientationScaleRecovery();
   const pageRef = useRef<HTMLElement | null>(null);
   const hasModalMobileOverlay = isMobileLayout && mobileOverlay !== null;
 

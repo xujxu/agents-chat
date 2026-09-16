@@ -1,9 +1,4 @@
-import {
-  expect,
-  test,
-  type Locator,
-  type Page,
-} from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import {
   installMobileChatFixture,
   loginMobileFixture,
@@ -63,39 +58,6 @@ async function getTopMessageAnchor(page: import('@playwright/test').Page) {
       index,
       offsetTop: messages[index].getBoundingClientRect().top - containerTop,
     };
-  });
-}
-
-type ViewportMutationTestWindow = Window & {
-  __viewportContentMutations?: string[];
-};
-
-async function startViewportMutationRecording(page: Page) {
-  await page.evaluate(() => {
-    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
-    if (!meta) throw new Error('Viewport meta not found');
-    const testWindow = window as ViewportMutationTestWindow;
-    testWindow.__viewportContentMutations = [];
-    new MutationObserver(() => {
-      testWindow.__viewportContentMutations?.push(
-        meta.getAttribute('content') ?? '',
-      );
-    }).observe(meta, {
-      attributes: true,
-      attributeFilter: ['content'],
-    });
-  });
-}
-
-async function getViewportMutations(page: Page) {
-  return page.evaluate(() =>
-    (window as ViewportMutationTestWindow).__viewportContentMutations ?? []
-  );
-}
-
-async function clearViewportMutations(page: Page) {
-  await page.evaluate(() => {
-    (window as ViewportMutationTestWindow).__viewportContentMutations = [];
   });
 }
 
@@ -282,13 +244,32 @@ test('keeps navigation, composer, and overlays usable in landscape', async ({ pa
   expect(navigationBox!.height).toBeLessThanOrEqual(390);
 });
 
-test('prevents automatic zoom across repeated orientation changes', async ({ page, browserName }) => {
+test('keeps typography stable with the initial viewport policy', async ({ page, browserName }) => {
   const textarea = page.locator('textarea.composerTextarea');
   await textarea.fill('orientation-safe draft');
   await textarea.focus();
 
-  const viewportContent = await page.locator('meta[name="viewport"]').getAttribute('content');
-  expect(viewportContent).not.toMatch(/maximum-scale=1|user-scalable=no/);
+  const viewport = page.locator('meta[name="viewport"]');
+  const viewportContent = await viewport.getAttribute('content');
+  if (!viewportContent) throw new Error('Viewport content not found');
+  expect(viewportContent).toMatch(/maximum-scale\s*=\s*1/i);
+  expect(viewportContent).not.toMatch(/user-scalable\s*=\s*no/i);
+  await page.evaluate(() => {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    if (!meta) throw new Error('Viewport meta not found');
+    const testWindow = window as Window & {
+      __orientationViewportMutations?: string[];
+    };
+    testWindow.__orientationViewportMutations = [];
+    new MutationObserver(() => {
+      testWindow.__orientationViewportMutations?.push(
+        meta.getAttribute('content') ?? '',
+      );
+    }).observe(meta, {
+      attributes: true,
+      attributeFilter: ['content'],
+    });
+  });
   await expect.poll(() => page.evaluate(() => {
     const selectors = ['html', '.chatPageRoot', '.messageContent.markdownBody'];
     const elements = selectors.map((selector) => {
@@ -342,7 +323,7 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
   })).toEqual(await page.evaluate(() => (
     CSS.supports('text-size-adjust', 'none')
       || CSS.supports('-webkit-text-size-adjust', 'none')
-      ? { supported: true, values: ['none', 'none', 'none'] }
+      ? { supported: true, values: ['100%', '100%', '100%'] }
       : { supported: false, values: ['', '', ''] }
   )));
 
@@ -410,102 +391,19 @@ test('prevents automatic zoom across repeated orientation changes', async ({ pag
 
   await page.waitForTimeout(2_500);
   await expectStableTypography();
+  expect(await page.evaluate(() =>
+    (window as Window & {
+      __orientationViewportMutations?: string[];
+    }).__orientationViewportMutations ?? []
+  )).toEqual([]);
+  await expect(viewport).toHaveAttribute('content', viewportContent);
   expect(layoutWidths[2]).toBe(layoutWidths[0]);
   expect(layoutWidths[3]).toBe(layoutWidths[1]);
   await page.getByRole('button', { name: 'Close navigation' }).click();
   await expect(textarea).toHaveValue('orientation-safe draft');
 });
 
-test('temporarily recovers iOS scale and restores the zoom-enabled viewport', async ({
-  page,
-  browserName,
-}) => {
-  test.skip(browserName !== 'webkit', 'iOS recovery requires the iPhone project');
-
-  const viewport = page.locator('meta[name="viewport"]');
-  const originalContent = await viewport.getAttribute('content');
-  expect(originalContent).not.toBeNull();
-  await startViewportMutationRecording(page);
-
-  const textarea = page.locator('textarea.composerTextarea');
-  await textarea.fill('draft survives viewport recovery');
-  await textarea.focus();
-  await page.evaluate(() =>
-    window.dispatchEvent(new Event('orientationchange'))
-  );
-
-  await expect.poll(async () =>
-    (await getViewportMutations(page)).filter((content) =>
-      /maximum-scale\s*=\s*1/i.test(content)
-    )
-  ).toHaveLength(1);
-  await expect.poll(() => viewport.getAttribute('content')).toBe(originalContent);
-  await expect(textarea).toBeFocused();
-  await expect(textarea).toHaveValue('draft survives viewport recovery');
-  expect(await viewport.getAttribute('content')).not.toMatch(
-    /maximum-scale\s*=\s*1|user-scalable\s*=\s*no/i,
-  );
-
-  await clearViewportMutations(page);
-  await page.evaluate(async () => {
-    for (let index = 0; index < 3; index += 1) {
-      window.dispatchEvent(new Event('orientationchange'));
-      await new Promise((resolve) => window.setTimeout(resolve, 75));
-    }
-  });
-  await expect.poll(async () =>
-    (await getViewportMutations(page)).filter((content) =>
-      /maximum-scale\s*=\s*1/i.test(content)
-    )
-  ).toHaveLength(1);
-  await expect.poll(() => viewport.getAttribute('content')).toBe(originalContent);
-});
-
-test('does not mutate viewport metadata for Android orientation events', async ({
-  page,
-  browserName,
-}) => {
-  test.skip(browserName === 'webkit', 'Android isolation uses the Chromium project');
-  await startViewportMutationRecording(page);
-
-  await page.evaluate(() =>
-    window.dispatchEvent(new Event('orientationchange'))
-  );
-  await page.waitForTimeout(500);
-
-  expect(await getViewportMutations(page)).toEqual([]);
-});
-
-test('reports a missing viewport meta without leaving recovery active', async ({
-  page,
-  browserName,
-}) => {
-  test.skip(browserName !== 'webkit', 'iOS recovery requires the iPhone project');
-  const errors: string[] = [];
-  page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
-  });
-
-  await page.locator('meta[name="viewport"]').evaluate((meta) => meta.remove());
-  await page.evaluate(() =>
-    window.dispatchEvent(new Event('orientationchange'))
-  );
-
-  await expect.poll(() =>
-    errors.some((message) =>
-      message.includes('[viewport] Failed to recover iOS orientation scale.')
-    )
-  ).toBe(true);
-  await page.waitForTimeout(500);
-  expect(errors.filter((message) =>
-    message.includes('[viewport] Failed to recover iOS orientation scale.')
-  )).toHaveLength(1);
-});
-
-test('keeps the latest message pinned through portrait relayout', async ({
-  page,
-  browserName,
-}) => {
+test('keeps the latest message pinned through portrait relayout', async ({ page }) => {
   const chat = page.locator('.chatContainer');
   await chat.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
@@ -515,10 +413,6 @@ test('keeps the latest message pinned through portrait relayout', async ({
 
   await triggerViewportRelayoutWithScrollDrift(page, 760, -180);
 
-  if (browserName === 'webkit') {
-    await page.waitForTimeout(500);
-  }
-
   await expect.poll(() => getDistanceFromChatBottom(page), {
     timeout: 5000,
   }).toBeLessThanOrEqual(4);
@@ -527,10 +421,7 @@ test('keeps the latest message pinned through portrait relayout', async ({
   })).toHaveCount(0);
 });
 
-test('keeps the same historical message position through portrait relayout', async ({
-  page,
-  browserName,
-}) => {
+test('keeps the same historical message position through portrait relayout', async ({ page }) => {
   const chat = page.locator('.chatContainer');
   await chat.evaluate((element) => {
     element.scrollTop = Math.round(
@@ -546,10 +437,6 @@ test('keeps the same historical message position through portrait relayout', asy
   })).toBeVisible();
 
   await triggerViewportRelayoutWithScrollDrift(page, 760, 140);
-
-  if (browserName === 'webkit') {
-    await page.waitForTimeout(500);
-  }
 
   await expect.poll(async () => {
     const after = await getTopMessageAnchor(page);
