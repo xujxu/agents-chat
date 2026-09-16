@@ -476,7 +476,36 @@ test('does not mutate viewport metadata for Android orientation events', async (
   expect(await getViewportMutations(page)).toEqual([]);
 });
 
-test('keeps the latest message pinned through portrait relayout', async ({ page }) => {
+test('reports a missing viewport meta without leaving recovery active', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'webkit', 'iOS recovery requires the iPhone project');
+  const errors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+
+  await page.locator('meta[name="viewport"]').evaluate((meta) => meta.remove());
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event('orientationchange'))
+  );
+
+  await expect.poll(() =>
+    errors.some((message) =>
+      message.includes('[viewport] Failed to recover iOS orientation scale.')
+    )
+  ).toBe(true);
+  await page.waitForTimeout(500);
+  expect(errors.filter((message) =>
+    message.includes('[viewport] Failed to recover iOS orientation scale.')
+  )).toHaveLength(1);
+});
+
+test('keeps the latest message pinned through portrait relayout', async ({
+  page,
+  browserName,
+}) => {
   const chat = page.locator('.chatContainer');
   await chat.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
@@ -486,6 +515,10 @@ test('keeps the latest message pinned through portrait relayout', async ({ page 
 
   await triggerViewportRelayoutWithScrollDrift(page, 760, -180);
 
+  if (browserName === 'webkit') {
+    await page.waitForTimeout(500);
+  }
+
   await expect.poll(() => getDistanceFromChatBottom(page), {
     timeout: 5000,
   }).toBeLessThanOrEqual(4);
@@ -494,7 +527,10 @@ test('keeps the latest message pinned through portrait relayout', async ({ page 
   })).toHaveCount(0);
 });
 
-test('keeps the same historical message position through portrait relayout', async ({ page }) => {
+test('keeps the same historical message position through portrait relayout', async ({
+  page,
+  browserName,
+}) => {
   const chat = page.locator('.chatContainer');
   await chat.evaluate((element) => {
     element.scrollTop = Math.round(
@@ -510,6 +546,10 @@ test('keeps the same historical message position through portrait relayout', asy
   })).toBeVisible();
 
   await triggerViewportRelayoutWithScrollDrift(page, 760, 140);
+
+  if (browserName === 'webkit') {
+    await page.waitForTimeout(500);
+  }
 
   await expect.poll(async () => {
     const after = await getTopMessageAnchor(page);
