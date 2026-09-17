@@ -83,6 +83,38 @@ async function triggerViewportRelayoutWithScrollDrift(
   }, { drift: scrollDrift });
 }
 
+test('keeps the mobile root independent from visual viewport events', async ({ page }) => {
+  const app = page.locator('.chatPageRoot .page');
+  const initialRoot = await app.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = (element as HTMLElement).style;
+    return {
+      top: Math.round(rect.top),
+      height: Math.round(rect.height),
+      position: getComputedStyle(element).position,
+      inlineHeight: style.getPropertyValue('--app-viewport-height'),
+      inlineTop: style.getPropertyValue('--app-viewport-offset-top'),
+    };
+  });
+
+  await setTestVisualViewport(page, 430, 24);
+
+  await expect.poll(() => app.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = (element as HTMLElement).style;
+    return {
+      top: Math.round(rect.top),
+      height: Math.round(rect.height),
+      position: getComputedStyle(element).position,
+      inlineHeight: style.getPropertyValue('--app-viewport-height'),
+      inlineTop: style.getPropertyValue('--app-viewport-offset-top'),
+    };
+  })).toEqual(initialRoot);
+  expect(initialRoot.position).not.toBe('fixed');
+  expect(initialRoot.inlineHeight).toBe('');
+  expect(initialRoot.inlineTop).toBe('');
+});
+
 test('separates left navigation from management actions', async ({ page }) => {
   const navigation = page.getByRole('button', { name: 'Open navigation' });
   await expect(navigation).toBeVisible();

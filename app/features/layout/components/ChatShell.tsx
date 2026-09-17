@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useDesktopViewportSync } from '../hooks/useDesktopViewportSync';
 import type { MobileOverlay } from '../hooks/useMobileOverlayState';
-import { APP_VIEWPORT_WILL_CHANGE_EVENT } from '../viewportEvents';
 
 export type ChatShellProps = {
   sidebar: ReactNode;
@@ -48,31 +48,7 @@ export function ChatShell({
   const pageRef = useRef<HTMLElement | null>(null);
   const hasModalMobileOverlay = isMobileLayout && mobileOverlay !== null;
 
-  useEffect(() => {
-    const page = pageRef.current;
-    if (!page) return;
-
-    const visualViewport = window.visualViewport;
-    const syncViewport = () => {
-      const height = visualViewport?.height ?? window.innerHeight;
-      const offsetTop = visualViewport?.offsetTop ?? 0;
-      window.dispatchEvent(new Event(APP_VIEWPORT_WILL_CHANGE_EVENT));
-      page.style.setProperty('--app-viewport-height', `${Math.round(height)}px`);
-      page.style.setProperty('--app-viewport-offset-top', `${Math.round(offsetTop)}px`);
-    };
-
-    syncViewport();
-    window.addEventListener('resize', syncViewport);
-    window.addEventListener('orientationchange', syncViewport);
-    visualViewport?.addEventListener('resize', syncViewport);
-    visualViewport?.addEventListener('scroll', syncViewport);
-    return () => {
-      window.removeEventListener('resize', syncViewport);
-      window.removeEventListener('orientationchange', syncViewport);
-      visualViewport?.removeEventListener('resize', syncViewport);
-      visualViewport?.removeEventListener('scroll', syncViewport);
-    };
-  }, []);
+  useDesktopViewportSync({ pageRef, isMobileLayout });
 
   useEffect(() => {
     if (!isMobileLayout || mobileOverlay === null) return;

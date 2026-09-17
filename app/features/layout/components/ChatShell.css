@@ -1,13 +1,20 @@
 .chatPageRoot .page {
   position: relative;
-  height: var(--app-viewport-height, 100dvh);
-  min-height: var(--app-viewport-height, 100dvh);
+  height: var(--app-viewport-height, 100vh);
+  min-height: var(--app-viewport-height, 100vh);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   background: var(--bg-accent);
   color: var(--text);
   transition: background 220ms ease, color 220ms ease;
+}
+
+@supports (height: 100dvh) {
+  .chatPageRoot .page {
+    height: var(--app-viewport-height, 100dvh);
+    min-height: var(--app-viewport-height, 100dvh);
+  }
 }
 .chatPageRoot .ghostButton,
 .chatPageRoot .modalActions button {
@@ -1245,11 +1252,20 @@
 @media (max-width: 900px) {
   .chatPageRoot .page {
     --mobile-header-height: 68px;
-    position: fixed;
-    top: var(--app-viewport-offset-top, 0px);
-    right: 0;
-    left: 0;
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
     width: 100%;
+    height: 100vh;
+    min-height: 100vh;
+  }
+
+  @supports (height: 100dvh) {
+    .chatPageRoot .page {
+      height: 100dvh;
+      min-height: 100dvh;
+    }
   }
   .chatPageRoot .mobileOnlyButton,
   .chatPageRoot .mobileNavigationButton {
