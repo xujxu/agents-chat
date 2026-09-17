@@ -46,9 +46,35 @@ test('keeps desktop geometry while clearing viewport overrides in mobile layout'
   await page.locator('button[title="Agents"]').click();
   const desktopAgents = page.locator('.agentsSidebar');
   await expect(desktopAgents).toBeVisible();
-  const agentsBox = await desktopAgents.boundingBox();
-  expect(agentsBox).not.toBeNull();
-  expect(agentsBox!.x).toBeGreaterThan(900);
+  const resizeHandle = page.locator('.sidebarResizeHandle');
+  const chatMain = page.locator('.chatMain');
+  await expect.poll(async () => {
+    const [appBox, sidebarBox, handleBox, chatBox, agentsBox] = await Promise.all([
+      app.boundingBox(),
+      sidebar.boundingBox(),
+      resizeHandle.boundingBox(),
+      chatMain.boundingBox(),
+      desktopAgents.boundingBox(),
+    ]);
+    if (!appBox || !sidebarBox || !handleBox || !chatBox || !agentsBox) return null;
+    return {
+      sidebarStartsAtApp: Math.round(sidebarBox.x - appBox.x),
+      handleFollowsSidebar: Math.round(handleBox.x - (sidebarBox.x + sidebarBox.width)),
+      chatFollowsHandle: Math.round(chatBox.x - (handleBox.x + handleBox.width)),
+      agentsFollowChat: Math.round(agentsBox.x - (chatBox.x + chatBox.width)),
+      agentsWidth: Math.round(agentsBox.width),
+      agentsEndAtApp: Math.round(
+        appBox.x + appBox.width - (agentsBox.x + agentsBox.width),
+      ),
+    };
+  }).toEqual({
+    sidebarStartsAtApp: 0,
+    handleFollowsSidebar: 0,
+    chatFollowsHandle: 0,
+    agentsFollowChat: 0,
+    agentsWidth: 260,
+    agentsEndAtApp: 0,
+  });
 
   await page.setViewportSize({ width: 880, height: 700 });
   await expect.poll(() => app.evaluate((element) => ({
@@ -72,4 +98,15 @@ test('keeps desktop geometry while clearing viewport overrides in mobile layout'
   });
   await expect(sidebar).toBeVisible();
   await expect(page.locator('.sidebarResizeHandle')).toBeVisible();
+
+  await page.setViewportSize({ width: 1200, height: 640 });
+  await expect.poll(() => app.evaluate((element) => ({
+    width: Math.round(element.getBoundingClientRect().width),
+    height: Math.round(element.getBoundingClientRect().height),
+    inlineHeight: (element as HTMLElement).style.getPropertyValue('--app-viewport-height'),
+  }))).toEqual({
+    width: 1200,
+    height: 640,
+    inlineHeight: '640px',
+  });
 });
