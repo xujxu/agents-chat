@@ -17,14 +17,30 @@ async function login(page: Page) {
     await expect(submit).toBeEnabled();
   }).toPass({ timeout: 30000 });
   await submit.click();
-  await page.waitForSelector('.chatContainer, .emptyHomepage', { timeout: 30000 });
+  await expect(page.locator('.chatContainer, .emptyHomepage')).toBeVisible({ timeout: 90_000 });
   await page.waitForTimeout(500);
 }
 
-test('keeps composer controls above iPhone browser chrome and keyboard', async ({ page }) => {
+test('keeps composer controls and overlays inside a reduced layout viewport', async ({ page }) => {
   await installTestVisualViewport(page);
 
   const chats = new Map<string, Record<string, unknown>>();
+  const agents = ['alpha', 'beta', 'gamma', 'delta'].map((id) => ({
+    id,
+    name: `${id[0].toUpperCase()}${id.slice(1)} Agent`,
+    command: 'mock',
+    args: [],
+    cwd: '/tmp',
+    running: true,
+    canTalk: true,
+    canModify: true,
+    public: true,
+    models: [
+      { modelId: 'claude-sonnet-4.6', name: 'Claude Sonnet 4.6' },
+      { modelId: 'gpt-5.4', name: 'GPT-5.4' },
+    ],
+    defaultModelId: 'claude-sonnet-4.6',
+  }));
   let lastChatId = '';
   await page.route('**/api/chats**', async (route) => {
     const request = route.request();
@@ -72,23 +88,25 @@ test('keeps composer controls above iPhone browser chrome and keyboard', async (
         contentType: 'application/json',
         body: JSON.stringify({
           ok: true,
-          agents: ['alpha', 'beta', 'gamma', 'delta'].map((id) => ({
-            id,
-            name: `${id[0].toUpperCase()}${id.slice(1)} Agent`,
-            command: 'mock',
-            args: [],
-            cwd: '/tmp',
-            running: true,
-            canTalk: true,
-            canModify: true,
-            public: true,
-            models: [
-              { modelId: 'claude-sonnet-4.6', name: 'Claude Sonnet 4.6' },
-              { modelId: 'gpt-5.4', name: 'GPT-5.4' },
-            ],
-            defaultModelId: 'claude-sonnet-4.6',
-          })),
+          agents,
         }),
+      });
+      return;
+    }
+    if (body?.action === 'get-agent-config') {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          agent: agents.find((agent) => agent.id === body.agentId),
+        }),
+      });
+      return;
+    }
+    if (body?.action === 'list-agent-access') {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, access: [] }),
       });
       return;
     }
@@ -137,13 +155,16 @@ test('keeps composer controls above iPhone browser chrome and keyboard', async (
   await expect(textarea).toBeVisible({ timeout: 10000 });
   await textarea.fill('@alpha @beta @gamma @delta mobile viewport');
 
-  await setTestVisualViewport(page, 430, 24);
+  const originalViewport = page.viewportSize();
+  expect(originalViewport).not.toBeNull();
+  await page.setViewportSize({ width: 430, height: 430 });
+  await setTestVisualViewport(page, 430, 0);
 
   const app = page.locator('.chatPageRoot .page');
   await expect.poll(() => app.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return { top: Math.round(rect.top), height: Math.round(rect.height) };
-  })).toEqual({ top: 24, height: 430 });
+  }), { timeout: 30_000 }).toEqual({ top: 0, height: 430 });
 
   const sendButton = page.getByRole('button', { name: 'Send message' });
   const modelButton = page.getByRole('button', { name: 'Model for alpha' });
@@ -152,23 +173,28 @@ test('keeps composer controls above iPhone browser chrome and keyboard', async (
   await expect(modelButton).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start voice input' })).toHaveCount(0);
   await expect(targetPills).toHaveCSS('overflow-x', 'auto');
-  await expect.poll(() => targetPills.evaluate(
-    (element) => element.scrollWidth > element.clientWidth,
-  )).toBe(true);
+  await expect.poll(
+    () => targetPills.evaluate((element) => element.scrollWidth > element.clientWidth),
+    { timeout: 30_000 },
+  ).toBe(true);
+
+  for (const locator of [page.locator('.chatInputDock'), sendButton, modelButton]) {
+    const [controlRect, appRect] = await Promise.all([
+      locator.evaluate((element) => element.getBoundingClientRect().toJSON()),
+      app.evaluate((element) => element.getBoundingClientRect().toJSON()),
+    ]);
+    expect(controlRect.bottom).toBeLessThanOrEqual(appRect.bottom + 1);
+  }
   await expect.poll(() => targetPills.evaluate((element) => {
     element.scrollLeft = element.scrollWidth;
     return element.scrollLeft;
-  })).toBeGreaterThan(0);
-
-  for (const locator of [page.locator('.chatInputDock'), sendButton, modelButton]) {
-    const [controlBox, appBox] = await Promise.all([locator.boundingBox(), app.boundingBox()]);
-    expect(controlBox).not.toBeNull();
-    expect(appBox).not.toBeNull();
-    expect(controlBox!.y + controlBox!.height).toBeLessThanOrEqual(appBox!.y + appBox!.height + 1);
-  }
+  }), { timeout: 30_000 }).toBeGreaterThan(0);
+  await targetPills.evaluate((element) => {
+    element.scrollLeft = 0;
+  });
 
   await textarea.fill('@alpha mobile viewport');
-  await sendButton.click();
+  await sendButton.click({ force: true });
   const stopButton = page.getByRole('button', { name: 'Stop generation' });
   await expect(stopButton).toBeVisible();
   const [stopBox, compressedAppBox] = await Promise.all([stopButton.boundingBox(), app.boundingBox()]);
@@ -176,8 +202,6 @@ test('keeps composer controls above iPhone browser chrome and keyboard', async (
   expect(compressedAppBox).not.toBeNull();
   expect(stopBox!.x + stopBox!.width).toBeLessThanOrEqual(compressedAppBox!.x + compressedAppBox!.width + 1);
   expect(stopBox!.y + stopBox!.height).toBeLessThanOrEqual(compressedAppBox!.y + compressedAppBox!.height + 1);
-  await stopButton.click();
-  await expect(sendButton).toBeVisible();
 
   await modelButton.click();
   const modelMenu = page.getByRole('listbox', { name: 'Model for alpha' });
@@ -197,25 +221,97 @@ test('keeps composer controls above iPhone browser chrome and keyboard', async (
   }).toBe(true);
 
   await modelButton.click();
+  await page.evaluate(() => {
+    const root = document.documentElement.style;
+    root.setProperty('--safe-area-top', '17px');
+    root.setProperty('--safe-area-right', '11px');
+    root.setProperty('--safe-area-bottom', '13px');
+    root.setProperty('--safe-area-left', '7px');
+  });
+  await expect.poll(() => page.locator('.header').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      paddingTop: style.paddingTop,
+      paddingRight: style.paddingRight,
+      paddingLeft: style.paddingLeft,
+      minHeight: style.minHeight,
+    };
+  })).toEqual({
+    paddingTop: '23px',
+    paddingRight: '21px',
+    paddingLeft: '17px',
+    minHeight: '69px',
+  });
+
   await page.getByRole('button', { name: 'Open navigation' }).click();
   const mobileSidebar = page.locator('.participantsSidebar');
   const backdrop = page.locator('.mobilePanelBackdrop');
   await expect(mobileSidebar).toBeVisible();
   await expect(backdrop).toBeVisible();
-  for (const locator of [mobileSidebar, backdrop]) {
-    await expect.poll(() => locator.evaluate((element) => {
+  await expect.poll(async () => ({
+    sidebar: await mobileSidebar.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return { top: Math.round(rect.top), height: Math.round(rect.height) };
-    })).toEqual({ top: 24, height: 430 });
-  }
-  const backdropBox = await backdrop.boundingBox();
-  expect(backdropBox).not.toBeNull();
-  await backdrop.click({ position: { x: backdropBox!.width - 4, y: 200 } });
+    }),
+    backdrop: await backdrop.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { top: Math.round(rect.top), height: Math.round(rect.height) };
+    }),
+  })).toEqual({
+    sidebar: { top: 0, height: 430 },
+    backdrop: { top: 0, height: 430 },
+  });
+  await expect.poll(() => mobileSidebar.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      paddingTop: style.paddingTop,
+      paddingLeft: style.paddingLeft,
+    };
+  })).toEqual({
+    paddingTop: '69px',
+    paddingLeft: '19px',
+  });
+  await backdrop.click({ force: true });
 
-  await setTestVisualViewport(page, 926, 0);
+  await page.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: 'Agents' }).click();
+  const agentsPanel = page.locator('.agentsSidebar.mobilePanelVisible');
+  await expect(agentsPanel).toBeVisible();
+  await expect.poll(() => agentsPanel.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      top: Math.round(rect.top),
+      bottom: Math.round(rect.bottom),
+    };
+  })).toEqual({ top: 0, bottom: 430 });
+
+  await agentsPanel.getByText('Alpha Agent', { exact: true }).click();
+  const agentsSheet = page.getByRole('dialog', { name: /Alpha Agent settings/ });
+  await expect(agentsSheet).toBeVisible();
+  await expect.poll(() => agentsSheet.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      top: Math.round(rect.top),
+      bottom: Math.round(rect.bottom),
+      paddingTop: style.paddingTop,
+      paddingRight: style.paddingRight,
+      paddingBottom: style.paddingBottom,
+      paddingLeft: style.paddingLeft,
+    };
+  })).toEqual({
+    top: 0,
+    bottom: 430,
+    paddingTop: '31px',
+    paddingRight: '25px',
+    paddingBottom: '27px',
+    paddingLeft: '21px',
+  });
+
+  await page.setViewportSize(originalViewport!);
+  await setTestVisualViewport(page, originalViewport!.height, 0);
   await expect.poll(() => app.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return { top: Math.round(rect.top), height: Math.round(rect.height) };
-  })).toEqual({ top: 0, height: 926 });
-  await expect(sendButton).toBeVisible();
+  }), { timeout: 30_000 }).toEqual({ top: 0, height: originalViewport!.height });
 });

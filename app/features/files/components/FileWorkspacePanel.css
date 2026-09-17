@@ -162,7 +162,7 @@
   .mdEditorToolbarRight{align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px;}
   .mobileDesktopHint{order:3;flex-basis:100%;text-align:right;}
   .fileContentWithLines{font-size:12px;}
-  .mobileMarkdownViewer{padding:16px 14px calc(24px + env(safe-area-inset-bottom));overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+  .mobileMarkdownViewer{padding:16px 14px calc(24px + var(--safe-area-bottom));overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
   .mdFileSearch,.mdFileRefresh{min-height:44px;}
   .commentSidebar{width:min(82vw, 300px);min-width:min(82vw, 300px);position:absolute;right:0;top:0;bottom:0;z-index:4;box-shadow:var(--shadow);}
 }

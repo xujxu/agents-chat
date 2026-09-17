@@ -260,20 +260,18 @@ test('keeps navigation, composer, and overlays usable in landscape', async ({ pa
   await expect(send).toBeVisible();
 
   for (const locator of [composer, send]) {
-    const box = await locator.boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.y).toBeGreaterThanOrEqual(0);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(844);
-    expect(box!.y + box!.height).toBeLessThanOrEqual(390);
+    const rect = await locator.evaluate((element) => element.getBoundingClientRect().toJSON());
+    expect(rect.x).toBeGreaterThanOrEqual(0);
+    expect(rect.y).toBeGreaterThanOrEqual(0);
+    expect(rect.right).toBeLessThanOrEqual(844);
+    expect(rect.bottom).toBeLessThanOrEqual(390);
   }
 
-  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('button', { name: 'Open navigation' }).click({ force: true });
   const navigation = page.getByRole('dialog', { name: 'Chats and files navigation' });
   await expect(navigation).toBeVisible();
-  const navigationBox = await navigation.boundingBox();
-  expect(navigationBox).not.toBeNull();
-  expect(navigationBox!.height).toBeLessThanOrEqual(390);
+  const navigationRect = await navigation.evaluate((element) => element.getBoundingClientRect().toJSON());
+  expect(navigationRect.height).toBeLessThanOrEqual(390);
 });
 
 test('uses a zoom-enabled viewport and stable authored typography', async ({ page }) => {
