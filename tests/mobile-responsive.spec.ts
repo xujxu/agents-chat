@@ -244,7 +244,7 @@ test('keeps navigation, composer, and overlays usable in landscape', async ({ pa
   expect(navigationBox!.height).toBeLessThanOrEqual(390);
 });
 
-test('keeps typography stable with the initial viewport policy', async ({ page, browserName }) => {
+test('uses a zoom-enabled viewport and stable authored typography', async ({ page }) => {
   const textarea = page.locator('textarea.composerTextarea');
   await textarea.fill('orientation-safe draft');
   await textarea.focus();
@@ -252,8 +252,12 @@ test('keeps typography stable with the initial viewport policy', async ({ page, 
   const viewport = page.locator('meta[name="viewport"]');
   const viewportContent = await viewport.getAttribute('content');
   if (!viewportContent) throw new Error('Viewport content not found');
-  expect(viewportContent).toMatch(/maximum-scale\s*=\s*1/i);
-  expect(viewportContent).not.toMatch(/user-scalable\s*=\s*no/i);
+  expect(viewportContent).toMatch(/width=device-width/i);
+  expect(viewportContent).toMatch(/initial-scale=1(?:\.0)?/i);
+  expect(viewportContent).toMatch(/viewport-fit=cover/i);
+  expect(viewportContent).toMatch(/interactive-widget=resizes-content/i);
+  expect(viewportContent).not.toMatch(/maximum-scale/i);
+  expect(viewportContent).not.toMatch(/user-scalable/i);
   await page.evaluate(() => {
     const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
     if (!meta) throw new Error('Viewport meta not found');
@@ -362,9 +366,7 @@ test('keeps typography stable with the initial viewport policy', async ({ page, 
     { width: 844, height: 390 },
     { width: 430, height: 760 },
   ]) {
-    if (browserName !== 'webkit') {
-      await page.setViewportSize(viewport);
-    }
+    await page.setViewportSize(viewport);
     await setTestVisualViewport(page, viewport.height, 0);
     await page.evaluate(() => window.dispatchEvent(new Event('orientationchange')));
 
