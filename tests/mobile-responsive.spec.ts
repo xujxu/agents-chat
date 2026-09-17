@@ -267,7 +267,7 @@ test('keeps navigation, composer, and overlays usable in landscape', async ({ pa
     expect(rect.bottom).toBeLessThanOrEqual(390);
   }
 
-  await page.getByRole('button', { name: 'Open navigation' }).click({ force: true });
+  await page.getByRole('button', { name: 'Open navigation' }).click();
   const navigation = page.getByRole('dialog', { name: 'Chats and files navigation' });
   await expect(navigation).toBeVisible();
   const navigationRect = await navigation.evaluate((element) => element.getBoundingClientRect().toJSON());

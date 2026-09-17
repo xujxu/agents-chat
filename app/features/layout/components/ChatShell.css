@@ -1323,8 +1323,7 @@
     display: block;
     position: fixed;
     inset: 0;
-    height: 100vh;
-    height: 100dvh;
+    height: auto;
     background: rgba(0, 0, 0, 0.42);
     backdrop-filter: blur(3px);
     z-index: 21;
@@ -1344,8 +1343,7 @@
     position: fixed;
     top: 0;
     bottom: 0;
-    height: 100vh;
-    height: 100dvh;
+    height: auto;
     box-sizing: border-box;
     padding-top: calc(var(--mobile-header-height) + var(--safe-area-top));
     padding-bottom: var(--safe-area-bottom);

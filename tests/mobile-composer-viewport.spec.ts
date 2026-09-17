@@ -194,7 +194,7 @@ test('keeps composer controls and overlays inside a reduced layout viewport', as
   });
 
   await textarea.fill('@alpha mobile viewport');
-  await sendButton.click({ force: true });
+  await sendButton.click();
   const stopButton = page.getByRole('button', { name: 'Stop generation' });
   await expect(stopButton).toBeVisible();
   const [stopBox, compressedAppBox] = await Promise.all([stopButton.boundingBox(), app.boundingBox()]);

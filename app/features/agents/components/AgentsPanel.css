@@ -307,8 +307,7 @@
     position: fixed;
     inset: 0;
     width: 100%;
-    height: 100vh;
-    height: 100dvh;
+    height: auto;
     max-height: none;
     border-radius: 0;
     padding:
