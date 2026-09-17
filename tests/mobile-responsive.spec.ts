@@ -14,6 +14,22 @@ let fixture: MobileFixture;
 test.beforeEach(async ({ page }) => {
   await installTestVisualViewport(page);
   fixture = await installMobileChatFixture(page);
+  await page.addInitScript(() => {
+    const NativeResizeObserver = window.ResizeObserver;
+    if (typeof NativeResizeObserver === 'undefined') return;
+
+    const testWindow = window as Window & {
+      __chatContainerResizeObserved?: boolean;
+    };
+    window.ResizeObserver = class extends NativeResizeObserver {
+      observe(target: Element, options?: ResizeObserverOptions) {
+        if (target.classList.contains('chatContainer')) {
+          testWindow.__chatContainerResizeObserved = true;
+        }
+        super.observe(target, options);
+      }
+    };
+  });
   await loginMobileFixture(page);
 });
 
@@ -61,15 +77,16 @@ async function getTopMessageAnchor(page: import('@playwright/test').Page) {
   });
 }
 
-async function triggerViewportRelayoutWithScrollDrift(
+async function triggerLayoutRelayoutWithScrollDrift(
   page: import('@playwright/test').Page,
-  nextHeight: number,
+  nextViewport: { width: number; height: number },
   scrollDrift: number,
 ) {
-  await setTestVisualViewport(page, nextHeight, 0);
-  await page.evaluate(({ drift }) => {
-    window.dispatchEvent(new Event('resize'));
+  await page.evaluate(() => {
     window.dispatchEvent(new Event('orientationchange'));
+  });
+  await page.setViewportSize(nextViewport);
+  await page.evaluate(({ drift }) => {
     const container = document.querySelector<HTMLElement>('.chatContainer');
     if (!container) throw new Error('Chat container not found');
     container.scrollTop = Math.max(
@@ -82,6 +99,14 @@ async function triggerViewportRelayoutWithScrollDrift(
     container.dispatchEvent(new Event('scroll'));
   }, { drift: scrollDrift });
 }
+
+test('observes transcript geometry as the scroll anchor authority', async ({ page }) => {
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & {
+      __chatContainerResizeObserved?: boolean;
+    }).__chatContainerResizeObserved ?? false
+  )).toBe(true);
+});
 
 test('keeps the mobile root independent from visual viewport events', async ({ page }) => {
   const app = page.locator('.chatPageRoot .page');
@@ -437,13 +462,18 @@ test('uses a zoom-enabled viewport and stable authored typography', async ({ pag
 
 test('keeps the latest message pinned through portrait relayout', async ({ page }) => {
   const chat = page.locator('.chatContainer');
+  await page.setViewportSize({ width: 430, height: 820 });
   await chat.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
     element.dispatchEvent(new Event('scroll'));
   });
   await expect.poll(() => getDistanceFromChatBottom(page)).toBeLessThanOrEqual(4);
 
-  await triggerViewportRelayoutWithScrollDrift(page, 760, -180);
+  await triggerLayoutRelayoutWithScrollDrift(
+    page,
+    { width: 430, height: 760 },
+    -180,
+  );
 
   await expect.poll(() => getDistanceFromChatBottom(page), {
     timeout: 5000,
@@ -455,6 +485,7 @@ test('keeps the latest message pinned through portrait relayout', async ({ page 
 
 test('keeps the same historical message position through portrait relayout', async ({ page }) => {
   const chat = page.locator('.chatContainer');
+  await page.setViewportSize({ width: 430, height: 820 });
   await page.waitForTimeout(500);
   await chat.evaluate((element) => {
     element.scrollTop = Math.round(
@@ -469,7 +500,11 @@ test('keeps the same historical message position through portrait relayout', asy
     name: 'Jump to latest messages',
   })).toBeVisible();
 
-  await triggerViewportRelayoutWithScrollDrift(page, 760, 140);
+  await triggerLayoutRelayoutWithScrollDrift(
+    page,
+    { width: 430, height: 760 },
+    140,
+  );
 
   await expect.poll(async () => {
     const after = await getTopMessageAnchor(page);

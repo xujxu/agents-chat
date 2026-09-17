@@ -5,12 +5,11 @@ import {
   useEffect,
   useRef,
   type MutableRefObject,
-  type RefObject,
 } from 'react';
 import { APP_VIEWPORT_WILL_CHANGE_EVENT } from '../../layout/viewportEvents';
 
 const BOTTOM_THRESHOLD = 4;
-const VIEWPORT_SETTLE_MS = 100;
+const VIEWPORT_SETTLE_MS = 250;
 
 type StableAnchor =
   | { kind: 'bottom'; scrollTop: number }
@@ -22,7 +21,7 @@ type StableAnchor =
     };
 
 type UseChatOrientationScrollStabilityOptions = {
-  containerRef: RefObject<HTMLElement | null>;
+  containerRef: MutableRefObject<HTMLElement | null>;
   shouldStickToBottomRef: MutableRefObject<boolean>;
   lastScrollTopRef: MutableRefObject<number>;
   setShowScrollToBottom: (show: boolean) => void;
@@ -39,6 +38,8 @@ export function useChatOrientationScrollStability({
   const settleTimerRef = useRef<number | null>(null);
   const firstFrameRef = useRef(0);
   const secondFrameRef = useRef(0);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const observedContainerRef = useRef<HTMLElement | null>(null);
 
   const captureStableAnchor = useCallback((container: HTMLElement) => {
     const distanceFromBottom =
@@ -143,28 +144,40 @@ export function useChatOrientationScrollStability({
     shouldStickToBottomRef,
   ]);
 
+  const observeContainer = useCallback((container: HTMLElement | null) => {
+    resizeObserverRef.current?.disconnect();
+    resizeObserverRef.current = null;
+    observedContainerRef.current = container;
+    containerRef.current = container;
+    if (!container) return;
+
+    captureStableAnchor(container);
+    if (typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      if (observedContainerRef.current === container) scheduleRestore();
+    });
+    observer.observe(container);
+    resizeObserverRef.current = observer;
+  }, [captureStableAnchor, containerRef, scheduleRestore]);
+
   useEffect(() => {
-    const visualViewport = window.visualViewport;
     const captureBeforeRelayout = () => {
       const container = containerRef.current;
       if (container) captureStableAnchor(container);
       scheduleRestore();
     };
-    const continueActiveRelayout = () => {
-      if (relayoutActiveRef.current) scheduleRestore();
-    };
 
     window.addEventListener(APP_VIEWPORT_WILL_CHANGE_EVENT, captureBeforeRelayout);
     window.addEventListener('resize', scheduleRestore);
     window.addEventListener('orientationchange', scheduleRestore);
-    visualViewport?.addEventListener('resize', scheduleRestore);
-    visualViewport?.addEventListener('scroll', continueActiveRelayout);
     return () => {
       window.removeEventListener(APP_VIEWPORT_WILL_CHANGE_EVENT, captureBeforeRelayout);
       window.removeEventListener('resize', scheduleRestore);
       window.removeEventListener('orientationchange', scheduleRestore);
-      visualViewport?.removeEventListener('resize', scheduleRestore);
-      visualViewport?.removeEventListener('scroll', continueActiveRelayout);
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
+      observedContainerRef.current = null;
       if (settleTimerRef.current !== null) {
         window.clearTimeout(settleTimerRef.current);
       }
@@ -179,5 +192,6 @@ export function useChatOrientationScrollStability({
   return {
     captureStableAnchor,
     handleRelayoutScroll,
+    observeContainer,
   };
 }
