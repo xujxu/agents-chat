@@ -33,12 +33,12 @@ build. The interrupted observer changes need real-browser validation.
   anchor, ignore only layout-induced scrolls, and allow explicit user scrolls
   to cancel restoration. Bound scheduling so repeated resize events cannot
   indefinitely postpone restoration.
-- [ ] Run against an isolated source server:
+- [x] Run against an isolated source server:
   `PLAYWRIGHT_BASE_URL=http://localhost:3011 npx playwright test --config tests/playwright.config.ts --project=android-chromium`.
   Repeat for `--project=iphone-webkit`, sequentially. Run
   `--project=desktop-chromium tests/desktop-viewport-shell.spec.ts` and targeted
   desktop interactions. Require all selected tests to pass.
-- [ ] Run `npx tsc --noEmit` and `npm run build` in the isolated source copy;
+- [x] Run `npx tsc --noEmit` and `npm run build` in the isolated source copy;
   leave production process, build, and data untouched. Document actual results
   and retain the physical Safari/Chrome acceptance gate in the spec.
 
@@ -120,6 +120,39 @@ subsequent local tests and is no longer available.
 No test acceptance threshold, device pixel ratio, or product behavior is
 weakened to accommodate the local runner. Physical iPhone acceptance remains a
 separate requirement after supported-runner automation succeeds.
+
+### Final automated results (2026-09-18)
+
+Supported-runner validation passed for commit `e63cf1c`:
+https://github.com/xujxu/agents-chat/actions/runs/35299145378
+
+- Production build and strict TypeScript check passed.
+- Focused cross-browser regressions: 12/12, 58.2 seconds.
+- Complete iPhone WebKit coverage: 37/37, 3.6 minutes.
+- Complete Android Chromium coverage: 37/37, 1.4 minutes.
+- Desktop viewport and interaction coverage: 12/12, 20.6 seconds.
+- Total workflow elapsed time, including setup/build: 7 minutes 56 seconds.
+
+The supported runner separated three remaining issues:
+
+1. Alternating 1px/2px test stimuli could cancel out before a coalesced
+   WebKit render. Monotonically increasing sizes now produce real changes;
+   the >=3 notification, <=650ms restoration, and <=1px error assertions remain.
+2. User input cancelled a pending restoration but did not acknowledge dimensions
+   changed before observer delivery. The next scroll could therefore schedule
+   the stale anchor again. User input now updates the dimension baseline.
+3. Jump-to-latest did not cancel pending history restoration. The transcript
+   hook now owns this explicit bottom request and cancels stale restoration
+   before preserving the existing smooth-scroll behavior.
+
+Desktop interaction fixtures also now honor configured test credentials rather
+than requiring a hard-coded password. All prior mobile UX commits remain in the
+pushed branch ancestry, including mobile navigation, rendered Markdown file
+viewing, and surface-specific model pickers.
+
+Automation is complete. Deployment and physical iPhone Safari/Chrome acceptance
+are still pending; passing emulation is not a claim that the physical compositor
+defect has been verified fixed. No production process, build, or data was changed.
 
 **Create**
 

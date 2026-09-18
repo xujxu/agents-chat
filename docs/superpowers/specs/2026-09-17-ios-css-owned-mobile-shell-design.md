@@ -329,6 +329,12 @@ reproduce the physical iOS compositor defect.
 
 ## Physical-Device Acceptance
 
+Automated validation passed on Ubuntu 24.04 for `e63cf1c` (37 iPhone, 37
+Android, 12 desktop tests, plus 12 focused cross-browser checks, production
+build, and TypeScript). See
+https://github.com/xujxu/agents-chat/actions/runs/35299145378.
+The following physical-device acceptance has not yet been performed.
+
 Deploy the production build and test the same iPhone in Safari and iOS Chrome:
 
 1. Open a Chat at the latest message.
