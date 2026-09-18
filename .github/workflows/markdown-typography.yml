@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [fix/ios-markdown-text-autosizing]
+    paths-ignore: ['docs/**']
 
 permissions:
   contents: read

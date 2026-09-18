@@ -292,6 +292,7 @@ function for a read-only device-inspection snippet.
 
 ```ts
 import { readFileSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import { loginMobileFixture } from './helpers/mobileChatFixture';
 import { installTypographyFixture, typographyChat } from './helpers/typographyFixture';
@@ -314,26 +315,39 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.afterEach(async ({ page, browser }, testInfo) => {
-  await testInfo.attach('typography-observations.json', {
-    body: JSON.stringify({
-      commit: process.env.GITHUB_SHA || 'unrecorded',
-      browser: browser.version(),
-      project: testInfo.project.name,
-      observations,
-    }, null, 2),
-    contentType: 'application/json',
-  });
-  await testInfo.attach('device-sampler.js', {
-    body: `(${captureTypography.toString()})(${JSON.stringify(roots)})`,
-    contentType: 'application/javascript',
-  });
-  await testInfo.attach('synthetic-chat.json', {
-    body: JSON.stringify(typographyChat(), null, 2),
-    contentType: 'application/json',
-  });
-  if (!page.isClosed()) await testInfo.attach('final-viewport.png', {
-    body: await page.screenshot(), contentType: 'image/png',
-  });
+  await mkdir(testInfo.outputPath('evidence'), { recursive: true });
+  const evidence = [
+    {
+      name: 'typography-observations.json',
+      content: JSON.stringify({
+        commit: process.env.GITHUB_SHA || 'unrecorded',
+        browser: browser.version(),
+        project: testInfo.project.name,
+        observations,
+      }, null, 2),
+      contentType: 'application/json',
+    },
+    {
+      name: 'device-sampler.js',
+      content: `(${captureTypography.toString()})(${JSON.stringify(roots)})`,
+      contentType: 'application/javascript',
+    },
+    {
+      name: 'synthetic-chat.json',
+      content: JSON.stringify(typographyChat(), null, 2),
+      contentType: 'application/json',
+    },
+  ];
+  for (const item of evidence) {
+    const path = testInfo.outputPath('evidence', item.name);
+    await writeFile(path, item.content);
+    await testInfo.attach(item.name, { path, contentType: item.contentType });
+  }
+  if (!page.isClosed()) {
+    const path = testInfo.outputPath('evidence', 'final-viewport.png');
+    await page.screenshot({ path });
+    await testInfo.attach('final-viewport.png', { path, contentType: 'image/png' });
+  }
 });
 
 for (const portrait of [{ width: 390, height: 844 }, { width: 430, height: 932 }]) {
@@ -487,6 +501,7 @@ on:
   workflow_dispatch:
   push:
     branches: [fix/ios-markdown-text-autosizing]
+    paths-ignore: ['docs/**']
 
 permissions:
   contents: read
@@ -531,9 +546,9 @@ jobs:
           npx tsc --noEmit
       - name: Prepare revision-identifiable standalone build
         run: |
-          mkdir -p artifacts .next/standalone/.next
-          cp -R .next/static .next/standalone/.next/static
-          cp -R public .next/standalone/public
+          mkdir -p artifacts .next/standalone/.next .next/standalone/public
+          cp -R .next/static .next/standalone/.next/
+          cp -R public/. .next/standalone/public/
           printf '%s\n' "$GITHUB_SHA" > .next/standalone/public/validation-revision.txt
           cp .next/BUILD_ID artifacts/next-build-id.txt
           if [ "${{ matrix.project }}" = "desktop-chromium" ]; then
@@ -738,6 +753,31 @@ experiments; use the design's evidence-driven next-variable decision tree.
 
 ## Execution Record
 
-No implementation or workflow execution has started. Record actual baseline
-and candidate commit/run IDs here during Tasks 3 and 4. Physical acceptance
-remains pending an approved preview and testing on the affected iPhone.
+Initial baseline `feded3e` ran in
+[35346208306](https://github.com/xujxu/agents-chat/actions/runs/35346208306):
+all engines built and passed applicable geometry cases; only the missing
+text-adjust declaration failed the policy contract.
+
+Initial candidate `8453e6e` ran in
+[35346525691](https://github.com/xujxu/agents-chat/actions/runs/35346525691):
+all three jobs passed, including 25 typography/policy cases and 79 existing
+mobile/desktop regression cases. Neither run reproduced physical iPhone
+inflation.
+
+Artifact inspection exposed an evidence-persistence defect: buffer-only
+Playwright attachments were not saved by the line reporter for successful
+cases. The implementation now writes measurements, screenshots, the synthetic
+fixture, and device sampler to test output files before attaching them.
+Baseline `372b676` removes the candidate declarations again and repeats the
+comparison with persistent evidence in
+[35347208920](https://github.com/xujxu/agents-chat/actions/runs/35347208920).
+All 22 applicable behavior cases passed; all three policy cases failed only
+because the declarations are absent. The iPhone artifact was downloaded and
+its observation JSON, screenshots, fixture, and sampler files verified present.
+The first runs are not the final downloadable typography evidence.
+
+The workflow ignores documentation-only pushes so recording run results does
+not repeat builds and browser suites.
+
+Physical acceptance remains pending an approved preview and testing on the
+affected iPhone.
