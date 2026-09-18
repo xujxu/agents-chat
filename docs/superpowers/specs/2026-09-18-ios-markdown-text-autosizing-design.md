@@ -20,6 +20,11 @@ applicable checks. See the
 for run links and evidence limitations. The reported physical iPhone symptom
 was not reproduced in CI, and on-device A/B acceptance is still pending.
 
+The user subsequently authorized a PROD deployment for physical testing.
+The first attempt was automatically rolled back: the built CSS had lost the
+iOS prefix even though source-policy checks passed. The compiler-target
+correction below is required before another deployment.
+
 ## Goal
 
 Keep chat Markdown typography stable when an iPhone rotates between portrait
@@ -193,6 +198,33 @@ Do not add `user-scalable=no`, a maximum zoom restriction, gesture interception,
 or viewport mutations. User-initiated browser zoom must remain available.
 Do not claim that all browser or operating-system text preferences are
 equivalent to pinch zoom; verify the target device's normal zoom separately.
+
+### Build-Time Browser Compatibility
+
+The production-origin artifact for `f47f1b9` exposed a build-pipeline gap:
+its root rule contained `-moz-text-size-adjust:100%;text-size-adjust:100%`,
+but no WebKit declaration. Next.js 16.2.3 defaults to Chrome 111, Edge 111,
+Firefox 111, and desktop Safari 16.4; it does not include iOS Safari.
+Its supported-browser loader reads project Browserslist configuration.
+
+Lightning CSS's
+[prefix selection](https://github.com/parcel-bundler/lightningcss/blob/c6a0c3cebf3395635e61075d2c81a96a710d4910/src/prefixes.rs)
+only emits the WebKit text-adjust prefix when an iOS Safari target is present.
+OpenClaw's [Vite configuration](https://github.com/openclaw/openclaw/blob/6c6dc44250d66eb8ec84f949c4a433c2dfcd8059/ui/vite.config.ts)
+uses a different build pipeline, so matching source declarations alone does
+not establish equivalent delivered CSS.
+
+Use `.browserslistrc` to preserve all four existing desktop targets and add
+`ios_saf 16.4`. This makes the build aware of the supported mobile engine
+without introducing runtime browser detection or changing layout ownership.
+Review these explicit targets when upgrading Next.js.
+
+The policy regression must fetch the stylesheets linked by the built page
+and assert both declarations in the compiled root rule, retaining the raw
+CSS as evidence. Source checks and empty Linux WebKit computed values are
+not substitutes. Deployment must independently verify the served assets
+and roll back if the iOS declaration is absent. This is a correction to
+delivery of the same typography policy, not proof of physical acceptance.
 
 ### Preserve Existing Responsibilities
 

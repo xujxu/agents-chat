@@ -8,7 +8,7 @@ the user selects inline execution.
 
 **Goal:** Produce a revision-identifiable baseline and minimal typography candidate, validate them in GitHub Actions, and require physical iPhone evidence before declaring the rotation defect fixed.
 
-**Architecture:** Keep production changes limited to the global text-adjust policy. Reuse the existing chat fixture and real message renderers; isolate deterministic content, read-only DOM measurements, and regression scenarios in test files. Do not change layout breakpoints, viewport ownership, input font sizes, or browser zoom settings.
+**Architecture:** Keep production changes limited to the global text-adjust policy and browser targets needed to preserve it in compiled CSS. Reuse the existing chat fixture and real message renderers; isolate deterministic content, read-only DOM measurements, and regression scenarios in test files. Do not change layout breakpoints, viewport ownership, input font sizes, or browser zoom settings.
 
 **Tech Stack:** Next.js, React, strict TypeScript, Playwright, GitHub Actions, existing authenticated chat persistence.
 
@@ -22,7 +22,7 @@ the user selects inline execution.
 - Run all validation commands in Actions. Local commands in this plan are Git/`gh` operations only.
 - Do not deploy to the shared running service without explicit approval.
 - Variant A contains tests and documentation, but no production behavior change.
-- Variant B adds only the two text-adjust declarations.
+- Variant B adds the two text-adjust declarations; the deployment investigation additionally requires explicit iOS browser targeting to preserve them in compiled CSS.
 - Preserve Actions evidence for both revisions; never substitute a policy assertion failure for physical symptom reproduction.
 - If a supported-engine regression fails, diagnose and correct it remotely rather than skipping WebKit or weakening the geometry checks.
 - CI-only completion is reported as a candidate awaiting physical acceptance.
@@ -36,7 +36,8 @@ the user selects inline execution.
 | `tests/markdown-typography.spec.ts` | Rotation, cold-load, streaming, collapse, route, and policy coverage |
 | `tests/playwright.config.ts` | Include the cross-platform spec in both mobile projects without excluding desktop |
 | `.github/workflows/markdown-typography.yml` | Remote build, type check, engine matrix, artifacts, and bounded regressions |
-| `app/globals.css` | The sole production candidate change |
+| `app/globals.css` | Global browser text-adjust policy |
+| `.browserslistrc` | Preserve existing desktop targets and include iOS Safari for emitted CSS |
 | Existing design and this plan | Record evidence, outcomes, and physical acceptance status |
 
 Keep the existing `mobileChatFixture.ts` unchanged. Do not add a test dependency,
@@ -807,9 +808,36 @@ runner exposes an empty computed text-adjust property; the stylesheet policy
 is therefore established by the separate declaration contract, not by claiming
 a computed value that the engine did not expose.
 
-No local build, test, dependency install, browser automation, or test server
-was run. No deployment or service restart was performed. Production behavior
-relative to `7f8c292` differs only in the two global CSS declarations.
+At this stage, no local build, test, dependency install, browser automation,
+test server, deployment, or service restart had been performed.
 
-Physical acceptance remains pending an approved preview and testing on the
-affected iPhone.
+### Approved PROD Deployment and Compiled-CSS Correction
+
+The user then authorized deployment to `https://agent.xujx.us.kg` for physical
+iPhone acceptance. The workflow now accepts a public build origin so
+prerendered metadata does not retain the isolated CI URL.
+
+Production-origin revision `f47f1b9` passed
+[35349481470](https://github.com/xujxu/agents-chat/actions/runs/35349481470),
+but deployment detected that the served CSS omitted
+`-webkit-text-size-adjust`. The deployment script automatically restored the
+previous healthy build. Consistent backups of both SQLite databases were
+retained; environment files, systemd configuration, and installed production
+dependencies were unchanged.
+
+The old policy check inspected source rather than emitted CSS. It therefore
+did not establish the iOS contract, despite the green geometry suite.
+Revision `6e73e46` adds a check of actual HTTP-delivered stylesheets and
+persists those bytes as evidence. Its
+[red run](https://github.com/xujxu/agents-chat/actions/runs/35353744811)
+failed in all three engines specifically because the compiled root rule
+omitted the iOS prefix, while the behavior cases passed.
+The corrective `.browserslistrc` keeps
+Next.js's existing desktop targets and adds iOS Safari 16.4, which makes
+Lightning CSS retain the required prefix. See the design's build-time
+compatibility section for the source evidence.
+
+All builds and browser validation remain in Actions. Local operational
+deployment checks are limited to archive inspection, database backup and
+readability, service health, and verification of the actual served assets.
+Physical iPhone acceptance remains pending.
