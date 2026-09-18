@@ -2,6 +2,12 @@ name: Markdown typography validation
 
 on:
   workflow_dispatch:
+    inputs:
+      build_origin:
+        description: Public origin used in prerendered metadata (not a secret)
+        required: false
+        type: string
+        default: http://localhost:3011
   push:
     branches: [fix/ios-markdown-text-autosizing]
     paths-ignore: ['docs/**']
@@ -44,6 +50,8 @@ jobs:
           npm ci --no-audit --no-fund
           npx playwright install --with-deps ${{ matrix.browser }}
       - name: Build and check types
+        env:
+          NEXTAUTH_URL: ${{ inputs.build_origin || 'http://localhost:3011' }}
         run: |
           npm run build
           npx tsc --noEmit
