@@ -22,8 +22,10 @@ was not reproduced in CI, and on-device A/B acceptance is still pending.
 
 The user subsequently authorized a PROD deployment for physical testing.
 The first attempt was automatically rolled back: the built CSS had lost the
-iOS prefix even though source-policy checks passed. The compiler-target
-correction below is required before another deployment.
+iOS prefix even though source-policy checks passed. Revision `79781d5` adds
+the compiler-target correction below, passed all 104 checks including the
+new delivered-CSS assertions, and is now deployed to PROD. Physical iPhone
+acceptance remains pending.
 
 ## Goal
 

@@ -687,6 +687,7 @@ baseline revision.
 ## Task 5: Physical Acceptance Handoff
 
 **No production deployment is authorized by this plan.**
+Subsequent explicit user approval authorized the PROD deployment recorded below.
 
 - [x] **Step 1: Record the exact A/B revisions and Actions URLs.**
 
@@ -740,7 +741,7 @@ experiments; use the design's evidence-driven next-variable decision tree.
 
 ## Self-Review
 
-- [x] Every production change is bounded to the global CSS policy.
+- [x] Every production change is bounded to the global CSS policy and its build-time browser compatibility.
 - [x] The test fixture exercises user, ordinary agent, and text-part rendering.
 - [x] Real polling updates cover pending and completed streaming output.
 - [x] Ordinary and wide landscape pairs are covered without changing breakpoints.
@@ -841,3 +842,30 @@ All builds and browser validation remain in Actions. Local operational
 deployment checks are limited to archive inspection, database backup and
 readability, service health, and verification of the actual served assets.
 Physical iPhone acceptance remains pending.
+
+Corrected revision `79781d534185c75cfc858feda1352de7d7a095c7` passed
+[35355385830](https://github.com/xujxu/agents-chat/actions/runs/35355385830):
+all three builds/type checks and all 104 applicable cases, including the
+new HTTP-delivered CSS contract. The production-origin desktop archive was
+deployed without running a local build or replacing installed dependencies.
+
+Deployment record:
+
+- PROD: `https://agent.xujx.us.kg`
+- Deployed Next build ID: `QbwyXTPSjhIfyuh8ovykl`
+- Previous build ID: `_1Fg5GcfP2ulV4ik2wLOW`
+- Rollback build: `.data/deployments/typography-79781d5/previous.next`
+- Consistent database backups: `.data/deployments/typography-79781d5/database-backups/`
+
+The systemd service is active. Local and public login pages reference the
+same stylesheet set; every fetched stylesheet matches the deployed file's
+SHA-256. The served root policy includes both the WebKit and standard
+declarations. Both existing databases remain readable. Environment files,
+systemd configuration, and production data paths were preserved.
+
+PROD swaps only `.next`, not the standalone `public` directory; identify
+this deployment by the recorded build ID and exact CSS assets, not the
+preview-only `/validation-revision.txt` file. No synthetic chat was inserted
+into shared production data. The user will perform physical Safari/Chrome
+acceptance on the affected iPhone; deployment success is not symptom
+acceptance.
