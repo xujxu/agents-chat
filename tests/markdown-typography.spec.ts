@@ -156,13 +156,28 @@ test('desktop resizing preserves typography and sidebar mode', async ({ page }, 
   }
 });
 
-test('@policy declares root text adjustment without restricting user zoom', async ({ page }) => {
+test('@policy declares root text adjustment without restricting user zoom', async ({ page }, testInfo) => {
   await loginMobileFixture(page);
   const source = readFileSync('app/globals.css', 'utf8');
   const rootRule = source.match(/html,\s*body\s*\{([^}]+)\}/)?.[1];
   expect(rootRule).toBeDefined();
   expect(rootRule).toMatch(/-webkit-text-size-adjust:\s*100%/);
   expect(rootRule).toMatch(/(?:^|[;\n])\s*text-size-adjust:\s*100%/);
+  const stylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
+    [...new Set(links.map((link) => link.getAttribute('href')).filter((href): href is string => !!href))],
+  );
+  expect(stylesheets.length).toBeGreaterThan(0);
+  const compiledCss = (await Promise.all(stylesheets.map(async (href) => {
+    const response = await page.request.get(href);
+    expect(response.ok(), `Stylesheet ${href}`).toBe(true);
+    return response.text();
+  }))).join('\n');
+  await mkdir(testInfo.outputPath('evidence'), { recursive: true });
+  await writeFile(testInfo.outputPath('evidence', 'served-stylesheets.css'), compiledCss);
+  const compiledRootRule = compiledCss.match(/(?:html\s*,\s*body|body\s*,\s*html)\s*\{([^}]+)\}/)?.[1];
+  expect(compiledRootRule, 'Root rule in served CSS').toBeDefined();
+  expect(compiledRootRule, 'iOS prefix must survive CSS compilation').toMatch(/-webkit-text-size-adjust:\s*100%/);
+  expect(compiledRootRule).toMatch(/(?:^|[;\n])\s*text-size-adjust:\s*100%/);
   const viewport = await page.locator('meta[name="viewport"]').getAttribute('content');
   expect(viewport).toContain('width=device-width');
   expect(viewport).not.toMatch(/user-scalable\s*=\s*(no|0)|maximum-scale\s*=/);
