@@ -181,6 +181,10 @@ export function useChatOrientationScrollStability({
         && !['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return;
       cancelScheduledRestore();
       restoreWriteRef.current = null;
+      observedSizeRef.current = {
+        width: container.clientWidth,
+        height: container.clientHeight,
+      };
       captureStableAnchor(container);
     };
     for (const type of ['wheel', 'touchstart', 'touchmove', 'pointerdown', 'keydown']) {

@@ -63,7 +63,7 @@ jobs:
         run: >-
           npx playwright test --config tests/playwright.config.ts
           --project=iphone-webkit
-          -g 'bounds transcript restoration|keeps composer controls'
+          -g 'bounds transcript restoration|keeps composer controls|preserves composer and current chat state|user scroll overrides'
           --timeout=60000 --global-timeout=150000 --max-failures=1
           --trace=retain-on-failure --reporter=line
           --output=artifacts/webkit-smoke

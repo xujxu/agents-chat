@@ -750,9 +750,12 @@ test('preserves the native transcript anchor when the composer grows', async ({ 
   await expect.poll(() => getDistanceFromChatBottom(page)).toBeLessThanOrEqual(4);
 });
 
-test('user scroll overrides pending transcript resize restoration', async ({ page }) => {
+test('user scroll overrides pending and not-yet-observed transcript resizing', async ({ page }) => {
   await triggerTranscriptResize(page);
   const expectedScroll = await page.locator('.chatContainer').evaluate((element) => {
+    const transcript = document.querySelector<HTMLElement>('.chatMessagesArea');
+    if (!transcript) throw new Error('Chat resize target not found');
+    transcript.style.marginBottom = '24px';
     element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
     element.scrollTop = Math.round((element.scrollHeight - element.clientHeight) * 0.5);
     element.dispatchEvent(new Event('scroll'));
