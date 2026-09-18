@@ -17,8 +17,8 @@ const alphaAgent = {
 
 async function login(page: Page) {
   await page.goto(`${BASE}/login`);
-  await page.locator('input[placeholder="Admin username"]').fill('admin');
-  await page.locator('input[placeholder="Password"]').fill('admin123');
+  await page.locator('input[placeholder="Admin username"]').fill(process.env.ADMIN_USERNAME || 'admin');
+  await page.locator('input[placeholder="Password"]').fill(process.env.ADMIN_PASSWORD || 'admin123');
   await page.locator('button[type="submit"]').click();
   await page.waitForSelector('.chatContainer, .emptyHomepage', { timeout: 30000 });
   await page.waitForTimeout(500);
