@@ -47,7 +47,7 @@ second Markdown renderer.
 
 **Create:** `tests/helpers/typographyFixture.ts`
 
-- [ ] **Step 1: Add the fixture module.**
+- [x] **Step 1: Add the fixture module.**
 
 ```ts
 import type { Page } from '@playwright/test';
@@ -159,7 +159,7 @@ travel through the application's real polling and text-part rendering path.
 
 **Create:** `tests/helpers/typographyMetrics.ts`
 
-- [ ] **Step 2: Add a browser-serializable sampler and assertion helpers.**
+- [x] **Step 2: Add a browser-serializable sampler and assertion helpers.**
 
 ```ts
 import { expect, type Page } from '@playwright/test';
@@ -288,7 +288,7 @@ function for a read-only device-inspection snippet.
 
 **Create:** `tests/markdown-typography.spec.ts`
 
-- [ ] **Step 1: Add the following spec before changing production CSS.**
+- [x] **Step 1: Add the following spec before changing production CSS.**
 
 ```ts
 import { readFileSync } from 'node:fs';
@@ -470,7 +470,7 @@ Keep all evidence collection active in both revisions. If a computed property
 is unavailable, the JSON records the empty value and the static contract still
 checks the intended declarations. No geometry case is skipped for that reason.
 
-- [ ] **Step 2: Extend `tests/playwright.config.ts` without changing existing project semantics.**
+- [x] **Step 2: Extend `tests/playwright.config.ts` without changing existing project semantics.**
 
 Add a distinct cross-platform list after `mobileSpecs`:
 
@@ -492,7 +492,7 @@ explicitly identified in the spec.
 
 **Create:** `.github/workflows/markdown-typography.yml`
 
-- [ ] **Step 1: Add a bounded, branch-triggered workflow.**
+- [x] **Step 1: Add a bounded, branch-triggered workflow.**
 
 ```yaml
 name: Markdown typography validation
@@ -624,11 +624,11 @@ Baseline geometry executes before the deliberately failing policy contract.
 The expected contract failure remains a failed workflow; it is not hidden
 using `continue-on-error`. Later regression steps run once the policy passes.
 The desktop job also retains a pre-start standalone archive (without runtime
-chat data) for an approved Linux x64 / Node 24 preview. All jobs exercise that
+chat data) for an approved Ubuntu 24.04 x64 / Node 24 preview. All jobs exercise that
 same standalone packaging path. The revision marker is generated only in the
 CI preview artifact, not added as application source or an API endpoint.
 
-- [ ] **Step 2: Commit and push variant A.**
+- [x] **Step 2: Commit and push variant A.**
 
 ```bash
 git add tests/helpers/typographyFixture.ts tests/helpers/typographyMetrics.ts tests/markdown-typography.spec.ts tests/playwright.config.ts .github/workflows/markdown-typography.yml
@@ -637,7 +637,7 @@ git push -u origin fix/ios-markdown-text-autosizing
 gh run list --repo xujxu/agents-chat --branch fix/ios-markdown-text-autosizing --workflow markdown-typography.yml --limit 3
 ```
 
-- [ ] **Step 3: Read the resulting run by its returned ID.**
+- [x] **Step 3: Read the resulting run by its returned ID.**
 
 Use `gh run view RUN_ID --repo xujxu/agents-chat --json status,conclusion,jobs,url`
 and, after completion, `gh run view RUN_ID --repo xujxu/agents-chat --log-failed`.
@@ -653,7 +653,7 @@ attributing anything to the policy. Do not change application behavior yet.
 
 **Modify:** `app/globals.css`, existing `html, body` declaration.
 
-- [ ] **Step 1: Add only these declarations to the existing rule.**
+- [x] **Step 1: Add only these declarations to the existing rule.**
 
 ```css
   -webkit-text-size-adjust: 100%;
@@ -663,7 +663,7 @@ attributing anything to the policy. Do not change application behavior yet.
 Do not add orientation conditions, `!important`, `none`, maximum scale,
 viewport mutation, font-size changes, or root-position changes.
 
-- [ ] **Step 2: Commit and push variant B.**
+- [x] **Step 2: Commit and push variant B.**
 
 ```bash
 git add app/globals.css
@@ -672,7 +672,7 @@ git push origin fix/ios-markdown-text-autosizing
 gh run list --repo xujxu/agents-chat --branch fix/ios-markdown-text-autosizing --workflow markdown-typography.yml --limit 3
 ```
 
-- [ ] **Step 3: Inspect the new run and artifacts.**
+- [x] **Step 3: Inspect the new run and artifacts.**
 
 Read the candidate run using the same `gh run view` operations with its own
 returned run ID. Expected: all three jobs pass behavior, policy, and existing
@@ -687,7 +687,7 @@ baseline revision.
 
 **No production deployment is authorized by this plan.**
 
-- [ ] **Step 1: Record the exact A/B revisions and Actions URLs.**
+- [x] **Step 1: Record the exact A/B revisions and Actions URLs.**
 
 Use the actual IDs from Tasks 3 and 4. Preserve the sampler and synthetic
 fixture for approved device testing. If an approved preview is unavailable,
@@ -778,6 +778,38 @@ The first runs are not the final downloadable typography evidence.
 
 The workflow ignores documentation-only pushes so recording run results does
 not repeat builds and browser suites.
+
+Final candidate `90439cd` ran in
+[35347491367](https://github.com/xujxu/agents-chat/actions/runs/35347491367).
+All three jobs passed build/type checking and their tests:
+
+| Engine | Typography behavior | Policy | Existing UX regression |
+| --- | --- | --- | --- |
+| iPhone WebKit | 7 passed | 1 passed | 31 passed |
+| Android Chromium | 7 passed | 1 passed | 31 passed |
+| Desktop Chromium | 8 passed | 1 passed | 17 passed |
+
+Total: 104 passed; the desktop-only grid scenario is intentionally skipped in
+the two mobile projects. No mobile rotation case is skipped.
+
+Final downloadable artifacts (retained for 14 days):
+
+- [Baseline iPhone evidence](https://github.com/xujxu/agents-chat/actions/runs/35347208920/artifacts/10547601719)
+- [Baseline desktop evidence and standalone archive](https://github.com/xujxu/agents-chat/actions/runs/35347208920/artifacts/10547511702)
+- [Candidate iPhone evidence](https://github.com/xujxu/agents-chat/actions/runs/35347491367/artifacts/10547354272)
+- [Candidate Android evidence](https://github.com/xujxu/agents-chat/actions/runs/35347491367/artifacts/10547407353)
+- [Candidate desktop evidence and standalone archive](https://github.com/xujxu/agents-chat/actions/runs/35347491367/artifacts/10547258739)
+
+The final iPhone artifact was downloaded and the persisted observations checked
+against its commit and browser version (WebKit 26.4). Both baseline and candidate
+report stable 13.5px paragraph typography in the emulated browser. This WebKit
+runner exposes an empty computed text-adjust property; the stylesheet policy
+is therefore established by the separate declaration contract, not by claiming
+a computed value that the engine did not expose.
+
+No local build, test, dependency install, browser automation, or test server
+was run. No deployment or service restart was performed. Production behavior
+relative to `7f8c292` differs only in the two global CSS declarations.
 
 Physical acceptance remains pending an approved preview and testing on the
 affected iPhone.

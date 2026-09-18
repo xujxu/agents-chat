@@ -12,6 +12,14 @@ This design authorizes a diagnostic baseline and a narrowly controlled
 candidate, not an unconditional production rollout or a shell rewrite.
 Implementation planning must preserve the evidence gates below.
 
+Implementation status: the CSS candidate and remote regression suite are
+available on `fix/ios-markdown-text-autosizing`. Baseline `372b676` and candidate
+`90439cd` have revision-specific Actions artifacts; the candidate passed 104
+applicable checks. See the
+[implementation record](../plans/2026-09-18-ios-markdown-text-autosizing.md#execution-record)
+for run links and evidence limitations. The reported physical iPhone symptom
+was not reproduced in CI, and on-device A/B acceptance is still pending.
+
 ## Goal
 
 Keep chat Markdown typography stable when an iPhone rotates between portrait
