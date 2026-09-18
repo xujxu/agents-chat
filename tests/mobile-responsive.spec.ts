@@ -199,7 +199,8 @@ test('bounds transcript restoration while resize notifications repeat', async ({
     let restoredAfter: number | null = null;
     let repeats = 0;
     const resize = () => {
-      transcript.style.marginBottom = `${repeats++ % 2 + 1}px`;
+      // Monotonic sizes cannot cancel out when WebKit coalesces timer updates.
+      transcript.style.marginBottom = `${++repeats}px`;
     };
     resize();
     element.scrollTop += 160;
@@ -223,10 +224,11 @@ test('bounds transcript restoration while resize notifications repeat', async ({
       transcript.style.removeProperty('margin-bottom');
     }
   });
-  expect(result.notifications).toBeGreaterThanOrEqual(3);
-  expect(result.restoredAfter).not.toBeNull();
-  expect(result.restoredAfter).toBeLessThanOrEqual(650);
-  expect(result.offsetDelta).toBeLessThanOrEqual(1);
+  const measurements = JSON.stringify(result);
+  expect(result.notifications, measurements).toBeGreaterThanOrEqual(3);
+  expect(result.restoredAfter, measurements).not.toBeNull();
+  expect(result.restoredAfter, measurements).toBeLessThanOrEqual(650);
+  expect(result.offsetDelta, measurements).toBeLessThanOrEqual(1);
 });
 
 test('disconnects transcript observers on replacement and unmount', async ({ page }) => {
