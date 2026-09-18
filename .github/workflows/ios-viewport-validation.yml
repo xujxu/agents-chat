@@ -58,12 +58,12 @@ jobs:
           done
           cat artifacts/server.log
           exit 1
-      - name: Reproduce outstanding WebKit failures first
+      - name: Check viewport and scroll regressions first
         timeout-minutes: 3
         run: >-
           npx playwright test --config tests/playwright.config.ts
-          --project=iphone-webkit
-          -g 'bounds transcript restoration|keeps composer controls|preserves composer and current chat state|user scroll overrides'
+          --project=iphone-webkit --project=android-chromium
+          -g 'bounds transcript restoration|keeps composer controls|preserves composer and current chat state|user scroll overrides|composer grows|jump to latest overrides'
           --timeout=60000 --global-timeout=150000 --max-failures=1
           --trace=retain-on-failure --reporter=line
           --output=artifacts/webkit-smoke

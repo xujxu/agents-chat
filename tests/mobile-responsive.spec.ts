@@ -767,6 +767,22 @@ test('user scroll overrides pending and not-yet-observed transcript resizing', a
   await expect(page.getByRole('button', { name: 'Jump to latest messages' })).toBeVisible();
 });
 
+test('jump to latest overrides pending history anchor restoration', async ({ page }) => {
+  await page.locator('.chatContainer').evaluate((element) => {
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
+    element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
+    element.dispatchEvent(new Event('scroll'));
+  });
+  const jump = page.getByRole('button', { name: 'Jump to latest messages' });
+  await expect(jump).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event('orientationchange')));
+  await jump.click();
+  await expect.poll(() => getDistanceFromChatBottom(page)).toBeLessThanOrEqual(4);
+  await page.waitForTimeout(600);
+  await expect.poll(() => getDistanceFromChatBottom(page)).toBeLessThanOrEqual(4);
+  await expect(jump).toBeHidden();
+});
+
 test('restores the inline body overflow that existed before mobile scroll lock', async ({ page }) => {
   await page.evaluate(() => {
     document.body.style.overflow = 'clip';

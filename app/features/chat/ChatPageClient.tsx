@@ -258,11 +258,7 @@ export function ChatPageClient() {
     orientationScroll.captureStableAnchor(container);
   }
   function scrollToLatest() {
-    const container = chatContainerRef.current;
-    if (!container) return;
-    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-    shouldStickToBottomRef.current = true;
-    setShowScrollToBottom(false);
+    orientationScroll.scrollToLatest();
   }
   function switchAgentFilter(agentId: string | null) { if (agentId === registry.selectedAgentFilter) return; cancelInitialChatRestore(); void saveCurrentChatToHistory(); registry.setSelectedAgentFilter(agentId); currentChatIdRef.current = ''; setCurrentChatId(''); setActiveSidebarChatId(''); setChatName('New Chat'); clearChatMessages({ clearAgentFilter: false }); currentAgentSessionsRef.current = {}; }
   async function loadChat(chatId: string) {

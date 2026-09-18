@@ -163,6 +163,26 @@ export function useChatOrientationScrollStability({
     restoreStableAnchor,
   ]);
 
+  const scrollToLatest = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    cancelScheduledRestore();
+    restoreWriteRef.current = null;
+    observedSizeRef.current = {
+      width: container.clientWidth,
+      height: container.clientHeight,
+    };
+    stableAnchorRef.current = { kind: 'bottom', scrollTop: container.scrollTop };
+    shouldStickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+  }, [
+    cancelScheduledRestore,
+    containerRef,
+    setShowScrollToBottom,
+    shouldStickToBottomRef,
+  ]);
+
   const observeContainer = useCallback((container: HTMLElement | null) => {
     cancelScheduledRestore();
     resizeObserverRef.current?.disconnect();
@@ -261,5 +281,6 @@ export function useChatOrientationScrollStability({
     captureStableAnchor,
     handleRelayoutScroll,
     observeContainer,
+    scrollToLatest,
   };
 }
