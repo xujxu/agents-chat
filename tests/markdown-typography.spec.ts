@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import { loginMobileFixture } from './helpers/mobileChatFixture';
 import { installTypographyFixture, typographyChat } from './helpers/typographyFixture';
@@ -21,26 +22,39 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.afterEach(async ({ page, browser }, testInfo) => {
-  await testInfo.attach('typography-observations.json', {
-    body: JSON.stringify({
-      commit: process.env.GITHUB_SHA || 'unrecorded',
-      browser: browser.version(),
-      project: testInfo.project.name,
-      observations,
-    }, null, 2),
-    contentType: 'application/json',
-  });
-  await testInfo.attach('device-sampler.js', {
-    body: `(${captureTypography.toString()})(${JSON.stringify(roots)})`,
-    contentType: 'application/javascript',
-  });
-  await testInfo.attach('synthetic-chat.json', {
-    body: JSON.stringify(typographyChat(), null, 2),
-    contentType: 'application/json',
-  });
-  if (!page.isClosed()) await testInfo.attach('final-viewport.png', {
-    body: await page.screenshot(), contentType: 'image/png',
-  });
+  await mkdir(testInfo.outputPath('evidence'), { recursive: true });
+  const evidence = [
+    {
+      name: 'typography-observations.json',
+      content: JSON.stringify({
+        commit: process.env.GITHUB_SHA || 'unrecorded',
+        browser: browser.version(),
+        project: testInfo.project.name,
+        observations,
+      }, null, 2),
+      contentType: 'application/json',
+    },
+    {
+      name: 'device-sampler.js',
+      content: `(${captureTypography.toString()})(${JSON.stringify(roots)})`,
+      contentType: 'application/javascript',
+    },
+    {
+      name: 'synthetic-chat.json',
+      content: JSON.stringify(typographyChat(), null, 2),
+      contentType: 'application/json',
+    },
+  ];
+  for (const item of evidence) {
+    const path = testInfo.outputPath('evidence', item.name);
+    await writeFile(path, item.content);
+    await testInfo.attach(item.name, { path, contentType: item.contentType });
+  }
+  if (!page.isClosed()) {
+    const path = testInfo.outputPath('evidence', 'final-viewport.png');
+    await page.screenshot({ path });
+    await testInfo.attach('final-viewport.png', { path, contentType: 'image/png' });
+  }
 });
 
 for (const portrait of [{ width: 390, height: 844 }, { width: 430, height: 932 }]) {
