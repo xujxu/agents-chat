@@ -1,6 +1,10 @@
 # iOS Markdown Typography Implementation Plan
 
-> **For agentic workers:** Execute this plan task-by-task in the current session. The referenced superpowers execution skills are not installed here; do not invent tool invocations. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+Environment note: those execution skills are not installed in this session.
+Do not invent unavailable tool invocations; execute the tasks directly when
+the user selects inline execution.
 
 **Goal:** Produce a revision-identifiable baseline and minimal typography candidate, validate them in GitHub Actions, and require physical iPhone evidence before declaring the rotation defect fixed.
 
@@ -394,6 +398,7 @@ test('draft and streamed Markdown survive real viewport changes', async ({ page 
 
 test('shared Markdown inherits the policy across orientation', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await loginMobileFixture(page);
   await page.goto('/share/typography');
   const shareRoots = { share: '.shareMsg.agent .shareMarkdown' };
   await expect(page.locator(shareRoots.share).first()).toBeVisible();
@@ -673,8 +678,10 @@ Use the actual IDs from Tasks 3 and 4. Preserve the sampler and synthetic
 fixture for approved device testing. If an approved preview is unavailable,
 mark the physical step blocked and report the blocker.
 The standalone archive is attached to the desktop job's evidence artifact.
-After approved deployment, verify `/validation-revision.txt`, the corresponding
-Next build ID/asset URLs, and the browser's loaded resources. Configure the
+After approved deployment and login, verify `/validation-revision.txt`, the
+corresponding Next build ID/asset URLs, and the browser's loaded resources.
+The existing middleware protects the revision text asset and share pages;
+do not change authentication to make the diagnostic artifacts public. Configure the
 preview's real authentication and URL explicitly; the workflow's dummy
 credentials are for its loopback-only instance and must not be exposed.
 
