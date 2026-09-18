@@ -245,10 +245,8 @@ export function ChatPageClient() {
     });
     return () => cancelAnimationFrame(frame);
   }, [leftSidebarTab, currentChatId]);
-  useEffect(() => { const el = chatContainerRef.current; if (!el) return; const onScroll = () => updateChatStickiness(el); onScroll(); el.addEventListener('scroll', onScroll, { passive: true }); return () => el.removeEventListener('scroll', onScroll); }, []);
-
   function updateChatStickiness(container: HTMLElement) {
-    if (orientationScroll.handleRelayoutScroll()) return;
+    if (orientationScroll.handleRelayoutScroll(container)) return;
     const previous = lastChatScrollTopRef.current;
     const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
     const nearBottom = distance <= 4;

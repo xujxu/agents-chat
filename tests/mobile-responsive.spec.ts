@@ -16,19 +16,46 @@ test.beforeEach(async ({ page }) => {
   fixture = await installMobileChatFixture(page);
   await page.addInitScript(() => {
     const NativeResizeObserver = window.ResizeObserver;
-    if (typeof NativeResizeObserver === 'undefined') return;
-
     const testWindow = window as Window & {
       __chatContainerResizeObserved?: boolean;
+      __chatTranscriptResizeCount?: number;
+      __chatResizeObservers?: Array<{
+        disconnected: boolean;
+      }>;
     };
-    window.ResizeObserver = class extends NativeResizeObserver {
+    testWindow.__chatResizeObservers = [];
+    testWindow.__chatTranscriptResizeCount = 0;
+    class TestResizeObserver extends NativeResizeObserver {
+      disconnected = false;
+      private registered = false;
+
+      constructor(callback: ResizeObserverCallback) {
+        super((entries, observer) => {
+          for (const entry of entries) {
+            if (entry.target.classList.contains('chatContainer')) {
+              testWindow.__chatTranscriptResizeCount = (testWindow.__chatTranscriptResizeCount ?? 0) + 1;
+            }
+          }
+          callback(entries, observer);
+        });
+      }
+
       observe(target: Element, options?: ResizeObserverOptions) {
         if (target.classList.contains('chatContainer')) {
           testWindow.__chatContainerResizeObserved = true;
+          if (!this.registered) testWindow.__chatResizeObservers?.push(this);
+          this.registered = true;
         }
+        this.disconnected = false;
         super.observe(target, options);
       }
-    };
+
+      disconnect() {
+        this.disconnected = true;
+        super.disconnect();
+      }
+    }
+    window.ResizeObserver = TestResizeObserver;
   });
   await loginMobileFixture(page);
 });
@@ -77,6 +104,31 @@ async function getTopMessageAnchor(page: import('@playwright/test').Page) {
   });
 }
 
+async function triggerTranscriptResize(
+  page: import('@playwright/test').Page,
+  repeatCount = 1,
+  intervalMs = 0,
+) {
+  await page.evaluate(async ({ repeats, interval }) => {
+    const transcript = document.querySelector<HTMLElement>('.chatMessagesArea');
+    if (!transcript) throw new Error('Chat resize target not found');
+    const testWindow = window as Window & { __chatTranscriptResizeCount: number };
+    for (let index = 0; index < repeats; index += 1) {
+      const before = testWindow.__chatTranscriptResizeCount;
+      transcript.style.marginBottom = `${index % 2 + 1}px`;
+      await new Promise<void>((resolve) => {
+        const check = () => {
+          if (testWindow.__chatTranscriptResizeCount > before) resolve();
+          else window.requestAnimationFrame(check);
+        };
+        window.requestAnimationFrame(check);
+      });
+      if (interval > 0) await new Promise((resolve) => window.setTimeout(resolve, interval));
+    }
+    transcript.style.removeProperty('margin-bottom');
+  }, { repeats: repeatCount, interval: intervalMs });
+}
+
 async function triggerLayoutRelayoutWithScrollDrift(
   page: import('@playwright/test').Page,
   nextViewport: { width: number; height: number },
@@ -96,8 +148,8 @@ async function triggerLayoutRelayoutWithScrollDrift(
         container.scrollHeight - container.clientHeight,
       ),
     );
-    container.dispatchEvent(new Event('scroll'));
   }, { drift: scrollDrift });
+  await triggerTranscriptResize(page, 8, 80);
 }
 
 test('observes transcript geometry as the scroll anchor authority', async ({ page }) => {
@@ -106,6 +158,116 @@ test('observes transcript geometry as the scroll anchor authority', async ({ pag
       __chatContainerResizeObserved?: boolean;
     }).__chatContainerResizeObserved ?? false
   )).toBe(true);
+});
+
+test('keeps the initial observer baseline from suppressing a real scroll', async ({ page }) => {
+  const chat = page.locator('.chatContainer');
+  await triggerTranscriptResize(page);
+
+  await chat.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
+    element.scrollTop = Math.round(
+      (element.scrollHeight - element.clientHeight) * 0.5,
+    );
+    element.dispatchEvent(new Event('scroll'));
+  });
+
+  await expect(page.getByRole('button', {
+    name: 'Jump to latest messages',
+  })).toBeVisible();
+  const anchor = await getTopMessageAnchor(page);
+  expect(anchor).not.toBeNull();
+});
+
+test('bounds transcript restoration while resize notifications repeat', async ({ page }) => {
+  const chat = page.locator('.chatContainer');
+  await triggerTranscriptResize(page);
+  await chat.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
+    element.scrollTop = Math.round(
+      (element.scrollHeight - element.clientHeight) * 0.55,
+    );
+    element.dispatchEvent(new Event('scroll'));
+  });
+  const result = await chat.evaluate(async (element) => {
+    const transcript = document.querySelector<HTMLElement>('.chatMessagesArea');
+    if (!transcript) throw new Error('Chat resize target not found');
+    const testWindow = window as Window & { __chatTranscriptResizeCount: number };
+    const originalTop = element.scrollTop;
+    const initialCount = testWindow.__chatTranscriptResizeCount;
+    const startedAt = performance.now();
+    let restoredAfter: number | null = null;
+    let repeats = 0;
+    const resize = () => {
+      transcript.style.marginBottom = `${repeats++ % 2 + 1}px`;
+    };
+    resize();
+    element.scrollTop += 160;
+    element.dispatchEvent(new Event('scroll'));
+    const resizeTimer = window.setInterval(resize, 80);
+    const sampleTimer = window.setInterval(() => {
+      if (restoredAfter === null && Math.abs(element.scrollTop - originalTop) <= 1) {
+        restoredAfter = performance.now() - startedAt;
+      }
+    }, 20);
+    try {
+      await new Promise(resolve => window.setTimeout(resolve, 900));
+      return {
+        restoredAfter,
+        notifications: testWindow.__chatTranscriptResizeCount - initialCount,
+        offsetDelta: Math.abs(element.scrollTop - originalTop),
+      };
+    } finally {
+      window.clearInterval(resizeTimer);
+      window.clearInterval(sampleTimer);
+      transcript.style.removeProperty('margin-bottom');
+    }
+  });
+  expect(result.notifications).toBeGreaterThanOrEqual(3);
+  expect(result.restoredAfter).not.toBeNull();
+  expect(result.restoredAfter).toBeLessThanOrEqual(650);
+  expect(result.offsetDelta).toBeLessThanOrEqual(1);
+});
+
+test('disconnects transcript observers on replacement and unmount', async ({ page }) => {
+  await triggerTranscriptResize(page);
+  const initialObserverIndex = await page.evaluate(() => {
+    const observers = (window as Window & {
+      __chatResizeObservers?: Array<{ disconnected: boolean }>;
+    }).__chatResizeObservers ?? [];
+    return observers.findLastIndex((observer) => !observer.disconnected);
+  });
+  expect(initialObserverIndex).toBeGreaterThanOrEqual(0);
+
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('button', { name: 'Second mobile chat' }).click();
+  await expect(page.getByText('Second chat message')).toBeVisible();
+
+  await expect.poll(() => page.evaluate((observerIndex) => {
+    const observers = (window as Window & {
+      __chatResizeObservers?: Array<{ disconnected: boolean }>;
+    }).__chatResizeObservers ?? [];
+    return {
+      active: observers.filter((observer) => !observer.disconnected).length,
+      initialDisconnected: observers[observerIndex]?.disconnected ?? false,
+    };
+  }, initialObserverIndex)).toEqual({
+    active: 1,
+    initialDisconnected: true,
+  });
+
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('tab', { name: 'Files' }).click();
+  await page.getByRole('button', { name: 'Files agent' }).click();
+  await page.getByRole('option', { name: 'Alpha Agent' }).click();
+  await page.locator('.mdTreeFile', { hasText: 'README.md' }).click();
+  await expect(page.locator('.mdEditorInline')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const observers = (window as Window & {
+      __chatResizeObservers?: Array<{ disconnected: boolean }>;
+    }).__chatResizeObservers ?? [];
+    return observers.length > 0 && observers.every((observer) => observer.disconnected);
+  })).toBe(true);
 });
 
 test('keeps the mobile root independent from visual viewport events', async ({ page }) => {
@@ -259,10 +421,17 @@ test('preserves composer and current chat state while opening and closing naviga
   await expect(page.getByText('Existing mobile message')).toBeVisible();
   const chatContainer = page.locator('.chatContainer');
   const preservedScrollTop = await chatContainer.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
     element.scrollTop = Math.floor((element.scrollHeight - element.clientHeight) / 2);
+    element.dispatchEvent(new Event('scroll'));
     return element.scrollTop;
   });
   expect(preservedScrollTop).toBeGreaterThan(0);
+  await expect(page.getByRole('button', {
+    name: 'Jump to latest messages',
+  })).toBeVisible();
+  const preservedAnchor = await getTopMessageAnchor(page);
+  expect(preservedAnchor).not.toBeNull();
 
   await page.getByRole('button', { name: 'Open navigation' }).click();
   await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
@@ -272,6 +441,19 @@ test('preserves composer and current chat state while opening and closing naviga
   await expect(page.locator('.attachmentChip')).toContainText('mobile-note.txt');
   await expect(page.getByText('Existing mobile message')).toBeVisible();
   await expect.poll(() => chatContainer.evaluate((element) => element.scrollTop)).toBe(preservedScrollTop);
+  await expect.poll(async () => {
+    const restoredAnchor = await getTopMessageAnchor(page);
+    if (!preservedAnchor || !restoredAnchor) return null;
+    return {
+      sameMessage: restoredAnchor.index === preservedAnchor.index,
+      offsetDelta: Math.round(Math.abs(
+        restoredAnchor.offsetTop - preservedAnchor.offsetTop,
+      )),
+    };
+  }).toEqual({
+    sameMessage: true,
+    offsetDelta: 0,
+  });
   await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('');
 });
 
@@ -398,6 +580,16 @@ test('uses a zoom-enabled viewport and stable authored typography', async ({ pag
       return getComputedStyle(element).fontSize;
     }), typographySelectors);
   const initialTypography = await readTypography();
+  const readGlyph = () => page.locator('.messageContent.markdownBody p').first().evaluate((element) => {
+    const text = element.firstChild;
+    if (!text || text.nodeType !== Node.TEXT_NODE) throw new Error('Expected Markdown text');
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, Math.min(8, text.textContent?.length ?? 0));
+    const rect = range.getBoundingClientRect();
+    return { width: rect.width, height: rect.height };
+  });
+  const initialGlyph = await readGlyph();
   const expectStableTypography = async (expected = initialTypography) => {
     await expect.poll(readTypography).toEqual(expected);
   };
@@ -416,9 +608,9 @@ test('uses a zoom-enabled viewport and stable authored typography', async ({ pag
   const layoutWidths: number[] = [];
 
   for (const viewport of [
-    { width: 844, height: 390 },
+    { width: 932, height: 430 },
     { width: 430, height: 760 },
-    { width: 844, height: 390 },
+    { width: 932, height: 430 },
     { width: 430, height: 760 },
   ]) {
     await page.setViewportSize(viewport);
@@ -441,6 +633,13 @@ test('uses a zoom-enabled viewport and stable authored typography', async ({ pag
       height: viewport.height,
     });
     await expectStableTypography();
+    const glyph = await readGlyph();
+    expect(Math.abs(glyph.width - initialGlyph.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(glyph.height - initialGlyph.height)).toBeLessThanOrEqual(1);
+    await expect.poll(() => page.locator('.page').evaluate((element) => [
+      (element as HTMLElement).style.getPropertyValue('--app-viewport-height'),
+      (element as HTMLElement).style.getPropertyValue('--app-viewport-offset-top'),
+    ])).toEqual(['', '']);
     layoutWidths.push(await page.locator('.chatPageRoot .page').evaluate((element) =>
       Math.round(element.getBoundingClientRect().width)
     ));
@@ -464,6 +663,7 @@ test('keeps the latest message pinned through portrait relayout', async ({ page 
   const chat = page.locator('.chatContainer');
   await page.setViewportSize({ width: 430, height: 820 });
   await chat.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: 100 }));
     element.scrollTop = element.scrollHeight;
     element.dispatchEvent(new Event('scroll'));
   });
@@ -488,6 +688,7 @@ test('keeps the same historical message position through portrait relayout', asy
   await page.setViewportSize({ width: 430, height: 820 });
   await page.waitForTimeout(500);
   await chat.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
     element.scrollTop = Math.round(
       (element.scrollHeight - element.clientHeight) * 0.55,
     );
@@ -520,6 +721,45 @@ test('keeps the same historical message position through portrait relayout', asy
   await expect(page.getByRole('button', {
     name: 'Jump to latest messages',
   })).toBeVisible();
+});
+
+test('preserves the native transcript anchor when the composer grows', async ({ page }) => {
+  const chat = page.locator('.chatContainer');
+  const textarea = page.locator('.composerTextarea');
+  await chat.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
+    element.scrollTop = (element.scrollHeight - element.clientHeight) * 0.5;
+    element.dispatchEvent(new Event('scroll'));
+  });
+  const before = await getTopMessageAnchor(page);
+  const initialHeight = await chat.evaluate((element) => element.clientHeight);
+  await textarea.fill('One\nTwo\nThree\nFour\nFive\nSix');
+  await expect.poll(() => chat.evaluate((element) => element.clientHeight)).toBeLessThan(initialHeight);
+  await expect.poll(async () => {
+    const after = await getTopMessageAnchor(page);
+    return before && after ? Math.abs(after.offsetTop - before.offsetTop) : Infinity;
+  }).toBeLessThanOrEqual(1);
+  await expect(textarea).toBeFocused();
+  await expect(textarea).toHaveValue('One\nTwo\nThree\nFour\nFive\nSix');
+
+  await page.getByRole('button', { name: 'Jump to latest messages' }).click();
+  await expect.poll(() => getDistanceFromChatBottom(page)).toBeLessThanOrEqual(4);
+  await textarea.fill('One\nTwo\nThree\nFour\nFive\nSix\nSeven\nEight\nNine');
+  await expect.poll(() => getDistanceFromChatBottom(page)).toBeLessThanOrEqual(4);
+});
+
+test('user scroll overrides pending transcript resize restoration', async ({ page }) => {
+  await triggerTranscriptResize(page);
+  const expectedScroll = await page.locator('.chatContainer').evaluate((element) => {
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 }));
+    element.scrollTop = Math.round((element.scrollHeight - element.clientHeight) * 0.5);
+    element.dispatchEvent(new Event('scroll'));
+    return element.scrollTop;
+  });
+  await page.waitForTimeout(600);
+  await expect.poll(() => page.locator('.chatContainer').evaluate((element) => element.scrollTop))
+    .toBe(expectedScroll);
+  await expect(page.getByRole('button', { name: 'Jump to latest messages' })).toBeVisible();
 });
 
 test('restores the inline body overflow that existed before mobile scroll lock', async ({ page }) => {
@@ -804,7 +1044,10 @@ test('mobile Agent management keeps full CRUD and access controls reachable', as
 
   const envTextarea = settings.locator('textarea');
   await envTextarea.focus();
-  await setTestVisualViewport(page, 420, 96);
+  const initialViewport = page.viewportSize();
+  if (!initialViewport) throw new Error('Expected an emulated mobile viewport');
+  await page.setViewportSize({ width: initialViewport.width, height: 420 });
+  await setTestVisualViewport(page, 420, 0);
   await expect(envTextarea).toBeFocused();
   await expectDialogFitsVisualViewport(envTextarea);
   await expectDialogFitsVisualViewport(settings.locator('.agentSheetActions'));
@@ -820,6 +1063,8 @@ test('mobile Agent management keeps full CRUD and access controls reachable', as
   expect(fixture.acpRequests.filter((request) => request.action === 'update-agent-config')).toHaveLength(1);
   releaseUpdate();
   await expect(settings).toBeHidden();
+  await page.setViewportSize(initialViewport);
+  await setTestVisualViewport(page, initialViewport.height, 0);
 
   expect(fixture.agents.get('mobile-managed')).toMatchObject({
     name: 'Mobile Managed Updated',

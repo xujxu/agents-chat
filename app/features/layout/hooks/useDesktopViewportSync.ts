@@ -2,6 +2,7 @@
 
 import { useEffect, type RefObject } from 'react';
 import { APP_VIEWPORT_WILL_CHANGE_EVENT } from '../viewportEvents';
+import { MOBILE_LAYOUT_QUERY } from './useMobileOverlayState';
 
 type UseDesktopViewportSyncOptions = {
   pageRef: RefObject<HTMLElement | null>;
@@ -21,7 +22,7 @@ export function useDesktopViewportSync({
       page.style.removeProperty('--app-viewport-offset-top');
     };
 
-    if (isMobileLayout) {
+    if (isMobileLayout || window.matchMedia(MOBILE_LAYOUT_QUERY).matches) {
       clearViewportProperties();
       return clearViewportProperties;
     }

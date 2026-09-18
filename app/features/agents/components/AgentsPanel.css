@@ -302,7 +302,7 @@
   color: var(--accent);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 900px), (max-width: 1100px) and (hover: none) and (pointer: coarse) {
   .chatPageRoot .agentMobileSheet {
     position: fixed;
     inset: 0;

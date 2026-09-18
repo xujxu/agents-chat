@@ -34,12 +34,19 @@ export function useChatOrientationScrollStability({
   setShowScrollToBottom,
 }: UseChatOrientationScrollStabilityOptions) {
   const stableAnchorRef = useRef<StableAnchor | null>(null);
-  const relayoutActiveRef = useRef(false);
+  const restoreScheduledRef = useRef(false);
+  const restoreWriteRef = useRef<{
+    container: HTMLElement;
+    scrollTop: number;
+  } | null>(null);
   const settleTimerRef = useRef<number | null>(null);
   const firstFrameRef = useRef(0);
   const secondFrameRef = useRef(0);
+  const clearRestoreWriteFrameRef = useRef(0);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const observedContainerRef = useRef<HTMLElement | null>(null);
+  const observedSizeRef = useRef({ width: 0, height: 0 });
+  const removeInputListenersRef = useRef<(() => void) | null>(null);
 
   const captureStableAnchor = useCallback((container: HTMLElement) => {
     const distanceFromBottom =
@@ -73,7 +80,7 @@ export function useChatOrientationScrollStability({
     const container = containerRef.current;
     const anchor = stableAnchorRef.current;
     if (!container || !anchor) {
-      relayoutActiveRef.current = false;
+      restoreScheduledRef.current = false;
       return;
     }
 
@@ -93,7 +100,19 @@ export function useChatOrientationScrollStability({
       nextScrollTop = anchor.scrollTop;
     }
 
-    container.scrollTop = Math.max(0, Math.min(nextScrollTop, maxScrollTop));
+    const boundedScrollTop = Math.max(
+      0,
+      Math.min(nextScrollTop, maxScrollTop),
+    );
+    restoreWriteRef.current = {
+      container,
+      scrollTop: boundedScrollTop,
+    };
+    container.scrollTop = boundedScrollTop;
+    window.cancelAnimationFrame(clearRestoreWriteFrameRef.current);
+    clearRestoreWriteFrameRef.current = window.requestAnimationFrame(() => {
+      restoreWriteRef.current = null;
+    });
     const distanceFromBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight;
     const pinnedToBottom =
@@ -101,7 +120,7 @@ export function useChatOrientationScrollStability({
     shouldStickToBottomRef.current = pinnedToBottom;
     lastScrollTopRef.current = container.scrollTop;
     setShowScrollToBottom(!pinnedToBottom);
-    relayoutActiveRef.current = false;
+    restoreScheduledRef.current = false;
     captureStableAnchor(container);
   }, [
     captureStableAnchor,
@@ -111,26 +130,27 @@ export function useChatOrientationScrollStability({
     shouldStickToBottomRef,
   ]);
 
-  const scheduleRestore = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    if (shouldStickToBottomRef.current) {
-      stableAnchorRef.current = {
-        kind: 'bottom',
-        scrollTop: container.scrollTop,
-      };
-    } else if (!stableAnchorRef.current) {
-      captureStableAnchor(container);
-    }
-    relayoutActiveRef.current = true;
-
+  const cancelScheduledRestore = useCallback(() => {
+    restoreScheduledRef.current = false;
     if (settleTimerRef.current !== null) {
       window.clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = null;
     }
     window.cancelAnimationFrame(firstFrameRef.current);
     window.cancelAnimationFrame(secondFrameRef.current);
+  }, []);
+
+  const scheduleRestore = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    if (restoreScheduledRef.current) return;
+    if (!stableAnchorRef.current) {
+      captureStableAnchor(container);
+    }
+    restoreScheduledRef.current = true;
 
     settleTimerRef.current = window.setTimeout(() => {
+      settleTimerRef.current = null;
       firstFrameRef.current = window.requestAnimationFrame(() => {
         secondFrameRef.current = window.requestAnimationFrame(
           restoreStableAnchor,
@@ -141,25 +161,53 @@ export function useChatOrientationScrollStability({
     captureStableAnchor,
     containerRef,
     restoreStableAnchor,
-    shouldStickToBottomRef,
   ]);
 
   const observeContainer = useCallback((container: HTMLElement | null) => {
+    cancelScheduledRestore();
     resizeObserverRef.current?.disconnect();
+    removeInputListenersRef.current?.();
     resizeObserverRef.current = null;
     observedContainerRef.current = container;
     containerRef.current = container;
+    stableAnchorRef.current = null;
+    restoreWriteRef.current = null;
     if (!container) return;
 
+    observedSizeRef.current = { width: container.clientWidth, height: container.clientHeight };
     captureStableAnchor(container);
+    const onUserInput = (event: Event) => {
+      if (event instanceof KeyboardEvent
+        && !['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return;
+      cancelScheduledRestore();
+      restoreWriteRef.current = null;
+      captureStableAnchor(container);
+    };
+    for (const type of ['wheel', 'touchstart', 'touchmove', 'pointerdown', 'keydown']) {
+      container.addEventListener(type, onUserInput, { passive: true });
+    }
+    removeInputListenersRef.current = () => {
+      for (const type of ['wheel', 'touchstart', 'touchmove', 'pointerdown', 'keydown']) {
+        container.removeEventListener(type, onUserInput);
+      }
+    };
     if (typeof ResizeObserver === 'undefined') return;
 
     const observer = new ResizeObserver(() => {
-      if (observedContainerRef.current === container) scheduleRestore();
+      if (observedContainerRef.current !== container) return;
+      const { width, height } = observedSizeRef.current;
+      if (width === container.clientWidth && height === container.clientHeight) return;
+      observedSizeRef.current = { width: container.clientWidth, height: container.clientHeight };
+      scheduleRestore();
     });
     observer.observe(container);
     resizeObserverRef.current = observer;
-  }, [captureStableAnchor, containerRef, scheduleRestore]);
+  }, [
+    cancelScheduledRestore,
+    captureStableAnchor,
+    containerRef,
+    scheduleRestore,
+  ]);
 
   useEffect(() => {
     const captureBeforeRelayout = () => {
@@ -167,27 +215,43 @@ export function useChatOrientationScrollStability({
       if (container) captureStableAnchor(container);
       scheduleRestore();
     };
+    const scheduleCurrentRestore = () => scheduleRestore();
 
     window.addEventListener(APP_VIEWPORT_WILL_CHANGE_EVENT, captureBeforeRelayout);
-    window.addEventListener('resize', scheduleRestore);
-    window.addEventListener('orientationchange', scheduleRestore);
+    window.addEventListener('resize', scheduleCurrentRestore);
+    window.addEventListener('orientationchange', scheduleCurrentRestore);
     return () => {
       window.removeEventListener(APP_VIEWPORT_WILL_CHANGE_EVENT, captureBeforeRelayout);
-      window.removeEventListener('resize', scheduleRestore);
-      window.removeEventListener('orientationchange', scheduleRestore);
+      window.removeEventListener('resize', scheduleCurrentRestore);
+      window.removeEventListener('orientationchange', scheduleCurrentRestore);
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
       observedContainerRef.current = null;
-      if (settleTimerRef.current !== null) {
-        window.clearTimeout(settleTimerRef.current);
-      }
-      window.cancelAnimationFrame(firstFrameRef.current);
-      window.cancelAnimationFrame(secondFrameRef.current);
+      removeInputListenersRef.current?.();
+      removeInputListenersRef.current = null;
+      cancelScheduledRestore();
+      window.cancelAnimationFrame(clearRestoreWriteFrameRef.current);
+      restoreWriteRef.current = null;
     };
-  }, [captureStableAnchor, containerRef, scheduleRestore]);
+  }, [
+    cancelScheduledRestore,
+    captureStableAnchor,
+    containerRef,
+    scheduleRestore,
+  ]);
 
-  const handleRelayoutScroll = useCallback(() =>
-    relayoutActiveRef.current, []);
+  const handleRelayoutScroll = useCallback((container: HTMLElement) => {
+    const restoreWrite = restoreWriteRef.current;
+    if (restoreWrite?.container === container) {
+      restoreWriteRef.current = null;
+      if (Math.abs(restoreWrite.scrollTop - container.scrollTop) <= 1) return true;
+    }
+    const { width, height } = observedSizeRef.current;
+    if (width !== container.clientWidth || height !== container.clientHeight) {
+      scheduleRestore();
+    }
+    return restoreScheduledRef.current;
+  }, [scheduleRestore]);
 
   return {
     captureStableAnchor,

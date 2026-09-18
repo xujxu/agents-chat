@@ -9,6 +9,17 @@ test.beforeEach(async ({ page }) => {
   await loginMobileFixture(page);
 });
 
+test('keeps a fine-pointer desktop at phone-landscape width on the desktop path', async ({ page }) => {
+  await page.setViewportSize({ width: 932, height: 700 });
+  const app = page.locator('.chatPageRoot .page');
+  await expect(page.getByRole('button', { name: 'Open navigation' })).toBeHidden();
+  await expect(page.locator('.sidebarResizeHandle')).toBeVisible();
+  await expect.poll(() => app.evaluate((element) => ({
+    inlineHeight: (element as HTMLElement).style.getPropertyValue('--app-viewport-height'),
+    height: Math.round(element.getBoundingClientRect().height),
+  }))).toEqual({ inlineHeight: '700px', height: 700 });
+});
+
 test('keeps desktop geometry while clearing viewport overrides in mobile layout', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
 

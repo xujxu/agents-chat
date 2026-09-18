@@ -157,7 +157,7 @@
 .addCommentFloatingBtn{background:var(--accent);color:white;border:none;border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer;z-index:10;box-shadow:0 2px 8px rgba(0, 0, 0, 0.3);}
 .addCommentFloatingBtn:hover{opacity:0.85;}
 
-@media (max-width: 900px) {
+@media (max-width: 900px), (max-width: 1100px) and (hover: none) and (pointer: coarse) {
   .mdEditorToolbar{align-items:flex-start;gap:8px;padding:8px 10px;}
   .mdEditorToolbarRight{align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px;}
   .mobileDesktopHint{order:3;flex-basis:100%;text-align:right;}

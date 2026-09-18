@@ -1,0 +1,111 @@
+name: iOS viewport validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/ios-viewport-validation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-viewport-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  viewport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: viewport-test-only
+      NEXTAUTH_SECRET: isolated-viewport-validation-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies and browsers
+        timeout-minutes: 5
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium webkit
+      - name: Build isolated production app and check types
+        timeout-minutes: 6
+        run: |
+          npm run build
+          npx tsc --noEmit
+      - name: Start isolated app
+        timeout-minutes: 1
+        run: |
+          mkdir -p artifacts
+          node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 >artifacts/server.log 2>&1 &
+          server_pid=$!
+          echo "$server_pid" > artifacts/server.pid
+          for attempt in $(seq 1 25); do
+            if curl --fail --silent http://localhost:3011/login >/dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat artifacts/server.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat artifacts/server.log
+          exit 1
+      - name: Reproduce outstanding WebKit failures first
+        timeout-minutes: 3
+        run: >-
+          npx playwright test --config tests/playwright.config.ts
+          --project=iphone-webkit
+          -g 'bounds transcript restoration|keeps composer controls'
+          --timeout=60000 --global-timeout=150000 --max-failures=1
+          --trace=retain-on-failure --reporter=line
+          --output=artifacts/webkit-smoke
+      - name: Complete iPhone WebKit coverage
+        timeout-minutes: 6
+        run: >-
+          npx playwright test --config tests/playwright.config.ts
+          --project=iphone-webkit
+          --timeout=60000 --global-timeout=330000 --max-failures=1
+          --trace=retain-on-failure --reporter=line
+          --output=artifacts/webkit
+      - name: Complete Android Chromium coverage
+        timeout-minutes: 6
+        run: >-
+          npx playwright test --config tests/playwright.config.ts
+          --project=android-chromium
+          --timeout=60000 --global-timeout=330000 --max-failures=1
+          --trace=retain-on-failure --reporter=line
+          --output=artifacts/android
+      - name: Check desktop layout and interactions
+        timeout-minutes: 3
+        run: >-
+          npx playwright test --config tests/playwright.config.ts
+          --project=desktop-chromium
+          tests/desktop-viewport-shell.spec.ts tests/interaction-coverage.spec.ts
+          --timeout=60000 --global-timeout=150000 --max-failures=1
+          --trace=retain-on-failure --reporter=line
+          --output=artifacts/desktop
+      - name: Stop isolated app
+        if: always()
+        run: |
+          if [ -f artifacts/server.pid ]; then
+            server_pid="$(cat artifacts/server.pid)"
+            if kill -0 "$server_pid" 2>/dev/null; then
+              kill "$server_pid"
+            fi
+          fi
+      - name: Preserve logs and failure traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-viewport-validation
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn

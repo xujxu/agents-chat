@@ -12,6 +12,115 @@
 
 ## File Structure
 
+## Resumption checkpoint (2026-09-17)
+
+The viewport, CSS shell, overlay, and desktop-isolation commits already exist.
+Continue in place without reapplying those changes or deploying over a running
+build. The interrupted observer changes need real-browser validation.
+
+- [x] Add a failing 932px landscape cycle to `tests/mobile-responsive.spec.ts`.
+  Measure a short `Range` inside Markdown in both orientations, require its
+  dimensions to differ by at most 1px, and require empty root viewport variables.
+- [x] Replace the global manual observer mock with a subclass of native
+  `ResizeObserver`. Exercise actual transcript dimension changes and Composer
+  growth; do not disable observer delivery to make tests pass.
+- [x] Apply `(max-width: 900px), (max-width: 1100px) and (hover: none) and
+  (pointer: coarse)` consistently to `useMobileOverlayState.ts` and the existing
+  900px rules in globals, ChatShell, AgentsPanel, FileWorkspacePanel,
+  ChatComposer, MessageList, and ChatSidebarList CSS. Check the actual query
+  before the initial `useDesktopViewportSync` effect subscribes.
+- [x] In `useChatOrientationScrollStability.ts`, restore the last pre-resize
+  anchor, ignore only layout-induced scrolls, and allow explicit user scrolls
+  to cancel restoration. Bound scheduling so repeated resize events cannot
+  indefinitely postpone restoration.
+- [ ] Run against an isolated source server:
+  `PLAYWRIGHT_BASE_URL=http://localhost:3011 npx playwright test --config tests/playwright.config.ts --project=android-chromium`.
+  Repeat for `--project=iphone-webkit`, sequentially. Run
+  `--project=desktop-chromium tests/desktop-viewport-shell.spec.ts` and targeted
+  desktop interactions. Require all selected tests to pass.
+- [ ] Run `npx tsc --noEmit` and `npm run build` in the isolated source copy;
+  leave production process, build, and data untouched. Document actual results
+  and retain the physical Safari/Chrome acceptance gate in the spec.
+
+### Validation status at pause
+
+- Isolated production build and an earlier TypeScript check passed.
+- Final Android matrix: 36/36 passed.
+- Final WebKit matrix did not pass: the reduced-layout Composer test timed out
+  while clicking the model selector, and bounded transcript restoration retained
+  a 160px offset instead of restoring within 650ms. These failures still need
+  diagnosis; do not weaken the assertions or treat them as accepted behavior.
+- The sequential matrix was stopped before completion; the final desktop
+  regression stage did not run.
+- Final TypeScript checking and diagnostic commands were blocked by the CLI
+  permission host failing to acknowledge command authorization requests.
+- The isolated test server was stopped. Production on port 3010, its build, and
+  its data were not changed. No deployment or physical iPhone acceptance occurred.
+- Changes remain in the working tree. Complete WebKit diagnosis, rerun the
+  required checks, and perform physical Safari/Chrome acceptance before declaring
+  the orientation defect fixed.
+
+### Follow-up investigation (2026-09-17)
+
+- Desktop viewport and interaction regression coverage now passes: 12/12.
+- The isolated TypeScript check passes with the revised tests.
+- Native observer instrumentation now counts delivered callbacks and forwards
+  observer options. Resize helpers wait for actual observer delivery rather than
+  assuming a 32ms delay is sufficient.
+- The bounded-restoration test measures elapsed time inside the browser, retains
+  the 650ms deadline, and requires at least three actual resize notifications
+  during its 900ms observation window. The revised Android subset passes 5/5;
+  the earlier complete Android run passed 36/36 before these test refinements.
+- WebKit still fails. The refined bounded test received zero resize callbacks
+  during that window. Separate probes measured initial native animation-frame
+  gaps of 1681ms and 2045ms on the login page, followed by normal frame delivery.
+  This establishes a rendering-timing problem in the current validation setup,
+  but does not establish that the application is free of scrolling defects.
+- The Composer test still intermittently stalls at model selection; other runs
+  fail while checking safe-area padding or reduced layout bounds. A diagnostic
+  trace remains at
+  `test-results/mobile-composer-viewport-k-9f099-e-a-reduced-layout-viewport-iphone-webkit/trace.zip`.
+- Changing renderer environment flags, using a virtual display, and waiting for
+  initial frames did not resolve the failures. Those experiments did not change
+  committed configuration, device pixel ratio, or test deadlines.
+- An isolated older-Playwright comparison could not be installed because the
+  CLI command-authorization host again failed to acknowledge requests. The
+  comparison was not run; no project dependencies were changed. Upstream
+  `microsoft/playwright#42396` is a related performance report, not proof of the
+  cause here (its follow-up narrowed that report to headful rendering).
+- Resume by inspecting the trace and reproducing on a responsive WebKit runner
+  with the same iPhone descriptor before changing product behavior or attributing
+  all failures to the browser. Full WebKit and physical-device acceptance remain
+  open. Temporary diagnostic logging and frame-wait experiments were removed.
+
+### Bounded supported-runner validation (2026-09-18)
+
+The local host is Ubuntu 20.04. Playwright 1.59.1's `browsers.json` overrides
+WebKit revision 2272 with revision 2092 on this OS. The emulated user agent and
+package browser-version label are not proof of the actual binary revision.
+Downgrading only the package can select the same overridden browser and is not
+a useful first comparison.
+
+The extended investigation mixed product failures with an unhealthy runner,
+repeated 180-second test timeouts, and command-authorization interruptions.
+A fresh minimal login-page probe, without Chat fixtures or observer mocks,
+took approximately 5 seconds to resize and delivered only two frames while a
+one-second timer took approximately three seconds. Do not keep rerunning the
+650ms restoration acceptance test under these conditions.
+
+Use `.github/workflows/ios-viewport-validation.yml` on Ubuntu 24.04 instead.
+It builds an isolated production app, checks types, and runs the two unresolved
+WebKit cases first with a 150-second global deadline and fail-fast behavior.
+Only after those pass does it run complete iPhone/Android coverage and desktop
+regressions. The job is capped at 25 minutes, superseded runs are cancelled, and
+each stage has a separate artifact directory so later tests cannot erase an
+earlier trace. The old trace under shared `test-results/` was overwritten by
+subsequent local tests and is no longer available.
+
+No test acceptance threshold, device pixel ratio, or product behavior is
+weakened to accommodate the local runner. Physical iPhone acceptance remains a
+separate requirement after supported-runner automation succeeds.
+
 **Create**
 
 - `app/features/layout/hooks/useDesktopViewportSync.ts` — owns the existing desktop-only viewport CSS-variable synchronization and mobile cleanup boundary.

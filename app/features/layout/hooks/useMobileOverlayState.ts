@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export const MOBILE_LAYOUT_QUERY = '(max-width: 900px)';
+export const MOBILE_LAYOUT_QUERY = '(max-width: 900px), (max-width: 1100px) and (hover: none) and (pointer: coarse)';
 
 export type MobileOverlay =
   | 'navigation'

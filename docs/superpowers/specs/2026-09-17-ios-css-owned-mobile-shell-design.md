@@ -29,8 +29,9 @@ on the same physical iPhone:
 - iOS Chrome could retain an approximately 2x visual scale after returning to
   portrait.
 
-Computed font sizes remained stable in both browsers. The defect is therefore
-not a Markdown typography rule. The failed viewport metadata workarounds must
+Computed font sizes remained stable in both browsers. This does not by itself
+exclude text autosizing or compositor scaling: computed CSS metrics are not
+physical rendered glyph measurements. The failed viewport metadata workarounds must
 be removed rather than combined with another scale-reset mechanism.
 
 ## Reference Architecture
@@ -62,6 +63,20 @@ boundaries but fitted to the existing agents-chat React structure.
 
 This change is deliberately mobile-only. The existing desktop grid, sidebar,
 Agents pane, and viewport synchronization path remain unchanged.
+
+### Orientation-safe mobile classification
+
+Use the same query in layout state and feature CSS:
+
+```css
+(max-width: 900px), (max-width: 1100px) and (hover: none) and (pointer: coarse)
+```
+
+The second clause keeps large touch phones (including 932px landscape iPhones)
+on the mobile path after rotation. Width alone must not switch those devices
+back to JavaScript root sizing. Fine-pointer desktop layouts above 900px remain
+unchanged. The initial viewport synchronization must check the actual media
+query before subscribing, even before React's mobile state effect has run.
 
 ### Viewport metadata
 
@@ -158,15 +173,19 @@ race a separate orientation restoration.
 
 ### Keyboard behavior
 
-The primary keyboard path is:
+Where the browser supports content resizing for the keyboard, the path is:
 
 1. `interactive-widget=resizes-content` asks the browser to resize content;
-2. `100dvh` updates the mobile shell;
+2. the changed layout viewport updates the CSS mobile shell;
 3. the flex layout gives the transcript the remaining height; and
 4. transcript resize reconciliation preserves its anchor.
 
 The current test contract that makes the entire page follow mocked
 `visualViewport.height` and `offsetTop` is invalid and must be replaced.
+
+A keyboard does not necessarily change `dvh`, and iOS WebKit does not guarantee
+support for `interactive-widget=resizes-content`. Desktop device emulation
+cannot establish physical keyboard behavior.
 
 A visual-viewport-only change must not change root page geometry. A layout
 viewport change must resize the shell and keep the Composer visible.
@@ -240,6 +259,17 @@ Verify on the mobile projects that:
 - repeated `visualViewport.resize` and `visualViewport.scroll` events do not
   change root top, height, inline style, or viewport metadata; and
 - repeated orientation transitions do not accumulate page scaling styles.
+- portrait/landscape cycles include 932px-wide touch viewports, not only
+  widths below the old 900px breakpoint;
+- glyph-range height and width for unchanged text remain stable alongside
+  computed typography; these are browser-layout checks, not proof about the
+  physical iOS compositor.
+
+Keep the native `ResizeObserver` active in integration tests. Instrument it
+without replacing delivery with a global manual mock. Observe real transcript
+resizing during rotation and Composer growth; preserve pre-resize anchors
+rather than recapturing already reflowed geometry. User scroll input must take
+priority over pending automatic restoration.
 
 ### Chat and keyboard
 
@@ -285,6 +315,14 @@ Run:
 5. the production build.
 
 Android and iPhone suites run sequentially to avoid resource contention.
+
+Use the bounded `iOS viewport validation` workflow on Ubuntu 24.04 for final
+automation. Ubuntu 20.04 selects Playwright's older WebKit revision override;
+package version or an emulated user-agent string does not identify the binary.
+Run the two outstanding WebKit cases first, fail fast, and retain separate
+trace directories for each stage rather than repeatedly overwriting
+`test-results/`. Do not loosen timing or geometry assertions to compensate for
+a stalled test runner.
 
 Automated tests prove ownership boundaries and regression safety but cannot
 reproduce the physical iOS compositor defect.
