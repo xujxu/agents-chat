@@ -15,6 +15,11 @@ host. This specification covers that diagnostic phase, not an established
 fix for Chrome's native zoom behavior. The user approved this written
 specification and deployment to PROD, confirming administrator access.
 
+Diagnostic revision `3834536` is deployed to PROD after remote validation.
+The [implementation record](../plans/2026-09-18-chrome-pinch-rotation-diagnostics.md#execution-record)
+contains the exact build, validation, rollback, and collection links.
+Physical logs and the final Chrome correction are still pending.
+
 ## Findings and Limits
 
 `ChatShell.tsx` copies visual viewport height and vertical offset into shell

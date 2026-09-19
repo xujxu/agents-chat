@@ -212,3 +212,48 @@ Test-first revision `fb09cb1` ran in
 The new Node suite failed with `ERR_MODULE_NOT_FOUND` for the not-yet-created
 diagnostic contract module. Existing mobile jobs retained their passing
 Markdown and UX checks. No local test or build was used.
+
+Implementation run
+[35411208056](https://github.com/xujxu/agents-chat/actions/runs/35411208056)
+passed Node contracts, builds, and the direct HTTP contract, but browser
+uploads received 403. The browser fixture used an administrator role with
+a non-admin subject; the existing NextAuth session callback correctly
+reclassified that synthetic account. The fixture now uses the actual
+credentials-admin identity and explicitly checks the refreshed session.
+Production authorization was not weakened.
+
+Revision `383453638c87b4b85fdca1db0a304cb4fce3d4ff` passed
+[35411480317](https://github.com/xujxu/agents-chat/actions/runs/35411480317):
+
+| Coverage | Result |
+| --- | --- |
+| Node contracts, bounded body reader, recorder, private storage | 8 passed |
+| Desktop diagnostic browser/API cases | 7 passed |
+| Android diagnostic browser cases | 6 passed |
+| iPhone WebKit diagnostic browser cases | 6 passed |
+| Existing typography/mobile/desktop cases | 104 passed |
+
+All three builds/type checks passed. Native iOS Chrome pinch/rotation is
+still awaiting physical evidence; synthetic viewport tests are not a fix
+claim.
+
+The exact production-origin artifact was deployed to
+`https://agent.xujx.us.kg`, with Next build ID `Jln2zPkPRO9cHxj1C3txX`.
+The previous build and consistent database backups are retained under
+`.data/deployments/viewport-diagnostics-3834536/`.
+Local/public stylesheet bytes match the artifact, the iOS typography prefix
+remains present, and anonymous public diagnostic POSTs return 401.
+The systemd service is active and both existing databases remain readable.
+No local build, dependency installation, type check, or browser test ran.
+
+Physical collection links:
+
+- Baseline: `https://agent.xujx.us.kg/?viewportDiagnostics=baseline`
+- Isolated comparison: `https://agent.xujx.us.kg/?viewportDiagnostics=isolated`
+
+Use each link in a fresh Chrome page, perform the reported gesture/rotation
+sequence, and press **Upload diagnostic log** without first correcting any
+unexpected enlargement. Repeat baseline in Safari for comparison.
+Uploaded files are created lazily in `.data/tmp/viewport-diagnostics/`.
+The normal application URL does not enable recording or the experimental
+gate. Root-cause analysis resumes after the user supplies the uploaded IDs.
