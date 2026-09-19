@@ -279,3 +279,30 @@ gh workflow run 361358759 --repo xujxu/agents-chat \
   control. If one further existing-page observation is requested, change
   only pinch orientation rather than repeat the same failed setup or add
   unproven recovery logic.
+- Follow-up `c3b80743-f28d-4e4d-88c4-6e5b28643628`, received
+  `2026-09-19T12:17:08.747Z`, exactly retains the previous initial sample
+  and all 41 preceding samples; 99 samples total, zero drops. A landscape
+  gesture settles at scale 1 and widths 832/832 by 242.031 seconds.
+  Returning to portrait at 255.081 produces persistent scale 2.018817
+  with widths 428/428.
+- Explicit manual restoration starts at 261.656, receives the expected
+  history acknowledgment at 261.757, but never reaches original raw scale.
+  It ends `not-restored/scale-timeout` at 264.781. Upload at 278.017 still
+  reports 2.018817 and widths 428/428. All live ownership and continuity
+  evidence remains true. This is a confirmed failed normalization attempt,
+  not a missing click, missing acknowledgment or successful recovery.
+- Therefore do not broaden automatic restoration to inconsistent portrait
+  readings or add retry loops. The demonstrated landscape correction does
+  not generalize to this persistent portrait-reporting state.
+- Another source-supported direction remains untested: prevention while
+  still at the healthy post-pinch baseline, rather than reactive correction
+  after rotation. In the Apple reference,
+  [restorePageState](https://github.com/apple-oss-distributions/WebKit/blob/WebKit-7619.2.8.11.9/Source/WebKit/WebProcess/WebPage/ios/WebPageIOS.mm#L514-L565)
+  sets `m_userHasChangedPageScaleFactor` from the saved initial-scale flag;
+  [dynamicViewportSizeUpdate](https://github.com/apple-oss-distributions/WebKit/blob/WebKit-7619.2.8.11.9/Source/WebKit/WebProcess/WebPage/ios/WebPageIOS.mm#L3935-L4000)
+  consults that state when deciding rotation scale preservation. This is
+  rationale for a bounded preventive experiment, not proof of prevention
+  on the affected device and not evidence of the exact underlying bug.
+- A browser-minimal reproduction/upstream report remains an alternative
+  if a site-level native remedy cannot meet acceptance. No runtime changes
+  or promotion to ordinary chat are authorized by these source findings.
