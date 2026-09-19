@@ -313,3 +313,31 @@ pinch cycle after restoration, repeated rotations, preservation of intended
 non-unit zoom, or transparent automatic history management. Obtain the
 user's visual/post-restoration pinch confirmation before designing any
 automatic candidate; ordinary PROD behavior remains unchanged.
+
+### Post-restoration pinch recording
+
+Upload `5779187a-1405-439d-9060-2599f8a93cce` was received at
+`2026-09-19T06:04:32.894Z`, with the same deployed client/server identity.
+It retains the earlier restoration sequence and extends to 136 samples,
+with no drops.
+
+Before the new pinch, the recording includes portrait and landscape
+rotations at approximately 138.0 and 139.5 seconds; each settles at native
+scale 1 with visual/document width matching (428 and 832 respectively).
+The subsequent landscape pinch begins at 182.752 seconds, increases native
+scale to approximately 1.85, and returns to stable native scale 1 at
+190.516 seconds, with visual/document width 832/832. Upload at 192.658
+seconds still reports 1 and 832/832.
+
+This supports that native pinch remains functional after restoration; it
+does not show a scale lock or continuous inverse-scale compensation.
+Transient gesture samples again have inconsistent scale/width readings,
+so only settled geometry is used for the return-to-100% conclusion.
+The controller remains one-shot `restored`; its terminal probe continuity
+flags are historical results, not new per-sample DOM checks.
+
+The recording ends before any rotation following this new pinch cycle.
+The next useful physical check is landscape -> portrait -> landscape
+without another restore action, to determine whether a new pinch recreates
+the rotation anomaly. Automatic recovery and transparent history behavior
+remain unimplemented.
