@@ -3,9 +3,12 @@
 ## Decision and Evidence
 
 The user approved the direction and boundaries of a repeatable automatic
-diagnostic experiment. This specification requires written review before
-implementation. It does not authorize changing ordinary page behavior or
-deploying a new build.
+diagnostic experiment, then approved this written specification and direct
+inline implementation. Implementation at `e927428` passed remote validation
+in Actions `35427133737`; the implementation plan records exact evidence.
+Automatic deployment still requires separate authorization, and physical
+iOS Chrome acceptance is pending. Approval does not authorize changing
+ordinary page behavior.
 
 The existing manual experiment at revision `7104363` has demonstrated:
 
