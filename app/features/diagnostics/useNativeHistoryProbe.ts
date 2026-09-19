@@ -51,7 +51,8 @@ export function useNativeHistoryProbe(
       checkpoint: () => {
         const state: unknown = history.state;
         const existing = historyObject(state) ? state : null;
-        if ((state !== null && !existing) || existing?.[MARKER] !== undefined) {
+        // The installed App Router reloads when popstate lacks its ownership flag.
+        if (!existing || existing.__NA !== true || existing[MARKER] !== undefined) {
           throw new Error('History entry is not suitable for a probe checkpoint.');
         }
         history.replaceState({ ...existing, [MARKER]: { token, role: 'checkpoint' } }, '', href);

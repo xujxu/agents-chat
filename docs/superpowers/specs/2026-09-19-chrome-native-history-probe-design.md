@@ -113,6 +113,8 @@ The installed Next.js App Router reloads on some unrecognized popstate
 entries. Preserve its opaque state through the supported History API;
 do not synthesize framework-private fields, overwrite the router's state,
 monkey-patch navigation methods, or suppress its listeners.
+Refuse to write unless the existing entry has the installed App Router's
+ownership flag; never manufacture that flag to make an unsafe entry pass.
 
 ### Request native restoration
 

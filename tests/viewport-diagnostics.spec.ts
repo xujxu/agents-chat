@@ -1,4 +1,4 @@
-import { readFile, unlink } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { encode } from 'next-auth/jwt';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
@@ -216,6 +216,17 @@ test('existing history and non-probe URLs never acquire a probe checkpoint', asy
   }
 });
 
+test('history entries not owned by the App Router are rejected before any write', async ({ page }) => {
+  await installTestVisualViewport(page);
+  await open(page, 'baseline', HISTORY_PATH);
+  await page.evaluate(() => History.prototype.replaceState.call(history, { foreignOwner: true }, ''));
+  await page.getByRole('button', { name: 'Establish 100% checkpoint' }).click();
+  await expect(historyProbe(page)).toHaveAttribute('data-phase', 'error');
+  expect(await page.evaluate(() => history.length)).toBe(1);
+  expect(await page.evaluate(() => history.state)).toEqual({ foreignOwner: true });
+  await expect(page.getByRole('button', { name: 'Restore native scale' })).toBeDisabled();
+});
+
 test('real Chromium native page-scale history outcome is recorded separately from mocked policy', async ({ page, context }, testInfo) => {
   test.skip(testInfo.project.name !== 'android-chromium', 'Native CDP experiment uses mobile Chromium, not iOS.');
   await page.setViewportSize({ width: 428, height: 926 });
@@ -230,17 +241,19 @@ test('real Chromium native page-scale history outcome is recorded separately fro
   // This case probes the mechanism, not the physical iPhone touch target.
   await page.getByRole('button', { name: 'Restore native scale' }).evaluate((button: HTMLButtonElement) => button.click());
   await expect(historyProbe(page)).toHaveAttribute('data-phase', /^(restored|not-restored)$/);
-  await testInfo.attach('native-chromium-history-outcome.json', {
-    body: JSON.stringify({
+  const outcome = JSON.stringify({
       phase: await historyProbe(page).getAttribute('data-phase'),
       metrics: await page.evaluate(() => ({
         scale: visualViewport?.scale, width: visualViewport?.width,
         clientWidth: document.documentElement.clientWidth,
       })),
       limitation: 'Chromium CDP observation, not physical iOS Chrome acceptance.',
-    }),
-    contentType: 'application/json',
-  });
+    });
+  const file = testInfo.outputPath('native-chromium-history-outcome.json');
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, outcome);
+  await testInfo.attach('native-chromium-history-outcome.json', { path: file, contentType: 'application/json' });
+  console.log(`Native Chromium history observation: ${outcome}`);
 });
 
 for (const mode of ['baseline', 'isolated']) {
