@@ -46,6 +46,9 @@ test('minimal route serves isolated HTML without framework bootstrap', async ({ 
   await expect(page.locator('meta[name="viewport"]')).not.toHaveAttribute('content', /minimum-scale|maximum-scale/);
   expect(await page.locator('#reference').evaluate(element => element.getBoundingClientRect().width)).toBe(100);
   expect(await page.locator('#specimen').evaluate(element => getComputedStyle(element).fontSize)).toBe('16px');
+  if (process.env.GITHUB_SHA) {
+    await expect(page.locator('body')).toHaveAttribute('data-revision', process.env.GITHUB_SHA);
+  }
   const html = await response!.text();
   expect(html).not.toMatch(/__next|\/_next\/|react|<link/i);
 });
@@ -64,6 +67,7 @@ test('passive recording preserves DOM, history and viewport while retaining raw 
     Object.assign(window, { observeMinimal: () => observer.observe(document, { subtree: true, attributes: true, childList: true, characterData: true }) });
   });
   const historyLength = await page.evaluate(() => history.length);
+  const viewportContent = await page.locator('meta[name="viewport"]').getAttribute('content');
   const documentHandle = await page.evaluateHandle(() => document);
   await start(page).click();
   await page.evaluate(() => {
@@ -96,6 +100,10 @@ test('passive recording preserves DOM, history and viewport while retaining raw 
   expect(log.stopReason).toBe('manual');
   expect(log.dropped).toBe(0);
   expect(await page.evaluate(() => history.length)).toBe(historyLength);
+  expect(await page.evaluate(() =>
+    (window as typeof window & { minimalTestState: { calls: string[] } }).minimalTestState.calls,
+  )).toEqual([]);
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute('content', viewportContent!);
   expect(await page.evaluate(doc => doc === document, documentHandle)).toBe(true);
   expect(errors).toEqual([]);
 });
