@@ -5,7 +5,8 @@
 The user approved an isolated feasibility experiment using same-document
 history restoration and subsequently instructed continuation after the
 interrupted specification review. Implementation `7104363` has passed remote
-validation; deployment still requires a separate decision. The
+validation and was deployed after explicit user authorization. Physical
+iPhone acceptance remains outstanding. The
 [execution record](../plans/2026-09-19-chrome-native-history-probe.md#execution-record)
 contains exact runs, evidence, and remaining acceptance gates.
 

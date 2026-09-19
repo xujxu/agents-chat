@@ -212,7 +212,7 @@ behavior. Retain all existing upload/API and three-engine regressions.
 - [x] Self-review the diff for accidental ordinary-page history changes,
   viewport mutations, reloads, gesture interception, arbitrary log content,
   uncontrolled repeated navigation, and loss of router state.
-- [ ] Update this execution record, commit, and request deployment approval
+- [x] Update this execution record, commit, and request deployment approval
   with the actual remote outcome. Do not deploy an unapproved artifact.
   A green run is not a fix claim: real Chrome acceptance remains blocked.
 
@@ -254,6 +254,27 @@ behavior. Retain all existing upload/API and three-engine regressions.
 - Browser continuity coverage confirms unchanged Document/shell/composer,
   opaque router state, draft and attachment retention, and continued
   controlled streaming without duplicate send/resume or a document load.
-- PROD remains `29195d0`. No deployment has been performed for this
-  experiment. Next gate: user authorization to deploy the exact successful
-  artifact, then physical iPhone reproduction and native-scale measurement.
+- The user subsequently explicitly authorized deployment to existing PROD.
+  Deployed the exact `7104363` desktop artifact from Actions `35424817153`;
+  no local builds, tests, or dependency installs were performed.
+- Production build ID: `cG8PvBsH_eiFx6ePSS-Y5`. Service
+  `agents-chat.service` was active/running with PID 40800 after cutover.
+  Only `.next` was swapped; host dependencies and environment were retained.
+- Consistent SQLite backups and previous build:
+  `.data/deployments/viewport-history-7104363/`.
+  The prior build was `29195d0`; automatic rollback was available but
+  not needed.
+- Deployment checks verified archive/client revision, route manifests,
+  ordinary and candidate viewport declarations, production origin, exact
+  local/public CSS bytes including both text-adjust declarations, public
+  login gating, unauthenticated upload rejection, and database readability.
+- Physical trial:
+  `https://agent.xujx.us.kg/diagnostics/viewport-history?viewportDiagnostics=baseline`.
+  Open a fresh tab, establish the 100% checkpoint before pinching, reproduce
+  pinch/back-to-100%/rotation enlargement, press Restore native scale
+  without manually correcting it first, and explicitly upload the log.
+  If the tab is not history-clean, use the displayed new-tab link rather than
+  clearing or navigating its existing history.
+- Awaiting physical iPhone native-scale evidence. The ordinary page does
+  not enable this experiment, and the original Chrome UX issue is not yet
+  declared solved.
