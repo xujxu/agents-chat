@@ -3,6 +3,9 @@ import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, readdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { MAX_DIAGNOSTIC_BYTES, type ViewportDiagnosticLog } from './viewportDiagnostics.ts';
+import type { MinimalViewportLog } from './viewportReproduction/schema.ts';
+
+type StoredViewportDiagnostic = ViewportDiagnosticLog | MinimalViewportLog;
 
 export class DiagnosticError extends Error {
   status: number;
@@ -68,7 +71,7 @@ async function privateDirectory(root: string): Promise<string> {
   return directory;
 }
 
-async function store(log: ViewportDiagnosticLog, root: string): Promise<string> {
+async function store(log: StoredViewportDiagnostic, root: string): Promise<string> {
   const directory = await privateDirectory(root);
   const now = Date.now();
   let count = 0;
@@ -97,7 +100,7 @@ async function store(log: ViewportDiagnosticLog, root: string): Promise<string> 
   return id;
 }
 
-export function storeViewportDiagnostic(log: ViewportDiagnosticLog, root = process.cwd()): Promise<string> {
+export function storeViewportDiagnostic(log: StoredViewportDiagnostic, root = process.cwd()): Promise<string> {
   const result = pending.then(() => store(log, root));
   // Recover the queue, not the caller's result: rejected writes still reach the route.
   pending = result.then(() => undefined, () => undefined);
