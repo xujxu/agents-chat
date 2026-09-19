@@ -179,26 +179,26 @@ const script = `(${minimalViewportClient.toString()})(${createMinimalRecorder.to
 
 ## Task 5: Remote Browser/API Coverage and Review
 
-- [ ] Exercise Start/refusals, active multi-touch departure, shrink/rotate,
+- [x] Exercise Start/refusals, active multi-touch departure, shrink/rotate,
   30-second timeout, hidden/pagehide, bounded overflow and frozen retries.
   Inspect record timestamps and final shape, not just displayed status.
-- [ ] Observe history methods and meta mutations through test-only
+- [x] Observe history methods and meta mutations through test-only
   instrumentation. Require zero app calls and constant history length
   throughout recording/upload; require no DOM changes during active
   periodic/event observation.
-- [ ] Run HTTP cases: page login protection, unauthenticated 401, ordinary
+- [x] Run HTTP cases: page login protection, unauthenticated 401, ordinary
   user 403, foreign/missing origin 403, content type 415, byte limit 413,
   invalid/mixed schema 400 and successful private persistence. Existing
   storage tests retain permission/retention/failure coverage.
-- [ ] Verify immutable failed-upload retry and explicit malformed/network
+- [x] Verify immutable failed-upload retry and explicit malformed/network
   errors. Read saved log via existing helper, which removes its test file.
-- [ ] Add Android Chromium CDP case: set actual native scale 2, observe
+- [x] Add Android Chromium CDP case: set actual native scale 2, observe
   recorded scale 2 without recovery, return scale 1, save JSON evidence.
   Explicitly label this transaction coverage, not physical iOS proof.
-- [ ] Push implementation with `[skip ci]`, dispatch same workflow, inspect
+- [x] Push implementation with `[skip ci]`, dispatch same workflow, inspect
   exact failures and iterate remotely. Require all three builds/types/jobs
   green and download the final minimal/native artifacts.
-- [ ] Update this record with exact revisions, results and limitations;
+- [x] Update this record with exact revisions, results and limitations;
   stop progress schedule and request separate deployment authorization.
 
 ## Plan Self-Review
@@ -219,7 +219,52 @@ from automation. No ordinary-page behavior is changed.
   `35448755523`: desktop job `105912141152` failed with
   `ERR_MODULE_NOT_FOUND` for the new schema. Existing 55 Node tests passed.
   Retrieved the completed job log directly while mobile jobs continued.
+  Both mobile jobs subsequently failed the missing route assertion with
+  HTTP 404 instead of 200; no unrelated failing stage was reported.
 - First implementation source `fd8528027f4c9ee4a7ad86f6d6b8ed4cb1eca88d`,
-  Actions `35448917858`: submitted for remote validation.
+  Actions `35448917858`: all three jobs passed.
+- Final source `42111b3371894332e1bf0096c14ab37959857c74`, Actions
+  [35449463953](https://github.com/xujxu/agents-chat/actions/runs/35449463953):
+  all three builds, type checks and jobs passed. This final revision adds
+  explicit served build-revision and post-upload history/meta assertions;
+  runtime implementation is unchanged from the first green candidate.
+
+| Coverage | Desktop Chromium | Android Chromium | iPhone WebKit |
+| --- | ---: | ---: | ---: |
+| Node policy/schema/storage | 60 | not scheduled | not scheduled |
+| Typography behavior | 8 | 7 | 7 |
+| Emitted typography policy | 1 | 1 | 1 |
+| Existing diagnostic API/browser | 18 | 18 | 17 |
+| Reactive recovery | 7 | 8 | 7 |
+| Preventive transactions | 9 | 10 | 9 |
+| Minimal recorder/API/browser | 10 | 10 | 9 |
+| Existing desktop/mobile regressions | 17 | 31 | 31 |
+
+- Total: 296 passing executions and 14 deliberate project-specific skips.
+  All execution was remote; no local installs, builds, type checks or
+  tests occurred.
+- Compiled-page coverage confirms the self-contained function serialization
+  executes without missing closure dependencies, loads no framework
+  bundles/styles, keeps visible DOM unchanged during recording, and does
+  not write history or modify viewport metadata through upload.
+- Downloaded exact final Android artifact ID `10585797798`. Its
+  `native-minimal-viewport.json` identifies client `42111b3`, experiment
+  `native-viewport-minimal` and server build `yL3bdMywuIiB9jEMZHo8P`.
+  Initial native scale 1 has widths 412/412; native scale 2 samples have
+  widths 206/412; after the test explicitly returns scale to 1, final
+  widths are 412/412. Reference width stays 100 and computed font size
+  stays 16. Ten total samples, zero drops; no recovery was attempted.
+  Contacts were synthetic and scale changes used Chromium CDP. This is
+  recorder evidence, not a physical iOS rotation result.
+- Desktop deployment artifact:
+  `typography-42111b3371894332e1bf0096c14ab37959857c74-desktop-chromium`,
+  ID `10586024166`. iPhone artifact ID `10586657646`.
+- Self-review retained separate minimal/schema-5 identities, unchanged
+  upload admission behavior, bounded event/timer capture, explicit refusal/
+  interruption/error states, and identical frozen bodies on retry. No
+  history operation, CSS compensation or scale normalization is present
+  in the minimal runtime. Existing build tracing warnings point to
+  `next.config.ts` / `app/api/markdown/route.ts`; they are outside this change.
+- Progress schedule 11 stopped at the deployment gate.
 - PROD remains `4c40f4d`; no minimal-page deployment or physical
   reproduction result is claimed.
