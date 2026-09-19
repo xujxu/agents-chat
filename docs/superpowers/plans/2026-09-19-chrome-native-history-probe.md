@@ -278,3 +278,38 @@ behavior. Retain all existing upload/API and three-engine regressions.
 - Awaiting physical iPhone native-scale evidence. The ordinary page does
   not enable this experiment, and the original Chrome UX issue is not yet
   declared solved.
+
+### First physical native restoration success
+
+Upload `187f95ee-57a0-4658-a9cd-11ffeab94114` was received at
+`2026-09-19T06:02:01.939Z`. It matches deployed client `7104363` and
+server build `cG8PvBsH_eiFx6ePSS-Y5`, schema 3, native-history experiment,
+Chrome `153.0.8010.24`, iOS `18.7.8`. It contains 73 samples with no drops.
+The raw log remains in the private diagnostic store, not Git.
+
+| Time from recorder start | Event | Native scale | Visual / document width |
+| --- | --- | --- | --- |
+| 18.233 s | Checkpoint established and owned | 1 | 428 / 428 |
+| 37.086 s | Pinch returned to settled portrait 100% | 1 | 428 / 428 |
+| 42.560 s | Settled landscape enlargement | 2.1635513305664062 | 385 / 832 |
+| 63.691 s | Explicit restoration requested | 2.1635513305664062 | 385 / 832 |
+| 63.724 s | Checkpoint traversal acknowledged | 2.1635513305664062 | 385 / 832 |
+| 63.837 s | Native scale and geometry recovered | 1 | 832 / 832 |
+| 64.180 s | Controller confirmed stable restoration | 1 | 832 / 832 |
+| 78.275 s | Explicit upload | 1 | 832 / 832 |
+
+The first recorded correct native geometry follows the restoration request
+by approximately 146 ms; stable confirmation follows by approximately
+489 ms. Correct landscape geometry persists for the remaining approximately
+14.4 seconds until upload. Document, shell and composer continuity and
+history ownership remain true throughout the armed/restoration sequence.
+The initial pre-arming composer reference was transient, as expected during
+chat loading; the explicit establishment captures the loaded composer.
+
+This is the first physical success for a non-reload, non-compensating
+native-scale restoration mechanism on the affected Chrome. It does not yet
+establish a complete UX fix. The recording does not demonstrate another
+pinch cycle after restoration, repeated rotations, preservation of intended
+non-unit zoom, or transparent automatic history management. Obtain the
+user's visual/post-restoration pinch confirmation before designing any
+automatic candidate; ordinary PROD behavior remains unchanged.
