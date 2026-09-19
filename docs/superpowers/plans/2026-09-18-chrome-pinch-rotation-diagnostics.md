@@ -257,3 +257,52 @@ unexpected enlargement. Repeat baseline in Safari for comparison.
 Uploaded files are created lazily in `.data/tmp/viewport-diagnostics/`.
 The normal application URL does not enable recording or the experimental
 gate. Root-cause analysis resumes after the user supplies the uploaded IDs.
+
+### Physical Log Analysis
+
+Four uploads from the deployed `3834536` client and
+`Jln2zPkPRO9cHxj1C3txX` server were inspected on 2026-09-19.
+No samples were dropped. All samples during the reported gesture/rotation
+sequence have no focused editable element.
+
+| Browser / mode | Settled before rotation | Settled landscape | Return to portrait |
+| --- | --- | --- | --- |
+| Chrome / baseline | scale 1, visual width 428 | scale 2.1635513305664062, visual width 385 | scale 1 |
+| Chrome / isolated | scale 1, visual width 428 | scale 2.1635513305664062, visual width 385 | scale 1 |
+| Safari / baseline | scale 1, visual width 428 | scale 1, visual width 832 | scale 1 |
+| Safari / isolated | scale 1, visual width 428 | scale 1, visual width 832 | scale 1 |
+
+Chrome baseline was settled at scale 1 for over five seconds before rotation;
+the isolated case for over three seconds. Both landscape scale values match
+`926 / 428` within `7.2e-8`. Document client/scroll widths agree at 428 in
+portrait and 832 in landscape. The 900px layout query stays mobile in both
+orientations, so this reproduction is not a mobile/desktop breakpoint switch.
+
+The isolated gate demonstrably worked: its landscape shell height remained
+751 while the baseline shell followed the zoomed visual height down to 172.
+Nevertheless, both Chrome runs reached the exact same page scale. Therefore
+suppressing these shell writes is not a solution and must not be promoted
+to ordinary behavior.
+
+The exact
+[Chromium 153.0.8010.24 source](https://github.com/chromium/chromium/blob/153.0.8010.24/ios/web/web_state/ui/crw_web_controller_container_view.mm#L226-L245)
+handles size-class changes by scheduling a native scroll-view zoom reset to
+`minimumZoomScale` after 100ms. Its
+[earlier corrective change](https://github.com/chromium/chromium/commit/b911298b8f6b242e805baff87209d102101e6670)
+explicitly discusses native WebView zoom-state inconsistency and rotation
+timing. This is relevant primary-source evidence, not proof that a specific
+native callback caused these four recordings.
+
+OpenClaw's pinned
+[viewport metadata](https://github.com/openclaw/openclaw/blob/6c6dc44250d66eb8ec84f949c4a433c2dfcd8059/ui/index.html#L5-L8)
+includes `viewport-fit=cover`, unlike the current app. Its root shell is also
+in normal flow. Neither difference has yet been isolated for this specific
+pinch-return-to-100% sequence. Adopting cover would expand this landscape
+layout from 832 toward 926 CSS pixels, crossing the existing 900px breakpoint
+and requiring safe-area handling; it is not a one-line production substitute.
+
+The confirmed defect is native whole-page scale change after returning to
+scale 1, not renewed Markdown font inflation. A declared minimum-scale
+candidate or a root-flow change remains an experiment until independently
+verified on the affected phone. Do not use a maximum-scale lock, forced
+rotation reset, or CSS inverse scaling as a presumed fix.
