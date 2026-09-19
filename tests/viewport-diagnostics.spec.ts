@@ -27,7 +27,17 @@ async function authenticate(context: BrowserContext, role = 'admin') {
 async function open(page: Page, mode?: string, pathname = '/') {
   const fixture = await installTypographyFixture(page);
   await authenticate(page.context());
-  await page.goto(mode ? `${pathname}?viewportDiagnostics=${mode}` : pathname);
+  const url = new URL(mode ? `${pathname}?viewportDiagnostics=${mode}` : pathname, BASE).href;
+  if (pathname === '/diagnostics/viewport-history' && page.url() === 'about:blank') {
+    // Replace only the test harness's initial blank document. This is setup,
+    // never part of checkpoint restoration, whose navigation count stays zero.
+    await Promise.all([
+      page.waitForURL(url),
+      page.evaluate(destination => { location.replace(destination); }, url),
+    ]);
+  } else {
+    await page.goto(url);
+  }
   await expect(page.locator('textarea.composerTextarea')).toBeVisible();
   const session = await (await page.request.get('/api/auth/session')).json();
   expect(session.user.role).toBe('admin');

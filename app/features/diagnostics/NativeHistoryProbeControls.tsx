@@ -25,6 +25,11 @@ export function NativeHistoryProbeControls({
         Experiment only. Start in a fresh tab before pinching. Establishing a checkpoint
         adds one same-page history entry. No reload or visual compensation.
       </p>
+      {evidence.reason === 'fresh-tab' ? (
+        <p><a href="/diagnostics/viewport-history?viewportDiagnostics=baseline" target="_blank" rel="noopener noreferrer">
+          Open a fresh experiment tab
+        </a></p>
+      ) : null}
       <button type="button" onClick={arm} disabled={evidence.phase !== 'idle'}>
         Establish 100% checkpoint
       </button>

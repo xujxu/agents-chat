@@ -26,8 +26,8 @@ export function useNativeHistoryProbe(
   useEffect(() => {
     if (!enabled) return;
     const originalDocument = document;
-    const shell = document.querySelector('.chatPageRoot .page');
-    const composer = document.querySelector('.composerTextarea');
+    let shell = document.querySelector('.chatPageRoot .page');
+    let composer = document.querySelector('.composerTextarea');
     const href = location.href;
     const token = crypto.randomUUID();
     let touches = 0;
@@ -64,7 +64,15 @@ export function useNativeHistoryProbe(
         transitionRef.current(next);
       },
     });
-    controllerRef.current = controller;
+    controllerRef.current = {
+      ...controller,
+      arm: () => {
+        if (controller.evidence().phase !== 'idle') return;
+        shell = document.querySelector('.chatPageRoot .page');
+        composer = document.querySelector('.composerTextarea');
+        controller.arm();
+      },
+    };
     evidenceRef.current = controller.evidence();
     setEvidence(evidenceRef.current);
     const sample = (event: ProbeEvent = 'tick') => controller.observe(event);

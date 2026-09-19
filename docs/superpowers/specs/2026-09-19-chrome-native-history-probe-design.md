@@ -88,6 +88,8 @@ presses **Establish 100% checkpoint**.
 Require exactly one existing history entry so arming cannot discard a
 pre-existing forward branch. Refuse otherwise with instructions to open a
 fresh tab; do not clear or rewrite the user's history to meet this condition.
+Offer an explicit new-tab link when this condition fails; it starts a new
+experiment document, not a reload-based recovery of the enlarged page.
 Also require a usable VisualViewport API, no active touches or focused
 editable element, native scale within 0.01 of 1, and visual width within
 2 CSS pixels of the document client width. Require consistent readings over
@@ -103,6 +105,8 @@ the new entry is the owned working entry.
 Do not store drafts, messages, attachments, credentials, or copies of chat
 state in history. Use document-scoped random identifiers and captured
 document/shell/composer identities to detect stale or remounted sessions.
+Capture shell/composer identities when the user arms the controller, after
+the chat has loaded, rather than pinning a transient loading component.
 Do not reuse a marker left by a different document or an earlier attempt.
 
 The installed Next.js App Router reloads on some unrecognized popstate

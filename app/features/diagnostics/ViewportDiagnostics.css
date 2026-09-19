@@ -38,3 +38,4 @@
 .viewportDiagnosticsStatus { margin-top: 8px; }
 .viewportDiagnosticsStatus[data-error="true"] { color: #ffb5a8; }
 .viewportDiagnostics[data-experiment="native-history"] button { margin-bottom: 8px; }
+.viewportDiagnostics[data-experiment="native-history"] a { color: #edc57d; }
