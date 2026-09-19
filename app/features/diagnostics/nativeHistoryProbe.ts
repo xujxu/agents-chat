@@ -1,4 +1,5 @@
 import type { ProbeEvidence } from '../../../lib/viewportDiagnostics';
+import { atOriginalScale, createViewportStability, validGeometry } from './nativeViewportPolicy.ts';
 
 export type ProbeObservation = {
   now: number;
@@ -15,7 +16,7 @@ export type ProbeObservation = {
   shellContinuous: boolean;
   composerContinuous: boolean;
 };
-export type ProbeEvent = 'tick' | 'touch' | 'orientation' | 'popstate' | 'navigation' | 'lifecycle';
+export type ProbeEvent = 'tick' | 'touch' | 'orientation' | 'popstate' | 'navigation' | 'lifecycle' | 'focus';
 export type ProbePorts = {
   read: () => ProbeObservation;
   checkpoint: () => void;
@@ -23,13 +24,6 @@ export type ProbePorts = {
   publish: (evidence: ProbeEvidence) => void;
 };
 
-const validGeometry = (o: ProbeObservation) =>
-  o.scale !== null && Number.isFinite(o.scale) && o.scale > 0
-  && o.width !== null && Number.isFinite(o.width) && o.width > 0
-  && Number.isFinite(o.clientWidth) && o.clientWidth > 0;
-const atOriginalScale = (o: ProbeObservation) =>
-  validGeometry(o) && Math.abs(o.scale! - 1) <= 0.01
-  && Math.abs(o.width! - o.clientWidth) <= 2;
 const continuous = (o: ProbeObservation) =>
   o.sameUrl && o.documentContinuous && o.shellContinuous && o.composerContinuous;
 
@@ -40,9 +34,7 @@ export function createNativeHistoryProbe(ports: ProbePorts) {
   let rotated = false;
   let deadline = 0;
   let acknowledged = false;
-  let stableKey = '';
-  let stableSince = 0;
-  let stableCount = 0;
+  const stability = createViewportStability();
 
   const evidence = (): ProbeEvidence => {
     const o = ports.read();
@@ -60,21 +52,7 @@ export function createNativeHistoryProbe(ports: ProbePorts) {
     ports.publish(evidence());
   };
   const terminal = () => ['restored', 'not-restored', 'invalidated', 'error'].includes(phase);
-  const stable = (o: ProbeObservation) => {
-    if (!validGeometry(o)) {
-      stableKey = '';
-      stableCount = 0;
-      return false;
-    }
-    const key = `${o.scale}/${o.width}/${o.clientWidth}/${o.orientation}`;
-    if (key !== stableKey) {
-      stableKey = key;
-      stableSince = o.now;
-      stableCount = 0;
-    }
-    stableCount++;
-    return !o.touches && !o.editable && stableCount >= 3 && o.now - stableSince >= 300;
-  };
+  const stable = stability.sample;
   const initialRefusal = (o: ProbeObservation): ProbeEvidence['reason'] => {
     if (!continuous(o)) return 'ownership';
     if (o.historyLength !== 1 || o.entry !== null) return 'fresh-tab';
@@ -146,7 +124,7 @@ export function createNativeHistoryProbe(ports: ProbePorts) {
       }
       acknowledged = true;
       deadline = o.now + 3000;
-      stableKey = '';
+      stability.reset();
       ports.publish(evidence());
       return;
     }
@@ -170,7 +148,7 @@ export function createNativeHistoryProbe(ports: ProbePorts) {
       }
       initialOrientation = o.orientation;
       deadline = o.now + 3000;
-      stableKey = '';
+      stability.reset();
       stable(o);
       set('arming');
     },

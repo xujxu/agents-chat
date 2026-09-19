@@ -1,76 +1,51 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { ProbeEvidence } from '../../../lib/viewportDiagnostics';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import type { AnyProbeEvidence, ProbeEvidence } from '../../../lib/viewportDiagnostics';
 import { createNativeHistoryProbe, type ProbeEvent } from './nativeHistoryProbe';
+import { createAutomaticNativeRecovery } from './automaticNativeRecovery';
+import { createNativeHistoryBrowser } from './nativeHistoryBrowser';
 
-const MARKER = 'viewportHistoryProbe';
 const INITIAL_EVIDENCE: ProbeEvidence = {
   phase: 'idle', reason: 'none', owned: false,
   documentContinuous: true, shellContinuous: true, composerContinuous: true,
 };
-function historyObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+type HistoryController = {
+  arm: () => void;
+  observe: (event?: ProbeEvent) => void;
+  evidence: () => AnyProbeEvidence;
+  restore?: () => void;
+  stop?: () => void;
+};
 
 export function useNativeHistoryProbe(
-  enabled: boolean, onTransition: (evidence: ProbeEvidence) => void,
+  kind: 'manual' | 'auto' | null, onTransition: (evidence: AnyProbeEvidence) => void,
 ) {
-  const [evidence, setEvidence] = useState<ProbeEvidence>(INITIAL_EVIDENCE);
+  const [evidence, setEvidence] = useState<AnyProbeEvidence>(INITIAL_EVIDENCE);
   const [panelStyle, setPanelStyle] = useState<CSSProperties>();
-  const controllerRef = useRef<ReturnType<typeof createNativeHistoryProbe> | null>(null);
-  const evidenceRef = useRef<ProbeEvidence>(INITIAL_EVIDENCE);
+  const controllerRef = useRef<HistoryController | null>(null);
+  const evidenceRef = useRef<AnyProbeEvidence>(INITIAL_EVIDENCE);
   const transitionRef = useRef(onTransition);
   transitionRef.current = onTransition;
 
   useEffect(() => {
-    if (!enabled) return;
-    const originalDocument = document;
-    let shell = document.querySelector('.chatPageRoot .page');
-    let composer = document.querySelector('.composerTextarea');
-    const href = location.href;
-    const token = crypto.randomUUID();
-    let touches = 0;
-    const entry = () => {
-      const state: unknown = history.state;
-      const marker = historyObject(state) ? state[MARKER] : null;
-      if (!historyObject(marker) || marker.token !== token) return null;
-      return marker.role === 'working' || marker.role === 'checkpoint' ? marker.role : null;
-    };
-    const controller = createNativeHistoryProbe({
-      read: () => ({
-        now: performance.now(), scale: visualViewport?.scale ?? null,
-        width: visualViewport?.width ?? null, clientWidth: document.documentElement.clientWidth,
-        orientation: matchMedia('(orientation: landscape)').matches ? 'landscape' : 'portrait',
-        touches, editable: !!document.activeElement?.matches('input, textarea, [contenteditable="true"]'),
-        historyLength: history.length, entry: entry(), sameUrl: location.href === href,
-        documentContinuous: document === originalDocument,
-        shellContinuous: shell !== null && document.querySelector('.chatPageRoot .page') === shell,
-        composerContinuous: composer !== null && document.querySelector('.composerTextarea') === composer,
-      }),
-      checkpoint: () => {
-        const state: unknown = history.state;
-        const existing = historyObject(state) ? state : null;
-        // The installed App Router reloads when popstate lacks its ownership flag.
-        if (!existing || existing.__NA !== true || existing[MARKER] !== undefined) {
-          throw new Error('History entry is not suitable for a probe checkpoint.');
-        }
-        history.replaceState({ ...existing, [MARKER]: { token, role: 'checkpoint' } }, '', href);
-        history.pushState({ ...existing, [MARKER]: { token, role: 'working' } }, '', href);
-      },
-      back: () => history.back(),
-      publish: next => {
+    if (!kind) return;
+    const browser = createNativeHistoryBrowser();
+    const ports = {
+      ...browser,
+      publish: (next: AnyProbeEvidence) => {
         evidenceRef.current = next;
         setEvidence(next);
         transitionRef.current(next);
       },
-    });
+    };
+    const controller: HistoryController = kind === 'auto'
+      ? createAutomaticNativeRecovery(ports) : createNativeHistoryProbe(ports);
     controllerRef.current = {
       ...controller,
       arm: () => {
         if (controller.evidence().phase !== 'idle') return;
-        shell = document.querySelector('.chatPageRoot .page');
-        composer = document.querySelector('.composerTextarea');
+        browser.captureChatIdentity();
         controller.arm();
       },
     };
@@ -82,10 +57,11 @@ export function useNativeHistoryProbe(
     const navigation = () => sample('navigation');
     const popstate = () => sample('popstate');
     const lifecycle = () => sample('lifecycle');
+    const focus = () => { if (kind === 'auto') sample('focus'); };
     const touch = (event: TouchEvent) => {
-      touches = event.touches.length;
+      browser.setTouches(event.touches.length);
       // The touch that activates a control precedes its click; never cancel it.
-      if (touches > 0) sample('touch');
+      if (event.touches.length > 0) sample('touch');
       else sample();
     };
     const position = () => {
@@ -105,10 +81,13 @@ export function useNativeHistoryProbe(
     };
     const timer = window.setInterval(tick, 100);
     window.addEventListener('orientationchange', orientation);
+    window.screen.orientation?.addEventListener('change', orientation);
     window.addEventListener('popstate', popstate);
     window.addEventListener('hashchange', navigation);
     window.addEventListener('pagehide', lifecycle);
     window.addEventListener('resize', position);
+    window.addEventListener('focusin', focus);
+    window.addEventListener('focusout', focus);
     for (const name of ['touchstart', 'touchend', 'touchcancel'] as const) {
       window.addEventListener(name, touch, { passive: true });
     }
@@ -120,19 +99,24 @@ export function useNativeHistoryProbe(
       controllerRef.current = null;
       clearInterval(timer);
       window.removeEventListener('orientationchange', orientation);
+      window.screen.orientation?.removeEventListener('change', orientation);
       window.removeEventListener('popstate', popstate);
       window.removeEventListener('hashchange', navigation);
       window.removeEventListener('pagehide', lifecycle);
       window.removeEventListener('resize', position);
+      window.removeEventListener('focusin', focus);
+      window.removeEventListener('focusout', focus);
       for (const name of ['touchstart', 'touchend', 'touchcancel'] as const) window.removeEventListener(name, touch);
       window.visualViewport?.removeEventListener('resize', position);
       window.visualViewport?.removeEventListener('scroll', position);
     };
-  }, [enabled]);
+  }, [kind]);
 
+  const readEvidence = useCallback(() => controllerRef.current?.evidence() ?? evidenceRef.current, []);
   return {
-    evidence, evidenceRef, panelStyle,
+    evidence, readEvidence, panelStyle,
     arm: () => controllerRef.current?.arm(),
-    restore: () => controllerRef.current?.restore(),
+    restore: () => controllerRef.current?.restore?.(),
+    stop: () => controllerRef.current?.stop?.(),
   };
 }

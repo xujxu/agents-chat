@@ -19,7 +19,7 @@ function sample(t = 0, event = 'initial') {
 
 function log() {
   return {
-    version: 3, experiment: null, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
+    version: 4, experiment: null, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
     osVersion: '18.7.8', clientRevision: null, assets: ['/_next/static/chunks/test.css'],
     initial: sample(), samples: [], dropped: 0,
   };
@@ -54,13 +54,14 @@ test('strict diagnostic schema rejects unknown data and invalid metrics', () => 
   ]) assert.equal(validateDiagnosticLog(invalid), false);
 });
 
-test('v3 records the declared minimum and rejects stale payloads', () => {
+test('v4 records the declared minimum and rejects stale payloads', () => {
   assert.ok(METRIC_KEYS.includes('viewportMinimumScale'));
   const candidate = log();
   candidate.initial.metrics.viewportMinimumScale = 1;
   assert.equal(validateDiagnosticLog(candidate), true);
   assert.equal(validateDiagnosticLog({ ...candidate, version: 1 }), false);
   assert.equal(validateDiagnosticLog({ ...candidate, version: 2 }), false);
+  assert.equal(validateDiagnosticLog({ ...candidate, version: 3 }), false);
 });
 
 test('history probe evidence is strictly allowlisted and tied to the experiment', () => {
@@ -78,6 +79,24 @@ test('history probe evidence is strictly allowlisted and tied to the experiment'
     { ...candidate, initial: { ...sample(), probe: { ...probe, owned: 1 } } },
     { ...candidate, initial: sample() },
     { ...log(), samples: [sample(1, 'probe')] },
+  ]) assert.equal(validateDiagnosticLog(invalid), false);
+});
+
+test('automatic evidence requires exact typed cycle and intent fields', () => {
+  const probe = {
+    phase: 'watching', reason: 'none', owned: true,
+    documentContinuous: true, shellContinuous: true, composerContinuous: true,
+    intent: 'original', cycle: 3, corrections: 3, orientationEpoch: 3, pendingAck: false,
+  };
+  const candidate = { ...log(), experiment: 'native-history-auto', initial: { ...sample(), probe } };
+  assert.equal(validateDiagnosticLog(candidate), true);
+  for (const invalid of [
+    { ...candidate, experiment: 'native-history' },
+    { ...candidate, experiment: null },
+    { ...candidate, mode: 'isolated' },
+    ...[{ cycle: -1 }, { corrections: 1.5 }, { orientationEpoch: Infinity },
+      { intent: 'private' }, { pendingAck: 'yes' }, { phase: 'restored' }, { history: 'private' }]
+      .map(change => ({ ...candidate, initial: { ...sample(), probe: { ...probe, ...change } } })),
   ]) assert.equal(validateDiagnosticLog(invalid), false);
 });
 

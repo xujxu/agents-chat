@@ -1,6 +1,6 @@
 import type { ProbeEvidence } from '../../../lib/viewportDiagnostics';
 
-const reasons: Record<ProbeEvidence['reason'], string> = {
+export const PROBE_REASON_MESSAGES: Record<ProbeEvidence['reason'], string> = {
   none: '',
   'fresh-tab': 'Open this diagnostic URL in a fresh tab with one history entry.',
   geometry: 'Native viewport geometry does not meet this action\'s requirements.',
@@ -37,7 +37,7 @@ export function NativeHistoryProbeControls({
         Restore native scale
       </button>
       <p role="status" aria-live="polite" data-testid="native-history-status">
-        {evidence.phase}. {reasons[evidence.reason]}
+        {evidence.phase}. {PROBE_REASON_MESSAGES[evidence.reason]}
         {evidence.phase === 'armed' && evidence.reason === 'none'
           ? ' Pinch, return to 100%, rotate, then restore if enlarged.' : ''}
         {evidence.phase === 'restored' ? ' Native scale and geometry restored without replacing the chat DOM.' : ''}

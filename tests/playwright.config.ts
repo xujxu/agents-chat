@@ -4,7 +4,9 @@ const mobileSpecs = [
   '**/mobile-responsive.spec.ts',
   '**/mobile-composer-viewport.spec.ts',
 ];
-const typographySpecs = ['**/markdown-typography.spec.ts', '**/viewport-diagnostics.spec.ts'];
+const typographySpecs = [
+  '**/markdown-typography.spec.ts', '**/viewport-diagnostics.spec.ts', '**/automatic-native-recovery.spec.ts',
+];
 
 export default defineConfig({
   testDir: '.',

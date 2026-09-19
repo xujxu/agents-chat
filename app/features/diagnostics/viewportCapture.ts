@@ -1,10 +1,10 @@
 import {
-  METRIC_KEYS, isDiagnosticAsset,
-  type DiagnosticMetrics, type DiagnosticMode, type ViewportDiagnosticLog, type ViewportSample, type ProbeEvidence,
+  METRIC_KEYS, isDiagnosticAsset, isAutoProbeEvidence,
+  type DiagnosticMetrics, type DiagnosticMode, type ViewportDiagnosticLog, type ViewportSample, type AnyProbeEvidence,
 } from '../../../lib/viewportDiagnostics';
 
 export function captureViewportSample(
-  event: ViewportSample['event'], t: number, gesture: boolean, probe: ProbeEvidence | null = null,
+  event: ViewportSample['event'], t: number, gesture: boolean, probe: AnyProbeEvidence | null = null,
 ): ViewportSample {
   const metrics = Object.fromEntries(METRIC_KEYS.map(key => [key, null])) as DiagnosticMetrics;
   const viewport = window.visualViewport;
@@ -51,7 +51,7 @@ export function captureViewportSample(
   };
 }
 
-export function initialViewportLog(mode: DiagnosticMode, probe: ProbeEvidence | null = null): ViewportDiagnosticLog {
+export function initialViewportLog(mode: DiagnosticMode, probe: AnyProbeEvidence | null = null): ViewportDiagnosticLog {
   const agent = navigator.userAgent;
   const chrome = agent.match(/(?:CriOS|Chrome)\/([\d.]+)/);
   const safari = agent.includes('Safari') ? agent.match(/Version\/([\d.]+)/) : null;
@@ -62,7 +62,7 @@ export function initialViewportLog(mode: DiagnosticMode, probe: ProbeEvidence | 
     .map(url => url.pathname)
     .filter(isDiagnosticAsset);
   return {
-    version: 3, experiment: probe ? 'native-history' : null,
+    version: 4, experiment: probe ? isAutoProbeEvidence(probe) ? 'native-history-auto' : 'native-history' : null,
     mode, browser: chrome ? 'chrome' : safari ? 'safari' : 'other',
     browserVersion: chrome?.[1] ?? safari?.[1] ?? null,
     osVersion: os?.[1].replaceAll('_', '.') ?? null,

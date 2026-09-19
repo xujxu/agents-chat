@@ -1,68 +1,23 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { encode } from 'next-auth/jwt';
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { METRIC_KEYS, validateDiagnosticLog } from '../lib/viewportDiagnostics';
-import { installTypographyFixture } from './helpers/typographyFixture';
 import { installTestVisualViewport, setTestVisualViewport } from './helpers/visualViewport';
-
-const BASE = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3010';
-const ORIGIN = new URL(BASE).origin;
-const ENDPOINT = '/api/diagnostics/viewport';
-
-async function authenticate(context: BrowserContext, role = 'admin') {
-  const secret = process.env.NEXTAUTH_SECRET;
-  if (!secret) throw new Error('Diagnostic API tests require the isolated CI NEXTAUTH_SECRET.');
-  const token = await encode({
-    secret,
-    token: {
-      sub: role === 'admin' ? 'admin' : 'viewport-ci',
-      email: role === 'admin' ? 'admin@local' : 'viewport-ci@example.test',
-      name: 'Viewport CI', role,
-    },
-  });
-  await context.addCookies([{ name: 'next-auth.session-token', value: token, url: BASE, httpOnly: true, sameSite: 'Lax' }]);
-}
-
-async function open(page: Page, mode?: string, pathname = '/') {
-  const fixture = await installTypographyFixture(page);
-  await authenticate(page.context());
-  const url = new URL(mode ? `${pathname}?viewportDiagnostics=${mode}` : pathname, BASE).href;
-  if (pathname === '/diagnostics/viewport-history' && page.url() === 'about:blank') {
-    // Replace only the test harness's initial blank document. This is setup,
-    // never part of checkpoint restoration, whose navigation count stays zero.
-    await Promise.all([
-      page.waitForURL(url),
-      page.evaluate(destination => { location.replace(destination); }, url),
-    ]);
-  } else {
-    await page.goto(url);
-  }
-  await expect(page.locator('textarea.composerTextarea')).toBeVisible();
-  const session = await (await page.request.get('/api/auth/session')).json();
-  expect(session.user.role).toBe('admin');
-  return fixture;
-}
+import {
+  DIAGNOSTIC_ORIGIN as ORIGIN, DIAGNOSTIC_ENDPOINT as ENDPOINT,
+  authenticateViewportDiagnostic as authenticate, openViewportDiagnostic as open,
+  readSavedViewportLog as savedLog,
+} from './helpers/viewportDiagnosticFixture';
 
 function payload() {
   return {
-    version: 3, experiment: null, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
+    version: 4, experiment: null, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
     osVersion: '18.7.8', clientRevision: null, assets: ['/_next/static/chunks/test.css'], dropped: 0, samples: [],
     initial: {
       t: 0, event: 'initial', gesture: false, focus: 'none', orientation: 'portrait', mobile: true, probe: null,
       metrics: Object.fromEntries(METRIC_KEYS.map(key => [key, key === 'scale' ? 1 : null])),
     },
   };
-}
-
-async function savedLog(id: string) {
-  expect(id).toMatch(/^[a-f0-9-]{36}$/);
-  const file = path.join(process.cwd(), '.next/standalone/.data/tmp/viewport-diagnostics', `${id}.json`);
-  try {
-    return JSON.parse(await readFile(file, 'utf8'));
-  } finally {
-    await unlink(file);
-  }
 }
 
 test('normal and unknown-mode pages do not expose diagnostics or upload', async ({ page }) => {
@@ -310,7 +265,7 @@ test('manual upload saves actual diagnostic data without chat or input content',
   const stored = await savedLog(id);
   expect(validateDiagnosticLog(stored.log)).toBe(true);
   expect(stored.log.mode).toBe('baseline');
-  expect(stored.log.version).toBe(3);
+  expect(stored.log.version).toBe(4);
   expect(stored.log.initial.metrics.viewportMinimumScale).toBeNull();
   expect(stored.log.samples.some((sample: { event: string }) => sample.event === 'orientation')).toBe(true);
   expect(stored.serverBuildId).toBeTruthy();
@@ -353,7 +308,7 @@ test('candidate upload records the actual minimum and leaves the ordinary policy
   const { id } = await response.json();
   await expect(page.locator('.viewportDiagnosticsStatus')).toContainText(`Saved log: ${id}`);
   const stored = await savedLog(id);
-  expect(stored.log.version).toBe(3);
+  expect(stored.log.version).toBe(4);
   expect(validateDiagnosticLog(stored.log)).toBe(true);
   expect(stored.log.initial.metrics.viewportMinimumScale).toBe(1);
   expect(stored.log.samples.length).toBeGreaterThan(0);
@@ -414,6 +369,7 @@ test('real API enforces authentication, administrator access, origin, and schema
   expect(outdated.status()).toBe(400);
   expect((await outdated.json()).message).toMatch(/fresh diagnostic tab/);
   expect((await post({ ...payload(), version: 2 })).status()).toBe(400);
+  expect((await post({ ...payload(), version: 3 })).status()).toBe(400);
   expect((await page.request.post(ENDPOINT, {
     data: '{broken', headers: { Origin: ORIGIN, 'Content-Type': 'application/json' },
   })).status()).toBe(400);

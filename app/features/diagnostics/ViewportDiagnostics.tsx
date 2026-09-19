@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  createViewportRecorder, parseDiagnosticMode, validateDiagnosticLog,
-  type DiagnosticMode, type ViewportDiagnosticLog, type ViewportSample, type ProbeEvidence,
+  createViewportRecorder, parseDiagnosticMode, validateDiagnosticLog, isAutoProbeEvidence,
+  type DiagnosticMode, type ViewportDiagnosticLog, type ViewportSample, type AnyProbeEvidence,
 } from '../../../lib/viewportDiagnostics';
 import { captureViewportSample, initialViewportLog } from './viewportCapture';
 import { useNativeHistoryProbe } from './useNativeHistoryProbe';
 import { NativeHistoryProbeControls } from './NativeHistoryProbeControls';
+import { AutomaticRecoveryControls } from './AutomaticRecoveryControls';
 import './ViewportDiagnostics.css';
 
 export function ViewportDiagnostics() {
@@ -19,10 +20,11 @@ export function ViewportDiagnostics() {
 }
 
 function DiagnosticPanel({ mode }: { mode: DiagnosticMode }) {
-  const historyEnabled = mode === 'baseline' && location.pathname === '/diagnostics/viewport-history';
-  const recordRef = useRef<((event: ViewportSample['event'], evidence?: ProbeEvidence) => void) | null>(null);
-  const probe = useNativeHistoryProbe(historyEnabled, evidence => recordRef.current?.('probe', evidence));
-  const probeEvidenceRef = probe.evidenceRef;
+  const kind = mode !== 'baseline' ? null : location.pathname === '/diagnostics/viewport-history' ? 'manual'
+    : location.pathname === '/diagnostics/viewport-auto' ? 'auto' : null;
+  const recordRef = useRef<((event: ViewportSample['event'], evidence?: AnyProbeEvidence) => void) | null>(null);
+  const probe = useNativeHistoryProbe(kind, evidence => recordRef.current?.('probe', evidence));
+  const readProbeEvidence = probe.readEvidence;
   const snapshotRef = useRef<(() => ViewportDiagnosticLog) | null>(null);
   const retryRef = useRef<ViewportDiagnosticLog | null>(null);
   const uploadingRef = useRef(false);
@@ -35,15 +37,15 @@ function DiagnosticPanel({ mode }: { mode: DiagnosticMode }) {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    const recorder = createViewportRecorder(initialViewportLog(mode, historyEnabled ? probeEvidenceRef.current : null));
+    const recorder = createViewportRecorder(initialViewportLog(mode, kind ? readProbeEvidence() : null));
     const start = performance.now();
     let gesture = false;
     let frame = 0;
     let settle = 0;
     let count = 0;
-    const record = (event: ViewportSample['event'], evidence?: ProbeEvidence) => {
+    const record = (event: ViewportSample['event'], evidence?: AnyProbeEvidence) => {
       const sample = captureViewportSample(event, performance.now() - start, gesture,
-        historyEnabled ? evidence ?? probeEvidenceRef.current : null);
+        kind ? evidence ?? readProbeEvidence() : null);
       recorder.record(sample);
       count++;
       setReading({
@@ -101,7 +103,7 @@ function DiagnosticPanel({ mode }: { mode: DiagnosticMode }) {
       viewport?.removeEventListener('resize', resize);
       viewport?.removeEventListener('scroll', scroll);
     };
-  }, [mode, historyEnabled, probeEvidenceRef]);
+  }, [mode, kind, readProbeEvidence]);
 
   const upload = async () => {
     if (uploadingRef.current) return;
@@ -147,8 +149,8 @@ function DiagnosticPanel({ mode }: { mode: DiagnosticMode }) {
 
   return (
     <aside className="viewportDiagnostics" aria-label="Viewport diagnostics" data-mode={mode}
-      data-experiment={historyEnabled ? 'native-history' : undefined}
-      style={historyEnabled ? probe.panelStyle : undefined}>
+      data-experiment={kind === 'auto' ? 'native-history-auto' : kind ? 'native-history' : undefined}
+      style={kind ? probe.panelStyle : undefined}>
       <div className="viewportDiagnosticsHeading">
         <strong>Viewport / {mode}</strong>
         <output aria-label="Recorded scale" aria-live="off">{reading.scale === null ? 'unavailable' : `${reading.scale}x`}</output>
@@ -157,7 +159,10 @@ function DiagnosticPanel({ mode }: { mode: DiagnosticMode }) {
         Minimum: {reading.minimum ?? 'unspecified'}.{' '}
         {reading.count} events{reading.dropped ? ` / ${reading.dropped} older samples dropped` : ''}. No chat text collected.
       </div>
-      {historyEnabled ? <NativeHistoryProbeControls evidence={probe.evidence} arm={probe.arm} restore={probe.restore} /> : null}
+      {kind === 'manual' && !isAutoProbeEvidence(probe.evidence)
+        ? <NativeHistoryProbeControls evidence={probe.evidence} arm={probe.arm} restore={probe.restore} /> : null}
+      {kind === 'auto' && isAutoProbeEvidence(probe.evidence)
+        ? <AutomaticRecoveryControls evidence={probe.evidence} arm={probe.arm} stop={probe.stop} /> : null}
       <button type="button" onClick={upload} disabled={uploading}>
         {uploading ? 'Uploading...' : failed ? 'Retry upload' : 'Upload diagnostic log'}
       </button>
