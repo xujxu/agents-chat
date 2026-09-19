@@ -303,3 +303,33 @@ diagnostic authentication/open/upload-file helpers; no runtime changes.
   `1x` after release for at least one second; then rotate, wait two seconds
   and upload. If scale cannot settle at `1x`, upload that condition without
   proceeding to rotation. No code/deployment change follows from this log.
+
+## First Physical Automatic Correction
+
+- Follow-up upload `eb74ae5b-49d8-40c9-a88f-838158e74e2e`, received
+  `2026-09-19T06:56:53.812Z`: same build/client, 139 samples, zero drops.
+  Initial sample and all 74 previous samples match exactly, establishing
+  continuation of the same recording.
+- A new pinch reached approximately 1.9943, returned to scale 1, then settled
+  after release with matching widths 428/428 at 156.097 seconds. The
+  controller accepted original intent at 156.141 seconds.
+- Rotation at 171.912 seconds produced the confirmed landscape anomaly:
+  scale 2.163551, widths 385/832. Automatic recovery began at 172.501,
+  received owned history acknowledgment at 172.543, and native geometry
+  returned to scale 1 and widths 832/832 at 172.653.
+- Stable recovery was confirmed at 172.990; re-arm completed at 173.009.
+  `corrections=1`, `cycle=1`, phase `watching`, with live ownership and all
+  document/shell/composer continuity flags true. Native correction was
+  observed 152 ms after the request, approximately 741 ms after rotation.
+- This is the first physical automatic recovery and successful re-arm,
+  not yet evidence of repeated automatic corrections.
+- The subsequent portrait rotation at 180.287 seconds reported scale
+  2.018817 with visual/document widths both 428, inconsistent native
+  readings. The controller conservatively timed out to
+  `watching/unassessed` at 183.321, without another traversal. Upload at
+  188.909 retained those readings and all continuity flags.
+- Do not characterize that portrait state as verified native 100% or as
+  confirmed visible 2x zoom. The requested all-orientation native-scale
+  outcome is not fully established. Next evidence should cover further
+  rotations and fresh pinch-back sequences on this same live controller,
+  observing whether automatic correction/re-arm can succeed again.
