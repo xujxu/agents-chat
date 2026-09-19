@@ -4,8 +4,10 @@
 
 The user approved a focused repair of the automatic diagnostic controller's
 conflicting original-scale and geometry checks. This does not authorize
-ordinary-page promotion or another production deployment. Written-spec
-review precedes implementation.
+ordinary-page promotion or another production deployment. The user approved
+the written spec and direct inline implementation. Source `8bcdafe` passed
+remote validation in Actions `35428835945`; deployment remains a separate
+authorization gate.
 
 ## Evidence and Root Cause
 

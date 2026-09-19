@@ -22,7 +22,7 @@ ownership unchanged. Add policy and real-hook regressions before the fix.
 The existing `fixture()` exposes `o`, `c`, `arm`, `tick`, `settle`, `rotate`
 and operation `count`. Add these cases:
 
-- [ ] Add original-intent, focus and rotation regressions:
+- [x] Add original-intent, focus and rotation regressions:
 
 ```js
 test('near-original released pinch uses the original-scale tolerance', () => {
@@ -90,7 +90,7 @@ test('original-scale tolerance does not admit nonunit or excessive width error',
 The existing helpers `enable`, `panel`, `touch`, `mockCorrection` and
 `setTestVisualViewport` remain unchanged.
 
-- [ ] Add a browser case reproducing full-width near-unit geometry:
+- [x] Add a browser case reproducing full-width near-unit geometry:
 
 ```ts
 test('near-original full-width pinch remains eligible for later correction', async ({ page }) => {
@@ -125,7 +125,7 @@ test('near-original full-width pinch remains eligible for later correction', asy
 });
 ```
 
-- [ ] Commit the tests and plan, push, dispatch the existing workflow:
+- [x] Commit the tests and plan, push, dispatch the existing workflow:
 
 ```bash
 git add tests/automatic-native-recovery.test.mjs tests/automatic-native-recovery.spec.ts \
@@ -146,13 +146,13 @@ before implementation; all execution is remote.
 
 **Modify:** `app/features/diagnostics/automaticNativeRecovery.ts`.
 
-- [ ] Replace the watching gate with:
+- [x] Replace the watching gate with:
 
 ```ts
 if (phase === 'watching' && settled && (atOriginalScale(o) || consistentGeometry(o))) {
 ```
 
-- [ ] Replace the geometry gate inside `assessing-rotation` with:
+- [x] Replace the geometry gate inside `assessing-rotation` with:
 
 ```ts
 if (settled && (atOriginalScale(o) || consistentGeometry(o))) {
@@ -160,7 +160,7 @@ if (settled && (atOriginalScale(o) || consistentGeometry(o))) {
 
 Keep the block bodies and all other runtime code unchanged.
 
-- [ ] Commit, push and dispatch the same workflow:
+- [x] Commit, push and dispatch the same workflow:
 
 ```bash
 git add app/features/diagnostics/automaticNativeRecovery.ts
@@ -172,10 +172,10 @@ gh workflow run 361358759 --repo xujxu/agents-chat \
   -f build_origin=https://agent.xujx.us.kg
 ```
 
-- [ ] Inspect all three final jobs and exact counts; download final native
+- [x] Inspect all three final jobs and exact counts; download final native
   Chromium cycle evidence. Require builds, type checks, Node policy/schema,
   new E2E coverage, existing manual/API/typography and UX regressions green.
-- [ ] Review the two-line runtime diff against the approved spec; record
+- [x] Review the two-line runtime diff against the approved spec; record
   exact red/green revisions, run IDs and artifact provenance below.
 - [ ] Ask for separate deployment authorization. Leave current PROD at
   `e927428` until approved. Stop periodic updates while awaiting user input.
@@ -187,3 +187,36 @@ gh workflow run 361358759 --repo xujxu/agents-chat \
   intentional non-unit and inconsistent-geometry protection, near-unit E2E
   after released pinch, remote-only validation and separate deployment.
 - No new feature, helper, schema or ordinary-page navigation is introduced.
+- Red source `5eda3a1`, Actions
+  [35428433003](https://github.com/xujxu/agents-chat/actions/runs/35428433003):
+  exactly three new policy cases failed (35 passed, three failed). The new
+  E2E case failed on Android Chromium and iPhone WebKit, receiving `unknown`
+  rather than `original`. Non-unit/width safety coverage passed.
+- Green source `8bcdafee9b38341be45d61fce5ee9b1a5b7dc08f`, Actions
+  [35428835945](https://github.com/xujxu/agents-chat/actions/runs/35428835945):
+  all three jobs, builds and type checks succeeded. There were 214 passing
+  executions and eight project-specific skips:
+
+| Coverage | Desktop Chromium | Android Chromium | iPhone WebKit |
+| --- | ---: | ---: | ---: |
+| Node policy/schema/storage | 38 | not scheduled | not scheduled |
+| Typography behavior | 8 | 7 | 7 |
+| Emitted typography policy | 1 | 1 | 1 |
+| Diagnostic API/browser | 17 | 17 | 16 |
+| Automatic recovery | 7 | 8 | 7 |
+| Existing desktop/mobile regressions | 17 | 31 | 31 |
+
+- Downloaded the final Android artifact. Native cycle evidence reports
+  scale 1 and widths 832/832, 428/428, 832/832 at cycles 1/2/3; history
+  length remains 2. This is Chromium mechanism evidence, not new iPhone
+  acceptance of this revision.
+- Exact desktop artifact:
+  `typography-8bcdafee9b38341be45d61fce5ee9b1a5b7dc08f-desktop-chromium`,
+  ID `10580191471`. Use this tested source if deployment is authorized,
+  not a later documentation-only HEAD.
+- Self-review confirmed the runtime diff consists only of the two approved
+  predicates. Original-scale bounds, non-original multiplicative checks,
+  history ownership, deadlines, manual behavior, schema and UI are unchanged.
+- No local test, build, type check or installation was executed. Current
+  PROD remains `e927428`; implementation is complete and deployment awaits
+  separate authorization.
