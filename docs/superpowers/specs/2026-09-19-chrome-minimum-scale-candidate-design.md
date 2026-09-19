@@ -10,7 +10,9 @@ Revision `29195d0` is now deployed as this independent candidate after
 remote validation. See the
 [implementation record](../plans/2026-09-19-chrome-minimum-scale-candidate.md#execution-record)
 for the exact build, run, rollback location, and physical collection links.
-Native acceptance and promotion remain pending.
+Physical comparison now shows that the explicit minimum does not prevent
+the Chrome scale jump. This candidate is rejected for promotion; the
+ordinary page remains unchanged.
 
 Four physical recordings from diagnostic revision `3834536` establish:
 Chrome baseline and the shell-write-isolated variant both settle at scale 1

@@ -192,3 +192,22 @@ pinch-return-to-original-size and rotation sequence, then upload each log.
 Also check retained intentional magnification before considering promotion.
 The native outcome remains pending, and the ordinary viewport policy has
 not changed.
+
+### Physical Result: Candidate Rejected
+
+Two subsequent Chrome uploads from client `29195d0` and server build
+`7McKDvj0HPkvJSTMzIGih` contain complete version-2 traces without dropped
+samples. The candidate records `viewportMinimumScale=1` throughout;
+the ordinary control records null. Neither trace involves input focus.
+
+Both independently settle at scale 1 and visual width 428 before rotation,
+then reach scale `2.1635513305664062` with visual width 385 in landscape.
+Both return to scale 1 in portrait. Document client/scroll widths agree
+at 428/832 respectively, and the mobile layout query remains active.
+
+The explicit minimum is therefore present but ineffective for the reported
+sequence. Reject promotion to the ordinary page. Keep the candidate isolated
+as evidence, without adding a maximum-scale lock or a forced reset.
+The earlier OpenClaw comparison concerned orientation behavior; whether it
+also reproduces this specific pinch-return-to-100%-then-rotate sequence on
+the same Chrome remains unverified.
