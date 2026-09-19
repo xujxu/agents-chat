@@ -23,7 +23,7 @@ Node tests, Playwright and GitHub Actions.
 **Modify:** `tests/viewport-diagnostics.spec.ts`,
 `.github/workflows/markdown-typography.yml`.
 
-- [ ] Use the existing automatic port observation shape. The new controller
+- [x] Use the existing automatic port observation shape. The new controller
   contract is `createPreventiveNativeRecovery(ports)` returning `arm`,
   `observe`, `stop`, `evidence`; `ports` has `read`, `checkpoint`, `back`,
   `rearm`, `publish`. Define a local deterministic fixture in the new test:
@@ -45,13 +45,13 @@ setting `entry='checkpoint'` and delivering `popstate`, and keeps only the
 latest published evidence. This supports exact counter-bound checks without
 retaining a million evidence objects.
 
-- [ ] Write cases for 20 repeated preparations, no enable/rotation/resize/
+- [x] Write cases for 20 repeated preparations, no enable/rotation/resize/
   focus-only action, no departure/no preparation, non-unit intent, partial
   release, fresh near-original stability, fixed gesture deadlines, new
   contact/focus/orientation cancellation, ownership/overlay/DOM changes,
   Stop with late acknowledgment, API exceptions, missing acknowledgment,
   missing settled original scale, and bounded counters.
-- [ ] The positive scenario is:
+- [x] The positive scenario is:
 
 ```js
 f.arm();
@@ -66,7 +66,7 @@ assert.equal(f.c.evidence().preparations, 1);
 assert.equal(f.o.historyLength, 2);
 ```
 
-- [ ] Add route assertion using existing `open`:
+- [x] Add route assertion using existing `open`:
 
 ```ts
 await open(page, 'baseline', '/diagnostics/viewport-preventive');
@@ -75,7 +75,7 @@ await expect(page.getByRole('button', { name: 'Enable automatic recovery' })).to
 await expect(page.locator('meta[name="viewport"]')).not.toHaveAttribute('content', /minimum-scale|maximum-scale/);
 ```
 
-- [ ] Append the new Node file to the existing contract command, commit
+- [x] Append the new Node file to the existing contract command, commit
   with `[skip ci]` and the required trailer, push, dispatch remotely:
 
 ```bash
@@ -91,14 +91,14 @@ Require actual missing-module/route failures before implementing.
 **Create:** `app/features/diagnostics/preventiveNativeRecovery.ts`.
 **Reuse unchanged:** `nativeViewportPolicy.ts`, `nativeHistoryBrowser.ts`.
 
-- [ ] Define ports by reusing `AutoPorts` without its publisher, replacing
+- [x] Define ports by reusing `AutoPorts` without its publisher, replacing
   it with `publish(PreventiveProbeEvidence)`. Keep mutable phase, reason,
   intent, cycle/preparations/gesture/orientation counters, pendingAck,
   deadline, previous contact count, direction and saw-departure flag.
-- [ ] Implement initial admission from the approved spec; establish one
+- [x] Implement initial admission from the approved spec; establish one
   owned pair after fresh stable original readings. Compute live evidence
   from `ports.read()` even in terminal states.
-- [ ] On a new multi-touch sequence, increment gesture counter and clear
+- [x] On a new multi-touch sequence, increment gesture counter and clear
   intent. Record a departure only while at least two contacts are present:
 
 ```ts
@@ -110,15 +110,15 @@ if (o.touches >= 2 && validGeometry(o) && Math.abs(o.scale - 1) > 0.01) {
 Partial release keeps `pinching`. All contacts released starts one fixed
 three-second window only if departure was observed; otherwise return
 watching with `no-scale-change`.
-- [ ] Assess original geometry with `atOriginalScale` first; consistent
+- [x] Assess original geometry with `atOriginalScale` first; consistent
   non-unit becomes intentional non-unit without traversal. Contradictory
   geometry waits only until the fixed deadline. New contact, focus or
   orientation cancels that gesture. A subsequent new gesture may start.
-- [ ] On eligible original geometry call back exactly once, wait for owned
+- [x] On eligible original geometry call back exactly once, wait for owned
   acknowledgment, reset stability, then verify original geometry and
   re-arm. Increase completed preparations only after re-arm and ownership
   checks succeed. Restore failure stops; no retry or reactive action.
-- [ ] Check counter bounds before increments. Preserve opaque router state
+- [x] Check counter bounds before increments. Preserve opaque router state
   and all live guards through the unchanged adapter. Stop cancels re-arm,
   never attempts to cancel or compensate an issued native traversal.
 
@@ -132,7 +132,7 @@ watching with `no-scale-change`.
 **Create:** `app/features/diagnostics/PreventiveRecoveryControls.tsx`,
 `app/diagnostics/viewport-preventive/page.tsx`.
 
-- [ ] Add the new exact evidence shape and type guard:
+- [x] Add the new exact evidence shape and type guard:
 
 ```ts
 type PreventiveProbeEvidence = Omit<AutoProbeEvidence, 'phase' | 'reason' | 'corrections'> & {
@@ -149,13 +149,13 @@ Use the spec's phase allowlist and existing common reasons plus `nonunit`,
 `no-scale-change`, `counter-limit`. Version becomes 5; experiment adds
 `native-history-preventive`. Validate exact shape and identity independently
 from reactive/manual evidence; reject version 4 as outdated.
-- [ ] Add hook kind `preventive`, selecting the new controller. Deliver
+- [x] Add hook kind `preventive`, selecting the new controller. Deliver
   focus events to either automatic controller. Reuse passive listeners,
   live evidence, 100ms ticks and safe cleanup.
-- [ ] Gate the new kind only on its exact baseline route. Render its own
+- [x] Gate the new kind only on its exact baseline route. Render its own
   controls and experiment identity; exclude its shape from manual controls.
   Capture experiment identity with the new type guard before other guards.
-- [ ] Controls show preparations, raw scale via the existing panel, phase
+- [x] Controls show preparations, raw scale via the existing panel, phase
   and fixed reason messages. Disclose extra history and no prevention
   guarantee. New route only returns `<ChatPageClient />`.
 
@@ -167,32 +167,32 @@ from reactive/manual evidence; reject version 4 as outdated.
 `tests/viewport-diagnostics.test.mjs`, `tests/viewport-diagnostics.spec.ts`,
 `tests/automatic-native-recovery.spec.ts`.
 
-- [ ] Add the preventive URL to the test harness's initial-blank replacement
+- [x] Add the preventive URL to the test harness's initial-blank replacement
   allowlist, never replacing a running document.
-- [ ] Use real history with synthetic native viewport readings for three
+- [x] Use real history with synthetic native viewport readings for three
   gesture preparations. Preserve draft, attachment, streaming, document
   and shell/composer handles; assert length2 and no extra send/resume.
-- [ ] Cover no-departure/non-unit/rotation-only behavior, near-original
+- [x] Cover no-departure/non-unit/rotation-only behavior, near-original
   full-width baseline, interruption, Stop, browser Back, overlay history,
   and absence of reactive fallback after later injected enlargement.
-- [ ] Upload schema-5 preventive evidence through the real API; verify the
+- [x] Upload schema-5 preventive evidence through the real API; verify the
   saved shape, privacy and rejection of mixed experiment data. Update
   existing version fixtures/assertions, retaining old-version rejection.
-- [ ] Add native Chromium CDP observation: gesture contacts plus real native
+- [x] Add native Chromium CDP observation: gesture contacts plus real native
   scale2 then1, before any rotation; record three real preparations and
   unchanged native geometry/history. Do not manufacture a claim that iOS
   rotation prevention has been proven by CDP.
-- [ ] Add separate preventive E2E workflow step with the existing timeout,
+- [x] Add separate preventive E2E workflow step with the existing timeout,
   workers1 and artifact conventions; include its spec in mobile selectors.
   Keep all existing workflow stages.
-- [ ] Commit/push and run the existing production-origin workflow. Inspect
+- [x] Commit/push and run the existing production-origin workflow. Inspect
   exact final results and native evidence; fix in-scope failures remotely.
 
 ## Task 5: Review and deployment gate
 
-- [ ] Review against every admission, gesture, transaction, schema and
+- [x] Review against every admission, gesture, transaction, schema and
   physical acceptance condition in approved spec `48f42bc`.
-- [ ] Record source/run/artifact provenance and exact limitations.
+- [x] Record source/run/artifact provenance and exact limitations.
 - [ ] Stop periodic updates and request separate deployment authorization.
   Do not replace PROD or claim physical preventive success before approval.
 
@@ -202,3 +202,43 @@ from reactive/manual evidence; reject version 4 as outdated.
 - No low arbitrary retry limit is introduced; each gesture is bounded to
   one attempt, with explicit counter-bound stop and no corrective fallback.
 - Existing typography fix and manual/reactive behavior remain separate.
+- Red source `92bd4da`, Actions
+  [35443054921](https://github.com/xujxu/agents-chat/actions/runs/35443054921):
+  expected missing controller module and missing preventive route failures.
+- Green source `4c40f4dc23ddc3ed227715ac7c705bb1a18cf060`, Actions
+  [35443442742](https://github.com/xujxu/agents-chat/actions/runs/35443442742):
+  all three builds, type checks and jobs passed on the first implementation
+  run. All execution was remote; no local validation was performed.
+
+| Coverage | Desktop Chromium | Android Chromium | iPhone WebKit |
+| --- | ---: | ---: | ---: |
+| Node policy/schema/storage | 55 | not scheduled | not scheduled |
+| Typography behavior | 8 | 7 | 7 |
+| Emitted typography policy | 1 | 1 | 1 |
+| Diagnostic API/browser | 18 | 18 | 17 |
+| Reactive recovery | 7 | 8 | 7 |
+| Preventive transactions | 9 | 10 | 9 |
+| Existing desktop/mobile regressions | 17 | 31 | 31 |
+
+- Total: 262 passing executions, ten deliberate project-specific skips.
+  The million-counter boundary case also passed, without allocating a
+  growing evidence history.
+- Downloaded the exact final Android artifact. Its
+  `native-preventive-transactions.json` records three actual Chromium
+  native-scale transactions: scale 1, visual/client widths 428/428,
+  history length 2 and cycles 1/2/3. Contacts are synthetic; native scale
+  changes use CDP. This does not demonstrate prevention of iOS rotation.
+- Desktop artifact:
+  `typography-4c40f4dc23ddc3ed227715ac7c705bb1a18cf060-desktop-chromium`,
+  ID `10584850721`, contains the candidate standalone build.
+- Self-review: preparation requires observed multi-touch scale departure,
+  complete release and a fresh original-scale window; orientation alone
+  never prepares. Stable intentional zoom is preserved, cancellation
+  consumes the prior gesture, and native acknowledgment precedes a fresh
+  original-scale confirmation. Re-arm and its guards complete before
+  preparation count increments. Stop/ownership loss cannot cause retries.
+  Schema identity is exact and does not reinterpret manual/reactive logs.
+- The shared test touch dispatcher was extracted from reactive E2E into
+  `tests/helpers/visualViewport.ts`; this changes no runtime behavior.
+- PROD still runs `8bcdafe`. Preventive deployment and physical acceptance
+  remain pending. No verified native prevention result is claimed.
