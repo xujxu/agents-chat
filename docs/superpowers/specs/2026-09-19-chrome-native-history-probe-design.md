@@ -2,10 +2,12 @@
 
 ## Decision and Scope
 
-The user approved designing an isolated feasibility experiment using
-same-document history restoration. This written specification is awaiting
-review before implementation. Deployment is a separate decision after
-remote validation.
+The user approved an isolated feasibility experiment using same-document
+history restoration and subsequently instructed continuation after the
+interrupted specification review. Implementation `7104363` has passed remote
+validation; deployment still requires a separate decision. The
+[execution record](../plans/2026-09-19-chrome-native-history-probe.md#execution-record)
+contains exact runs, evidence, and remaining acceptance gates.
 
 The required outcome is a correct **native** browser scale. Page reloads,
 CSS/visual compensation, and disabling native pinch zoom are excluded.

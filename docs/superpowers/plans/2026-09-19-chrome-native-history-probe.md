@@ -42,7 +42,7 @@ Node test runner, Playwright, existing three-engine GitHub Actions workflow.
 
 ## Task 1: Establish a failing remote contract
 
-- [ ] Write the pure-controller tests first. Define the interface as:
+- [x] Write the pure-controller tests first. Define the interface as:
 
 ```ts
 type Observation = {
@@ -71,7 +71,7 @@ editable focus, non-fresh history, marker/URL/DOM ownership loss, no rotation,
 too-early restore, repeated calls, API exceptions, wrong popstate, three-second
 timeout and lifecycle invalidation.
 
-- [ ] Add a browser red case asserting the new route renders the chat, has the
+- [x] Add a browser red case asserting the new route renders the chat, has the
   ordinary viewport policy, and exposes the probe only with baseline enabled:
 
 ```ts
@@ -83,13 +83,13 @@ await expect(page.locator('meta[name="viewport"]'))
   .not.toHaveAttribute('content', /minimum-scale|maximum-scale/);
 ```
 
-- [ ] Extend the existing remote Node step:
+- [x] Extend the existing remote Node step:
 
 ```yaml
 run: node --experimental-strip-types --test tests/viewport-diagnostics.test.mjs tests/native-history-probe.test.mjs
 ```
 
-- [ ] Commit tests with `[skip ci]`, push, and dispatch:
+- [x] Commit tests with `[skip ci]`, push, and dispatch:
 
 ```bash
 gh workflow run 361358759 --repo xujxu/agents-chat \
@@ -102,7 +102,7 @@ Record the run and its actual result. No local runner invocation.
 
 ## Task 2: Implement the bounded controller
 
-- [ ] Implement the factory against the above ports. Polling is external.
+- [x] Implement the factory against the above ports. Polling is external.
   Use a 300 ms stability window with at least three observations. Reset that
   window on changes to scale/width/client width/orientation. Active touch or
   editable focus blocks actions; a single tap on a control must not make its
@@ -118,28 +118,28 @@ const atOriginalScale = (o: Observation) =>
   o.clientWidth > 0 && Math.abs(o.width - o.clientWidth) <= 2;
 ```
 
-- [ ] Arm only from idle and history length 1. Recheck prerequisites before
+- [x] Arm only from idle and history length 1. Recheck prerequisites before
   calling checkpoint. Consume the attempt before calling the port, so an
   exception cannot allow a second partial history write.
-- [ ] Require owned working marker, length 2, same URL and original DOM
+- [x] Require owned working marker, length 2, same URL and original DOM
   references throughout armed/restoring. Require an observed orientation
   change and settled scale greater than 1.01 before explicit restore.
-- [ ] Set restoring before calling back, and accept only the checkpoint
+- [x] Set restoring before calling back, and accept only the checkpoint
   popstate within three seconds. Start a separate three-second settling
   deadline after that acknowledgment. No acknowledgment or stable scale
   failure yields an explicit negative outcome, never a retry/fallback.
-- [ ] On exceptions emit a fixed `history-error` reason, not arbitrary exception
+- [x] On exceptions emit a fixed `history-error` reason, not arbitrary exception
   text in uploads. Report it visibly. Invalidation never navigates.
 
 ## Task 3: Browser adapter and evidence contract
 
-- [ ] Define `ProbeEvidence` using literal phase/reason unions, an owned-entry
+- [x] Define `ProbeEvidence` using literal phase/reason unions, an owned-entry
   boolean and three continuity booleans. Add a nullable `probe` to every
   sample and `experiment: 'native-history' | null` to the version-3 log.
   Add `probe` to allowed sample events; transitions inherit recorder time.
   Exact-key validation must reject private/unknown fields and invalid enums.
   Ordinary logs require null probe data; history logs require evidence.
-- [ ] Update initial capture and all existing test payloads to version 3.
+- [x] Update initial capture and all existing test payloads to version 3.
   Reject versions 1 and 2 explicitly with a fresh-tab instruction:
 
 ```ts
@@ -149,7 +149,7 @@ throw new DiagnosticError(
 );
 ```
 
-- [ ] Implement marker reads by checking opaque `history.state` object shape.
+- [x] Implement marker reads by checking opaque `history.state` object shape.
   Use a random per-controller token and namespace; preserve all other fields.
   Do not create Next internal fields. A checkpoint uses:
 
@@ -162,36 +162,36 @@ history.pushState({ ...existing, viewportHistoryProbe: {
 } }, '', href);
 ```
 
-- [ ] Capture Document, shell, and composer references before arming. Read
+- [x] Capture Document, shell, and composer references before arming. Read
   identity equality on each observation; track touches passively, listen to
   orientation/resize/popstate/hashchange/pagehide, and sample every 100 ms.
   Cleanup removes listeners/timers and invalidates without changing history.
-- [ ] Gate the hook on exact route plus baseline query. Retain ordinary route
+- [x] Gate the hook on exact route plus baseline query. Retain ordinary route
   behavior. Provide establish/restore controls, one-shot phase labels, explicit
   refusal/error text, and history warning. Record every controller transition
   immediately through the existing recorder; regular samples include current
   evidence. Keep failed-upload frozen snapshots unchanged.
-- [ ] Bound only the experimental panel to real viewport width/height and
+- [x] Bound only the experimental panel to real viewport width/height and
   offset, with internal scrolling. Preserve native pinch and authored viewport.
 
 ## Task 4: Continuity, failure, and private-upload coverage
 
-- [ ] Add real History API tests using a fresh browser tab. After checkpoint,
+- [x] Add real History API tests using a fresh browser tab. After checkpoint,
   assert length grows from 1 to 2 and opaque state is preserved. Capture
   Document/shell/composer handles and count navigation requests.
-- [ ] With synthetic viewport metrics, rotate and enlarge, click restore,
+- [x] With synthetic viewport metrics, rotate and enlarge, click restore,
   acknowledge real popstate, then supply scale 1. Assert restored only after
   stable geometry. Keep a separate no-metric-reset case ending not-restored;
   mocked success must not be reported as evidence of native recovery.
-- [ ] Add draft and attachment before restoration and retain a selected
+- [x] Add draft and attachment before restoration and retain a selected
   conversation. Start the existing controlled typography stream, restore,
   append text, and confirm streaming continues with exactly one send and no
   new resume/start request. Verify document and DOM references are unchanged.
-- [ ] Verify user Back is not prevented, ownership loss disables restoration,
+- [x] Verify user Back is not prevented, ownership loss disables restoration,
   stale log versions fail, probe uploads contain only the allowlisted fields,
   private content never appears in saved evidence, and normal/minimum routes
   contain no probe controls or history writes.
-- [ ] Check control rectangles against a small synthetic landscape visual
+- [x] Check control rectangles against a small synthetic landscape visual
   viewport. Where feasible, add an actual Chromium CDP page-scale case:
 
 ```ts
@@ -204,12 +204,12 @@ behavior. Retain all existing upload/API and three-engine regressions.
 
 ## Task 5: Remote green run and handoff
 
-- [ ] Commit the implementation and dispatch the same production-origin
+- [x] Commit the implementation and dispatch the same production-origin
   workflow. Inspect step failures and fix the cause; do not weaken acceptance
   or run locally. Record exact run/commit/build evidence.
-- [ ] Keep progress messages at least every 15 minutes while work is active.
+- [x] Keep progress messages at least every 15 minutes while work is active.
   Use the requested schedule, bounded CLI waits, and durable todo state.
-- [ ] Self-review the diff for accidental ordinary-page history changes,
+- [x] Self-review the diff for accidental ordinary-page history changes,
   viewport mutations, reloads, gesture interception, arbitrary log content,
   uncontrolled repeated navigation, and loss of router state.
 - [ ] Update this execution record, commit, and request deployment approval
@@ -224,3 +224,36 @@ behavior. Retain all existing upload/API and three-engine regressions.
 - Plan self-review: tasks cover isolation, native geometry, history ownership,
   lifecycle, privacy, continuity, remote-only validation, and separate
   deployment/physical acceptance gates.
+- Test-first `8dab9fb`, Actions `35424159692`: expected missing controller
+  module and missing candidate route failures.
+- First implementation `8d51968`, Actions `35424300387`: all 20 Node cases
+  passed; remote type checking found an opaque-history object narrowing
+  error. Fixed with a proper type predicate in `01b757a`.
+- Actions `35424427627`: builds and Node cases passed; browser coverage
+  exposed the harness's retained initial blank history entry and premature
+  capture of the loading composer. The harness now replaces only its initial
+  blank document before the trial; actual restoration still has zero document
+  requests. The controller captures DOM references at explicit establishment.
+  The one-entry safety gate was not weakened.
+- `17f9cc1`, Actions `35424626685`: complete three-engine green run.
+- Final source `7104363af2a0befadcea88f699886043b195f0d0`,
+  [Actions `35424817153`](https://github.com/xujxu/agents-chat/actions/runs/35424817153):
+  complete green run, including the additional App Router ownership rejection
+  case and durable native Chromium evidence.
+- Final counts: 20 Node cases; diagnostic/API browser cases 16 desktop,
+  16 Android Chromium, 15 iPhone WebKit; 104 existing typography and UX
+  regression cases. Total 171 applicable cases and three production
+  builds/type checks, all executed remotely.
+- Native Chromium CDP observation (not mocked VisualViewport): native scale
+  was first set to 2; same-document restoration yielded `phase: restored`,
+  native scale 1, visual width 832, and document client width 832.
+  The original JSON is retained in the Android artifact under
+  `diagnostics/viewport-diagnostics-real--4e14c-parately-from-mocked-policy-android-chromium/native-chromium-history-outcome.json`.
+  This is encouraging mechanism evidence, **not** iOS Chrome acceptance:
+  mobile Chromium emulation does not run the affected WKWebView.
+- Browser continuity coverage confirms unchanged Document/shell/composer,
+  opaque router state, draft and attachment retention, and continued
+  controlled streaming without duplicate send/resume or a document load.
+- PROD remains `29195d0`. No deployment has been performed for this
+  experiment. Next gate: user authorization to deploy the exact successful
+  artifact, then physical iPhone reproduction and native-scale measurement.
