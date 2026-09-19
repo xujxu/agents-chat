@@ -19,7 +19,7 @@ function sample(t = 0, event = 'initial') {
 
 function log() {
   return {
-    version: 1, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
+    version: 2, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
     osVersion: '18.7.8', clientRevision: null, assets: ['/_next/static/chunks/test.css'],
     initial: sample(), samples: [], dropped: 0,
   };
@@ -52,6 +52,14 @@ test('strict diagnostic schema rejects unknown data and invalid metrics', () => 
     { ...log(), samples: [sample(20, 'resize'), sample(10, 'resize')] },
     { ...log(), samples: Array.from({ length: 257 }, (_, i) => sample(i, 'resize')) },
   ]) assert.equal(validateDiagnosticLog(invalid), false);
+});
+
+test('v2 records the declared minimum and rejects stale v1 payloads', () => {
+  assert.ok(METRIC_KEYS.includes('viewportMinimumScale'));
+  const candidate = log();
+  candidate.initial.metrics.viewportMinimumScale = 1;
+  assert.equal(validateDiagnosticLog(candidate), true);
+  assert.equal(validateDiagnosticLog({ ...candidate, version: 1 }), false);
 });
 
 test('recorder retains initial state, bounded recent samples, and frozen snapshots', () => {

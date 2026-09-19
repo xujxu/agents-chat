@@ -24,10 +24,10 @@ async function authenticate(context: BrowserContext, role = 'admin') {
   await context.addCookies([{ name: 'next-auth.session-token', value: token, url: BASE, httpOnly: true, sameSite: 'Lax' }]);
 }
 
-async function open(page: Page, mode?: string) {
+async function open(page: Page, mode?: string, pathname = '/') {
   await installTypographyFixture(page);
   await authenticate(page.context());
-  await page.goto(mode ? `/?viewportDiagnostics=${mode}` : '/');
+  await page.goto(mode ? `${pathname}?viewportDiagnostics=${mode}` : pathname);
   await expect(page.locator('textarea.composerTextarea')).toBeVisible();
   const session = await (await page.request.get('/api/auth/session')).json();
   expect(session.user.role).toBe('admin');
@@ -35,7 +35,7 @@ async function open(page: Page, mode?: string) {
 
 function payload() {
   return {
-    version: 1, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
+    version: 2, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
     osVersion: '18.7.8', clientRevision: null, assets: ['/_next/static/chunks/test.css'], dropped: 0, samples: [],
     initial: {
       t: 0, event: 'initial', gesture: false, focus: 'none', orientation: 'portrait', mobile: true,
@@ -112,11 +112,58 @@ test('manual upload saves actual diagnostic data without chat or input content',
   const stored = await savedLog(id);
   expect(validateDiagnosticLog(stored.log)).toBe(true);
   expect(stored.log.mode).toBe('baseline');
+  expect(stored.log.version).toBe(2);
+  expect(stored.log.initial.metrics.viewportMinimumScale).toBeNull();
   expect(stored.log.samples.some((sample: { event: string }) => sample.event === 'orientation')).toBe(true);
   expect(stored.serverBuildId).toBeTruthy();
   expect(stored.log.clientRevision).toBe(process.env.GITHUB_SHA);
   expect(JSON.stringify(stored)).not.toContain('PRIVATE_DIAGNOSTIC_SENTINEL');
   expect(JSON.stringify(stored)).not.toContain('Stable prose');
+});
+
+for (const pathname of ['/', '/diagnostics/viewport-minimum']) {
+  test(`${pathname} serves the intended viewport before and after hydration`, async ({ page, context }) => {
+    await authenticate(context);
+    const response = await page.request.get(pathname);
+    expect(response.status()).toBe(200);
+    expect(new URL(response.url()).pathname).toBe(pathname);
+    const html = await response.text();
+    const viewportTags = html.match(/<meta\b[^>]*name="viewport"[^>]*>/g) || [];
+    expect(viewportTags).toHaveLength(1);
+    const content = viewportTags[0].match(/content="([^"]+)"/)?.[1];
+    expect(content).toContain('width=device-width');
+    expect(content).toContain('initial-scale=1');
+    expect(content).toContain('interactive-widget=resizes-content');
+    expect(content).not.toMatch(/maximum-scale|user-scalable\s*=\s*(no|0)/);
+    if (pathname === '/') expect(content).not.toContain('minimum-scale');
+    else expect(content).toMatch(/(?:^|,)\s*minimum-scale=1(?:,|$)/);
+    await open(page, 'baseline', pathname);
+    await expect(page.locator('meta[name="viewport"]')).toHaveCount(1);
+    await expect(page.locator('meta[name="viewport"]')).toHaveAttribute('content', content!);
+    await expect(page.getByLabel('Viewport diagnostics')).toContainText(
+      pathname === '/' ? 'Minimum: unspecified' : 'Minimum: 1',
+    );
+  });
+}
+
+test('candidate upload records the actual minimum and leaves the ordinary policy unchanged', async ({ page }) => {
+  await open(page, 'baseline', '/diagnostics/viewport-minimum');
+  const responsePromise = page.waitForResponse(response => response.url().includes(ENDPOINT));
+  await page.getByRole('button', { name: 'Upload diagnostic log' }).click();
+  const response = await responsePromise;
+  expect(response.status()).toBe(201);
+  const { id } = await response.json();
+  await expect(page.locator('.viewportDiagnosticsStatus')).toContainText(`Saved log: ${id}`);
+  const stored = await savedLog(id);
+  expect(stored.log.version).toBe(2);
+  expect(validateDiagnosticLog(stored.log)).toBe(true);
+  expect(stored.log.initial.metrics.viewportMinimumScale).toBe(1);
+  expect(stored.log.samples.length).toBeGreaterThan(0);
+  expect(stored.log.samples.every((sample: { metrics: { viewportMinimumScale: number } }) =>
+    sample.metrics.viewportMinimumScale === 1)).toBe(true);
+  await page.goto('/?viewportDiagnostics=baseline');
+  await expect(page.getByLabel('Viewport diagnostics')).toContainText('Minimum: unspecified');
+  await expect(page.locator('meta[name="viewport"]')).not.toHaveAttribute('content', /minimum-scale/);
 });
 
 test('failed upload is explicit and retries the same frozen snapshot', async ({ page }) => {
@@ -165,6 +212,9 @@ test('real API enforces authentication, administrator access, origin, and schema
   expect((await post(payload(), { Origin: 'https://foreign.example' })).status()).toBe(403);
   expect((await post(payload(), {})).status()).toBe(403);
   expect((await post({ ...payload(), chat: 'not permitted' })).status()).toBe(400);
+  const outdated = await post({ ...payload(), version: 1 });
+  expect(outdated.status()).toBe(400);
+  expect((await outdated.json()).message).toMatch(/Reload/);
   expect((await page.request.post(ENDPOINT, {
     data: '{broken', headers: { Origin: ORIGIN, 'Content-Type': 'application/json' },
   })).status()).toBe(400);
