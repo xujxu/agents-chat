@@ -333,3 +333,48 @@ diagnostic authentication/open/upload-file helpers; no runtime changes.
   outcome is not fully established. Next evidence should cover further
   rotations and fresh pinch-back sequences on this same live controller,
   observing whether automatic correction/re-arm can succeed again.
+
+## Repeated Physical Automatic Corrections
+
+- Upload `f0ee8e7d-8eeb-47b5-808b-2daf4e7520a1`, received
+  `2026-09-19T07:00:10.641Z`, has the same initial snapshot, client revision
+  and server build. It contains 256 retained samples from 279.094 through
+  372.406 seconds and reports 228 dropped samples. Its sample prefix no
+  longer matches the previous upload because the bounded recorder evicted
+  older samples; do not claim gap-free evidence across that missing interval.
+- Both the second and third complete correction transactions are retained:
+
+| Correction | Rotation | Request | Native 1, widths 832/832 | Re-armed |
+| --- | ---: | ---: | ---: | ---: |
+| 2 | 336.377 s | 336.953 s | 337.082 s | 337.445 s |
+| 3 | 357.024 s | 357.502 s | 357.642 s | 358.006 s |
+
+- Each starts from confirmed native landscape enlargement 2.163551 with
+  widths 385/832. Restoration to native 1 occurs 129/140 ms after the
+  request, respectively. All retained samples report live ownership and
+  document/shell/composer continuity true.
+- Between corrections 2 and 3 a new real pinch reaches approximately 3.445,
+  settles back at native 1 and widths 832/832, and re-establishes original
+  intent at 347.789 seconds. Thus the later success follows another actual
+  pinch, not just repeated orientation notifications.
+- At 364.596 seconds the controller receives explicit Stop and remains
+  stopped without re-arming. Upload at 372.406 reports scale 1, widths
+  832/832, cycle 3 and corrections 3. This is `stopped-by-user`, not a
+  restoration failure.
+- Across the saved uploads, three physical automatic native corrections
+  are now evidenced, including repeat use after a subsequent pinch.
+  Repeatability of the recovery primitive is established for this device
+  and sequence; ordinary-page integration is still not authorized.
+- Remaining limits: portrait readings still report scale 2.018817 with
+  widths 428/428 and are conservatively unassessed. Also, the retained
+  early landscape samples settle at scale 1.004727 and widths 832/832,
+  leaving intent unknown: this satisfies the original-scale tolerance
+  but fails the stricter width-times-scale consistency gate. This is an
+  implementation threshold mismatch to address, not a reason to ask the
+  user to achieve mathematically exact 1x repeatedly or to relax genuine
+  non-unit-zoom protection indiscriminately.
+- No runtime/deployment change is made based solely on this upload.
+  Clarify the visible portrait behavior before choosing how to handle the
+  contradictory native readings. Transient rotation enlargement, fresh-tab
+  admission and the extra same-document Back entry remain unresolved
+  barriers to ordinary production promotion.
