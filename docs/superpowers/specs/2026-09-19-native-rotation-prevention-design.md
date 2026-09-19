@@ -7,8 +7,11 @@ This specification defines one bounded candidate, not another expansion of
 reactive recovery. The user approved the written spec and direct inline
 implementation. Source `4c40f4d` passed Actions `35443442742` and was
 subsequently deployed with explicit approval as build
-`_QKMBDh8Xk3hJBa-jDEnA`. Physical preventive acceptance is pending;
-ordinary-page promotion remains a separate decision.
+`_QKMBDh8Xk3hJBa-jDEnA`. The first eligible physical trial failed:
+preparation completed before rotation, but the persistent portrait
+scale/width contradiction returned. Stop this candidate; do not promote
+it to ordinary pages or add reactive fallback. See the implementation
+plan's physical result for evidence.
 
 The experiment tests whether restoring a healthy native history checkpoint
 **after a completed pinch returns to original scale, but before rotation**

@@ -240,8 +240,8 @@ from reactive/manual evidence; reject version 4 as outdated.
   Schema identity is exact and does not reinterpret manual/reactive logs.
 - The shared test touch dispatcher was extracted from reactive E2E into
   `tests/helpers/visualViewport.ts`; this changes no runtime behavior.
-- PROD still runs `8bcdafe`. Preventive deployment and physical acceptance
-  remain pending. No verified native prevention result is claimed.
+- At completion of remote validation, PROD still ran `8bcdafe`; deployment
+  and physical acceptance were pending. Later outcomes are recorded below.
 
 ## Authorized Production Deployment
 
@@ -269,3 +269,44 @@ from reactive/manual evidence; reject version 4 as outdated.
   If the eligible trial fails, retain its evidence and do not continue
   repeating it or add reactive fallback. Ordinary-page promotion remains
   outside this deployment.
+
+## Physical Result: Candidate Failed
+
+- Upload `3bb9f538-2eeb-4fa8-9957-ad94d6f72618`, received
+  `2026-09-19T14:19:25.757Z`, identifies schema 5,
+  `native-history-preventive`, client
+  `4c40f4dc23ddc3ed227715ac7c705bb1a18cf060` and server build
+  `_QKMBDh8Xk3hJBa-jDEnA`. Browser/device versions match the affected
+  Chrome 153.0.8010.24 / iOS 18.7.8 environment.
+- The initial snapshot plus 54 samples are retained, with zero dropped
+  samples. Explicit enablement reached watching at 4.067 s. Initial
+  composer continuity was false before enablement captured the loaded
+  chat; all recorded ownership/document/shell/composer flags were true
+  from the armed watching state onward.
+- After moving to landscape, multi-touch enlarged the native scale.
+  A subsequent multi-touch shrink returned to original scale and fully
+  released at 16.220 s. Geometry settled to scale 1 and visual/document
+  widths 832/832 before preparation.
+- One preparation requested traversal at 16.788 s, received its owned
+  acknowledgment at 16.827 s, and completed re-arm at 17.223 s:
+  preparations 1, cycle 1, watching, scale 1, widths 832/832.
+  This was a completed eligible preparation, not a premature rotation
+  or an intentional non-unit zoom refusal.
+- On return to portrait at 33.135 s, raw scale became
+  2.018817186355591 while visual/document widths were both 428.
+  The settled sample at 33.613 s and upload at 73.463 s retained that
+  contradiction. The first and last observations span 40.328 s; the
+  event-driven samples do not establish uninterrupted measurements in
+  the gaps or prove whether a visible jump occurred.
+- Preparations/cycle remained 1, with no post-rotation corrective
+  traversal. All recorded live continuity/ownership flags remained true
+  after arming. Successful native preparation did not prevent the
+  required native-consistency failure.
+- Decision: stop this preventive candidate under the approved failure
+  criterion. Do not repeat the same physical trial, add history retries,
+  hide the anomaly with reactive fallback, or promote the experiment to
+  ordinary chat. The original Markdown typography fix is unaffected.
+  No runtime change or redeployment follows from this result.
+- A separately scoped minimal browser reproduction is the remaining
+  investigation path, not an established fix. Its design and any
+  deployment require their own approval.
