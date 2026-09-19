@@ -266,5 +266,31 @@ from automation. No ordinary-page behavior is changed.
   in the minimal runtime. Existing build tracing warnings point to
   `next.config.ts` / `app/api/markdown/route.ts`; they are outside this change.
 - Progress schedule 11 stopped at the deployment gate.
-- PROD remains `4c40f4d`; no minimal-page deployment or physical
-  reproduction result is claimed.
+- At the validation handoff PROD remained `4c40f4d`; no physical
+  reproduction result was claimed. Authorized deployment followed below.
+
+## Authorized Production Deployment
+
+- User approved deployment to existing PROD for physical validation.
+  Deployed the exact `42111b3371894332e1bf0096c14ab37959857c74` desktop
+  artifact ID `10586024166` from Actions `35449463953`.
+- Build ID: `U29bqrydoMMrN4CyDCSIG`. Service active/running, observed
+  PID `52092`. Only `.next` changed; host dependencies and environment
+  remained intact. Previous `4c40f4d` build and consistent SQLite backup
+  API snapshots are retained under
+  `.data/deployments/viewport-minimal-42111b3/`.
+- Deployment integrity checks confirmed artifact identity, compiled
+  minimal HTML/revision and both new route manifests, production-origin
+  metadata, unchanged ordinary viewport policy, exact local/public CSS
+  and public client revision, both typography policies, login gates on
+  all four history/minimal diagnostic routes, upload 401 on both endpoints
+  and database readability. No local builds or tests were performed.
+- Progress schedule 12 stopped after deployment. First physical entry:
+  `https://agent.xujx.us.kg/diagnostics/viewport-minimal`.
+- Use a fresh Chrome tab, move to landscape at 1x without a preliminary
+  pinch, press Start recording, pinch larger/back to original and release,
+  return to portrait, wait three seconds, then Stop recording and Upload
+  diagnostic log. Recording automatically freezes after 30 seconds.
+- This page neither prevents nor corrects zoom. Await the first isolated
+  Chrome result before requesting Safari or another experiment.
+  Ordinary chat has no new scaling behavior.

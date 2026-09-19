@@ -7,8 +7,9 @@ failed its first eligible physical trial. This is an investigation, not a
 new recovery mechanism or an ordinary-page fix. The user approved the
 written specification and direct implementation. Final candidate
 `42111b3371894332e1bf0096c14ab37959857c74` passed Actions `35449463953`
-on all three platforms. Production deployment still requires separate
-authorization; no physical minimal-page result is claimed.
+on all three platforms. The user subsequently authorized production
+deployment; that exact artifact is deployed as build
+`U29bqrydoMMrN4CyDCSIG`. No physical minimal-page result is claimed.
 
 Upload `3bb9f538-2eeb-4fa8-9957-ad94d6f72618` recorded a completed native
 preparation before rotation, followed by persistent portrait scale
