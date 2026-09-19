@@ -9,8 +9,8 @@ const INITIAL_EVIDENCE: ProbeEvidence = {
   phase: 'idle', reason: 'none', owned: false,
   documentContinuous: true, shellContinuous: true, composerContinuous: true,
 };
-function historyObject(value: unknown): Record<string, unknown> | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value : null;
+function historyObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function useNativeHistoryProbe(
@@ -32,8 +32,9 @@ export function useNativeHistoryProbe(
     const token = crypto.randomUUID();
     let touches = 0;
     const entry = () => {
-      const marker = historyObject(historyObject(history.state)?.[MARKER]);
-      if (marker?.token !== token) return null;
+      const state: unknown = history.state;
+      const marker = historyObject(state) ? state[MARKER] : null;
+      if (!historyObject(marker) || marker.token !== token) return null;
       return marker.role === 'working' || marker.role === 'checkpoint' ? marker.role : null;
     };
     const controller = createNativeHistoryProbe({
@@ -49,7 +50,7 @@ export function useNativeHistoryProbe(
       }),
       checkpoint: () => {
         const state: unknown = history.state;
-        const existing = historyObject(state);
+        const existing = historyObject(state) ? state : null;
         if ((state !== null && !existing) || existing?.[MARKER] !== undefined) {
           throw new Error('History entry is not suitable for a probe checkpoint.');
         }
