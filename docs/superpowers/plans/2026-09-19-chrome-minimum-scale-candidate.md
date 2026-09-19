@@ -211,3 +211,25 @@ as evidence, without adding a maximum-scale lock or a forced reset.
 The earlier OpenClaw comparison concerned orientation behavior; whether it
 also reproduces this specific pinch-return-to-100%-then-rotate sequence on
 the same Chrome remains unverified.
+
+The user subsequently confirmed that OpenClaw also enlarges the whole page
+under this exact sequence in the same Chrome. This is a visual confirmation,
+not an uploaded OpenClaw geometry trace. It establishes a cross-application
+reproduction; OpenClaw is not a working counterexample for this scenario.
+Its normal-flow shell and cover policy therefore cannot simply be copied
+and claimed to solve the reported behavior.
+
+The remaining issue is unresolved. Neither tested application-side
+candidate prevented it. The standard
+[VisualViewport.scale API](https://developer.mozilla.org/en-US/docs/Web/API/VisualViewport/scale)
+is read-only; there is no supported assignment to set the browser's native
+pinch scale through that property. No reliable site-side correction that
+preserves intentional pinch zoom has been established. Do not represent
+this as proof that every possible browser-specific workaround is impossible,
+or that updating Chrome is known to fix it.
+
+Ordinary PROD retains the confirmed Markdown correction and unchanged
+viewport policy. Native Chrome correction is blocked on a verified upstream
+resolution or an independently justified and validated compatibility
+approach. Safari is the user's verified unaffected alternative. Keep the
+diagnostic routes opt-in and do not promote either rejected candidate.
