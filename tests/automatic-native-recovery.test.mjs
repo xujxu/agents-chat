@@ -122,6 +122,66 @@ test('focus exit requires a fresh settled original-scale baseline', () => {
   assert.equal(f.count.back, 0);
 });
 
+test('near-original released pinch uses the original-scale tolerance', () => {
+  for (const scale of [1.004727, 0.995]) {
+    const f = fixture();
+    Object.assign(f.o, { width: 832, clientWidth: 832, scrollWidth: 832, orientation: 'landscape' });
+    f.arm();
+    f.o.touches = 2; f.tick(1, 'touch');
+    Object.assign(f.o, { scale, width: 832, touches: 0 });
+    f.settle();
+    assert.equal(f.c.evidence().intent, 'original');
+    assert.equal(f.count.back, 0);
+    f.rotate(); f.settle();
+    assert.equal(f.count.back, 1);
+  }
+});
+
+test('near-original focus exit requires fresh stability then accepts the baseline', () => {
+  for (const scale of [1.004727, 0.995]) {
+    const f = fixture();
+    Object.assign(f.o, { width: 832, clientWidth: 832, scrollWidth: 832, orientation: 'landscape' });
+    f.arm();
+    f.o.editable = true; f.tick(1, 'focus');
+    Object.assign(f.o, { editable: false, scale });
+    f.tick(1, 'focus'); f.tick(); f.tick();
+    assert.equal(f.c.evidence().intent, 'unknown');
+    f.tick(); f.tick();
+    assert.equal(f.c.evidence().intent, 'original');
+    assert.equal(f.count.back, 0);
+  }
+});
+
+test('near-original rotation completes assessment without native navigation', () => {
+  for (const scale of [1.004727, 0.995]) {
+    const f = fixture(); f.arm(); f.rotate(scale, false); f.settle();
+    assert.equal(f.c.evidence().phase, 'watching');
+    assert.equal(f.c.evidence().reason, 'none');
+    assert.equal(f.c.evidence().intent, 'original');
+    assert.equal(f.count.back, 0);
+  }
+});
+
+test('original-scale tolerance does not admit nonunit or excessive width error', () => {
+  for (const [scale, width, intent] of [
+    [1.02, 832, 'unknown'],
+    [0.98, 832, 'unknown'],
+    [1.004727, 835, 'unknown'],
+    [1, 835, 'unknown'],
+    [1.16834, 832 / 1.16834, 'intentional-nonunit'],
+    [2.018817, 832, 'unknown'],
+  ]) {
+    const f = fixture();
+    Object.assign(f.o, { width: 832, clientWidth: 832, scrollWidth: 832, orientation: 'landscape' });
+    f.arm();
+    f.o.touches = 2; f.tick(1, 'touch');
+    Object.assign(f.o, { scale, width, touches: 0 }); f.settle();
+    assert.equal(f.c.evidence().intent, intent);
+    f.rotate(); f.settle();
+    assert.equal(f.count.back, 0);
+  }
+});
+
 test('ownership changes, overlays, URL changes and DOM replacements stop the controller', () => {
   for (const change of [
     { entry: null }, { entryCycle: 9 }, { historyLength: 3 }, { sameUrl: false },

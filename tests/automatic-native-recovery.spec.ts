@@ -132,6 +132,37 @@ test('intentional zoom and keyboard/toolbar resizes do not invoke automatic hist
   await expect(panel(page)).toHaveAttribute('data-corrections', '0');
 });
 
+test('near-original full-width pinch remains eligible for later correction', async ({ page }) => {
+  await enable(page);
+  await page.setViewportSize({ width: 832, height: 390 });
+  await page.evaluate(() => window.dispatchEvent(new Event('orientationchange')));
+  await expect(panel(page)).toHaveAttribute('data-phase', 'watching');
+  let cycle = 0;
+  for (const scale of [1.004727, 0.995]) {
+    await touch(page, 2);
+    await page.evaluate(() => {
+      if (!window.visualViewport) throw new Error('Test viewport is missing');
+      Object.defineProperty(window.visualViewport, 'width', {
+        configurable: true, get: () => document.documentElement.clientWidth,
+      });
+    });
+    await setTestVisualViewport(page, 390, 0, scale);
+    await touch(page, 0);
+    await expect(panel(page)).toHaveAttribute('data-intent', 'original');
+    await expect(panel(page)).toHaveAttribute('data-corrections', String(cycle));
+    expect(await page.evaluate(() => history.state.viewportHistoryProbe.role)).toBe('working');
+    await page.evaluate(() => {
+      const viewport = window.visualViewport;
+      if (!viewport) throw new Error('Test viewport is missing');
+      Object.defineProperty(viewport, 'width', {
+        configurable: true, get: () => window.innerWidth / viewport.scale,
+      });
+    });
+    cycle++;
+    await mockCorrection(page, cycle, cycle % 2 === 0);
+  }
+});
+
 test('Back stops automatic recovery and is not followed by a compensating push', async ({ page }) => {
   await enable(page);
   await page.goBack();
