@@ -49,6 +49,9 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Diagnostic contracts and storage
+        if: matrix.project == 'desktop-chromium'
+        run: node --experimental-strip-types --test tests/viewport-diagnostics.test.mjs
       - name: Build and check types
         env:
           NEXTAUTH_URL: ${{ inputs.build_origin || 'http://localhost:3011' }}
