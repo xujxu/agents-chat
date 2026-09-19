@@ -367,3 +367,37 @@ causal sequence. The remaining question requires one continuous recording:
 restore the currently enlarged page, verify 1x, pinch and return to 1x,
 rotate portrait and landscape, then upload without reopening the page or
 establishing another checkpoint.
+
+### Continuous recording confirms recurrence after successful recovery
+
+Upload `a6297e45-f29e-4063-ae95-f5e45c8e4636`, received at
+`2026-09-19T06:09:13.293Z`, contains 124 samples with no drops and the
+expected deployed client/server identity. Its initial sample and its first
+67 samples exactly match the preceding upload. This is a continuous
+extension of the previous trial, not a newly established checkpoint.
+
+| Time | Observation | Native scale | Visual / document width |
+| --- | --- | --- | --- |
+| 110.895 s | Explicit restoration requested | 2.1635513305664062 | 385 / 832 |
+| 111.026 s | Native geometry recovered | 1 | 832 / 832 |
+| 111.371 s | Stable restoration confirmed | 1 | 832 / 832 |
+| 117.665 s | Subsequent intentional landscape pinch | 2.6706974506378174 | 311 / 832 |
+| 119.594 s | Pinch-back settled | 1 | 832 / 832 |
+| 128.150 s | Portrait rotation, inconsistent scale/width | 2.018817186355591 | 428 / 428 |
+| 131.759 s | Landscape rotation, consistent enlargement | 2.1635513305664062 | 385 / 832 |
+| 137.045 s | Upload without another recovery | 2.1635513305664062 | 385 / 832 |
+
+The second physical restoration succeeds without replacing the tracked
+document/chat DOM, but a subsequent pinch-back and rotation recreates the
+anomaly. A one-time recovery cannot provide lasting protection. The retained
+`restored` panel phase describes the completed one-shot operation; it is not
+a claim that subsequent native geometry remains correct.
+
+There is enough evidence to stop repeating the same manual trial. The next
+design must address repeatable native correction, legitimate pinch intent,
+inconsistent raw viewport readings, and the extra history entry. Reactive
+correction after a confirmed rotation anomaly has a physically demonstrated
+recovery primitive, but can visibly enlarge before correction. Preventive
+restoration immediately after pinch-back is another hypothesis, not yet a
+physically demonstrated prevention mechanism. Neither automatic approach
+is currently implemented or enabled on ordinary PROD.

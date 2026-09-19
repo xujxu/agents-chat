@@ -5,10 +5,11 @@
 The user approved an isolated feasibility experiment using same-document
 history restoration and subsequently instructed continuation after the
 interrupted specification review. Implementation `7104363` has passed remote
-validation and was deployed after explicit user authorization. A first
-physical iPhone log now confirms native 2.16355-to-1 restoration with
-document/chat DOM continuity. Post-restoration pinch behavior and any
-automatic production UX remain unverified. The
+validation and was deployed after explicit user authorization. Two physical
+iPhone trials now confirm native 2.16355-to-1 restoration with document/chat
+DOM continuity. Native pinch remains functional afterward, but a continuous
+recording confirms that another pinch-back and rotation recreates the
+anomaly. Repeatable automatic recovery remains unimplemented. The
 [execution record](../plans/2026-09-19-chrome-native-history-probe.md#execution-record)
 contains exact runs, evidence, and remaining acceptance gates.
 
