@@ -21,7 +21,8 @@ export async function POST(request: NextRequest) {
       throw new DiagnosticError(415, 'content_type', 'Diagnostic uploads require JSON.');
     }
     const log = await readDiagnosticBody(request);
-    if (typeof log === 'object' && log !== null && 'version' in log && (log.version === 1 || log.version === 2 || log.version === 3)) {
+    if (typeof log === 'object' && log !== null && 'version' in log
+      && (log.version === 1 || log.version === 2 || log.version === 3 || log.version === 4)) {
       throw new DiagnosticError(400, 'outdated_log', 'Open a fresh diagnostic tab and collect a new log before uploading.');
     }
     if (!validateDiagnosticLog(log)) throw new DiagnosticError(400, 'invalid_log', 'Diagnostic log does not match the permitted schema.');

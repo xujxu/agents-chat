@@ -1,5 +1,5 @@
 import {
-  METRIC_KEYS, isDiagnosticAsset, isAutoProbeEvidence,
+  METRIC_KEYS, isDiagnosticAsset, isAutoProbeEvidence, isPreventiveProbeEvidence,
   type DiagnosticMetrics, type DiagnosticMode, type ViewportDiagnosticLog, type ViewportSample, type AnyProbeEvidence,
 } from '../../../lib/viewportDiagnostics';
 
@@ -62,7 +62,8 @@ export function initialViewportLog(mode: DiagnosticMode, probe: AnyProbeEvidence
     .map(url => url.pathname)
     .filter(isDiagnosticAsset);
   return {
-    version: 4, experiment: probe ? isAutoProbeEvidence(probe) ? 'native-history-auto' : 'native-history' : null,
+    version: 5, experiment: probe ? isPreventiveProbeEvidence(probe) ? 'native-history-preventive'
+      : isAutoProbeEvidence(probe) ? 'native-history-auto' : 'native-history' : null,
     mode, browser: chrome ? 'chrome' : safari ? 'safari' : 'other',
     browserVersion: chrome?.[1] ?? safari?.[1] ?? null,
     osVersion: os?.[1].replaceAll('_', '.') ?? null,

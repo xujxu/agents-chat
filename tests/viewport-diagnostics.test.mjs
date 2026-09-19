@@ -19,7 +19,7 @@ function sample(t = 0, event = 'initial') {
 
 function log() {
   return {
-    version: 4, experiment: null, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
+    version: 5, experiment: null, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
     osVersion: '18.7.8', clientRevision: null, assets: ['/_next/static/chunks/test.css'],
     initial: sample(), samples: [], dropped: 0,
   };
@@ -54,7 +54,7 @@ test('strict diagnostic schema rejects unknown data and invalid metrics', () => 
   ]) assert.equal(validateDiagnosticLog(invalid), false);
 });
 
-test('v4 records the declared minimum and rejects stale payloads', () => {
+test('v5 records the declared minimum and rejects stale payloads', () => {
   assert.ok(METRIC_KEYS.includes('viewportMinimumScale'));
   const candidate = log();
   candidate.initial.metrics.viewportMinimumScale = 1;
@@ -62,6 +62,7 @@ test('v4 records the declared minimum and rejects stale payloads', () => {
   assert.equal(validateDiagnosticLog({ ...candidate, version: 1 }), false);
   assert.equal(validateDiagnosticLog({ ...candidate, version: 2 }), false);
   assert.equal(validateDiagnosticLog({ ...candidate, version: 3 }), false);
+  assert.equal(validateDiagnosticLog({ ...candidate, version: 4 }), false);
 });
 
 test('history probe evidence is strictly allowlisted and tied to the experiment', () => {
@@ -98,6 +99,32 @@ test('automatic evidence requires exact typed cycle and intent fields', () => {
       { intent: 'private' }, { pendingAck: 'yes' }, { phase: 'restored' }, { history: 'private' }]
       .map(change => ({ ...candidate, initial: { ...sample(), probe: { ...probe, ...change } } })),
   ]) assert.equal(validateDiagnosticLog(invalid), false);
+});
+
+test('preventive evidence is separate from reactive corrections and manual phases', () => {
+  const probe = {
+    phase: 'watching', reason: 'none', owned: true,
+    documentContinuous: true, shellContinuous: true, composerContinuous: true,
+    intent: 'original', cycle: 3, preparations: 3, gestureEpoch: 4, orientationEpoch: 2, pendingAck: false,
+  };
+  const candidate = { ...log(), experiment: 'native-history-preventive', initial: { ...sample(), probe } };
+  assert.equal(validateDiagnosticLog(candidate), true);
+  for (const experiment of [null, 'native-history', 'native-history-auto']) {
+    assert.equal(validateDiagnosticLog({ ...candidate, experiment }), false);
+  }
+  for (const change of [
+    { preparations: -1 }, { gestureEpoch: 1.5 }, { cycle: 1_000_001 }, { orientationEpoch: Infinity },
+    { pendingAck: 1 }, { phase: 'assessing-rotation' }, { reason: 'intent-unknown' },
+    { intent: 'private' }, { corrections: 3 }, { history: 'private' },
+  ]) assert.equal(validateDiagnosticLog({
+    ...candidate, initial: { ...sample(), probe: { ...probe, ...change } },
+  }), false);
+  const manual = {
+    phase: 'armed', reason: 'none', owned: true,
+    documentContinuous: true, shellContinuous: true, composerContinuous: true,
+  };
+  assert.equal(validateDiagnosticLog({ ...candidate, initial: { ...sample(), probe: manual } }), false);
+  assert.equal(validateDiagnosticLog({ ...candidate, mode: 'isolated' }), false);
 });
 
 test('recorder retains initial state, bounded recent samples, and frozen snapshots', () => {

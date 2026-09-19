@@ -5,7 +5,7 @@ import { validateDiagnosticLog } from '../lib/viewportDiagnostics';
 import {
   DIAGNOSTIC_ENDPOINT, DIAGNOSTIC_ORIGIN, openViewportDiagnostic, readSavedViewportLog,
 } from './helpers/viewportDiagnosticFixture';
-import { installTestVisualViewport, setTestVisualViewport } from './helpers/visualViewport';
+import { dispatchViewportTouches as touch, installTestVisualViewport, setTestVisualViewport } from './helpers/visualViewport';
 
 const AUTO_PATH = '/diagnostics/viewport-auto';
 const panel = (page: Page) => page.getByLabel('Automatic native recovery', { exact: true });
@@ -19,13 +19,6 @@ async function enable(page: Page, mocked = true) {
   await expect(panel(page)).toHaveAttribute('data-phase', 'watching');
   expect(await page.evaluate(() => history.length)).toBe(2);
   return fixture;
-}
-async function touch(page: Page, count: number) {
-  await page.evaluate(value => {
-    const event = new Event(value ? 'touchstart' : 'touchend');
-    Object.defineProperty(event, 'touches', { value: Array.from({ length: value }, () => ({})) });
-    window.dispatchEvent(event);
-  }, count);
 }
 async function pinch(page: Page, scale: number) {
   await touch(page, 2);
@@ -99,7 +92,7 @@ test('three automatic cycles preserve live chat and state with a fixed-size hist
   expect(response.status()).toBe(201);
   const log = (await readSavedViewportLog((await response.json()).id)).log;
   expect(validateDiagnosticLog(log)).toBe(true);
-  expect(log.version).toBe(4);
+  expect(log.version).toBe(5);
   expect(log.experiment).toBe('native-history-auto');
   expect(log.samples.at(-1).probe).toMatchObject({
     phase: 'watching', corrections: 3, cycle: 3, pendingAck: false, owned: true,

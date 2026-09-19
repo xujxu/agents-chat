@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  createViewportRecorder, parseDiagnosticMode, validateDiagnosticLog, isAutoProbeEvidence,
+  createViewportRecorder, parseDiagnosticMode, validateDiagnosticLog, isAutoProbeEvidence, isPreventiveProbeEvidence,
   type DiagnosticMode, type ViewportDiagnosticLog, type ViewportSample, type AnyProbeEvidence,
 } from '../../../lib/viewportDiagnostics';
 import { captureViewportSample, initialViewportLog } from './viewportCapture';
 import { useNativeHistoryProbe } from './useNativeHistoryProbe';
 import { NativeHistoryProbeControls } from './NativeHistoryProbeControls';
 import { AutomaticRecoveryControls } from './AutomaticRecoveryControls';
+import { PreventiveRecoveryControls } from './PreventiveRecoveryControls';
 import './ViewportDiagnostics.css';
 
 export function ViewportDiagnostics() {
@@ -21,7 +22,8 @@ export function ViewportDiagnostics() {
 
 function DiagnosticPanel({ mode }: { mode: DiagnosticMode }) {
   const kind = mode !== 'baseline' ? null : location.pathname === '/diagnostics/viewport-history' ? 'manual'
-    : location.pathname === '/diagnostics/viewport-auto' ? 'auto' : null;
+    : location.pathname === '/diagnostics/viewport-auto' ? 'auto'
+    : location.pathname === '/diagnostics/viewport-preventive' ? 'preventive' : null;
   const recordRef = useRef<((event: ViewportSample['event'], evidence?: AnyProbeEvidence) => void) | null>(null);
   const probe = useNativeHistoryProbe(kind, evidence => recordRef.current?.('probe', evidence));
   const readProbeEvidence = probe.readEvidence;
@@ -149,7 +151,8 @@ function DiagnosticPanel({ mode }: { mode: DiagnosticMode }) {
 
   return (
     <aside className="viewportDiagnostics" aria-label="Viewport diagnostics" data-mode={mode}
-      data-experiment={kind === 'auto' ? 'native-history-auto' : kind ? 'native-history' : undefined}
+      data-experiment={kind === 'preventive' ? 'native-history-preventive'
+        : kind === 'auto' ? 'native-history-auto' : kind ? 'native-history' : undefined}
       style={kind ? probe.panelStyle : undefined}>
       <div className="viewportDiagnosticsHeading">
         <strong>Viewport / {mode}</strong>
@@ -159,10 +162,12 @@ function DiagnosticPanel({ mode }: { mode: DiagnosticMode }) {
         Minimum: {reading.minimum ?? 'unspecified'}.{' '}
         {reading.count} events{reading.dropped ? ` / ${reading.dropped} older samples dropped` : ''}. No chat text collected.
       </div>
-      {kind === 'manual' && !isAutoProbeEvidence(probe.evidence)
+      {kind === 'manual' && !isAutoProbeEvidence(probe.evidence) && !isPreventiveProbeEvidence(probe.evidence)
         ? <NativeHistoryProbeControls evidence={probe.evidence} arm={probe.arm} restore={probe.restore} /> : null}
       {kind === 'auto' && isAutoProbeEvidence(probe.evidence)
         ? <AutomaticRecoveryControls evidence={probe.evidence} arm={probe.arm} stop={probe.stop} /> : null}
+      {kind === 'preventive' && isPreventiveProbeEvidence(probe.evidence)
+        ? <PreventiveRecoveryControls evidence={probe.evidence} arm={probe.arm} stop={probe.stop} /> : null}
       <button type="button" onClick={upload} disabled={uploading}>
         {uploading ? 'Uploading...' : failed ? 'Retry upload' : 'Upload diagnostic log'}
       </button>

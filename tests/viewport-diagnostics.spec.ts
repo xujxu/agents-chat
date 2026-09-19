@@ -11,7 +11,7 @@ import {
 
 function payload() {
   return {
-    version: 4, experiment: null, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
+    version: 5, experiment: null, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
     osVersion: '18.7.8', clientRevision: null, assets: ['/_next/static/chunks/test.css'], dropped: 0, samples: [],
     initial: {
       t: 0, event: 'initial', gesture: false, focus: 'none', orientation: 'portrait', mobile: true, probe: null,
@@ -272,7 +272,7 @@ test('manual upload saves actual diagnostic data without chat or input content',
   const stored = await savedLog(id);
   expect(validateDiagnosticLog(stored.log)).toBe(true);
   expect(stored.log.mode).toBe('baseline');
-  expect(stored.log.version).toBe(4);
+  expect(stored.log.version).toBe(5);
   expect(stored.log.initial.metrics.viewportMinimumScale).toBeNull();
   expect(stored.log.samples.some((sample: { event: string }) => sample.event === 'orientation')).toBe(true);
   expect(stored.serverBuildId).toBeTruthy();
@@ -315,7 +315,7 @@ test('candidate upload records the actual minimum and leaves the ordinary policy
   const { id } = await response.json();
   await expect(page.locator('.viewportDiagnosticsStatus')).toContainText(`Saved log: ${id}`);
   const stored = await savedLog(id);
-  expect(stored.log.version).toBe(4);
+  expect(stored.log.version).toBe(5);
   expect(validateDiagnosticLog(stored.log)).toBe(true);
   expect(stored.log.initial.metrics.viewportMinimumScale).toBe(1);
   expect(stored.log.samples.length).toBeGreaterThan(0);
@@ -377,6 +377,9 @@ test('real API enforces authentication, administrator access, origin, and schema
   expect((await outdated.json()).message).toMatch(/fresh diagnostic tab/);
   expect((await post({ ...payload(), version: 2 })).status()).toBe(400);
   expect((await post({ ...payload(), version: 3 })).status()).toBe(400);
+  const previousCollector = await post({ ...payload(), version: 4 });
+  expect(previousCollector.status()).toBe(400);
+  expect((await previousCollector.json()).error).toBe('outdated_log');
   expect((await page.request.post(ENDPOINT, {
     data: '{broken', headers: { Origin: ORIGIN, 'Content-Type': 'application/json' },
   })).status()).toBe(400);

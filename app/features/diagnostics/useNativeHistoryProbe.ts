@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import type { AnyProbeEvidence, ProbeEvidence } from '../../../lib/viewportDiagnostics';
 import { createNativeHistoryProbe, type ProbeEvent } from './nativeHistoryProbe';
 import { createAutomaticNativeRecovery } from './automaticNativeRecovery';
+import { createPreventiveNativeRecovery } from './preventiveNativeRecovery';
 import { createNativeHistoryBrowser } from './nativeHistoryBrowser';
 
 const INITIAL_EVIDENCE: ProbeEvidence = {
@@ -19,7 +20,7 @@ type HistoryController = {
 };
 
 export function useNativeHistoryProbe(
-  kind: 'manual' | 'auto' | null, onTransition: (evidence: AnyProbeEvidence) => void,
+  kind: 'manual' | 'auto' | 'preventive' | null, onTransition: (evidence: AnyProbeEvidence) => void,
 ) {
   const [evidence, setEvidence] = useState<AnyProbeEvidence>(INITIAL_EVIDENCE);
   const [panelStyle, setPanelStyle] = useState<CSSProperties>();
@@ -39,8 +40,8 @@ export function useNativeHistoryProbe(
         transitionRef.current(next);
       },
     };
-    const controller: HistoryController = kind === 'auto'
-      ? createAutomaticNativeRecovery(ports) : createNativeHistoryProbe(ports);
+    const controller: HistoryController = kind === 'preventive' ? createPreventiveNativeRecovery(ports)
+      : kind === 'auto' ? createAutomaticNativeRecovery(ports) : createNativeHistoryProbe(ports);
     controllerRef.current = {
       ...controller,
       arm: () => {
@@ -57,7 +58,7 @@ export function useNativeHistoryProbe(
     const navigation = () => sample('navigation');
     const popstate = () => sample('popstate');
     const lifecycle = () => sample('lifecycle');
-    const focus = () => { if (kind === 'auto') sample('focus'); };
+    const focus = () => { if (kind !== 'manual') sample('focus'); };
     const touch = (event: TouchEvent) => {
       browser.setTouches(event.touches.length);
       // The touch that activates a control precedes its click; never cancel it.

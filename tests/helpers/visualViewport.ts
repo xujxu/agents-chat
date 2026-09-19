@@ -1,5 +1,13 @@
 import type { Page } from '@playwright/test';
 
+export async function dispatchViewportTouches(page: Page, count: number): Promise<void> {
+  await page.evaluate(value => {
+    const event = new Event(value ? 'touchstart' : 'touchend');
+    Object.defineProperty(event, 'touches', { value: Array.from({ length: value }, () => ({})) });
+    window.dispatchEvent(event);
+  }, count);
+}
+
 export async function installTestVisualViewport(page: Page): Promise<void> {
   await page.addInitScript(() => {
     let height: number | null = null;

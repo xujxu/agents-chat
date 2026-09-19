@@ -28,7 +28,8 @@ export async function openViewportDiagnostic(page: Page, mode?: string, pathname
   const fixture = await installTypographyFixture(page);
   await authenticateViewportDiagnostic(page.context());
   const url = new URL(mode ? `${pathname}?viewportDiagnostics=${mode}` : pathname, DIAGNOSTIC_BASE).href;
-  if (['/diagnostics/viewport-history', '/diagnostics/viewport-auto'].includes(pathname) && page.url() === 'about:blank') {
+  if (['/diagnostics/viewport-history', '/diagnostics/viewport-auto', '/diagnostics/viewport-preventive'].includes(pathname)
+    && page.url() === 'about:blank') {
     // Only replace the harness's initial blank document, never a trial document.
     await Promise.all([
       page.waitForURL(url),

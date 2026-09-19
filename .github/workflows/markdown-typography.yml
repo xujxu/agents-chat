@@ -121,6 +121,12 @@ jobs:
           --project=${{ matrix.project }} tests/automatic-native-recovery.spec.ts
           --workers=1 --timeout=60000 --global-timeout=300000
           --trace=retain-on-failure --reporter=line --output=artifacts/automatic
+      - name: Preventive native recovery coverage
+        run: >-
+          npx playwright test --config tests/playwright.config.ts
+          --project=${{ matrix.project }} tests/preventive-native-recovery.spec.ts
+          --workers=1 --timeout=60000 --global-timeout=300000
+          --trace=retain-on-failure --reporter=line --output=artifacts/preventive
       - name: Desktop regression coverage
         if: matrix.project == 'desktop-chromium'
         run: >-
