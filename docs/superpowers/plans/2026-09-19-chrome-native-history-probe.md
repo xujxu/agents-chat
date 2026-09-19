@@ -341,3 +341,29 @@ The next useful physical check is landscape -> portrait -> landscape
 without another restore action, to determine whether a new pinch recreates
 the rotation anomaly. Automatic recovery and transparent history behavior
 remain unimplemented.
+
+### Repeated-rotation upload is a new, unrestored trial
+
+Upload `3c4cf641-2a42-410c-94df-57aec25fed62` was received at
+`2026-09-19T06:07:36.691Z`, again matching deployed client/server identity.
+It has 67 samples with no drops. Unlike the preceding two uploads, its
+timeline starts again at zero and contains a new checkpoint establishment
+at approximately 7.1 seconds. It never enters `restoring` or `restored`.
+The recording alone does not establish why the recorder restarted.
+
+This trial rotates from portrait to landscape at native scale 1, pinches
+up to approximately 2.10, and returns to settled landscape scale 1 with
+width 832/832 by 20.243 seconds. A portrait rotation reports scale
+2.018817186355591, but visual and document widths both remain 428 in the
+recorded samples; do not infer a geometrically confirmed 2x visible
+enlargement from that inconsistent pair. The following landscape rotation
+settles at scale 2.1635513305664062 and width 385/832 at 30.191 seconds,
+persisting through upload at 40.295 seconds.
+
+This confirms an unrestored landscape-pinch/rotation reproduction, not a
+failure of the earlier restoration or a demonstrated recurrence after a
+successful restoration. Do not merge these discontinuous trials into one
+causal sequence. The remaining question requires one continuous recording:
+restore the currently enlarged page, verify 1x, pinch and return to 1x,
+rotate portrait and landscape, then upload without reopening the page or
+establishing another checkpoint.
