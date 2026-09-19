@@ -242,3 +242,40 @@ gh workflow run 361358759 --repo xujxu/agents-chat \
   Ordinary chat still does not enable automatic navigation. Three earlier
   physical corrections remain valid evidence for the mechanism; no new
   physical outcome is claimed for this tolerance revision.
+
+## Native Consistency Follow-Up
+
+- User subsequently confirmed automatic reset on the deployed tolerance
+  revision, with normal-looking portrait text but persistent scale 2.018817
+  in the diagnostic panel. This is reported physical behavior; no new
+  automatic log was uploaded with that report.
+- Public source inspection confirms different inputs to the two metrics:
+  [VisualViewport.cpp](https://github.com/apple-oss-distributions/WebKit/blob/WebKit-7619.2.8.11.9/Source/WebCore/page/VisualViewport.cpp)
+  derives width from the visual viewport rectangle and page zoom, whereas
+  scale uses the page scale and base viewport layout scale.
+  [WebPageIOS.mm, lines 4496-4658](https://github.com/apple-oss-distributions/WebKit/blob/WebKit-7619.2.8.11.9/Source/WebKit/WebProcess/WebPage/ios/WebPageIOS.mm#L4496-L4658)
+  separately gates scale updates and applies visible viewport geometry.
+  Chrome's exact release still contains its delayed native minimum-zoom
+  assignment after size-class changes. These support a synchronization
+  hypothesis, not a proven exact root cause in iOS 18.7.8.
+- The existing deployed manual controller already permits an explicitly
+  requested restoration for stable scale above 1.01, including full-width
+  contradictory geometry. Reuse this surface for a controlled observation
+  before adding another diagnostic route or changing automatic eligibility.
+- Control upload `a93121a9-0e08-48ac-8956-37ac6be2bbd3`, received
+  `2026-09-19T12:13:35.514Z`, uses `8bcdafe`, schema 4 and the manual route.
+  It has 41 samples, zero drops, successful initial checkpoint ownership,
+  a released portrait pinch-back baseline at 19.163 seconds, then confirmed
+  landscape enlargement at 25.166 seconds.
+- On return to portrait, the log **does** briefly report scale 2.018817
+  with widths 428/428 at 33.793 seconds. Without any restoration request it
+  settles at native 1 with widths 428/428 by 34.355 seconds and remains
+  there at upload 66.021. The user correctly reports no lasting target state;
+  there was no manual restoration attempt. This trial cannot establish
+  whether a persistent portrait mismatch can be explicitly normalized.
+- Earlier manual upload `a6297e45-f29e-4063-ae95-f5e45c8e4636` contains a
+  landscape pinch-back followed by portrait scale 2.018817, widths 428/428,
+  lasting beyond settlement. That sequence differs from this portrait-pinch
+  control. If one further existing-page observation is requested, change
+  only pinch orientation rather than repeat the same failed setup or add
+  unproven recovery logic.
