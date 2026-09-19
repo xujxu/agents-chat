@@ -9,6 +9,7 @@ const reasons: Record<AutoProbeEvidence['reason'], string> = {
   overflow: 'Document overflow prevents a reliable native-scale assessment.',
   superseded: 'Another rotation interrupted recovery. No automatic retry.',
   'stopped-by-user': 'Automatic recovery is stopped. Existing history is left intact.',
+  'intent-unknown': 'A scale change could not be attributed to rotation. No forced reset.',
 };
 
 export function AutomaticRecoveryControls({

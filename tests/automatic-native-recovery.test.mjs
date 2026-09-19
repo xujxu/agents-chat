@@ -68,15 +68,28 @@ test('intentional nonunit pinch is not normalized by rotation', () => {
 });
 
 test('resize alone and inconsistent rotation geometry never trigger navigation', () => {
+  const resize = fixture(); resize.arm();
+  resize.o.scale = 2; resize.o.width = 214; resize.settle();
+  assert.equal(resize.count.back, 0);
+  assert.equal(resize.c.evidence().intent, 'unknown');
+  resize.rotate(); resize.settle();
+  assert.equal(resize.count.back, 0);
   const f = fixture(); f.arm();
-  f.o.scale = 2; f.o.width = 214; f.settle();
-  assert.equal(f.count.back, 0);
   f.rotate(2, false); f.settle();
   assert.equal(f.count.back, 0);
   f.tick(3100);
   assert.equal(f.c.evidence().reason, 'unassessed');
   f.rotate(); f.settle();
   assert.equal(f.count.back, 1);
+});
+
+test('normal settled rotation does not authorize later unattributed zoom to be reset', () => {
+  const f = fixture(); f.arm(); f.rotate(1); f.settle();
+  assert.equal(f.c.evidence().phase, 'watching');
+  f.o.scale = 2; f.o.width = f.o.clientWidth / 2; f.settle();
+  assert.equal(f.c.evidence().intent, 'unknown');
+  f.rotate(); f.settle();
+  assert.equal(f.count.back, 0);
 });
 
 test('duplicate orientation notifications cannot extend the fixed assessment deadline', () => {
@@ -96,6 +109,17 @@ test('contact or focused input cancels an assessment without resetting user zoom
     Object.assign(f.o, { touches: 0, editable: false }); f.settle(); f.tick(4000);
     assert.equal(f.count.back, 0);
   }
+});
+
+test('focus exit requires a fresh settled original-scale baseline', () => {
+  const f = fixture(); f.arm();
+  f.o.editable = true; f.tick(1, 'focus');
+  assert.equal(f.c.evidence().intent, 'unknown');
+  f.o.editable = false; f.tick(1, 'focus'); f.tick(); f.tick();
+  assert.equal(f.c.evidence().intent, 'unknown');
+  f.tick(); f.tick();
+  assert.equal(f.c.evidence().intent, 'original');
+  assert.equal(f.count.back, 0);
 });
 
 test('ownership changes, overlays, URL changes and DOM replacements stop the controller', () => {

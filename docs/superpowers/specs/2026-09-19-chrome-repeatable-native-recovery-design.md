@@ -111,6 +111,10 @@ Do not learn user intent from a scale change caused only by rotation.
 In particular, native scale 2 with full-width visual geometry is neither
 proof of deliberate zoom nor a reliable enlargement measurement. The
 physical recordings contain such inconsistent intermediate readings.
+If a consistent non-unit scale settles without a pinch or an intervening
+orientation boundary after the last accepted 100% baseline, treat intent
+as unknown rather than assuming a browser-induced anomaly. This protects
+unobserved zoom actions such as browser UI controls from a forced reset.
 
 An editable focus/keyboard transition invalidates eligibility for the current
 rotation. It is not a reason to reset zoom. After focus leaves, establish

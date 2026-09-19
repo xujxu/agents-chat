@@ -22,16 +22,22 @@ export function createAutomaticNativeRecovery(ports: AutoPorts) {
   let cycle = 0;
   let corrections = 0;
   let orientationEpoch = 0;
+  let originalIntentEpoch = 0;
   let pendingAck = false;
   let deadline = 0;
   let boundaryTime = -Infinity;
   let direction = ports.read().orientation;
   let previousTouches = 0;
+  let previousEditable = false;
   let learningIntent = false;
   let gestureEpoch = 0;
   let focusBaselinePending = false;
   let lastPublished = '';
   const stability = createViewportStability();
+  const rememberOriginalIntent = () => {
+    intent = 'original';
+    originalIntentEpoch = orientationEpoch;
+  };
   const continuous = (o: AutoObservation) =>
     o.sameUrl && o.documentContinuous && o.shellContinuous && o.composerContinuous;
   const owned = (o: AutoObservation) =>
@@ -79,7 +85,7 @@ export function createAutomaticNativeRecovery(ports: AutoPorts) {
       cycle++;
       const next = ports.read();
       if (!owned(next) || next.entry !== 'working') { stop('ownership'); return; }
-      intent = 'original';
+      rememberOriginalIntent();
       learningIntent = false;
       focusBaselinePending = false;
       direction = next.orientation;
@@ -109,7 +115,7 @@ export function createAutomaticNativeRecovery(ports: AutoPorts) {
         try {
           ports.checkpoint();
           if (!owned(ports.read()) || ports.read().entry !== 'working') { stop('ownership'); return; }
-          intent = 'original';
+          rememberOriginalIntent();
           set('watching');
         } catch {
           stop('history-error', true);
@@ -158,17 +164,27 @@ export function createAutomaticNativeRecovery(ports: AutoPorts) {
     if (o.editable) {
       intent = 'unknown'; focusBaselinePending = true; learningIntent = false;
     }
+    if (previousEditable && !o.editable) {
+      stability.reset();
+      stability.sample(o);
+      settled = false;
+    }
+    previousEditable = o.editable;
     if (phase === 'assessing-rotation' && (o.touches || o.editable)) {
       set('watching', o.editable ? 'focus' : 'interrupted');
       return;
     }
     if (phase === 'watching' && settled && consistentGeometry(o)) {
       if (learningIntent && gestureEpoch === orientationEpoch) {
-        intent = atOriginalScale(o) ? 'original' : 'intentional-nonunit';
+        if (atOriginalScale(o)) rememberOriginalIntent();
+        else intent = 'intentional-nonunit';
         learningIntent = false;
         reason = intent === 'original' ? 'none' : 'nonunit';
       } else if (focusBaselinePending && o.now > boundaryTime + 3000 && atOriginalScale(o)) {
-        intent = 'original'; focusBaselinePending = false; reason = 'none';
+        rememberOriginalIntent(); focusBaselinePending = false; reason = 'none';
+      } else if (intent === 'original' && originalIntentEpoch === orientationEpoch
+        && o.orientation === direction && !changedDirection && o.scale !== null && o.scale > 1.01) {
+        intent = 'unknown'; reason = 'intent-unknown';
       }
     }
     if (changedDirection) {
@@ -188,7 +204,7 @@ export function createAutomaticNativeRecovery(ports: AutoPorts) {
         if (!Number.isFinite(o.scrollWidth) || o.scrollWidth > o.clientWidth + 2) {
           set('watching', 'overflow'); return;
         }
-        if (atOriginalScale(o)) { set('watching'); return; }
+        if (atOriginalScale(o)) { rememberOriginalIntent(); set('watching'); return; }
         if (o.scale !== null && o.scale > 1.01) {
           pendingAck = true;
           deadline = o.now + 3000;

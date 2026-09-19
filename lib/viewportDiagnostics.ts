@@ -32,7 +32,7 @@ export const AUTO_PHASES = [
   'idle', 'arming', 'watching', 'assessing-rotation', 'restoring', 'rearming', 'stopped', 'error',
 ] as const;
 export const AUTO_REASONS = [
-  ...PROBE_REASONS, 'unassessed', 'nonunit', 'overlay', 'overflow', 'superseded', 'stopped-by-user',
+  ...PROBE_REASONS, 'unassessed', 'nonunit', 'overlay', 'overflow', 'superseded', 'stopped-by-user', 'intent-unknown',
 ] as const;
 export type AutoProbeEvidence = Omit<ProbeEvidence, 'phase' | 'reason'> & {
   phase: typeof AUTO_PHASES[number];
