@@ -65,6 +65,13 @@ test('normal and unknown-mode pages do not expose diagnostics or upload', async 
   expect(requests).toEqual([]);
 });
 
+test('native history candidate exposes an explicit probe without changing viewport policy', async ({ page }) => {
+  await open(page, 'baseline', '/diagnostics/viewport-history');
+  await expect(page.getByRole('button', { name: 'Establish 100% checkpoint' })).toBeVisible();
+  await expect(page.locator('meta[name="viewport"]'))
+    .not.toHaveAttribute('content', /minimum-scale|maximum-scale/);
+});
+
 for (const mode of ['baseline', 'isolated']) {
   test(`${mode} preserves its declared pinch gate and resumes at scale 1`, async ({ page }) => {
     await installTestVisualViewport(page);
