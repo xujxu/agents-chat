@@ -25,7 +25,7 @@ GitHub Actions.
   `7f8c292ec439ce7ac49d976f4b840cebfa534d0e`. Confirm the investigation
   worktree is clean and branch `fix/ios-markdown-typography` does not exist
   locally or at origin. Both archive tags remain unchanged.
-- [ ] Create the branch/worktree without switching production's checkout:
+- [x] Create the branch/worktree without switching production's checkout:
 
 ```bash
 git worktree add -b fix/ios-markdown-typography \
@@ -33,7 +33,7 @@ git worktree add -b fix/ios-markdown-typography \
   upstream/main
 ```
 
-- [ ] Restore only the approved historical paths using Git's source
+- [x] Restore only the approved historical paths using Git's source
   restoration in that new, clean worktree:
 
 ```bash
@@ -65,7 +65,7 @@ routes or application TypeScript may change.
 
 ## Task 2: Focus Documentation and CI
 
-- [ ] Copy only approved closure spec `ea36252` into the clean worktree
+- [x] Copy only approved closure spec `ea36252` into the clean worktree
   with the same Git source-restoration mechanism:
 
 ```bash
@@ -73,7 +73,7 @@ git restore --source=ea36252 -- \
   docs/superpowers/specs/2026-09-19-ios-typography-pr-closure-design.md
 ```
 
-- [ ] Add this section to `README.md` after Quick Start:
+- [x] Add this section to `README.md` after Quick Start:
 
 ```markdown
 ## Mobile browser compatibility
@@ -91,7 +91,7 @@ behavior. Safari is a verified temporary alternative for that observed
 case, not a guarantee across every browser or OS version.
 ```
 
-- [ ] Preserve manual workflow dispatch and replace the historical push
+- [x] Preserve manual workflow dispatch and replace the historical push
   filter with the clean branch. Add ordinary pull-request coverage, not
   privileged `pull_request_target`:
 
@@ -111,7 +111,7 @@ case, not a guarantee across every browser or OS version.
     paths-ignore: ['docs/**', 'README.md']
 ```
 
-- [ ] Keep the archived behavior/served-CSS tests and regression stages.
+- [x] Keep the archived behavior/served-CSS tests and regression stages.
   Tighten the viewport assertion to reject both minimum and maximum scale
   locks and require initial scale 1:
 
@@ -126,11 +126,11 @@ than inventing new behavior; require a new final clean-revision green run.
 
 ## Task 3: Verify Scope and Run Remotely
 
-- [ ] Review `git diff upstream/main` and changed-file inventory. Exactly
+- [x] Review `git diff upstream/main` and changed-file inventory. Exactly
   nine paths are expected: the seven extracted paths, README and the
   focused closure spec. Confirm `app/layout.tsx`, `ChatShell.tsx`,
   `ChatPageClient.tsx`, all `lib/` and all API routes equal upstream main.
-- [ ] Commit in the clean worktree, preserving the required trailer:
+- [x] Commit in the clean worktree, preserving the required trailer:
 
 ```bash
 git add .browserslistrc app/globals.css \
@@ -146,13 +146,13 @@ gh workflow run 361358759 --repo xujxu/agents-chat \
   -f build_origin=https://agent.xujx.us.kg
 ```
 
-- [ ] Inspect the complete remote results. Expected coverage retains
+- [x] Inspect the complete remote results. Expected coverage retains
   typography 8/7/7, served policy 1 per project and regressions 17/31/31,
   for 104 passes and two deliberate desktop-only skips. Counts alone do
   not override actual failures or changed selectors.
-- [ ] If a targeted failure occurs, correct only the in-scope cause and
+- [x] If a targeted failure occurs, correct only the in-scope cause and
   rerun remotely. Never install, build, type-check or run tests locally.
-- [ ] Download the exact final desktop artifact. Inspect archive revision,
+- [x] Download the exact final desktop artifact. Inspect archive revision,
   build ID, compiled CSS and `app-paths-manifest.json`; no paths under
   `/diagnostics/` or `/api/diagnostics/` may be present. Inspect source
   inventory separately so middleware redirects cannot masquerade as route
@@ -160,12 +160,12 @@ gh workflow run 361358759 --repo xujxu/agents-chat \
 
 ## Task 4: Handoff Without Deployment or PR Creation
 
-- [ ] Record final source/base, workflow, counts, artifact/build identity
+- [x] Record final source/base, workflow, counts, artifact/build identity
   and diff scope in this investigation-branch plan. Preserve the clean
   candidate source as the exact validated commit.
-- [ ] Stop schedule 14 when ready or blocked. Report the branch and
+- [x] Stop schedule 14 when ready or blocked. Report the branch and
   accepted limitation, with no claim that native Chrome zoom was fixed.
-- [ ] Do not deploy or open a PR in this task: current authorization is
+- [x] Do not deploy or open a PR in this task: current authorization is
   preparation and validation. Keep production running its authorized
   `42111b3` build until separately approved.
 
@@ -177,3 +177,52 @@ TypeScript unchanged, includes the actual emitted-prefix contract and
 zoom-unrestricted metadata checks, and verifies route exclusion from the
 artifact. README/spec use Fixed versus Known limitation consistently.
 Opening a PR and deployment are explicit later actions.
+
+## Completed Preparation and Validation
+
+- Clean branch: `fix/ios-markdown-typography`, pushed to `origin`.
+- Exact candidate: `c65dd6250c2ef416fb3771b92bda92e3993d2da1`.
+- Target base: `huanyingtianhe/agents-chat` main
+  `7f8c292ec439ce7ac49d976f4b840cebfa534d0e`, fetched before preparation.
+- Isolated worktree:
+  `/home/xujx/.copilot/session-state/7eaf6b49-c9b6-492d-aee2-a2a9a24f0e45/files/typography-pr-worktree`.
+  Production's original checkout stays on
+  `fix/ios-markdown-text-autosizing`. Both worktrees are clean.
+- The candidate contains exactly the approved nine paths, 732 insertions
+  and two deletions. Application code changes only by adding the two CSS
+  declarations; application TypeScript, APIs, libraries, package manifests
+  and lockfile equal the target base. The additional lines are focused
+  tests, workflow, documentation and build-target configuration.
+- Actions
+  [35452233942](https://github.com/xujxu/agents-chat/actions/runs/35452233942)
+  passed all three builds, type checks and project jobs on the first run:
+
+| Coverage | Desktop Chromium | Android Chromium | iPhone WebKit |
+| --- | ---: | ---: | ---: |
+| Typography behavior | 8 | 7 | 7 |
+| HTTP-served typography / viewport policy | 1 | 1 | 1 |
+| Existing regression coverage | 17 | 31 | 31 |
+
+- Total: 104 passes, two intentional desktop-only scenario skips on the
+  mobile projects. No local installs, builds, type checks or tests ran.
+- Downloaded the exact desktop artifact
+  `typography-c65dd6250c2ef416fb3771b92bda92e3993d2da1-desktop-chromium`,
+  ID `10586932662`, and inspected it without running it.
+- Artifact build ID: `3tQ5Gip6b6QMwUDh4HZvF`; archived revision and external
+  revision/build-ID files match the candidate. Compiled root CSS contains
+  both required 100% declarations. Root viewport remains
+  `width=device-width, initial-scale=1, interactive-widget=resizes-content`.
+- The compiled App Router manifest has 25 entries and no `/diagnostics/`
+  or `/api/diagnostics/` routes. Static JavaScript contains none of the
+  known history-probe or native recovery/minimal-experiment identifiers.
+  The separate source diff confirms no diagnostic implementation was
+  carried over.
+- Android artifact ID `10587565530`; iPhone artifact ID `10586728066`.
+  These results validate the clean typography candidate, not a repair of
+  native Chrome zoom.
+- Schedule 14 stopped. No PR was opened and no production deployment,
+  service restart or data deletion occurred. PROD remains on the
+  previously authorized minimal-diagnostic release until separately
+  authorized to replace it.
+- Closure classification remains: typography fixed; native Chrome zoom
+  accepted as a documented known limitation. Automatic reset is excluded.
