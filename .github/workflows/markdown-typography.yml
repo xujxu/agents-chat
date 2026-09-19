@@ -51,7 +51,7 @@ jobs:
           npx playwright install --with-deps ${{ matrix.browser }}
       - name: Diagnostic contracts and storage
         if: matrix.project == 'desktop-chromium'
-        run: node --experimental-strip-types --test tests/viewport-diagnostics.test.mjs tests/native-history-probe.test.mjs tests/automatic-native-recovery.test.mjs
+        run: node --experimental-strip-types --test tests/viewport-diagnostics.test.mjs tests/native-history-probe.test.mjs tests/automatic-native-recovery.test.mjs tests/preventive-native-recovery.test.mjs
       - name: Build and check types
         env:
           NEXTAUTH_URL: ${{ inputs.build_origin || 'http://localhost:3011' }}

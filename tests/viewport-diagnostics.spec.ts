@@ -48,6 +48,13 @@ test('automatic candidate exposes explicitly enabled recovery without viewport r
 
 const historyProbe = (page: Page) => page.getByLabel('Native history probe', { exact: true });
 
+test('preventive candidate is independently enabled without reactive controls or viewport restrictions', async ({ page }) => {
+  await open(page, 'baseline', '/diagnostics/viewport-preventive');
+  await expect(page.getByRole('button', { name: 'Enable rotation prevention' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enable automatic recovery' })).toHaveCount(0);
+  await expect(page.locator('meta[name="viewport"]')).not.toHaveAttribute('content', /minimum-scale|maximum-scale/);
+});
+
 async function armHistoryProbe(page: Page) {
   expect(await page.evaluate(() => history.length)).toBe(1);
   await page.getByRole('button', { name: 'Establish 100% checkpoint' }).click();
