@@ -12,8 +12,8 @@ Safari does not exhibit this symptom.
 The user approved an evidence-first, single-variable comparison and requested
 a one-click upload button so diagnostics can be inspected on the production
 host. This specification covers that diagnostic phase, not an established
-fix for Chrome's native zoom behavior. Production deployment requires
-confirmation at the written-spec review.
+fix for Chrome's native zoom behavior. The user approved this written
+specification and deployment to PROD, confirming administrator access.
 
 ## Findings and Limits
 
@@ -63,7 +63,10 @@ pixel scale, so visible symptoms remain part of physical acceptance.
 
 Keep capture in memory for the current page only. Retain an initial snapshot
 and a bounded ring of at most 256 subsequent samples, with a dropped-sample
-count. Coalesce high-frequency resize/scroll samples per animation frame;
+count. Upload snapshots may discard additional oldest samples to meet the
+256 KiB byte budget, retaining the initial sample and recording the additional
+drops. Raw scale is never rounded to make the payload smaller.
+Coalesce high-frequency resize/scroll samples per animation frame;
 preserve gesture boundaries, orientation changes, and post-event settling
 observations. Stop and clean up listeners/timers when the component unmounts.
 
@@ -72,7 +75,9 @@ Allowlisted fields:
 - Schema version, diagnostic mode, monotonic elapsed time, event category,
   gesture-active state, and orientation.
 - Parsed browser/OS versions, device pixel ratio, screen dimensions, and
-  first-party compiled CSS asset identifiers for revision matching.
+  first-party compiled CSS asset identifiers for revision matching. The
+  Actions build also embeds its public commit SHA as `clientRevision`,
+  separate from the receiving server's build ID; other builds report null.
 - Raw visual viewport scale, width, height, and offsets; window inner
   dimensions; document client/scroll dimensions.
 - Bounding rectangles for the shell, header, transcript, and composer;

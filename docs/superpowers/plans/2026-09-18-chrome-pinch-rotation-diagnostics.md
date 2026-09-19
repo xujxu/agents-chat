@@ -58,7 +58,7 @@ assert.equal(shouldPauseViewportSync('isolated', false, 1), false);
   CSS values, and four rectangles. Do not use open-ended payload objects.
 - [ ] Define sample fields `t`, `event`, `gesture`, `focus`, `orientation`,
   `mobile`, and `metrics`. Define log fields `version: 1`, `mode`,
-  `browser`, `browserVersion`, `osVersion`, `assets`, `initial`,
+  `browser`, `browserVersion`, `osVersion`, `clientRevision`, `assets`, `initial`,
   `samples`, and `dropped`.
 - [ ] Validate exact keys recursively. Reject unknown keys, arbitrary
   strings, non-finite/out-of-range numbers, more than 256 subsequent
@@ -172,6 +172,8 @@ node --experimental-strip-types --test tests/viewport-diagnostics.test.mjs
 - [ ] Extend the existing workflow: Node tests before build on desktop,
   diagnostic spec on all three engines. Existing 104 applicable checks
   remain enabled, including emitted iOS CSS prefix checks.
+  Embed `NEXT_PUBLIC_VIEWPORT_DIAGNOSTICS_REVISION=${{ github.sha }}` at
+  build time so old tabs remain identifiable independently of upload time.
 - [ ] Commit with a Copilot trailer. Use `[skip ci]` when manually
   dispatching production-origin validation to avoid duplicate builds:
 
@@ -202,3 +204,11 @@ have a bounded owner. No new dependency, scale lock, shell rewrite, public
 log endpoint, automatic upload, or unapproved data collection is required.
 Administrator-only upload and the fixed temporary path were approved during
 the written-spec review. Implementation proceeds inline as previously chosen.
+
+## Execution Record
+
+Test-first revision `fb09cb1` ran in
+[35410794947](https://github.com/xujxu/agents-chat/actions/runs/35410794947).
+The new Node suite failed with `ERR_MODULE_NOT_FOUND` for the not-yet-created
+diagnostic contract module. Existing mobile jobs retained their passing
+Markdown and UX checks. No local test or build was used.

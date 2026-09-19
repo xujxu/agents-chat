@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import type { MobileOverlay } from '../hooks/useMobileOverlayState';
+import { ViewportDiagnostics } from '../../diagnostics/ViewportDiagnostics';
+import { parseDiagnosticMode, shouldPauseViewportSync } from '../../../../lib/viewportDiagnostics';
 
 export type ChatShellProps = {
   sidebar: ReactNode;
@@ -52,7 +54,10 @@ export function ChatShell({
     if (!page) return;
 
     const visualViewport = window.visualViewport;
+    const diagnosticMode = parseDiagnosticMode(new URLSearchParams(location.search).get('viewportDiagnostics'));
+    let gesture = false;
     const syncViewport = () => {
+      if (shouldPauseViewportSync(diagnosticMode, gesture, visualViewport?.scale)) return;
       const height = visualViewport?.height ?? window.innerHeight;
       const offsetTop = visualViewport?.offsetTop ?? 0;
       page.style.setProperty('--app-viewport-height', `${Math.round(height)}px`);
@@ -64,11 +69,25 @@ export function ChatShell({
     window.addEventListener('orientationchange', syncViewport);
     visualViewport?.addEventListener('resize', syncViewport);
     visualViewport?.addEventListener('scroll', syncViewport);
+    const trackGesture = (event: TouchEvent) => {
+      gesture = event.touches.length >= 2;
+      if (!gesture) syncViewport();
+    };
+    if (diagnosticMode === 'isolated') {
+      for (const name of ['touchstart', 'touchend', 'touchcancel'] as const) {
+        window.addEventListener(name, trackGesture, { passive: true });
+      }
+    }
     return () => {
       window.removeEventListener('resize', syncViewport);
       window.removeEventListener('orientationchange', syncViewport);
       visualViewport?.removeEventListener('resize', syncViewport);
       visualViewport?.removeEventListener('scroll', syncViewport);
+      if (diagnosticMode === 'isolated') {
+        for (const name of ['touchstart', 'touchend', 'touchcancel'] as const) {
+          window.removeEventListener(name, trackGesture);
+        }
+      }
     };
   }, []);
 
@@ -130,6 +149,7 @@ export function ChatShell({
       {imageLightbox}
       {workflowPicker}
       {statusBar}
+      <ViewportDiagnostics />
     </main>
   );
 }

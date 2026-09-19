@@ -55,6 +55,7 @@ jobs:
       - name: Build and check types
         env:
           NEXTAUTH_URL: ${{ inputs.build_origin || 'http://localhost:3011' }}
+          NEXT_PUBLIC_VIEWPORT_DIAGNOSTICS_REVISION: ${{ github.sha }}
         run: |
           npm run build
           npx tsc --noEmit
@@ -100,6 +101,12 @@ jobs:
           --project=${{ matrix.project }} tests/markdown-typography.spec.ts
           --grep @policy --workers=1 --timeout=60000 --global-timeout=90000
           --trace=retain-on-failure --reporter=line --output=artifacts/policy
+      - name: Diagnostic API and browser coverage
+        run: >-
+          npx playwright test --config tests/playwright.config.ts
+          --project=${{ matrix.project }} tests/viewport-diagnostics.spec.ts
+          --workers=1 --timeout=60000 --global-timeout=240000
+          --trace=retain-on-failure --reporter=line --output=artifacts/diagnostics
       - name: Mobile regression coverage
         if: matrix.project != 'desktop-chromium'
         run: >-

@@ -20,7 +20,7 @@ function sample(t = 0, event = 'initial') {
 function log() {
   return {
     version: 1, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
-    osVersion: '18.7.8', assets: ['/_next/static/chunks/test.css'],
+    osVersion: '18.7.8', clientRevision: null, assets: ['/_next/static/chunks/test.css'],
     initial: sample(), samples: [], dropped: 0,
   };
 }
@@ -74,6 +74,20 @@ test('body reader enforces actual bytes even with a false Content-Length', async
       controller.enqueue(new Uint8Array(1));
       controller.close();
     },
+  });
+
+  test('snapshot also respects the byte budget without changing raw scale', () => {
+    const recorder = createViewportRecorder(log());
+    for (let i = 1; i <= 256; i++) {
+      const item = sample(i, 'resize');
+      for (const key of METRIC_KEYS) item.metrics[key] = -123456.78901234567;
+      item.metrics.scale = 1.0000123456789;
+      recorder.record(item);
+    }
+    const snapshot = recorder.snapshot();
+    assert.ok(Buffer.byteLength(JSON.stringify(snapshot)) <= MAX_DIAGNOSTIC_BYTES);
+    assert.equal(snapshot.samples.at(-1).metrics.scale, 1.0000123456789);
+    assert.equal(snapshot.samples.length + snapshot.dropped, 256);
   });
   const request = new Request('https://example.com', {
     method: 'POST', body: stream, duplex: 'half', headers: { 'Content-Length': '1' },
