@@ -378,3 +378,7 @@ diagnostic authentication/open/upload-file helpers; no runtime changes.
   contradictory native readings. Transient rotation enlargement, fresh-tab
   admission and the extra same-document Back entry remain unresolved
   barriers to ordinary production promotion.
+- User visual feedback after this recording: portrait appears the same size
+  as initially, with no obvious enlargement. This supports normal visible
+  portrait geometry, but does not prove the contradictory native scale
+  value itself is correct. Do not normalize or overwrite the raw evidence.
