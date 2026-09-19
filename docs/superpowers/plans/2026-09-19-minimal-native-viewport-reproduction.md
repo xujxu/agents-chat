@@ -294,3 +294,43 @@ from automation. No ordinary-page behavior is changed.
 - This page neither prevents nor corrects zoom. Await the first isolated
   Chrome result before requesting Safari or another experiment.
   Ordinary chat has no new scaling behavior.
+
+## First Isolated Chrome Physical Result
+
+- Upload `a3991247-7ac6-4e8b-b681-f9b5ed4894f8`, received
+  `2026-09-19T15:04:53.155Z`: minimal schema 1, experiment
+  `native-viewport-minimal`, exact client `42111b3` and deployed server
+  build `U29bqrydoMMrN4CyDCSIG`. Chrome 153.0.8010.24 / iOS 18.7.8.
+- The recording contains the initial measurement plus 170 samples,
+  zero dropped samples, visible lifecycle throughout, and manual Stop
+  at 23.156 s. No timeout or hidden-page interruption occurred.
+- Initial landscape geometry is scale 1 and visual/document widths
+  832/832. Two contacts are recorded from 5.941 s; scale departs from 1
+  and reaches reported values above 2 during the pinch.
+- Both contacts release by 8.841 s. The elastic visual-width overshoot
+  resolves at 8.994 s to scale 1 and 832/832. Repeated periodic readings
+  retain that healthy, contact-free baseline through 13.604 s, before
+  the orientation transition. This is not a rotation while intentionally
+  left at non-unit zoom.
+- The transition includes intermediate inconsistent readings at 13.814 s
+  and 13.901 s. From 13.935 s through manual Stop at 23.156 s, recorded
+  portrait scale is 2.338709592819214 and visual/document widths are
+  183/428. These readings are consistent with actual native enlargement:
+  183 multiplied by the reported scale is approximately 428.
+  Unlike the earlier 2.018817/428-by-428 state, this is not solely a
+  scale/full-width contradiction.
+- All recorded computed font sizes remain 16px and reference-block
+  bounding dimensions remain 100 by 24 CSS pixels. No further multi-touch
+  occurs after the original release; a later single-contact Stop tap
+  does not explain the earlier rotation-triggered enlargement.
+- Conclusion: a standalone instrumented HTML page without React, chat
+  layout/runtime, global CSS or history recovery reproduces unintended
+  native zoom after the affected pinch-return/rotation sequence. Those
+  chat-specific mechanisms are not necessary to trigger this symptom.
+  The scale magnitude and geometry differ from the previous portrait
+  contradiction; do not claim this proves an identical internal defect,
+  the exact browser/engine component responsible, or a working repair.
+- Next approved comparison: use the same minimal page on the same iPhone
+  in Safari, starting in landscape at 1x, then record one identical
+  pinch-return/release/portrait sequence and upload. Do not modify or
+  redeploy the page between the paired browser observations.
