@@ -174,7 +174,7 @@ export function createAutomaticNativeRecovery(ports: AutoPorts) {
       set('watching', o.editable ? 'focus' : 'interrupted');
       return;
     }
-    if (phase === 'watching' && settled && consistentGeometry(o)) {
+    if (phase === 'watching' && settled && (atOriginalScale(o) || consistentGeometry(o))) {
       if (learningIntent && gestureEpoch === orientationEpoch) {
         if (atOriginalScale(o)) rememberOriginalIntent();
         else intent = 'intentional-nonunit';
@@ -200,7 +200,7 @@ export function createAutomaticNativeRecovery(ports: AutoPorts) {
     }
     if (phase === 'assessing-rotation') {
       if (o.now > deadline) { set('watching', 'unassessed'); return; }
-      if (settled && consistentGeometry(o)) {
+      if (settled && (atOriginalScale(o) || consistentGeometry(o))) {
         if (!Number.isFinite(o.scrollWidth) || o.scrollWidth > o.clientWidth + 2) {
           set('watching', 'overflow'); return;
         }
