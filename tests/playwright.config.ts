@@ -7,6 +7,7 @@ const mobileSpecs = [
 const typographySpecs = [
   '**/markdown-typography.spec.ts', '**/viewport-diagnostics.spec.ts', '**/automatic-native-recovery.spec.ts',
   '**/preventive-native-recovery.spec.ts',
+  '**/minimal-native-viewport.spec.ts',
 ];
 
 export default defineConfig({
