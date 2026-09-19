@@ -5,9 +5,10 @@
 The user selected the preventive path: "那就继续第一条路径，即 旋转前预防实验".
 This specification defines one bounded candidate, not another expansion of
 reactive recovery. The user approved the written spec and direct inline
-implementation. Source `4c40f4d` passed Actions `35443442742`; deployment,
-physical preventive acceptance and ordinary-page promotion remain separate
-decisions.
+implementation. Source `4c40f4d` passed Actions `35443442742` and was
+subsequently deployed with explicit approval as build
+`_QKMBDh8Xk3hJBa-jDEnA`. Physical preventive acceptance is pending;
+ordinary-page promotion remains a separate decision.
 
 The experiment tests whether restoring a healthy native history checkpoint
 **after a completed pinch returns to original scale, but before rotation**

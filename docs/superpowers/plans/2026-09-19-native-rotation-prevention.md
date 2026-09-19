@@ -193,7 +193,7 @@ from reactive/manual evidence; reject version 4 as outdated.
 - [x] Review against every admission, gesture, transaction, schema and
   physical acceptance condition in approved spec `48f42bc`.
 - [x] Record source/run/artifact provenance and exact limitations.
-- [ ] Stop periodic updates and request separate deployment authorization.
+- [x] Stop periodic updates and request separate deployment authorization.
   Do not replace PROD or claim physical preventive success before approval.
 
 ## Review and Execution Record
@@ -242,3 +242,30 @@ from reactive/manual evidence; reject version 4 as outdated.
   `tests/helpers/visualViewport.ts`; this changes no runtime behavior.
 - PROD still runs `8bcdafe`. Preventive deployment and physical acceptance
   remain pending. No verified native prevention result is claimed.
+
+## Authorized Production Deployment
+
+- User explicitly approved deployment to the existing PROD for physical
+  validation. Deployed the exact `4c40f4dc23ddc3ed227715ac7c705bb1a18cf060`
+  desktop artifact from Actions `35443442742`.
+- Build ID: `_QKMBDh8Xk3hJBa-jDEnA`. Service is active/running, observed
+  PID `49408`. Only `.next` changed; host dependencies and environment were
+  preserved. SQLite backup API snapshots and previous `8bcdafe` build are
+  retained under `.data/deployments/viewport-preventive-4c40f4d/`.
+- Deployment checks confirmed the preventive route manifest and ordinary
+  viewport metadata, matching local/public CSS and client revision, both
+  text-adjust policies, login protection on all three history experiment
+  routes, unauthenticated upload 401 and readable databases.
+- No local builds, type checks, tests or package installations occurred.
+  Existing manual/reactive diagnostic collectors must be reopened because
+  the deployed upload contract is now schema 5.
+- Physical entry:
+  `https://agent.xujx.us.kg/diagnostics/viewport-preventive?viewportDiagnostics=baseline`.
+  First use one short landscape-pinch/return-to-portrait trial: enable in
+  a fresh healthy tab, move to landscape, pinch out and back, release, wait
+  for preparations 1 and watching, then return to portrait and upload.
+  This directly targets the previously persistent portrait mismatch.
+- A completed preparation remains distinct from actual preventive success.
+  If the eligible trial fails, retain its evidence and do not continue
+  repeating it or add reactive fallback. Ordinary-page promotion remains
+  outside this deployment.
