@@ -6,6 +6,12 @@ The user approved implementation and PROD deployment of an independent
 diagnostic candidate declaring `minimum-scale=1`. Normal PROD behavior
 must not change. This remains an experiment, not a confirmed native fix.
 
+Revision `29195d0` is now deployed as this independent candidate after
+remote validation. See the
+[implementation record](../plans/2026-09-19-chrome-minimum-scale-candidate.md#execution-record)
+for the exact build, run, rollback location, and physical collection links.
+Native acceptance and promotion remain pending.
+
 Four physical recordings from diagnostic revision `3834536` establish:
 Chrome baseline and the shell-write-isolated variant both settle at scale 1
 before rotation, then reach `2.1635513305664062` in landscape. Safari stays
