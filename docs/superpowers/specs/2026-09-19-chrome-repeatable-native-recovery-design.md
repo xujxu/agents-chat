@@ -6,9 +6,9 @@ The user approved the direction and boundaries of a repeatable automatic
 diagnostic experiment, then approved this written specification and direct
 inline implementation. Implementation at `e927428` passed remote validation
 in Actions `35427133737`; the implementation plan records exact evidence.
-Automatic deployment still requires separate authorization, and physical
-iOS Chrome acceptance is pending. Approval does not authorize changing
-ordinary page behavior.
+The user subsequently authorized deployment of this exact candidate to PROD;
+build `tXSys2qtUz0Jp1f8Kf-Or` is deployed. Physical iOS Chrome acceptance
+is pending. Approval does not authorize changing ordinary page behavior.
 
 The existing manual experiment at revision `7104363` has demonstrated:
 

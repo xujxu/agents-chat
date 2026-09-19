@@ -184,7 +184,7 @@ diagnostic authentication/open/upload-file helpers; no runtime changes.
   local installs, builds, type checks or tests. All existing regression
   selectors remain, with an explicit automatic browser step.
 - [x] Record exact source/run/results and self-review against the spec.
-- [ ] Obtain separate deployment authorization after green. Do not deploy or
+- [x] Obtain separate deployment authorization after green. Do not deploy or
   assert physical automatic success before that gate.
 
 ## Execution Record
@@ -247,7 +247,31 @@ diagnostic authentication/open/upload-file helpers; no runtime changes.
   retry failed recovery or re-arm after Stop. Repeated state-machine and
   browser cycles retain the owned pair without accumulating entries.
 - Handoff gate: implementation and remote validation are complete. PROD
-  still runs manual source `7104363`; automatic deployment and physical
-  repeated-pinch/rotation acceptance remain pending. Extra Back history,
+  at this point still ran manual source `7104363`; automatic deployment and
+  physical repeated-pinch/rotation acceptance required separate gates. Extra Back history,
   fresh-tab admission, possible transient enlargement and unsupported
   intentional non-unit rotation behavior remain explicit trial limitations.
+
+## Authorized Production Deployment
+
+- User explicitly approved: "同意，部署到现有 PROD 供真机验证".
+- Deployed the exact successful `e92742854b7780ac01ab0323dd80eb8c437341f3`
+  artifact from Actions `35427133737`, not documentation-only HEAD.
+  Production build ID: `tXSys2qtUz0Jp1f8Kf-Or`.
+- Swapped only `.next`; preserved host dependencies, environment and data.
+  Both databases were backed up with the SQLite backup API. Previous build
+  and database backups are retained under
+  `.data/deployments/viewport-auto-e927428/`.
+- Service `agents-chat` is active/running (observed PID `42869`). Local/public
+  HTML and exact stylesheet bytes match; both typography declarations
+  remain present. Public client JavaScript matches the tested revision.
+  Manual and automatic routes enforce login; unauthenticated uploads return
+  401; both databases remain readable.
+- No local build, test, type check or installation was performed. These were
+  deployment integrity and production health checks only.
+- Physical handoff URL:
+  `https://agent.xujx.us.kg/diagnostics/viewport-auto?viewportDiagnostics=baseline`.
+  Open a fresh tab, enable once at 100%, and repeat pinch-back/rotation
+  sequences without using the manual Restore control. Upload the recording
+  whether automatic recovery succeeds or stops. Physical automatic
+  acceptance remains pending; ordinary chat still does not enable recovery.
