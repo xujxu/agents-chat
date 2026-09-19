@@ -12,9 +12,11 @@ deployment; that exact artifact is deployed as build
 `U29bqrydoMMrN4CyDCSIG`. The first isolated Chrome recording reproduced
 unintended post-rotation native enlargement (scale 2.3387096, widths
 183/428), despite a released original-scale baseline beforehand.
-Safari comparison is pending. This is not yet an exact root-cause
-identification or proof of the earlier contradictory portrait state's
-internal mechanism.
+The paired Safari recording retained native scale 1 and widths 428/428
+after returning to portrait. The bounded isolation/comparison is complete.
+This is not yet an exact root-cause identification or proof of the earlier
+contradictory portrait state's internal mechanism, and no conforming
+ordinary-page repair has been demonstrated.
 
 Upload `3bb9f538-2eeb-4fa8-9957-ad94d6f72618` recorded a completed native
 preparation before rotation, followed by persistent portrait scale

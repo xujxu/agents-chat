@@ -334,3 +334,50 @@ from automation. No ordinary-page behavior is changed.
   in Safari, starting in landscape at 1x, then record one identical
   pinch-return/release/portrait sequence and upload. Do not modify or
   redeploy the page between the paired browser observations.
+
+## Paired Safari Physical Result and Scope Completion
+
+- Upload `fb55f875-02a2-483d-bd32-5ed199342a64`, received
+  `2026-09-19T15:07:19.450Z`, identifies the same minimal schema,
+  experiment, client `42111b3` and server build `U29bqrydoMMrN4CyDCSIG`.
+  The parsed Safari version is 18.7.5 and its user-agent OS field is 18.7.
+  Chrome reported OS 18.7.8; these parsed strings do not independently
+  establish a different installed OS or device. The requested comparison
+  was Safari on the same iPhone.
+- Initial plus 149 samples, zero drops, visible throughout, manual Stop
+  at 20.162 s. Landscape starts at scale 1 and widths 832/832.
+  Multi-touch departs from original scale, with reported scale above 3.
+- All contacts release by 6.988 s; elastic overshoot resolves at 7.156 s.
+  Scale 1 and 832/832 persist through the pre-transition observations,
+  including the orientation event at 12.627 s.
+- The first portrait geometry at 12.681 s is scale 1 and 428/428.
+  Every retained portrait sample through Stop at 20.162 s remains at
+  those values, a 7.481-second observation span. No post-rotation
+  enlargement or contradictory portrait scale was captured.
+- Computed font size stays 16px and reference geometry stays 100 by 24
+  CSS pixels throughout. No recovery mechanism ran in either browser.
+  The larger Safari pinch amplitude does not make the gestures identical;
+  both recordings nevertheless establish released original-scale geometry
+  well before rotation.
+
+| Isolated physical trial | Released landscape baseline | Settled portrait observations |
+| --- | --- | --- |
+| Chrome `a3991247` | 1, 832/832 | 2.3387096, 183/428; retained until Stop |
+| Safari `fb55f875` | 1, 832/832 | 1, 428/428; retained until Stop |
+
+- The approved minimal-reproduction scope is complete: unintended native
+  enlargement is reproducible without chat/React/history recovery in the
+  affected Chrome environment, while this paired Safari trial did not
+  reproduce it. Sampling does not exclude uncaptured transient frames,
+  and one paired trial does not establish behavior across all versions.
+- This directs further investigation toward browser-specific native zoom
+  behavior and its interaction with the engine. It does not identify the
+  responsible native function or prove the earlier full-width/2.018817
+  contradiction shares the exact internal cause.
+- Do not request repeated copies of these trials or add another app-side
+  reset without a new evidence-based hypothesis. No webpage-level repair
+  meeting the no-reload/no-compensation/native-pinch constraints has yet
+  been demonstrated for the full Chrome issue.
+- Any new recovery experiment, app integration or upstream publication
+  remains separately scoped. No further code changes, deployment or
+  external submission followed from this paired result.
