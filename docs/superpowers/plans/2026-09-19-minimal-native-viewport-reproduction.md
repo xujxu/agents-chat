@@ -381,3 +381,112 @@ from automation. No ordinary-page behavior is changed.
 - Any new recovery experiment, app integration or upstream publication
   remains separately scoped. No further code changes, deployment or
   external submission followed from this paired result.
+
+## Bounded Native Source Investigation After Archiving
+
+The user approved a read-only browser-side investigation and first
+required archiving the typography changes for a later PR. Both remote
+archive tags and their verified commits are recorded in
+`2026-09-18-ios-markdown-text-autosizing.md`. No production code or browser
+experiment was changed during this investigation.
+
+### Primary Chromium Evidence
+
+1. Chromium's original
+   [ca55ec74 native rotation reset](https://github.com/chromium/chromium/commit/ca55ec74a1877fe98b8deca0b6c30c80763e9bbe),
+   dated 2023-06-13, explicitly introduced assigning the scroll view's
+   native zoom to its minimum on size-class changes. It describes
+   unexpected zoomed positioning after rotation. This is browser-owned
+   Objective-C code, not a webpage CSS or JavaScript adjustment.
+2. The 2025-03-06
+   [b911298b follow-up](https://github.com/chromium/chromium/commit/b911298b8f6b242e805baff87209d102101e6670)
+   removed a non-user-gesture zoom reset from `scrollViewDidZoom`. Its
+   message reports that the earlier call appeared to leave WebView's
+   internal zoom state corrupted or inconsistent. Removing it regressed
+   rotation behavior, so the same patch delayed the size-class reset
+   by 100 ms to run after an observed WebView scale error. The commit
+   explicitly references Chromium issues 398044856 and 328494038.
+3. The affected public
+   [153.0.8010.24 controller source](https://github.com/chromium/chromium/blob/153.0.8010.24/ios/web/web_state/ui/crw_web_controller_container_view.mm#L226-L245)
+   still performs the delayed assignment. Its
+   [scroll delegate](https://github.com/chromium/chromium/blob/153.0.8010.24/ios/web/web_state/ui/crw_web_view_scroll_view_delegate_proxy.mm)
+   also contains the follow-up's removal of the non-user-gesture reset.
+   Thus this is an already-present native mitigation, not a newly found
+   patch that can simply be applied to the website.
+4. Compared the complete controller file above against pinned Chromium
+   main
+   [`280c10305884862b0562f68e256cd23895fa4279`](https://github.com/chromium/chromium/blob/280c10305884862b0562f68e256cd23895fa4279/ios/web/web_state/ui/crw_web_controller_container_view.mm),
+   observed at 2026-09-19T14:54:19Z. They are byte-identical, SHA-256
+   `a1270c0167c0b726a433533a2d44dcb009b8bede1c60d0762e8894338f8e627c`.
+   This comparison concerns one relevant native file, not all browser
+   code or a guarantee about every newer release.
+
+Two related fixes were examined and not promoted as matching remedies:
+
+- [80a42c59](https://github.com/chromium/chromium/commit/80a42c594dbd8f3eb558178f883a3ba558a8d591)
+  reduces YouTube Shorts rotation-zoom frequency and discusses frame/
+  safe-area timing for `viewport-fit=cover`; it explicitly does not
+  eliminate the problem. It references Chromium issue 417245739.
+- [b31bd3f8](https://github.com/chromium/chromium/commit/b31bd3f8bcdad817aaa7ebfbc1cd887f43cc6c29)
+  changes dynamic `viewport-fit=cover` handling and references Chromium
+  issues 425651125 and 497876501. The affected tag already contains the
+  inspected container implementation. Our minimal page does not use
+  `viewport-fit=cover`, so neither commit establishes a matching fix or
+  justifies adding/changing that policy as another experiment.
+
+### WebKit Boundary and Remaining Uncertainty
+
+The published Apple reference tag `WebKit-7619.2.8.11.9` is not verified
+as the exact implementation shipped on the affected iOS 18.7.8 device.
+Within that reference:
+
+- [WebPageIOS.mm](https://github.com/apple-oss-distributions/WebKit/blob/WebKit-7619.2.8.11.9/Source/WebKit/WebProcess/WebPage/ios/WebPageIOS.mm#L474-L490)
+  chooses either initial scale or a visible-content-fraction calculation
+  during viewport width changes. Rotation and history restoration use
+  that helper with internal user-zoom state.
+- The same file's
+  [UI-process scale handling](https://github.com/apple-oss-distributions/WebKit/blob/WebKit-7619.2.8.11.9/Source/WebKit/WebProcess/WebPage/ios/WebPageIOS.mm#L4496-L4615)
+  filters updates by layer-tree transaction and current scale before
+  applying native scale/geometry. Native timing/state interaction is
+  therefore a plausible investigation direction, not a proven causal
+  trace for either uploaded symptom.
+- Chromium's native 100 ms callback, its minimum native scale, and these
+  WebKit transaction IDs were not recorded by the webpage. Do not infer
+  their actual order or values from JavaScript orientation-event times,
+  nor derive the observed 2.3387096 or 2.018817 values from an assumed
+  internal formula.
+- The
+  [VisualViewport interface](https://github.com/WebKit/WebKit/blob/a6cba35ff79643c658df2a37937d0450525b5aa7/Source/WebCore/page/VisualViewport.idl)
+  exposes scale as read-only. The investigated native reset and internal
+  state controls are not webpage APIs. This does not prove every possible
+  indirect workaround impossible, but supplies no reliable new direct
+  scale-reset mechanism under the user's constraints.
+
+### Public Issue/Version Check and Decision
+
+Inspected the controller's recent commit history and bounded Chromium/
+WebKit commit searches for native zoom/rotation and internal user-scale
+state. No verified release-specific fix for this exact isolated sequence
+was found. The Chromium issue pages returned the generic client shell,
+not readable issue bodies/status; the Apple forum lead required human
+verification. Do not claim those issues are open/closed, exact matches,
+or fixed in a particular version. A search-generated summary misidentified
+the directly verified b911298b commit and was discarded rather than used
+as evidence. The short Ionic pinch/rotation report is related but lacks
+enough verified detail to establish a remedy.
+
+**Outcome:** primary browser history confirms a known family of native
+rotation/zoom-state problems and an already-shipped native mitigation.
+Together with the paired standalone recordings, it supports escalating
+the isolated reproduction to browser maintainers, but does not establish
+the exact defect or a new webpage repair satisfying no reload, no visual
+compensation and preserved native pinch.
+
+Stop this bounded investigation without adding another reset or asking
+for repeat trials. Do not recommend an upgrade/downgrade as a verified
+fix without a matching release record. The next useful separately
+authorized work is preparing a privacy-reviewed, self-contained upstream
+reproduction/report; actual publication requires explicit approval.
+No raw log, project source or production URL was submitted to an upstream
+tracker. The accepted typography-only fix remains archived and separable
+for its later PR.

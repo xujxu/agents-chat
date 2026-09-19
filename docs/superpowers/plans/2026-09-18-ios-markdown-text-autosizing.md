@@ -869,3 +869,37 @@ preview-only `/validation-revision.txt` file. No synthetic chat was inserted
 into shared production data. The user will perform physical Safari/Chrome
 acceptance on the affected iPhone; deployment success is not symptom
 acceptance.
+
+### Physical Outcome and Archive for a Later PR
+
+The user subsequently confirmed the Markdown font-size inflation was fixed.
+The remaining Chrome issue is native whole-page zoom after a pinch/rotation
+sequence, not a reason to discard the accepted typography policy. Its
+separate diagnostic and physical results are recorded in the native
+recovery/minimal-reproduction plans.
+
+Before continuing the read-only browser investigation on 2026-09-19, the
+user requested preservation of all typography changes for a future PR.
+The worktree was clean and the feature branch was already pushed. Created
+and pushed two annotated tags to `origin`, then verified their peeled
+commit IDs with `git ls-remote --tags`:
+
+| Remote archive tag | Pinned commit | Scope |
+| --- | --- | --- |
+| `archive/markdown-typography-verified-20260919` | `79781d534185c75cfc858feda1352de7d7a095c7` | Verified typography implementation, tests, workflow and design/plan before native zoom experiments |
+| `archive/ios-viewport-investigation-20260919` | `443d477426a716e813c65284ce67f8163b764de1` | Complete tracked work through the paired isolated Chrome/Safari result |
+
+The existing `fix/ios-markdown-text-autosizing` branch remains intact; no
+reset, rebase, deletion or PR creation was performed. Private uploaded
+logs, databases, environment files and session artifacts were not added
+to Git.
+
+The historical base for the typography-only milestone is `7f8c292`
+(the `huanyingtianhe/agents-chat#49` merge, also local main), not this fork's stale
+`origin/main` at `43ac219`. Comparing `7f8c292...79781d5` gives nine
+changed files: `.browserslistrc`, the typography workflow, `app/globals.css`,
+the typography spec/plan, two typography test helpers, the typography
+Playwright spec and Playwright configuration. The full investigation tag
+also contains diagnostic experiments and must not be mistaken for a
+typography-only PR. Recheck the intended target's current main when
+preparing that PR and select its scope explicitly.
