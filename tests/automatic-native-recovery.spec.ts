@@ -147,7 +147,7 @@ test('a mobile overlay owns its navigation and invalidates the recovery experime
   await expect(panel(page)).toHaveAttribute('data-phase', 'stopped');
   expect(await page.evaluate(() => history.length)).toBe(3);
   expect(await page.evaluate(() => history.state.agentsChatMobileOverlay)).toBe(true);
-  await page.getByRole('button', { name: 'Close active panel' }).evaluate((button: HTMLButtonElement) => button.click());
+  await page.goBack();
   await expect(page.locator('.chatPageRoot .page')).toHaveAttribute('data-mobile-overlay', 'none');
   await expect.poll(() => page.evaluate(() => history.state?.viewportHistoryProbe?.role)).toBe('working');
   await expect(panel(page)).toHaveAttribute('data-phase', 'stopped');

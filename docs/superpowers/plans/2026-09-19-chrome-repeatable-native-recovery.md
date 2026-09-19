@@ -194,3 +194,22 @@ diagnostic authentication/open/upload-file helpers; no runtime changes.
 - Plan review: covers intent, geometry inconsistencies, repeatable bounded
   history, interruption/ownership, live evidence, private upload, multi-cycle
   continuity, remote-only validation and separate physical/deployment gates.
+- Red `c0e0510`, Actions `35426259766`: expected missing automatic module and
+  route failures.
+- Implementation `bb4a738`, Actions `35426506937`: Node policy/schema cases,
+  builds, manual diagnostics, and three-cycle native Chromium mechanism
+  coverage passed. Automatic browser failures all concerned a menu-close
+  assertion expecting its old history entry to have been consumed.
+- `6ae83e7`, Actions `35426784373`: conservative guards were added for
+  unattributed pre-rotation zoom and a freshly settled baseline after focus
+  exit. Waiting for asynchronous traversal did not fix the menu-close test.
+  Inspection established a pre-existing behavior: `ChatShell` passes its
+  close callback directly as `onClick`; `useMobileOverlayState.close` treats
+  the received truthy click event as `fromHistory`, closing the panel without
+  calling back. This was not introduced by automatic recovery.
+- Scope decision: leave that existing close-button behavior unchanged.
+  Exercise the approved browser-Back boundary instead: open the real mobile
+  overlay, assert automatic recovery stops and leaves its entry untouched,
+  then use browser Back and verify the overlay's own listener closes it,
+  with no automatic re-arm or history growth. This does not claim to fix
+  the ordinary menu-close path.
