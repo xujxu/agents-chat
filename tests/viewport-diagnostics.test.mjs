@@ -84,19 +84,6 @@ test('body reader enforces actual bytes even with a false Content-Length', async
     },
   });
 
-  test('snapshot also respects the byte budget without changing raw scale', () => {
-    const recorder = createViewportRecorder(log());
-    for (let i = 1; i <= 256; i++) {
-      const item = sample(i, 'resize');
-      for (const key of METRIC_KEYS) item.metrics[key] = -123456.78901234567;
-      item.metrics.scale = 1.0000123456789;
-      recorder.record(item);
-    }
-    const snapshot = recorder.snapshot();
-    assert.ok(Buffer.byteLength(JSON.stringify(snapshot)) <= MAX_DIAGNOSTIC_BYTES);
-    assert.equal(snapshot.samples.at(-1).metrics.scale, 1.0000123456789);
-    assert.equal(snapshot.samples.length + snapshot.dropped, 256);
-  });
   const request = new Request('https://example.com', {
     method: 'POST', body: stream, duplex: 'half', headers: { 'Content-Length': '1' },
   });
@@ -107,6 +94,20 @@ test('body reader enforces actual bytes even with a false Content-Length', async
   assert.deepEqual(await readDiagnosticBody(new Request('https://example.com', {
     method: 'POST', body: JSON.stringify(log()),
   })), log());
+});
+
+test('snapshot also respects the byte budget without changing raw scale', () => {
+  const recorder = createViewportRecorder(log());
+  for (let i = 1; i <= 256; i++) {
+    const item = sample(i, 'resize');
+    for (const key of METRIC_KEYS) item.metrics[key] = -123456.78901234567;
+    item.metrics.scale = 1.0000123456789;
+    recorder.record(item);
+  }
+  const snapshot = recorder.snapshot();
+  assert.ok(Buffer.byteLength(JSON.stringify(snapshot)) <= MAX_DIAGNOSTIC_BYTES);
+  assert.equal(snapshot.samples.at(-1).metrics.scale, 1.0000123456789);
+  assert.equal(snapshot.samples.length + snapshot.dropped, 256);
 });
 
 async function withRoot(run) {

@@ -152,3 +152,11 @@ reads it rather than assuming it from a URL. Old log rejection is explicit,
 and previous saved evidence remains untouched. The existing real browser
 upload tests continue to verify the administrator identity after refresh.
 No native rotation success can be inferred from CI.
+
+## Execution Record
+
+Test-first revision `8073124` ran in
+[35412970354](https://github.com/xujxu/agents-chat/actions/runs/35412970354).
+The new contract checks failed on the absent minimum metric/version-2
+contract, and mobile HTTP coverage confirmed the candidate route returned
+404 before implementation. Existing source and geometry checks still passed.

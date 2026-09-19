@@ -21,8 +21,8 @@ function DiagnosticPanel({ mode }: { mode: DiagnosticMode }) {
   const retryRef = useRef<ViewportDiagnosticLog | null>(null);
   const uploadingRef = useRef(false);
   const controllerRef = useRef<AbortController | null>(null);
-  const [reading, setReading] = useState<{ scale: number | null; count: number; dropped: number }>({
-    scale: null, count: 0, dropped: 0,
+  const [reading, setReading] = useState<{ scale: number | null; minimum: number | null; count: number; dropped: number }>({
+    scale: null, minimum: null, count: 0, dropped: 0,
   });
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState('');
@@ -39,9 +39,13 @@ function DiagnosticPanel({ mode }: { mode: DiagnosticMode }) {
       const sample = captureViewportSample(event, performance.now() - start, gesture);
       recorder.record(sample);
       count++;
-      setReading({ scale: sample.metrics.scale, count, dropped: Math.max(0, count - 256) });
+      setReading({
+        scale: sample.metrics.scale, minimum: sample.metrics.viewportMinimumScale,
+        count, dropped: Math.max(0, count - 256),
+      });
     };
-    setReading({ scale: recorder.snapshot().initial.metrics.scale, count: 0, dropped: 0 });
+    const initialMetrics = recorder.snapshot().initial.metrics;
+    setReading({ scale: initialMetrics.scale, minimum: initialMetrics.viewportMinimumScale, count: 0, dropped: 0 });
     const settled = () => {
       window.clearTimeout(settle);
       settle = window.setTimeout(() => record('settled'), 300);
@@ -139,6 +143,7 @@ function DiagnosticPanel({ mode }: { mode: DiagnosticMode }) {
         <output aria-label="Recorded scale" aria-live="off">{reading.scale === null ? 'unavailable' : `${reading.scale}x`}</output>
       </div>
       <div className="viewportDiagnosticsHint">
+        Minimum: {reading.minimum ?? 'unspecified'}.{' '}
         {reading.count} events{reading.dropped ? ` / ${reading.dropped} older samples dropped` : ''}. No chat text collected.
       </div>
       <button type="button" onClick={upload} disabled={uploading}>

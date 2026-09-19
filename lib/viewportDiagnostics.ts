@@ -1,7 +1,7 @@
 export const MAX_DIAGNOSTIC_BYTES = 256 * 1024;
 export const MAX_DIAGNOSTIC_SAMPLES = 256;
 export const METRIC_KEYS = [
-  'scale', 'visualWidth', 'visualHeight', 'offsetTop', 'offsetLeft',
+  'scale', 'viewportMinimumScale', 'visualWidth', 'visualHeight', 'offsetTop', 'offsetLeft',
   'innerWidth', 'innerHeight', 'clientWidth', 'clientHeight', 'scrollWidth', 'scrollHeight',
   'screenWidth', 'screenHeight', 'dpr', 'shellHeight', 'shellOffsetTop',
   'pageX', 'pageY', 'pageWidth', 'pageHeight',
@@ -25,7 +25,7 @@ export type ViewportSample = {
   metrics: DiagnosticMetrics;
 };
 export type ViewportDiagnosticLog = {
-  version: 1;
+  version: 2;
   mode: DiagnosticMode;
   browser: 'chrome' | 'safari' | 'other';
   browserVersion: string | null;
@@ -85,7 +85,7 @@ export function validateDiagnosticLog(value: unknown): value is ViewportDiagnost
   if (!exactKeys(value, [
     'version', 'mode', 'browser', 'browserVersion', 'osVersion', 'clientRevision', 'assets', 'initial', 'samples', 'dropped',
   ])) return false;
-  if (value.version !== 1 || !member(value.mode, ['baseline', 'isolated'])
+  if (value.version !== 2 || !member(value.mode, ['baseline', 'isolated'])
     || !member(value.browser, ['chrome', 'safari', 'other'])
     || !version(value.browserVersion) || !version(value.osVersion)
     || !(value.clientRevision === null || (typeof value.clientRevision === 'string' && /^[a-f0-9]{40}$/.test(value.clientRevision)))

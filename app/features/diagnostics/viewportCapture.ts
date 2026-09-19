@@ -10,6 +10,9 @@ export function captureViewportSample(
   const viewport = window.visualViewport;
   const root = document.documentElement;
   const page = document.querySelector<HTMLElement>('.chatPageRoot .page');
+  const viewportContent = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')?.content;
+  const minimum = viewportContent?.match(/(?:^|,)\s*minimum-scale\s*=\s*(\d+(?:\.\d+)?)\s*(?:,|$)/i);
+  metrics.viewportMinimumScale = minimum ? Number(minimum[1]) : null;
   Object.assign(metrics, {
     scale: viewport?.scale ?? null,
     visualWidth: viewport?.width ?? null, visualHeight: viewport?.height ?? null,
@@ -59,7 +62,7 @@ export function initialViewportLog(mode: DiagnosticMode): ViewportDiagnosticLog 
     .map(url => url.pathname)
     .filter(isDiagnosticAsset);
   return {
-    version: 1, mode, browser: chrome ? 'chrome' : safari ? 'safari' : 'other',
+    version: 2, mode, browser: chrome ? 'chrome' : safari ? 'safari' : 'other',
     browserVersion: chrome?.[1] ?? safari?.[1] ?? null,
     osVersion: os?.[1].replaceAll('_', '.') ?? null,
     clientRevision: process.env.NEXT_PUBLIC_VIEWPORT_DIAGNOSTICS_REVISION ?? null,

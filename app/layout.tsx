@@ -11,6 +11,7 @@ import './features/files/components/FileWorkspacePanel.css';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import Providers from './providers';
+import { APP_VIEWPORT } from './features/layout/appViewport';
 
 const metadataBase = new URL(process.env.NEXTAUTH_URL || 'http://localhost:3010');
 
@@ -48,11 +49,7 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  interactiveWidget: 'resizes-content',
-};
+export const viewport: Viewport = APP_VIEWPORT;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
