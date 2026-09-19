@@ -13,7 +13,14 @@ const ENDPOINT = '/api/diagnostics/viewport';
 async function authenticate(context: BrowserContext, role = 'admin') {
   const secret = process.env.NEXTAUTH_SECRET;
   if (!secret) throw new Error('Diagnostic API tests require the isolated CI NEXTAUTH_SECRET.');
-  const token = await encode({ secret, token: { sub: 'viewport-ci', email: 'viewport-ci@example.test', role } });
+  const token = await encode({
+    secret,
+    token: {
+      sub: role === 'admin' ? 'admin' : 'viewport-ci',
+      email: role === 'admin' ? 'admin@local' : 'viewport-ci@example.test',
+      name: 'Viewport CI', role,
+    },
+  });
   await context.addCookies([{ name: 'next-auth.session-token', value: token, url: BASE, httpOnly: true, sameSite: 'Lax' }]);
 }
 
@@ -22,6 +29,8 @@ async function open(page: Page, mode?: string) {
   await authenticate(page.context());
   await page.goto(mode ? `/?viewportDiagnostics=${mode}` : '/');
   await expect(page.locator('textarea.composerTextarea')).toBeVisible();
+  const session = await (await page.request.get('/api/auth/session')).json();
+  expect(session.user.role).toBe('admin');
 }
 
 function payload() {
