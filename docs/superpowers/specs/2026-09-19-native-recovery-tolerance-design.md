@@ -6,8 +6,8 @@ The user approved a focused repair of the automatic diagnostic controller's
 conflicting original-scale and geometry checks. This does not authorize
 ordinary-page promotion or another production deployment. The user approved
 the written spec and direct inline implementation. Source `8bcdafe` passed
-remote validation in Actions `35428835945`; deployment remains a separate
-authorization gate.
+remote validation in Actions `35428835945`. The user subsequently authorized
+diagnostic-only deployment; build `N_MP_43O_8y9-3oqGYo0e` is deployed.
 
 ## Evidence and Root Cause
 

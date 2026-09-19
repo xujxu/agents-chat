@@ -177,7 +177,7 @@ gh workflow run 361358759 --repo xujxu/agents-chat \
   new E2E coverage, existing manual/API/typography and UX regressions green.
 - [x] Review the two-line runtime diff against the approved spec; record
   exact red/green revisions, run IDs and artifact provenance below.
-- [ ] Ask for separate deployment authorization. Leave current PROD at
+- [x] Ask for separate deployment authorization. Leave current PROD at
   `e927428` until approved. Stop periodic updates while awaiting user input.
 
 ## Review and Execution Record
@@ -220,3 +220,25 @@ gh workflow run 361358759 --repo xujxu/agents-chat \
 - No local test, build, type check or installation was executed. Current
   PROD remains `e927428`; implementation is complete and deployment awaits
   separate authorization.
+
+## Authorized Deployment
+
+- User approved: "同意，部署到现有 PROD，保持诊断试验范围".
+- Deployed exact tested source `8bcdafee9b38341be45d61fce5ee9b1a5b7dc08f`
+  from Actions `35428835945`; build ID `N_MP_43O_8y9-3oqGYo0e`.
+- Only `.next` was replaced. Database backups used SQLite's backup API;
+  host dependencies, environment and data were preserved. Previous
+  `e927428` build and database backups are retained in
+  `.data/deployments/viewport-auto-8bcdafe/`.
+- Service is active/running (observed PID `46371`). Local/public build
+  assets match, the client revision is correct, both typography declarations
+  remain, diagnostic pages enforce login, unauthenticated uploads return
+  401, and both databases remain readable.
+- These were deployment-integrity and health checks, not local tests,
+  builds, type checks or installations.
+- Diagnostic URL is unchanged:
+  `https://agent.xujx.us.kg/diagnostics/viewport-auto?viewportDiagnostics=baseline`.
+  A new tab is needed to load the new client and establish clean history.
+  Ordinary chat still does not enable automatic navigation. Three earlier
+  physical corrections remain valid evidence for the mechanism; no new
+  physical outcome is claimed for this tolerance revision.
