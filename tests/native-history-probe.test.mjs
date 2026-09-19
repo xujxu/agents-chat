@@ -181,3 +181,33 @@ test('history API exceptions consume the attempt and do not leak exception text'
   assert.equal(restore.counts().backs, 1);
   assert.equal(JSON.stringify([...arm.events, ...restore.events]).includes('private'), false);
 });
+
+test('late acknowledgments and transient original-scale readings do not pass', () => {
+  const late = fixture();
+  late.arm(); late.rotate(); late.probe.restore();
+  late.value.entry = 'checkpoint';
+  late.tick(3100, 'popstate');
+  assert.equal(late.probe.evidence().reason, 'ack-timeout');
+  const transient = fixture();
+  transient.arm(); transient.rotate(); transient.probe.restore();
+  transient.value.entry = 'checkpoint';
+  transient.tick(10, 'popstate');
+  Object.assign(transient.value, { scale: 1, width: 832 });
+  transient.tick();
+  Object.assign(transient.value, { scale: 2.16, width: 385 });
+  transient.tick(); transient.tick(3100);
+  assert.equal(transient.probe.evidence().phase, 'not-restored');
+});
+
+test('a released control tap permits restoration but an active touch does not', () => {
+  const f = fixture();
+  f.arm(); f.rotate();
+  f.value.touches = 1;
+  f.tick(10, 'touch');
+  f.probe.restore();
+  assert.equal(f.counts().backs, 0);
+  f.value.touches = 0;
+  f.tick(10);
+  f.probe.restore();
+  assert.equal(f.counts().backs, 1);
+});

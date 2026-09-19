@@ -37,3 +37,4 @@
 .viewportDiagnostics button:disabled { opacity: 0.65; cursor: wait; }
 .viewportDiagnosticsStatus { margin-top: 8px; }
 .viewportDiagnosticsStatus[data-error="true"] { color: #ffb5a8; }
+.viewportDiagnostics[data-experiment="native-history"] button { margin-bottom: 8px; }

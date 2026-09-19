@@ -25,20 +25,21 @@ async function authenticate(context: BrowserContext, role = 'admin') {
 }
 
 async function open(page: Page, mode?: string, pathname = '/') {
-  await installTypographyFixture(page);
+  const fixture = await installTypographyFixture(page);
   await authenticate(page.context());
   await page.goto(mode ? `${pathname}?viewportDiagnostics=${mode}` : pathname);
   await expect(page.locator('textarea.composerTextarea')).toBeVisible();
   const session = await (await page.request.get('/api/auth/session')).json();
   expect(session.user.role).toBe('admin');
+  return fixture;
 }
 
 function payload() {
   return {
-    version: 2, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
+    version: 3, experiment: null, mode: 'baseline', browser: 'chrome', browserVersion: '153.0.8010.24',
     osVersion: '18.7.8', clientRevision: null, assets: ['/_next/static/chunks/test.css'], dropped: 0, samples: [],
     initial: {
-      t: 0, event: 'initial', gesture: false, focus: 'none', orientation: 'portrait', mobile: true,
+      t: 0, event: 'initial', gesture: false, focus: 'none', orientation: 'portrait', mobile: true, probe: null,
       metrics: Object.fromEntries(METRIC_KEYS.map(key => [key, key === 'scale' ? 1 : null])),
     },
   };
@@ -70,6 +71,166 @@ test('native history candidate exposes an explicit probe without changing viewpo
   await expect(page.getByRole('button', { name: 'Establish 100% checkpoint' })).toBeVisible();
   await expect(page.locator('meta[name="viewport"]'))
     .not.toHaveAttribute('content', /minimum-scale|maximum-scale/);
+});
+
+const HISTORY_PATH = '/diagnostics/viewport-history';
+const historyProbe = (page: Page) => page.getByLabel('Native history probe', { exact: true });
+
+async function armHistoryProbe(page: Page) {
+  expect(await page.evaluate(() => history.length)).toBe(1);
+  await page.getByRole('button', { name: 'Establish 100% checkpoint' }).click();
+  await expect(historyProbe(page)).toHaveAttribute('data-phase', 'armed');
+  expect(await page.evaluate(() => history.length)).toBe(2);
+}
+
+async function enlargeHistoryProbe(page: Page) {
+  await page.setViewportSize({ width: 832, height: 390 });
+  await setTestVisualViewport(page, 180, 0, 2.16);
+  await expect(page.getByLabel('Recorded scale')).toHaveText('2.16x');
+  // Match the controller's real 300 ms stability requirement, not just one event.
+  await page.waitForTimeout(450);
+}
+
+test('history traversal preserves chat, draft, attachments and a live response without reloading', async ({ page }) => {
+  await page.setViewportSize({ width: 428, height: 926 });
+  await installTestVisualViewport(page);
+  const fixture = await open(page, 'baseline', HISTORY_PATH);
+  await page.evaluate(() => history.replaceState({ ...history.state, probeTestOpaque: 'retained' }, ''));
+  const documentHandle = await page.evaluateHandle(() => document);
+  const shellHandle = await page.locator('.chatPageRoot .page').elementHandle();
+  const composerHandle = await page.locator('.composerTextarea').elementHandle();
+  const originalUrl = page.url();
+  await armHistoryProbe(page);
+
+  const requests: string[] = [];
+  let documentRequests = 0;
+  page.on('request', request => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequests++;
+    if (new URL(request.url()).pathname === '/api/acp' && request.method() === 'POST') {
+      requests.push(request.postDataJSON().action);
+    }
+  });
+  const composer = page.locator('.composerTextarea');
+  await composer.fill('@alpha History continuity check');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.locator('.message.agent.streamingMessage')).toBeVisible();
+  await composer.fill('PRIVATE_HISTORY_DRAFT');
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'history-private.txt', mimeType: 'text/plain', buffer: Buffer.from('PRIVATE_ATTACHMENT_CONTENT'),
+  });
+  await expect(page.locator('.attachmentChip')).toContainText('history-private.txt');
+  await composer.blur();
+  const resumeCount = requests.filter(action => action === 'resume-session').length;
+  await enlargeHistoryProbe(page);
+  await page.getByRole('button', { name: 'Restore native scale' }).click();
+  await page.waitForFunction(() => history.state?.viewportHistoryProbe?.role === 'checkpoint');
+  await setTestVisualViewport(page, 390, 0, 1);
+  await expect(historyProbe(page)).toHaveAttribute('data-phase', 'restored');
+  expect(page.url()).toBe(originalUrl);
+  expect(await page.evaluate(doc => doc === document, documentHandle)).toBe(true);
+  expect(await shellHandle!.evaluate(node => node === document.querySelector('.chatPageRoot .page'))).toBe(true);
+  expect(await composerHandle!.evaluate(node => node === document.querySelector('.composerTextarea'))).toBe(true);
+  expect(await page.evaluate(() => history.state.probeTestOpaque)).toBe('retained');
+  await expect(composer).toHaveValue('PRIVATE_HISTORY_DRAFT');
+  await expect(page.locator('.attachmentChip')).toContainText('history-private.txt');
+  await expect(page.locator('.message.user').first()).toContainText('Stable heading');
+  fixture.append();
+  await expect(page.locator('.message.agent:last-child')).toContainText('Additional streaming paragraph.');
+  expect(requests.filter(action => action === 'send')).toHaveLength(1);
+  expect(requests.filter(action => action === 'resume-session')).toHaveLength(resumeCount);
+  expect(documentRequests).toBe(0);
+  fixture.finish();
+  await expect(page.locator('.message.agent:last-child')).not.toHaveClass(/streamingMessage/);
+
+  const responsePromise = page.waitForResponse(response => response.url().includes(ENDPOINT));
+  await page.getByRole('button', { name: 'Upload diagnostic log' }).click();
+  const response = await responsePromise;
+  expect(response.status()).toBe(201);
+  const stored = await savedLog((await response.json()).id);
+  expect(validateDiagnosticLog(stored.log)).toBe(true);
+  expect(stored.log.experiment).toBe('native-history');
+  const phases = stored.log.samples.filter((sample: { event: string }) => sample.event === 'probe')
+    .map((sample: { probe: { phase: string } }) => sample.probe.phase);
+  expect(phases).toEqual(expect.arrayContaining(['arming', 'armed', 'restoring', 'restored']));
+  expect(JSON.stringify(stored)).not.toMatch(/PRIVATE_HISTORY_DRAFT|PRIVATE_ATTACHMENT_CONTENT|history-private.txt|probeTestOpaque|viewportHistoryProbe/);
+});
+
+test('history probe records failure if native scale does not recover and keeps controls reachable', async ({ page }) => {
+  await page.setViewportSize({ width: 428, height: 926 });
+  await installTestVisualViewport(page);
+  await open(page, 'baseline', HISTORY_PATH);
+  await armHistoryProbe(page);
+  await enlargeHistoryProbe(page);
+  await page.getByRole('button', { name: 'Restore native scale' }).click();
+  await expect(historyProbe(page)).toHaveAttribute('data-phase', 'not-restored');
+  await expect(page.getByTestId('native-history-status')).toContainText('did not return to 100%');
+  await expect(page.getByLabel('Recorded scale')).toHaveText('2.16x');
+  const panel = await page.getByLabel('Viewport diagnostics').boundingBox();
+  expect(panel).not.toBeNull();
+  expect(panel!.x).toBeGreaterThanOrEqual(0);
+  expect(panel!.y).toBeGreaterThanOrEqual(0);
+  expect(panel!.x + panel!.width).toBeLessThanOrEqual(832 / 2.16 + 1);
+  expect(panel!.y + panel!.height).toBeLessThanOrEqual(181);
+  await page.getByRole('button', { name: 'Upload diagnostic log' }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole('button', { name: 'Restore native scale' })).toBeDisabled();
+});
+
+test('user Back invalidates the probe without intercepting navigation or automatically retrying', async ({ page }) => {
+  await installTestVisualViewport(page);
+  await open(page, 'baseline', HISTORY_PATH);
+  await armHistoryProbe(page);
+  await page.goBack();
+  await expect(historyProbe(page)).toHaveAttribute('data-phase', 'invalidated');
+  expect(await page.evaluate(() => history.state.viewportHistoryProbe.role)).toBe('checkpoint');
+  await expect(page.getByRole('button', { name: 'Restore native scale' })).toBeDisabled();
+  expect(await page.evaluate(() => history.length)).toBe(2);
+});
+
+test('existing history and non-probe URLs never acquire a probe checkpoint', async ({ page }) => {
+  await installTestVisualViewport(page);
+  await open(page, 'baseline', HISTORY_PATH);
+  await page.evaluate(() => history.pushState({ ...history.state, unrelated: true }, ''));
+  await page.getByRole('button', { name: 'Establish 100% checkpoint' }).click();
+  await expect(page.getByTestId('native-history-status')).toContainText('fresh tab');
+  expect(await page.evaluate(() => history.length)).toBe(2);
+  expect(await page.evaluate(() => history.state.viewportHistoryProbe)).toBeUndefined();
+  for (const url of [
+    '/?viewportDiagnostics=baseline', '/?viewportDiagnostics=isolated',
+    '/diagnostics/viewport-minimum?viewportDiagnostics=baseline',
+    HISTORY_PATH, `${HISTORY_PATH}?viewportDiagnostics=isolated`,
+  ]) {
+    await page.goto(url);
+    await expect(page.locator('.composerTextarea')).toBeVisible();
+    await expect(historyProbe(page)).toHaveCount(0);
+    expect(await page.evaluate(() => history.state.viewportHistoryProbe)).toBeUndefined();
+  }
+});
+
+test('real Chromium native page-scale history outcome is recorded separately from mocked policy', async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name !== 'android-chromium', 'Native CDP experiment uses mobile Chromium, not iOS.');
+  await page.setViewportSize({ width: 428, height: 926 });
+  await open(page, 'baseline', HISTORY_PATH);
+  await armHistoryProbe(page);
+  await page.setViewportSize({ width: 832, height: 390 });
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 2 });
+  await expect.poll(() => page.evaluate(() => visualViewport?.scale)).toBe(2);
+  await page.waitForTimeout(450);
+  // CDP changes native scale, but automated click coordinates differ by engine.
+  // This case probes the mechanism, not the physical iPhone touch target.
+  await page.getByRole('button', { name: 'Restore native scale' }).evaluate((button: HTMLButtonElement) => button.click());
+  await expect(historyProbe(page)).toHaveAttribute('data-phase', /^(restored|not-restored)$/);
+  await testInfo.attach('native-chromium-history-outcome.json', {
+    body: JSON.stringify({
+      phase: await historyProbe(page).getAttribute('data-phase'),
+      metrics: await page.evaluate(() => ({
+        scale: visualViewport?.scale, width: visualViewport?.width,
+        clientWidth: document.documentElement.clientWidth,
+      })),
+      limitation: 'Chromium CDP observation, not physical iOS Chrome acceptance.',
+    }),
+    contentType: 'application/json',
+  });
 });
 
 for (const mode of ['baseline', 'isolated']) {
@@ -119,7 +280,7 @@ test('manual upload saves actual diagnostic data without chat or input content',
   const stored = await savedLog(id);
   expect(validateDiagnosticLog(stored.log)).toBe(true);
   expect(stored.log.mode).toBe('baseline');
-  expect(stored.log.version).toBe(2);
+  expect(stored.log.version).toBe(3);
   expect(stored.log.initial.metrics.viewportMinimumScale).toBeNull();
   expect(stored.log.samples.some((sample: { event: string }) => sample.event === 'orientation')).toBe(true);
   expect(stored.serverBuildId).toBeTruthy();
@@ -162,7 +323,7 @@ test('candidate upload records the actual minimum and leaves the ordinary policy
   const { id } = await response.json();
   await expect(page.locator('.viewportDiagnosticsStatus')).toContainText(`Saved log: ${id}`);
   const stored = await savedLog(id);
-  expect(stored.log.version).toBe(2);
+  expect(stored.log.version).toBe(3);
   expect(validateDiagnosticLog(stored.log)).toBe(true);
   expect(stored.log.initial.metrics.viewportMinimumScale).toBe(1);
   expect(stored.log.samples.length).toBeGreaterThan(0);
@@ -221,7 +382,8 @@ test('real API enforces authentication, administrator access, origin, and schema
   expect((await post({ ...payload(), chat: 'not permitted' })).status()).toBe(400);
   const outdated = await post({ ...payload(), version: 1 });
   expect(outdated.status()).toBe(400);
-  expect((await outdated.json()).message).toMatch(/Reload/);
+  expect((await outdated.json()).message).toMatch(/fresh diagnostic tab/);
+  expect((await post({ ...payload(), version: 2 })).status()).toBe(400);
   expect((await page.request.post(ENDPOINT, {
     data: '{broken', headers: { Origin: ORIGIN, 'Content-Type': 'application/json' },
   })).status()).toBe(400);

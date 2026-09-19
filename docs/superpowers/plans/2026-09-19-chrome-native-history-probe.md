@@ -104,7 +104,9 @@ Record the run and its actual result. No local runner invocation.
 
 - [ ] Implement the factory against the above ports. Polling is external.
   Use a 300 ms stability window with at least three observations. Reset that
-  window on changes to scale/width/client width/orientation, touch or focus.
+  window on changes to scale/width/client width/orientation. Active touch or
+  editable focus blocks actions; a single tap on a control must not make its
+  subsequent click fail forever by restarting the geometry window.
   Reject missing/nonfinite geometry. Initial scale tolerance is 0.01 and
   width tolerance is 2 CSS pixels. Only an explicit arm may write history.
 

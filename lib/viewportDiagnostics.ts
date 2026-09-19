@@ -11,8 +11,23 @@ export const METRIC_KEYS = [
 ] as const;
 export const DIAGNOSTIC_EVENTS = [
   'initial', 'resize', 'scroll', 'orientation', 'touch-start', 'touch-end',
-  'touch-cancel', 'focus', 'settled', 'upload',
+  'touch-cancel', 'focus', 'settled', 'upload', 'probe',
 ] as const;
+export const PROBE_PHASES = [
+  'idle', 'arming', 'armed', 'restoring', 'restored', 'not-restored', 'invalidated', 'error',
+] as const;
+export const PROBE_REASONS = [
+  'none', 'fresh-tab', 'geometry', 'touch', 'focus', 'unstable', 'rotation',
+  'ownership', 'lifecycle', 'interrupted', 'history-error', 'ack-timeout', 'scale-timeout',
+] as const;
+export type ProbeEvidence = {
+  phase: typeof PROBE_PHASES[number];
+  reason: typeof PROBE_REASONS[number];
+  owned: boolean;
+  documentContinuous: boolean;
+  shellContinuous: boolean;
+  composerContinuous: boolean;
+};
 export type DiagnosticMode = 'baseline' | 'isolated';
 export type DiagnosticMetrics = Record<typeof METRIC_KEYS[number], number | null>;
 export type ViewportSample = {
@@ -23,9 +38,11 @@ export type ViewportSample = {
   orientation: 'portrait' | 'landscape';
   mobile: boolean;
   metrics: DiagnosticMetrics;
+  probe: ProbeEvidence | null;
 };
 export type ViewportDiagnosticLog = {
-  version: 2;
+  version: 3;
+  experiment: 'native-history' | null;
   mode: DiagnosticMode;
   browser: 'chrome' | 'safari' | 'other';
   browserVersion: string | null;
@@ -66,14 +83,22 @@ function version(value: unknown): boolean {
 }
 
 function validSample(value: unknown): value is ViewportSample {
-  if (!exactKeys(value, ['t', 'event', 'gesture', 'focus', 'orientation', 'mobile', 'metrics'])) return false;
+  if (!exactKeys(value, ['t', 'event', 'gesture', 'focus', 'orientation', 'mobile', 'metrics', 'probe'])) return false;
   if (!finite(value.t, 0, 7 * 86400_000) || !member(value.event, DIAGNOSTIC_EVENTS)
     || typeof value.gesture !== 'boolean' || typeof value.mobile !== 'boolean'
     || !member(value.focus, ['none', 'editable', 'other'])
     || !member(value.orientation, ['portrait', 'landscape'])
-    || !exactKeys(value.metrics, METRIC_KEYS)) return false;
+    || !exactKeys(value.metrics, METRIC_KEYS) || !validProbe(value.probe)) return false;
   const metrics = value.metrics;
   return METRIC_KEYS.every(key => metrics[key] === null || finite(metrics[key], -10_000_000, 10_000_000));
+}
+
+function validProbe(value: unknown): value is ProbeEvidence | null {
+  if (value === null) return true;
+  return exactKeys(value, ['phase', 'reason', 'owned', 'documentContinuous', 'shellContinuous', 'composerContinuous'])
+    && member(value.phase, PROBE_PHASES) && member(value.reason, PROBE_REASONS)
+    && typeof value.owned === 'boolean' && typeof value.documentContinuous === 'boolean'
+    && typeof value.shellContinuous === 'boolean' && typeof value.composerContinuous === 'boolean';
 }
 
 export function isDiagnosticAsset(value: unknown): value is string {
@@ -83,9 +108,10 @@ export function isDiagnosticAsset(value: unknown): value is string {
 
 export function validateDiagnosticLog(value: unknown): value is ViewportDiagnosticLog {
   if (!exactKeys(value, [
-    'version', 'mode', 'browser', 'browserVersion', 'osVersion', 'clientRevision', 'assets', 'initial', 'samples', 'dropped',
+    'version', 'experiment', 'mode', 'browser', 'browserVersion', 'osVersion', 'clientRevision', 'assets', 'initial', 'samples', 'dropped',
   ])) return false;
-  if (value.version !== 2 || !member(value.mode, ['baseline', 'isolated'])
+  if (value.version !== 3 || !(value.experiment === null || value.experiment === 'native-history')
+    || (value.experiment !== null && value.mode !== 'baseline') || !member(value.mode, ['baseline', 'isolated'])
     || !member(value.browser, ['chrome', 'safari', 'other'])
     || !version(value.browserVersion) || !version(value.osVersion)
     || !(value.clientRevision === null || (typeof value.clientRevision === 'string' && /^[a-f0-9]{40}$/.test(value.clientRevision)))
@@ -93,9 +119,13 @@ export function validateDiagnosticLog(value: unknown): value is ViewportDiagnost
     || !validSample(value.initial) || value.initial.t !== 0 || value.initial.event !== 'initial'
     || !Array.isArray(value.samples) || value.samples.length > MAX_DIAGNOSTIC_SAMPLES
     || !finite(value.dropped, 0, 1_000_000) || !Number.isInteger(value.dropped)) return false;
+  const matchesExperiment = (sample: ViewportSample) =>
+    (sample.probe !== null) === (value.experiment === 'native-history')
+    && (sample.event !== 'probe' || value.experiment === 'native-history');
+  if (!matchesExperiment(value.initial)) return false;
   let previous = 0;
   return value.samples.every(sample => {
-    if (!validSample(sample) || sample.event === 'initial' || sample.t < previous) return false;
+    if (!validSample(sample) || !matchesExperiment(sample) || sample.event === 'initial' || sample.t < previous) return false;
     previous = sample.t;
     return true;
   });

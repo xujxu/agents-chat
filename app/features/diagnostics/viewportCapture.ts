@@ -1,10 +1,10 @@
 import {
   METRIC_KEYS, isDiagnosticAsset,
-  type DiagnosticMetrics, type DiagnosticMode, type ViewportDiagnosticLog, type ViewportSample,
+  type DiagnosticMetrics, type DiagnosticMode, type ViewportDiagnosticLog, type ViewportSample, type ProbeEvidence,
 } from '../../../lib/viewportDiagnostics';
 
 export function captureViewportSample(
-  event: ViewportSample['event'], t: number, gesture: boolean,
+  event: ViewportSample['event'], t: number, gesture: boolean, probe: ProbeEvidence | null = null,
 ): ViewportSample {
   const metrics = Object.fromEntries(METRIC_KEYS.map(key => [key, null])) as DiagnosticMetrics;
   const viewport = window.visualViewport;
@@ -45,13 +45,13 @@ export function captureViewportSample(
   const focus = !active || active === document.body || active === root ? 'none'
     : active.matches('input, textarea, [contenteditable="true"]') ? 'editable' : 'other';
   return {
-    t, event, gesture, focus, metrics,
+    t, event, gesture, focus, metrics, probe,
     orientation: matchMedia('(orientation: landscape)').matches ? 'landscape' : 'portrait',
     mobile: matchMedia('(max-width: 900px)').matches,
   };
 }
 
-export function initialViewportLog(mode: DiagnosticMode): ViewportDiagnosticLog {
+export function initialViewportLog(mode: DiagnosticMode, probe: ProbeEvidence | null = null): ViewportDiagnosticLog {
   const agent = navigator.userAgent;
   const chrome = agent.match(/(?:CriOS|Chrome)\/([\d.]+)/);
   const safari = agent.includes('Safari') ? agent.match(/Version\/([\d.]+)/) : null;
@@ -62,11 +62,12 @@ export function initialViewportLog(mode: DiagnosticMode): ViewportDiagnosticLog 
     .map(url => url.pathname)
     .filter(isDiagnosticAsset);
   return {
-    version: 2, mode, browser: chrome ? 'chrome' : safari ? 'safari' : 'other',
+    version: 3, experiment: probe ? 'native-history' : null,
+    mode, browser: chrome ? 'chrome' : safari ? 'safari' : 'other',
     browserVersion: chrome?.[1] ?? safari?.[1] ?? null,
     osVersion: os?.[1].replaceAll('_', '.') ?? null,
     clientRevision: process.env.NEXT_PUBLIC_VIEWPORT_DIAGNOSTICS_REVISION ?? null,
     assets: [...new Set(assets)].slice(0, 32),
-    initial: captureViewportSample('initial', 0, false), samples: [], dropped: 0,
+    initial: captureViewportSample('initial', 0, false, probe), samples: [], dropped: 0,
   };
 }
