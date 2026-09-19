@@ -84,6 +84,13 @@ test('native history candidate exposes an explicit probe without changing viewpo
 });
 
 const HISTORY_PATH = '/diagnostics/viewport-history';
+test('automatic candidate exposes explicitly enabled recovery without viewport restrictions', async ({ page }) => {
+  await open(page, 'baseline', '/diagnostics/viewport-auto');
+  await expect(page.getByRole('button', { name: 'Enable automatic recovery' })).toBeVisible();
+  await expect(page.locator('meta[name="viewport"]'))
+    .not.toHaveAttribute('content', /minimum-scale|maximum-scale/);
+});
+
 const historyProbe = (page: Page) => page.getByLabel('Native history probe', { exact: true });
 
 async function armHistoryProbe(page: Page) {

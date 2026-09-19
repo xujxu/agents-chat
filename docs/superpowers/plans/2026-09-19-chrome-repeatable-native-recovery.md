@@ -1,0 +1,196 @@
+# Repeatable Native Recovery Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> User selected inline execution. Neither named execution skill is installed;
+> implement directly in this session, without subagents or local validation.
+
+**Goal:** Build the approved opt-in automatic native-scale recovery experiment,
+with repeatable corrections and a fixed-size owned history pair.
+
+**Architecture:** A new pure controller separates user pinch intent from native
+rotation scale. Share browser ownership/identity operations and settled geometry
+with the existing manual probe, without changing its policy. Schema-4 evidence
+and independent controls expose current state, corrections and stop reasons.
+
+**Tech Stack:** Next.js/React/TypeScript, History and VisualViewport APIs,
+existing Node tests, Playwright and GitHub Actions.
+
+---
+
+## Task 1: Test-first policy and isolated route
+
+**Create:** `tests/automatic-native-recovery.test.mjs`.
+**Modify:** `.github/workflows/markdown-typography.yml`,
+`tests/viewport-diagnostics.spec.ts`.
+
+- [ ] Add deterministic controller fixtures using this port contract:
+
+```ts
+type AutoPorts = {
+  read(): ProbeObservation & {
+    scrollWidth: number; overlay: boolean; entryCycle: number | null;
+  };
+  checkpoint(): void;
+  back(): void;
+  rearm(): void;
+  publish(evidence: AutoProbeEvidence): void;
+};
+// createAutomaticNativeRecovery(ports) returns:
+// arm(), stop(), observe(event), evidence().
+// Events reuse ProbeEvent, with focus notifications added.
+```
+
+Write cases for repeated correction/re-arm at constant length 2; original
+versus deliberately non-unit intent; inconsistent widths; duplicate and
+superseded orientation epochs; no resize-only correction; contact/focus
+cancellation; fixed deadlines; wrong history/DOM/URL; overlay interference;
+stop before/after history acknowledgment; history exceptions and live
+terminal evidence.
+
+- [ ] Add the failing route contract:
+
+```ts
+await open(page, 'baseline', '/diagnostics/viewport-auto');
+await expect(page.getByRole('button', {
+  name: 'Enable automatic recovery',
+})).toBeVisible();
+await expect(page.locator('meta[name="viewport"]'))
+  .not.toHaveAttribute('content', /minimum-scale|maximum-scale/);
+```
+
+- [ ] Include the new Node file in the existing contract step. Commit with
+  `[skip ci]`, push, then dispatch:
+
+```bash
+gh workflow run 361358759 --repo xujxu/agents-chat \
+  --ref fix/ios-markdown-text-autosizing \
+  -f build_origin=https://agent.xujx.us.kg
+```
+
+Expected red: missing automatic controller and route. Record the exact run.
+
+## Task 2: Shared geometry and browser ownership
+
+**Create:** `app/features/diagnostics/nativeViewportPolicy.ts`,
+`app/features/diagnostics/nativeHistoryBrowser.ts`.
+**Modify:** `nativeHistoryProbe.ts`, `useNativeHistoryProbe.ts` in the same folder.
+
+- [ ] Extract the existing finite geometry/original-scale checks and the
+  300 ms / three-observation stability tracker without changing manual policy.
+  Define `ViewportObservation` with scale, width, clientWidth, orientation,
+  now, touches and editable fields; the manual observation extends it.
+- [ ] The shared browser adapter returns `read`, `checkpoint`, `back`,
+  `rearm`, `captureChatIdentity`, and `setTouches`. Keep document-scoped
+  ownership tokens private. Require the installed router's existing `__NA`
+  ownership flag rather than creating it.
+- [ ] Initial checkpoint writes preserve opaque state and use:
+
+```ts
+history.replaceState({ ...state, viewportHistoryProbe: {
+  token, role: 'checkpoint', cycle,
+} }, '', href);
+history.pushState({ ...state, viewportHistoryProbe: {
+  token, role: 'working', cycle,
+} }, '', href);
+```
+
+Initial admission requires length 1. Back requires the owned working entry
+at length 2. Re-arm requires the owned checkpoint at length 2; increment the
+cycle, restamp A, and push B, replacing only the known forward owned entry.
+Recheck URL, current marker, router ownership and DOM immediately before
+each operation. Exceptions propagate to the controller's visible error.
+- [ ] Keep passive contacts, viewport positioning, native orientation,
+  popstate/hash/pagehide and focus listeners in the hook. Instantiate either
+  controller by an explicit `manual | auto | null` kind. The recorder reads
+  live automatic evidence, including when stopped. Cleanup never navigates.
+
+## Task 3: Intent-aware automatic state machine
+
+**Create:** `app/features/diagnostics/automaticNativeRecovery.ts`.
+
+- [ ] Start with the exact admission policy from the approved specification.
+  `arm()` captures the initial orientation and begins bounded stable admission.
+  Establish only from idle; API failure consumes the attempt.
+- [ ] Track `unknown | original | intentional-nonunit` separately from native
+  scale. Multi-touch clears intent. After release, learn intent only from
+  settled consistent geometry in the same orientation epoch. Focus invalidates
+  the current assessment. Do not learn zoom intent from rotation alone.
+- [ ] Assess only a genuine orientation event with changed direction and
+  original intent. Duplicate notifications do not move the deadline. Reset
+  the stability tracker at that boundary and allow three seconds. Require:
+
+```ts
+Math.abs(width * scale - clientWidth) <= Math.max(2, scale)
+  && scrollWidth <= clientWidth + 2
+  && scale > 1.01
+```
+
+Also require live ownership, stable geometry, no overlay/contact/editable
+focus. Already-original geometry completes assessment without navigation;
+inconsistent geometry times out explicitly without retrying that epoch.
+- [ ] For a confirmed anomaly, issue one back, await the owned checkpoint
+  within three seconds, then await native 1 plus matching width within three
+  seconds. Stop on new gesture/orientation/navigation/error; never retry.
+- [ ] Count a stable successful correction, then synchronously recheck and
+  re-arm the owned pair. Resume watching with original intent. Stop/cleanup
+  must not re-arm if an already-issued native traversal completes later.
+  Terminal evidence recomputes current identity and ownership.
+
+## Task 4: Schema, controls and composition
+
+**Modify:** `lib/viewportDiagnostics.ts`,
+`app/api/diagnostics/viewport/route.ts`,
+`app/features/diagnostics/viewportCapture.ts`,
+`app/features/diagnostics/ViewportDiagnostics.tsx`.
+**Create:** `app/features/diagnostics/AutomaticRecoveryControls.tsx`,
+`app/diagnostics/viewport-auto/page.tsx`.
+
+- [ ] Version 4 adds experiment `native-history-auto` and an exact automatic
+  probe shape: common phase/reason/ownership/continuity plus `intent`, `cycle`,
+  `corrections`, `orientationEpoch`, `pendingAck`. Keep the manual shape
+  separate and validate it against the experiment identity.
+- [ ] Update all fixtures and old-version rejection, including version 3.
+  Do not change private storage, byte/sample limits, retries or authorization.
+- [ ] The route only renders `ChatPageClient`. Gate controls on its exact path
+  plus baseline mode. Provide Enable, Stop, new-tab admission help, phase,
+  correction count and explicit reasons. Do not touch ordinary metadata.
+- [ ] Preserve the current real-visual-viewport panel bounds. Continue manual
+  recording unchanged except the schema version. Automatic snapshots contain
+  fresh ownership/continuity results, never a stale terminal success flag.
+
+## Task 5: Multi-cycle browser/API evidence and remote green
+
+**Create:** `tests/automatic-native-recovery.spec.ts`.
+**Create:** `tests/helpers/viewportDiagnosticFixture.ts` by extracting existing
+diagnostic authentication/open/upload-file helpers; no runtime changes.
+**Modify:** `tests/playwright.config.ts`, existing diagnostic tests and workflow.
+
+- [ ] Run three real History API cycles with synthetic native metrics and
+  assert length 2, increasing cycles/corrections and unchanged document/chat
+  handles. Preserve opaque state, selected chat, draft, attachment and an
+  ongoing controlled response; no additional document request or duplicate
+  send/resume. Synthetic metrics prove policy, not iOS scale recovery.
+- [ ] Exercise deliberate non-unit pinch, wrong/overflow geometry, keyboard
+  resize without orientation, new contact during assessment, external Back,
+  mobile overlay history, explicit Stop and late acknowledgment.
+- [ ] Persist a three-cycle mobile Chromium CDP native-scale observation.
+  Use real scale changes, not a replaced VisualViewport; record whether
+  actual native restoration/re-arm succeeds without claiming iOS equivalence.
+- [ ] Send automatic evidence through the real upload endpoint and verify
+  schema/privacy, invalid enum/shape and stale payload failures. Keep normal
+  and manual routes' history/gating contracts.
+- [ ] Dispatch the production-origin workflow and inspect failures. Run no
+  local installs, builds, type checks or tests. All existing regression
+  selectors remain, with an explicit automatic browser step.
+- [ ] Record exact source/run/results and self-review against the spec.
+  Request separate deployment authorization after green. Do not deploy or
+  assert physical automatic success yet.
+
+## Execution Record
+
+- Written specification `31db05a` approved; user selected direct inline
+  implementation. Existing PROD remains manual candidate `7104363`.
+- Plan review: covers intent, geometry inconsistencies, repeatable bounded
+  history, interruption/ownership, live evidence, private upload, multi-cycle
+  continuity, remote-only validation and separate physical/deployment gates.
