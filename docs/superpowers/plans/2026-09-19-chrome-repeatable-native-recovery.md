@@ -275,3 +275,31 @@ diagnostic authentication/open/upload-file helpers; no runtime changes.
   sequences without using the manual Restore control. Upload the recording
   whether automatic recovery succeeds or stops. Physical automatic
   acceptance remains pending; ordinary chat still does not enable recovery.
+
+## First Automatic Physical Recording
+
+- Upload `3a33307d-f8dc-4fc5-a0af-c6191d056c5e`, received
+  `2026-09-19T06:54:37.056Z`: correct deployed build/revision, schema 4,
+  iOS 18.7.8 / Chrome 153.0.8010.24, 74 samples, zero drops.
+- Enabled successfully at 11.009 seconds. All live document/shell/composer
+  identity and history ownership flags remain true after enablement.
+- The initial pinch reached 2.762234. The subsequent inward gesture released
+  near 1.088137, then settled at **1.168340**, visual/document widths
+  **366/428**, at 18.367 seconds. There is no settled 100% baseline after this
+  gesture and before the first rotation at 31.683 seconds.
+- The controller therefore retained `intentional-nonunit`, as specified.
+  Eight orientation boundaries occurred, but no recovery traversal was
+  requested: corrections and cycle both stayed zero. Later landscape
+  readings confirm the familiar enlargement (2.163551, widths 385/832).
+  Rotation alone returning the browser to scale 1 did not overwrite the
+  last gesture-derived intent.
+- This recording does **not** establish successful automatic recovery, nor
+  failure of the native recovery operation: the non-unit intent guard kept
+  that operation from running. It also shows why judging 100% by appearance
+  is insufficient. The trial still needs a post-pinch, finger-released
+  `1x` baseline before rotation.
+- Next physical instruction: if the same tab remains `watching`, keep the
+  recording and perform one new pinch/inward gesture until the panel reads
+  `1x` after release for at least one second; then rotate, wait two seconds
+  and upload. If scale cannot settle at `1x`, upload that condition without
+  proceeding to rotation. No code/deployment change follows from this log.
