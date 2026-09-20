@@ -388,6 +388,10 @@
   align-items: center;
 }
 
+.composerOptionalActions:empty {
+  display: none;
+}
+
 .targetPill {
   display: inline-flex;
   align-items: center;

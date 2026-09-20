@@ -7,6 +7,7 @@ const mobileSpecs = [
 const typographySpecs = ['**/markdown-typography.spec.ts'];
 const readingSpecs = ['**/chat-reading-anchor.spec.ts'];
 const persistenceSpecs = ['**/chat-persistence.spec.ts', '**/chat-outbox.spec.ts'];
+const voiceSpecs = ['**/voice-input.spec.ts'];
 
 export default defineConfig({
   testDir: '.',
@@ -29,12 +30,12 @@ export default defineConfig({
     },
     {
       name: 'android-chromium',
-      testMatch: [...mobileSpecs, ...typographySpecs, ...readingSpecs, ...persistenceSpecs],
+      testMatch: [...mobileSpecs, ...typographySpecs, ...readingSpecs, ...persistenceSpecs, ...voiceSpecs],
       use: { ...devices['Pixel 7'] },
     },
     {
       name: 'iphone-webkit',
-      testMatch: [...mobileSpecs, ...typographySpecs, ...readingSpecs, ...persistenceSpecs],
+      testMatch: [...mobileSpecs, ...typographySpecs, ...readingSpecs, ...persistenceSpecs, ...voiceSpecs],
       use: { ...devices['iPhone 14 Pro Max'] },
     },
   ],
