@@ -131,7 +131,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: native-cache
+        with:
+          path: artifacts/runtime
+          key: voice-runtime-ubuntu20-avx2-5670d5c-base-q5_1-static-r1
       - name: Build compatible CPU-only Whisper runtime
+        if: steps.native-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p artifacts/runtime/licenses
           curl -fL --retry 3 https://github.com/ggml-org/whisper.cpp/archive/5670d5c0bbcb148feabef84400a07cfca9aa3b30.tar.gz -o /tmp/whisper.tar.gz
@@ -162,12 +168,35 @@ jobs:
           echo '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898  artifacts/runtime/ggml-base-q5_1.bin' | sha256sum --check
       - name: Real-model smoke with production resource limits
         run: |
+          curl -fL --retry 3 https://raw.githubusercontent.com/ggml-org/whisper.cpp/5670d5c0bbcb148feabef84400a07cfca9aa3b30/samples/jfk.wav -o /tmp/voice-jfk.wav
+          echo '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898  artifacts/runtime/ggml-base-q5_1.bin' | sha256sum --check
           /usr/bin/time -v /usr/bin/nice -n 10 /usr/bin/prlimit --as=1073741824 --cpu=120 -- \
             artifacts/runtime/whisper-cli -m artifacts/runtime/ggml-base-q5_1.bin \
-            -f /tmp/voice-whisper-source/samples/jfk.wav -of artifacts/jfk \
+            -f /tmp/voice-jfk.wav -of artifacts/jfk \
             -otxt -l auto -t 1 -p 1 -bs 1 -bo 1 -nt -np -ng \
             >artifacts/smoke.log 2>artifacts/smoke-metrics.log
           grep -qi country artifacts/jfk.txt
+          python3 - <<'PY'
+          import wave
+          with wave.open('/tmp/voice-jfk.wav', 'rb') as source:
+              params = source.getparams()
+              frames = source.readframes(source.getnframes())
+          target_bytes = 30 * params.framerate * params.nchannels * params.sampwidth
+          repeated = (frames * (target_bytes // len(frames) + 1))[:target_bytes]
+          with wave.open('/tmp/voice-30-seconds.wav', 'wb') as output:
+              output.setparams(params)
+              output.writeframes(repeated)
+          PY
+          if /usr/bin/time -v /usr/bin/nice -n 10 /usr/bin/prlimit --as=536870912 --cpu=120 -- \
+            artifacts/runtime/whisper-cli -m artifacts/runtime/ggml-base-q5_1.bin \
+            -f /tmp/voice-30-seconds.wav -of artifacts/bounded-30-seconds \
+            -otxt -l auto -t 1 -p 1 -bs 1 -bo 1 -nt -np -ng \
+            >artifacts/bounded-smoke.log 2>artifacts/bounded-smoke-metrics.log; then
+            grep -qi country artifacts/bounded-30-seconds.txt
+            echo '512 MiB address-space experiment: PASS for 30-second public sample' | tee artifacts/bounded-result.txt
+          else
+            echo '512 MiB address-space experiment: FAILED; do not lower production limits without further investigation' | tee artifacts/bounded-result.txt
+          fi
           printf '%s\n' "$GITHUB_SHA" > artifacts/runtime/revision.txt
           printf '%s\n' 'whisper.cpp 5670d5c0bbcb148feabef84400a07cfca9aa3b30' > artifacts/runtime/engine-revision.txt
           (cd artifacts/runtime && sha256sum whisper-cli ggml-base-q5_1.bin > SHA256SUMS)
@@ -181,4 +210,5 @@ jobs:
             artifacts/voice-runtime.*
             artifacts/smoke*
             artifacts/jfk.txt
+            artifacts/bounded*
           retention-days: 7
