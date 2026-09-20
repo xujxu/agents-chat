@@ -38,6 +38,8 @@ jobs:
       PLAYWRIGHT_BASE_URL: http://localhost:3011
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: a3cbf0979e03797c982eb52f0530067a7e7a8c73
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -64,7 +66,7 @@ jobs:
       - name: Start isolated application
         run: |
           mkdir -p artifacts
-          printf '%s\n' "$GITHUB_SHA" > artifacts/revision.txt
+          git rev-parse HEAD > artifacts/revision.txt
           node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 >artifacts/server.log 2>&1 &
           server_pid=$!
           echo "$server_pid" > artifacts/server.pid
@@ -120,6 +122,39 @@ jobs:
               kill "$server_pid"
             fi
           fi
+      - name: Export verified production build
+        if: success() && github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p production-artifact
+          git rev-parse HEAD > production-artifact/revision.txt
+          node --version > production-artifact/node-version.txt
+          sha256sum package-lock.json > production-artifact/package-lock.sha256
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const modules = path.resolve('node_modules');
+          for (const entry of fs.readdirSync('.next/node_modules', { withFileTypes: true })) {
+            if (!entry.isSymbolicLink()) continue;
+            const link = path.resolve('.next/node_modules', entry.name);
+            const target = fs.realpathSync(link);
+            const relative = path.relative(modules, target);
+            if (relative.startsWith('..') || path.isAbsolute(relative)) {
+              throw new Error(`Unexpected external module link: ${entry.name}`);
+            }
+            fs.unlinkSync(link);
+            fs.symlinkSync(path.relative(path.dirname(link), target), link);
+          }
+          NODE
+          tar --exclude='.next/cache' --exclude='.next/standalone' -czf production-artifact/next-build.tar.gz .next
+          cd production-artifact
+          sha256sum next-build.tar.gz > next-build.sha256
+      - name: Upload verified production build
+        if: success() && github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-next-a3cbf09
+          path: production-artifact/
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: always()
         with:
