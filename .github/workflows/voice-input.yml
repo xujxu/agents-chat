@@ -1,0 +1,37 @@
+name: Voice input PoC
+
+on:
+  push:
+    branches: [poc/server-voice-input]
+  pull_request:
+    paths:
+      - 'lib/voice/**'
+      - 'app/api/voice/**'
+      - 'app/features/composer/**'
+      - 'app/features/chat/runtime/useComposerState.ts'
+      - 'app/features/chat/ChatPageClient.tsx'
+      - 'public/voice/**'
+      - 'tests/voice-*'
+      - '.github/workflows/voice-input.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voice-input-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  voice:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Voice logic regressions
+        run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-audio.test.ts
