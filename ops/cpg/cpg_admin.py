@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, "/usr/local/libexec/cpg")
 import cpg_common as common
@@ -130,6 +131,7 @@ def remove_limit():
 
 
 def stop_units():
+    systemctl("daemon-reload")
     for name in (TIMER, SETUP):
         if (UNITS / name).exists():
             systemctl("disable", "--now", name)
@@ -317,6 +319,8 @@ def main():
                     common.verify_boundary(common.read_group())
                     systemctl("is-enabled", SETUP, TIMER)
                     systemctl("is-active", TIMER)
+                elif common.GROUP.exists() and common.read_group()["limit"] < common.memory_info()[0]:
+                    raise RuntimeError("Protection is marked disabled but a kernel ceiling is still present")
                 print(json_report(value["config"]))
     if args.action in ("install", "enable"):
         systemctl("start", MONITOR)

@@ -5,6 +5,7 @@ from pathlib import Path
 import signal
 import sys
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, "/usr/local/libexec/cpg")
 import cpg_common as common
 
@@ -18,7 +19,7 @@ def run(config, arguments):
         os.execv(executable, [executable] + arguments)
         return
     common.verify_boundary(common.read_group())
-    total, available = common.memory_info()
+    _, available = common.memory_info()
     group = common.read_group()
     if available < 512 * common.MIB or group["usage"] >= common.LIMIT - 128 * common.MIB:
         raise RuntimeError("Insufficient headroom for another protected CLI; close existing tasks first")

@@ -1,10 +1,15 @@
 """Run only inside a disposable GitHub Actions VM with legacy memory cgroups."""
 import json
+import errno
+import fcntl
 import os
 from pathlib import Path
+import pty
+import select
 import signal
 import subprocess
 import sys
+import termios
 import time
 
 SOURCE = Path(__file__).resolve().parent
@@ -27,6 +32,49 @@ def ctl(action, check=True):
     return command("/usr/local/sbin/cpgctl", action, check=check)
 
 
+def terminal_run(arguments, interrupt=False):
+    master, slave = pty.openpty()
+
+    def become_user():
+        os.setsid()
+        fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+        os.setgroups([])
+        os.setgid(1001)
+        os.setuid(1001)
+
+    process = subprocess.Popen(
+        ["/usr/local/bin/cpg", *arguments], stdin=slave, stdout=slave, stderr=slave,
+        preexec_fn=become_user,
+    )
+    os.close(slave)
+    output = b""
+    deadline = time.monotonic() + 20
+    try:
+        while time.monotonic() < deadline:
+            readable, _, _ = select.select([master], [], [], 0.2)
+            if readable:
+                try:
+                    chunk = os.read(master, 65536)
+                except OSError as error:
+                    if error.errno != errno.EIO:
+                        raise
+                    break
+                if not chunk:
+                    break
+                output += chunk
+                if interrupt and b"READY" in output:
+                    os.write(master, b"\x03")
+                    interrupt = False
+            elif process.poll() is not None:
+                break
+        return process.wait(timeout=5), output.decode()
+    finally:
+        os.close(master)
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGTERM)
+            process.wait(timeout=5)
+
+
 def main():
     assert Path("/sys/fs/cgroup/memory/memory.limit_in_bytes").exists(), "VM did not boot cgroup v1"
     command("useradd", "--uid", "1001", "--create-home", "cpgtest")
@@ -35,6 +83,7 @@ def main():
     baseline = Path("/proc/self/cgroup").read_text()
     command("python3", str(SOURCE / "cpg_admin.py"), "install", "--uid", "1001", "--copilot", str(fixture))
     ctl("status")
+    assert command("systemctl", "show", "cpg-monitor.service", "--property=Result", "--value").stdout.strip() == "success"
     assert common.read_group()["limit"] == 1610612736
     assert Path("/proc/self/cgroup").read_text() == baseline
     assert not Path("/etc/systemd/system/user-1001.slice.d/70-host-memory-guard.conf").exists()
@@ -48,10 +97,17 @@ def main():
     assert observed["marker"] == "preserved"
     assert common.memory_membership(observed["group"]) == "/cpg-cli"
     assert common.memory_membership(observed["child_group"]) == "/cpg-cli"
+    assert common.memory_membership(observed["parent_group"]) != "/cpg-cli"
     assert not common.memory_membership(user("/bin/cat", "/proc/self/cgroup").stdout).startswith("/cpg-cli")
     # The delegated join file must not allow changing the hard boundary.
     assert user("/bin/sh", "-c", "echo -1 > /sys/fs/cgroup/memory/cpg-cli/memory.limit_in_bytes", check=False).returncode != 0
     print("PASS: literal argv, --yolo, cwd, environment, identity and descendant boundary", flush=True)
+    code, text = terminal_run(["--yolo"])
+    assert code == 0, (code, text)
+    assert json.loads(text)["tty"] == [True, True, True]
+    code, text = terminal_run(["--interruptible"], interrupt=True)
+    assert code == 42, (code, text)
+    print("PASS: interactive PTY descriptors and Ctrl-C forwarded without killing supervisor", flush=True)
 
     held = subprocess.Popen(
         ["runuser", "-u", "cpgtest", "--", "/usr/local/bin/cpg", "--hold"],
@@ -94,10 +150,31 @@ def main():
     common.GROUP.rmdir()
     ctl("enable")
     ctl("status")
+    # Neither drift nor a missing boundary may cause a silent unprotected launch.
+    join = common.GROUP / "cgroup.procs"
+    os.chown(str(join), 0, 0)
+    join.chmod(0o644)
+    failed = user("/usr/local/bin/cpg", "--yolo", check=False)
+    assert failed.returncode == 125 and not failed.stdout
+    os.chown(str(join), 1001, 1001)
+    join.chmod(0o600)
+    (common.GROUP / "memory.limit_in_bytes").write_text("-1")
+    failed = user("/usr/local/bin/cpg", "--yolo", check=False)
+    assert failed.returncode == 125 and not failed.stdout
+    (common.GROUP / "memory.limit_in_bytes").write_text(str(common.LIMIT))
+    owned = common.LIB / "cpg_common.py"
+    original = owned.read_bytes()
+    owned.write_bytes(original + b"\n# drift fixture\n")
+    refusal = ctl("uninstall", check=False)
+    assert refusal.returncode != 0 and "modified" in refusal.stderr
+    assert common.read_group()["limit"] == common.LIMIT
+    owned.write_bytes(original)
+    print("PASS: failed join/boundary fail closed and uninstall preserves modified files", flush=True)
     ctl("uninstall")
     assert not common.GROUP.exists()
     for path in ("/usr/local/bin/cpg", "/usr/local/sbin/cpgctl", "/etc/cpg/config.json",
-                 "/etc/systemd/system/cpg-setup.service", "/etc/systemd/system/cpg-monitor.timer"):
+                 "/etc/systemd/system/cpg-setup.service", "/etc/systemd/system/cpg-monitor.timer",
+                 "/usr/local/libexec/cpg", "/var/lib/cpg", "/run/lock/cpg.lock"):
         assert not Path(path).exists(), path
     assert Path("/proc/self/cgroup").read_text() == baseline
     print("PASS: persistent setup and clean standalone uninstall", flush=True)
