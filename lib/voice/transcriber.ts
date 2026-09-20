@@ -5,9 +5,9 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createLogger } from '../logger';
 import { VoiceError } from './audio';
+import { monitorVoiceMemory } from './memory';
 
 const logger = createLogger('voice.transcriber');
-const MIN_AVAILABLE_BYTES = 1536 * 1024 * 1024;
 
 export async function voiceConfiguration() {
   if (process.env.VOICE_ENABLED !== '1') return null;
@@ -22,13 +22,6 @@ export async function voiceConfiguration() {
     throw new VoiceError('voice_not_configured', 503);
   }
   return { binary, model };
-}
-
-export async function assertVoiceMemoryAvailable() {
-  const memory = await readFile('/proc/meminfo', 'utf8');
-  const availableKiB = memory.match(/^MemAvailable:\s+(\d+)\s+kB$/m)?.[1];
-  if (!availableKiB) throw new VoiceError('voice_memory_unknown', 503);
-  if (Number(availableKiB) * 1024 < MIN_AVAILABLE_BYTES) throw new VoiceError('voice_low_memory', 503);
 }
 
 export async function transcribeVoice(
@@ -48,17 +41,25 @@ export async function transcribeVoice(
         configuration.binary, '-m', configuration.model, '-f', input, '-of', output, '-otxt',
         '-l', 'auto', '-t', '1', '-p', '1', '-bs', '1', '-bo', '1', '-nt', '-np', '-ng',
       ], { stdio: 'ignore', env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8', NODE_ENV: 'production' } });
+      let memoryFailure: VoiceError | undefined;
+      const stopMonitoring = child.pid ? monitorVoiceMemory(child.pid, error => {
+        memoryFailure = error;
+        child.kill('SIGKILL');
+      }) : () => null;
       const abort = () => child.kill('SIGKILL');
       signal.addEventListener('abort', abort, { once: true });
       if (signal.aborted) abort();
       child.once('error', () => {
+        stopMonitoring();
         signal.removeEventListener('abort', abort);
         reject(new VoiceError('voice_process_failed', 503));
       });
       child.once('close', (code, exitSignal) => {
+        const sampledPeakRssKiB = stopMonitoring();
         signal.removeEventListener('abort', abort);
-        logger.info({ elapsedMs: Math.round(performance.now() - started), exitCode: code, signal: exitSignal }, 'Voice inference finished');
+        logger.info({ elapsedMs: Math.round(performance.now() - started), exitCode: code, signal: exitSignal, sampledPeakRssKiB }, 'Voice inference finished');
         if (signal.aborted) reject(signal.reason);
+        else if (memoryFailure) reject(memoryFailure);
         else if (code !== 0) reject(new VoiceError('voice_inference_failed', 502));
         else resolve();
       });

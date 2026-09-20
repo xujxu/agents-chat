@@ -4,7 +4,8 @@ import { getAuthToken } from '@/lib/auth';
 import { createLogger } from '@/lib/logger';
 import { MAX_VOICE_BYTES, MAX_VOICE_SECONDS, validateVoiceWav, VoiceError } from '@/lib/voice/audio';
 import { cancelVoiceJob, reserveVoiceJob } from '@/lib/voice/jobs';
-import { assertVoiceMemoryAvailable, transcribeVoice, voiceConfiguration } from '@/lib/voice/transcriber';
+import { transcribeVoice, voiceConfiguration } from '@/lib/voice/transcriber';
+import { assertVoiceMemoryAvailable } from '@/lib/voice/memory';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
