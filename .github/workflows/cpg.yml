@@ -6,6 +6,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: cpg-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   guard:
     runs-on: ubuntu-24.04
@@ -40,5 +43,6 @@ jobs:
           path: |
             ${{ runner.temp }}/cpg-vm/serial.log
             ${{ runner.temp }}/cpg-vm/install.log
+            ${{ runner.temp }}/cpg-vm/guestfs.log
           if-no-files-found: ignore
           retention-days: 3

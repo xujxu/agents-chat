@@ -9,9 +9,8 @@ curl --fail --silent --show-error --location \
   https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img \
   --output "$work/root.qcow2"
 qemu-img resize "$work/root.qcow2" 5G
-export LIBGUESTFS_BACKEND=direct
-virt-edit -a "$work/root.qcow2" /boot/grub/grub.cfg \
-  -e 's/^(\s*linux\s+.*)$/$1 systemd.unified_cgroup_hierarchy=0/'
+sudo env LIBGUESTFS_BACKEND=direct virt-edit -v -x -a "$work/root.qcow2" /boot/grub/grub.cfg \
+  -e 's/^(\s*linux\s+.*)$/$1 systemd.unified_cgroup_hierarchy=0/' > "$work/guestfs.log" 2>&1
 python3 - "$source_dir" "$work" <<'PY'
 import base64
 import json
@@ -33,7 +32,10 @@ config = {
 PY
 cloud-localds "$work/seed.img" "$work/user-data" "$work/meta-data"
 accelerator=tcg
-if [ -w /dev/kvm ]; then accelerator=kvm; fi
+if [ -e /dev/kvm ]; then
+  sudo chmod a+rw /dev/kvm
+  accelerator=kvm
+fi
 timeout 12m qemu-system-x86_64 -accel "$accelerator" -m 3072 -smp 2 \
   -drive "file=$work/root.qcow2,if=virtio" -drive "file=$work/seed.img,format=raw,if=virtio" \
   -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \

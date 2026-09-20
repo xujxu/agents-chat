@@ -1,4 +1,5 @@
 import os
+from contextlib import ExitStack
 from pathlib import Path
 import tempfile
 import unittest
@@ -6,6 +7,7 @@ from unittest.mock import patch
 
 import cpg_common as common
 import cpg_launcher as launcher
+import cpg_admin as admin
 
 
 class GuardTests(unittest.TestCase):
@@ -71,6 +73,56 @@ class GuardTests(unittest.TestCase):
             launcher.run(config, args)
             execute.assert_called_once_with("/bin/copilot", ["/bin/copilot"] + args)
             self.assertIn("DISABLED", output.call_args.args[0])
+
+    def test_installed_assets_do_not_modify_applications_or_sudo_policy(self):
+        package = admin.files(Path(__file__).resolve().parent)
+        self.assertEqual(len(package), 6)
+        for path in package:
+            self.assertNotIn("agents-chat", str(path))
+            self.assertNotIn("user-", str(path))
+            self.assertNotIn("sudoers", str(path))
+        monitor = package[admin.UNITS / admin.MONITOR]
+        self.assertIn(b"MemoryMax=32M", monitor)
+        self.assertIn(b"CPUQuota=5%", monitor)
+
+    def test_partial_install_failure_removes_only_new_files(self):
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            root = Path(directory)
+            paths = {
+                "CONFIG": root / "etc/cpg/config.json",
+                "STATE": root / "state/cpg",
+                "RECORD": root / "state/cpg/installation.json",
+                "LIB": root / "lib/cpg",
+                "ADMIN": root / "sbin/cpgctl",
+                "LAUNCHER": root / "bin/cpg",
+                "GROUP": root / "memory/cpg-cli",
+                "LOCK": root / "lock",
+            }
+            for name, path in paths.items():
+                stack.enter_context(patch.object(common, name, path))
+            common.LOCK.write_text("")
+            binary = root / "copilot"
+            binary.write_text("#!/bin/sh\nexit 0\n")
+            binary.chmod(0o755)
+            unrelated = root / "unrelated"
+            unrelated.write_text("keep")
+            package = {common.LAUNCHER: b"launcher", common.ADMIN: b"admin"}
+            stack.enter_context(patch.object(admin, "files", return_value=package))
+            stack.enter_context(patch.object(common, "memory_info", return_value=(4096 * common.MIB, 2048 * common.MIB)))
+            stack.enter_context(patch.object(common, "memory_membership", return_value="/outside"))
+            stack.enter_context(patch.object(admin.pwd, "getpwuid", return_value=type("User", (), {"pw_gid": 1001})()))
+            stack.enter_context(patch.object(admin, "configure_group", side_effect=RuntimeError("injected setup failure")))
+            stack.enter_context(patch.object(admin, "stop_units"))
+            control = stack.enter_context(patch.object(admin, "systemctl"))
+            with self.assertRaisesRegex(RuntimeError, "injected setup failure"):
+                admin.install(1001, str(binary))
+            self.assertFalse(common.LAUNCHER.exists())
+            self.assertFalse(common.ADMIN.exists())
+            self.assertFalse(common.CONFIG.exists())
+            self.assertFalse(common.RECORD.exists())
+            self.assertTrue(binary.exists())
+            self.assertEqual(unrelated.read_text(), "keep")
+            self.assertTrue(all("restart" not in call.args for call in control.call_args_list))
 
 
 if __name__ == "__main__":
