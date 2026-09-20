@@ -160,6 +160,12 @@ def main():
     ctl("disable")
     command("systemctl", "stop", common.WORKLOAD, "cpg.slice")
     assert not common.GROUP.exists()
+    common.LOCK.unlink()
+    command("systemctl", "start", "cpg-setup.service")
+    assert common.LOCK.exists()
+    assert common.read_group()["limit"] > common.LIMIT
+    disabled = user("/usr/local/bin/cpg", "--yolo")
+    assert "DISABLED" in disabled.stderr
     ctl("enable")
     ctl("status")
     # Neither drift nor a missing boundary may cause a silent unprotected launch.
