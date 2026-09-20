@@ -43,26 +43,28 @@ test('voice is absent when runtime capability is disabled', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Start voice input', exact: true })).toHaveCount(0);
 });
 
-test('recording uploads bounded WAV, appends to latest draft, and never sends automatically', async ({ page }) => {
+test('recording uploads bounded WAV, appends to latest draft, and never sends automatically', async ({ page }, testInfo) => {
   const fixture = await prepare(page);
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
-  let upload: Buffer | null = null;
+  const capture: { upload: Buffer | null } = { upload: null };
   await page.route('**/api/voice', async route => {
     if (route.request().method() === 'GET') return route.fallback();
-    upload = route.request().postDataBuffer();
+    capture.upload = route.request().postDataBuffer();
     await gate;
     await route.fulfill({ json: { ok: true, text: '你好，voice PoC.' } });
   });
   const input = page.locator('textarea.composerTextarea');
   await input.fill('Original draft');
   await record(page);
+  await page.screenshot({ path: testInfo.outputPath('voice-recording.png'), animations: 'disabled' });
   await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
   await expect(page.getByText('Transcribing…', { exact: true })).toBeVisible();
   await input.fill('Edited while waiting');
-  await expect.poll(() => upload?.length ?? 0).toBeGreaterThan(44);
-  expect(upload!.length).toBeLessThan(1024 * 1024);
-  expect(upload!.subarray(0, 4).toString()).toBe('RIFF');
+  await expect.poll(() => capture.upload?.length ?? 0).toBeGreaterThan(44);
+  if (!capture.upload) throw new Error('Missing voice upload');
+  expect(capture.upload.length).toBeLessThan(1024 * 1024);
+  expect(capture.upload.subarray(0, 4).toString()).toBe('RIFF');
   release();
   await expect(input).toHaveValue('Edited while waiting\n你好，voice PoC.');
   expect(fixture.acpRequests.filter(request => request.action === 'prompt')).toHaveLength(0);
@@ -96,7 +98,7 @@ test('microphone denial and backend failures are visible without clearing text',
     });
   });
   await page.getByRole('button', { name: 'Start voice input', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Microphone permission');
+  await expect(page.getByRole('alert', { name: 'Voice input error' })).toContainText('Microphone permission');
   await expect(page.locator('textarea.composerTextarea')).toHaveValue('Preserve text');
 });
 
@@ -108,7 +110,7 @@ test('server busy is explicit and leaves the composer editable', async ({ page }
   await page.locator('textarea.composerTextarea').fill('Preserve text');
   await record(page);
   await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('busy');
+  await expect(page.getByRole('alert', { name: 'Voice input error' })).toContainText('busy');
   await expect(page.locator('textarea.composerTextarea')).toHaveValue('Preserve text');
 });
 
@@ -144,7 +146,10 @@ for (const action of ['cancel', 'chat change', 'account change']) {
       } else if (action === 'chat change') {
         const navigation = page.getByRole('button', { name: 'Open navigation' });
         if (await navigation.isVisible()) await navigation.click();
-        else await page.getByRole('button', { name: 'Chats', exact: true }).click();
+        else if (!await page.getByRole('button', { name: 'Second mobile chat', exact: true }).isVisible()) {
+          await page.getByRole('button', { name: 'More actions' }).click();
+          await page.getByRole('menuitem', { name: 'Chats', exact: true }).click();
+        }
         await page.getByRole('button', { name: 'Second mobile chat', exact: true }).click();
         await expect(page.getByText('Second chat message', { exact: true })).toBeVisible();
       } else {

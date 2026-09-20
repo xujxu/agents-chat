@@ -34,7 +34,7 @@ export function VoiceInputControls({ voice }: Props) {
 
 export function VoiceInputStatus({ voice }: Props) {
   if (voice.error) return (
-    <div className="voiceStatus voiceError" role="alert">
+    <div className="voiceStatus voiceError" role="alert" aria-label="Voice input error">
       <span>{voice.error}</span>
       <button type="button" onClick={voice.dismissError} aria-label="Dismiss voice error">×</button>
     </div>
