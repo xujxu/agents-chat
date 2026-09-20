@@ -114,15 +114,23 @@ def main():
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     assert held.stdout.readline().strip() == "READY"
+    protected = common.group_pids()
+    assert protected, "held Copilot did not enter the protected group"
+    print("Protected PIDs before lifecycle:", protected, flush=True)
     refusal = ctl("uninstall", check=False)
     assert refusal.returncode != 0 and "running" in refusal.stderr
     ctl("disable")
+    print("Protected PIDs after disable:", common.group_pids(), flush=True)
     assert held.poll() is None, "disable killed an existing task"
     assert common.read_group()["limit"] > common.LIMIT
     disabled = user("/usr/local/bin/cpg", "--yolo")
     assert "DISABLED" in disabled.stderr
     assert common.memory_membership(json.loads(disabled.stdout)["group"]) != "/cpg-cli"
     ctl("enable")
+    print("Protected PIDs after enable:", common.group_pids(), flush=True)
+    for pid in protected:
+        print("Held membership:", pid, Path("/proc/{}/cgroup".format(pid)).read_text(), flush=True)
+        assert common.memory_membership(Path("/proc/{}/cgroup".format(pid)).read_text()) == "/cpg-cli"
     assert held.poll() is None
     for pid in common.group_pids():
         os.kill(pid, signal.SIGTERM)
