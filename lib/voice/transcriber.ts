@@ -37,7 +37,7 @@ export async function transcribeVoice(
     signal.throwIfAborted();
     await new Promise<void>((resolve, reject) => {
       const child = spawn('/usr/bin/nice', [
-        '-n', '10', '/usr/bin/prlimit', '--as=1073741824', '--cpu=120', '--',
+        '-n', '10', '/usr/bin/prlimit', '--as=1073741824', '--cpu=120', '--core=0', '--',
         configuration.binary, '-m', configuration.model, '-f', input, '-of', output, '-otxt',
         '-l', 'auto', '-t', '1', '-p', '1', '-bs', '1', '-bo', '1', '-nt', '-np', '-ng',
       ], { stdio: 'ignore', env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8', NODE_ENV: 'production' } });

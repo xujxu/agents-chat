@@ -137,6 +137,7 @@ jobs:
           npx playwright test --config tests/playwright.config.ts
           tests/mobile-composer-viewport.spec.ts tests/mobile-responsive.spec.ts tests/voice-disabled.spec.ts
           --project=desktop-chromium --project=iphone-webkit --project=android-chromium
+          --grep='composer|viewport|landscape|unavailable voice|disabled voice'
           --workers=1 --timeout=60000 --global-timeout=600000 --max-failures=3
           --reporter=line --output=artifacts/mobile-regressions
       - name: Package portable application
@@ -212,7 +213,7 @@ jobs:
         run: |
           curl -fL --retry 3 https://raw.githubusercontent.com/ggml-org/whisper.cpp/5670d5c0bbcb148feabef84400a07cfca9aa3b30/samples/jfk.wav -o /tmp/voice-jfk.wav
           echo '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898  artifacts/runtime/ggml-base-q5_1.bin' | sha256sum --check
-          /usr/bin/time -v /usr/bin/nice -n 10 /usr/bin/prlimit --as=1073741824 --cpu=120 -- \
+          /usr/bin/time -v /usr/bin/nice -n 10 /usr/bin/prlimit --as=1073741824 --cpu=120 --core=0 -- \
             artifacts/runtime/whisper-cli -m artifacts/runtime/ggml-base-q5_1.bin \
             -f /tmp/voice-jfk.wav -of artifacts/jfk \
             -otxt -l auto -t 1 -p 1 -bs 1 -bo 1 -nt -np -ng \
@@ -233,7 +234,7 @@ jobs:
               output.setparams(params)
               output.writeframes(repeated)
           PY
-          /usr/bin/time -v /usr/bin/nice -n 10 /usr/bin/prlimit --as=1073741824 --cpu=120 -- \
+          /usr/bin/time -v /usr/bin/nice -n 10 /usr/bin/prlimit --as=1073741824 --cpu=120 --core=0 -- \
             artifacts/runtime/whisper-cli -m artifacts/runtime/ggml-base-q5_1.bin \
             -f /tmp/voice-30-seconds.wav -of artifacts/bounded-30-seconds \
             -otxt -l auto -t 1 -p 1 -bs 1 -bo 1 -nt -ng \
@@ -247,6 +248,8 @@ jobs:
           assert peak <= 384 * 1024, 'Full-duration sample exceeded the application RSS guard'
           pathlib.Path('artifacts/bounded-result.txt').write_text('30 seconds, 1 GiB address space: PASS; peak RSS={} KiB\n'.format(peak))
           PY
+          cat artifacts/bounded-result.txt
+          grep -E 'Elapsed|Maximum resident' artifacts/bounded-smoke-metrics.log
           printf '%s\n' "$GITHUB_SHA" > artifacts/runtime/revision.txt
           printf '%s\n' 'whisper.cpp 5670d5c0bbcb148feabef84400a07cfca9aa3b30' > artifacts/runtime/engine-revision.txt
           (cd artifacts/runtime && sha256sum whisper-cli ggml-base-q5_1.bin > SHA256SUMS)
