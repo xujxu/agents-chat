@@ -41,6 +41,7 @@ import { SelectPicker } from '../ui/SelectPicker';
 import { useChatGitContext } from './runtime/useChatGitContext';
 import { useMobileOverlayState } from '../layout/hooks/useMobileOverlayState';
 import { ChatOutboxNotice } from './components/ChatOutboxNotice';
+import { useVoiceInput, VoiceInputControls, VoiceInputStatus } from '../composer/voice';
 
 const CHAT_ACTION_MENU_WIDTH = 132;
 const CHAT_ACTION_MENU_HEIGHT = 124;
@@ -277,6 +278,12 @@ export function ChatPageClient() {
     : null;
   const initialChatLoading = initialChatRestore.status === 'loading';
   const initialChatFailed = initialChatRestore.status === 'failed';
+  const voice = useVoiceInput({
+    userId, chatId: currentChatId,
+    active: authStatus === 'authenticated' && !initialChatLoading && !initialChatFailed
+      && !chatSelection.loadingSelection && !(leftSidebarTab === 'files' && mdEditorOpen && mdSelectedFile),
+    onTranscript: composer.appendTranscription,
+  });
   const initialChatLabel = initialChatLoading
     ? initialChatRestore.chatName || 'chat'
     : 'chat';
@@ -295,7 +302,7 @@ export function ChatPageClient() {
         {showScrollToBottom ? <button type="button" className="jumpToLatestButton" onClick={scrollToLatest} aria-label="Jump to latest messages" title="Jump to latest messages">↓</button> : null}
       </div>
     )}
-    composer={!initialChatLoading && !initialChatFailed && !chatSelection.loadingSelection && currentChatId && !(leftSidebarTab === 'files' && mdEditorOpen && mdSelectedFile) ? <ChatComposer composerRef={composerRef} fileInputRef={fileInputRef} input={input} isMobileLayout={mobile.isMobileLayout} onResize={composer.resizeComposer} attachments={attachments} attachmentError={attachmentError} isDraggingAttachment={isDraggingAttachment} mentionAgents={filteredAgents} mentionSelectedIndex={mentionSelectedIndex} slashCommands={filteredSlashCommands} slashSelectedIndex={slashSelectedIndex} targetControls={targetControls} isSending={isCurrentChatSending} sendDisabled={agents.length === 0} onMentionSelect={selectMention} onSlashCommandSelect={insertSlashCommand} onFilesSelected={(files) => void addFilesToComposer(files)} onRemoveAttachment={removeAttachment} onPreviewAttachment={setLightboxImage} onPaste={handleAttachmentPaste} onKeyDown={handleComposerKeyDown} onInput={composerInputHandler} onDragOver={handleComposerDragOver} onDragLeave={handleComposerDragLeave} onDrop={handleComposerDrop} onSend={() => void handleSend()} onStop={() => void handleStop()} /> : null}
+    composer={!initialChatLoading && !initialChatFailed && !chatSelection.loadingSelection && currentChatId && !(leftSidebarTab === 'files' && mdEditorOpen && mdSelectedFile) ? <ChatComposer composerRef={composerRef} fileInputRef={fileInputRef} input={input} isMobileLayout={mobile.isMobileLayout} onResize={composer.resizeComposer} attachments={attachments} attachmentError={attachmentError} isDraggingAttachment={isDraggingAttachment} mentionAgents={filteredAgents} mentionSelectedIndex={mentionSelectedIndex} slashCommands={filteredSlashCommands} slashSelectedIndex={slashSelectedIndex} targetControls={targetControls} optionalActions={<VoiceInputControls voice={voice} />} notice={<VoiceInputStatus voice={voice} />} isSending={isCurrentChatSending} sendDisabled={agents.length === 0} onMentionSelect={selectMention} onSlashCommandSelect={insertSlashCommand} onFilesSelected={(files) => void addFilesToComposer(files)} onRemoveAttachment={removeAttachment} onPreviewAttachment={setLightboxImage} onPaste={handleAttachmentPaste} onKeyDown={handleComposerKeyDown} onInput={composerInputHandler} onDragOver={handleComposerDragOver} onDragLeave={handleComposerDragLeave} onDrop={handleComposerDrop} onSend={() => void handleSend()} onStop={() => void handleStop()} /> : null}
     rightPanel={<><AgentsPanel panelState={agentPanelState} mobileModal={mobile.isMobileLayout} onClose={() => { if (mobile.isMobileLayout) mobile.close(); else setShowAgentsPanel(false); }} agents={agentSidebarItems} agentsLoading={agentsLoading} isAdmin={isAdmin} nodesData={nodesData} selectedAgentFilter={registry.selectedAgentFilter} selectedAgentModels={registry.selectedAgentModels} ensuringAgentModels={registry.ensuringAgentModels} setSelectedModelForAgent={registry.setSelectedModelForAgent} reloadAgents={reloadAgents} /><NodesPanel panelState={nodePanelState} mobileModal={mobile.isMobileLayout} mobileRestricted={mobile.isMobileLayout} onClose={() => { if (mobile.isMobileLayout) mobile.close(); else setShowNodesPanel(false); }} /><SchedulesPanel isOpen={showSchedulesPanel} mobileModal={mobile.isMobileLayout} mobileRestricted={mobile.isMobileLayout} onClose={() => { if (mobile.isMobileLayout) mobile.close(); else setShowSchedulesPanel(false); }} agents={agentSidebarItems.map(a => ({ id: a.id, name: a.name || a.id }))} /></>}
     statusBar={<StatusBar statusText={`${agents.length} agent${agents.length !== 1 ? 's' : ''} configured`} targetText={`${messages.filter((m) => m.type === 'user').length} messages`} isRunning={agents.length > 0} gitContextSlot={gitContextControls} planSlot={activeWorkflow ? <PlanProgressBar orchestration={activeWorkflow} variant="inline" /> : null} />}
     shareDialog={shareDialog ? <ShareDialogComponent dialog={shareDialog} onCopyLink={() => void copyShareDialogLink()} onClose={() => setShareDialog(null)} /> : null}

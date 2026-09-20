@@ -54,6 +54,42 @@ case, not a guarantee across every browser or OS version.
 
 For persistent deployment, use one of the platform-specific scripts below. Both handle build + restart + health check in one command.
 
+### Optional self-hosted voice input (PoC)
+
+Voice input is disabled by default. The **Voice input PoC** Actions workflow
+builds and verifies an x86_64 Linux CPU-only `whisper-cli` compatible with glibc
+2.31+, together with the multilingual `ggml-base-q5_1.bin` model and licenses.
+Configure `VOICE_ENABLED=1`, `VOICE_WHISPER_PATH`, and `VOICE_MODEL_PATH` using
+absolute paths to those verified artifacts, then restart the app. The host needs
+`/usr/bin/nice`, `/usr/bin/prlimit`, and `/proc/meminfo`. Do not expose a separate
+Whisper server port. Set `VOICE_ENABLED=0` and restart to disable the capability.
+
+The microphone appears beside the attachment button when configured. HTTPS (or
+localhost), microphone permission, AudioWorklet, and OfflineAudioContext are
+required. Click once to record, again to transcribe, or cancel to discard.
+Recording automatically stops after 30 seconds. Results append to the current
+draft without overwriting edits or automatically sending. Changing chats/accounts,
+opening the file editor, leaving the page, or backgrounding the tab cancels work.
+Actual iPhone microphone behavior and Chinese recognition quality still require
+real-device evaluation; Playwright WebKit is not a physical-iPhone benchmark.
+
+The browser uploads at most 960,044 bytes of 16 kHz mono 16-bit WAV, below nginx's
+default 1 MiB limit, without FFmpeg or third-party transcription calls. Only
+authenticated, same-origin clients with the matching account may submit/cancel.
+One inference runs at a time per app process; excess requests are rejected
+instead of queued. The PoC assumes a single Next.js process. Inference uses one
+thread, niceness 10, a 120-second deadline, a 1 GiB **address-space** ceiling, and
+requires at least 1.5 GiB `MemAvailable` before starting. These bounds reduce
+contention, but are not a guarantee against host-wide memory/CPU pressure.
+Each request loads the model anew; there is no permanently resident model.
+
+Temporary audio/results are deleted after success, failure, or cancellation and
+are not saved in chat history. Logs contain durations, sizes, exit status, and
+error codes, never audio/transcript contents. A host crash or forced application
+kill can bypass cleanup: `agents-chat-voice-*` directories in the OS temporary
+directory may require removal after confirming no transcription is running.
+Do not enable this PoC on multiple workers without a shared admission controller.
+
 ### Chat persistence and proxy limits
 
 The browser saves only new or changed messages. Small updates are batched below
