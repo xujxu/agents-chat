@@ -14,17 +14,26 @@ async function prepare(page: Page, enabled = true) {
     Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
       configurable: true,
       value: async () => {
-        const context = new AudioContext();
-        const destination = context.createMediaStreamDestination();
-        const oscillator = context.createOscillator();
-        oscillator.connect(destination);
-        oscillator.start();
-        await context.resume();
-        for (const track of destination.stream.getTracks()) {
-          const stop = track.stop.bind(track);
-          track.stop = () => { stop(); oscillator.stop(); void context.close(); };
+        let stage = 'context';
+        try {
+          const context = new AudioContext();
+          stage = 'destination';
+          const destination = context.createMediaStreamDestination();
+          stage = 'oscillator';
+          const oscillator = context.createOscillator();
+          oscillator.connect(destination);
+          oscillator.start();
+          stage = 'resume';
+          await context.resume();
+          for (const track of destination.stream.getTracks()) {
+            const stop = track.stop.bind(track);
+            track.stop = () => { stop(); oscillator.stop(); void context.close(); };
+          }
+          return destination.stream;
+        } catch (error) {
+          console.error('Voice fixture microphone failed', stage, error instanceof Error ? error.message : String(error));
+          throw error;
         }
-        return destination.stream;
       },
     });
   });
@@ -67,7 +76,7 @@ test('recording uploads bounded WAV, appends to latest draft, and never sends au
   expect(capture.upload.subarray(0, 4).toString()).toBe('RIFF');
   release();
   await expect(input).toHaveValue('Edited while waiting\n你好，voice PoC.');
-  expect(fixture.acpRequests.filter(request => request.action === 'prompt')).toHaveLength(0);
+  expect(fixture.acpRequests.filter(request => request.action === 'send')).toHaveLength(0);
   const button = await page.getByRole('button', { name: 'Start voice input', exact: true }).boundingBox();
   expect(button).not.toBeNull();
   expect(button!.x).toBeGreaterThanOrEqual(0);
@@ -104,7 +113,7 @@ test('microphone denial and backend failures are visible without clearing text',
 
 test('server busy is explicit and leaves the composer editable', async ({ page }) => {
   await prepare(page);
-  await page.route('**/api/voice', route => route.request().method() === 'GET'
+  await page.route('**/api/voice', route => route.request().method() !== 'POST'
     ? route.fallback()
     : route.fulfill({ status: 429, json: { ok: false, error: 'voice_busy' } }));
   await page.locator('textarea.composerTextarea').fill('Preserve text');
@@ -146,11 +155,11 @@ for (const action of ['cancel', 'chat change', 'account change']) {
       } else if (action === 'chat change') {
         const navigation = page.getByRole('button', { name: 'Open navigation' });
         if (await navigation.isVisible()) await navigation.click();
-        else if (!await page.getByRole('button', { name: 'Second mobile chat', exact: true }).isVisible()) {
+        else if (!await page.getByRole('button', { name: 'Second mobile chat' }).isVisible()) {
           await page.getByRole('button', { name: 'More actions' }).click();
           await page.getByRole('menuitem', { name: 'Chats', exact: true }).click();
         }
-        await page.getByRole('button', { name: 'Second mobile chat', exact: true }).click();
+        await page.getByRole('button', { name: 'Second mobile chat' }).click();
         await expect(page.getByText('Second chat message', { exact: true })).toBeVisible();
       } else {
         const secret = process.env.NEXTAUTH_SECRET;

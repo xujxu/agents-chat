@@ -24,6 +24,7 @@ concurrency:
 
 jobs:
   voice:
+    needs: native
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
@@ -32,6 +33,7 @@ jobs:
       NEXTAUTH_SECRET: isolated-voice-poc-ci-secret
       NEXTAUTH_URL: http://localhost:3011
       PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -61,11 +63,18 @@ jobs:
           done
           cat artifacts/server.log
           exit 1
-      - name: Voice API and browser regressions
+      - name: WebKit voice capture and cancellation
+        run: >-
+          npx playwright test --config tests/playwright.config.ts tests/voice-input.spec.ts
+          --project=iphone-webkit --workers=1 --timeout=45000 --global-timeout=300000 --max-failures=2
+          --trace=retain-on-failure --reporter=line --output=artifacts/webkit-voice
+      - name: Voice API and Chromium regressions
+        env:
+          VOICE_API_FIXTURE: '1'
         run: >-
           npx playwright test --config tests/playwright.config.ts
           tests/voice-api.spec.ts tests/voice-input.spec.ts
-          --project=desktop-chromium --project=iphone-webkit --project=android-chromium
+          --project=desktop-chromium --project=android-chromium
           --workers=1 --timeout=45000 --global-timeout=600000 --max-failures=4
           --trace=retain-on-failure --reporter=line --output=artifacts/voice-tests
       - name: Verify temporary audio cleanup
@@ -74,6 +83,37 @@ jobs:
             echo 'Voice temporary files were not cleaned up'
             exit 1
           fi
+      - uses: actions/download-artifact@v4
+        with:
+          name: voice-native-${{ github.sha }}
+          path: artifacts/native
+      - name: Start application with real pinned model
+        run: |
+          kill "$(cat artifacts/server.pid)"
+          for attempt in $(seq 1 30); do
+            if ! kill -0 "$(cat artifacts/server.pid)" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          (cd artifacts/native && sha256sum --check voice-runtime.sha256)
+          mkdir /tmp/voice-ci-runtime
+          tar -xzf artifacts/native/voice-runtime.tar.gz -C /tmp/voice-ci-runtime
+          (cd /tmp/voice-ci-runtime/runtime && sha256sum --check SHA256SUMS)
+          VOICE_ENABLED=1 VOICE_WHISPER_PATH=/tmp/voice-ci-runtime/runtime/whisper-cli \
+            VOICE_MODEL_PATH=/tmp/voice-ci-runtime/runtime/ggml-base-q5_1.bin \
+            node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 >artifacts/real-server.log 2>&1 &
+          echo "$!" > artifacts/server.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --max-time 2 http://localhost:3011/api/auth/providers >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Real model through authenticated HTTP API
+        env:
+          VOICE_REAL_SAMPLE: artifacts/native/jfk.wav
+        run: >-
+          npx playwright test --config tests/playwright.config.ts tests/voice-real-model.spec.ts
+          --project=desktop-chromium --workers=1 --timeout=150000 --reporter=line
+          --output=artifacts/real-model
       - name: Restart with voice disabled for existing mobile coverage
         run: |
           kill "$(cat artifacts/server.pid)"
@@ -181,19 +221,23 @@ jobs:
           with wave.open('/tmp/voice-jfk.wav', 'rb') as source:
               params = source.getparams()
               frames = source.readframes(source.getnframes())
+          assert params.framerate == 16000 and params.nchannels == 1 and params.sampwidth == 2
+          with wave.open('artifacts/jfk.wav', 'wb') as canonical:
+              canonical.setparams(params)
+              canonical.writeframes(frames)
           target_bytes = 30 * params.framerate * params.nchannels * params.sampwidth
           repeated = (frames * (target_bytes // len(frames) + 1))[:target_bytes]
           with wave.open('/tmp/voice-30-seconds.wav', 'wb') as output:
               output.setparams(params)
               output.writeframes(repeated)
           PY
-          if /usr/bin/time -v /usr/bin/nice -n 10 /usr/bin/prlimit --as=536870912 --cpu=120 -- \
+          if MALLOC_ARENA_MAX=2 /usr/bin/time -v /usr/bin/nice -n 10 /usr/bin/prlimit --as=536870912 --cpu=120 -- \
             artifacts/runtime/whisper-cli -m artifacts/runtime/ggml-base-q5_1.bin \
             -f /tmp/voice-30-seconds.wav -of artifacts/bounded-30-seconds \
-            -otxt -l auto -t 1 -p 1 -bs 1 -bo 1 -nt -np -ng \
+            -otxt -l auto -t 1 -p 1 -bs 1 -bo 1 -nt -ng \
             >artifacts/bounded-smoke.log 2>artifacts/bounded-smoke-metrics.log; then
             grep -qi country artifacts/bounded-30-seconds.txt
-            echo '512 MiB address-space experiment: PASS for 30-second public sample' | tee artifacts/bounded-result.txt
+            echo '512 MiB address-space, MALLOC_ARENA_MAX=2: PASS for 30-second public sample' | tee artifacts/bounded-result.txt
           else
             echo '512 MiB address-space experiment: FAILED; do not lower production limits without further investigation' | tee artifacts/bounded-result.txt
           fi
@@ -210,5 +254,6 @@ jobs:
             artifacts/voice-runtime.*
             artifacts/smoke*
             artifacts/jfk.txt
+            artifacts/jfk.wav
             artifacts/bounded*
           retention-days: 7

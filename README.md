@@ -57,7 +57,7 @@ For persistent deployment, use one of the platform-specific scripts below. Both 
 ### Optional self-hosted voice input (PoC)
 
 Voice input is disabled by default. The **Voice input PoC** Actions workflow
-builds and verifies an x86_64 Linux CPU-only `whisper-cli` compatible with glibc
+builds and verifies an AVX2/FMA/F16C/BMI2 x86_64 Linux CPU-only `whisper-cli` compatible with glibc
 2.31+, together with the multilingual `ggml-base-q5_1.bin` model and licenses.
 Configure `VOICE_ENABLED=1`, `VOICE_WHISPER_PATH`, and `VOICE_MODEL_PATH` using
 absolute paths to those verified artifacts, then restart the app. The host needs
