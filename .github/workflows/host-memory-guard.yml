@@ -1,0 +1,43 @@
+name: Host memory guard
+
+on:
+  push:
+    branches: [ops/host-memory-guard]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate on matching Ubuntu 20.04 userspace
+        run: |
+          docker run --rm -v "$PWD/ops/host-memory-guard:/source:ro" ubuntu:20.04 bash -euc '
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq python3 systemd util-linux
+            mkdir /tmp/package
+            cp /source/*.py /tmp/package/
+            cd /tmp/package
+            python3 -m py_compile host_memory_guard.py test_host_memory_guard.py
+            python3 -m unittest -v test_host_memory_guard.py
+            python3 -c "from host_memory_guard import config_files; from pathlib import Path; files=config_files(1001,Path(\"host_memory_guard.py\").read_bytes()); [(p.parent.mkdir(parents=True,exist_ok=True),p.write_bytes(data)) for p,data in files.items()]"
+            printf "[Service]\nExecStart=/bin/true\n" > /etc/systemd/system/agents-chat.service
+            systemd-analyze verify agents-chat.service host-memory-guard.service host-memory-guard.timer
+            wall --help | grep -- --timeout
+          '
+      - name: Export reviewed installer
+        run: |
+          mkdir artifact
+          cp ops/host-memory-guard/host_memory_guard.py artifact/
+          printf '%s\n' "$GITHUB_SHA" > artifact/revision.txt
+          (cd artifact && sha256sum host_memory_guard.py > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: host-memory-guard-${{ github.sha }}
+          path: artifact/
+          retention-days: 7
