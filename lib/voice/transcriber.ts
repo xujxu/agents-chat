@@ -47,7 +47,7 @@ export async function transcribeVoice(
         '-n', '10', '/usr/bin/prlimit', '--as=1073741824', '--cpu=120', '--',
         configuration.binary, '-m', configuration.model, '-f', input, '-of', output, '-otxt',
         '-l', 'auto', '-t', '1', '-p', '1', '-bs', '1', '-bo', '1', '-nt', '-np', '-ng',
-      ], { stdio: 'ignore', env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' } });
+      ], { stdio: 'ignore', env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8', NODE_ENV: 'production' } });
       const abort = () => child.kill('SIGKILL');
       signal.addEventListener('abort', abort, { once: true });
       if (signal.aborted) abort();
