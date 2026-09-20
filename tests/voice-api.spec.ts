@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
 import { encodeVoiceWav, MAX_VOICE_BYTES } from '../lib/voice/audio';
 
@@ -37,4 +38,20 @@ test('one global inference slot rejects concurrent work and recovers after compl
   ]);
   expect(responses.map(response => response.status()).sort()).toEqual([200, 429]);
   expect((await api.post('/api/voice', { headers, data })).status()).toBe(200);
+});
+
+test('explicit cancellation works before upload and releases an active native process', async ({ page }) => {
+  await installMobileChatFixture(page);
+  await loginMobileFixture(page);
+  const api = page.context().request;
+  const data = Buffer.from(encodeVoiceWav(new Float32Array(16_000).fill(0.2)));
+  const earlyHeaders = { 'content-type': 'audio/wav', 'x-voice-user-id': 'admin@local', 'x-voice-request-id': randomUUID() };
+  expect((await api.delete('/api/voice', { headers: earlyHeaders })).status()).toBe(200);
+  expect((await api.post('/api/voice', { headers: earlyHeaders, data })).status()).toBe(499);
+  const headers = { ...earlyHeaders, 'x-voice-request-id': randomUUID() };
+  const pending = api.post('/api/voice', { headers, data });
+  const cancelled = await api.delete('/api/voice', { headers });
+  expect(cancelled.status()).toBe(200);
+  expect((await pending).status()).toBe(499);
+  expect((await api.post('/api/voice', { headers: { ...headers, 'x-voice-request-id': randomUUID() }, data })).status()).toBe(200);
 });
