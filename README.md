@@ -79,8 +79,14 @@ authenticated, same-origin clients with the matching account may submit/cancel.
 One inference runs at a time per app process; excess requests are rejected
 instead of queued. The PoC assumes a single Next.js process. Inference uses one
 thread, niceness 10, a 120-second deadline, a 1 GiB **address-space** ceiling, and
-requires at least 1.5 GiB `MemAvailable` before starting. These bounds reduce
-contention, but are not a guarantee against host-wide memory/CPU pressure.
+requires at least 768 MiB `MemAvailable` before starting. While running, a
+100 ms watchdog terminates inference if sampled peak RSS exceeds 384 MiB or host
+available memory falls below 256 MiB. The address-space limit includes virtual
+reservations and is not an RSS limit; the watchdog is sampled, not an atomic OS
+memory quota. These protections reduce contention but cannot guarantee against
+host-wide memory/CPU pressure. The proxy must allow at least the 120-second
+inference deadline (`proxy_read_timeout 150s` for nginx); its upload-size limit
+does not need changing.
 Each request loads the model anew; there is no permanently resident model.
 
 Temporary audio/results are deleted after success, failure, or cancellation and

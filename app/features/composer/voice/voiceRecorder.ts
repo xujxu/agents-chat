@@ -34,7 +34,7 @@ export async function startVoiceRecording(signal: AbortSignal, onLimit: () => vo
     signal.throwIfAborted();
     await context.resume();
     stage = 'microphone';
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }, video: false });
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     signal.throwIfAborted();
     stage = 'load_worklet';
     await context.audioWorklet.addModule('/voice/recorder-worklet.js');

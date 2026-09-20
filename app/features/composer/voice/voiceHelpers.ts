@@ -12,6 +12,7 @@ export function voiceErrorMessage(error: unknown): string {
   const messages: Record<string, string> = {
     voice_busy: 'Voice transcription is busy. Please try again shortly.',
     voice_low_memory: 'The server has insufficient free memory for voice input. Please try again later.',
+    voice_memory_limit: 'Voice input stopped to protect server memory. Please try again later.',
     voice_timeout: 'Voice transcription timed out. Try a shorter recording.',
     voice_no_audio: 'No audio was recorded. Please try again.',
     voice_no_speech: 'No speech was detected. Please try again.',
