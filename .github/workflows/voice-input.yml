@@ -68,6 +68,12 @@ jobs:
           --project=desktop-chromium --project=iphone-webkit --project=android-chromium
           --workers=1 --timeout=45000 --global-timeout=600000 --max-failures=4
           --trace=retain-on-failure --reporter=line --output=artifacts/voice-tests
+      - name: Verify temporary audio cleanup
+        run: |
+          if find /tmp -maxdepth 1 -type d -name 'agents-chat-voice-*' | grep -q .; then
+            echo 'Voice temporary files were not cleaned up'
+            exit 1
+          fi
       - name: Restart with voice disabled for existing mobile coverage
         run: |
           kill "$(cat artifacts/server.pid)"
@@ -83,10 +89,12 @@ jobs:
           done
           exit 1
       - name: Existing composer and mobile behavior
+        env:
+          VOICE_EXPECT_DISABLED: '1'
         run: >-
           npx playwright test --config tests/playwright.config.ts
-          tests/mobile-composer-viewport.spec.ts tests/mobile-responsive.spec.ts
-          --project=iphone-webkit --project=android-chromium
+          tests/mobile-composer-viewport.spec.ts tests/mobile-responsive.spec.ts tests/voice-disabled.spec.ts
+          --project=desktop-chromium --project=iphone-webkit --project=android-chromium
           --workers=1 --timeout=60000 --global-timeout=600000 --max-failures=3
           --reporter=line --output=artifacts/mobile-regressions
       - name: Package portable application
@@ -138,7 +146,8 @@ jobs:
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -qq
               apt-get install -y -qq cmake g++ make
-              cmake -S /source -B /tmp/build -DCMAKE_BUILD_TYPE=Release \
+              cp -a /source /tmp/source
+              cmake -S /tmp/source -B /tmp/build -DCMAKE_BUILD_TYPE=Release \
                 -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
                 -DGGML_CUDA=OFF -DGGML_BLAS=OFF -DWHISPER_BUILD_TESTS=OFF \
                 -DWHISPER_BUILD_SERVER=OFF -DWHISPER_CURL=OFF \
@@ -146,6 +155,7 @@ jobs:
               cmake --build /tmp/build --target whisper-cli --parallel 2
               cp /tmp/build/bin/whisper-cli /output/whisper-cli
               cp /usr/share/doc/gcc-9-base/copyright /output/licenses/gcc-runtime.COPYING
+              cp /usr/share/common-licenses/GPL-3 /output/licenses/GPL-3
             '
           curl -fL --retry 3 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin?download=true' \
             -o artifacts/runtime/ggml-base-q5_1.bin

@@ -3,7 +3,7 @@ import { encodeVoiceWav, MAX_VOICE_SECONDS, VOICE_SAMPLE_RATE } from '@/lib/voic
 export type VoiceRecording = { finish: () => Promise<Blob>; cancel: () => Promise<void> };
 
 export async function startVoiceRecording(signal: AbortSignal, onLimit: () => void): Promise<VoiceRecording> {
-  if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext || !window.AudioWorkletNode) {
+  if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext || !window.AudioWorkletNode || !window.OfflineAudioContext) {
     throw new Error('voice_unsupported_browser');
   }
   const context = new AudioContext();
@@ -67,6 +67,7 @@ export async function startVoiceRecording(signal: AbortSignal, onLimit: () => vo
           const samples = new Float32Array(sampleCount);
           let offset = 0;
           for (const chunk of chunks) { samples.set(chunk, offset); offset += chunk.length; }
+          chunks.length = 0;
           const length = Math.min(VOICE_SAMPLE_RATE * MAX_VOICE_SECONDS, Math.ceil(sampleCount * VOICE_SAMPLE_RATE / context.sampleRate));
           const offline = new OfflineAudioContext(1, length, VOICE_SAMPLE_RATE);
           const buffer = offline.createBuffer(1, sampleCount, context.sampleRate);

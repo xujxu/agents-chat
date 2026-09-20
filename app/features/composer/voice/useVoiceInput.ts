@@ -55,7 +55,7 @@ export function useVoiceInput({ userId, chatId, active, onTranscript }: Options)
           throw new Error('voice_invalid_result');
         }
         if (controller.signal.aborted) return;
-        if (result.enabled && (!navigator.mediaDevices?.getUserMedia || !window.AudioContext || !window.AudioWorkletNode)) {
+        if (result.enabled && (!navigator.mediaDevices?.getUserMedia || !window.AudioContext || !window.AudioWorkletNode || !window.OfflineAudioContext)) {
           throw new Error('voice_unsupported_browser');
         }
         setAvailable(result.enabled);
