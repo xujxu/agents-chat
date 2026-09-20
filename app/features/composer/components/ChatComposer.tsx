@@ -21,6 +21,7 @@ type ChatComposerProps = {
   slashSelectedIndex: number;
   targetControls: ReactNode;
   optionalActions?: ReactNode;
+  notice?: ReactNode;
   isSending: boolean;
   sendDisabled: boolean;
   onMentionSelect: (agentId: string) => void;
@@ -51,6 +52,7 @@ export function ChatComposer({
   slashSelectedIndex,
   targetControls,
   optionalActions,
+  notice,
   isSending,
   sendDisabled,
   onMentionSelect,
@@ -117,6 +119,7 @@ export function ChatComposer({
               onPreview={onPreviewAttachment}
             />
             {attachmentError ? <div className="attachmentError" role="alert">{attachmentError}</div> : null}
+            {notice}
             <div className="composerTextRow">
               <textarea
                 ref={composerRef}

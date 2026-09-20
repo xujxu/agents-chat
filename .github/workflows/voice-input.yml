@@ -26,6 +26,12 @@ jobs:
   voice:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    env:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-voice-poc-ci-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,4 +40,135 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Voice logic regressions
-        run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-audio.test.ts
+        run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-audio.test.ts tests/voice-jobs.test.ts
+      - name: Install browser engines
+        run: npx playwright install --with-deps chromium webkit
+      - name: Build and typecheck
+        run: |
+          npm run build
+          npx tsc --noEmit --incremental false
+      - name: Start isolated voice-enabled app
+        run: |
+          mkdir -p artifacts
+          chmod +x tests/fixtures/voice-whisper.py
+          VOICE_ENABLED=1 VOICE_WHISPER_PATH="$PWD/tests/fixtures/voice-whisper.py" \
+            VOICE_MODEL_PATH="$PWD/tests/fixtures/voice-whisper.py" \
+            node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 >artifacts/server.log 2>&1 &
+          echo "$!" > artifacts/server.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --max-time 2 http://localhost:3011/api/auth/providers >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat artifacts/server.log
+          exit 1
+      - name: Voice API and browser regressions
+        run: >-
+          npx playwright test --config tests/playwright.config.ts
+          tests/voice-api.spec.ts tests/voice-input.spec.ts
+          --project=desktop-chromium --project=iphone-webkit --project=android-chromium
+          --workers=1 --timeout=45000 --global-timeout=600000 --max-failures=4
+          --trace=retain-on-failure --reporter=line --output=artifacts/voice-tests
+      - name: Restart with voice disabled for existing mobile coverage
+        run: |
+          kill "$(cat artifacts/server.pid)"
+          for attempt in $(seq 1 30); do
+            if ! kill -0 "$(cat artifacts/server.pid)" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          VOICE_ENABLED=0 node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 >artifacts/disabled-server.log 2>&1 &
+          echo "$!" > artifacts/server.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --max-time 2 http://localhost:3011/api/auth/providers >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Existing composer and mobile behavior
+        run: >-
+          npx playwright test --config tests/playwright.config.ts
+          tests/mobile-composer-viewport.spec.ts tests/mobile-responsive.spec.ts
+          --project=iphone-webkit --project=android-chromium
+          --workers=1 --timeout=60000 --global-timeout=600000 --max-failures=3
+          --reporter=line --output=artifacts/mobile-regressions
+      - name: Package portable application
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          root = pathlib.Path.cwd()
+          for link in (root / '.next/node_modules').iterdir():
+              if link.is_symlink():
+                  relative = link.resolve().relative_to(root / 'node_modules')
+                  link.unlink()
+                  link.symlink_to(pathlib.Path('../../node_modules') / relative)
+          PY
+          printf '%s\n' "$GITHUB_SHA" > artifacts/revision.txt
+          node --version > artifacts/node-version.txt
+          sha256sum package-lock.json > artifacts/package-lock.sha256
+          tar --exclude=.next/cache --exclude=.next/standalone -czf artifacts/next-build.tar.gz .next
+          (cd artifacts && sha256sum next-build.tar.gz > next-build.sha256)
+      - name: Stop app
+        if: always()
+        run: |
+          if [ -f artifacts/server.pid ] && kill -0 "$(cat artifacts/server.pid)" 2>/dev/null; then
+            kill "$(cat artifacts/server.pid)"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-app-${{ github.sha }}
+          path: artifacts/
+          retention-days: 7
+
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build compatible CPU-only Whisper runtime
+        run: |
+          mkdir -p artifacts/runtime/licenses
+          curl -fL --retry 3 https://github.com/ggml-org/whisper.cpp/archive/5670d5c0bbcb148feabef84400a07cfca9aa3b30.tar.gz -o /tmp/whisper.tar.gz
+          mkdir /tmp/voice-whisper-source
+          tar -xzf /tmp/whisper.tar.gz --strip-components=1 -C /tmp/voice-whisper-source
+          cp /tmp/voice-whisper-source/LICENSE artifacts/runtime/licenses/whisper.cpp.LICENSE
+          curl -fL --retry 3 https://raw.githubusercontent.com/openai/whisper/main/LICENSE -o artifacts/runtime/licenses/whisper-model.LICENSE
+          docker run --rm \
+            -v /tmp/voice-whisper-source:/source:ro \
+            -v "$PWD/artifacts/runtime:/output" \
+            ubuntu:20.04 bash -euc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y -qq cmake g++ make
+              cmake -S /source -B /tmp/build -DCMAKE_BUILD_TYPE=Release \
+                -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
+                -DGGML_CUDA=OFF -DGGML_BLAS=OFF -DWHISPER_BUILD_TESTS=OFF \
+                -DWHISPER_BUILD_SERVER=OFF -DWHISPER_CURL=OFF \
+                -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+              cmake --build /tmp/build --target whisper-cli --parallel 2
+              cp /tmp/build/bin/whisper-cli /output/whisper-cli
+              cp /usr/share/doc/gcc-9-base/copyright /output/licenses/gcc-runtime.COPYING
+            '
+          curl -fL --retry 3 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin?download=true' \
+            -o artifacts/runtime/ggml-base-q5_1.bin
+          echo '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898  artifacts/runtime/ggml-base-q5_1.bin' | sha256sum --check
+      - name: Real-model smoke with production resource limits
+        run: |
+          /usr/bin/time -v /usr/bin/nice -n 10 /usr/bin/prlimit --as=1073741824 --cpu=120 -- \
+            artifacts/runtime/whisper-cli -m artifacts/runtime/ggml-base-q5_1.bin \
+            -f /tmp/voice-whisper-source/samples/jfk.wav -of artifacts/jfk \
+            -otxt -l auto -t 1 -p 1 -bs 1 -bo 1 -nt -np -ng \
+            >artifacts/smoke.log 2>artifacts/smoke-metrics.log
+          grep -qi country artifacts/jfk.txt
+          printf '%s\n' "$GITHUB_SHA" > artifacts/runtime/revision.txt
+          printf '%s\n' 'whisper.cpp 5670d5c0bbcb148feabef84400a07cfca9aa3b30' > artifacts/runtime/engine-revision.txt
+          (cd artifacts/runtime && sha256sum whisper-cli ggml-base-q5_1.bin > SHA256SUMS)
+          tar -czf artifacts/voice-runtime.tar.gz -C artifacts runtime
+          (cd artifacts && sha256sum voice-runtime.tar.gz > voice-runtime.sha256)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-native-${{ github.sha }}
+          path: |
+            artifacts/voice-runtime.*
+            artifacts/smoke*
+            artifacts/jfk.txt
+          retention-days: 7
