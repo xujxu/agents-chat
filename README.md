@@ -85,7 +85,7 @@ does not need changing.
 Each request loads the model anew; there is no permanently resident model.
 
 Temporary audio/results are deleted after success, failure, or cancellation and
-are not saved in chat history. Logs contain durations, sizes, exit status, and
+are not saved in chat history. Native core dumps are disabled. Logs contain durations, sizes, exit status, and
 error codes, never audio/transcript contents. A host crash or forced application
 kill can bypass cleanup: `agents-chat-voice-*` directories in the OS temporary
 directory may require removal after confirming no transcription is running.

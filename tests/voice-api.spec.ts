@@ -1,11 +1,26 @@
 import { expect, test } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
+import { readdir, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
 import { encodeVoiceWav, MAX_VOICE_BYTES } from '../lib/voice/audio';
 
 test.beforeEach(() => {
   test.skip(process.env.VOICE_API_FIXTURE !== '1', 'Runs in the voice-enabled native fixture phase');
 });
+
+async function activeFixturePid(): Promise<number> {
+  const directories = (await readdir(tmpdir())).filter(name => name.startsWith('agents-chat-voice-'));
+  for (const directory of directories) {
+    try {
+      return Number(await readFile(path.join(tmpdir(), directory, 'child.pid'), 'utf8'));
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+    }
+  }
+  return 0;
+}
 
 test('voice API enforces authentication, ownership, origin, size and WAV format', async ({ page, request }) => {
   expect((await request.get('/api/voice')).status()).toBe(401);
@@ -53,9 +68,58 @@ test('explicit cancellation works before upload and releases an active native pr
   expect((await api.delete('/api/voice', { headers: earlyHeaders })).status()).toBe(200);
   expect((await api.post('/api/voice', { headers: earlyHeaders, data })).status()).toBe(499);
   const headers = { ...earlyHeaders, 'x-voice-request-id': randomUUID() };
-  const pending = api.post('/api/voice', { headers, data });
+  const pending = api.post('/api/voice', {
+    headers, data: Buffer.from(encodeVoiceWav(new Float32Array(16_000).fill(0.4))),
+  });
+  let childPid: number | undefined;
+  await expect.poll(async () => {
+    childPid = await activeFixturePid();
+    return childPid;
+  }).toBeGreaterThan(0);
   const cancelled = await api.delete('/api/voice', { headers });
   expect(cancelled.status()).toBe(200);
   expect((await pending).status()).toBe(499);
+  const killedPid = childPid;
+  if (!killedPid) throw new Error('Native fixture did not start');
+  expect(() => process.kill(killedPid, 0)).toThrow();
   expect((await api.post('/api/voice', { headers: { ...headers, 'x-voice-request-id': randomUUID() }, data })).status()).toBe(200);
+});
+
+test('HTTP disconnection kills native inference even without an explicit cancellation request', async ({ page }) => {
+  await installMobileChatFixture(page);
+  await loginMobileFixture(page);
+  const controller = new AbortController();
+  const id = randomUUID();
+  const cookies = (await page.context().cookies()).map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+  const pending = fetch(new URL('/api/voice', process.env.PLAYWRIGHT_BASE_URL), {
+    method: 'POST', signal: controller.signal,
+    headers: { cookie: cookies, 'content-type': 'audio/wav', 'x-voice-user-id': 'admin@local', 'x-voice-request-id': id },
+    body: encodeVoiceWav(new Float32Array(16_000).fill(0.4)),
+  }).then(response => String(response.status), error => error instanceof Error ? error.name : String(error));
+  try {
+    await expect.poll(activeFixturePid).toBeGreaterThan(0);
+    controller.abort();
+    expect(await pending).toBe('AbortError');
+    await expect.poll(activeFixturePid).toBe(0);
+  } finally {
+    controller.abort();
+    await page.context().request.delete('/api/voice', {
+      headers: { 'x-voice-user-id': 'admin@local', 'x-voice-request-id': id },
+    });
+  }
+});
+
+test('RSS watchdog terminates an oversized native process and releases admission', async ({ page }) => {
+  await installMobileChatFixture(page);
+  await loginMobileFixture(page);
+  const api = page.context().request;
+  const headers = { 'content-type': 'audio/wav', 'x-voice-user-id': 'admin@local' };
+  const response = await api.post('/api/voice', {
+    headers, data: Buffer.from(encodeVoiceWav(new Float32Array(16_000).fill(0.5))),
+  });
+  expect(response.status()).toBe(503);
+  expect(await response.json()).toMatchObject({ error: 'voice_memory_limit' });
+  expect((await api.post('/api/voice', {
+    headers, data: Buffer.from(encodeVoiceWav(new Float32Array(16_000).fill(0.2))),
+  })).status()).toBe(200);
 });
