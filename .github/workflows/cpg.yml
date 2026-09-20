@@ -1,0 +1,44 @@
+name: CPG terminal guard
+on:
+  push:
+    branches: [ops/host-memory-guard]
+    paths: [ops/cpg/**, .github/workflows/cpg.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests with host-compatible Python
+        run: |
+          docker run --rm -v "$PWD/ops/cpg:/source:ro" ubuntu:20.04 bash -euc '
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3
+            cd /source
+            PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_cpg.py
+          '
+      - name: Real legacy-cgroup isolation in disposable VM
+        run: bash ops/cpg/ci-vm.sh
+      - name: Package standalone installer
+        run: |
+          mkdir artifact
+          cp ops/cpg/cpg_common.py ops/cpg/cpg_launcher.py ops/cpg/cpg_admin.py ops/cpg/README.md artifact/
+          printf '%s\n' "$GITHUB_SHA" > artifact/revision.txt
+          (cd artifact && sha256sum *.py README.md > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpg-${{ github.sha }}
+          path: artifact/
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cpg-vm-diagnostics
+          path: |
+            ${{ runner.temp }}/cpg-vm/serial.log
+            ${{ runner.temp }}/cpg-vm/install.log
+          if-no-files-found: ignore
+          retention-days: 3
