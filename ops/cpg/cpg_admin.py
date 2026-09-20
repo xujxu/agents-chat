@@ -22,9 +22,14 @@ SLICE = "cpg.slice"
 
 
 def systemctl(*arguments):
-    return subprocess.run(
-        ["/bin/systemctl", *arguments], check=True, capture_output=True, text=True, timeout=25,
-    ).stdout.strip()
+    result = subprocess.run(
+        ["/bin/systemctl", *arguments], capture_output=True, text=True, timeout=25,
+    )
+    if result.returncode:
+        raise RuntimeError("systemctl {} failed: {}".format(
+            " ".join(arguments), (result.stderr or result.stdout).strip(),
+        ))
+    return result.stdout.strip()
 
 
 def mkdir(path, mode=0o755):

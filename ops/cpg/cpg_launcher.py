@@ -46,7 +46,8 @@ def run(config, arguments):
             os.close(ready_write)
             os.execv(executable, [executable] + arguments)
         except Exception as error:
-            print("cpg: protected launch failed: " + str(error), file=sys.stderr, flush=True)
+            detail = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) else str(error)
+            print("cpg: protected launch failed: " + detail, file=sys.stderr, flush=True)
             os._exit(125)
     os.close(ready_write)
     try:

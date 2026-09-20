@@ -122,13 +122,20 @@ def group_pids():
 def read_group():
     oom = counters(GROUP / "memory.oom_control")
     memory = counters(GROUP / "memory.stat")
+    kills = 0
+    # v1 counts victims in their own group, not necessarily the limiting parent.
+    for path in GROUP.rglob("memory.oom_control"):
+        try:
+            kills += counters(path)["oom_kill"]
+        except FileNotFoundError:
+            continue
     return {
         "limit": int((GROUP / "memory.limit_in_bytes").read_text()),
         "usage": int((GROUP / "memory.usage_in_bytes").read_text()),
         "inactive_file": memory["total_inactive_file"],
         "hierarchy": int((GROUP / "memory.use_hierarchy").read_text()),
         "oom_disabled": oom["oom_kill_disable"],
-        "oom_kills": oom["oom_kill"],
+        "oom_kills": kills,
         "failcnt": int((GROUP / "memory.failcnt").read_text()),
     }
 

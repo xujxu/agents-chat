@@ -25,6 +25,22 @@ class GuardTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 common.verify_boundary(dict(healthy, **{field: value}))
 
+    def test_oom_victims_are_counted_across_delegated_children(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            child = root / common.WORKLOAD
+            child.mkdir()
+            (root / "memory.oom_control").write_text("oom_kill_disable 0\noom_kill 2\n")
+            (child / "memory.oom_control").write_text("oom_kill_disable 0\noom_kill 3\n")
+            (root / "memory.stat").write_text("total_inactive_file 0\n")
+            for name, value in (
+                ("limit_in_bytes", common.LIMIT), ("usage_in_bytes", 100),
+                ("use_hierarchy", 1), ("failcnt", 0),
+            ):
+                (root / ("memory." + name)).write_text(str(value))
+            with patch.object(common, "GROUP", root):
+                self.assertEqual(common.read_group()["oom_kills"], 5)
+
     def test_pressure_thresholds_and_cache_semantics(self):
         group = {"usage": common.LIMIT, "inactive_file": common.LIMIT, "oom_kills": 0}
         self.assertEqual(common.pressure_reasons(512 * common.MIB, group), [])
