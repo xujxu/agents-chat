@@ -42,7 +42,7 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Voice logic regressions
-        run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-audio.test.ts tests/voice-jobs.test.ts
+        run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-audio.test.ts tests/voice-jobs.test.ts tests/voice-memory.test.ts
       - name: Install browser engines
         run: npx playwright install --with-deps chromium webkit
       - name: Build and typecheck
@@ -64,6 +64,8 @@ jobs:
           cat artifacts/server.log
           exit 1
       - name: WebKit voice capture and cancellation
+        env:
+          VOICE_API_FIXTURE: '1'
         run: >-
           npx playwright test --config tests/playwright.config.ts tests/voice-input.spec.ts
           --project=iphone-webkit --workers=1 --timeout=45000 --global-timeout=300000 --max-failures=2
@@ -231,16 +233,20 @@ jobs:
               output.setparams(params)
               output.writeframes(repeated)
           PY
-          if MALLOC_ARENA_MAX=2 /usr/bin/time -v /usr/bin/nice -n 10 /usr/bin/prlimit --as=536870912 --cpu=120 -- \
+          /usr/bin/time -v /usr/bin/nice -n 10 /usr/bin/prlimit --as=1073741824 --cpu=120 -- \
             artifacts/runtime/whisper-cli -m artifacts/runtime/ggml-base-q5_1.bin \
             -f /tmp/voice-30-seconds.wav -of artifacts/bounded-30-seconds \
             -otxt -l auto -t 1 -p 1 -bs 1 -bo 1 -nt -ng \
-            >artifacts/bounded-smoke.log 2>artifacts/bounded-smoke-metrics.log; then
-            grep -qi country artifacts/bounded-30-seconds.txt
-            echo '512 MiB address-space, MALLOC_ARENA_MAX=2: PASS for 30-second public sample' | tee artifacts/bounded-result.txt
-          else
-            echo '512 MiB address-space experiment: FAILED; do not lower production limits without further investigation' | tee artifacts/bounded-result.txt
-          fi
+            >artifacts/bounded-smoke.log 2>artifacts/bounded-smoke-metrics.log
+          grep -qi country artifacts/bounded-30-seconds.txt
+          python3 - <<'PY'
+          import pathlib
+          import re
+          text = pathlib.Path('artifacts/bounded-smoke-metrics.log').read_text()
+          peak = int(re.search(r'Maximum resident set size \(kbytes\): (\d+)', text).group(1))
+          assert peak <= 384 * 1024, 'Full-duration sample exceeded the application RSS guard'
+          pathlib.Path('artifacts/bounded-result.txt').write_text('30 seconds, 1 GiB address space: PASS; peak RSS={} KiB\n'.format(peak))
+          PY
           printf '%s\n' "$GITHUB_SHA" > artifacts/runtime/revision.txt
           printf '%s\n' 'whisper.cpp 5670d5c0bbcb148feabef84400a07cfca9aa3b30' > artifacts/runtime/engine-revision.txt
           (cd artifacts/runtime && sha256sum whisper-cli ggml-base-q5_1.bin > SHA256SUMS)

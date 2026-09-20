@@ -11,9 +11,23 @@ async function prepare(page: Page, enabled = true) {
     return route.fulfill({ json: { ok: true, text: '你好，voice PoC.' } });
   });
   await page.addInitScript(() => {
-    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+    const state = window as typeof window & {
+      __voiceFixtureCalls?: number;
+      __voiceUpload?: { bytes: number; header: string };
+    };
+    const originalFetch = window.fetch;
+    window.fetch = async (input, init) => {
+      if (input === '/api/voice' && init?.method === 'POST' && init.body instanceof Blob) {
+        const bytes = new Uint8Array(await init.body.arrayBuffer());
+        state.__voiceUpload = { bytes: bytes.length, header: new TextDecoder().decode(bytes.subarray(0, 4)) };
+      }
+      return originalFetch.call(window, input, init);
+    };
+    // WebKit may recreate native object wrappers; override the shared prototype.
+    Object.defineProperty(Object.getPrototypeOf(navigator.mediaDevices), 'getUserMedia', {
       configurable: true,
       value: async () => {
+        state.__voiceFixtureCalls = (state.__voiceFixtureCalls ?? 0) + 1;
         let stage = 'context';
         try {
           const context = new AudioContext();
@@ -44,6 +58,7 @@ async function prepare(page: Page, enabled = true) {
 async function record(page: Page) {
   await page.getByRole('button', { name: 'Start voice input', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Stop recording', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => (window as typeof window & { __voiceFixtureCalls?: number }).__voiceFixtureCalls)).toBeGreaterThan(0);
   await expect(page.getByText('Recording 0:01 / 0:30', { exact: true })).toBeVisible();
 }
 
@@ -56,10 +71,10 @@ test('recording uploads bounded WAV, appends to latest draft, and never sends au
   const fixture = await prepare(page);
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
-  const capture: { upload: Buffer | null } = { upload: null };
+  let uploaded = false;
   await page.route('**/api/voice', async route => {
     if (route.request().method() === 'GET') return route.fallback();
-    capture.upload = route.request().postDataBuffer();
+    uploaded = true;
     await gate;
     await route.fulfill({ json: { ok: true, text: '你好，voice PoC.' } });
   });
@@ -70,10 +85,13 @@ test('recording uploads bounded WAV, appends to latest draft, and never sends au
   await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
   await expect(page.getByText('Transcribing…', { exact: true })).toBeVisible();
   await input.fill('Edited while waiting');
-  await expect.poll(() => capture.upload?.length ?? 0).toBeGreaterThan(44);
-  if (!capture.upload) throw new Error('Missing voice upload');
-  expect(capture.upload.length).toBeLessThan(1024 * 1024);
-  expect(capture.upload.subarray(0, 4).toString()).toBe('RIFF');
+  await expect.poll(() => uploaded).toBe(true);
+  const upload = await page.evaluate(() => (window as typeof window & {
+    __voiceUpload?: { bytes: number; header: string };
+  }).__voiceUpload);
+  expect(upload?.bytes).toBeGreaterThan(44);
+  expect(upload?.bytes).toBeLessThan(1024 * 1024);
+  expect(upload?.header).toBe('RIFF');
   release();
   await expect(input).toHaveValue('Edited while waiting\n你好，voice PoC.');
   expect(fixture.acpRequests.filter(request => request.action === 'send')).toHaveLength(0);
@@ -101,7 +119,7 @@ test('microphone denial and backend failures are visible without clearing text',
   await prepare(page);
   await page.locator('textarea.composerTextarea').fill('Preserve text');
   await page.evaluate(() => {
-    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+    Object.defineProperty(Object.getPrototypeOf(navigator.mediaDevices), 'getUserMedia', {
       configurable: true,
       value: async () => { throw new DOMException('Permission denied', 'NotAllowedError'); },
     });
@@ -183,15 +201,23 @@ for (const action of ['cancel', 'chat change', 'account change']) {
 
 test('recording stops automatically at 30 seconds and keeps the WAV within the limit', async ({ page }) => {
   await prepare(page);
-  let uploadBytes = 0;
   await page.route('**/api/voice', async route => {
     if (route.request().method() === 'GET') return route.fallback();
-    uploadBytes = route.request().postDataBuffer()?.length || 0;
     return route.fulfill({ json: { ok: true, text: 'Automatically stopped recording' } });
   });
   await page.getByRole('button', { name: 'Start voice input', exact: true }).click();
   await expect(page.locator('textarea.composerTextarea')).toHaveValue('Automatically stopped recording', { timeout: 38_000 });
+  const uploadBytes = await page.evaluate(() => (window as typeof window & { __voiceUpload?: { bytes: number } }).__voiceUpload?.bytes);
   expect(uploadBytes).toBeGreaterThan(44);
   expect(uploadBytes).toBeLessThanOrEqual(960_044);
   await expect(page.getByRole('button', { name: 'Start voice input', exact: true })).toBeEnabled();
+});
+
+test('browser-recorded WAV is accepted by the real authenticated API', async ({ page }) => {
+  test.skip(process.env.VOICE_API_FIXTURE !== '1', 'Requires the bounded native fixture server');
+  await prepare(page);
+  await page.route('**/api/voice', route => route.request().method() === 'POST' ? route.continue() : route.fallback());
+  await record(page);
+  await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
+  await expect(page.locator('textarea.composerTextarea')).toHaveValue('你好，voice PoC.');
 });
