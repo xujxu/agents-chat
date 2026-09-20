@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
 import { encodeVoiceWav, MAX_VOICE_BYTES } from '../lib/voice/audio';
 
+test.beforeEach(() => {
+  test.skip(process.env.VOICE_API_FIXTURE !== '1', 'Runs in the voice-enabled native fixture phase');
+});
+
 test('voice API enforces authentication, ownership, origin, size and WAV format', async ({ page, request }) => {
   expect((await request.get('/api/voice')).status()).toBe(401);
   expect((await request.post('/api/voice', { data: 'audio' })).status()).toBe(401);

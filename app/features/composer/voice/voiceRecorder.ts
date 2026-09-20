@@ -14,12 +14,14 @@ export async function startVoiceRecording(signal: AbortSignal, onLimit: () => vo
   let finishCapture: (() => void) | undefined;
   const chunks: Float32Array[] = [];
   let sampleCount = 0;
+  let stage = 'resume_audio';
   const maximumSamples = Math.floor(context.sampleRate * MAX_VOICE_SECONDS);
   const cleanup = () => {
     stream?.getTracks().forEach(track => track.stop());
     stream = undefined;
     source?.disconnect();
     node?.disconnect();
+    node?.port.close();
     signal.removeEventListener('abort', onAbort);
     return closing ??= context.state === 'closed' ? Promise.resolve() : context.close();
   };
@@ -31,10 +33,13 @@ export async function startVoiceRecording(signal: AbortSignal, onLimit: () => vo
   try {
     signal.throwIfAborted();
     await context.resume();
+    stage = 'microphone';
     stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }, video: false });
     signal.throwIfAborted();
+    stage = 'load_worklet';
     await context.audioWorklet.addModule('/voice/recorder-worklet.js');
     signal.throwIfAborted();
+    stage = 'connect_audio';
     node = new AudioWorkletNode(context, 'agents-chat-voice', { processorOptions: { maxSeconds: MAX_VOICE_SECONDS } });
     node.port.onmessage = ({ data }: MessageEvent<{ type: string; samples?: Float32Array }>) => {
       if (signal.aborted) return;
@@ -83,6 +88,7 @@ export async function startVoiceRecording(signal: AbortSignal, onLimit: () => vo
       },
     };
   } catch (error) {
+    if (!signal.aborted) console.error('Voice recording setup failed', { stage, name: error instanceof Error ? error.name : 'unknown' });
     await cleanup();
     throw error;
   }

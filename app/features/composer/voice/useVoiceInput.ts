@@ -103,7 +103,7 @@ export function useVoiceInput({ userId, chatId, active, onTranscript }: Options)
       }
       if (isCurrent(job)) onTranscript(result.text);
     } catch (failure) {
-      if (isCurrent(job)) setError(voiceErrorMessage(failure));
+      if (isCurrent(job)) { setError(voiceErrorMessage(failure)); cancel(); }
     } finally {
       clearTimeout(deadline);
       if (jobRef.current === job) { jobRef.current = null; setPhase('idle'); }
