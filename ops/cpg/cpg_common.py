@@ -10,7 +10,9 @@ import tempfile
 MIB = 1024 * 1024
 LIMIT = 1536 * MIB
 CONTROLLER = Path("/sys/fs/cgroup/memory")
-GROUP = CONTROLLER / "cpg-cli"
+GROUP = CONTROLLER / "cpg.slice"
+WORKLOAD = "cpg-workload.service"
+WORKLOAD_PATH = "/cpg.slice/" + WORKLOAD
 CONFIG = Path("/etc/cpg/config.json")
 STATE = Path("/var/lib/cpg")
 RECORD = STATE / "installation.json"
@@ -107,7 +109,14 @@ def memory_info():
 
 
 def group_pids():
-    return [int(pid) for pid in (GROUP / "cgroup.procs").read_text().split()]
+    result = set()
+    for path in GROUP.rglob("cgroup.procs"):
+        try:
+            result.update(int(pid) for pid in path.read_text().split())
+        except FileNotFoundError:
+            # A finished delegated subgroup may disappear during enumeration.
+            continue
+    return sorted(result)
 
 
 def read_group():

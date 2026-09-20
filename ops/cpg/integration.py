@@ -95,12 +95,12 @@ def main():
     assert observed["args"] == arguments
     assert observed["uid"] == 1001 and observed["cwd"] == "/tmp"
     assert observed["marker"] == "preserved"
-    assert common.memory_membership(observed["group"]) == "/cpg-cli"
-    assert common.memory_membership(observed["child_group"]) == "/cpg-cli"
-    assert common.memory_membership(observed["parent_group"]) != "/cpg-cli"
-    assert not common.memory_membership(user("/bin/cat", "/proc/self/cgroup").stdout).startswith("/cpg-cli")
+    assert common.memory_membership(observed["group"]) == common.WORKLOAD_PATH
+    assert common.memory_membership(observed["child_group"]) == common.WORKLOAD_PATH
+    assert not common.memory_membership(observed["parent_group"]).startswith("/cpg.slice")
+    assert not common.memory_membership(user("/bin/cat", "/proc/self/cgroup").stdout).startswith("/cpg.slice")
     # The delegated join file must not allow changing the hard boundary.
-    assert user("/bin/sh", "-c", "echo -1 > /sys/fs/cgroup/memory/cpg-cli/memory.limit_in_bytes", check=False).returncode != 0
+    assert user("/bin/sh", "-c", "echo -1 > /sys/fs/cgroup/memory/cpg.slice/memory.limit_in_bytes", check=False).returncode != 0
     print("PASS: literal argv, --yolo, cwd, environment, identity and descendant boundary", flush=True)
     code, text = terminal_run(["--yolo"])
     assert code == 0, (code, text)
@@ -119,18 +119,21 @@ def main():
     print("Protected PIDs before lifecycle:", protected, flush=True)
     refusal = ctl("uninstall", check=False)
     assert refusal.returncode != 0 and "running" in refusal.stderr
+    command("systemctl", "daemon-reload")
+    for pid in protected:
+        assert common.memory_membership(Path("/proc/{}/cgroup".format(pid)).read_text()) == common.WORKLOAD_PATH
     ctl("disable")
     print("Protected PIDs after disable:", common.group_pids(), flush=True)
     assert held.poll() is None, "disable killed an existing task"
     assert common.read_group()["limit"] > common.LIMIT
     disabled = user("/usr/local/bin/cpg", "--yolo")
     assert "DISABLED" in disabled.stderr
-    assert common.memory_membership(json.loads(disabled.stdout)["group"]) != "/cpg-cli"
+    assert not common.memory_membership(json.loads(disabled.stdout)["group"]).startswith("/cpg.slice")
     ctl("enable")
     print("Protected PIDs after enable:", common.group_pids(), flush=True)
     for pid in protected:
         print("Held membership:", pid, Path("/proc/{}/cgroup".format(pid)).read_text(), flush=True)
-        assert common.memory_membership(Path("/proc/{}/cgroup".format(pid)).read_text()) == "/cpg-cli"
+        assert common.memory_membership(Path("/proc/{}/cgroup".format(pid)).read_text()) == common.WORKLOAD_PATH
     assert held.poll() is None
     for pid in common.group_pids():
         os.kill(pid, signal.SIGTERM)
@@ -155,17 +158,15 @@ def main():
 
     # Verify persistent initialization recreates a missing empty group.
     ctl("disable")
-    common.GROUP.rmdir()
+    command("systemctl", "stop", common.WORKLOAD, "cpg.slice")
+    assert not common.GROUP.exists()
     ctl("enable")
     ctl("status")
     # Neither drift nor a missing boundary may cause a silent unprotected launch.
-    join = common.GROUP / "cgroup.procs"
-    os.chown(str(join), 0, 0)
-    join.chmod(0o644)
+    command("systemctl", "stop", common.WORKLOAD)
     failed = user("/usr/local/bin/cpg", "--yolo", check=False)
     assert failed.returncode == 125 and not failed.stdout
-    os.chown(str(join), 1001, 1001)
-    join.chmod(0o600)
+    command("systemctl", "start", common.WORKLOAD)
     (common.GROUP / "memory.limit_in_bytes").write_text("-1")
     failed = user("/usr/local/bin/cpg", "--yolo", check=False)
     assert failed.returncode == 125 and not failed.stdout
@@ -182,6 +183,7 @@ def main():
     assert not common.GROUP.exists()
     for path in ("/usr/local/bin/cpg", "/usr/local/sbin/cpgctl", "/etc/cpg/config.json",
                  "/etc/systemd/system/cpg-setup.service", "/etc/systemd/system/cpg-monitor.timer",
+                 "/etc/systemd/system/cpg-workload.service", "/etc/systemd/system/cpg.slice",
                  "/usr/local/libexec/cpg", "/var/lib/cpg", "/run/lock/cpg.lock"):
         assert not Path(path).exists(), path
     assert Path("/proc/self/cgroup").read_text() == baseline

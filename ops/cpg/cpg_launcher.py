@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import signal
+import subprocess
 import sys
 
 sys.dont_write_bytecode = True
@@ -24,15 +25,21 @@ def run(config, arguments):
     if available < 512 * common.MIB or group["usage"] >= common.LIMIT - 128 * common.MIB:
         raise RuntimeError("Insufficient headroom for another protected CLI; close existing tasks first")
     membership = common.memory_membership(Path("/proc/self/cgroup").read_text())
-    if membership == "/cpg-cli" or membership.startswith("/cpg-cli/"):
+    if membership == "/cpg.slice" or membership.startswith("/cpg.slice/"):
         raise RuntimeError("Already inside cpg; run the original Copilot rather than nesting supervisors")
     ready_read, ready_write = os.pipe()
     child = os.fork()
     if child == 0:
         os.close(ready_read)
         try:
-            (common.GROUP / "cgroup.procs").write_text(str(os.getpid()))
-            if common.memory_membership(Path("/proc/self/cgroup").read_text()) != "/cpg-cli":
+            subprocess.run(
+                ["/usr/bin/busctl", "--system", "--quiet", "call", "org.freedesktop.systemd1",
+                 "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager",
+                 "AttachProcessesToUnit", "ssau", common.WORKLOAD, "", "1", str(os.getpid())],
+                env={"PATH": "/usr/bin:/bin", "LANG": "C"},
+                check=True, capture_output=True, text=True, timeout=10,
+            )
+            if common.memory_membership(Path("/proc/self/cgroup").read_text()) != common.WORKLOAD_PATH:
                 raise RuntimeError("Kernel did not move Copilot into its private memory group")
             common.verify_boundary(common.read_group())
             os.write(ready_write, b"ready")

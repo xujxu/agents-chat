@@ -75,8 +75,8 @@ class GuardTests(unittest.TestCase):
             self.assertIn("DISABLED", output.call_args.args[0])
 
     def test_installed_assets_do_not_modify_applications_or_sudo_policy(self):
-        package = admin.files(Path(__file__).resolve().parent)
-        self.assertEqual(len(package), 6)
+        package = admin.files(Path(__file__).resolve().parent, 1001, 1001)
+        self.assertEqual(len(package), 8)
         for path in package:
             self.assertNotIn("agents-chat", str(path))
             self.assertNotIn("user-", str(path))

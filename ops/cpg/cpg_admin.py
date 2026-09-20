@@ -18,6 +18,7 @@ UNITS = Path("/etc/systemd/system")
 SETUP = "cpg-setup.service"
 MONITOR = "cpg-monitor.service"
 TIMER = "cpg-monitor.timer"
+SLICE = "cpg.slice"
 
 
 def systemctl(*arguments):
@@ -43,14 +44,29 @@ def ensure_lock():
         os.close(descriptor)
 
 
-def files(source):
+def slice_file(enabled):
+    return (
+        "[Unit]\nDescription=Root-owned aggregate ceiling for terminal Copilot tasks\n\n"
+        "[Slice]\nMemoryAccounting=yes\nMemoryMax=" + ("1536M" if enabled else "infinity") + "\n"
+    ).encode()
+
+
+def files(source, uid, gid):
     return {
         common.LIB / "cpg_common.py": (source / "cpg_common.py").read_bytes(),
         common.LAUNCHER: (source / "cpg_launcher.py").read_bytes(),
         common.ADMIN: (source / "cpg_admin.py").read_bytes(),
+        UNITS / SLICE: slice_file(True),
+        UNITS / common.WORKLOAD: (
+            "[Unit]\nDescription=Delegated terminal Copilot processes (not SSH or Web)\n\n"
+            "[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/bin/true\n"
+            "User={}\nGroup={}\nSlice=cpg.slice\nDelegate=yes\n"
+            "MemoryAccounting=yes\nOOMPolicy=continue\n".format(uid, gid)
+        ).encode(),
         UNITS / SETUP: (
             "[Unit]\nDescription=Initialize terminal-only Copilot memory group\n"
-            "After=local-fs.target\nBefore=multi-user.target\n\n"
+            "Requires=cpg-workload.service\nAfter=local-fs.target cpg-workload.service\n"
+            "Before=multi-user.target\n\n"
             "[Service]\nType=oneshot\nRemainAfterExit=yes\n"
             "ExecStart=/usr/local/sbin/cpgctl boot\n"
             "MemoryMax=32M\nTasksMax=8\nTimeoutStartSec=15\n"
@@ -104,39 +120,45 @@ def configure_group(config):
     if not (common.CONTROLLER / "memory.limit_in_bytes").exists():
         raise RuntimeError("This installer supports only the host's cgroup-v1 memory controller")
     if not common.GROUP.exists():
-        common.GROUP.mkdir()
+        raise RuntimeError("Systemd did not create the cpg memory slice")
     if common.GROUP.stat().st_uid != 0:
         raise RuntimeError("Memory group must be root-owned")
     current = common.read_group()
-    if current["usage"] >= common.LIMIT - 128 * common.MIB:
+    if config["enabled"] and current["usage"] >= common.LIMIT - 128 * common.MIB:
         raise RuntimeError("Existing protected tasks are too close to the ceiling; exit them before enabling")
     (common.GROUP / "memory.use_hierarchy").write_text("1")
     (common.GROUP / "memory.oom_control").write_text("0")
-    (common.GROUP / "memory.limit_in_bytes").write_text(str(common.LIMIT))
-    common.verify_boundary(common.read_group())
-    os.chown(str(common.GROUP / "cgroup.procs"), config["uid"], config["gid"])
-    (common.GROUP / "cgroup.procs").chmod(0o600)
-    common.GROUP.chmod(0o755)
+    if config["enabled"]:
+        (common.GROUP / "memory.limit_in_bytes").write_text(str(common.LIMIT))
+        common.verify_boundary(common.read_group())
+    else:
+        remove_limit()
 
 
 def remove_limit():
     if common.GROUP.exists():
         if common.GROUP.stat().st_uid != 0:
             raise RuntimeError("Refusing unowned memory group")
-        os.chown(str(common.GROUP / "cgroup.procs"), 0, 0)
-        (common.GROUP / "cgroup.procs").chmod(0o644)
         (common.GROUP / "memory.limit_in_bytes").write_text("-1")
         if common.read_group()["limit"] < common.memory_info()[0]:
             raise RuntimeError("Kernel did not remove the memory ceiling")
 
 
-def stop_units():
-    systemctl("daemon-reload")
-    for name in (TIMER, SETUP):
-        if (UNITS / name).exists():
-            systemctl("disable", "--now", name)
+def stop_monitor():
+    if (UNITS / TIMER).exists():
+        systemctl("disable", "--now", TIMER)
     if (UNITS / MONITOR).exists():
         systemctl("stop", MONITOR)
+
+
+def stop_units():
+    systemctl("daemon-reload")
+    stop_monitor()
+    if (UNITS / SETUP).exists():
+        systemctl("disable", "--now", SETUP)
+    for name in (common.WORKLOAD, SLICE):
+        if (UNITS / name).exists():
+            systemctl("stop", name)
 
 
 def uninstall(value, partial=False):
@@ -149,10 +171,10 @@ def uninstall(value, partial=False):
             path = Path(name)
             if path.is_symlink() or (path.exists() and fingerprint(path.read_bytes()) != expected):
                 raise RuntimeError("Refusing to remove changed partial-install file: " + name)
-    stop_units()
     remove_limit()
+    stop_units()
     if common.GROUP.exists():
-        common.GROUP.rmdir()
+        raise RuntimeError("Systemd has not removed the empty cpg slice; retry uninstall")
     for name in value["files"]:
         path = Path(name)
         if path.exists():
@@ -183,7 +205,7 @@ def install(uid, executable):
     if total < common.LIMIT + 512 * common.MIB or available < 768 * common.MIB:
         raise RuntimeError("Insufficient host memory headroom for installation")
     common.memory_membership(Path("/proc/self/cgroup").read_text())
-    package = files(Path(__file__).resolve().parent)
+    package = files(Path(__file__).resolve().parent, uid, user.pw_gid)
     for path in (*package, common.CONFIG, common.RECORD, common.GROUP):
         if path.exists() or path.is_symlink():
             raise RuntimeError("Refusing existing installation target: " + str(path))
@@ -201,8 +223,9 @@ def install(uid, executable):
         for path, data in package.items():
             common.write_bytes(path, data, 0o755 if path in (common.LAUNCHER, common.ADMIN) else 0o644)
         common.write_json(common.CONFIG, config)
-        configure_group(config)
         systemctl("daemon-reload")
+        systemctl("start", common.WORKLOAD)
+        configure_group(config)
         systemctl("enable", SETUP, TIMER)
         systemctl("start", TIMER)
         value["phase"] = "installed"
@@ -222,15 +245,21 @@ def set_enabled(value, enabled):
         _, available = common.memory_info()
         if available < 768 * common.MIB:
             raise RuntimeError("Insufficient host headroom to enable protection")
-        configure_group(config)
-        write_configuration(value, config)
+        if common.GROUP.exists() and common.read_group()["usage"] >= common.LIMIT - 128 * common.MIB:
+            raise RuntimeError("Existing protected tasks are too close to the ceiling; exit them before enabling")
+    content = slice_file(enabled)
+    common.write_bytes(UNITS / SLICE, content)
+    value["files"][str(UNITS / SLICE)] = fingerprint(content)
+    write_configuration(value, config)
+    systemctl("daemon-reload")
+    systemctl("start", common.WORKLOAD)
+    configure_group(config)
+    if enabled:
         systemctl("enable", SETUP, TIMER)
         systemctl("start", TIMER)
         print("cpg enabled: shared hard ceiling is 1536 MiB.")
     else:
-        remove_limit()
-        write_configuration(value, config)
-        stop_units()
+        stop_monitor()
         print("cpg disabled: memory ceiling and alerts removed; running tasks were not killed.")
 
 
@@ -309,8 +338,7 @@ def main():
                 uninstall(value, partial=value["phase"] == "installing")
             elif args.action == "boot":
                 check_files(value)
-                if value["config"]["enabled"]:
-                    configure_group(value["config"])
+                configure_group(value["config"])
             elif args.action in ("enable", "disable"):
                 set_enabled(value, args.action == "enable")
             else:
@@ -318,7 +346,7 @@ def main():
                 if value["config"]["enabled"]:
                     common.verify_boundary(common.read_group())
                     systemctl("is-enabled", SETUP, TIMER)
-                    systemctl("is-active", TIMER)
+                    systemctl("is-active", TIMER, common.WORKLOAD)
                 elif common.GROUP.exists() and common.read_group()["limit"] < common.memory_info()[0]:
                     raise RuntimeError("Protection is marked disabled but a kernel ceiling is still present")
                 print(json_report(value["config"]))

@@ -19,9 +19,10 @@ through `cpg`. Do not run `sudo cpg`.
 
 All protected CLIs and descendants share a **1536 MiB** hard memory ceiling.
 This is charged memory, including charged file cache, not the sum of process RSS.
-The launcher joins only its forked child to a dedicated cgroup-v1 memory group,
-then executes the original Copilot. Its small supervisor and the parent SSH shell
-remain outside that group. The kernel can select only in-group tasks for an OOM
+The launcher asks the system manager to attach only its forked child to the
+delegated `cpg-workload.service`, then executes the original Copilot. A separate,
+root-owned parent `cpg.slice` enforces the ceiling. Its small supervisor and the
+parent SSH shell remain outside that slice. The kernel can select only in-group tasks for an OOM
 caused by this group's ceiling. The supervisor reports a corresponding SIGKILL
 and OOM counter increase instead of hiding the failure.
 
@@ -32,8 +33,8 @@ budget and may affect one another. Tools deliberately started through an externa
 service manager are not automatically descendants in the memory hierarchy.
 
 This is not a security sandbox or a guarantee against global OOM from unrelated
-programs. The same user can already signal its own processes; the delegated join
-file is not an isolation boundary against malicious code running as that user.
+programs. The same user can already signal its own processes; delegation is not
+an isolation boundary against malicious code running as that user.
 No arbitrary processes are searched for or killed by name. No CPU/disk limits
 are imposed on Copilot, and swap configuration is unchanged.
 
@@ -54,12 +55,15 @@ attempts scoped removal on partial failure. It does not restart existing apps.
 After a failed partial installation, the staged `cpg_admin.py uninstall` can
 retry removal using the installation record; inspect any drift refusal first.
 
-Root creates `/sys/fs/cgroup/memory/cpg-cli` with its limit files root-owned.
-Only its `cgroup.procs` join file is writable by the configured user. The launcher
-writes only its own forked child's PID; it never moves its caller or SSH shell.
+Root installs the parent slice and an ordinary-user delegated workload unit.
+The launcher uses systemd's `AttachProcessesToUnit` API, which checks that both
+the process and delegated unit belong to the caller's UID. It submits only its
+own forked child's PID; it never moves its caller or SSH shell. The root-owned
+parent ceiling cannot be raised through the user-owned delegated child group.
 No sudoers rule, polkit rule, setuid binary or runtime privileged broker is needed.
-A systemd boot unit recreates this memory-controller-specific group after reboot.
-Other controller memberships are unchanged.
+A systemd boot unit initializes the units after reboot. Systemd manages membership
+across its hierarchies, so reloads do not undo isolation. Merely moving a process
+in the memory hierarchy is insufficient: systemd may move it back on reload.
 
 Owned files:
 
@@ -68,7 +72,7 @@ Owned files:
 - `/etc/cpg/config.json`: root-owned public configuration; no credentials.
 - `/var/lib/cpg/`: root-only installation and alert state.
 - `/run/lock/cpg.lock`: lifecycle/startup coordination.
-- `cpg-setup.service`, `cpg-monitor.service`, `cpg-monitor.timer`: boot initialization and monitoring.
+- `cpg.slice`, `cpg-workload.service`, `cpg-setup.service`, `cpg-monitor.service`, `cpg-monitor.timer`: isolation, boot initialization and monitoring.
 
 ## Status, disable, enable, uninstall
 
@@ -77,8 +81,9 @@ Owned files:
     sudo cpgctl enable
     sudo cpgctl uninstall
 
-**Disable** actually removes the live kernel ceiling and disables boot setup and
-monitoring. Existing tasks are not killed. A subsequent `cpg` explicitly warns
+**Disable** actually removes the live and persistent kernel ceiling and disables
+monitoring. The lightweight boot setup remains enabled so the launcher still works
+after reboot, including when disabled. Existing tasks are not killed. A subsequent `cpg` explicitly warns
 that protection is disabled, then launches the original binary without isolation.
 **Enable** checks headroom and existing group usage before restoring the ceiling;
 CLIs started outside the group while disabled are not moved into it afterward.
@@ -114,8 +119,9 @@ installer has already initialized the group, and the enabled unit is for reboot.
 
 All automated validation is in GitHub Actions. Unit tests run on Ubuntu 20.04.
 A disposable Ubuntu 20.04 VM boots a real cgroup-v1 memory controller and verifies
-literal `--yolo`/other argument forwarding, identity/cwd/environment, descendant
-membership, inability to raise the limit, live enable/disable, active-task uninstall
+literal `--yolo`/other argument forwarding, identity/cwd/environment, interactive
+terminal/Ctrl-C behavior, descendant membership across systemd reloads, inability
+to raise the parent limit, live enable/disable, active-task uninstall
 refusal, actual **1536 MiB** kernel OOM, survival of the outer supervisor and an
 unrelated same-user process, group recreation and cleanup. The fixture is not
 Copilot and does not use any credentials. Never run the VM fixture or deliberate
