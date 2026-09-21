@@ -58,6 +58,10 @@ jobs:
               apt-get update -qq
               apt-get install -y -qq time libsndfile1
               pip install --quiet numpy==2.2.6 pyarrow==20.0.0 soundfile==0.13.1 opencc-python-reimplemented==0.1.7
+              if [ "$MODEL" = funasr ]; then
+                pip install --quiet sherpa-onnx==1.13.8
+                pip freeze > artifacts/python-runtime.txt
+              fi
               export LD_LIBRARY_PATH=/work/sherpa/lib
               ulimit -c 0
               python scripts/voice_accuracy_benchmark.py "$MODEL"

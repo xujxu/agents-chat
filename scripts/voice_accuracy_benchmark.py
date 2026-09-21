@@ -20,6 +20,9 @@ from voice_accuracy_samples import prepare
 
 
 def command(model, sample):
+    if model == "funasr-python":
+        return ["/usr/bin/env", "-u", "LD_LIBRARY_PATH", sys.executable,
+                "scripts/voice_funasr_python.py", f"accuracy-samples/{sample['id']}.wav"]
     args = ["sherpa/bin/sherpa-onnx-offline", "--num-threads=2",
             "--provider=cpu", "--debug=0"]
     if model == "sense":
@@ -60,7 +63,11 @@ def trial(model, sample):
             code = process.wait()
             failure = "timeout_120s"
     elapsed = time.monotonic() - started
-    log = prefix.with_suffix(".log").read_text()
+    try:
+        log = prefix.with_suffix(".log").read_text()
+    except UnicodeDecodeError:
+        failure = failure or "invalid_utf8_output"
+        log = ""
     text = None
     result = None
     for match in re.finditer(r"^\s*\{", log, re.M):
@@ -123,6 +130,18 @@ def summarize(results):
 def main():
     model = sys.argv[1]
     samples = prepare()
+    if model == "funasr":
+        diagnostics = []
+        for sample in samples[:3]:
+            result = trial("funasr", sample)
+            diagnostics.append(result)
+            # Retain both paths' logs, rather than overwriting the alternate run.
+            for suffix in (".log", ".rss"):
+                path = Path("artifacts") / (sample["id"] + suffix)
+                if path.exists():
+                    path.rename(path.with_name("cli-" + path.name))
+        Path("artifacts/cli-diagnostic.json").write_text(json.dumps(diagnostics, ensure_ascii=False, indent=2))
+        model = "funasr-python"
     Path("artifacts/environment.json").write_text(json.dumps({
         "model": model, "sha": os.environ.get("GITHUB_SHA"), "platform": platform.platform(),
         "cpu": Path("/proc/cpuinfo").read_text().split("\n\n")[0],

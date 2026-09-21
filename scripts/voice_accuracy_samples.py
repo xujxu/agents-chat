@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import re
 import urllib.request
 
 import pyarrow.parquet as pq
@@ -34,7 +35,7 @@ def prepare():
         rows = pq.read_table(path).to_pylist()
         groups = {"mixed-word": [], "mixed-phrase": [], "zh": [], "en": []}
         for row in rows:
-            if not 1 <= row["duration"] <= 30:
+            if not 1 <= row["duration"] <= 30 or re.search(r"[\[\]<>]", row["transcription"]):
                 continue
             units = tokens(row["transcription"])
             zh = sum(language(t) == "zh" for t in units)
@@ -75,7 +76,7 @@ def prepare():
     (out / "methodology.json").write_text(json.dumps({
         "dataset": "CAiRE/ASCEND", "revision": REVISION, "sha256": FILES,
         "license": "CC-BY-SA-4.0", "attribution": "Lovenia et al., ASCEND, LREC 2022",
-        "sampling": "hash-ranked fixed strata; no selection based on model output",
+        "sampling": "hash-ranked fixed strata; no selection based on model output; exclude incomplete bracket-marked references such as [UNK]",
         "mixed_phrase": "at least 3 English words total; not necessarily a complete English sentence",
         "scoring": "micro MER; t2s + NFKC + lowercase + punctuation ignored; numbers unchanged",
         "limitations": [
