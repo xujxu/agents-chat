@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+import tempfile
 
 import onnx
 from onnxruntime.quantization import QuantType, quantize_dynamic
@@ -31,16 +32,36 @@ def quantize(source, destination, mode):
     metadata = {p.key: p.value for p in source_model.metadata_props}
     inputs = [x.SerializeToString() for x in source_model.graph.input]
     outputs = [x.SerializeToString() for x in source_model.graph.output]
-    del source_model
+    versions = {op.version for op in source_model.opset_import if op.domain in ("", "ai.onnx")}
+    if len(versions) != 1:
+        raise ValueError("Missing or conflicting standard ONNX opsets")
+    retained = [op for op in source_model.opset_import if op.domain not in ("", "ai.onnx")]
+    del source_model.opset_import[:]
+    source_model.opset_import.extend([onnx.helper.make_opsetid("", versions.pop()), *retained])
+    def normalize_domains(graph):
+        for node in graph.node:
+            if node.domain == "ai.onnx":
+                node.domain = ""
+            for attr in node.attribute:
+                if attr.type == onnx.AttributeProto.GRAPH:
+                    normalize_domains(attr.g)
+                elif attr.type == onnx.AttributeProto.GRAPHS:
+                    for child in attr.graphs:
+                        normalize_domains(child)
+    normalize_domains(source_model.graph)
     destination.parent.mkdir(parents=True, exist_ok=True)
     unsigned = mode == "u8u8"
-    quantize_dynamic(
-        str(source), str(destination),
-        weight_type=QuantType.QUInt8 if unsigned else QuantType.QInt8,
-        per_channel=True, reduce_range=mode == "u8s8-rr",
-        extra_options={"WeightSymmetric": not unsigned},
-        use_external_data_format=True,
-    )
+    # Keep the temporary graph next to its unchanged relative external weights.
+    with tempfile.NamedTemporaryFile(suffix=".onnx", dir=source.parent) as normalized:
+        onnx.save_model(source_model, normalized.name)
+        del source_model
+        quantize_dynamic(
+            normalized.name, str(destination),
+            weight_type=QuantType.QUInt8 if unsigned else QuantType.QInt8,
+            per_channel=True, reduce_range=mode == "u8s8-rr",
+            extra_options={"WeightSymmetric": not unsigned},
+            use_external_data_format=True,
+        )
     model = onnx.load(destination, load_external_data=False)
     assert [x.SerializeToString() for x in model.graph.input] == inputs, "Input interface changed"
     assert [x.SerializeToString() for x in model.graph.output] == outputs, "Output interface changed"

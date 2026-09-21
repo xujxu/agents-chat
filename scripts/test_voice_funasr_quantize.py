@@ -20,7 +20,8 @@ class QuantizationTests(unittest.TestCase):
                 [helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 2])],
                 [numpy_helper.from_array(np.array([[-2, 1], [1, 2]], dtype=np.float32), "weight")],
             )
-            model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+            model = helper.make_model(graph, opset_imports=[
+                helper.make_opsetid("", 17), helper.make_opsetid("ai.onnx", 17)])
             model.ir_version = 9
             helper.set_model_props(model, {"model_type": "test", "max_total_len": "1024"})
             onnx.save(model, source)
