@@ -233,4 +233,35 @@ for sample in samples:
             "transcripts": sorted(set(row["text"] or "" for row in rows)),
         })
 (OUT / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False))
+if SENSE_COMPARISON:
+    # Oracle boundaries from synthetic construction, NOT a production VAD or
+    # evidence that arbitrary natural code-switching can be segmented correctly.
+    source = read_audio("mixed-30")
+    chunks = []
+    offset = 0
+    for index, size in enumerate([len(zh) + 16000, len(en) + 16000] * 3):
+        data = source[offset:offset + size]
+        offset += size
+        if not data:
+            break
+        name = f"oracle-chunk-{index}"
+        write_audio(name, data)
+        durations[name] = len(data) / 32000
+        samples[name] = "auto"
+        chunks.append(name)
+    segmented = []
+    for repetition in range(3):
+        rows = [trial(name, "sense-auto", repetition) for name in chunks]
+        segmented.append({
+            "repeat": repetition, "method": "known synthetic utterance boundaries",
+            "new_process_per_chunk": True,
+            "elapsed_seconds": sum(row["elapsed_seconds"] for row in rows),
+            "peak_rss_kib": max(row["peak_rss_kib"] for row in rows),
+            "load_ms": sum(row["timings_ms"].get("load", 0) for row in rows),
+            "decode_ms": sum(row["timings_ms"].get("decode", 0) for row in rows),
+            "chunks": rows,
+        })
+    (OUT / "oracle-segmentation.json").write_text(json.dumps(segmented, ensure_ascii=False, indent=2))
+    assert not any(row["failure"] or row["exit_code"]
+                   for item in segmented for row in item["chunks"]), "Segment inference failed"
 assert not any(row["failure"] or row["exit_code"] for row in results), "Some runs failed; inspect results"
