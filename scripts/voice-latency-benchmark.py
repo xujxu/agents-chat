@@ -56,6 +56,7 @@ download(license_url, OUT / "sample-source-model-license.txt")
     "limitations": [
         "Demo probes only; no verified human reference transcripts, so no CER/WER claim.",
         "Mixed probe concatenates two speakers; not natural code-switching.",
+        "30-second probe repeats the same Mandarin phrase four times, then pads silence.",
         "Short probe truncates Mandarin speech at 4 seconds; may cut a word.",
         "Warm filesystem cache, new process each trial; not disk-cold model loading.",
         "Inference timing excludes browser recording, upload, API and draft insertion.",
@@ -80,14 +81,19 @@ def write_audio(name, data):
 zh, en = read_audio("zh"), read_audio("en")
 write_audio("zh-short", zh[:4 * 32000])
 write_audio("mixed", zh[:12 * 32000] + bytes(16000) + en[:12 * 32000])
-samples = {"zh": "zh", "en": "en", "zh-short": "zh", "mixed": "zh"}
+write_audio("mixed-en-first", en[:12 * 32000] + bytes(16000) + zh[:12 * 32000])
+# Repetition is a duration/coverage probe, not natural 30-second conversation.
+write_audio("zh-30", (zh + bytes(16000)) * 4 + bytes(30 * 32000 - (len(zh) + 16000) * 4))
+samples = {"zh": "zh", "en": "en", "zh-short": "zh", "mixed": "zh",
+           "mixed-en-first": "en", "zh-30": "zh"}
 durations = {name: len(read_audio(name)) / 32000 for name in samples}
 assert all(0 < duration <= 30 for duration in durations.values())
 (OUT / "environment.json").write_text(json.dumps({
     "platform": platform.platform(), "cpu": Path("/proc/cpuinfo").read_text().split("\n\n")[0],
     "cpu_affinity": sorted(os.sched_getaffinity(0)), "duration_seconds": durations,
     "revision": os.environ.get("GITHUB_SHA"), "native_revision": "e4ca3a6",
-    "threads": 1, "address_space_bytes": 1073741824, "rss_limit_kib": 393216,
+    "threads": "1 except explicitly marked 2-thread experiment",
+    "address_space_bytes": 1073741824, "rss_limit_kib": 393216,
     "timeout_seconds": 120, "repeats": 3,
 }, indent=2))
 
@@ -102,12 +108,13 @@ def trial(sample, variant, repetition):
         # Experimental: 50 encoder frames per second, rounded up with padding.
         context = min(1500, math.ceil((durations[sample] + 1) / 5) * 250)
         extra = ["-ac", str(context)]
+    threads = 2 if variant == "base-two-threads" else 1
     prefix = OUT / f"{sample}-{variant}-{repetition}"
     command = [
         "/usr/bin/nice", "-n", "10", "/usr/bin/prlimit", "--as=1073741824",
         "--cpu=120", "--core=0", "--", str(RUNTIME / "whisper-cli"),
         "-m", str(RUNTIME / f"ggml-{model}-q5_1.bin"), "-f", str(SAMPLES / f"{sample}.wav"),
-        "-of", str(prefix), "-otxt", "-l", language, "-t", "1", "-p", "1",
+        "-of", str(prefix), "-otxt", "-l", language, "-t", str(threads), "-p", "1",
         "-bs", "1", "-bo", "1", "-nt", "-ng", *extra,
     ]
     peak = 0
@@ -147,7 +154,8 @@ def trial(sample, variant, repetition):
     text = text_file.read_text().strip() if text_file.exists() else None
     return {
         "sample": sample, "variant": variant, "repeat": repetition,
-        "language": language, "audio_seconds": durations[sample], "extra_args": extra,
+        "language": language, "threads": threads,
+        "audio_seconds": durations[sample], "extra_args": extra,
         "elapsed_seconds": elapsed, "cpu_seconds": cpu_after.ru_utime + cpu_after.ru_stime
         - cpu_before.ru_utime - cpu_before.ru_stime, "peak_rss_kib": peak,
         "exit_code": code, "failure": failure, "timings_ms": timings,
@@ -155,7 +163,8 @@ def trial(sample, variant, repetition):
     }
 
 
-variants = ["base-auto", "base-language", "tiny-auto", "tiny-language", "base-short-context"]
+variants = ["base-auto", "base-language", "tiny-auto", "tiny-language",
+            "base-short-context", "base-two-threads"]
 jobs = [(sample, variant, repetition) for sample in samples for variant in variants
         for repetition in range(3)]
 jobs += [("en", "base-force-zh", repetition) for repetition in range(3)]
@@ -180,6 +189,7 @@ for sample in samples:
             "min_seconds": round(min(row["elapsed_seconds"] for row in rows), 3),
             "max_seconds": round(max(row["elapsed_seconds"] for row in rows), 3),
             "max_rss_mib": round(max(row["peak_rss_kib"] for row in rows) / 1024, 1),
+            "median_cpu_seconds": round(statistics.median(row["cpu_seconds"] for row in rows), 3),
             "encoder_runs": [row["encoder_runs"] for row in rows],
             "failures": [row["failure"] or f"exit={row['exit_code']}" for row in rows
                          if row["failure"] or row["exit_code"] or not row["text"]],
