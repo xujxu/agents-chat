@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const mobileSpecs = [
+  '**/chat-welcome.spec.ts',
   '**/mobile-responsive.spec.ts',
   '**/mobile-composer-viewport.spec.ts',
 ];
@@ -25,7 +26,7 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop-chromium',
-      testIgnore: mobileSpecs,
+      testIgnore: mobileSpecs.filter(spec => spec !== '**/chat-welcome.spec.ts'),
       use: { ...devices['Desktop Chrome'] },
     },
     {
