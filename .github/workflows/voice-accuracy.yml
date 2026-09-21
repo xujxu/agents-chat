@@ -1,0 +1,17 @@
+name: Natural bilingual accuracy experiment
+on:
+  push:
+    branches: [experiment/voice-accuracy]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  metrics:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - run: python -m unittest discover -s scripts -p test_voice_accuracy_metrics.py -v
