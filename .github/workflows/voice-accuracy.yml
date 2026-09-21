@@ -15,3 +15,56 @@ jobs:
           python-version: '3.12'
       - run: pip install opencc-python-reimplemented==0.1.7
       - run: python -m unittest discover -s scripts -p test_voice_accuracy_metrics.py -v
+  compare:
+    needs: metrics
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model: sense
+            archive: sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17
+            sha256: 7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e
+          - model: qwen
+            archive: sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25
+            sha256: 393f8a14e2f5fb96746aaab342997a40641001fbd5bf9592a080a8329178ee96
+          - model: funasr
+            archive: sherpa-onnx-funasr-nano-int8-2025-12-30
+            sha256: eb43d7ccc2e86b243f6a03b7df361033dda66db9523d1a92bf6aca2b50c9476b
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download verified CPU runtime and model
+        env:
+          ARCHIVE: ${{ matrix.archive }}
+          MODEL_SHA256: ${{ matrix.sha256 }}
+        run: |
+          mkdir -p sherpa model artifacts
+          curl -fL --retry 3 --max-time 240 https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared-no-tts.tar.bz2 -o runtime.tar.bz2
+          echo 'd0f96c8b65c6cd0974fada22737e337de81bc8cd2abbec2e39caf358b1eec5fc  runtime.tar.bz2' | sha256sum --check
+          curl -fL --retry 3 --max-time 600 "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/$ARCHIVE.tar.bz2" -o model.tar.bz2
+          echo "$MODEL_SHA256  model.tar.bz2" | sha256sum --check
+          tar -xjf runtime.tar.bz2 --strip-components=1 -C sherpa
+          tar -xjf model.tar.bz2 --strip-components=1 -C model
+          sha256sum runtime.tar.bz2 model.tar.bz2 > artifacts/downloads.sha256
+          find model -maxdepth 2 -type f -iname '*license*' -exec cp '{}' artifacts/ \;
+      - name: Evaluate natural mixed speech within future-host budget
+        env:
+          MODEL: ${{ matrix.model }}
+        run: |
+          docker run --rm --memory=4g --memory-swap=4g --cpus=2 --pids-limit=128 \
+            -e GITHUB_SHA -e MODEL -e OPENBLAS_NUM_THREADS=2 -e OMP_NUM_THREADS=2 \
+            -v "$PWD:/work" -w /work python:3.12-bookworm bash -euc '
+              apt-get update -qq
+              apt-get install -y -qq time libsndfile1
+              pip install --quiet numpy==2.2.6 pyarrow==20.0.0 soundfile==0.13.1 opencc-python-reimplemented==0.1.7
+              export LD_LIBRARY_PATH=/work/sherpa/lib
+              ulimit -c 0
+              python scripts/voice_accuracy_benchmark.py "$MODEL"
+            '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-accuracy-${{ matrix.model }}-${{ github.sha }}
+          path: artifacts/
+          retention-days: 14
