@@ -6,7 +6,7 @@ import numpy as np
 import onnx
 from onnx import TensorProto, helper, numpy_helper
 
-from voice_funasr_quantize import quantize
+from voice_funasr_quantize import check_interface, quantize
 
 
 class QuantizationTests(unittest.TestCase):
@@ -43,6 +43,17 @@ class QuantizationTests(unittest.TestCase):
     def test_invalid_mode_rejected(self):
         with self.assertRaises(ValueError):
             quantize(Path("missing"), Path("unused"), "invalid")
+
+    def test_shape_inference_refinement_not_interface_change(self):
+        before = [{"name": "x", "dtype": 1, "shape": ["batch", None, 64]}]
+        check_interface(before, [{"name": "x", "dtype": 1, "shape": [1, "sequence", 64]}])
+        for changed in (
+            {"name": "x", "dtype": 1, "shape": [1, "sequence", 32]},
+            {"name": "x", "dtype": 10, "shape": [1, "sequence", 64]},
+            {"name": "x", "dtype": 1, "shape": [1, 64]},
+        ):
+            with self.assertRaises(ValueError):
+                check_interface(before, [changed])
 
 
 if __name__ == "__main__":
