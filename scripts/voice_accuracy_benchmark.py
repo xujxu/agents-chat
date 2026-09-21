@@ -131,7 +131,7 @@ def summarize(results):
 
 def main():
     model = sys.argv[1]
-    samples = prepare(test_per_stratum=12 if model == "funasr" else 50)
+    samples = prepare()
     if model == "funasr":
         diagnostics = []
         for sample in samples[:3]:
@@ -168,6 +168,13 @@ def main():
             out.flush()
             print(f"{sample['id']}: {result['seconds']:.2f}s failure={result['failure']}", flush=True)
             Path("artifacts/summary.json").write_text(json.dumps(summarize(results), indent=2))
+            development = [r for r in results if r["split"] == "validation"]
+            if len(results) == 12 and len(development) == 12 and sum(
+                    r["text"] == "" or bool(r["failure"]) for r in development) >= 6:
+                Path("artifacts/quality-gate-failure.txt").write_text(
+                    "At least half the development speech cases returned empty text or failed. "
+                    "Stopped before test evaluation; this runtime/model combination is not usable.")
+                raise SystemExit("Development sanity gate failed; test set was not evaluated.")
     if any(r["failure"] for r in results):
         raise SystemExit("Inference failures; inspect artifacts. No successful fallback was substituted.")
 

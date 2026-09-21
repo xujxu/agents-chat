@@ -1,7 +1,5 @@
 name: Natural bilingual accuracy experiment
 on:
-  push:
-    branches: [experiment/voice-accuracy]
   workflow_dispatch:
 permissions:
   contents: read
