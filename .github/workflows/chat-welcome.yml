@@ -49,12 +49,6 @@ jobs:
           npx playwright test --config tests/playwright.config.ts tests/chat-welcome.spec.ts
           --workers=1 --timeout=45000 --global-timeout=420000 --max-failures=3
           --trace=retain-on-failure --reporter=line --output=artifacts/welcome
-      - name: Loading and mobile composer regressions
-        run: >-
-          npx playwright test --config tests/playwright.config.ts
-          tests/chat-selection-loading.spec.ts tests/mobile-composer-viewport.spec.ts
-          --workers=1 --timeout=60000 --global-timeout=480000 --max-failures=2
-          --trace=retain-on-failure --reporter=line --output=artifacts/regression
       - name: Voice integration regressions
         env:
           VOICE_API_FIXTURE: '1'
@@ -63,6 +57,27 @@ jobs:
           tests/voice-input.spec.ts tests/voice-api.spec.ts
           --workers=1 --timeout=45000 --global-timeout=600000 --max-failures=3
           --trace=retain-on-failure --reporter=line --output=artifacts/voice
+      - name: Restart with voice disabled for existing composer coverage
+        run: |
+          kill "$(cat artifacts/server.pid)"
+          for attempt in $(seq 1 30); do
+            if ! kill -0 "$(cat artifacts/server.pid)" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if kill -0 "$(cat artifacts/server.pid)" 2>/dev/null; then exit 1; fi
+          VOICE_ENABLED=0 node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 > artifacts/disabled-server.log 2>&1 &
+          echo "$!" > artifacts/server.pid
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 2 http://localhost:3011/login >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Loading and mobile composer regressions
+        run: >-
+          npx playwright test --config tests/playwright.config.ts
+          tests/chat-selection-loading.spec.ts tests/mobile-composer-viewport.spec.ts
+          --workers=1 --timeout=60000 --global-timeout=480000 --max-failures=2
+          --trace=retain-on-failure --reporter=line --output=artifacts/regression
       - name: Stop app
         if: always()
         run: |
