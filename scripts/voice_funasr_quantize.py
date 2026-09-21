@@ -1,9 +1,11 @@
-"""CI-only LLM requantization, leaving the audio encoder and tokenizer unchanged.
+"""CI-only CPU-safe requantization of the LLM or audio encoder.
 
 Recipe: Wasser1462/FunASR-nano-onnx at
 6823a8ed9f4a0393750d54d750051cf5a51a7fa9,
-scripts/export_llm_onnx_u8u8.py. The freshly generated full-range signed
-variant is a control for conversion-tool differences versus the shipped model.
+scripts/export_llm_onnx_u8u8.py and export_encoder_adaptor_onnx.py.
+The encoder quantizes only MatMul, matching its source export scope.
+The full-range signed LLM variant controls conversion-tool differences.
+Embedding weights and tokenizer are never modified.
 """
 
 import hashlib
