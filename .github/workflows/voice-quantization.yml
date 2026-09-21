@@ -42,30 +42,38 @@ jobs:
           pip install --quiet numpy==2.2.6 onnx==1.19.0 onnxruntime==1.23.2 pyarrow==20.0.0 soundfile==0.13.1 opencc-python-reimplemented==0.1.7
           pip freeze > artifacts/conversion-packages.txt
           python scripts/voice_accuracy_samples.py
-      - name: Convert only the LLM using three controlled quantization settings
+      - name: Convert LLM and encoder independently using CPU-safe quantization
         run: |
-          for mode in u8s8 u8s8-rr u8u8; do
+          for mode in u8u8; do
             mkdir -p "quantized/$mode"
             /usr/bin/time -v timeout 900 python scripts/voice_funasr_quantize.py \
               float/llm.fp32.onnx "quantized/$mode/llm.int8.onnx" "$mode" \
               > "artifacts/conversion-$mode.log" 2>&1
             cp "quantized/$mode/llm.int8.json" "artifacts/conversion-$mode.json"
           done
+          mkdir -p quantized/encoder
+          /usr/bin/time -v timeout 900 python scripts/voice_funasr_quantize.py \
+            float/encoder_adaptor.onnx quantized/encoder/encoder_adaptor.int8.onnx u8u8 encoder \
+            > artifacts/conversion-encoder.log 2>&1
+          cp quantized/encoder/encoder_adaptor.int8.json artifacts/conversion-encoder.json
           find quantized -type f -exec sha256sum '{}' \; > artifacts/converted-models.sha256
-      - name: Same-host inference with unchanged frontend and strict runtime limits
+      - name: Same-host encoder ablation with unchanged embedding and runtime limits
         run: |
           failed=0
-          for mode in original u8s8 u8s8-rr u8u8; do
+          for mode in original u8u8 float-encoder safe-encoder; do
             mkdir -p "case-$mode/model" "case-$mode/artifacts"
-            ln -s ../../original/encoder_adaptor.int8.onnx "case-$mode/model/encoder_adaptor.int8.onnx"
+            case "$mode" in
+              float-encoder) encoder=float/encoder_adaptor.onnx ;;
+              safe-encoder) encoder=quantized/encoder/encoder_adaptor.int8.onnx ;;
+              *) encoder=original/encoder_adaptor.int8.onnx ;;
+            esac
+            ln -s "../../$encoder" "case-$mode/model/encoder_adaptor.int8.onnx"
             ln -s ../../original/embedding.int8.onnx "case-$mode/model/embedding.int8.onnx"
             ln -s ../../original/Qwen3-0.6B "case-$mode/model/Qwen3-0.6B"
             if [ "$mode" = original ]; then
               ln -s ../../original/llm.int8.onnx "case-$mode/model/llm.int8.onnx"
             else
-              for file in "quantized/$mode/"*.onnx*; do
-                ln -s "../../$file" "case-$mode/model/$(basename "$file")"
-              done
+              ln -s ../../quantized/u8u8/llm.int8.onnx "case-$mode/model/llm.int8.onnx"
             fi
             ln -s ../accuracy-samples "case-$mode/accuracy-samples"
             ln -s ../sherpa "case-$mode/sherpa"
@@ -86,8 +94,7 @@ jobs:
           done
           echo "$failed" > artifacts/any-variant-failed.txt
           # A broken control is an expected experimental outcome, not a passing candidate.
-          test -f case-u8u8/artifacts/completed.json
-          test -f case-u8s8-rr/artifacts/completed.json
+          test -f case-safe-encoder/artifacts/completed.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

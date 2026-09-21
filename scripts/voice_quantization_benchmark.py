@@ -1,4 +1,4 @@
-"""Compare only LLM quantization on identical audio, frontend and CPU."""
+"""Compare quantization ablations on identical audio, tokenizer and CPU."""
 
 import json
 import os
@@ -17,7 +17,8 @@ Path("artifacts/environment.json").write_text(json.dumps({
     "revision": os.environ.get("GITHUB_SHA"),
     "avx512_vnni": "avx512_vnni" in cpu, "avx_vnni": " avx_vnni " in cpu,
     "threads": 2, "memory_limit_gib": 4, "timeout_seconds": 120,
-    "audio_encoder": "unchanged release INT8", "embedding": "unchanged release INT8",
+    "audio_encoder": {"float-encoder": "FP32", "safe-encoder": "U8U8"}.get(variant, "release INT8"),
+    "embedding": "unchanged release INT8",
     "model_loading": "new process per sample; possible warm filesystem cache",
 }, indent=2))
 results = []

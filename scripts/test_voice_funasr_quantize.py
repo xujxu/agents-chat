@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from itertools import product
 from pathlib import Path
 
 import numpy as np
@@ -25,10 +26,10 @@ class QuantizationTests(unittest.TestCase):
             model.ir_version = 9
             helper.set_model_props(model, {"model_type": "test", "max_total_len": "1024"})
             onnx.save(model, source)
-            for mode in ("u8s8", "u8s8-rr", "u8u8"):
-                with self.subTest(mode=mode):
-                    destination = root / f"{mode}.onnx"
-                    report = quantize(source, destination, mode)
+            for mode, component in product(("u8s8", "u8s8-rr", "u8u8"), ("llm", "encoder")):
+                with self.subTest(mode=mode, component=component):
+                    destination = root / f"{component}-{mode}.onnx"
+                    report = quantize(source, destination, mode, component)
                     result = onnx.load(destination)
                     self.assertFalse(any(t.external_data for t in result.graph.initializer))
                     self.assertEqual(result.graph.input[0].name, "x")

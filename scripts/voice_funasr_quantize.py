@@ -49,9 +49,11 @@ def check_interface(before, after):
                     raise ValueError(f"Static interface dimension changed: {old} -> {new}")
 
 
-def quantize(source, destination, mode):
+def quantize(source, destination, mode, component="llm"):
     if mode not in ("u8s8", "u8s8-rr", "u8u8"):
         raise ValueError(f"Unsupported quantization mode: {mode}")
+    if component not in ("llm", "encoder"):
+        raise ValueError(f"Unsupported component: {component}")
     source, destination = Path(source), Path(destination)
     source_model = onnx.load(source, load_external_data=False)
     metadata = {p.key: p.value for p in source_model.metadata_props}
@@ -86,6 +88,7 @@ def quantize(source, destination, mode):
             per_channel=True, reduce_range=mode == "u8s8-rr",
             extra_options={"WeightSymmetric": not unsigned},
             use_external_data_format=False,
+            **({"op_types_to_quantize": ["MatMul"]} if component == "encoder" else {}),
         )
     model = onnx.load(destination, load_external_data=False)
     assert not any(t.external_data for t in model.graph.initializer), "Expected self-contained runtime model"
@@ -101,6 +104,7 @@ def quantize(source, destination, mode):
     onnx.checker.check_model(str(destination))
     report = {
         "mode": mode, "source_sha256": checksum(source),
+        "component": component,
         "model_sha256": checksum(destination), "quantized_weight_tensors": len(weights),
         "per_channel": True, "reduce_range": mode == "u8s8-rr",
         "weight_type": "QUInt8" if unsigned else "QInt8",
@@ -113,4 +117,5 @@ def quantize(source, destination, mode):
 
 
 if __name__ == "__main__":
-    quantize(Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3])
+    quantize(Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3],
+             sys.argv[4] if len(sys.argv) == 5 else "llm")
