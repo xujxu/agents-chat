@@ -87,6 +87,10 @@ write_audio("mixed-en-first", en[:12 * 32000] + bytes(16000) + zh[:12 * 32000])
 write_audio("zh-30", (zh + bytes(16000)) * 4 + bytes(30 * 32000 - (len(zh) + 16000) * 4))
 samples = {"zh": "zh", "en": "en", "zh-short": "zh", "mixed": "zh",
            "mixed-en-first": "en", "zh-30": "zh"}
+if SENSE_COMPARISON:
+    bilingual = zh + bytes(16000) + en + bytes(16000)
+    write_audio("mixed-30", (bilingual * 3)[:30 * 32000])
+    samples["mixed-30"] = "auto"
 durations = {name: len(read_audio(name)) / 32000 for name in samples}
 assert all(0 < duration <= 30 for duration in durations.values())
 (OUT / "environment.json").write_text(json.dumps({

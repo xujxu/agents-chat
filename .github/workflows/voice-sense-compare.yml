@@ -38,6 +38,24 @@ jobs:
         run: |
           export LD_LIBRARY_PATH="$PWD/sherpa/lib"
           python3 scripts/voice-latency-benchmark.py
+      - name: Check Ubuntu 20.04 runtime compatibility under hard caps
+        run: |
+          docker run --rm --memory=384m --memory-swap=384m --cpus=1 --pids-limit=64 \
+            -v "$PWD/sherpa:/runtime:ro" -v "$PWD/sense:/model:ro" \
+            -v "$PWD/benchmark-samples:/samples:ro" \
+            ubuntu:20.04 bash -euc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y -qq libstdc++6
+              export LD_LIBRARY_PATH=/runtime/lib
+              ulimit -v 1048576
+              ulimit -t 120
+              ulimit -c 0
+              /runtime/bin/sherpa-onnx-offline --tokens=/model/tokens.txt \
+                --sense-voice-model=/model/model.int8.onnx \
+                --sense-voice-language=auto --sense-voice-use-itn=1 \
+                --num-threads=1 --provider=cpu --debug=0 /samples/mixed-30.wav
+            ' > artifacts/ubuntu20-compatibility.log 2>&1
       - name: Preserve model provenance
         if: always()
         run: |
