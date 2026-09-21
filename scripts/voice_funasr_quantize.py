@@ -85,9 +85,10 @@ def quantize(source, destination, mode):
             weight_type=QuantType.QUInt8 if unsigned else QuantType.QInt8,
             per_channel=True, reduce_range=mode == "u8s8-rr",
             extra_options={"WeightSymmetric": not unsigned},
-            use_external_data_format=True,
+            use_external_data_format=False,
         )
     model = onnx.load(destination, load_external_data=False)
+    assert not any(t.external_data for t in model.graph.initializer), "Expected self-contained runtime model"
     inferred_inputs, inferred_outputs = interface(model.graph.input), interface(model.graph.output)
     check_interface(inputs, inferred_inputs)
     check_interface(outputs, inferred_outputs)

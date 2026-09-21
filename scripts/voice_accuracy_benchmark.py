@@ -54,10 +54,10 @@ def trial(model, sample):
     prefix = Path("artifacts") / sample["id"]
     failure = None
     started = time.monotonic()
-    with prefix.with_suffix(".log").open("w") as log:
+    with prefix.with_suffix(".log").open("w") as log, prefix.with_suffix(".stdout").open("w") as stdout:
         process = subprocess.Popen(
             ["/usr/bin/time", "-f", "%M", "-o", str(prefix.with_suffix(".rss")),
-             *command(model, sample)], stdout=log, stderr=log, start_new_session=True)
+             *command(model, sample)], stdout=stdout, stderr=log, start_new_session=True)
         try:
             code = process.wait(timeout=120)
         except subprocess.TimeoutExpired:
@@ -66,7 +66,7 @@ def trial(model, sample):
             failure = "timeout_120s"
     elapsed = time.monotonic() - started
     try:
-        log = prefix.with_suffix(".log").read_text()
+        log = prefix.with_suffix(".stdout").read_text()
     except UnicodeDecodeError:
         failure = failure or "invalid_utf8_output"
         log = ""
@@ -138,7 +138,7 @@ def main():
             result = trial("funasr", sample)
             diagnostics.append(result)
             # Retain both paths' logs, rather than overwriting the alternate run.
-            for suffix in (".log", ".rss"):
+            for suffix in (".log", ".stdout", ".rss"):
                 path = Path("artifacts") / (sample["id"] + suffix)
                 if path.exists():
                     path.rename(path.with_name("cli-" + path.name))
@@ -146,7 +146,7 @@ def main():
         ascii_diagnostics = []
         for sample in samples[:3]:
             ascii_diagnostics.append(trial("funasr-ascii", sample))
-            for suffix in (".log", ".rss"):
+            for suffix in (".log", ".stdout", ".rss"):
                 path = Path("artifacts") / (sample["id"] + suffix)
                 if path.exists():
                     path.rename(path.with_name("ascii-" + path.name))

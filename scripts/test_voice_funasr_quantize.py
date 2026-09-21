@@ -30,6 +30,7 @@ class QuantizationTests(unittest.TestCase):
                     destination = root / f"{mode}.onnx"
                     report = quantize(source, destination, mode)
                     result = onnx.load(destination)
+                    self.assertFalse(any(t.external_data for t in result.graph.initializer))
                     self.assertEqual(result.graph.input[0].name, "x")
                     self.assertEqual(result.graph.output[0].name, "y")
                     self.assertEqual(dict((p.key, p.value) for p in result.metadata_props)["max_total_len"], "1024")

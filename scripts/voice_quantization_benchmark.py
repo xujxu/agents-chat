@@ -30,10 +30,13 @@ with Path("artifacts/results.jsonl").open("w") as stream:
         stream.flush()
         Path("artifacts/summary.json").write_text(json.dumps(summarize(results), indent=2))
         print(f"{variant} {sample['id']}: {result['seconds']:.2f}s {result['failure']}", flush=True)
-        if len(results) == 12 and sum(r["text"] == "" or bool(r["failure"]) for r in results) >= 6:
-            Path("artifacts/quality-gate-failure.txt").write_text(
-                "At least half the development samples are empty or failed; not evaluated on test.")
-            raise SystemExit("Development quality gate failed")
+        if len(results) == 12:
+            dev = next(r for r in summarize(results) if r["group"] == "mixed")
+            if sum(r["text"] == "" or bool(r["failure"]) for r in results) >= 6 or (
+                    dev["mer"] is not None and dev["mer"] >= 0.8):
+                Path("artifacts/quality-gate-failure.txt").write_text(
+                    "Development gate: at least half empty/failed or MER >= 80%; not evaluated on test.")
+                raise SystemExit("Development quality gate failed")
 if any(r["failure"] for r in results):
     raise SystemExit("Inference failures; inspect evidence")
 Path("artifacts/completed.json").write_text(json.dumps({
