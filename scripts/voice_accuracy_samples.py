@@ -21,13 +21,14 @@ FILES = {
 }
 
 
-def prepare():
+def prepare(test_per_stratum=50):
     out = Path("artifacts")
     out.mkdir(exist_ok=True)
     samples = Path("accuracy-samples")
     samples.mkdir()
     urllib.request.urlretrieve(f"{BASE}/README.md", out / "ASCEND-dataset-card.txt")
     manifest = []
+    selection = []
     for split, checksum in FILES.items():
         path = samples / f"{split}.parquet"
         urllib.request.urlretrieve(f"{BASE}/main/{split}-00000-of-00001.parquet", path)
@@ -50,10 +51,14 @@ def prepare():
                 continue
             groups[category].append(row)
         for category, candidates in groups.items():
-            count = (6 if split == "validation" else 12) if category.startswith("mixed") else (0 if split == "validation" else 3)
+            requested = (6 if split == "validation" else test_per_stratum) if category.startswith("mixed") else (0 if split == "validation" else 3)
+            count = min(requested, len(candidates))
+            selection.append({"split": split, "category": category, "requested": requested,
+                              "eligible": len(candidates), "selected": count})
+            print(f"{split}/{category}: {count} selected from {len(candidates)} eligible (target {requested})", flush=True)
             ranked = sorted(candidates, key=lambda r: hashlib.sha256(
                 f"accuracy-v1:{split}:{r['id']}".encode()).hexdigest())
-            assert len(ranked) >= count, f"Not enough samples: {split}/{category}"
+            assert requested == 0 or count > 0, f"No eligible samples: {split}/{category}"
             for row in ranked[:count]:
                 name = f"{split}-{row['id']}"
                 audio, rate = sf.read(io.BytesIO(row["audio"]["bytes"]), dtype="float32")
@@ -75,6 +80,7 @@ def prepare():
     (out / "samples.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
     (out / "methodology.json").write_text(json.dumps({
         "dataset": "CAiRE/ASCEND", "revision": REVISION, "sha256": FILES,
+        "selection": selection,
         "license": "CC-BY-SA-4.0", "attribution": "Lovenia et al., ASCEND, LREC 2022",
         "sampling": "hash-ranked fixed strata; no selection based on model output; exclude incomplete bracket-marked references such as [UNK]",
         "mixed_phrase": "at least 3 English words total; not necessarily a complete English sentence",

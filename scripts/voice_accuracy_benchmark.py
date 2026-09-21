@@ -35,7 +35,7 @@ def command(model, sample):
                  "--qwen3-asr-tokenizer=model/tokenizer",
                  "--qwen3-asr-max-total-len=1024", "--qwen3-asr-max-new-tokens=512",
                  "--qwen3-asr-temperature=0.000001", "--qwen3-asr-seed=42"]
-    elif model == "funasr":
+    elif model in ("funasr", "funasr-ascii"):
         args += ["--funasr-nano-encoder-adaptor=model/encoder_adaptor.int8.onnx",
                  "--funasr-nano-embedding=model/embedding.int8.onnx",
                  "--funasr-nano-llm=model/llm.int8.onnx",
@@ -43,6 +43,8 @@ def command(model, sample):
                  "--funasr-nano-max-new-tokens=512",
                  "--funasr-nano-temperature=0.000001", "--funasr-nano-seed=42",
                  "--funasr-nano-itn=1"]
+        if model == "funasr-ascii":
+            args.append("--funasr-nano-user-prompt=\u8bed\u97f3\u8f6c\u5199:")
     else:
         raise ValueError(f"Unknown model: {model}")
     return args + [f"accuracy-samples/{sample['id']}.wav"]
@@ -129,7 +131,7 @@ def summarize(results):
 
 def main():
     model = sys.argv[1]
-    samples = prepare()
+    samples = prepare(test_per_stratum=12 if model == "funasr" else 50)
     if model == "funasr":
         diagnostics = []
         for sample in samples[:3]:
@@ -141,6 +143,14 @@ def main():
                 if path.exists():
                     path.rename(path.with_name("cli-" + path.name))
         Path("artifacts/cli-diagnostic.json").write_text(json.dumps(diagnostics, ensure_ascii=False, indent=2))
+        ascii_diagnostics = []
+        for sample in samples[:3]:
+            ascii_diagnostics.append(trial("funasr-ascii", sample))
+            for suffix in (".log", ".rss"):
+                path = Path("artifacts") / (sample["id"] + suffix)
+                if path.exists():
+                    path.rename(path.with_name("ascii-" + path.name))
+        Path("artifacts/ascii-prompt-diagnostic.json").write_text(json.dumps(ascii_diagnostics, ensure_ascii=False, indent=2))
         model = "funasr-python"
     Path("artifacts/environment.json").write_text(json.dumps({
         "model": model, "sha": os.environ.get("GITHUB_SHA"), "platform": platform.platform(),
