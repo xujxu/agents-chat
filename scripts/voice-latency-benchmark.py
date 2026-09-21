@@ -20,6 +20,7 @@ ROOT = Path.cwd()
 OUT = ROOT / "artifacts"
 SAMPLES = ROOT / "benchmark-samples"
 RUNTIME = ROOT / "native/runtime"
+SENSE_COMPARISON = os.environ.get("VOICE_BENCH_SENSE") == "1"
 SAMPLE_REVISION = "3847d57b6bdf2dd8875cb1508d2af43d80a16bf7"
 SAMPLE_BLOBS = {
     "zh": "1ae2c89b29112ee5e23bcebc353ea6687c38e6bd",
@@ -117,6 +118,15 @@ def trial(sample, variant, repetition):
         "-of", str(prefix), "-otxt", "-l", language, "-t", str(threads), "-p", "1",
         "-bs", "1", "-bo", "1", "-nt", "-ng", *extra,
     ]
+    if variant == "sense-auto":
+        command = command[:8] + [
+            str(ROOT / "sherpa/bin/sherpa-onnx-offline"),
+            f"--tokens={ROOT / 'sense/tokens.txt'}",
+            f"--sense-voice-model={ROOT / 'sense/model.int8.onnx'}",
+            "--sense-voice-language=auto", "--sense-voice-use-itn=1",
+            "--num-threads=1", "--provider=cpu", "--debug=0",
+            str(SAMPLES / f"{sample}.wav"),
+        ]
     peak = 0
     failure = None
     cpu_before = resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -152,6 +162,26 @@ def trial(sample, variant, repetition):
     encode = re.search(r"encode time.*?/\s*(\d+) runs", log)
     text_file = prefix.with_suffix(".txt")
     text = text_file.read_text().strip() if text_file.exists() else None
+    if variant == "sense-auto":
+        # The pinned CLI prints one JSON result to stdout and timings to stderr.
+        start = log.find('{\n')
+        if start < 0:
+            start = log.find('{"')
+        if start >= 0:
+            try:
+                result, _ = json.JSONDecoder().raw_decode(log[start:])
+                text = result.get("text")
+            except json.JSONDecodeError as error:
+                failure = f"invalid_result: {error}"
+        for key, pattern in [
+            ("load", r"recognizer created in ([\d.]+) s"),
+            ("decode", r"Elapsed seconds: ([\d.]+) s"),
+        ]:
+            match = re.search(pattern, log)
+            if match:
+                timings[key] = float(match[1]) * 1000
+    if code == 0 and not text:
+        failure = failure or "empty_result"
     return {
         "sample": sample, "variant": variant, "repeat": repetition,
         "language": language, "threads": threads,
@@ -165,9 +195,12 @@ def trial(sample, variant, repetition):
 
 variants = ["base-auto", "base-language", "tiny-auto", "tiny-language",
             "base-short-context", "base-two-threads"]
+if SENSE_COMPARISON:
+    variants = ["base-auto", "sense-auto"]
 jobs = [(sample, variant, repetition) for sample in samples for variant in variants
         for repetition in range(3)]
-jobs += [("en", "base-force-zh", repetition) for repetition in range(3)]
+if not SENSE_COMPARISON:
+    jobs += [("en", "base-force-zh", repetition) for repetition in range(3)]
 random.Random(20260921).shuffle(jobs)
 results = []
 with (OUT / "results.jsonl").open("w") as stream:
@@ -181,7 +214,7 @@ with (OUT / "results.jsonl").open("w") as stream:
 
 summary = []
 for sample in samples:
-    for variant in variants + (["base-force-zh"] if sample == "en" else []):
+    for variant in variants + (["base-force-zh"] if sample == "en" and not SENSE_COMPARISON else []):
         rows = [row for row in results if row["sample"] == sample and row["variant"] == variant]
         summary.append({
             "sample": sample, "variant": variant, "audio_seconds": durations[sample],

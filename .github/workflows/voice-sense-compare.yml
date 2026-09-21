@@ -1,0 +1,52 @@
+name: Bilingual voice model comparison
+on:
+  push:
+    branches: [experiment/voice-sense-compare]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35591663846
+          name: voice-native-e4ca3a6ac7b1e663051a369413b940cacdfc1b86
+          path: native
+      - name: Prepare pinned runtimes and models
+        run: |
+          (cd native && sha256sum --check voice-runtime.sha256 && tar -xzf voice-runtime.tar.gz)
+          (cd native/runtime && sha256sum --check SHA256SUMS)
+          curl -fL --retry 3 --max-time 180 https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared-no-tts.tar.bz2 -o sherpa.tar.bz2
+          echo 'd0f96c8b65c6cd0974fada22737e337de81bc8cd2abbec2e39caf358b1eec5fc  sherpa.tar.bz2' | sha256sum --check
+          mkdir sherpa
+          tar -xjf sherpa.tar.bz2 --strip-components=1 -C sherpa
+          curl -fL --retry 3 --max-time 180 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2 -o sense.tar.bz2
+          echo '7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e  sense.tar.bz2' | sha256sum --check
+          mkdir sense
+          tar -xjf sense.tar.bz2 --strip-components=1 -C sense
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+      - name: Compare within unchanged production limits
+        env:
+          VOICE_BENCH_SENSE: '1'
+        run: |
+          export LD_LIBRARY_PATH="$PWD/sherpa/lib"
+          python3 scripts/voice-latency-benchmark.py
+      - name: Preserve model provenance
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cp sense/LICENSE artifacts/sense-model-LICENSE
+          sha256sum sense/model.int8.onnx sherpa/bin/sherpa-onnx-offline > artifacts/sense-runtime.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-sense-${{ github.sha }}
+          path: artifacts/
+          retention-days: 14
