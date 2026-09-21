@@ -146,8 +146,10 @@ def trial(sample, variant, repetition):
             "--num-threads=1", "--provider=cpu", "--debug=0",
             str(SAMPLES / f"{sample}.wav"),
         ]
-    if variant == "sense-vad":
+    if variant.startswith("sense-vad"):
         command = command[:8] + [str(ROOT / "voice-vad-probe"), str(SAMPLES / f"{sample}.wav")]
+        if variant != "sense-vad":
+            command.append(variant.removeprefix("sense-vad-"))
     peak = 0
     failure = None
     cpu_before = resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -184,7 +186,7 @@ def trial(sample, variant, repetition):
     text_file = prefix.with_suffix(".txt")
     text = text_file.read_text().strip() if text_file.exists() else None
     segments = []
-    if variant == "sense-vad":
+    if variant.startswith("sense-vad"):
         records = []
         for match in re.finditer(r"^\{", log, re.M):
             try:
@@ -197,6 +199,9 @@ def trial(sample, variant, repetition):
         metrics = next((record for record in records if "segments" in record), None)
         if metrics:
             timings = {key: metrics[f"{key}_seconds"] * 1000 for key in ("vad", "load", "decode")}
+            peak = max(peak, metrics["max_rss_kib"])
+            if peak > 393216:
+                failure = failure or "rss_limit"
             if metrics["segments"] != len(segments):
                 failure = "segment_count_mismatch"
         else:
@@ -221,7 +226,7 @@ def trial(sample, variant, repetition):
                 timings[key] = float(match[1]) * 1000
     if code == 0 and not text and sample != "silence":
         failure = failure or "empty_result"
-    if code == 0 and sample == "silence" and variant == "sense-vad" and segments:
+    if code == 0 and sample == "silence" and variant.startswith("sense-vad") and segments:
         failure = "silence_detected_as_speech"
     return {
         "sample": sample, "variant": variant, "repeat": repetition,
@@ -240,7 +245,7 @@ variants = ["base-auto", "base-language", "tiny-auto", "tiny-language",
 if SENSE_COMPARISON:
     variants = ["base-auto", "sense-auto"]
 if VAD_COMPARISON:
-    variants.append("sense-vad")
+    variants = ["sense-auto", "sense-vad", "sense-vad-pad", "sense-vad-pad-lowmem"]
 jobs = [(sample, variant, repetition) for sample in samples for variant in variants
         for repetition in range(3)]
 if not SENSE_COMPARISON:

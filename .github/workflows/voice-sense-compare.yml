@@ -44,14 +44,16 @@ jobs:
           export LD_LIBRARY_PATH="$PWD/sherpa/lib"
           python3 scripts/voice-latency-benchmark.py
       - name: Check Ubuntu 20.04 runtime compatibility under hard caps
+        if: ${{ !cancelled() }}
         run: |
           docker run --rm --memory=384m --memory-swap=384m --cpus=1 --pids-limit=64 \
             -v "$PWD/sherpa:/runtime:ro" -v "$PWD/sense:/model:ro" \
             -v "$PWD/benchmark-samples:/samples:ro" \
+            -v "$PWD:/work:ro" -w /work \
             ubuntu:20.04 bash -euc '
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -qq
-              apt-get install -y -qq libstdc++6
+              apt-get install -y -qq libstdc++6 gcc
               export LD_LIBRARY_PATH=/runtime/lib
               ulimit -v 1048576
               ulimit -t 120
@@ -60,13 +62,20 @@ jobs:
                 --sense-voice-model=/model/model.int8.onnx \
                 --sense-voice-language=auto --sense-voice-use-itn=1 \
                 --num-threads=1 --provider=cpu --debug=0 /samples/mixed-30.wav
+              gcc -std=c11 -Wall -Wextra -Werror -I/runtime/include scripts/voice-vad-probe.c \
+                -L/runtime/lib -lsherpa-onnx-c-api -o /tmp/voice-vad-probe
+              for sample in mixed-30 mixed-no-gap silence; do
+                echo "VAD_LOW_MEMORY_SAMPLE=$sample"
+                /tmp/voice-vad-probe "/samples/$sample.wav" pad-lowmem
+              done
             ' > artifacts/ubuntu20-compatibility.log 2>&1
       - name: Preserve model provenance
         if: always()
         run: |
           mkdir -p artifacts
           cp sense/LICENSE artifacts/sense-model-LICENSE
-          sha256sum sense/model.int8.onnx sherpa/bin/sherpa-onnx-offline > artifacts/sense-runtime.sha256
+          sha256sum sense/model.int8.onnx sherpa/bin/sherpa-onnx-offline \
+            silero_vad.onnx voice-vad-probe scripts/voice-cpu-lowmem.config > artifacts/sense-runtime.sha256
       - uses: actions/upload-artifact@v4
         if: always()
         with:
