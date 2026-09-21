@@ -10,6 +10,7 @@ import random
 import re
 import resource
 import statistics
+import struct
 import subprocess
 import time
 import urllib.request
@@ -21,6 +22,7 @@ OUT = ROOT / "artifacts"
 SAMPLES = ROOT / "benchmark-samples"
 RUNTIME = ROOT / "native/runtime"
 SENSE_COMPARISON = os.environ.get("VOICE_BENCH_SENSE") == "1"
+VAD_COMPARISON = os.environ.get("VOICE_BENCH_VAD") == "1"
 SAMPLE_REVISION = "3847d57b6bdf2dd8875cb1508d2af43d80a16bf7"
 SAMPLE_BLOBS = {
     "zh": "1ae2c89b29112ee5e23bcebc353ea6687c38e6bd",
@@ -91,6 +93,19 @@ if SENSE_COMPARISON:
     bilingual = zh + bytes(16000) + en + bytes(16000)
     write_audio("mixed-30", (bilingual * 3)[:30 * 32000])
     samples["mixed-30"] = "auto"
+if VAD_COMPARISON:
+    def trim_edges(data):
+        frames = [data[i:i + 640] for i in range(0, len(data), 640)]
+        active = [i for i, frame in enumerate(frames)
+                  if max(abs(value[0]) for value in struct.iter_unpack("<h", frame)) > 327]
+        assert active, "Source sample has no audible frames"
+        return b"".join(frames[active[0]:active[-1] + 1])
+
+    trimmed_zh, trimmed_en = trim_edges(zh), trim_edges(en)
+    write_audio("mixed-no-gap", trimmed_zh + trimmed_en)
+    write_audio("mixed-short-gap", trimmed_zh + bytes(3200) + trimmed_en)
+    write_audio("silence", bytes(5 * 32000))
+    samples.update({"mixed-no-gap": "auto", "mixed-short-gap": "auto", "silence": "auto"})
 durations = {name: len(read_audio(name)) / 32000 for name in samples}
 assert all(0 < duration <= 30 for duration in durations.values())
 (OUT / "environment.json").write_text(json.dumps({
@@ -131,6 +146,8 @@ def trial(sample, variant, repetition):
             "--num-threads=1", "--provider=cpu", "--debug=0",
             str(SAMPLES / f"{sample}.wav"),
         ]
+    if variant == "sense-vad":
+        command = command[:8] + [str(ROOT / "voice-vad-probe"), str(SAMPLES / f"{sample}.wav")]
     peak = 0
     failure = None
     cpu_before = resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -166,6 +183,24 @@ def trial(sample, variant, repetition):
     encode = re.search(r"encode time.*?/\s*(\d+) runs", log)
     text_file = prefix.with_suffix(".txt")
     text = text_file.read_text().strip() if text_file.exists() else None
+    segments = []
+    if variant == "sense-vad":
+        records = []
+        for match in re.finditer(r"^\{", log, re.M):
+            try:
+                record, _ = json.JSONDecoder().raw_decode(log[match.start():])
+                records.append(record)
+            except json.JSONDecodeError as error:
+                failure = f"invalid_vad_result: {error}"
+        segments = [record for record in records if "segment_start" in record]
+        text = " ".join(segment["result"]["text"] for segment in segments)
+        metrics = next((record for record in records if "segments" in record), None)
+        if metrics:
+            timings = {key: metrics[f"{key}_seconds"] * 1000 for key in ("vad", "load", "decode")}
+            if metrics["segments"] != len(segments):
+                failure = "segment_count_mismatch"
+        else:
+            failure = failure or "missing_vad_metrics"
     if variant == "sense-auto":
         # The pinned CLI prints one JSON result to stdout and timings to stderr.
         start = log.find('{\n')
@@ -184,8 +219,10 @@ def trial(sample, variant, repetition):
             match = re.search(pattern, log)
             if match:
                 timings[key] = float(match[1]) * 1000
-    if code == 0 and not text:
+    if code == 0 and not text and sample != "silence":
         failure = failure or "empty_result"
+    if code == 0 and sample == "silence" and variant == "sense-vad" and segments:
+        failure = "silence_detected_as_speech"
     return {
         "sample": sample, "variant": variant, "repeat": repetition,
         "language": language, "threads": threads,
@@ -194,6 +231,7 @@ def trial(sample, variant, repetition):
         - cpu_before.ru_utime - cpu_before.ru_stime, "peak_rss_kib": peak,
         "exit_code": code, "failure": failure, "timings_ms": timings,
         "encoder_runs": int(encode[1]) if encode else None, "text": text,
+        "segments": segments,
     }
 
 
@@ -201,6 +239,8 @@ variants = ["base-auto", "base-language", "tiny-auto", "tiny-language",
             "base-short-context", "base-two-threads"]
 if SENSE_COMPARISON:
     variants = ["base-auto", "sense-auto"]
+if VAD_COMPARISON:
+    variants.append("sense-vad")
 jobs = [(sample, variant, repetition) for sample in samples for variant in variants
         for repetition in range(3)]
 if not SENSE_COMPARISON:
@@ -229,11 +269,11 @@ for sample in samples:
             "median_cpu_seconds": round(statistics.median(row["cpu_seconds"] for row in rows), 3),
             "encoder_runs": [row["encoder_runs"] for row in rows],
             "failures": [row["failure"] or f"exit={row['exit_code']}" for row in rows
-                         if row["failure"] or row["exit_code"] or not row["text"]],
+                         if row["failure"] or row["exit_code"] or (not row["text"] and sample != "silence")],
             "transcripts": sorted(set(row["text"] or "" for row in rows)),
         })
 (OUT / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False))
-if SENSE_COMPARISON:
+if SENSE_COMPARISON and not VAD_COMPARISON:
     # Oracle boundaries from synthetic construction, NOT a production VAD or
     # evidence that arbitrary natural code-switching can be segmented correctly.
     source = read_audio("mixed-30")

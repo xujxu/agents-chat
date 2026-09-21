@@ -30,11 +30,16 @@ jobs:
           echo '7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e  sense.tar.bz2' | sha256sum --check
           mkdir sense
           tar -xjf sense.tar.bz2 --strip-components=1 -C sense
+          curl -fL --retry 3 --max-time 60 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx -o silero_vad.onnx
+          echo '9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6  silero_vad.onnx' | sha256sum --check
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
+          gcc -std=c11 -Wall -Wextra -Werror -Isherpa/include scripts/voice-vad-probe.c \
+            -Lsherpa/lib -lsherpa-onnx-c-api -o voice-vad-probe
       - name: Compare within unchanged production limits
         env:
           VOICE_BENCH_SENSE: '1'
+          VOICE_BENCH_VAD: '1'
         run: |
           export LD_LIBRARY_PATH="$PWD/sherpa/lib"
           python3 scripts/voice-latency-benchmark.py
