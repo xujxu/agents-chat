@@ -3,6 +3,15 @@ on:
   push:
     branches: [experiment/voice-natural-long]
   workflow_dispatch:
+    inputs:
+      collect_audio_and_infer:
+        description: Download public audio and run three models (otherwise tests/report only)
+        type: boolean
+        default: false
+      evidence_run:
+        description: Completed comparison run to analyze without rerunning models
+        type: string
+        default: '35731913423'
 permissions:
   contents: read
   actions: read
@@ -17,7 +26,9 @@ jobs:
       - run: pip install opencc-python-reimplemented==0.1.7
       - run: python -m unittest discover -s scripts -p 'test_voice_*selection.py' -v
       - run: python -m unittest discover -s scripts -p test_voice_public_windows.py -v
+      - run: python -m unittest discover -s scripts -p test_voice_long_report.py -v
   inventory:
+    if: github.event_name == 'workflow_dispatch' && inputs.collect_audio_and_infer
     needs: selection-tests
     runs-on: ubuntu-22.04
     timeout-minutes: 30
@@ -39,6 +50,26 @@ jobs:
         with:
           name: voice-long-public-clips-${{ github.sha }}
           path: accuracy-samples/
+          retention-days: 14
+  report:
+    needs: selection-tests
+    if: github.event_name == 'push' || !inputs.collect_audio_and_infer
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.evidence_run || '35731913423' }}
+          pattern: voice-long-performance-*
+          merge-multiple: true
+          path: evidence
+      - run: python scripts/voice_long_report.py evidence report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-long-reviewed-performance-${{ github.sha }}
+          path: report/
           retention-days: 14
   compare:
     needs: inventory

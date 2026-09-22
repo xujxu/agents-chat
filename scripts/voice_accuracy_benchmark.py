@@ -16,7 +16,6 @@ import sys
 import time
 
 from voice_accuracy_metrics import score
-from voice_accuracy_samples import prepare
 
 
 def command(model, sample):
@@ -92,6 +91,9 @@ def trial(model, sample, *, score_reference=True):
         failure = failure or "rss_limit"
     if result and isinstance(result.get("tokens"), list) and len(result["tokens"]) >= 512:
         failure = failure or "possible_token_limit"
+    diagnostics = prefix.with_suffix(".log").read_text(errors="replace")
+    if "Truncating audio placeholders:" in diagnostics or "Falling back to keep last" in diagnostics:
+        failure = failure or "context_truncation"
     return {
         **sample, "model": model, "text": text, "failure": failure,
         "exit_code": code, "seconds": elapsed, "peak_rss_kib": rss,
@@ -130,6 +132,8 @@ def summarize(results):
 
 
 def main():
+    from voice_accuracy_samples import prepare
+
     model = sys.argv[1]
     samples = prepare()
     if model == "funasr":
