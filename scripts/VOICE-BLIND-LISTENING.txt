@@ -1,0 +1,40 @@
+Blind listening package
+======================
+
+Run the "Voice blind listening package" workflow_dispatch on
+experiment/voice-natural-long. Tests and audio packaging run in GitHub Actions
+only. No model inference, source corpus download or production changes occur.
+The input is the existing public-clips artifact 10695264903 from run 35731913423.
+If that artifact expires, restore the same source evidence explicitly; do not
+silently select different clips.
+
+The workflow produces three independently downloadable GitHub artifact ZIPs:
+
+voice-blind-listening-40:
+  audio/01.wav ... audio/40.wav
+  transcripts.csv (id,transcript,notes; 40 rows; transcript and notes blank)
+  README.txt
+  ATTRIBUTION.txt
+
+voice-blind-blank-csv:
+  An identical transcripts.csv for a separate download if needed.
+
+voice-blind-key-do-not-open-before-transcribing:
+  mapping.json and provenance.json. Keep these for the later comparison, but do
+  not consult them before listening. They contain source identity, attribution,
+  timing and hashes, not captions or ASR output. Separation is to prevent
+  accidental unblinding, not to enforce secrecy.
+
+The packager requires exactly 40 unique IDs, verifies each source WAV against its
+manifest SHA-256, checks mono 16-kHz PCM16 and 15-30-second duration, and rejects
+truncated audio. A fixed shuffle gives stable 01-40 IDs. WAV metadata is removed
+without changing PCM samples; every written waveform is reread and compared.
+The output directory must be new, preventing stale captions from being uploaded.
+Only successful jobs upload artifacts. Download before the 30-day retention ends,
+and retain the key alongside the listener's completed CSV for future comparison.
+
+Human transcription is the next evidence-gathering step, not an accuracy result.
+Record uncertain or inaudible spans and review them before scoring. Never use the
+source captions as a verified reference. Later, join the completed CSV's blind ID
+through mapping.json to the source ID in the ASR results; verify source hashes.
+Do not change the mapping, rerun selection, or substitute another audio set.
