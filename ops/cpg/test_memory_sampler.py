@@ -182,6 +182,7 @@ class SamplerTests(unittest.TestCase):
         (self.proc / "42" / "cgroup").write_text("2:memory:/outside\n")
         self.assertEqual(history.update(sampler.snapshot("new-session"))[0]["event"], "left_group")
         (self.group / common.WORKLOAD / "cgroup.procs").write_text("42\n")
+        (self.proc / "42" / "cgroup").write_text("2:memory:/cpg.slice/cpg-workload.service\n")
         history.update(sampler.snapshot("new-session"))
         (self.proc / "42" / "stat").unlink()
         (self.group / common.WORKLOAD / "cgroup.procs").write_text("")
