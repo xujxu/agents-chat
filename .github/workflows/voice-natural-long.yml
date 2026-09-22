@@ -1,0 +1,18 @@
+name: Natural long bilingual acceptance study
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  selection-tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - run: python -m unittest discover -s scripts -p 'test_voice_*selection.py' -v
