@@ -11,12 +11,14 @@ curl --fail --silent --show-error --location \
 qemu-img resize "$work/root.qcow2" 5G
 sudo env LIBGUESTFS_BACKEND=direct virt-edit -v -x -a "$work/root.qcow2" /boot/grub/grub.cfg \
   -e 's/^(\s*linux\s+.*)$/$1 systemd.unified_cgroup_hierarchy=0/' > "$work/guestfs.log" 2>&1
-python3 - "$source_dir" "$work" <<'PY'
+python3 - "$source_dir" "$work" "${1:-integration.py}" <<'PY'
 import base64
 import json
 from pathlib import Path
 import sys
-source, work = map(Path, sys.argv[1:])
+source, work = map(Path, sys.argv[1:3])
+integration = sys.argv[3]
+assert integration in ("integration.py", "memory_sampler_integration.py")
 files = [{
     "path": "/opt/cpg-test/" + path.name,
     "permissions": "0644",
@@ -25,7 +27,7 @@ files = [{
 } for path in source.glob("*.py")]
 config = {
     "write_files": files,
-    "runcmd": [["bash", "-c", "python3 /opt/cpg-test/integration.py > /var/log/cpg-test.log 2>&1; result=$?; cat /var/log/cpg-test.log > /dev/ttyS0; echo CPG_RESULT=$result > /dev/ttyS0; poweroff"]],
+    "runcmd": [["bash", "-c", "python3 /opt/cpg-test/" + integration + " > /var/log/cpg-test.log 2>&1; result=$?; cat /var/log/cpg-test.log > /dev/ttyS0; echo CPG_RESULT=$result > /dev/ttyS0; poweroff"]],
 }
 (work / "user-data").write_text("#cloud-config\n" + json.dumps(config))
 (work / "meta-data").write_text("instance-id: cpg-ci\nlocal-hostname: cpg-ci\n")

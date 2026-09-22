@@ -5,10 +5,12 @@ Purpose and boundaries
 Observe normal work in a fresh CLI process and fresh session. Do not resume or
 exercise an OOM-prone old session to establish a baseline. Do not provoke OOM.
 Keep cpg.slice's exact 1.5 GiB (1610612736 byte) hard limit. This diagnostic
-never changes the guard, CLI installation, services, or production application.
-It sends no signals and does not kill processes. No sudo or installation needed.
+never changes the guard, CLI installation, existing services, or production application.
+It sends no signals and does not kill observed processes. Foreground sampling
+needs no sudo or installation. The optional bounded system service below needs
+administrator authorization only to create its own transient service.
 
-Launch manually from a SEPARATE ordinary SSH shell, NOT a CLI tool, cpg shell,
+For foreground use, launch from a SEPARATE ordinary SSH shell, NOT a CLI tool, cpg shell,
 or cpg descendant. The sampler refuses membership at /cpg.slice or below.
 Keep that SSH connection open: this is a foreground process, not a daemon.
 Use Ctrl-C to stop early. It stops automatically after at most two hours
@@ -20,8 +22,83 @@ artifact side by side. From that directory, run:
 
   python3 -B ./memory_sampler.py --output "$HOME/cli-memory-new-session" --label new-session
 
-The output's parent must already exist and must not contain symlinks. Use a
-new directory for each comparison. An existing directory must be owned by you
+Bounded background service (approved deployment design)
+------------------------------------------------------
+Use memory_sampler_service.py from the same verified artifact. Run the launcher
+as your normal user, never with sudo in front of Python:
+
+  sudo -v
+  python3 -B ./memory_sampler_service.py
+
+The launcher prepares the private output directory, then uses sudo -n solely
+for systemd-run. If authorization fails, it reports failure and no sampler is
+started; do not grant broad passwordless sudo to work around this. The system
+manager launches Python as your UID/GID in system.slice, OUTSIDE cpg.slice.
+Thus launching this management command from cpg does not place the sampler in
+cpg: the system manager, not the launcher, is its process parent.
+
+This is a transient service, not an installed/boot-enabled daemon. SSH logout
+does not stop it. No linger setting, application service or guard configuration
+is changed. There is no automatic restart or recurring timer.
+
+Hard resource limits:
+  RuntimeMaxSec=7200       Maximum two hours; at most five seconds stop grace.
+  MemoryMax=33554432       32 MiB charged to the sampler's own cgroup.
+  CPUQuota=5%              At most 5% of one logical CPU, not 5% of the machine.
+  TasksMax=8               Maximum threads/processes in this service.
+  Nice=19                 Lowest ordinary CPU scheduling priority.
+  IOSchedulingClass=idle   Idle I/O scheduling priority where supported.
+  LimitFSIZE=4194304       Kernel per-file size limit of 4 MiB.
+
+The sampler still reads every ten seconds. Kernel throttling, scheduler delay
+or slow reads can reduce the number of observations. Resource limits are
+ceilings, not promises about measured typical usage. Reaching a memory/file
+limit can end only the sampler; it must never raise cpg's 1.5 GiB ceiling or
+automatically retry. NoNewPrivileges and read-only system/home/cgroup mounts
+restrict the service; only its private output directory is writable.
+
+For UID 1001 the fixed service and output names are:
+  cli-memory-sampler-1001.service
+  /tmp/cli-memory-sampler-1001/
+
+Other users get the same names with their numeric UID. A fixed name prevents
+duplicate service instances and avoids a new directory on every run. JSONL
+rotation remains <=16 MiB total; console.log appends startup/alert/error output
+and is separately limited to 4 MiB by LimitFSIZE. The tool's files therefore
+total <=20 MiB of content, plus small filesystem metadata. systemd's own
+start/stop/failure metadata remains in the existing host journal; the tool
+does not change global journal settings. Console output is not also streamed
+to the journal. Files and directory remain 0600/0700.
+
+Logs persist after stop; they are not deleted automatically. /tmp is temporary
+storage and may be cleaned on reboot or by host policy. Repeated runs preserve
+old data subject to JSONL rotation and the same fixed bounds. A full console
+file causes a visible service failure rather than unbounded growth; archive
+evidence privately before removing any full log. Never unlink .lock while a
+writer may be running. No unlimited diagnostic archive is created by the tool.
+
+Inspect (substitute your UID if different):
+  systemctl status cli-memory-sampler-1001.service --no-pager
+  tail -n 2 /tmp/cli-memory-sampler-1001/samples.jsonl
+  tail -n 5 /tmp/cli-memory-sampler-1001/console.log
+
+Stop early:
+  sudo systemctl stop cli-memory-sampler-1001.service
+
+KillSignal=SIGINT lets the sampler write an interrupted stop marker. systemd
+uses SIGKILL only if it cannot stop within five seconds. A RuntimeMaxSec expiry
+can leave Result=timeout even when SIGINT allowed a clean final log record.
+The Python deadline normally ends first. For a failed previous run, inspect
+its status and logs before explicitly clearing its failed state to start again:
+  sudo systemctl reset-failed cli-memory-sampler-1001.service
+
+Do not claim sampling is active until both the service state and recent sample
+records have been observed. No old-session baseline or stress exercise is
+needed; observe ordinary work in the new CLI process/session.
+
+The output's parent must already exist and must not contain symlinks. For manual
+foreground comparisons, use a new directory; the service reuses its fixed
+directory and start/stop markers delimit each run. A directory must be owned by you
 with permissions 0700; existing log/lock files must be owned, single-link
 regular files with permissions 0600. Symlinks in directory ancestors, the
 directory, the log, its backups, and the lock are rejected. The writer uses
@@ -89,6 +166,11 @@ Validation and delivery
 -----------------------
 All validation runs in GitHub Actions, never on the production host.
 The CLI memory sampling workflow runs synthetic proc/cgroup tests plus existing
-guard tests under Ubuntu 20.04 / Python 3.8, then publishes this file, the two
-Python sources, revision.txt and SHA256SUMS. The sampler is not started against
-the production machine by the workflow or by Copilot tools.
+guard tests under Ubuntu 20.04 / Python 3.8. A disposable Ubuntu 20.04 VM also
+checks real systemd 245/cgroup-v1 resource limits, non-root execution outside
+cpg, observed CPU/memory overhead, runtime expiry, graceful stop, and the kernel
+file-size bound. Only this sampler integration runs there, not the older guard
+OOM stress scenario. The workflow publishes this file, the three Python sources,
+revision.txt and SHA256SUMS after all checks pass. Production deployment is
+separate, requires explicit approval, and is observation rather than a test
+workload. No sampler is launched as a direct CLI-tool child on production.

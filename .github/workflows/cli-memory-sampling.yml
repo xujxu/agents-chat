@@ -9,7 +9,7 @@ permissions:
 jobs:
   sampler:
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Test read-only sampler using synthetic proc and cgroup fixtures
@@ -20,10 +20,12 @@ jobs:
             cd /source
             PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_memory_sampler.py test_memory_sampler_service.py test_cpg.py
           '
+      - name: Verify service resource limits and lifecycle in legacy-cgroup VM
+        run: bash ops/cpg/ci-vm.sh memory_sampler_integration.py
       - name: Package standalone diagnostic tool
         run: |
           mkdir artifact
-          cp ops/cpg/memory_sampler.py ops/cpg/cpg_common.py ops/cpg/MEMORY-SAMPLING.txt artifact/
+          cp ops/cpg/memory_sampler.py ops/cpg/memory_sampler_service.py ops/cpg/cpg_common.py ops/cpg/MEMORY-SAMPLING.txt artifact/
           printf '%s\n' "$GITHUB_SHA" > artifact/revision.txt
           (cd artifact && sha256sum *.py MEMORY-SAMPLING.txt revision.txt > SHA256SUMS && sha256sum --check SHA256SUMS)
       - uses: actions/upload-artifact@v4
@@ -31,3 +33,13 @@ jobs:
           name: cli-memory-sampler-${{ github.sha }}
           path: artifact/
           retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sampler-service-vm-diagnostics
+          path: |
+            ${{ runner.temp }}/cpg-vm/serial.log
+            ${{ runner.temp }}/cpg-vm/install.log
+            ${{ runner.temp }}/cpg-vm/guestfs.log
+          if-no-files-found: ignore
+          retention-days: 3

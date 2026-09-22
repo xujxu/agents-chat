@@ -290,6 +290,9 @@ class Log:
         self.stream.write(data)
         self.stream.flush()
 
+    def prepare_console(self):
+        os.close(self._open("console.log"))
+
     def __exit__(self, *args):
         try:
             if self.stream is not None:
@@ -320,7 +323,7 @@ def main(argv=None):
                        "interval_seconds": INTERVAL, "duration_seconds": SAMPLES * INTERVAL,
                        "warning_bytes": WARN_BYTES, "schema": 1})
             print("Sampling outside cpg: every 10 seconds, at most 2 hours. "
-                  "Keep this SSH shell open; Ctrl-C stops cleanly.", flush=True)
+                  "Ctrl-C or the service's systemctl stop stops cleanly.", flush=True)
             alerts = Alerts()
             history = ProcessHistory()
             deadline = time.monotonic() + SAMPLES * INTERVAL
