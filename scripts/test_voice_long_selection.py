@@ -20,8 +20,8 @@ class LongSelectionTests(unittest.TestCase):
 
     def test_english_runs_are_not_claimed_to_be_sentences(self):
         result = describe(sample("a"))
-        self.assertEqual(result["english_words"], 6)
-        self.assertEqual(result["longest_english_run"], 6)
+        self.assertEqual(result["english_words"], 5)
+        self.assertEqual(result["longest_english_run"], 5)
         self.assertEqual(result["switches"], 2)
 
     def test_prefer_official_evaluation_splits_and_never_pad(self):

@@ -16,3 +16,20 @@ jobs:
           python-version: '3.12'
       - run: pip install opencc-python-reimplemented==0.1.7
       - run: python -m unittest discover -s scripts -p 'test_voice_*selection.py' -v
+  inventory:
+    needs: selection-tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy==2.2.6 pyarrow==20.0.0 soundfile==0.13.1 opencc-python-reimplemented==0.1.7
+      - run: python scripts/voice_long_samples.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-long-inventory-${{ github.sha }}
+          path: artifacts/
+          retention-days: 14
