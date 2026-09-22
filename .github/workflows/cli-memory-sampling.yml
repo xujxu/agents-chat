@@ -18,7 +18,7 @@ jobs:
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3
             cd /source
-            PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_memory_sampler.py test_cpg.py
+            PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_memory_sampler.py test_memory_sampler_service.py test_cpg.py
           '
       - name: Package standalone diagnostic tool
         run: |
