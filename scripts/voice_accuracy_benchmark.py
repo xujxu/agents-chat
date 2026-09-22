@@ -50,7 +50,7 @@ def command(model, sample):
     return args + [f"accuracy-samples/{sample['id']}.wav"]
 
 
-def trial(model, sample):
+def trial(model, sample, *, score_reference=True):
     prefix = Path("artifacts") / sample["id"]
     failure = None
     started = time.monotonic()
@@ -96,7 +96,7 @@ def trial(model, sample):
         **sample, "model": model, "text": text, "failure": failure,
         "exit_code": code, "seconds": elapsed, "peak_rss_kib": rss,
         "rtf": elapsed / sample["duration"],
-        "score": score(sample["reference"], text) if text is not None and not failure else None,
+        "score": score(sample["reference"], text) if score_reference and text is not None and not failure else None,
     }
 
 
