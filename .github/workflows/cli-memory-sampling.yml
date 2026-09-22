@@ -1,0 +1,33 @@
+name: CLI memory sampling
+on:
+  push:
+    branches: [ops/cli-memory-sampling]
+    paths: [ops/cpg/**, .github/workflows/cli-memory-sampling.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sampler:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test read-only sampler using synthetic proc and cgroup fixtures
+        run: |
+          docker run --rm -v "$PWD/ops/cpg:/source:ro" ubuntu:20.04 bash -euc '
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3
+            cd /source
+            PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_memory_sampler.py test_cpg.py
+          '
+      - name: Package standalone diagnostic tool
+        run: |
+          mkdir artifact
+          cp ops/cpg/memory_sampler.py ops/cpg/cpg_common.py ops/cpg/MEMORY-SAMPLING.txt artifact/
+          printf '%s\n' "$GITHUB_SHA" > artifact/revision.txt
+          (cd artifact && sha256sum *.py MEMORY-SAMPLING.txt revision.txt > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-memory-sampler-${{ github.sha }}
+          path: artifact/
+          retention-days: 30
