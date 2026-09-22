@@ -155,6 +155,153 @@ class SamplerTests(unittest.TestCase):
         self.assertEqual(sum(row["type"] == "sample" for row in rows), 2)
         self.assertEqual(rows[-1]["reason"], "duration_complete")
 
+    def test_missing_executable_does_not_falsely_report_exit(self):
+        (self.proc / "42" / "exe").unlink()
+        row = sampler.process_sample(42)
+        self.assertEqual(row["status"], "ok")
+        self.assertIsNone(row["is_copilot"])
+        self.assertEqual(row["errors"][0]["operation"], "read_executable_basename")
+
+    def test_process_error_is_logged_without_exception_text(self):
+        with patch.object(sampler, "process_sample", side_effect=PermissionError("SECRET")):
+            row = sampler.snapshot("new-session")
+        self.assertEqual(row["processes"][0]["status"], "read_error")
+        self.assertEqual(row["processes"][0]["error"]["kind"], "PermissionError")
+        self.assertNotIn("SECRET", json.dumps(row))
+
+    def test_identity_changes_exit_and_group_departure(self):
+        history = sampler.ProcessHistory()
+        row = sampler.snapshot("new-session")
+        self.assertEqual(history.update(row)[0]["event"], "process_seen")
+        self.assertEqual(history.update(row), [])
+        (self.proc / "42" / "stat").write_text("42 (reused) S 1 " + "0 " * 17 + "121")
+        events = history.update(sampler.snapshot("new-session"))
+        self.assertEqual(events[0]["event"], "pid_reused")
+        self.assertEqual(events[0]["previous_start_ticks"], 120)
+        (self.group / common.WORKLOAD / "cgroup.procs").write_text("")
+        (self.proc / "42" / "cgroup").write_text("2:memory:/outside\n")
+        self.assertEqual(history.update(sampler.snapshot("new-session"))[0]["event"], "left_group")
+        (self.group / common.WORKLOAD / "cgroup.procs").write_text("42\n")
+        history.update(sampler.snapshot("new-session"))
+        (self.proc / "42" / "stat").unlink()
+        (self.group / common.WORKLOAD / "cgroup.procs").write_text("")
+        self.assertEqual(history.update(sampler.snapshot("new-session"))[0]["event"], "exited")
+
+    def test_oom_counter_decrease_is_explicit(self):
+        alarms = sampler.Alerts()
+        row = sampler.snapshot("new-session")
+        alarms.update(row, 0)
+        row["group"]["oom_kills"] = 0
+        self.assertIn("OOM_COUNTER_DECREASE", " ".join(alarms.update(row, 1)))
+
+    def test_alarm_reentry_is_rate_limited(self):
+        alarms = sampler.Alerts()
+        row = sampler.snapshot("new-session")
+        row["group"]["usage"] = sampler.WARN_BYTES
+        self.assertIn("HIGH_MEMORY", " ".join(alarms.update(row, 0)))
+        row["group"]["usage"] = 0
+        alarms.update(row, 1)
+        row["group"]["usage"] = sampler.WARN_BYTES
+        self.assertEqual(alarms.update(row, 2), [])
+        self.assertIn("HIGH_MEMORY", " ".join(alarms.update(row, 60)))
+
+    def test_symlink_parent_log_lock_and_backup_are_rejected(self):
+        real = self.root / "real"
+        real.mkdir(mode=0o700)
+        parent = self.root / "parent"
+        parent.symlink_to(real, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "symlink"):
+            with sampler.Log(parent / "child"):
+                self.fail("opened symlink ancestor")
+        target = self.root / "target"
+        target.write_text("unchanged")
+        for name in ("samples.jsonl", "samples.jsonl.1", ".lock"):
+            output = self.root / name.replace(".", "_")
+            output.mkdir(mode=0o700)
+            (output / name).symlink_to(target)
+            with self.assertRaisesRegex(RuntimeError, "symlink"):
+                with sampler.Log(output):
+                    self.fail("opened symlink file")
+        self.assertEqual(target.read_text(), "unchanged")
+
+    def test_hardlink_and_public_output_are_rejected(self):
+        output = self.root / "logs"
+        output.mkdir(mode=0o755)
+        output.chmod(0o755)
+        with self.assertRaisesRegex(RuntimeError, "0700"):
+            with sampler.Log(output):
+                self.fail("accepted public output")
+        output.chmod(0o700)
+        target = self.root / "target"
+        target.write_text("keep")
+        target.chmod(0o600)
+        os.link(str(target), str(output / "samples.jsonl"))
+        with self.assertRaisesRegex(RuntimeError, "regular"):
+            with sampler.Log(output):
+                self.fail("accepted hardlink")
+        self.assertEqual(target.read_text(), "keep")
+
+    def test_ctrl_c_writes_stop_marker_and_releases_lock(self):
+        output = self.root / "interrupt"
+        with patch.object(sampler.time, "sleep", side_effect=KeyboardInterrupt), \
+                patch("builtins.print"):
+            self.assertEqual(sampler.main(["--output", str(output)]), 0)
+        rows = [json.loads(line) for line in (output / "samples.jsonl").read_text().splitlines()]
+        self.assertEqual(rows[-1]["reason"], "interrupted")
+        with sampler.Log(output):
+            pass
+
+    def test_failed_read_stops_explicitly_without_private_exception_text(self):
+        output = self.root / "failure"
+        with patch.object(sampler, "snapshot", side_effect=PermissionError("SECRET")), \
+                patch("builtins.print") as output_print:
+            self.assertEqual(sampler.main(["--output", str(output)]), 1)
+        rows = [json.loads(line) for line in (output / "samples.jsonl").read_text().splitlines()]
+        self.assertEqual(rows[-2]["type"], "error")
+        self.assertEqual(rows[-1]["reason"], "read_error")
+        self.assertNotIn("SECRET", json.dumps(rows))
+        self.assertNotIn("SECRET", str(output_print.call_args_list))
+
+    def test_clock_deadline_prevents_slow_reads_extending_duration(self):
+        with patch.object(sampler, "SAMPLES", 2), \
+                patch.object(sampler.time, "monotonic", side_effect=[0, 0, 21]), \
+                patch.object(sampler.time, "sleep") as sleep, patch("builtins.print"):
+            output = self.root / "deadline"
+            self.assertEqual(sampler.main(["--output", str(output)]), 0)
+        sleep.assert_not_called()
+        rows = [json.loads(line) for line in (output / "samples.jsonl").read_text().splitlines()]
+        self.assertEqual(sum(row["type"] == "sample" for row in rows), 1)
+
+    def test_inside_group_main_never_creates_output(self):
+        (self.proc / "self" / "cgroup").write_text("2:memory:/cpg.slice/nested\n")
+        output = self.root / "refused"
+        with patch("builtins.print"):
+            self.assertEqual(sampler.main(["--output", str(output)]), 1)
+        self.assertFalse(output.exists())
+
+    def test_missing_status_counter_is_null_with_explicit_error(self):
+        status = self.proc / "42" / "status"
+        status.write_text(status.read_text().replace("RssAnon:\t1500 kB\n", ""))
+        row = sampler.process_sample(42)
+        self.assertIsNone(row["anonymous_bytes"])
+        self.assertEqual(row["errors"][0]["field"], "anonymous_bytes")
+
+    def test_rotation_without_backups_and_late_symlink_refusal(self):
+        output = self.root / "logs"
+        with sampler.Log(output, max_bytes=100, backups=0) as log:
+            for index in range(10):
+                log.write({"index": index, "data": "x" * 40})
+        self.assertEqual(len(list(output.glob("samples.jsonl*"))), 1)
+        output = self.root / "late-link"
+        with sampler.Log(output, max_bytes=100, backups=1) as log:
+            log.write({"data": "x" * 60})
+            target = self.root / "untouched"
+            target.write_text("keep")
+            (output / "samples.jsonl.1").symlink_to(target)
+            with self.assertRaisesRegex(RuntimeError, "symlink"):
+                log.write({"data": "x" * 60})
+        self.assertEqual(target.read_text(), "keep")
+
 
 if __name__ == "__main__":
     unittest.main()

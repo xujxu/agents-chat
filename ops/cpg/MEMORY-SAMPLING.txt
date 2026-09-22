@@ -1,0 +1,94 @@
+CLI memory sampler (Linux cgroup v1, Python 3.8+ standard library)
+
+Purpose and boundaries
+----------------------
+Observe normal work in a fresh CLI process and fresh session. Do not resume or
+exercise an OOM-prone old session to establish a baseline. Do not provoke OOM.
+Keep cpg.slice's exact 1.5 GiB (1610612736 byte) hard limit. This diagnostic
+never changes the guard, CLI installation, services, or production application.
+It sends no signals and does not kill processes. No sudo or installation needed.
+
+Launch manually from a SEPARATE ordinary SSH shell, NOT a CLI tool, cpg shell,
+or cpg descendant. The sampler refuses membership at /cpg.slice or below.
+Keep that SSH connection open: this is a foreground process, not a daemon.
+Use Ctrl-C to stop early. It stops automatically after at most two hours
+(720 samples, ten seconds between samples; slow reads can reduce sample count).
+It cannot guarantee a deadline while a kernel/filesystem read is blocked.
+
+Place memory_sampler.py and the matching cpg_common.py from the Actions
+artifact side by side. From that directory, run:
+
+  python3 -B ./memory_sampler.py --output "$HOME/cli-memory-new-session" --label new-session
+
+The output's parent must already exist and must not contain symlinks. Use a
+new directory for each comparison. An existing directory must be owned by you
+with permissions 0700; existing log/lock files must be owned, single-link
+regular files with permissions 0600. Symlinks in directory ancestors, the
+directory, the log, its backups, and the lock are rejected. The writer uses
+directory-relative descriptors and a nonblocking advisory single-writer lock.
+Leave .lock in place, including after exit; removing it can defeat locking.
+
+Readouts
+--------
+Every record has a UTC time. Sample records include a user-supplied non-sensitive
+label, process PID + kernel start ticks, PPID, RSS, anonymous/file-backed RSS,
+peak RSS, swap, thread count, and is_copilot (executable basename comparison
+only). Neither executable paths nor process names, command lines, environment,
+session history, prompts, or tool/chat content are logged. Use a generic label;
+do not encode private content in it. Executable inspection can be denied for
+another user; is_copilot is then null with an explicit error. A wrapper whose
+executable is not named copilot will not be classified as Copilot.
+
+All enumerated processes below cpg.slice are included, not just Copilot. PID
+reuse and exits during a read are explicitly marked. Between samples, process
+identity changes and departures are recorded; a process that still exists
+outside the group is marked left_group, not exited. Very short-lived processes
+between samples are not observable. Samples are not atomic across processes
+or cgroup counters. A process moving groups during a read can race observation.
+Missing process status fields are null with explicit errors, never fake zeroes.
+
+Group counters retain numeric usage, limit, total_cache, total_rss,
+inactive_file, failcnt, hierarchy, oom_disabled and oom_kills. OOM victims are
+summed across the parent and descendant groups using cpg_common's v1 helper.
+Disappeared delegated groups can lower this cumulative sum; counter decreases
+are recorded explicitly and are not interpreted as negative OOM events.
+MemAvailable is read separately from /proc/meminfo.
+
+Group usage is charged memory, NOT the sum of process RSS. Shared pages, cache,
+kernel accounting, sampling races and differing scopes prevent equality.
+total_rss is the kernel's cgroup-v1 statistic, not a summed process RSS.
+Use all these measurements together; none proves a specific JS/native/TUI leak.
+
+Warnings use charged group usage >= 1126 MiB (about 1.1 GiB), independently of
+the guard monitor's working-set thresholds. HIGH_MEMORY is printed and logged
+at most once per 60 seconds. RECOVERED marks falling below that threshold.
+OOM_COUNTER_INCREASE and OOM_COUNTER_DECREASE mark observed counter changes.
+Warnings are advisory only. There is no automatic restart, limit adjustment,
+signal, kill or session cancellation.
+
+Output and errors
+-----------------
+samples.jsonl is flushed after every record. It rotates before exceeding 4 MiB;
+three backups (.1 newest to .3 oldest) bound JSONL storage to 16 MiB total.
+Each file is 0600 in a 0700 directory. One oversized record is rejected rather
+than truncating JSON or exceeding the bound. Existing oversized files or
+unexpected numbered backups require a new output directory. Older evidence
+can be evicted by rotation; preserve relevant files privately when stopped.
+
+Per-process read errors are explicit in the sample and stderr; sampling other
+processes continues. Group/host read or guard-boundary failures stop with a
+nonzero exit code, an error record and a stop marker where logging still works.
+Disk/permission/logging failures are reported to stderr and fail closed; no
+stop marker can be promised when the output itself is unwritable. Exception
+messages are not persisted: error operation/type/errno avoid leaking content.
+Ctrl-C normally writes a stop marker and releases the lock. An abrupt kill or
+SSH disconnect can leave no stop record. A successful start message alone is
+not evidence of ongoing sampling: confirm recent sample records in the output.
+
+Validation and delivery
+-----------------------
+All validation runs in GitHub Actions, never on the production host.
+The CLI memory sampling workflow runs synthetic proc/cgroup tests plus existing
+guard tests under Ubuntu 20.04 / Python 3.8, then publishes this file, the two
+Python sources, revision.txt and SHA256SUMS. The sampler is not started against
+the production machine by the workflow or by Copilot tools.
