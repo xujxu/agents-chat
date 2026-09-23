@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 import socket
 import tempfile
@@ -124,7 +123,6 @@ class RuntimeTests(unittest.TestCase):
                 patch.object(launch, "check_preload"):
             env = launch.environment(1001, 123, {"NODE_OPTIONS": "--trace-warnings", "KEEP": "yes"})
         self.assertEqual(env["KEEP"], "yes")
-        self.assertIn("--trace-warnings", env["NODE_OPTIONS"])
         self.assertEqual(env["NODE_OPTIONS"], "--trace-warnings")
         self.assertEqual(env["CPG_MEMORY_PID"], "123")
         self.assertEqual(env["CPG_MEMORY_SOCKET"], str(self.collector.path))

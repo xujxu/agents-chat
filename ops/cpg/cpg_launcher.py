@@ -1,5 +1,5 @@
 #!/usr/bin/python3 -I
-"""Launch the configured Copilot without changing its arguments or privileges."""
+"""Launch the configured Copilot with optional numeric sampling, never privileges."""
 import os
 from pathlib import Path
 import signal

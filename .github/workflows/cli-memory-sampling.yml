@@ -25,7 +25,22 @@ jobs:
           tar -xzf copilot-linux-x64.tar.gz
           python3 "$GITHUB_WORKSPACE/ops/cpg/test_runtime_compatibility.py" ./copilot
       - name: Check real internal telemetry, disconnects, and numeric overhead
-        run: python3 ops/cpg/test_runtime_preload.py "$RUNNER_TEMP/copilot-runtime/copilot"
+        run: |
+          node ops/cpg/test_preload_bounds.cjs
+          python3 ops/cpg/test_runtime_preload.py "$RUNNER_TEMP/copilot-runtime/copilot"
+  guard:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify launcher isolation and upgrade with live tasks in legacy-cgroup VM
+        run: bash ops/cpg/ci-vm.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: guard-vm-diagnostics
+          path: ${{ runner.temp }}/cpg-vm/serial.log
+          retention-days: 3
   sampler:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
@@ -44,7 +59,7 @@ jobs:
       - name: Package standalone diagnostic tool
         run: |
           mkdir artifact
-          cp ops/cpg/memory_sampler*.py ops/cpg/memory_sampler_preload.cjs ops/cpg/cpg_common.py ops/cpg/cpg_launcher.py ops/cpg/cpg_admin.py ops/cpg/MEMORY-SAMPLING.txt ops/cpg/README.md artifact/
+          cp ops/cpg/memory_sampler.py ops/cpg/memory_sampler_incident.py ops/cpg/memory_sampler_metrics.py ops/cpg/memory_sampler_runtime.py ops/cpg/memory_sampler_launch.py ops/cpg/memory_sampler_service.py ops/cpg/memory_sampler_preload.cjs ops/cpg/cpg_common.py ops/cpg/cpg_launcher.py ops/cpg/cpg_admin.py ops/cpg/MEMORY-SAMPLING.txt ops/cpg/README.md artifact/
           printf '%s\n' "$GITHUB_SHA" > artifact/revision.txt
           (cd artifact && sha256sum *.py *.cjs MEMORY-SAMPLING.txt README.md revision.txt > SHA256SUMS && sha256sum --check SHA256SUMS)
       - uses: actions/upload-artifact@v4

@@ -116,6 +116,14 @@ def main():
     assert held.stdout.readline().strip() == "READY"
     protected = common.group_pids()
     assert protected, "held Copilot did not enter the protected group"
+    units_before = {p: p.read_bytes() for p in Path("/etc/systemd/system").glob("cpg*")
+                    if p.is_file()}
+    command("python3", str(SOURCE / "cpg_admin.py"), "upgrade-launcher")
+    ctl("status")
+    assert held.poll() is None, "launcher upgrade interrupted live CLI"
+    assert common.read_group()["limit"] == 1610612736
+    assert all(path.read_bytes() == content for path, content in units_before.items())
+    print("PASS: launcher-only upgrade preserves installation hashes, live tasks and units", flush=True)
     print("Protected PIDs before lifecycle:", protected, flush=True)
     refusal = ctl("uninstall", check=False)
     assert refusal.returncode != 0 and "running" in refusal.stderr
