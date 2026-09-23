@@ -9,7 +9,7 @@ import time
 
 
 def profiler_paths():
-    listing = subprocess.check_output(["dpkg-query", "-L", "heaptrack"], text=True, timeout=10)
+    listing = subprocess.check_output(["dpkg-query", "-L", "libheaptrack"], text=True, timeout=10)
     paths = {}
     for name in ("libheaptrack_preload.so", "heaptrack_interpret"):
         matches = [Path(line) for line in listing.splitlines()

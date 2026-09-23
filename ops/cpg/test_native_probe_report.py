@@ -10,10 +10,11 @@ from native_probe_capture import profiler_paths
 class ReportTests(unittest.TestCase):
     def test_profiler_paths_require_unambiguous_existing_package_files(self):
         listing = "/usr/lib/heaptrack/libheaptrack_preload.so\n/usr/lib/heaptrack/heaptrack_interpret\n"
-        with patch("native_probe_capture.subprocess.check_output", return_value=listing), \
+        with patch("native_probe_capture.subprocess.check_output", return_value=listing) as query, \
                 patch.object(Path, "is_file", return_value=True):
             self.assertEqual(profiler_paths()["heaptrack_interpret"],
                              "/usr/lib/heaptrack/heaptrack_interpret")
+            query.assert_called_once_with(["dpkg-query", "-L", "libheaptrack"], text=True, timeout=10)
         for invalid in ("", listing + listing):
             with patch("native_probe_capture.subprocess.check_output", return_value=invalid), \
                     patch.object(Path, "is_file", return_value=True), self.assertRaises(RuntimeError):
