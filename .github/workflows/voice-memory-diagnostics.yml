@@ -23,6 +23,10 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Existing memory and audio regression tests
         run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-memory.test.ts tests/voice-audio.test.ts tests/voice-jobs.test.ts
+      - name: Build and typecheck the unchanged API interface
+        run: |
+          npm run build
+          npx tsc --noEmit --incremental false
       - uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
@@ -51,6 +55,7 @@ jobs:
       - name: Observe real proc snapshots without changing the guard
         env:
           VOICE_MEMORY_DIAG: '1'
+          VOICE_MEMORY_EXPECT_FIXED: '1'
         run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-memory-diagnostics.test.ts
       - uses: actions/upload-artifact@v4
         if: always()

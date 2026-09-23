@@ -1,0 +1,37 @@
+Voice memory monitor exit-race investigation
+============================================
+
+Baseline evidence: Actions35880930904, commit666af12, artifact10760488337.
+The production guard was unchanged. A CI-only proxy observed the same proc
+reads used by the monitor, without recording paths, command lines, environment,
+raw process status or transcripts.80 bounded process-exit probes and60 fixed
+ASCEND short candidate inferences were exercised.
+
+905 status reads;17 snapshots lacked VmHWM and VmRSS. All17 had Linux
+PF_EXITING (0x4) in proc stat. Most still showed state R, not zombie Z.
+The run produced15 voice_memory_unknown and9 actual memory-limit errors.
+Several exit-probe failures had exitCode0: normal process exit could be reported
+as a monitoring error. Extra diagnostic stat reads can affect race timing.
+
+Linux publishes task memory fields only when get_task_mm succeeds. During exit,
+the memory descriptor can be gone before zombie state/proc disappearance:
+https://github.com/torvalds/linux/blob/v6.8/fs/proc/array.c
+https://github.com/torvalds/linux/blob/v6.8/include/linux/sched.h
+
+Fix: when VmHWM is missing, read the same PID's proc stat and skip only a
+confirmed PF_EXITING/X/Z process or a vanished proc entry. Parse after the final
+closing parenthesis because process names may contain spaces/parentheses.
+An active process with missing fields, malformed stat, or unreadable stat still
+fails closed. Keep the previously measured peak; do not invent a zero value.
+Host meminfo read errors, including ENOENT, must not be mistaken for process exit.
+Existing RSS384MiB, headroom thresholds, polling interval100ms, address-space
+1GiB, single-thread and timeout120s limits remain unchanged.
+
+Validation is exclusively in Actions. Deterministic regression fixtures cover
+the exit race, malformed fields, read errors, stop-during-read and live-process
+RSS/headroom enforcement. The bounded real-process diagnosis is then repeated
+with a zero-unknown assertion while requiring actual budget rejections to remain.
+This does not fix real SenseVoice over-budget long utterances or prove a complete
+browser/API acceptance pass; rerun that separately, preserving its failures.
+
+The patch is on the experimental branch only; no PROD deployment or cpg change.

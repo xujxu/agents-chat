@@ -98,6 +98,12 @@ test('bounded CI diagnosis of real process exits and candidate inference', {
     await save();
   }
   assert.ok(statusReads > 0, 'The actual production guard must use the observed reader');
+  if (process.env.VOICE_MEMORY_EXPECT_FIXED === '1') {
+    assert.equal(outcomes.filter(row => row.error === 'voice_memory_unknown').length, 0,
+      'Confirmed exit races must no longer produce unknown-memory failures');
+    assert.ok(outcomes.some(row => row.error === 'voice_memory_limit'),
+      'Real over-budget candidate inputs must still be rejected');
+  }
   console.log(JSON.stringify({
     statusReads, missingPeakSnapshots: observations.length,
     missingPeakExitingFlags: observations.filter(row => row.flags !== null && (row.flags & 4) !== 0).length,
