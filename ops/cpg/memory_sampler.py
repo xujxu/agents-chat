@@ -12,12 +12,15 @@ import sys
 import time
 
 import cpg_common as common
+from memory_sampler_metrics import (
+    HIGH_INTERVAL, NORMAL_INTERVAL, READ_ERRORS, MemoryDetails, error_details, process_stat,
+)
 
 PROC = Path("/proc")
 INTERVAL = 10
 SAMPLES = 720
 WARN_BYTES = 1126 * common.MIB
-READ_ERRORS = (OSError, ValueError, KeyError, RuntimeError)
+CLOCK_TICKS = os.sysconf("SC_CLK_TCK")
 
 
 def timestamp():
@@ -26,12 +29,6 @@ def timestamp():
 
 def boot_id():
     return (PROC / "sys/kernel/random/boot_id").read_text().strip()
-
-
-def error_details(error, operation):
-    # Exception messages can contain paths or file contents.
-    return {"operation": operation, "kind": type(error).__name__,
-            "errno": error.errno if isinstance(error, OSError) else None}
 
 
 def protected(membership):
@@ -44,24 +41,22 @@ def ensure_outside():
 
 
 def start_ticks(pid):
-    text = (PROC / str(pid) / "stat").read_text()
-    # The comm field may contain spaces and closing parentheses.
-    fields = text[text.rindex(")") + 1:].split()
-    if len(fields) < 20:
-        raise ValueError("Incomplete process stat")
-    return int(fields[19])
+    return process_stat(PROC, pid)["start_ticks"]
 
 
 def process_sample(pid):
     result = {"pid": pid}
     try:
-        result["start_ticks"] = start_ticks(pid)
+        result.update(process_stat(PROC, pid))
         values = {}
         wanted = {
             "PPid": ("ppid", 1), "VmRSS": ("rss_bytes", 1024),
             "RssAnon": ("anonymous_bytes", 1024), "RssFile": ("file_bytes", 1024),
             "VmHWM": ("peak_rss_bytes", 1024), "VmSwap": ("swap_bytes", 1024),
             "Threads": ("threads", 1),
+            "VmSize": ("virtual_bytes", 1024), "VmData": ("data_virtual_bytes", 1024),
+            "VmStk": ("stack_virtual_bytes", 1024), "VmPTE": ("page_table_bytes", 1024),
+            "RssShmem": ("shared_memory_bytes", 1024),
         }
         for line in (PROC / str(pid) / "status").read_text().splitlines():
             name, _, value = line.partition(":")
@@ -94,7 +89,9 @@ def snapshot(label):
     group = common.read_group()
     common.verify_boundary(group)
     memory = common.counters(common.GROUP / "memory.stat")
-    group.update({key: memory[key] for key in ("total_cache", "total_rss")})
+    group.update({key: memory[key] for key in (
+        "total_cache", "total_rss", "total_pgfault", "total_pgmajfault",
+    )})
     available = common.counters(PROC / "meminfo")["MemAvailable"] * 1024
     processes = []
     for pid in common.group_pids():
@@ -103,7 +100,8 @@ def snapshot(label):
         except READ_ERRORS as error:
             processes.append({"pid": pid, "status": "read_error",
                               "error": error_details(error, "read_process")})
-    return {"type": "sample", "time": timestamp(), "label": label,
+    return {"type": "sample", "schema": 2, "clock_ticks_per_second": CLOCK_TICKS,
+            "time": timestamp(), "label": label,
             "group": group, "host_available_bytes": available, "processes": processes}
 
 
@@ -394,12 +392,16 @@ def main(argv=None):
                 incident = IncidentCapture(log, boot)
             log.write({"type": "start", "time": timestamp(), "label": args.label,
                        "interval_seconds": interval, "duration_seconds": duration,
-                       "warning_bytes": WARN_BYTES, "schema": 1})
+                       "warning_bytes": WARN_BYTES, "schema": 2,
+                       "memory_detail_intervals_seconds": {
+                           "normal": NORMAL_INTERVAL, "high": HIGH_INTERVAL,
+                       }})
             print("Sampling outside cpg: every {} seconds, {}. "
                   "Ctrl-C or systemctl stop stops cleanly.".format(
                       interval, "continuous" if args.continuous else "at most 2 hours"), flush=True)
             alerts = Alerts()
             history = ProcessHistory()
+            memory_details = MemoryDetails(PROC, WARN_BYTES)
             deadline = None if args.continuous else time.monotonic() + duration
             reason = "duration_complete"
             result = 0
@@ -409,7 +411,12 @@ def main(argv=None):
                     now = time.monotonic()
                     if deadline is not None and now >= deadline:
                         break
+                    started = time.perf_counter()
                     row = snapshot(args.label)
+                    row["monotonic_seconds"] = now
+                    memory_details.update(row, now)
+                    row["sample_duration_ms"] = round(
+                        (time.perf_counter() - started) * 1000, 3)
                     row["events"] = history.update(row)
                     row["alerts"] = alerts.update(row, now)
                     if incident is not None:

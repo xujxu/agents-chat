@@ -94,7 +94,8 @@ def install(uid):
     unit = persistent_unit(uid, account.pw_gid)
     source = Path(__file__).resolve().parent
     sources = {name: (source / name).read_bytes() for name in (
-        "memory_sampler.py", "memory_sampler_incident.py", "cpg_common.py",
+        "memory_sampler.py", "memory_sampler_incident.py", "memory_sampler_metrics.py",
+        "cpg_common.py",
     )}
     root_directory(LIB)
     root_directory(UNITS)

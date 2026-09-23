@@ -92,7 +92,7 @@ class SamplerTests(unittest.TestCase):
                 sampler.process_sample(42)
 
     def test_pid_reuse_is_not_misreported_as_continuous_process(self):
-        with patch.object(sampler, "start_ticks", side_effect=[120, 121]):
+        with patch.object(sampler, "start_ticks", return_value=121):
             self.assertEqual(sampler.process_sample(42)["status"], "pid_reused_during_sample")
 
     def test_snapshot_counts_child_oom_and_keeps_charge_distinct_from_rss(self):

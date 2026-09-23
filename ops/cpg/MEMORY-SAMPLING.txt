@@ -1,5 +1,58 @@
 CLI memory sampler (Linux cgroup v1, Python 3.8+ standard library)
 
+Enhanced numeric metrics (schema 2)
+----------------------------------
+Upgrade an existing service with the same --install --uid command below, from
+the new verified package. This briefly restarts only the sampler. Existing
+rolling samples and latest OOM evidence are retained; schema 1 and 2 records
+may coexist. No CLI flags, guard limits or application services are changed.
+
+Every basic sample now also records:
+  Per process: cpu_user_ticks, cpu_system_ticks, minor_faults, major_faults,
+               virtual_bytes (VmSize), data_virtual_bytes (VmData),
+               stack_virtual_bytes (VmStk), page_table_bytes (VmPTE),
+               shared_memory_bytes (RssShmem).
+  Cgroup:      total_pgfault and total_pgmajfault, from memory.stat.
+  Sample:      schema=2, clock_ticks_per_second, monotonic_seconds,
+               sample_duration_ms (proc/group/detail collection only).
+
+CPU and fault counters are cumulative for that process (including its threads,
+excluding reaped children). Use only identical boot_id, PID and start_ticks
+when calculating deltas. One-core CPU percent is:
+  100 * delta(cpu_user_ticks + cpu_system_ticks)
+      / clock_ticks_per_second / delta(monotonic_seconds)
+It can exceed 100% for a multithreaded process. Fault counts are NOT allocation
+bytes or OOM counts: minor faults need no backing-store page read, while major
+faults can involve file I/O. VmSize/VmData are virtual mappings, NOT physical
+memory used; they may stay high after RSS falls. VmStk does not sum all native
+worker stacks. Cgroup and process counters differ in scope and are not atomic.
+
+Only confirmed Copilot executables receive low-frequency smaps_rollup details:
+  First observation: baseline.
+  Normal group usage: at most once per 60 seconds per process.
+  Charged group usage >= 1126 MiB: at most once per 30 seconds per process.
+The high-memory condition does not bypass the 30-second minimum spacing.
+Basic sampling continues every two seconds in continuous mode.
+
+memory_detail includes its status, sampled_at and read_duration_ms. Successful
+reads include RSS/PSS, anonymous memory, private/shared clean/dirty pages,
+swap, and kernel-dependent anonymous huge pages, lazy-free pages and PSS
+breakdowns. All memory fields are bytes. Optional unsupported fields are null
+and listed in unavailable_fields, never fabricated as zero. Records marked
+not_due contain no stale/cached values; not_copilot identifies skipped helpers.
+Missing/denied/malformed rollups are explicit read_error entries with sanitized
+operation/type/errno, while basic sampling continues. Failed detail reads are
+rate-limited too. PID identity and group membership are checked before and
+after detail reads; raced data is discarded, not attached to a reused PID.
+
+smaps_rollup walks kernel page accounting; it does not copy or inspect the
+heap. No debugger, process signal, heap dump or per-allocation tracing is used.
+It still cannot identify JavaScript objects or Rust/C++ allocations, and RSS
+minus V8 heap size is not an exact native-memory measure. Slow kernel reads
+can delay collection; the recorded durations expose this rather than promising
+an exact cadence. The existing 32 MiB / 5% CPU / 24 MiB data-file bounds remain
+unchanged; larger records can shorten the history retained within those bounds.
+
 Continuous, boot-enabled service (recommended for capturing the next OOM)
 ----------------------------------------------------------------------
 The optional continuous mode samples normal activity every two seconds with
@@ -90,8 +143,8 @@ Use Ctrl-C to stop early. It stops automatically after at most two hours
 (720 samples, ten seconds between samples; slow reads can reduce sample count).
 It cannot guarantee a deadline while a kernel/filesystem read is blocked.
 
-Place memory_sampler.py and the matching cpg_common.py from the Actions
-artifact side by side. From that directory, run:
+Keep all Python files from the matching Actions artifact side by side.
+From that directory, run:
 
   python3 -B ./memory_sampler.py --output "$HOME/cli-memory-new-session" --label new-session
 
@@ -243,7 +296,7 @@ guard tests under Ubuntu 20.04 / Python 3.8. A disposable Ubuntu 20.04 VM also
 checks real systemd 245/cgroup-v1 resource limits, non-root execution outside
 cpg, observed CPU/memory overhead, runtime expiry, graceful stop, and the kernel
 file-size bound. Only this sampler integration runs there, not the older guard
-OOM stress scenario. The workflow publishes this file, the four Python sources,
+OOM stress scenario. The workflow publishes this file, the five Python sources,
 revision.txt and SHA256SUMS after all checks pass. Production deployment is
 separate, requires explicit approval, and is observation rather than a test
 workload. No sampler is launched as a direct CLI-tool child on production.

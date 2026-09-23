@@ -1,6 +1,7 @@
 """Run only inside the disposable Actions Ubuntu 20.04/cgroup-v1 VM."""
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import time
 
@@ -145,6 +146,11 @@ def main():
 def persistent():
     global OUTPUT
     OUTPUT = Path("/var/lib/cli-memory-sampler-1001")
+    fake_copilot = SOURCE / "copilot"
+    shutil.copyfile("/bin/sleep", fake_copilot)
+    fake_copilot.chmod(0o755)
+    command("systemd-run", "--unit=sampler-metrics-fixture", "--slice=cpg.slice",
+            "--property=User=1001", str(fake_copilot), "180")
     Path("/etc/systemd/system/cpg-setup.service").write_text(
         "[Service]\nType=oneshot\nExecStart=/bin/true\nRemainAfterExit=yes\n")
     command("systemctl", "daemon-reload")
@@ -161,6 +167,24 @@ def persistent():
     assert Path("/etc/systemd/system/multi-user.target.wants/" + UNIT).is_symlink()
     assert OUTPUT.stat().st_uid == 1001 and OUTPUT.stat().st_mode & 0o777 == 0o700
     assert rows()[0]["interval_seconds"] == 2 and rows()[0]["duration_seconds"] is None
+    samples = [row for row in rows() if row["type"] == "sample"]
+    assert all(row["schema"] == 2 and row["clock_ticks_per_second"] > 0 for row in samples)
+    assert all(row["monotonic_seconds"] > 0 and row["sample_duration_ms"] >= 0 for row in samples)
+    detailed = [process for row in samples for process in row["processes"]
+                if process.get("is_copilot") and process.get("memory_detail", {}).get("status") == "ok"]
+    assert detailed, samples[-1]
+    for process in detailed:
+        assert process["cpu_user_ticks"] >= 0 and process["cpu_system_ticks"] >= 0
+        assert process["minor_faults"] > 0 and process["major_faults"] >= 0
+        assert process["virtual_bytes"] >= process["rss_bytes"] > 0
+        assert process["memory_detail"]["rss_bytes"] > 0
+        assert process["memory_detail"]["private_dirty_bytes"] >= 0
+        assert not process["errors"], process
+    wait_for(lambda: any(process.get("is_copilot") and
+                         process.get("memory_detail", {}).get("status") == "not_due"
+                         for row in rows() for process in row.get("processes", [])))
+    print("PASS: real CPU/fault/virtual-memory counters and rate-limited smaps_rollup as non-root",
+          flush=True)
     first_pid = int(state["MainPID"])
     first_samples = len([row for row in rows() if row["type"] == "sample"])
     command("systemctl", "kill", "--signal=SIGKILL", "--kill-who=main", UNIT)
@@ -193,6 +217,17 @@ def persistent():
     command("systemctl", "restart", UNIT)
     wait_for(lambda: rows()[-1]["type"] == "sample")
     assert (OUTPUT / "oom-before.jsonl").read_bytes() == evidence
+    preserved = (OUTPUT / "samples.jsonl").read_bytes()
+    command("/usr/bin/python3", "-B", str(SOURCE / "memory_sampler_service.py"),
+            "--install", "--uid", "1001")
+    wait_for(lambda: rows()[-1]["type"] == "sample")
+    assert (OUTPUT / "samples.jsonl").read_bytes().startswith(preserved)
+    assert (OUTPUT / "oom-before.jsonl").read_bytes() == evidence
+    installed_group = common.CONTROLLER / show("ControlGroup")["ControlGroup"].lstrip("/")
+    peak = int((installed_group / "memory.max_usage_in_bytes").read_text())
+    assert peak < 32 * common.MIB
+    print("PASS: in-place service upgrade retains samples/incident; sampler peak_bytes={}".format(peak),
+          flush=True)
     command("systemctl", "stop", UNIT)
     assert rows()[-1]["reason"] == "interrupted"
     for path in OUTPUT.glob("*.jsonl*"):
