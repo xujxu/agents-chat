@@ -144,7 +144,7 @@ jobs:
           npx playwright test --config tests/playwright.config.ts
           tests/mobile-composer-viewport.spec.ts tests/mobile-responsive.spec.ts tests/voice-disabled.spec.ts
           --project=desktop-chromium --project=iphone-webkit --project=android-chromium
-          --grep='composer|viewport|landscape|unavailable voice|disabled voice|mobile header controls|mobile pills fade'
+          --grep='composer|viewport|landscape|unavailable voice|disabled voice|mobile header controls|mobile pills fade|sidebars'
           --workers=1 --timeout=60000 --global-timeout=600000 --max-failures=3
           --reporter=line --output=artifacts/mobile-regressions
       - name: Package portable application
