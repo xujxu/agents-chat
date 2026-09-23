@@ -5,6 +5,7 @@ on:
     paths:
       - lib/voice/memory.ts
       - tests/voice-memory*.test.ts
+      - tests/voice-api.spec.ts
       - .github/workflows/voice-memory-diagnostics.yml
   workflow_dispatch:
 permissions:
@@ -14,6 +15,13 @@ jobs:
   diagnose:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
+    env:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-voice-memory-ci-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,11 +60,38 @@ jobs:
           tar -xjf sense.tar.bz2 --strip-components=1 -C sense
           gcc -std=c11 -Wall -Wextra -Werror -Isherpa/include scripts/voice-sense-adapter.c \
             -Lsherpa/lib -Wl,-rpath,"$PWD/sherpa/lib" -lsherpa-onnx-c-api -o voice-sense-adapter
-      - name: Observe real proc snapshots without changing the guard
+      - name: Repeat the bounded real-process diagnosis with fixed guard
         env:
           VOICE_MEMORY_DIAG: '1'
           VOICE_MEMORY_EXPECT_FIXED: '1'
         run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-memory-diagnostics.test.ts
+      - run: npx playwright install --with-deps chromium
+      - name: Start isolated application for authenticated API regressions
+        run: |
+          chmod +x tests/fixtures/voice-whisper.py
+          VOICE_ENABLED=1 VOICE_WHISPER_PATH="$PWD/tests/fixtures/voice-whisper.py" \
+            VOICE_MODEL_PATH="$PWD/tests/fixtures/voice-whisper.py" \
+            node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 >diagnostics/server.log 2>&1 &
+          echo "$!" > diagnostics/server.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --max-time 2 http://localhost:3011/api/auth/providers >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          tail -40 diagnostics/server.log
+          exit 1
+      - name: API exits, cancellation and actual memory-limit rejection
+        env:
+          VOICE_API_FIXTURE: '1'
+        run: |
+          npx playwright test --config tests/playwright.config.ts tests/voice-api.spec.ts \
+            --project=desktop-chromium --workers=1 --timeout=150000 --global-timeout=600000 \
+            --reporter=line --output=diagnostics/playwright
+      - name: Stop isolated application
+        if: always()
+        run: |
+          if [ -f diagnostics/server.pid ] && kill -0 "$(cat diagnostics/server.pid)" 2>/dev/null; then
+            kill "$(cat diagnostics/server.pid)"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

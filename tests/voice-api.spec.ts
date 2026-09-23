@@ -59,6 +59,23 @@ test('one global inference slot rejects concurrent work and recovers after compl
   expect((await api.post('/api/voice', { headers, data })).status()).toBe(200);
 });
 
+test('normally exiting native processes consistently deliver through the authenticated API', async ({ page }) => {
+  await installMobileChatFixture(page);
+  await loginMobileFixture(page);
+  const api = page.context().request;
+  const data = Buffer.from(encodeVoiceWav(new Float32Array(16_000).fill(0.2)));
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const response = await api.post('/api/voice', {
+      headers: { 'content-type': 'audio/wav', 'x-voice-user-id': 'admin@local',
+        'x-voice-request-id': randomUUID() },
+      data,
+    });
+    const result = await response.json();
+    expect(response.status(), JSON.stringify(result)).toBe(200);
+    expect(result).toMatchObject({ ok: true, text: '你好，voice PoC.' });
+  }
+});
+
 test('explicit cancellation works before upload and releases an active native process', async ({ page }) => {
   await installMobileChatFixture(page);
   await loginMobileFixture(page);
