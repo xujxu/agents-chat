@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Start a bounded, non-root sampler through the system systemd manager."""
+"""Manage bounded transient or persistent non-root system sampling."""
 import argparse
 import os
 from pathlib import Path
+import pwd
+import stat
 import subprocess
 import sys
 
 import memory_sampler as sampler
+
+LIB = Path("/usr/local/libexec/cli-memory-sampler")
+UNITS = Path("/etc/systemd/system")
 
 
 def unit_name(uid):
@@ -49,10 +54,85 @@ def start_command(source, output, uid, gid):
     ]
 
 
+def persistent_unit(uid, gid):
+    if type(uid) is not int or uid <= 0 or type(gid) is not int or gid < 0:
+        raise ValueError("A non-root user and valid group are required")
+    state = "cli-memory-sampler-{}".format(uid)
+    return (
+        "[Unit]\nDescription=Continuous bounded CLI memory sampler\n"
+        "After=cpg-setup.service\nWants=cpg-setup.service\nStartLimitIntervalSec=0\n\n"
+        "[Service]\nType=exec\nUser={uid}\nGroup={gid}\nSlice=system.slice\n"
+        "RuntimeMaxSec=infinity\nTimeoutStopSec=5\nRestart=on-failure\nRestartSec=30\n"
+        "KillSignal=SIGINT\nMemoryAccounting=yes\nMemoryMax=33554432\n"
+        "CPUAccounting=yes\nCPUQuota=5%\nTasksMax=8\nNice=19\nIOSchedulingClass=idle\n"
+        "LimitFSIZE=4194304\nUMask=0077\nNoNewPrivileges=yes\nPrivateDevices=yes\n"
+        "ProtectSystem=strict\nProtectHome=yes\nProtectControlGroups=yes\n"
+        "ProtectKernelTunables=yes\nStateDirectory={state}\nStateDirectoryMode=0700\n"
+        "StandardInput=null\nStandardOutput=journal\nStandardError=inherit\n"
+        "LogRateLimitIntervalSec=60s\nLogRateLimitBurst=10\n"
+        "ExecStart=/usr/bin/python3 -B {lib}/memory_sampler.py "
+        "--output /var/lib/{state} --label continuous --continuous\n\n"
+        "[Install]\nWantedBy=multi-user.target\n"
+    ).format(uid=uid, gid=gid, state=state, lib=LIB)
+
+
+def root_directory(path):
+    for directory in reversed([path, *path.parents]):
+        try:
+            directory.mkdir(mode=0o755)
+        except FileExistsError:
+            pass
+        info = directory.lstat()
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022):
+            raise RuntimeError("Installation requires root-owned non-writable directories")
+
+
+def install(uid):
+    if os.getuid() != 0:
+        raise RuntimeError("--install requires sudo; the installed sampler itself runs non-root")
+    account = pwd.getpwuid(uid)
+    unit = persistent_unit(uid, account.pw_gid)
+    source = Path(__file__).resolve().parent
+    sources = {name: (source / name).read_bytes() for name in (
+        "memory_sampler.py", "memory_sampler_incident.py", "cpg_common.py",
+    )}
+    root_directory(LIB)
+    root_directory(UNITS)
+    name = unit_name(uid)
+    state = subprocess.run(
+        ["systemctl", "show", name, "--property=LoadState", "--value"],
+        text=True, capture_output=True, check=True,
+    ).stdout.strip()
+    if state != "not-found":
+        subprocess.run(["systemctl", "stop", name], check=True)
+        failed = subprocess.run(["systemctl", "is-failed", "--quiet", name], check=False)
+        if failed.returncode == 0:
+            subprocess.run(["systemctl", "reset-failed", name], check=True)
+        elif failed.returncode != 1:
+            raise RuntimeError("Unable to determine previous sampler failure state")
+    for filename, content in sources.items():
+        sampler.common.write_bytes(LIB / filename, content, mode=0o644)
+    sampler.common.write_bytes(UNITS / name, unit.encode(), mode=0o644)
+    subprocess.run(["systemctl", "daemon-reload"], check=True)
+    subprocess.run(["systemctl", "enable", "--now", name], check=True)
+    subprocess.run(["systemctl", "is-active", "--quiet", name], check=True)
+    print("Installed {}: continuous, boot-enabled; output /var/lib/cli-memory-sampler-{}. "
+          "Confirm fresh samples before relying on collection.".format(name, uid), flush=True)
+
+
 def main(argv=None):
-    argparse.ArgumentParser(description=__doc__).parse_args(argv)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--install", action="store_true",
+                        help="Install and enable continuous system service (requires sudo)")
+    parser.add_argument("--uid", type=int, help="Non-root account for --install")
+    args = parser.parse_args(argv)
+    if args.install != (args.uid is not None):
+        parser.error("--install and --uid must be supplied together")
     uid, gid = os.getuid(), os.getgid()
     try:
+        if args.install:
+            install(args.uid)
+            return 0
         command = start_command(Path(__file__).resolve().parent, output_directory(uid), uid, gid)
         prepare_output(output_directory(uid))
         result = subprocess.run(["sudo", "-n", *command], check=False)
@@ -66,7 +146,7 @@ def main(argv=None):
               "to confirm collection; output: {}".format(unit_name(uid), output_directory(uid)),
               flush=True)
         return 0
-    except sampler.READ_ERRORS as error:
+    except (*sampler.READ_ERRORS, subprocess.CalledProcessError) as error:
         print("Sampler service not started: {} (errno={}). "
               "Use a private non-symlink output directory and only one writer.".format(
                   type(error).__name__, getattr(error, "errno", None)),

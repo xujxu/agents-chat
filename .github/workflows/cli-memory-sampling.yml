@@ -25,7 +25,7 @@ jobs:
       - name: Package standalone diagnostic tool
         run: |
           mkdir artifact
-          cp ops/cpg/memory_sampler.py ops/cpg/memory_sampler_service.py ops/cpg/cpg_common.py ops/cpg/MEMORY-SAMPLING.txt artifact/
+          cp ops/cpg/memory_sampler.py ops/cpg/memory_sampler_incident.py ops/cpg/memory_sampler_service.py ops/cpg/cpg_common.py ops/cpg/MEMORY-SAMPLING.txt artifact/
           printf '%s\n' "$GITHUB_SHA" > artifact/revision.txt
           (cd artifact && sha256sum *.py MEMORY-SAMPLING.txt revision.txt > SHA256SUMS && sha256sum --check SHA256SUMS)
       - uses: actions/upload-artifact@v4

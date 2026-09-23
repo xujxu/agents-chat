@@ -139,6 +139,70 @@ def main():
     assert not Path("/var/lib/systemd/linger/samplertest").exists()
     assert not Path("/etc/systemd/system/" + UNIT).exists()
     print("PASS: kernel file-size cap, private bounded logs; no linger or persistent unit", flush=True)
+    persistent()
+
+
+def persistent():
+    global OUTPUT
+    OUTPUT = Path("/var/lib/cli-memory-sampler-1001")
+    Path("/etc/systemd/system/cpg-setup.service").write_text(
+        "[Service]\nType=oneshot\nExecStart=/bin/true\nRemainAfterExit=yes\n")
+    command("systemctl", "daemon-reload")
+    command("/usr/bin/python3", "-B", str(SOURCE / "memory_sampler_service.py"),
+            "--install", "--uid", "1001")
+    wait_for(lambda: (OUTPUT / "samples.jsonl").exists())
+    wait_for(lambda: any(row["type"] == "sample" for row in rows()))
+    state = show("MainPID", "ControlGroup", "RuntimeMaxUSec", "Restart", "MemoryMax")
+    assert state["RuntimeMaxUSec"] == "infinity" and state["Restart"] == "on-failure", state
+    assert state["ControlGroup"] == "/system.slice/" + UNIT, state
+    assert state["MemoryMax"] == str(32 * common.MIB)
+    command("systemctl", "is-enabled", "--quiet", UNIT)
+    assert Path("/etc/systemd/system/" + UNIT).exists()
+    assert Path("/etc/systemd/system/multi-user.target.wants/" + UNIT).is_symlink()
+    assert OUTPUT.stat().st_uid == 1001 and OUTPUT.stat().st_mode & 0o777 == 0o700
+    assert rows()[0]["interval_seconds"] == 2 and rows()[0]["duration_seconds"] is None
+    first_pid = int(state["MainPID"])
+    first_samples = len([row for row in rows() if row["type"] == "sample"])
+    command("systemctl", "kill", "--signal=SIGKILL", "--kill-who=main", UNIT)
+    wait_for(lambda: int(show("MainPID")["MainPID"]) not in (0, first_pid), seconds=50)
+    wait_for(lambda: len([row for row in rows() if row["type"] == "sample"]) > first_samples)
+    print("PASS: installed boot-enabled service; restart after abrupt sampler exit preserves logs",
+          flush=True)
+
+    # Only the disposable VM creates pressure, in a small child group with a surviving parent.
+    oom_script = (
+        "import subprocess, time; time.sleep(3); "
+        "r=subprocess.run(['/usr/bin/python3','-c','x=bytearray(80*1024*1024)']); "
+        "print('victim_returncode='+str(r.returncode), flush=True); time.sleep(90)"
+    )
+    previous_kills = common.read_group()["oom_kills"]
+    command("systemd-run", "--unit=sampler-oom-fixture", "--slice=cpg.slice",
+            "--property=MemoryMax=48M", "--property=OOMPolicy=continue",
+            "/usr/bin/python3", "-c", oom_script)
+    wait_for(lambda: common.read_group()["oom_kills"] > previous_kills)
+    wait_for(lambda: (OUTPUT / "oom-before.jsonl").exists())
+    before = [json.loads(line) for line in (OUTPUT / "oom-before.jsonl").read_text().splitlines()]
+    assert before[-1]["incident"]["previous_oom_kills"] == previous_kills
+    assert before[-1]["incident"]["oom_kills"] > previous_kills
+    command("systemctl", "is-active", "--quiet", UNIT)
+    wait_for(lambda: len((OUTPUT / "oom-after.jsonl").read_text().splitlines()) >= 3)
+    print("PASS: sampler outside protected group survives real fixture OOM and saves pre/post evidence",
+          flush=True)
+    evidence = (OUTPUT / "oom-before.jsonl").read_bytes()
+    command("systemctl", "stop", "sampler-oom-fixture.service")
+    command("systemctl", "restart", UNIT)
+    wait_for(lambda: rows()[-1]["type"] == "sample")
+    assert (OUTPUT / "oom-before.jsonl").read_bytes() == evidence
+    command("systemctl", "stop", UNIT)
+    assert rows()[-1]["reason"] == "interrupted"
+    for path in OUTPUT.glob("*.jsonl*"):
+        assert path.stat().st_size <= 4 * common.MIB
+        assert path.stat().st_mode & 0o777 == 0o600
+    assert sum(path.stat().st_size for path in OUTPUT.glob("*.jsonl*")) <= 24 * common.MIB
+    assert not (OUTPUT / "console.log").exists()
+    assert not Path("/var/lib/systemd/linger/samplertest").exists()
+    print("PASS: manual restart/stop preserves latest incident, 24 MiB data bound, no console growth",
+          flush=True)
 
 
 if __name__ == "__main__":

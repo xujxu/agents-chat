@@ -24,6 +24,10 @@ def timestamp():
     return datetime.now(timezone.utc).isoformat()
 
 
+def boot_id():
+    return (PROC / "sys/kernel/random/boot_id").read_text().strip()
+
+
 def error_details(error, operation):
     # Exception messages can contain paths or file contents.
     return {"operation": operation, "kind": type(error).__name__,
@@ -257,6 +261,7 @@ class Log:
                     }:
                         raise RuntimeError("Unexpected log backup; use a new output directory")
             self.stream = os.fdopen(self._open("samples.jsonl"), "ab")
+            self._repair_tail()
             return self
         except BaseException:
             self.__exit__(None, None, None)
@@ -281,8 +286,67 @@ class Log:
                 continue
         self.stream = os.fdopen(self._open("samples.jsonl"), "ab")
 
+    @staticmethod
+    def encode(row):
+        return (json.dumps(row, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
+
+    def _reader(self, name):
+        self._check(name)
+        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                             dir_fd=self.directory)
+        try:
+            self._validate_file(os.fstat(descriptor))
+            return os.fdopen(descriptor, "rb")
+        except BaseException:
+            os.close(descriptor)
+            raise
+
+    def _repair_tail(self):
+        with self._reader("samples.jsonl") as reader:
+            end = reader.seek(0, os.SEEK_END)
+            original = end
+            while end:
+                begin = max(0, end - 4096)
+                reader.seek(begin)
+                block = reader.read(end - begin)
+                newline = block.rfind(b"\n")
+                if newline >= 0:
+                    end = begin + newline + 1
+                    break
+                end = begin
+            if end != original:
+                os.ftruncate(self.stream.fileno(), end)
+                print("RECOVERED_INCOMPLETE_RECORD: discarded {} trailing bytes".format(
+                    original - end), file=sys.stderr, flush=True)
+
+    def records(self):
+        names = ["samples.jsonl." + str(index) for index in range(self.backups, 0, -1)]
+        for name in names + ["samples.jsonl"]:
+            try:
+                reader = self._reader(name)
+            except FileNotFoundError:
+                continue
+            with reader:
+                for line in reader:
+                    yield json.loads(line)
+
+    def evidence(self, name, data, replace=False):
+        if name not in ("oom-before.jsonl", "oom-after.jsonl"):
+            raise ValueError("Invalid evidence filename")
+        descriptor = self._open(name)
+        with os.fdopen(descriptor, "ab") as stream:
+            size = 0 if replace else os.fstat(stream.fileno()).st_size
+            if size + len(data) > self.max_bytes:
+                return False
+            if replace:
+                os.ftruncate(stream.fileno(), 0)
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        return True
+
     def write(self, row):
-        data = (json.dumps(row, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
+        data = self.encode(row)
         if len(data) > self.max_bytes:
             raise ValueError("Single record exceeds log size bound")
         if os.fstat(self.stream.fileno()).st_size + len(data) > self.max_bytes:
@@ -313,30 +377,44 @@ def main(argv=None):
                         help="New/private directory under an existing non-symlink parent")
     parser.add_argument("--label", default="new-session",
                         help="Non-sensitive comparison label, 1-48 ASCII letters/digits/_/-")
+    parser.add_argument("--continuous", action="store_true",
+                        help="Sample every 2 seconds without a deadline; retain latest OOM evidence")
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,48}", args.label):
         parser.error("--label must contain only 1-48 ASCII letters/digits/_/-")
     try:
         ensure_outside()
         with Log(args.output) as log:
+            interval = 2 if args.continuous else INTERVAL
+            duration = None if args.continuous else SAMPLES * INTERVAL
+            boot = boot_id() if args.continuous else None
+            incident = None
+            if args.continuous:
+                from memory_sampler_incident import IncidentCapture
+                incident = IncidentCapture(log, boot)
             log.write({"type": "start", "time": timestamp(), "label": args.label,
-                       "interval_seconds": INTERVAL, "duration_seconds": SAMPLES * INTERVAL,
+                       "interval_seconds": interval, "duration_seconds": duration,
                        "warning_bytes": WARN_BYTES, "schema": 1})
-            print("Sampling outside cpg: every 10 seconds, at most 2 hours. "
-                  "Ctrl-C or the service's systemctl stop stops cleanly.", flush=True)
+            print("Sampling outside cpg: every {} seconds, {}. "
+                  "Ctrl-C or systemctl stop stops cleanly.".format(
+                      interval, "continuous" if args.continuous else "at most 2 hours"), flush=True)
             alerts = Alerts()
             history = ProcessHistory()
-            deadline = time.monotonic() + SAMPLES * INTERVAL
+            deadline = None if args.continuous else time.monotonic() + duration
             reason = "duration_complete"
             result = 0
             try:
-                for index in range(SAMPLES):
+                index = 0
+                while args.continuous or index < SAMPLES:
                     now = time.monotonic()
-                    if now >= deadline:
+                    if deadline is not None and now >= deadline:
                         break
                     row = snapshot(args.label)
                     row["events"] = history.update(row)
                     row["alerts"] = alerts.update(row, now)
+                    if incident is not None:
+                        row["boot_id"] = boot
+                        incident.observe(row, now)
                     log.write(row)
                     for alert in row["alerts"]:
                         print(row["time"] + " " + alert, file=sys.stderr, flush=True)
@@ -345,11 +423,12 @@ def main(argv=None):
                             event["event"] == "read_error" for event in row["events"]):
                         print("READ_ERROR: partial process data; see numeric log.",
                               file=sys.stderr, flush=True)
-                    remaining = deadline - time.monotonic()
+                    index += 1
+                    remaining = interval if deadline is None else deadline - time.monotonic()
                     if remaining <= 0:
                         break
-                    if index + 1 < SAMPLES:
-                        time.sleep(min(INTERVAL, remaining))
+                    if args.continuous or index < SAMPLES:
+                        time.sleep(min(interval, remaining))
             except KeyboardInterrupt:
                 reason = "interrupted"
             except READ_ERRORS as error:

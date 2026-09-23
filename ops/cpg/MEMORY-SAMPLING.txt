@@ -1,5 +1,78 @@
 CLI memory sampler (Linux cgroup v1, Python 3.8+ standard library)
 
+Continuous, boot-enabled service (recommended for capturing the next OOM)
+----------------------------------------------------------------------
+The optional continuous mode samples normal activity every two seconds with
+no two-hour deadline. Install it once from the verified Actions package:
+
+  sudo python3 -B ./memory_sampler_service.py --install --uid "$(id -u)"
+
+Run this in an ordinary SSH terminal. Never send sudo passwords to a CLI agent.
+The installer replaces only this UID's previous sampler service, copies the
+runtime into root-owned /usr/local/libexec/cli-memory-sampler, and enables a
+system service at boot. It does not alter the Copilot guard, application or SSH.
+The Python sampler runs as the selected non-root user in system.slice, outside
+cpg.slice, so closing the CLI/SSH or a protected CLI OOM does not stop collection.
+The cpg setup service is ordered first at boot. A missing/disabled/changed
+guard remains an explicit sampling failure; no limits are silently relaxed.
+An unexpected sampler failure restarts after 30 seconds; manual stop stays
+stopped until explicitly started or the machine reboots.
+
+For UID 1001:
+  Service: cli-memory-sampler-1001.service
+  Output:  /var/lib/cli-memory-sampler-1001/ (persistent across reboot)
+
+  systemctl status cli-memory-sampler-1001.service --no-pager
+  tail -n 2 /var/lib/cli-memory-sampler-1001/samples.jsonl
+  sudo journalctl -u cli-memory-sampler-1001.service -n 30 --no-pager
+  sudo systemctl stop cli-memory-sampler-1001.service
+  sudo systemctl disable --now cli-memory-sampler-1001.service
+
+Storage is bounded, including over indefinite operation:
+  samples.jsonl + .1/.2/.3: at most 4 MiB each, 16 MiB total; oldest overwritten.
+  oom-before.jsonl: up to 4 MiB, at most 300 samples including the detected OOM
+                    (roughly ten minutes under normal two-second scheduling).
+  oom-after.jsonl: up to 4 MiB, observations through 60 seconds after detection.
+  Total sample/evidence file content: at most 24 MiB, plus an empty .lock.
+
+There is only one retained incident. It is replaced when the cumulative OOM
+counter increases again, never just because ordinary logs rotate. Evidence is
+flushed and fsynced on each write. Updating the fixed evidence files is not
+atomic across files; an interruption while replacing an incident can leave an
+incomplete incident. Compare record times, boot_id and the incident marker.
+An oversized post window ends explicitly with OOM_POST_CAPTURE_FULL in the
+normal log, not by exceeding its bound.
+
+Startup restores recent pre-event samples and the OOM baseline from rolling
+logs on the SAME kernel boot. Thus an increase during a sampler restart gap
+can be detected, but no observations can be reconstructed for that gap.
+A different boot or decreasing counter is not treated as a fresh OOM.
+A restart preserves existing incident files but does not resume an unfinished
+60-second post window. A torn final ordinary log record from an abrupt exit is
+discarded with an explicit RECOVERED_INCOMPLETE_RECORD diagnostic.
+
+The sampler retains the 32 MiB memory / 5% of one CPU / 8 task / 4 MiB per-file
+limits described below. Continuous mode does NOT append console.log forever:
+small operational diagnostics go to the existing system journal, rate-limited
+to 10 messages per minute. Journal retention is governed by host policy, not
+included in the 24 MiB private sample bound; no host journal setting is changed.
+The previous transient service's /tmp logs are left intact, not migrated or
+deleted. Those existing files are separate from the new fixed 24 MiB budget.
+
+Sample timestamps, PID/start ticks, per-process RSS, cgroup RSS/cache/usage,
+host available memory, exits and OOM counter deltas support correlation.
+An OOM counter increase proves an observed kill in the protected hierarchy,
+NOT which PID was killed. Two-second sampling can miss short-lived processes
+and fast peaks, and cannot identify JS/native allocations or prove a memory
+leak. Obtain the kernel OOM record with sudo for the exact victim and allocation
+context. This tool never reads prompts, command lines, environments or heaps.
+
+The legacy bounded foreground/transient modes below remain available unchanged
+unless --continuous is explicitly passed. All validation remains in Actions,
+including synthetic rotation/restart/boot tests and a disposable legacy-cgroup
+VM with a small OOM fixture (never on the production host). The VM checks
+persistent enablement, restart, isolation and real OOM evidence capture.
+
 Purpose and boundaries
 ----------------------
 Observe normal work in a fresh CLI process and fresh session. Do not resume or
@@ -170,7 +243,7 @@ guard tests under Ubuntu 20.04 / Python 3.8. A disposable Ubuntu 20.04 VM also
 checks real systemd 245/cgroup-v1 resource limits, non-root execution outside
 cpg, observed CPU/memory overhead, runtime expiry, graceful stop, and the kernel
 file-size bound. Only this sampler integration runs there, not the older guard
-OOM stress scenario. The workflow publishes this file, the three Python sources,
+OOM stress scenario. The workflow publishes this file, the four Python sources,
 revision.txt and SHA256SUMS after all checks pass. Production deployment is
 separate, requires explicit approval, and is observation rather than a test
 workload. No sampler is launched as a direct CLI-tool child on production.
