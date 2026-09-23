@@ -36,7 +36,9 @@ def wait_for(predicate, seconds=60):
 
 
 def rows():
-    return [json.loads(line) for line in (OUTPUT / "samples.jsonl").read_text().splitlines()]
+    # A concurrent append can expose an unfinished final record.
+    lines = (OUTPUT / "samples.jsonl").read_bytes().split(b"\n")[:-1]
+    return [json.loads(line) for line in lines]
 
 
 def main():

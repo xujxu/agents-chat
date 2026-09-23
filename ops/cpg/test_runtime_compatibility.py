@@ -17,11 +17,11 @@ def main():
             "require('node:fs').writeFileSync(process.env.CPG_PROBE_OUTPUT,"
             "JSON.stringify({pid:process.pid,node:process.version,"
             "heap:require('node:v8').getHeapStatistics().used_heap_size}));\n")
-        env = dict(os.environ, NODE_OPTIONS="--require=" + str(probe),
-                   CPG_PROBE_OUTPUT=str(result))
-        completed = subprocess.run([executable, "--version"], env=env, text=True,
+        env = dict(os.environ, CPG_PROBE_OUTPUT=str(result))
+        completed = subprocess.run([executable, "--node-options=--require=" + str(probe),
+                                    "--version"], env=env, text=True,
                                    capture_output=True, timeout=90, check=True)
-        assert result.exists(), "Standalone CLI did not execute the NODE_OPTIONS preload"
+        assert result.exists(), "Standalone CLI did not execute the --node-options preload"
         data = json.loads(result.read_text())
         assert data["heap"] > 0
         print("PASS: official CLI preload compatibility", completed.stdout.strip(), data)
