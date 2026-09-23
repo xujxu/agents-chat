@@ -1,0 +1,70 @@
+name: Native allocation feasibility
+on:
+  push:
+    branches: [ops/native-allocation-probe]
+    paths: [ops/cpg/**, .github/workflows/native-allocation-probe.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  evidence-tests:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check evidence gates and existing numeric sampler
+        working-directory: ops/cpg
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
+            test_native_probe_report.py test_memory_sampler.py \
+            test_memory_sampler_runtime.py test_sampler_anomalies.py
+  isolated-probe:
+    needs: evidence-tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install missing experiment tools
+        run: |
+          if ! command -v heaptrack || ! command -v heaptrack_print; then
+            sudo apt-get update -qq
+            sudo apt-get install --no-install-recommends -y heaptrack
+          fi
+          command -v cc
+          command -v readelf
+      - name: Fetch checksum-verified standalone CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-probe-runtime" "$RUNNER_TEMP/native-probe-results"
+          cd "$RUNNER_TEMP/native-probe-runtime"
+          curl --fail --silent --show-error --location -O https://github.com/github/copilot-cli/releases/download/v1.0.88/copilot-linux-x64.tar.gz
+          curl --fail --silent --show-error --location -O https://github.com/github/copilot-cli/releases/download/v1.0.88/SHA256SUMS.txt
+          grep ' copilot-linux-x64.tar.gz$' SHA256SUMS.txt | sha256sum --check -
+          tar -xzf copilot-linux-x64.tar.gz
+      - name: Run credential-free experiment in a limited disposable service
+        run: |
+          sudo systemd-run --unit=cpg-native-probe --wait --pipe --collect \
+            --uid="$(id -u)" --working-directory="$GITHUB_WORKSPACE/ops/cpg" \
+            --setenv=GITHUB_ACTIONS=true \
+            -p MemoryMax=1536M -p MemorySwapMax=0 -p TasksMax=128 \
+            -p RuntimeMaxSec=480 -p LimitFSIZE=67108864 -p LimitCORE=0 \
+            -p KillMode=control-group \
+            /usr/bin/python3 native_allocation_probe.py \
+            "$RUNNER_TEMP/native-probe-runtime/copilot" "$RUNNER_TEMP/native-probe-results"
+      - name: Publish evidence gate decision
+        if: always()
+        run: |
+          report="$RUNNER_TEMP/native-probe-results/summary.json"
+          if [ -f "$report" ]; then
+            printf '### Native allocation feasibility\n```json\n' >> "$GITHUB_STEP_SUMMARY"
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Experiment did not produce a decision; do not enable production profiling.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-allocation-feasibility-${{ github.sha }}
+          path: ${{ runner.temp }}/native-probe-results/
+          if-no-files-found: warn
+          retention-days: 7
