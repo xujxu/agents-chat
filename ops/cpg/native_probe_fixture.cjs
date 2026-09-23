@@ -26,7 +26,7 @@ setTimeout(() => {
 setTimeout(() => {
   transient = undefined;
   global.gc();
-  record('released');
+  record('release_requested');
 }, 4000);
 setTimeout(() => {
   if (!retained || retained[0] !== 2) throw new Error('Retained buffer missing');

@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 
-from native_probe_report import MIB, assess, overhead, parse_stacks, stack_bytes
+from native_probe_report import MIB, assess, overhead, parse_stacks, stack_bytes, check_cli_phases
 from native_probe_capture import capture
 
 SOURCE = Path(__file__).resolve().parent
@@ -76,12 +76,7 @@ def execute(root, name, command, tracked=False, abrupt=False, cli_home=None):
               else run(command, directory, env, expected=expected))
     if cli_home is not None:
         markers = [json.loads(line) for line in (directory / "markers.jsonl").read_text().splitlines()]
-        if [m["phase"] for m in markers] != ["start", "peak", "released", "finished"]:
-            raise RuntimeError("Incomplete standalone CLI fixture phases")
-        if markers[1]["memory"]["arrayBuffers"] - markers[0]["memory"]["arrayBuffers"] < 47 * MIB:
-            raise RuntimeError("Standalone fixture did not allocate the known buffers")
-        if markers[1]["memory"]["arrayBuffers"] - markers[2]["memory"]["arrayBuffers"] < 31 * MIB:
-            raise RuntimeError("Standalone fixture did not release the transient buffer")
+        check_cli_phases(markers)
         result["max_rss_bytes"] = markers[-1]["usage"]["maxRSS"] * 1024
         result["versions"] = markers[-1]["versions"]
     else:

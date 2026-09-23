@@ -4,11 +4,23 @@ import resource
 from pathlib import Path
 from unittest.mock import patch
 
-from native_probe_report import MIB, assess, parse_stacks, stack_bytes, overhead
+from native_probe_report import MIB, assess, parse_stacks, stack_bytes, overhead, check_cli_phases
 from native_probe_capture import profiler_paths, trace_file_limit
 
 
 class ReportTests(unittest.TestCase):
+    def test_cli_release_must_finish_before_exit_not_before_async_sweeping(self):
+        phases = ["start", "peak", "release_requested", "finished"]
+        for values in ([0, 48, 48, 16], [0, 48, 16, 16]):
+            check_cli_phases([{"phase": phase, "memory": {"arrayBuffers": size * MIB}}
+                              for phase, size in zip(phases, values)])
+        for values in ([0, 48, 48, 48], [0, 48, 16, 48], [0, 16, 16, 0]):
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                check_cli_phases([{"phase": phase, "memory": {"arrayBuffers": size * MIB}}
+                                  for phase, size in zip(phases, values)])
+        with self.assertRaises(ValueError):
+            check_cli_phases([])
+
     def test_traced_files_keep_the_tighter_limit(self):
         with patch("native_probe_capture.resource.setrlimit") as limit:
             trace_file_limit()

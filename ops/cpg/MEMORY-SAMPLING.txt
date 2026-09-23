@@ -32,7 +32,8 @@ extracts its bundled runtime once outside the uploaded artifacts, then all
 baseline/traced runs share that initially empty home. Cold extraction is not
 part of the overhead comparison. A test-only Node
 preload allocates 32+16 MiB Buffers, releases the first with explicit GC, then
-exits. These forced-GC and SIGKILL operations are restricted to the fixtures,
+checks the ArrayBuffer drop before exit (sweeping can finish asynchronously).
+These forced-GC and SIGKILL operations are restricted to the fixtures,
 not production diagnostics. Three baseline/traced pairs measure total reaped
 process-tree CPU, end-to-end wall time and subject peak RSS. A killed CLI run
 checks selected earlier native Buffer stacks survive. This validates a known

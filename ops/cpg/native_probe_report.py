@@ -5,6 +5,17 @@ import statistics
 MIB = 1024 ** 2
 
 
+def check_cli_phases(markers):
+    if [m["phase"] for m in markers] != ["start", "peak", "release_requested", "finished"]:
+        raise ValueError("Incomplete standalone CLI fixture phases")
+    buffers = [m["memory"]["arrayBuffers"] for m in markers]
+    if buffers[1] - buffers[0] < 47 * MIB:
+        raise ValueError("Standalone fixture did not allocate the known buffers")
+    # ArrayBuffer sweeping can finish asynchronously after a synchronous GC.
+    if buffers[1] - buffers[-1] < 31 * MIB:
+        raise ValueError("Standalone fixture did not release the transient buffer before exit")
+
+
 def parse_stacks(text):
     result = []
     for line in text.splitlines():
