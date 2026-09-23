@@ -96,6 +96,44 @@ class ContinuousTests(unittest.TestCase):
                     incident.observe(sample(1, kills=9), 1)
             self.assertEqual(target.read_text(), "keep")
 
+    def test_abrupt_writer_tail_is_repaired_explicitly(self):
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root) / "logs"
+            with sampler.Log(output) as log:
+                log.write(sample(0))
+            with (output / "samples.jsonl").open("ab") as stream:
+                stream.write(b'{"type":"sample","incomplete":')
+            with patch("builtins.print") as report:
+                with sampler.Log(output) as log:
+                    self.assertEqual(list(log.records()), [sample(0)])
+                    log.write(sample(1))
+            self.assertIn("RECOVERED_INCOMPLETE_RECORD", str(report.call_args_list))
+            self.assertEqual(len((output / "samples.jsonl").read_text().splitlines()), 2)
+
+    def test_exact_default_storage_caps_under_repeated_rotation(self):
+        mib = 1024 * 1024
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root) / "logs"
+            with sampler.Log(output) as log:
+                self.assertEqual(log.max_bytes, 4 * mib)
+                self.assertEqual(log.backups, 3)
+                incident = IncidentCapture(log, "boot-one")
+                for index in range(40):
+                    row = sample(index, kills=8 if index < 8 else 9)
+                    row["payload"] = "x" * (mib - 1024)
+                    incident.observe(row, index)
+                    log.write(row)
+            regular = list(output.glob("samples.jsonl*"))
+            evidence = list(output.glob("oom-*.jsonl"))
+            self.assertEqual(len(regular), 4)
+            self.assertEqual(len(evidence), 2)
+            self.assertLessEqual(sum(p.stat().st_size for p in regular), 16 * mib)
+            self.assertLessEqual(sum(p.stat().st_size for p in evidence), 8 * mib)
+            self.assertTrue(all(p.stat().st_size <= 4 * mib for p in regular + evidence))
+            for path in regular + evidence:
+                for line in path.open():
+                    json.loads(line)
+
     def test_continuous_main_has_no_sample_count_deadline(self):
         from test_memory_sampler import SamplerTests
         fixture = SamplerTests()
