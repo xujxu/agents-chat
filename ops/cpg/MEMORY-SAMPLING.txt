@@ -60,7 +60,8 @@ Collector memory is covered by the service ceiling but is not included in
 the subject-RSS overhead metric. This is bounded-duration FULL tracing, not
 an always-on sampled allocator map with bounded storage and loss accounting.
 
-Artifacts contain synthetic traces, native stacks, resource measurements,
+Artifacts contain synthetic traces, losslessly compressed native folded stacks
+(*.stacks.gz, including zero-cost entries), resource measurements,
 CLI SHA256/ELF BuildID, runtime/tool versions and summary.json. No local crash
 logs, actual session files, prompts, code or credentials are uploaded.
 Output contains process paths and stack symbols; real-world traces would

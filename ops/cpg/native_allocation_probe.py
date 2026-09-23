@@ -1,5 +1,6 @@
 """Actions-only heaptrack feasibility experiment; never attaches to a live CLI."""
 import hashlib
+import gzip
 import json
 import os
 from pathlib import Path
@@ -48,7 +49,10 @@ def analyze(directory, env):
              "--print-allocators=0", "--print-temporary=0", "--print-leaks=1",
              "--flamegraph-cost-type=" + cost, "--print-flamegraph=" + str(output)],
             analysis, env)
-        result[cost] = parse_stacks(output.read_text())
+        result[cost] = [(stack, value) for stack, value in parse_stacks(output.read_text()) if value]
+        with output.open("rb") as source, gzip.open(str(output) + ".gz", "wb") as compressed:
+            shutil.copyfileobj(source, compressed, MIB)
+        output.unlink()
     return result
 
 
@@ -88,9 +92,10 @@ def execute(root, name, command, tracked=False, abrupt=False, cli_home=None):
             raise RuntimeError("Missing native fixture completion marker")
         result.update(markers[0])
     (directory / "resources.json").write_text(json.dumps(result, indent=2) + "\n")
+    stacks = analyze(directory, env) if tracked else None
     if sum(p.stat().st_size for p in root.rglob("*") if p.is_file()) > 128 * MIB:
         raise RuntimeError("Experiment exceeded 128 MiB between-run artifact budget")
-    return result, analyze(directory, env) if tracked else None
+    return result, stacks
 
 
 def native_accounting(stacks):
