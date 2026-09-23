@@ -1,0 +1,25 @@
+name: Human-transcribed voice corpus baseline
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - scripts/voice_corpus_*.py
+      - scripts/test_voice_corpus_*.py
+      - scripts/voice_accuracy_metrics.py
+      - .github/workflows/voice-corpus-baseline.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - run: python -m unittest discover -s scripts -p test_voice_corpus_baseline.py -v
+      - run: python -m unittest discover -s scripts -p test_voice_accuracy_metrics.py -v
