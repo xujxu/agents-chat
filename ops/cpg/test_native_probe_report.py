@@ -1,13 +1,19 @@
 """Evidence gates for the isolated native profiler experiment."""
 import unittest
+import resource
 from pathlib import Path
 from unittest.mock import patch
 
 from native_probe_report import MIB, assess, parse_stacks, stack_bytes, overhead
-from native_probe_capture import profiler_paths
+from native_probe_capture import profiler_paths, trace_file_limit
 
 
 class ReportTests(unittest.TestCase):
+    def test_traced_files_keep_the_tighter_limit(self):
+        with patch("native_probe_capture.resource.setrlimit") as limit:
+            trace_file_limit()
+            limit.assert_called_once_with(resource.RLIMIT_FSIZE, (64 * MIB, 64 * MIB))
+
     def test_profiler_paths_require_unambiguous_existing_package_files(self):
         listing = "/usr/lib/heaptrack/libheaptrack_preload.so\n/usr/lib/heaptrack/heaptrack_interpret\n"
         with patch("native_probe_capture.subprocess.check_output", return_value=listing) as query, \

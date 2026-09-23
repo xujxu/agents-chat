@@ -46,7 +46,7 @@ jobs:
             --uid="$(id -u)" --working-directory="$GITHUB_WORKSPACE/ops/cpg" \
             --setenv=GITHUB_ACTIONS=true \
             -p MemoryMax=1536M -p MemorySwapMax=0 -p TasksMax=128 \
-            -p RuntimeMaxSec=480 -p LimitFSIZE=67108864 -p LimitCORE=0 \
+            -p RuntimeMaxSec=480 -p LimitFSIZE=536870912 -p LimitCORE=0 \
             -p KillMode=control-group \
             /usr/bin/python3 native_allocation_probe.py \
             "$RUNNER_TEMP/native-probe-runtime/copilot" "$RUNNER_TEMP/native-probe-results"

@@ -26,8 +26,11 @@ somewhere in a text report. A second run kills only the disposable fixture
 with SIGKILL and checks that the selected earlier allocation/free evidence
 survives. It is NOT an actual OOM test or proof of lossless final capture.
 
-The official standalone CLI runs --acp without protocol requests, in an empty
-HOME with an allowlisted environment and no credentials. A test-only Node
+The official standalone CLI runs --acp without protocol requests, in an isolated
+HOME with an allowlisted environment and no credentials. A --version warmup
+extracts its bundled runtime once outside the uploaded artifacts, then all
+baseline/traced runs share that initially empty home. Cold extraction is not
+part of the overhead comparison. A test-only Node
 preload allocates 32+16 MiB Buffers, releases the first with explicit GC, then
 exits. These forced-GC and SIGKILL operations are restricted to the fixtures,
 not production diagnostics. Three baseline/traced pairs measure total reaped
@@ -47,7 +50,9 @@ are errors, not successful captures. Actual values and failed gates are
 retained even if a well-formed experiment fails the eligibility thresholds.
 
 The entire disposable service (subjects AND collectors) is limited to 1536 MiB,
-no swap, 128 tasks and 480 seconds; each regular file is capped at 64 MiB.
+no swap, 128 tasks and 480 seconds. Service files are capped at 512 MiB to permit
+the CLI's bundled package extraction; traced subjects and interpreters have a
+tighter 64 MiB file cap. Warmed runtime files are not uploaded.
 An aggregate 128 MiB artifact check runs between subjects, not per write; it
 can overshoot within a run. Each subprocess has a 60-second deadline, and
 systemd cleans remaining descendants when the experiment service exits.

@@ -59,17 +59,18 @@ def clean_environment(home):
             "LC_ALL": "C.UTF-8", "DEBUGINFOD_URLS": ""}
 
 
-def execute(root, name, command, tracked=False, abrupt=False, cli=False):
+def execute(root, name, command, tracked=False, abrupt=False, cli_home=None):
     directory = root / name
     directory.mkdir()
     env = clean_environment(directory / "home")
-    if cli:
+    if cli_home is not None:
+        env.update(HOME=str(cli_home), XDG_CONFIG_HOME=str(cli_home / ".config"))
         env.update(CPG_NATIVE_PROBE_MARKER=str(directory / "markers.jsonl"),
                    CPG_NATIVE_PROBE_KILL="1" if abrupt else "0")
     expected = (-9,) if abrupt else (0,)
     result = (capture(command, directory, env, expected) if tracked
               else run(command, directory, env, expected=expected))
-    if cli:
+    if cli_home is not None:
         markers = [json.loads(line) for line in (directory / "markers.jsonl").read_text().splitlines()]
         if [m["phase"] for m in markers] != ["start", "peak", "released", "finished"]:
             raise RuntimeError("Incomplete standalone CLI fixture phases")
@@ -138,20 +139,27 @@ def main():
         _, killed = execute(root, "native-killed", [str(fixture), "kill"], tracked=True, abrupt=True)
         exact, accounting = native_accounting(normal)
         killed_exact, killed_accounting = native_accounting(killed)
+        summary.update(native_accounting=accounting, native_killed_accounting=killed_accounting)
+        cli_home = executable.parent / "probe-home"
+        warm_env = clean_environment(cli_home)
+        warm = root / "cli-warmup"
+        warm.mkdir()
+        run([str(executable), "--version"], warm, warm_env)
         args = [str(executable),
                 "--node-options=--expose-gc --require=" + str(SOURCE / "native_probe_fixture.cjs"),
                 "--acp"]
         base, tracked = [], []
         named_bytes = []
         for index in range(3):
-            baseline, _ = execute(root, "cli-baseline-" + str(index), args, cli=True)
-            instrumented, stacks = execute(root, "cli-tracked-" + str(index), args, tracked=True, cli=True)
+            baseline, _ = execute(root, "cli-baseline-" + str(index), args, cli_home=cli_home)
+            instrumented, stacks = execute(root, "cli-tracked-" + str(index), args,
+                                           tracked=True, cli_home=cli_home)
             base.append(baseline)
             tracked.append(instrumented)
             named_bytes.append(sum(value for stack, value in stacks["peak"]
                                    if any(name in stack for name in (
                                        "ArrayBuffer", "BackingStore", "node::Buffer"))))
-        _, killed_cli = execute(root, "cli-killed", args, tracked=True, abrupt=True, cli=True)
+        _, killed_cli = execute(root, "cli-killed", args, tracked=True, abrupt=True, cli_home=cli_home)
         killed_named = sum(value for stack, value in killed_cli["peak"]
                            if any(name in stack for name in ("ArrayBuffer", "BackingStore", "node::Buffer")))
         measured = overhead(base, tracked)

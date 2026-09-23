@@ -8,6 +8,10 @@ import subprocess
 import time
 
 
+def trace_file_limit():
+    resource.setrlimit(resource.RLIMIT_FSIZE, (64 * 1024 ** 2, 64 * 1024 ** 2))
+
+
 def profiler_paths():
     listing = subprocess.check_output(["dpkg-query", "-L", "libheaptrack"], text=True, timeout=10)
     paths = {}
@@ -37,11 +41,13 @@ def capture(command, directory, env, expected):
                 (directory / "stdout.txt").open("w") as out, \
                 (directory / "stderr.txt").open("w") as err:
             interpreter = subprocess.Popen([paths["heaptrack_interpret"]], stdin=pipe,
-                                           stdout=trace, stderr=errors, env=env, cwd=directory)
+                                           stdout=trace, stderr=errors, env=env, cwd=directory,
+                                           preexec_fn=trace_file_limit)
             subject_env = dict(env, LD_PRELOAD=paths["libheaptrack_preload.so"],
                                DUMP_HEAPTRACK_OUTPUT=str(fifo))
             subject = subprocess.Popen(command, env=subject_env, cwd=directory,
-                                       stdin=subprocess.PIPE, stdout=out, stderr=err)
+                                       stdin=subprocess.PIPE, stdout=out, stderr=err,
+                                       preexec_fn=trace_file_limit)
             code = subject.wait(timeout=60)
             os.close(pipe_fd)
             pipe_fd = None
