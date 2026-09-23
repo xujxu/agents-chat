@@ -41,6 +41,161 @@ async function expectExactlyOneActiveModal(page: import('@playwright/test').Page
   await expect(page.locator('[role="dialog"][aria-modal="true"]:not([aria-hidden="true"])')).toHaveCount(1);
 }
 
+test('responsive composer placeholder stays on one line without shrinking on input', async ({ page }) => {
+  const textarea = page.locator('textarea.composerTextarea');
+  const mobilePlaceholder = 'Type a message, / or @';
+  const desktopPlaceholder = 'Type a message, / for commands, or @ to mention an agent';
+
+  for (const width of [320, 375, 390, 430, 844, 900, 901, 1280, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await setTestVisualViewport(page, 844, 0);
+    await expect(textarea).toHaveAttribute('placeholder', width <= 900 ? mobilePlaceholder : desktopPlaceholder);
+    await expect(textarea).toHaveValue('');
+    await expect.poll(() => textarea.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const singleLineHeight = parseFloat(style.lineHeight)
+        + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      return Math.abs(element.getBoundingClientRect().height - singleLineHeight);
+    })).toBeLessThanOrEqual(1);
+    const emptyHeight = await textarea.evaluate((element) => element.getBoundingClientRect().height);
+
+    for (const value of ['a', '', '字', '']) {
+      await textarea.fill(value);
+      await expect.poll(() => textarea.evaluate(
+        (element) => element.getBoundingClientRect().height,
+      )).toBeCloseTo(emptyHeight, 0);
+    }
+
+    await textarea.fill('First line\nSecond line');
+    await expect.poll(() => textarea.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    )).toBeGreaterThan(emptyHeight + 10);
+    await textarea.fill('');
+    await expect.poll(() => textarea.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    )).toBeCloseTo(emptyHeight, 0);
+  }
+
+  await textarea.fill('Keep my draft');
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await expect(textarea).toHaveAttribute('placeholder', desktopPlaceholder);
+  await expect(textarea).toHaveValue('Keep my draft');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(textarea).toHaveAttribute('placeholder', mobilePlaceholder);
+  await expect(textarea).toHaveValue('Keep my draft');
+});
+
+test('mobile header controls match the account chip height', async ({ page }) => {
+  for (const width of [320, 390, 560, 561, 844, 900]) {
+    await page.setViewportSize({ width, height: 844 });
+    await setTestVisualViewport(page, 844, 0);
+    const size = width <= 560 ? 30 : 34;
+    const account = page.locator('.userChip');
+    await expect(account).toHaveCSS('height', `${size}px`);
+
+    for (const name of ['Open navigation', 'More actions']) {
+      const button = page.getByRole('button', { name });
+      await expect(button).toHaveCSS('height', `${size}px`);
+      await expect(button).toHaveCSS('width', `${size}px`);
+    }
+    await expect.poll(() => page.locator('.header').evaluate((header) => {
+      const tops = Array.from(header.querySelectorAll(
+        '.mobileNavigationButton, .headerOverflowBtn, .userChip',
+      ), (element) => element.getBoundingClientRect().top);
+      return Math.max(...tops) - Math.min(...tops);
+    })).toBeLessThanOrEqual(1);
+  }
+
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await expect(page.locator('.participantsSidebar')).toHaveClass(/mobilePanelVisible/);
+  await page.getByRole('button', { name: 'More actions' }).click();
+  await expect(page.getByRole('menu', { name: 'Header actions' })).toBeVisible();
+  await page.locator('.userNameButton').click();
+  await expect(page.getByRole('dialog', { name: 'Account details' })).toBeVisible();
+});
+
+test('composer controls share a compact height on mobile and desktop', async ({ page }) => {
+  const textarea = page.locator('textarea.composerTextarea');
+  const send = page.getByRole('button', { name: 'Send message' });
+  for (const width of [320, 390, 844, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await setTestVisualViewport(page, 844, 0);
+    for (const draft of ['', '@alpha aligned controls']) {
+      await textarea.fill(draft);
+      const controls = page.locator('.attachButton, .sendButton, .targetPill');
+      await expect(send).toHaveCSS('height', '32px');
+      const sendBox = await send.boundingBox();
+      expect(sendBox).not.toBeNull();
+      for (const control of await controls.all()) {
+        await expect(control).toHaveCSS('height', '32px');
+        const box = await control.boundingBox();
+        expect(box).not.toBeNull();
+        expect(Math.abs(box!.y - sendBox!.y)).toBeLessThanOrEqual(1);
+      }
+    }
+  }
+});
+
+for (const theme of ['VS Code Dark', 'Claude']) {
+  test(`mobile pills fade softly without covering send or the last workflow pill in ${theme}`, async ({ page }, testInfo) => {
+    await page.route('**/api/workflows', (route) => route.fulfill({
+      json: { ok: true, repo: [], user: [] },
+    }));
+    await page.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('menuitem', { name: 'Theme' }).click();
+    await page.getByRole('menuitemradio', { name: theme, exact: false }).click();
+
+    const pills = page.locator('.targetPills');
+    const workflow = pills.getByRole('button', { name: /workflow/ });
+    const send = page.getByRole('button', { name: 'Send message' });
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      await setTestVisualViewport(page, 844, 0);
+      await page.locator('textarea.composerTextarea').fill('@alpha @beta overflow controls');
+      await expect(pills.locator('.modelTargetPill')).toHaveCount(2);
+      await expect(pills).toHaveCSS('overflow-x', 'auto');
+      await expect.poll(() => pills.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+      await expect(pills).toHaveCSS('mask-image', /linear-gradient/);
+      await pills.evaluate((element) => { element.scrollLeft = 0; });
+      await settleChatLayout(page);
+      const [pillsBox, sendBox] = await Promise.all([pills.boundingBox(), send.boundingBox()]);
+      expect(pillsBox).not.toBeNull();
+      expect(sendBox).not.toBeNull();
+      expect(pillsBox!.x + pillsBox!.width).toBeLessThanOrEqual(sendBox!.x - 6);
+      const overflowScreenshot = testInfo.outputPath(`composer-${width}-overflow.png`);
+      await page.locator('.composerShell').screenshot({ path: overflowScreenshot });
+      await testInfo.attach(`composer-${theme}-${width}-overflow`, {
+        path: overflowScreenshot,
+        contentType: 'image/png',
+      });
+
+      await pills.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+      await expect.poll(() => pills.evaluate((element) => {
+        const pill = element.lastElementChild;
+        if (!pill) throw new Error('Expected a workflow pill at the end of the toolbar');
+        return element.getBoundingClientRect().right - pill.getBoundingClientRect().right;
+      })).toBeGreaterThanOrEqual(11);
+      const [workflowBox, scrollBox] = await Promise.all([workflow.boundingBox(), pills.boundingBox()]);
+      expect(workflowBox).not.toBeNull();
+      expect(scrollBox).not.toBeNull();
+      expect(workflowBox!.x).toBeGreaterThanOrEqual(scrollBox!.x - 1);
+      await workflow.click();
+      await expect(page.getByRole('heading', { name: 'Pick a workflow' })).toBeVisible();
+      await page.locator('.wfPickerClose').click();
+
+      await page.locator('textarea.composerTextarea').fill('');
+      await pills.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+      await expect(workflow).toBeVisible();
+      const endScreenshot = testInfo.outputPath(`composer-${width}-end.png`);
+      await page.locator('.composerShell').screenshot({ path: endScreenshot });
+      await testInfo.attach(`composer-${theme}-${width}-end`, {
+        path: endScreenshot,
+        contentType: 'image/png',
+      });
+    }
+  });
+}
+
 test('separates left navigation from management actions', async ({ page }) => {
   const navigation = page.getByRole('button', { name: 'Open navigation' });
   await expect(navigation).toBeVisible();
