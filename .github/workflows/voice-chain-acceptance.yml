@@ -1,0 +1,29 @@
+name: Voice browser API chain acceptance
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - scripts/voice_chain_report.py
+      - scripts/test_voice_chain_report.py
+      - scripts/voice-sense-adapter.c
+      - tests/voice-corpus-chain.spec.ts
+      - .github/workflows/voice-chain-acceptance.yml
+  workflow_dispatch:
+    inputs:
+      meeting_run:
+        description: Successful licensed natural meeting corpus run
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - run: python -m unittest discover -s scripts -p test_voice_chain_report.py -v
