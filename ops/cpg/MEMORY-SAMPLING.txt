@@ -1,5 +1,69 @@
 CLI memory sampler (Linux cgroup v1, Python 3.8+ standard library)
 
+Isolated native allocation feasibility experiment (NOT a sampler upgrade)
+------------------------------------------------------------------------
+Run the separate "Native allocation feasibility" GitHub Actions workflow on
+ops/native-allocation-probe. Do not run native_allocation_probe.py on the
+production host. Its Python 3.10+ harness requires GITHUB_ACTIONS=true.
+No new production sampler options, services or permissions are installed.
+
+This experiment deliberately uses the established heaptrack malloc profiler,
+not a new allocator hook. heaptrack launches fresh processes with LD_PRELOAD:
+no perf/BPF policy relaxation, debugger attach or credentials are required.
+This does NOT mean its full allocation tracing is suitable for always-on use.
+It can block/slow the subject, consume memory and change allocation timing.
+
+The C fixture has exact known malloc/calloc/realloc/free totals, including a
+failed realloc, worker-thread allocation, release and deliberately outstanding
+memory. A separate mmap allocation illustrates memory outside these totals.
+Folded stacks are checked in bytes, not merely for a function-name substring
+somewhere in a text report. A second run kills only the disposable fixture
+with SIGKILL and checks that the selected earlier allocation/free evidence
+survives. It is NOT an actual OOM test or proof of lossless final capture.
+
+The official standalone CLI runs --acp without protocol requests, in an empty
+HOME with an allowlisted environment and no credentials. A test-only Node
+preload allocates 32+16 MiB Buffers, releases the first with explicit GC, then
+exits. These forced-GC and SIGKILL operations are restricted to the fixtures,
+not production diagnostics. Three baseline/traced pairs measure total reaped
+process-tree CPU, end-to-end wall time and subject peak RSS. A killed CLI run
+checks selected earlier native Buffer stacks survive. This validates a known
+native Buffer path, NOT the unknown V8 malloc path seen in production.
+
+Initial conservative synthetic gates:
+  - Exact C fixture peak/outstanding bytes for all four named call paths.
+  - At least 32 MiB of CLI peak allocations with a named Buffer/ArrayBuffer/
+    BackingStore native frame, in every traced pair.
+  - Selected known allocation/free evidence readable after subject SIGKILL.
+  - Paired median extra CPU <5% of one core, extra subject peak RSS <32 MiB,
+    and traced/baseline wall-time ratio <1.25.
+Threshold equality fails. Empty/malformed stack files or incomplete phases
+are errors, not successful captures. Actual values and failed gates are
+retained even if a well-formed experiment fails the eligibility thresholds.
+
+The entire disposable service (subjects AND collectors) is limited to 1536 MiB,
+no swap, 128 tasks and 480 seconds; each regular file is capped at 64 MiB.
+An aggregate 128 MiB artifact check runs between subjects, not per write; it
+can overshoot within a run. Each subprocess has a 60-second deadline, and
+systemd cleans remaining descendants when the experiment service exits.
+Collector memory is covered by the service ceiling but is not included in
+the subject-RSS overhead metric. This is bounded-duration FULL tracing, not
+an always-on sampled allocator map with bounded storage and loss accounting.
+
+Artifacts contain synthetic traces, native stacks, resource measurements,
+CLI SHA256/ELF BuildID, runtime/tool versions and summary.json. No local crash
+logs, actual session files, prompts, code or credentials are uploaded.
+Output contains process paths and stack symbols; real-world traces would
+require separate local handling and review before sharing.
+
+Always read summary.json: a green workflow means the experiment ran, not that
+all eligibility gates passed. production_ready and root_cause_proven remain
+false even when synthetic_gates_passed is true. Direct mmap/custom allocators,
+JIT stack symbolization, allocation-event loss, allocator retention and actual
+OOM reproduction remain outside this first gate. Missing internal V8 symbols
+may still require a matching symbolized build or upstream symbolization.
+Do not deploy full tracing based only on a passing synthetic Buffer fixture.
+
 V8 allocation anomaly capture (sampler 2, internal schema 2)
 -----------------------------------------------------------
 Upgrade BOTH service and launcher using the two commands below from one green

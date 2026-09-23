@@ -134,6 +134,17 @@ installer has already initialized the group, and the enabled unit is for reboot.
 
 ## Validation
 
+### Experimental native allocation feasibility
+
+The separate **Native allocation feasibility** Actions workflow evaluates
+heaptrack against known C allocations and the checksum-verified original CLI
+1.0.88. It is not installed by cpg or included in the sampler upgrade package.
+It never attaches to a running process, changes kernel profiling permissions,
+or loads private sessions. See the experiment section of
+[MEMORY-SAMPLING.txt](MEMORY-SAMPLING.txt) for evidence gates and limitations.
+A green experiment job means the experiment completed, NOT that production
+profiling is approved: inspect `summary.json`, especially `failed_gates`.
+
 All automated validation is in GitHub Actions. Unit tests run on Ubuntu 20.04.
 A disposable Ubuntu 20.04 VM boots a real cgroup-v1 memory controller and verifies
 literal `--yolo`/other argument forwarding, identity/cwd/environment, interactive
