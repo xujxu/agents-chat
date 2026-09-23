@@ -155,6 +155,22 @@ class GuardTests(unittest.TestCase):
             self.assertIn(b"--memory-sampling", common.LAUNCHER.read_bytes())
             self.assertEqual(result["config"], value["config"])
             control.assert_not_called()
+            value = result
+            originals = {path: path.read_bytes() for path in (common.LAUNCHER, common.ADMIN)}
+            write = common.write_json
+            calls = []
+
+            def fail_after_record_replace(path, data, mode):
+                write(path, data, mode)
+                calls.append(path)
+                if len(calls) == 1:
+                    raise OSError("injected post-rename failure")
+
+            with patch.object(common, "write_json", side_effect=fail_after_record_replace):
+                with self.assertRaisesRegex(OSError, "injected"):
+                    admin.upgrade_launcher(value)
+            self.assertEqual(common.read_json(common.RECORD), value)
+            self.assertTrue(all(path.read_bytes() == content for path, content in originals.items()))
 
     def test_installed_assets_do_not_modify_applications_or_sudo_policy(self):
         package = admin.files(Path(__file__).resolve().parent, 1001, 1001)

@@ -88,6 +88,20 @@ class RuntimeTests(unittest.TestCase):
         self.assertGreater(self.collector.take()["rejected"], 0)
         self.assertEqual(len(self.collector.clients), 0)
 
+    def test_pending_ring_has_exact_bound_and_explicit_drop_count(self):
+        client = self.connect()
+        server = next(iter(self.collector.clients))
+        payload = (json.dumps(metrics()) + "\n").encode()
+        for index in range(runtime.MAX_PENDING + 10):
+            client.sendall(payload)
+            with patch.object(runtime.time, "monotonic", return_value=index + 1):
+                self.collector._read(server)
+            self.assertLessEqual(len(self.collector.pending), runtime.MAX_PENDING)
+        data = self.collector.take()
+        self.assertEqual(len(data["samples"]), runtime.MAX_PENDING)
+        self.assertEqual(data["dropped"], 10)
+        self.assertEqual(self.collector.take()["dropped"], 0)
+
     def test_reject_unprotected_peer_and_do_not_keep_payload(self):
         client = self.connect()
         with patch.object(self.collector, "_identity", side_effect=PermissionError()):

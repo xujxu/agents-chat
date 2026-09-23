@@ -291,6 +291,7 @@ def upgrade_launcher(value):
         print("Launcher upgrade failed; restoring previous launcher/admin files.", file=sys.stderr)
         for path, content in original.items():
             common.write_bytes(path, content, mode=0o755)
+        common.write_json(common.RECORD, value, 0o600)
         raise
     print("cpg launcher upgraded. Existing tasks, guard limits and units were not changed.")
 
