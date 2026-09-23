@@ -13,6 +13,8 @@ Voice candidate acceptance, CI only
    The long-engines job compares the frozen baseline SenseVoice/FunASR settings
    on all 40 windows. The chain job selects 20 fixed hash-ranked ASCEND samples
    per category plus all 40 meeting windows. Selection never uses engine output.
+   Use chain_only=true to retry the browser job without repeating long-engine
+   inference; retain the separate successful long-engine run in the final report.
 
 3. The chain job compiles a CI-only SenseVoice adapter accepting the existing
    transcriber CLI flags. It disables ONNX memory arena/pattern and uses one

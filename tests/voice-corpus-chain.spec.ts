@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { performance } from 'node:perf_hooks';
 import { expect, test } from '@playwright/test';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
 import { validateVoiceWav } from '../lib/voice/audio';

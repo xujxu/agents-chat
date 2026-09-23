@@ -14,6 +14,10 @@ on:
         description: Successful licensed natural meeting corpus run
         required: true
         type: string
+      chain_only:
+        description: Retry only the browser chain without rerunning completed engine comparisons
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -129,7 +133,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   long-engines:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && !inputs.chain_only
     needs: test
     runs-on: ubuntu-22.04
     timeout-minutes: 45
