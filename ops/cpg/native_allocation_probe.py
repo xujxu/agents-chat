@@ -127,7 +127,8 @@ def main():
             digest.update(chunk)
     metadata = {"cli_sha256": digest.hexdigest(),
                 "heaptrack": subprocess.check_output(["heaptrack", "--version"], text=True).strip(),
-                "cli_elf_notes": subprocess.check_output(["readelf", "-n", str(executable)], text=True),
+                "cli_build_id_section": subprocess.check_output(
+                    ["readelf", "-x", ".note.gnu.build-id", str(executable)], text=True, timeout=10),
                 "production_limits_changed": False}
     (root / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
     summary = {"production_ready": False, "root_cause_proven": False, "status": "incomplete"}
