@@ -1,0 +1,61 @@
+name: Voice memory monitor diagnostics
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - lib/voice/memory.ts
+      - tests/voice-memory*.test.ts
+      - .github/workflows/voice-memory-diagnostics.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Existing memory and audio regression tests
+        run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-memory.test.ts tests/voice-audio.test.ts tests/voice-jobs.test.ts
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10748244312
+          merge-multiple: true
+          path: short
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35875241311
+          artifact-ids: 10756888523
+          merge-multiple: true
+          path: reviewed
+      - name: Prepare unchanged candidate adapter
+        run: |
+          mkdir sherpa sense
+          curl -fL --retry 3 --max-time 240 https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared-no-tts.tar.bz2 -o runtime.tar.bz2
+          echo 'd0f96c8b65c6cd0974fada22737e337de81bc8cd2abbec2e39caf358b1eec5fc  runtime.tar.bz2' | sha256sum --check
+          tar -xjf runtime.tar.bz2 --strip-components=1 -C sherpa
+          curl -fL --retry 3 --max-time 600 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2 -o sense.tar.bz2
+          echo '7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e  sense.tar.bz2' | sha256sum --check
+          tar -xjf sense.tar.bz2 --strip-components=1 -C sense
+          gcc -std=c11 -Wall -Wextra -Werror -Isherpa/include scripts/voice-sense-adapter.c \
+            -Lsherpa/lib -Wl,-rpath,"$PWD/sherpa/lib" -lsherpa-onnx-c-api -o voice-sense-adapter
+      - name: Observe real proc snapshots without changing the guard
+        env:
+          VOICE_MEMORY_DIAG: '1'
+        run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-memory-diagnostics.test.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-memory-diagnostics
+          path: diagnostics/
+          retention-days: 30
+          if-no-files-found: error
