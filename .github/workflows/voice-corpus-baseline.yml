@@ -67,7 +67,7 @@ jobs:
       - name: Prepare frozen runtime and two candidate engines
         run: |
           echo '258f71d72806834e0b1df98a0e6025d5c4cba1464ac4da9ad26e767ed4e555d8  quantized/u8u8/llm.int8.onnx' | sha256sum --check
-          echo 'b428cd7d87593b29af27077a5a7f758e4475c4e20856a7a64cb08cd9a2aa2c  quantized/encoder/encoder_adaptor.int8.onnx' | sha256sum --check
+          echo 'b428cd7d87593b29af27077a5a7f758e4475c4e20856a7f7a64cb08cd9a2aa2c  quantized/encoder/encoder_adaptor.int8.onnx' | sha256sum --check
           mkdir sherpa sense original
           curl -fL --retry 3 --max-time 240 https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared-no-tts.tar.bz2 -o runtime.tar.bz2
           echo 'd0f96c8b65c6cd0974fada22737e337de81bc8cd2abbec2e39caf358b1eec5fc  runtime.tar.bz2' | sha256sum --check

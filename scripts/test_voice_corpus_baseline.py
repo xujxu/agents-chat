@@ -1,3 +1,5 @@
+from pathlib import Path
+import re
 import unittest
 
 from voice_corpus_data import select_rows
@@ -21,6 +23,16 @@ def result(item=None, **changes):
 
 
 class CorpusSelectionTests(unittest.TestCase):
+    def test_workflow_checksums_are_well_formed_and_match_existing_models(self):
+        workflows = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+        baseline = (workflows / "voice-corpus-baseline.yml").read_text()
+        existing = (workflows / "voice-natural-long.yml").read_text()
+        checks = re.findall(r"echo '([^']+)' \| sha256sum --check", baseline)
+        self.assertEqual(len(checks), 5)
+        for check in checks:
+            self.assertRegex(check, r"^[0-9a-f]{64}  \S+$")
+            self.assertIn(check, existing)
+
     def test_all_rows_accounted_for_without_model_conditioned_sampling(self):
         rows = [
             {"id": "1", "transcription": "你好 world", "duration": 2},
