@@ -24,7 +24,8 @@ class SamplerTests(unittest.TestCase):
             ("memory.usage_in_bytes", 600 * common.MIB),
             ("memory.failcnt", 2), ("memory.use_hierarchy", 1),
             ("memory.oom_control", "oom_kill_disable 0\noom_kill 0\n"),
-            ("memory.stat", "total_inactive_file 1024\ntotal_cache 2048\ntotal_rss 4096\n"),
+            ("memory.stat", "total_inactive_file 1024\ntotal_cache 2048\ntotal_rss 4096\n"
+             "total_pgfault 55\ntotal_pgmajfault 3\n"),
             ("cgroup.procs", ""),
         ):
             (self.group / name).write_text(str(value))
@@ -49,7 +50,9 @@ class SamplerTests(unittest.TestCase):
         (directory / "stat").write_text(f"{pid} (name with ) spaces) " + " ".join(fields))
         (directory / "status").write_text(
             "Name:\tPRIVATE-NOT-LOGGED\nPPid:\t1\nVmRSS:\t2000 kB\nVmHWM:\t2500 kB\n"
-            "RssAnon:\t1500 kB\nRssFile:\t500 kB\nVmSwap:\t0 kB\nThreads:\t12\n")
+            "RssAnon:\t1500 kB\nRssFile:\t500 kB\nVmSwap:\t0 kB\nThreads:\t12\n"
+            "VmSize:\t9000 kB\nVmData:\t6000 kB\nVmStk:\t132 kB\nVmPTE:\t64 kB\n"
+            "RssShmem:\t0 kB\n")
         (directory / "exe").symlink_to("/private/copilot")
         (directory / "cgroup").write_text("2:memory:/cpg.slice/cpg-workload.service\n")
         (directory / "cmdline").write_text("SECRET-COMMAND")

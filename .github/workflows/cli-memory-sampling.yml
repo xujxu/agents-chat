@@ -18,7 +18,7 @@ jobs:
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3
             cd /source
-            PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_memory_sampler.py test_memory_sampler_service.py test_continuous_sampler.py test_cpg.py
+            PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_memory_sampler.py test_memory_sampler_service.py test_continuous_sampler.py test_memory_sampler_metrics.py test_cpg.py
           '
       - name: Verify service resource limits and lifecycle in legacy-cgroup VM
         run: bash ops/cpg/ci-vm.sh memory_sampler_integration.py
