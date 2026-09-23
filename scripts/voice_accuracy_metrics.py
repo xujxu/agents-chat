@@ -27,7 +27,10 @@ def language(token):
 
 
 def score(reference, hypothesis):
-    ref, hyp = tokens(reference), tokens(hypothesis)
+    return score_units(tokens(reference), tokens(hypothesis))
+
+
+def score_units(ref, hyp):
     dp = [[0] * (len(hyp) + 1) for _ in range(len(ref) + 1)]
     for i in range(len(ref) + 1):
         dp[i][0] = i

@@ -23,3 +23,133 @@ jobs:
       - run: pip install opencc-python-reimplemented==0.1.7
       - run: python -m unittest discover -s scripts -p test_voice_corpus_baseline.py -v
       - run: python -m unittest discover -s scripts -p test_voice_accuracy_metrics.py -v
+      - run: python -m unittest discover -s scripts -p test_voice_long_report.py -v
+  corpus:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy==2.2.6 pyarrow==20.0.0 soundfile==0.13.1 opencc-python-reimplemented==0.1.7
+      - run: python scripts/voice_corpus_data.py corpus
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ascend-test-corpus
+          path: corpus/
+          if-no-files-found: error
+          retention-days: 14
+  compare:
+    needs: corpus
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ascend-test-corpus
+          path: corpus
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35619891005
+          artifact-ids: 10650339950
+          merge-multiple: true
+          path: quantized
+      - name: Prepare frozen runtime and two candidate engines
+        run: |
+          echo '258f71d72806834e0b1df98a0e6025d5c4cba1464ac4da9ad26e767ed4e555d8  quantized/u8u8/llm.int8.onnx' | sha256sum --check
+          echo 'b428cd7d87593b29af27077a5a7f758e4475c4e20856a7a64cb08cd9a2aa2c  quantized/encoder/encoder_adaptor.int8.onnx' | sha256sum --check
+          mkdir sherpa sense original
+          curl -fL --retry 3 --max-time 240 https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared-no-tts.tar.bz2 -o runtime.tar.bz2
+          echo 'd0f96c8b65c6cd0974fada22737e337de81bc8cd2abbec2e39caf358b1eec5fc  runtime.tar.bz2' | sha256sum --check
+          tar -xjf runtime.tar.bz2 --strip-components=1 -C sherpa
+          curl -fL --retry 3 --max-time 600 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-funasr-nano-int8-2025-12-30.tar.bz2 -o original.tar.bz2
+          echo 'eb43d7ccc2e86b243f6a03b7df361033dda66db9523d1a92bf6aca2b50c9476b  original.tar.bz2' | sha256sum --check
+          tar -xjf original.tar.bz2 --strip-components=1 -C original
+          curl -fL --retry 3 --max-time 600 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2 -o sense.tar.bz2
+          echo '7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e  sense.tar.bz2' | sha256sum --check
+          tar -xjf sense.tar.bz2 --strip-components=1 -C sense
+      - name: Run both engines sequentially on shared shard audio
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          failed=0
+          for variant in sense safe-encoder; do
+            mkdir -p "case-$variant/model"
+            ln -s ../corpus/audio "case-$variant/accuracy-samples"
+            ln -s ../sherpa "case-$variant/sherpa"
+            ln -s ../scripts "case-$variant/scripts"
+            if [ "$variant" = sense ]; then
+              ln -s ../../sense/model.int8.onnx "case-$variant/model/model.int8.onnx"
+              ln -s ../../sense/tokens.txt "case-$variant/model/tokens.txt"
+            else
+              ln -s ../../original/embedding.int8.onnx "case-$variant/model/embedding.int8.onnx"
+              ln -s ../../original/Qwen3-0.6B "case-$variant/model/Qwen3-0.6B"
+              ln -s ../../quantized/u8u8/llm.int8.onnx "case-$variant/model/llm.int8.onnx"
+              ln -s ../../quantized/encoder/encoder_adaptor.int8.onnx "case-$variant/model/encoder_adaptor.int8.onnx"
+            fi
+            if ! docker run --rm --memory=4g --memory-swap=4g --cpus=2 --pids-limit=128 \
+              -e GITHUB_SHA -e GITHUB_RUN_ID -e VARIANT="$variant" -e SHARD \
+              -e OPENBLAS_NUM_THREADS=2 -e OMP_NUM_THREADS=2 \
+              -v "$PWD:/work" -w "/work/case-$variant" python:3.12-bookworm bash -euc '
+                apt-get update -qq
+                apt-get install -y -qq time
+                pip install --quiet opencc-python-reimplemented==0.1.7
+                export LD_LIBRARY_PATH=/work/sherpa/lib
+                ulimit -c 0
+                python scripts/voice_corpus_run.py "$VARIANT" "$SHARD" 8
+              '; then
+              echo "::error::Incomplete execution for $variant; preserving evidence"
+              failed=1
+            fi
+          done
+          exit "$failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ascend-engine-shard-${{ matrix.shard }}
+          path: |
+            case-*/artifacts/
+            sense/LICENSE
+          if-no-files-found: error
+          retention-days: 30
+  report:
+    needs: [corpus, compare]
+    if: always() && needs.corpus.result == 'success'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        with:
+          name: ascend-test-corpus
+          path: corpus
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ascend-engine-shard-*
+          path: evidence
+      - run: python scripts/voice_corpus_report.py corpus evidence report
+      - name: Include source methodology and attribution
+        run: |
+          cp corpus/coverage.json corpus/inventory.json corpus/samples.json \
+            corpus/ATTRIBUTION.txt corpus/ASCEND-dataset-card.txt report/
+          cat report/REPORT.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ascend-engine-baseline-report
+          path: report/
+          if-no-files-found: error
+          retention-days: 30
