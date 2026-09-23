@@ -1,0 +1,46 @@
+Voice candidate acceptance, CI only
+==================================
+
+1. Run Voice error audit and natural meeting inventory. Its pinned ASCEND source
+   is baseline run 35858271102. AISHELL-4 test acquisition in run 35863991538
+   produced archive SHA256:
+   7e5d306b5f18ab66fcd7e0380c90979b47fd9576bfa8e67e6353bdec7c14a35a
+   Artifact 10752270787 contains 40 original continuous source windows, 29 zh and
+   11 annotation-mixed, under CC-BY-SA-4.0. No speech is spliced or synthesized.
+   Speech overlap and special/unknown annotation windows are excluded explicitly.
+
+2. Dispatch Voice browser API chain acceptance with meeting_run=35863991538.
+   The long-engines job compares the frozen baseline SenseVoice/FunASR settings
+   on all 40 windows. The chain job selects 20 fixed hash-ranked ASCEND samples
+   per category plus all 40 meeting windows. Selection never uses engine output.
+
+3. The chain job compiles a CI-only SenseVoice adapter accepting the existing
+   transcriber CLI flags. It disables ONNX memory arena/pattern and uses one
+   thread. The actual app, recorder, worklet, encoder, authentication, API,
+   cancellation and memory guards are unchanged. No VAD is present in the
+   current product path, so none is silently introduced here.
+
+4. Each sample goes through the authenticated API twice: original WAV, then real
+   browser recording from a controlled WebAudio MediaStream at 48kHz. The latter
+   exercises actual recorder resampling/encoding. Browser startup may introduce
+   silence and the 30s limit can clip near-limit playback: captured waveforms
+   and uploaded durations are retained, not silently corrected to match source.
+   Chat data is mocked; voice capability and transcription requests are not.
+   This is not a physical microphone/AEC test or a WebKit accuracy claim.
+
+5. Keep the service limits unchanged: 384MiB RSS, 1GiB virtual address space,
+   1 thread, 120s, one active job. The adapter also checks its final native HWM
+   against 384MiB before writing text. Missing telemetry is explicit if the
+   service killed a process earlier. Log/model/transcript outputs in CI are
+   licensed public test material, not private user recordings.
+
+6. All expected attempts must be present exactly once. Record failures rather
+   than claiming successful fallback. Score failure-inclusive CER/WER/MER using
+   unchanged normalization. Timings exclude recording duration but include API
+   work and cold process/model startup. Acceptance needs an explicit product
+   latency/quality target; this report does not invent one.
+
+Neither workflow deploys artifacts or edits PROD. The CLI cpg cap is unrelated
+to the voice service budget and stays 1.5GiB. Do not run these workloads locally.
+Read voice-baseline-error-audit, voice-natural-long-engine-report and
+voice-chain-evidence for diagnostic, engine and complete-path results.
