@@ -10,6 +10,7 @@ import sys
 import time
 
 from native_probe_report import MIB, assess, overhead, parse_stacks, stack_bytes
+from native_probe_capture import capture
 
 SOURCE = Path(__file__).resolve().parent
 
@@ -65,9 +66,9 @@ def execute(root, name, command, tracked=False, abrupt=False, cli=False):
     if cli:
         env.update(CPG_NATIVE_PROBE_MARKER=str(directory / "markers.jsonl"),
                    CPG_NATIVE_PROBE_KILL="1" if abrupt else "0")
-    if tracked:
-        command = ["heaptrack", "-o", str(directory / "trace"), *command]
-    result = run(command, directory, env, expected=(137, -9) if abrupt else (0,))
+    expected = (-9,) if abrupt else (0,)
+    result = (capture(command, directory, env, expected) if tracked
+              else run(command, directory, env, expected=expected))
     if cli:
         markers = [json.loads(line) for line in (directory / "markers.jsonl").read_text().splitlines()]
         if [m["phase"] for m in markers] != ["start", "peak", "released", "finished"]:

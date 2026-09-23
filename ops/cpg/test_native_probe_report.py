@@ -1,10 +1,24 @@
 """Evidence gates for the isolated native profiler experiment."""
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from native_probe_report import MIB, assess, parse_stacks, stack_bytes, overhead
+from native_probe_capture import profiler_paths
 
 
 class ReportTests(unittest.TestCase):
+    def test_profiler_paths_require_unambiguous_existing_package_files(self):
+        listing = "/usr/lib/heaptrack/libheaptrack_preload.so\n/usr/lib/heaptrack/heaptrack_interpret\n"
+        with patch("native_probe_capture.subprocess.check_output", return_value=listing), \
+                patch.object(Path, "is_file", return_value=True):
+            self.assertEqual(profiler_paths()["heaptrack_interpret"],
+                             "/usr/lib/heaptrack/heaptrack_interpret")
+        for invalid in ("", listing + listing):
+            with patch("native_probe_capture.subprocess.check_output", return_value=invalid), \
+                    patch.object(Path, "is_file", return_value=True), self.assertRaises(RuntimeError):
+                profiler_paths()
+
     def test_folded_stacks_preserve_function_spaces_and_sum(self):
         rows = parse_stacks("main;cpg_probe_keep (fixture.c); 16777216\n"
                             "main;cpg_probe_keep (fixture.c); 4096\n"

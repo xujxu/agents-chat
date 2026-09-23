@@ -12,6 +12,11 @@ not a new allocator hook. heaptrack launches fresh processes with LD_PRELOAD:
 no perf/BPF policy relaxation, debugger attach or credentials are required.
 This does NOT mean its full allocation tracing is suitable for always-on use.
 It can block/slow the subject, consume memory and change allocation timing.
+The harness uses the packaged preload and interpreter directly with a private
+FIFO and checks their exit statuses independently. Older heaptrack shell
+launchers can return zero after the subject is SIGKILLed; that wrapper result
+must not be mistaken for the subject's status. The external interpreter drains
+the FIFO after subject exit. Internal profiler buffering can still lose data.
 
 The C fixture has exact known malloc/calloc/realloc/free totals, including a
 failed realloc, worker-thread allocation, release and deliberately outstanding
