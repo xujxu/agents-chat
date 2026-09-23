@@ -75,6 +75,23 @@ def combine_results(manifest, results):
     return summaries, scored
 
 
+def paired_success_metrics(scored):
+    pairs = {}
+    for row in scored:
+        pairs.setdefault(row["id"], {})[row["pipeline"]] = row
+    common = [rows for rows in pairs.values() if set(rows) == set(PIPELINES)
+              and all(row["failure"] is None for row in rows.values())]
+    summaries = []
+    for dataset in sorted({row["dataset"] for row in scored}):
+        summaries.extend({**row, "dataset": dataset} for row in summarize(
+            [row for rows in common for row in rows.values() if row["dataset"] == dataset]))
+    return {
+        "common_success_samples": len(common), "total_paired_samples": len(pairs),
+        "excluded_due_to_failure": len(pairs) - len(common), "summary": summaries,
+        "scope": "Identical jointly successful subset only; conditional diagnostic, not delivery acceptance.",
+    }
+
+
 def report(source, evidence, destination):
     source, evidence, destination = Path(source), Path(evidence), Path(destination)
     manifest = json.loads((source / "samples.json").read_text())
@@ -111,7 +128,11 @@ def report(source, evidence, destination):
         delta = browser["delivered_score"]["errors"] - direct["delivered_score"]["errors"]
         changed["browser_worse" if delta > 0 else "browser_better" if delta < 0 else "tie"] += 1
     (destination / "paired-change.json").write_text(json.dumps(dict(changed), indent=2))
+    common = paired_success_metrics(scored)
+    (destination / "paired-success.json").write_text(json.dumps(common, indent=2))
     lines += ["", f"Paired edit-count changes: {dict(changed)}",
+              f"Both paths successful: {common['common_success_samples']}/{common['total_paired_samples']}.",
+              "See paired-success.json for like-for-like conditional metrics, not full-delivery acceptance.",
               "Missing native peak values are explicit, not zero; a killed process may not write telemetry.",
               "100 fixed diagnostic probes, not an independent untouched holdout or acceptance threshold.",
               "Report long Mandarin and the 11 annotation-mixed meeting windows separately from ASCEND.",

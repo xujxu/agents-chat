@@ -18,6 +18,10 @@ on:
         description: Retry only the browser chain without rerunning completed engine comparisons
         type: boolean
         default: false
+      report_run:
+        description: Reanalyze a completed chain evidence run without rerunning inference
+        type: string
+        default: ''
 permissions:
   contents: read
   actions: read
@@ -33,7 +37,7 @@ jobs:
       - run: python -m unittest discover -s scripts -p test_voice_chain_report.py -v
       - run: python -m unittest discover -s scripts -p test_voice_acceptance.py -v
   chain:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && !inputs.report_run
     needs: test
     runs-on: ubuntu-22.04
     timeout-minutes: 90
@@ -133,7 +137,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   long-engines:
-    if: github.event_name == 'workflow_dispatch' && !inputs.chain_only
+    if: github.event_name == 'workflow_dispatch' && !inputs.chain_only && !inputs.report_run
     needs: test
     runs-on: ubuntu-22.04
     timeout-minutes: 45
@@ -217,3 +221,34 @@ jobs:
             case-*/artifacts/
           if-no-files-found: error
           retention-days: 30
+  report-only:
+    if: github.event_name == 'workflow_dispatch' && inputs.report_run != ''
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.report_run }}
+          name: voice-chain-evidence
+          path: retained
+      - run: python scripts/voice_chain_report.py report retained/chain retained/chain-evidence report
+      - name: Retain exact inference source run
+        env:
+          SOURCE_RUN: ${{ inputs.report_run }}
+        run: |
+          printf '%s\n' "$SOURCE_RUN" > report/inference-run.txt
+          cp scripts/VOICE-ACCEPTANCE-RESULTS.txt report/
+          cat report/REPORT.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-chain-reviewed-report
+          path: report/
+          retention-days: 30
+          if-no-files-found: error

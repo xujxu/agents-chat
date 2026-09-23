@@ -1,6 +1,6 @@
 import unittest
 
-from voice_chain_report import combine_results, select_short
+from voice_chain_report import combine_results, paired_success_metrics, select_short
 
 
 class ChainReportTests(unittest.TestCase):
@@ -32,6 +32,23 @@ class ChainReportTests(unittest.TestCase):
         summaries, scored = combine_results([sample], rows)
         self.assertTrue(all(row["error_rate"] == 1 for row in summaries))
         self.assertTrue(all(row["failures"] == 1 for row in summaries))
+        common = paired_success_metrics(scored)
+        self.assertEqual(common["common_success_samples"], 0)
+        self.assertEqual(common["summary"], [])
+
+    def test_paired_success_diagnostics_use_identical_subset(self):
+        manifest = [{"id": identifier, "reference": "你好", "category": "zh", "duration": 2,
+                     "dataset": "ASCEND", "audio_sha256": identifier}
+                    for identifier in ("one", "two")]
+        rows = [{"id": item["id"], "pipeline": pipeline, "status": 200, "text": "你好",
+                 "error": None, "seconds": 1}
+                for item in manifest for pipeline in ("direct-wav-api", "browser-recorded-api")]
+        rows[-1].update({"status": 503, "text": None, "error": "voice_memory_limit"})
+        _, scored = combine_results(manifest, rows)
+        common = paired_success_metrics(scored)
+        self.assertEqual(common["common_success_samples"], 1)
+        self.assertEqual(common["excluded_due_to_failure"], 1)
+        self.assertTrue(all(row["samples"] == 1 for row in common["summary"]))
 
 
 if __name__ == "__main__":
