@@ -7,6 +7,20 @@ on:
 permissions:
   contents: read
 jobs:
+  runtime:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check opt-in preload compatibility with the official standalone CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/copilot-runtime"
+          cd "$RUNNER_TEMP/copilot-runtime"
+          curl --fail --silent --show-error --location -O https://github.com/github/copilot-cli/releases/download/v1.0.88/copilot-linux-x64.tar.gz
+          curl --fail --silent --show-error --location -O https://github.com/github/copilot-cli/releases/download/v1.0.88/SHA256SUMS.txt
+          grep ' copilot-linux-x64.tar.gz$' SHA256SUMS.txt | sha256sum --check -
+          tar -xzf copilot-linux-x64.tar.gz
+          python3 "$GITHUB_WORKSPACE/ops/cpg/test_runtime_compatibility.py" ./copilot
   sampler:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
