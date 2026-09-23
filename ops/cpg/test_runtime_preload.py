@@ -70,9 +70,14 @@ def actual_cli(executable, root):
             assert samples[-1]["metrics"]["heap_limit_bytes"] > 0
 
 
-def fixture(root):
+def fixture(root, burst=False):
     script = root / "fixture.cjs"
+    setup = (
+        "const v8=require('node:v8'); const heapStats=v8.getHeapStatistics;"
+        "v8.getHeapStatistics=()=>({...heapStats(),malloced_memory:80*1024*1024});\n"
+    ) if burst else ""
     script.write_text(
+        setup +
         "const {Worker}=require('node:worker_threads');\n"
         "const held=Buffer.alloc(32*1024*1024,1);\n"
         "const worker=new Worker('setInterval(()=>{},1000)',{eval:true});\n"
@@ -83,9 +88,9 @@ def fixture(root):
     return script
 
 
-def node_checks(root):
+def node_checks(root, burst=False):
     path = root / "runtime.sock"
-    script = fixture(root)
+    script = fixture(root, burst)
     observations = {False: [], True: []}
     for enabled in (False, True, False, True, False, True):
         with runtime.RuntimeCollector(path) as collector:
@@ -107,6 +112,12 @@ def node_checks(root):
                         assert collector.take()["connections"] <= 1
                         assert samples[-1]["metrics"]["gc_count"] > 0
                         assert max(s["metrics"]["array_buffers_bytes"] for s in samples) >= 32 * 1024**2
+                        if burst:
+                            accelerated = [s for s in samples if s["metrics"]["next_interval_ms"] == 500]
+                            assert len(accelerated) >= 15, samples
+                            intervals = [b["metrics"]["sampled_unix_ms"] - a["metrics"]["sampled_unix_ms"]
+                                         for a, b in zip(accelerated, accelerated[1:])]
+                            assert 450 <= statistics.median(intervals) <= 750, intervals
                     else:
                         assert not samples
                 finally:
@@ -115,13 +126,16 @@ def node_checks(root):
                                  for r in rows) for key, rows in observations.items()}
     rss = {key: statistics.median(r["maxRSS"] * 1024 for r in rows)
            for key, rows in observations.items()}
-    report = {"extra_one_core_cpu_percent": (cpu[True] - cpu[False]) / 15 * 100,
+    report = {"mode": "burst" if burst else "normal",
+              "extra_one_core_cpu_percent": (cpu[True] - cpu[False]) / 15 * 100,
               "extra_peak_rss_bytes": rss[True] - rss[False], "raw": observations}
     print("OVERHEAD", json.dumps(report), flush=True)
     assert report["extra_one_core_cpu_percent"] < 1, report
     assert report["extra_peak_rss_bytes"] < 10 * 1024**2, report
     print("PASS: synthetic median overhead below 1% of one core and 10 MiB; not a CLI workload guarantee",
           flush=True)
+    if burst:
+        return
 
     with runtime.RuntimeCollector(path) as collector:
         with patch.object(collector, "_identity", side_effect=lambda credentials: (credentials[0], 1)):
@@ -147,6 +161,7 @@ def main():
         root = Path(directory)
         actual_cli(str(Path(sys.argv[1]).resolve()), root)
         node_checks(root)
+        node_checks(root, burst=True)
 
 
 if __name__ == "__main__":

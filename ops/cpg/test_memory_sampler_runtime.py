@@ -154,7 +154,8 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(pace.update(row, 63), 0.5)
 
     def test_cli_version_probe_has_timeout_and_rejects_unexpected_output(self):
-        for output in ("GitHub Copilot CLI 1.0.88\n", "1.0.88\nCommit: abc\n"):
+        for output in ("GitHub Copilot CLI 1.0.88\n", "1.0.88\nCommit: abc\n",
+                       "GitHub Copilot CLI 1.0.88.\nRun 'copilot update' to check for updates.\n"):
             with patch.object(launch.subprocess, "run",
                               return_value=subprocess.CompletedProcess([], 0, output)) as run:
                 self.assertEqual(launch.cli_version("/original/copilot"), "1.0.88")

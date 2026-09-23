@@ -21,13 +21,12 @@ CLI's `--node-options` channel. The enabled guard and running external sampler
 are required. Look for the `[cpg-memory]` connected message and actual telemetry,
 not just the launch request. See [MEMORY-SAMPLING.txt](MEMORY-SAMPLING.txt) for
 installation, compatibility, bounded IPC, metric interpretation and overhead.
-Internal sampling changes the diagnostic process's environment/Node options only;
-sampler 2 adds bounded V8 allocation-triggered bursts, thread CPU windows and
+Sampler 2 adds bounded V8 allocation-triggered bursts, thread CPU windows and
 three allocation incident pairs independent of the latest OOM evidence. Total
 sample/evidence storage is bounded to 30 MiB; service resource limits are unchanged.
 Version metadata records embedded Node/V8 and the original CLI's `--version`.
 These metrics narrow attribution but do not provide native allocation stacks.
-it does not patch the CLI or change its memory ceiling. Existing sessions cannot
+Internal sampling does not patch the CLI or change its memory ceiling. Existing sessions cannot
 be retrofitted. To upgrade an existing launcher without stopping CLIs, run
 `sudo python3 ./cpg_admin.py upgrade-launcher` from the verified matching package.
 

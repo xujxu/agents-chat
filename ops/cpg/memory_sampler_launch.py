@@ -51,7 +51,8 @@ def cli_version(executable):
         raise RuntimeError("Cannot record CLI version: " + type(error).__name__) from error
     first = result.stdout.splitlines()[0] if result.stdout else ""
     match = re.fullmatch(
-        r"(?:GitHub Copilot CLI\s+)?(\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?)", first.strip())
+        r"(?:GitHub Copilot CLI\s+)?(\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]*[A-Za-z0-9])?)\.?",
+        first.strip())
     if not match or len(match.group(1)) > 64:
         raise RuntimeError("Unrecognized CLI --version response; sampling launch refused")
     return match.group(1)
