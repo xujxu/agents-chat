@@ -67,6 +67,40 @@ test('voice is absent when runtime capability is disabled', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Start voice input', exact: true })).toHaveCount(0);
 });
 
+test('voice toolbar uses shared 30px controls and fades both pill edges', async ({ page }, testInfo) => {
+  await prepare(page);
+  const voice = page.getByRole('button', { name: 'Start voice input', exact: true });
+  await expect(voice).toBeVisible();
+  for (const width of [320, 390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.locator('textarea.composerTextarea').fill('@alpha @beta voice toolbar');
+    await expect(page.locator('.modelTargetPill')).toHaveCount(2);
+    for (const control of await page.locator('.voiceButton, .attachButton, .sendButton, .targetPill, .userChip, .header .ghostButton:visible').all()) {
+      await expect(control).toHaveCSS('height', '30px');
+    }
+    if (width > 560) continue;
+    const pills = page.locator('.targetPills');
+    const mask = await pills.evaluate((element) => getComputedStyle(element).maskImage);
+    expect(mask.match(/transparent|rgba\(\s*0,\s*0,\s*0,\s*0\s*\)/g)).toHaveLength(2);
+    const [voiceBox, pillsBox] = await Promise.all([voice.boundingBox(), pills.boundingBox()]);
+    expect(voiceBox).not.toBeNull();
+    expect(pillsBox).not.toBeNull();
+    expect(pillsBox!.x).toBeGreaterThanOrEqual(voiceBox!.x + voiceBox!.width + 5);
+    await pills.evaluate((element) => {
+      element.scrollLeft = (element.scrollWidth - element.clientWidth) / 2;
+    });
+    await expect.poll(() => pills.evaluate((element) => element.scrollLeft)).toBeGreaterThan(12);
+    await page.locator('.composerShell').screenshot({
+      path: testInfo.outputPath(`voice-toolbar-${width}-both-edges.png`),
+    });
+    await pills.evaluate((element) => { element.scrollLeft = 0; });
+    await expect.poll(() => pills.evaluate((element) => {
+      const first = element.firstElementChild!;
+      return first.getBoundingClientRect().left - element.getBoundingClientRect().left;
+    })).toBeGreaterThanOrEqual(11);
+  }
+});
+
 test('recording uploads bounded WAV, appends to latest draft, and never sends automatically', async ({ page }, testInfo) => {
   const fixture = await prepare(page);
   let release!: () => void;
