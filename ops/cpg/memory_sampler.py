@@ -16,6 +16,7 @@ from memory_sampler_metrics import (
     HIGH_INTERVAL, NORMAL_INTERVAL, READ_ERRORS, MemoryDetails, error_details, process_stat,
 )
 from memory_sampler_runtime import RuntimeCollector
+from memory_sampler_anomalies import AllocationWatch, ThreadDetails
 
 PROC = Path("/proc")
 INTERVAL = 10
@@ -193,6 +194,8 @@ class SamplingPace:
                 self.previous is not None and usage - self.previous >= 128 * common.MIB):
             self.burst_until = now + 60
         self.previous = usage
+        if row.get("allocation_anomalies"):
+            self.burst_until = max(self.burst_until, now + 30)
         return 0.5 if now < self.burst_until else 2
 
 
@@ -343,13 +346,38 @@ class Log:
                 for line in reader:
                     yield json.loads(line)
 
+    @staticmethod
+    def evidence_limit(name, maximum):
+        if name in ("oom-before.jsonl", "oom-after.jsonl"):
+            return maximum
+        if re.fullmatch(r"allocation-(before|after)\.jsonl(?:\.[12])?", name):
+            return min(maximum, common.MIB)
+        raise ValueError("Invalid evidence filename")
+
+    def rotate_allocations(self):
+        names = [part + suffix for part in ("allocation-before.jsonl", "allocation-after.jsonl")
+                 for suffix in ("", ".1", ".2")]
+        for name in names:
+            self._check(name)
+        for part in ("allocation-before.jsonl", "allocation-after.jsonl"):
+            try:
+                os.unlink(part + ".2", dir_fd=self.directory)
+            except FileNotFoundError:
+                pass
+            for old, new in ((part + ".1", part + ".2"), (part, part + ".1")):
+                try:
+                    os.replace(old, new, src_dir_fd=self.directory, dst_dir_fd=self.directory)
+                except FileNotFoundError:
+                    continue
+
     def evidence(self, name, data, replace=False):
-        if name not in ("oom-before.jsonl", "oom-after.jsonl"):
+        limit = self.evidence_limit(name, self.max_bytes)
+        if not isinstance(data, bytes):
             raise ValueError("Invalid evidence filename")
         descriptor = self._open(name)
         with os.fdopen(descriptor, "ab") as stream:
             size = 0 if replace else os.fstat(stream.fileno()).st_size
-            if size + len(data) > self.max_bytes:
+            if size + len(data) > limit:
                 return False
             if replace:
                 os.ftruncate(stream.fileno(), 0)
@@ -411,7 +439,7 @@ def main(argv=None):
                 incident = IncidentCapture(log, boot)
             log.write({"type": "start", "time": timestamp(), "label": args.label,
                        "interval_seconds": interval, "duration_seconds": duration,
-                       "warning_bytes": WARN_BYTES, "schema": 2,
+                       "warning_bytes": WARN_BYTES, "schema": 2, "sampler_version": "2",
                        "memory_detail_intervals_seconds": {
                            "normal": NORMAL_INTERVAL, "high": HIGH_INTERVAL,
                        }, "runtime_enabled": args.runtime_socket is not None,
@@ -422,6 +450,8 @@ def main(argv=None):
             alerts = Alerts()
             history = ProcessHistory()
             memory_details = MemoryDetails(PROC, WARN_BYTES)
+            allocations = AllocationWatch()
+            threads = ThreadDetails(PROC)
             pace = SamplingPace()
             deadline = None if args.continuous else time.monotonic() + duration
             reason = "duration_complete"
@@ -436,11 +466,13 @@ def main(argv=None):
                     row = snapshot(args.label)
                     row["monotonic_seconds"] = now
                     memory_details.update(row, now)
-                    row["sample_duration_ms"] = round(
-                        (time.perf_counter() - started) * 1000, 3)
                     row["events"] = history.update(row)
                     row["alerts"] = alerts.update(row, now)
                     row["runtime"] = runtime.take()
+                    allocations.update(row, now)
+                    threads.update(row, now, allocations.active(now))
+                    row["sample_duration_ms"] = round(
+                        (time.perf_counter() - started) * 1000, 3)
                     if row["runtime"]["rejected"] or row["runtime"]["dropped"]:
                         row["alerts"].append("RUNTIME_DATA_INCOMPLETE: rejected={} dropped={}".format(
                             row["runtime"]["rejected"], row["runtime"]["dropped"]))

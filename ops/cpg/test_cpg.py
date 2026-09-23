@@ -130,7 +130,7 @@ class GuardTests(unittest.TestCase):
             execute = stack.enter_context(patch.object(os, "execve", side_effect=SystemExit(0)))
             with self.assertRaises(SystemExit):
                 launcher.run(config, args)
-            prepare.assert_called_once_with(1001, 123)
+            prepare.assert_called_once_with(1001, 123, executable=config["executable"])
             execute.assert_called_once_with(config["executable"],
                 [config["executable"], runtime.node_option(), *args[1:]], environment)
 

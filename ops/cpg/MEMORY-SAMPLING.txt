@@ -1,5 +1,69 @@
 CLI memory sampler (Linux cgroup v1, Python 3.8+ standard library)
 
+V8 allocation anomaly capture (sampler 2, internal schema 2)
+-----------------------------------------------------------
+Upgrade BOTH service and launcher using the two commands below from one green
+Actions artifact. No protection limits or application services are changed.
+Running CLIs keep their old preload; only a newly launched diagnostic session
+gets the new internal fields. The upgraded collector accepts schema 1 and 2.
+
+Internal sampling remains every 2s normally. V8 malloced memory >=64 MiB on
+entering an allocation episode, or a >=32 MiB rise between samples, triggers
+0.5s internal sampling for 30s after the last rise. Constant high memory alone
+does not extend this window indefinitely. Falling below 32 MiB rearms the
+episode threshold. Output backpressure still skips collection rather than
+building a queue. These are diagnostic thresholds, not memory limits.
+
+Additional numeric fields: heap_physical_bytes, global_handles_total_bytes,
+global_handles_used_bytes, code_and_metadata_bytes, bytecode_and_metadata_bytes,
+external_script_source_bytes, cpu_profiler_metadata_bytes, next_interval_ms.
+These describe V8 heap/code accounting, NOT all native allocations and NOT
+malloc call stacks. The version-only allowlisted metadata contains embedded
+Node/V8, sampler and CLI versions. New launchers query the original executable's
+--version once inside the protected child before launching; failure refuses
+the diagnostic launch. Older launchers/direct preload use report CLI version
+as "unavailable" rather than inventing it. No environment/arguments are logged.
+
+The external collector independently detects allocation episode entry (64 MiB
+level or 32 MiB delta, rearmed below 32 MiB), even from old internal schema 1.
+It switches to 0.5s external samples for 30s and reads thread CPU statistics at
+most once per second for 30s: up to 4 confirmed Copilot processes and 64 threads
+per process per cycle. Truncation, read errors and skipped intervals are explicit.
+Thread records include kernel thread names (up to 64 characters), TID/start ticks,
+CPU totals and deltas with elapsed seconds; names may be application-defined,
+so treat these local files as private. No stacks, commands or environment are read.
+PID/group/TID identity is checked; a reused thread gets a new baseline, not a
+delta from its predecessor. CPU percent = delta_ticks / clock_ticks / elapsed
+seconds * 100. A busy thread is a lead, not proof it allocated memory.
+
+Allocation anomalies retain their own pre/post evidence without waiting for OOM:
+  allocation-before.jsonl and allocation-after.jsonl, each at most 1 MiB;
+  two older pairs with .1/.2 suffixes, at most 6 MiB total for all three pairs.
+Post capture lasts up to 60s, stops explicitly at its file cap, and nearby
+anomalies merge into an active capture. The pre-window uses the existing
+300-record/4 MiB ring, retaining only the suffix that fits in 1 MiB.
+Normal sample rotation never replaces these files. Allocation state is reset
+on service restart (a still-high process can become a new episode); an unfinished
+post capture is not resumed. Pair rotation is not atomic across files: compare
+boot_id, time and allocation_incident markers after interruption.
+
+The existing latest OOM pair is independent and unchanged (8 MiB), and rolling
+samples retain 16 MiB. The new overall data-file bound is therefore 30 MiB.
+The service still has a 32 MiB memory limit, 5% CPU quota and 4 MiB per-file
+kernel limit; allocation evidence has an additional 1 MiB application limit.
+
+Native profiling follow-up
+-------------------------
+This release does NOT attach perf, change perf_event_paranoid, start a debugger,
+force GC or generate heap snapshots. Check matching perf tools, permissions,
+unwind sections and symbol availability before a separate isolated profiling
+experiment. CPU stacks show execution, not allocation ownership; native malloc
+stacks need a compatible allocation profiler and separate overhead validation.
+Stripped standalone binaries may only provide module offsets/exported symbols.
+Keep captures local and review before sharing. Do not enable heap snapshots at
+the memory ceiling: they block the event loop, need substantial extra memory,
+and do not directly account for the observed V8 malloc allocation spike.
+
 Opt-in internal telemetry and burst sampling
 -------------------------------------------
 Upgrade from the same green Actions package (do not mix revisions):
@@ -26,7 +90,7 @@ Compatibility is verified against standalone CLI 1.0.88, not guaranteed for futu
 builds: look for "[cpg-memory] internal numeric sampling connected (2s)" and actual
 runtime.samples records, not just the launcher's "requested" message.
 
-The preload samples every 2 seconds in the MAIN Node isolate only:
+The preload samples every 2 seconds normally in the MAIN Node isolate only:
   V8 heap used/total/limit, external and ArrayBuffer bytes;
   V8 malloced/peak malloced bytes, native/detached context counts;
   cumulative observed GC count/major count/duration;
@@ -37,6 +101,7 @@ latency histogram. These metrics exclude other isolates' JS heaps and do NOT
 measure all Rust/C++ allocations. ArrayBuffers are included in external; do not
 add them together. RSS minus heap is not an exact native-memory measurement.
 No prompts, source, environment, raw memory, stacks or command lines are logged.
+Only bounded version strings and anomaly-window thread names supplement numbers.
 
 PID scoping and main-thread checks prevent inherited worker/helper sampling.
 The preload does not keep the CLI alive. At most one small pending socket write
@@ -70,7 +135,7 @@ Continuous external basic sampling accelerates from 2s to 0.5s when group usage
 reaches 1126 MiB or rises by at least 128 MiB between observations, and stays fast
 for 60s after the last trigger. Smaps detail frequency is unchanged. Actual
 cadence is limited by reads and the existing 5% CPU quota. The 300-record incident
-ring now spans roughly 2.5-10 minutes depending on pressure; 24 MiB file bounds
+ring now spans roughly 2.5-10 minutes depending on pressure; 30 MiB file bounds
 and 32 MiB external-service memory limit remain unchanged. Internal overhead is
 charged to the CLI's guard and is NOT capped by external-service limits.
 
@@ -166,9 +231,11 @@ Storage is bounded, including over indefinite operation:
   oom-before.jsonl: up to 4 MiB, at most 300 samples including the detected OOM
                     (roughly ten minutes normally, 2.5 minutes during bursts).
   oom-after.jsonl: up to 4 MiB, observations through 60 seconds after detection.
-  Total sample/evidence file content: at most 24 MiB, plus an empty .lock.
+  Allocation evidence: at most 6 MiB across three pairs, described above.
+  Total sample/evidence file content: at most 30 MiB, plus an empty .lock.
 
-There is only one retained incident. It is replaced when the cumulative OOM
+There is only one retained OOM incident, in addition to allocation episodes.
+The OOM incident is replaced when the cumulative OOM
 counter increases again, never just because ordinary logs rotate. Evidence is
 flushed and fsynced on each write. Updating the fixed evidence files is not
 atomic across files; an interruption while replacing an incident can leave an

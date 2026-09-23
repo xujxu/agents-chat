@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import socket
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -151,6 +152,21 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(pace.update(row, 62), 2)
         row["group"]["usage"] = sampler.WARN_BYTES
         self.assertEqual(pace.update(row, 63), 0.5)
+
+    def test_cli_version_probe_has_timeout_and_rejects_unexpected_output(self):
+        for output in ("GitHub Copilot CLI 1.0.88\n", "1.0.88\nCommit: abc\n"):
+            with patch.object(launch.subprocess, "run",
+                              return_value=subprocess.CompletedProcess([], 0, output)) as run:
+                self.assertEqual(launch.cli_version("/original/copilot"), "1.0.88")
+                self.assertEqual(run.call_args.kwargs["timeout"], 10)
+        with patch.object(launch.subprocess, "run",
+                          return_value=subprocess.CompletedProcess([], 0, "PRIVATE")):
+            with self.assertRaisesRegex(RuntimeError, "Unrecognized"):
+                launch.cli_version("/original/copilot")
+        with patch.object(launch.subprocess, "run",
+                          side_effect=subprocess.TimeoutExpired("PRIVATE", 10)):
+            with self.assertRaisesRegex(RuntimeError, "TimeoutExpired"):
+                launch.cli_version("/original/copilot")
 
 
 if __name__ == "__main__":

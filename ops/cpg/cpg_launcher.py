@@ -52,7 +52,7 @@ def run(config, arguments):
                 raise RuntimeError("Kernel did not move Copilot into its private memory group")
             common.verify_boundary(common.read_group())
             if sampling:
-                environment = runtime.environment(config["uid"], os.getpid())
+                environment = runtime.environment(config["uid"], os.getpid(), executable=executable)
                 arguments = [runtime.node_option()] + arguments
             os.write(ready_write, b"ready")
             os.close(ready_write)

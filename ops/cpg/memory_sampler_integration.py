@@ -204,6 +204,7 @@ def persistent():
     sender.chmod(0o755)
     payload = dict.fromkeys(runtime.FIELDS, 1)
     payload["heap_used_bytes"] = 1234567
+    payload["malloced_bytes"] = 80 * common.MIB
     oom_script = (
         "import socket,time; s=socket.socket(socket.AF_UNIX); "
         "s.connect('/run/cli-memory-sampler-1001/runtime.sock'); "
@@ -226,6 +227,17 @@ def persistent():
     assert before[-1]["incident"]["oom_kills"] > previous_kills
     internal = [entry for row in before for entry in row.get("runtime", {}).get("samples", [])]
     assert any(entry["metrics"]["heap_used_bytes"] == 1234567 for entry in internal), before
+    assert (OUTPUT / "allocation-before.jsonl").exists()
+    allocation = [json.loads(line) for line in
+                  (OUTPUT / "allocation-before.jsonl").read_text().splitlines()]
+    assert allocation[-1]["allocation_anomalies"][0]["malloced_bytes"] == 80 * common.MIB
+    assert allocation[-1]["next_interval_seconds"] == 0.5
+    thread_samples = [p["thread_detail"] for row in rows() for p in row.get("processes", [])
+                      if p.get("thread_detail", {}).get("status") == "ok"]
+    assert thread_samples and any(
+        t.get("cpu_delta_ticks") is not None for d in thread_samples for t in d["threads"])
+    print("PASS: allocation trigger, thread CPU deltas and accelerated external cadence in real VM",
+          flush=True)
     command("systemctl", "is-active", "--quiet", UNIT)
     wait_for(lambda: len((OUTPUT / "oom-after.jsonl").read_text().splitlines()) >= 3)
     print("PASS: external sampler survives sender OOM and preserves internal metrics in pre/post evidence",
@@ -251,10 +263,10 @@ def persistent():
     for path in OUTPUT.glob("*.jsonl*"):
         assert path.stat().st_size <= 4 * common.MIB
         assert path.stat().st_mode & 0o777 == 0o600
-    assert sum(path.stat().st_size for path in OUTPUT.glob("*.jsonl*")) <= 24 * common.MIB
+    assert sum(path.stat().st_size for path in OUTPUT.glob("*.jsonl*")) <= 30 * common.MIB
     assert not (OUTPUT / "console.log").exists()
     assert not Path("/var/lib/systemd/linger/samplertest").exists()
-    print("PASS: manual restart/stop preserves latest incident, 24 MiB data bound, no console growth",
+    print("PASS: manual restart/stop preserves latest incident, 30 MiB data bound, no console growth",
           flush=True)
 
 

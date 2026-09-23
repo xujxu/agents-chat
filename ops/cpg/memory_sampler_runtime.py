@@ -3,6 +3,7 @@ from collections import deque
 import json
 import math
 import os
+import re
 from pathlib import Path
 import selectors
 import socket
@@ -25,17 +26,33 @@ FIELDS = frozenset((
     "gc_count", "gc_major_count", "gc_duration_ms", "event_loop_delay_ms",
     "collection_duration_ms", "dropped_samples",
 ))
+EXTRA_FIELDS = frozenset((
+    "heap_physical_bytes", "global_handles_total_bytes", "global_handles_used_bytes",
+    "code_and_metadata_bytes", "bytecode_and_metadata_bytes",
+    "external_script_source_bytes", "cpu_profiler_metadata_bytes", "next_interval_ms",
+))
 
 
 def validate(value):
-    if not isinstance(value, dict) or set(value) != FIELDS:
+    if not isinstance(value, dict):
         raise ValueError("Invalid runtime fields")
-    for number in value.values():
+    fields = FIELDS
+    if value.get("schema") == 2:
+        fields = FIELDS | EXTRA_FIELDS
+        versions = value.get("versions")
+        if (not isinstance(versions, dict) or set(versions) != {"node", "v8", "sampler", "cli"}
+                or any(not isinstance(v, str) or not re.fullmatch(r"[A-Za-z0-9.+_-]{1,64}", v)
+                       for v in versions.values())):
+            raise ValueError("Invalid runtime versions")
+    elif value.get("schema") != 1:
+        raise ValueError("Unsupported runtime schema")
+    if set(value) != (fields | {"versions"} if value["schema"] == 2 else fields):
+        raise ValueError("Invalid runtime fields")
+    for key in fields:
+        number = value[key]
         if (type(number) not in (int, float) or not 0 <= number <= 2**53 - 1
                 or not math.isfinite(number)):
             raise ValueError("Invalid runtime number")
-    if value["schema"] != 1:
-        raise ValueError("Unsupported runtime schema")
     return value
 
 

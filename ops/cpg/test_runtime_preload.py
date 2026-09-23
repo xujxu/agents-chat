@@ -11,13 +11,15 @@ import time
 from unittest.mock import patch
 
 import memory_sampler_runtime as runtime
+from memory_sampler_launch import cli_version
 
 PRELOAD = Path(__file__).with_name("memory_sampler_preload.cjs").resolve()
 
 
-def start(command, path, enabled=True):
+def start(command, path, enabled=True, version="unavailable"):
     env = dict(os.environ, CPG_MEMORY_SOCKET=str(path))
     if enabled:
+        env["CPG_MEMORY_CLI_VERSION"] = version
         command = ["bash", "-c", 'export CPG_MEMORY_PID=$$; exec "$@"', "fixture", *command]
     return subprocess.Popen(command, env=env, stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -48,13 +50,16 @@ def actual_cli(executable, root):
         # Hosted runners use v2; the real v1 boundary is tested in the separate VM.
         with patch.object(runtime.common, "memory_membership", return_value="/cpg.slice/test"):
             process = start([executable, "--node-options=--require=" + str(PRELOAD),
-                             "--acp"], path)
+                             "--acp"], path, version=cli_version(executable))
             try:
                 samples = collect(collector, process, 8)
                 assert process.poll() is None, process.communicate()
                 assert len(samples) >= 3, samples
                 assert all(item["pid"] == process.pid for item in samples)
                 assert all(item["metrics"]["heap_used_bytes"] > 0 for item in samples)
+                assert all(item["metrics"]["schema"] == 2 for item in samples)
+                assert all(item["metrics"]["versions"]["cli"] == "1.0.88" for item in samples)
+                assert all(item["metrics"]["heap_physical_bytes"] > 0 for item in samples)
                 assert samples[-1]["metrics"]["sequence"] > samples[0]["metrics"]["sequence"]
             finally:
                 _, stderr = stop(process)

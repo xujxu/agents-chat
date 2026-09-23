@@ -13,6 +13,8 @@ function fixture({ pid = 42, mainThread = true } = {}) {
   let now = 0;
   let collections = 0;
   let connections = 0;
+  let malloced = 1;
+  let scheduledMs = 0;
   const socket = new EventEmitter();
   Object.assign(socket, {
     writableLength: 0,
@@ -26,8 +28,12 @@ function fixture({ pid = 42, mainThread = true } = {}) {
     'node:worker_threads': { isMainThread: mainThread },
     'node:net': { createConnection() { connections++; return socket; } },
     'node:v8': { getHeapStatistics() {
-      return { heap_size_limit: 100, malloced_memory: 1, peak_malloced_memory: 1,
+      return { heap_size_limit: 100, malloced_memory: malloced, peak_malloced_memory: malloced,
+        total_physical_size: 20, total_global_handles_size: 8, used_global_handles_size: 4,
         number_of_native_contexts: 1, number_of_detached_contexts: 0 };
+    }, getHeapCodeStatistics() {
+      return { code_and_metadata_size: 1, bytecode_and_metadata_size: 2,
+        external_script_source_size: 3, cpu_profiler_metadata_size: 0 };
     } },
     'node:perf_hooks': {
       performance: { now: () => now },
@@ -37,6 +43,7 @@ function fixture({ pid = 42, mainThread = true } = {}) {
   };
   const process = {
     pid,
+    versions: { node: '24.13.0', v8: '13.6.233.17-node.37' },
     env: { CPG_MEMORY_PID: '42', CPG_MEMORY_SOCKET: '/private/socket' },
     uptime: () => now / 1000,
     stderr: { write: (text) => warnings.push(text) },
@@ -48,12 +55,14 @@ function fixture({ pid = 42, mainThread = true } = {}) {
   vm.runInNewContext(source, {
     require: (name) => modules[name],
     Buffer, process, Date,
-    setInterval(callback) { tick = callback; return { unref() {} }; },
+    setTimeout(callback, ms) { tick = callback; scheduledMs = ms; return { unref() {} }; },
   });
   return { writes, warnings, socket, process,
     get collections() { return collections; },
     get connections() { return connections; },
-    tick() { now += 2000; tick(); },
+    get scheduledMs() { return scheduledMs; },
+    setMalloced(bytes) { malloced = bytes; },
+    tick() { now += scheduledMs; tick(); },
   };
 }
 
@@ -72,4 +81,26 @@ assert.equal(active.process.env.CPG_MEMORY_PID, undefined);
 assert.equal(active.process.env.CPG_MEMORY_SOCKET, undefined);
 assert.equal(fixture({ pid: 43 }).connections, 0);
 assert.equal(fixture({ mainThread: false }).connections, 0);
+const burst = fixture();
+burst.socket.emit('data', Buffer.from('CPG_MEMORY/1\n'));
+assert.equal(burst.scheduledMs, 2000);
+burst.socket.writableLength = 0;
+burst.setMalloced(64 * 1024 * 1024);
+burst.tick();
+assert.equal(burst.scheduledMs, 500);
+assert.equal(burst.writes.at(-1).schema, 2);
+assert.equal(burst.writes.at(-1).versions.node, '24.13.0');
+assert.equal(burst.writes.at(-1).code_and_metadata_bytes, 1);
+for (let i = 0; i < 60; i++) {
+  burst.socket.writableLength = 0;
+  burst.tick();
+}
+assert.equal(burst.scheduledMs, 2000, 'constant high allocation must not burst indefinitely');
+burst.socket.writableLength = 0;
+burst.setMalloced(1);
+burst.tick();
+burst.socket.writableLength = 0;
+burst.setMalloced(33 * 1024 * 1024);
+burst.tick();
+assert.equal(burst.scheduledMs, 500, '32 MiB growth must trigger a fresh burst');
 console.log('PASS: exact backpressure bound, explicit drops, and worker/descendant exclusion');

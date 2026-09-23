@@ -6,7 +6,10 @@ if (process.env.CPG_MEMORY_PID === String(process.pid)
   const net = require('node:net');
   const v8 = require('node:v8');
   const { performance, PerformanceObserver, constants } = require('node:perf_hooks');
-  const intervalMs = 2000;
+  let intervalMs = 2000;
+  let burstUntil = 0;
+  let previousMalloc;
+  let allocationHigh = false;
   let socket;
   let ready = false;
   let sequence = 0;
@@ -18,8 +21,13 @@ if (process.env.CPG_MEMORY_PID === String(process.pid)
   let gcDuration = 0;
   let expected = performance.now();
   const socketPath = process.env.CPG_MEMORY_SOCKET;
+  const versions = {
+    node: process.versions.node, v8: process.versions.v8, sampler: '2',
+    cli: process.env.CPG_MEMORY_CLI_VERSION || 'unavailable',
+  };
   delete process.env.CPG_MEMORY_PID;
   delete process.env.CPG_MEMORY_SOCKET;
+  delete process.env.CPG_MEMORY_CLI_VERSION;
 
   function warn(reason) {
     const now = performance.now();
@@ -41,7 +49,6 @@ if (process.env.CPG_MEMORY_PID === String(process.pid)
   function sample() {
     const started = performance.now();
     const delay = Math.max(0, started - expected);
-    expected = started + intervalMs;
     sequence++;
     if (!ready || !socket || socket.destroyed || socket.writableLength > 0) {
       dropped++;
@@ -50,8 +57,18 @@ if (process.env.CPG_MEMORY_PID === String(process.pid)
     }
     const memory = process.memoryUsage();
     const heap = v8.getHeapStatistics();
+    const code = v8.getHeapCodeStatistics();
+    const rising = previousMalloc !== undefined
+      && heap.malloced_memory - previousMalloc >= 32 * 1024 * 1024;
+    if ((!allocationHigh && heap.malloced_memory >= 64 * 1024 * 1024) || rising) {
+      burstUntil = started + 30000;
+      allocationHigh = true;
+    }
+    if (heap.malloced_memory < 32 * 1024 * 1024) allocationHigh = false;
+    previousMalloc = heap.malloced_memory;
+    intervalMs = started < burstUntil ? 500 : 2000;
     const row = {
-      schema: 1,
+      schema: 2,
       sequence,
       sampled_unix_ms: Date.now(),
       uptime_ms: process.uptime() * 1000,
@@ -64,6 +81,15 @@ if (process.env.CPG_MEMORY_PID === String(process.pid)
       peak_malloced_bytes: heap.peak_malloced_memory,
       native_contexts: heap.number_of_native_contexts,
       detached_contexts: heap.number_of_detached_contexts,
+      heap_physical_bytes: heap.total_physical_size,
+      global_handles_total_bytes: heap.total_global_handles_size,
+      global_handles_used_bytes: heap.used_global_handles_size,
+      code_and_metadata_bytes: code.code_and_metadata_size,
+      bytecode_and_metadata_bytes: code.bytecode_and_metadata_size,
+      external_script_source_bytes: code.external_script_source_size,
+      cpu_profiler_metadata_bytes: code.cpu_profiler_metadata_size,
+      next_interval_ms: intervalMs,
+      versions,
       gc_count: gcCount,
       gc_major_count: gcMajor,
       gc_duration_ms: gcDuration,
@@ -119,9 +145,16 @@ if (process.env.CPG_MEMORY_PID === String(process.pid)
   }
 
   connect();
-  const timer = setInterval(() => {
+  function tick() {
     connect();
     sample();
-  }, intervalMs);
-  timer.unref();
+    schedule();
+  }
+  function schedule() {
+    // Backpressure must not keep the faster timer alive after its bounded window.
+    if (performance.now() >= burstUntil) intervalMs = 2000;
+    expected = performance.now() + intervalMs;
+    setTimeout(tick, intervalMs).unref();
+  }
+  schedule();
 }

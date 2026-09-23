@@ -98,6 +98,7 @@ def install(uid):
     sources = {name: (source / name).read_bytes() for name in (
         "memory_sampler.py", "memory_sampler_incident.py", "memory_sampler_metrics.py",
         "memory_sampler_runtime.py", "memory_sampler_launch.py",
+        "memory_sampler_anomalies.py",
         "memory_sampler_preload.cjs", "cpg_common.py",
     )}
     root_directory(LIB)
