@@ -9,9 +9,22 @@ application units, or the original Copilot executable.
 
 Use `cpg`, or `cpg --yolo`, from your normal project directory as the configured
 ordinary user. Arguments are forwarded literally, without a shell or argument
-parser. Working directory, environment, terminal descriptors and the original
+parser, except for the opt-in first argument `--memory-sampling` described below.
+Working directory, environment, terminal descriptors and the original
 user identity are preserved. Authentication/session storage remains the original
 Copilot's responsibility. `--yolo` does not disable the kernel memory ceiling.
+
+For opt-in internal numeric diagnostics, install the matching sampler package
+and run `cpg --memory-sampling --yolo`. Plain `cpg` is unchanged. This first
+argument is consumed by cpg and enables a Node preload via the original standalone
+CLI's `--node-options` channel. The enabled guard and running external sampler
+are required. Look for the `[cpg-memory]` connected message and actual telemetry,
+not just the launch request. See [MEMORY-SAMPLING.txt](MEMORY-SAMPLING.txt) for
+installation, compatibility, bounded IPC, metric interpretation and overhead.
+Internal sampling changes the diagnostic process's environment/Node options only;
+it does not patch the CLI or change its memory ceiling. Existing sessions cannot
+be retrofitted. To upgrade an existing launcher without stopping CLIs, run
+`sudo python3 ./cpg_admin.py upgrade-launcher` from the verified matching package.
 
 Calling the original `copilot` still bypasses protection. An already-running CLI
 is not retroactively moved: after installation, exit it normally and restart

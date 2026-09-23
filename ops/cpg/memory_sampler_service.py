@@ -68,10 +68,12 @@ def persistent_unit(uid, gid):
         "LimitFSIZE=4194304\nUMask=0077\nNoNewPrivileges=yes\nPrivateDevices=yes\n"
         "ProtectSystem=strict\nProtectHome=yes\nProtectControlGroups=yes\n"
         "ProtectKernelTunables=yes\nStateDirectory={state}\nStateDirectoryMode=0700\n"
+        "RuntimeDirectory={state}\nRuntimeDirectoryMode=0700\n"
         "StandardInput=null\nStandardOutput=journal\nStandardError=inherit\n"
         "LogRateLimitIntervalSec=60s\nLogRateLimitBurst=10\n"
         "ExecStart=/usr/bin/python3 -B {lib}/memory_sampler.py "
-        "--output /var/lib/{state} --label continuous --continuous\n\n"
+        "--output /var/lib/{state} --label continuous --continuous "
+        "--runtime-socket /run/{state}/runtime.sock\n\n"
         "[Install]\nWantedBy=multi-user.target\n"
     ).format(uid=uid, gid=gid, state=state, lib=LIB)
 
@@ -95,7 +97,8 @@ def install(uid):
     source = Path(__file__).resolve().parent
     sources = {name: (source / name).read_bytes() for name in (
         "memory_sampler.py", "memory_sampler_incident.py", "memory_sampler_metrics.py",
-        "cpg_common.py",
+        "memory_sampler_runtime.py", "memory_sampler_launch.py",
+        "memory_sampler_preload.cjs", "cpg_common.py",
     )}
     root_directory(LIB)
     root_directory(UNITS)

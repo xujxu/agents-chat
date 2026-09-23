@@ -15,6 +15,15 @@ def run(config, arguments):
     if os.getuid() == 0 or os.getuid() != config["uid"]:
         raise RuntimeError("cpg must run as its configured ordinary user, never root")
     executable = config["executable"]
+    sampling = bool(arguments and arguments[0] == "--memory-sampling")
+    if sampling:
+        arguments = arguments[1:]
+        if not config["enabled"]:
+            raise RuntimeError("--memory-sampling requires the enabled cpg guard")
+        sys.path.insert(0, "/usr/local/libexec/cli-memory-sampler")
+        import memory_sampler_launch as runtime
+        runtime.check_preload()
+        runtime.check_collector(runtime.socket_path(config["uid"]), config["uid"])
     if not config["enabled"]:
         print("CPG DISABLED: launching Copilot without memory protection.", file=sys.stderr, flush=True)
         os.execv(executable, [executable] + arguments)
@@ -42,9 +51,17 @@ def run(config, arguments):
             if common.memory_membership(Path("/proc/self/cgroup").read_text()) != common.WORKLOAD_PATH:
                 raise RuntimeError("Kernel did not move Copilot into its private memory group")
             common.verify_boundary(common.read_group())
+            if sampling:
+                environment = runtime.environment(config["uid"], os.getpid())
+                arguments = [runtime.node_option()] + arguments
             os.write(ready_write, b"ready")
             os.close(ready_write)
-            os.execv(executable, [executable] + arguments)
+            if sampling:
+                print("cpg: internal numeric sampling requested; look for the "
+                      "[cpg-memory] connected message.", file=sys.stderr, flush=True)
+                os.execve(executable, [executable] + arguments, environment)
+            else:
+                os.execv(executable, [executable] + arguments)
         except Exception as error:
             detail = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) else str(error)
             print("cpg: protected launch failed: " + detail, file=sys.stderr, flush=True)

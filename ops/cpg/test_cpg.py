@@ -90,6 +90,72 @@ class GuardTests(unittest.TestCase):
             execute.assert_called_once_with("/bin/copilot", ["/bin/copilot"] + args)
             self.assertIn("DISABLED", output.call_args.args[0])
 
+    def test_sampling_refuses_disabled_guard_before_launch(self):
+        config = {"uid": 1001, "enabled": False, "executable": "/bin/copilot"}
+        with patch.object(os, "getuid", return_value=1001), \
+                patch.object(os, "execv") as execute:
+            with self.assertRaisesRegex(RuntimeError, "enabled"):
+                launcher.run(config, ["--memory-sampling", "--yolo"])
+            execute.assert_not_called()
+
+    def test_only_leading_sampling_option_is_consumed(self):
+        config = {"uid": 1001, "enabled": False, "executable": "/bin/copilot"}
+        args = ["-p", "--memory-sampling"]
+        with patch.object(os, "getuid", return_value=1001), patch.object(os, "execv") as execute:
+            launcher.run(config, args)
+            execute.assert_called_once_with("/bin/copilot", ["/bin/copilot"] + args)
+
+    def test_sampling_child_executes_original_binary_with_literal_arguments(self):
+        import memory_sampler_launch as runtime
+        config = {"uid": 1001, "enabled": True, "executable": "/original/copilot"}
+        group = {"usage": 0}
+        environment = {"CPG_MEMORY_PID": "123"}
+        args = ["--memory-sampling", "--yolo", "-p", "literal $(text)"]
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(os, "getuid", return_value=1001))
+            stack.enter_context(patch.object(os, "getpid", return_value=123))
+            stack.enter_context(patch.object(common, "read_group", return_value=group))
+            stack.enter_context(patch.object(common, "verify_boundary"))
+            stack.enter_context(patch.object(common, "memory_info", return_value=(4 * common.LIMIT, common.LIMIT)))
+            stack.enter_context(patch.object(common, "memory_membership",
+                                            side_effect=["/outside", common.WORKLOAD_PATH]))
+            stack.enter_context(patch.object(os, "fork", return_value=0))
+            stack.enter_context(patch.object(os, "pipe", return_value=(100, 101)))
+            stack.enter_context(patch.object(os, "close"))
+            stack.enter_context(patch.object(os, "write"))
+            stack.enter_context(patch.object(launcher.subprocess, "run"))
+            stack.enter_context(patch.object(runtime, "check_preload"))
+            stack.enter_context(patch.object(runtime, "check_collector"))
+            prepare = stack.enter_context(patch.object(runtime, "environment", return_value=environment))
+            execute = stack.enter_context(patch.object(os, "execve", side_effect=SystemExit(0)))
+            with self.assertRaises(SystemExit):
+                launcher.run(config, args)
+            prepare.assert_called_once_with(1001, 123)
+            execute.assert_called_once_with(config["executable"],
+                [config["executable"], runtime.node_option(), *args[1:]], environment)
+
+    def test_launcher_upgrade_changes_only_code_and_record_hashes(self):
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            root = Path(directory)
+            for name, path in (("LAUNCHER", root / "cpg"), ("ADMIN", root / "cpgctl"),
+                               ("RECORD", root / "record"), ("LIB", root)):
+                stack.enter_context(patch.object(common, name, path))
+            source = Path(admin.__file__).parent
+            (root / "cpg_common.py").write_bytes((source / "cpg_common.py").read_bytes())
+            common.LAUNCHER.write_bytes(b"old-launcher")
+            common.ADMIN.write_bytes(b"old-admin")
+            value = {"phase": "installed", "files": {"untouched-unit": "keep"}, "config": {"uid": 1001}}
+            stack.enter_context(patch.object(admin, "check_files"))
+            control = stack.enter_context(patch.object(admin, "systemctl"))
+            admin.upgrade_launcher(value)
+            result = common.read_json(common.RECORD)
+            self.assertEqual(result["files"]["untouched-unit"], "keep")
+            self.assertEqual(result["files"][str(common.LAUNCHER)],
+                             admin.fingerprint(common.LAUNCHER.read_bytes()))
+            self.assertIn(b"--memory-sampling", common.LAUNCHER.read_bytes())
+            self.assertEqual(result["config"], value["config"])
+            control.assert_not_called()
+
     def test_installed_assets_do_not_modify_applications_or_sudo_policy(self):
         package = admin.files(Path(__file__).resolve().parent, 1001, 1001)
         self.assertEqual(len(package), 8)

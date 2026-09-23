@@ -15,6 +15,7 @@ import cpg_common as common
 from memory_sampler_metrics import (
     HIGH_INTERVAL, NORMAL_INTERVAL, READ_ERRORS, MemoryDetails, error_details, process_stat,
 )
+from memory_sampler_runtime import RuntimeCollector
 
 PROC = Path("/proc")
 INTERVAL = 10
@@ -179,6 +180,20 @@ class Alerts:
                 change, self.oom_kills, kills))
         self.oom_kills = kills
         return messages
+
+
+class SamplingPace:
+    def __init__(self):
+        self.previous = None
+        self.burst_until = 0
+
+    def update(self, row, now):
+        usage = row["group"]["usage"]
+        if usage >= WARN_BYTES or (
+                self.previous is not None and usage - self.previous >= 128 * common.MIB):
+            self.burst_until = now + 60
+        self.previous = usage
+        return 0.5 if now < self.burst_until else 2
 
 
 class Log:
@@ -351,6 +366,8 @@ class Log:
             self._rotate()
         self.stream.write(data)
         self.stream.flush()
+        if row.get("runtime", {}).get("samples"):
+            os.fsync(self.stream.fileno())
 
     def prepare_console(self):
         os.close(self._open("console.log"))
@@ -377,12 +394,14 @@ def main(argv=None):
                         help="Non-sensitive comparison label, 1-48 ASCII letters/digits/_/-")
     parser.add_argument("--continuous", action="store_true",
                         help="Sample every 2 seconds without a deadline; retain latest OOM evidence")
+    parser.add_argument("--runtime-socket", type=Path,
+                        help="Private Unix socket for opt-in CLI numeric telemetry")
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,48}", args.label):
         parser.error("--label must contain only 1-48 ASCII letters/digits/_/-")
     try:
         ensure_outside()
-        with Log(args.output) as log:
+        with Log(args.output) as log, RuntimeCollector(args.runtime_socket) as runtime:
             interval = 2 if args.continuous else INTERVAL
             duration = None if args.continuous else SAMPLES * INTERVAL
             boot = boot_id() if args.continuous else None
@@ -395,13 +414,15 @@ def main(argv=None):
                        "warning_bytes": WARN_BYTES, "schema": 2,
                        "memory_detail_intervals_seconds": {
                            "normal": NORMAL_INTERVAL, "high": HIGH_INTERVAL,
-                       }})
+                       }, "runtime_enabled": args.runtime_socket is not None,
+                       "burst_interval_seconds": 0.5 if args.continuous else None})
             print("Sampling outside cpg: every {} seconds, {}. "
                   "Ctrl-C or systemctl stop stops cleanly.".format(
                       interval, "continuous" if args.continuous else "at most 2 hours"), flush=True)
             alerts = Alerts()
             history = ProcessHistory()
             memory_details = MemoryDetails(PROC, WARN_BYTES)
+            pace = SamplingPace()
             deadline = None if args.continuous else time.monotonic() + duration
             reason = "duration_complete"
             result = 0
@@ -419,6 +440,13 @@ def main(argv=None):
                         (time.perf_counter() - started) * 1000, 3)
                     row["events"] = history.update(row)
                     row["alerts"] = alerts.update(row, now)
+                    row["runtime"] = runtime.take()
+                    if row["runtime"]["rejected"] or row["runtime"]["dropped"]:
+                        row["alerts"].append("RUNTIME_DATA_INCOMPLETE: rejected={} dropped={}".format(
+                            row["runtime"]["rejected"], row["runtime"]["dropped"]))
+                    if args.continuous:
+                        interval = pace.update(row, now)
+                    row["next_interval_seconds"] = interval
                     if incident is not None:
                         row["boot_id"] = boot
                         incident.observe(row, now)
@@ -435,7 +463,7 @@ def main(argv=None):
                     if remaining <= 0:
                         break
                     if args.continuous or index < SAMPLES:
-                        time.sleep(min(interval, remaining))
+                        runtime.wait(min(interval, remaining))
             except KeyboardInterrupt:
                 reason = "interrupted"
             except READ_ERRORS as error:

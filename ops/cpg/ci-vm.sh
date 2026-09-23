@@ -24,7 +24,7 @@ files = [{
     "permissions": "0644",
     "encoding": "b64",
     "content": base64.b64encode(path.read_bytes()).decode(),
-} for path in source.glob("*.py")]
+} for path in sorted(source.iterdir()) if path.suffix in (".py", ".cjs")]
 config = {
     "write_files": files,
     "runcmd": [["bash", "-c", "python3 /opt/cpg-test/" + integration + " > /var/log/cpg-test.log 2>&1; result=$?; cat /var/log/cpg-test.log > /dev/ttyS0; echo CPG_RESULT=$result > /dev/ttyS0; poweroff"]],

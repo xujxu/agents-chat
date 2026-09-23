@@ -7,6 +7,7 @@ import time
 
 import cpg_common as common
 import memory_sampler_service as service
+import memory_sampler_runtime as runtime
 
 SOURCE = Path(__file__).resolve().parent
 OUTPUT = service.output_directory(1001)
@@ -195,24 +196,35 @@ def persistent():
     print("PASS: installed boot-enabled service; restart after abrupt sampler exit preserves logs",
           flush=True)
 
-    # Only the disposable VM creates pressure, in a small child group with a surviving parent.
+    # Only the disposable VM creates pressure. The internal sender itself is the victim.
+    fixture_dir = SOURCE / "runtime-fixture"
+    fixture_dir.mkdir()
+    sender = fixture_dir / "copilot"
+    shutil.copyfile("/usr/bin/python3", sender)
+    sender.chmod(0o755)
+    payload = dict.fromkeys(runtime.FIELDS, 1)
+    payload["heap_used_bytes"] = 1234567
     oom_script = (
-        "import subprocess, time; time.sleep(3); "
-        "r=subprocess.run(['/usr/bin/python3','-c','x=bytearray(80*1024*1024)']); "
-        "print('victim_returncode='+str(r.returncode), flush=True); time.sleep(90)"
+        "import socket,time; s=socket.socket(socket.AF_UNIX); "
+        "s.connect('/run/cli-memory-sampler-1001/runtime.sock'); "
+        "assert s.recv(100)==b'CPG_MEMORY/1\\n'; "
+        "s.sendall(" + repr((json.dumps(payload) + "\n").encode()) + "); "
+        "time.sleep(4); x=bytearray(80*1024*1024); time.sleep(90)"
     )
     previous_kills = common.read_group()["oom_kills"]
     command("systemd-run", "--unit=sampler-oom-fixture", "--slice=cpg.slice",
-            "--property=MemoryMax=48M", "--property=OOMPolicy=continue",
-            "/usr/bin/python3", "-c", oom_script)
+            "--property=MemoryMax=48M", "--property=OOMPolicy=continue", "--property=User=1001",
+            str(sender), "-c", oom_script)
     wait_for(lambda: common.read_group()["oom_kills"] > previous_kills)
     wait_for(lambda: (OUTPUT / "oom-before.jsonl").exists())
     before = [json.loads(line) for line in (OUTPUT / "oom-before.jsonl").read_text().splitlines()]
     assert before[-1]["incident"]["previous_oom_kills"] == previous_kills
     assert before[-1]["incident"]["oom_kills"] > previous_kills
+    internal = [entry for row in before for entry in row.get("runtime", {}).get("samples", [])]
+    assert any(entry["metrics"]["heap_used_bytes"] == 1234567 for entry in internal), before
     command("systemctl", "is-active", "--quiet", UNIT)
     wait_for(lambda: len((OUTPUT / "oom-after.jsonl").read_text().splitlines()) >= 3)
-    print("PASS: sampler outside protected group survives real fixture OOM and saves pre/post evidence",
+    print("PASS: external sampler survives sender OOM and preserves internal metrics in pre/post evidence",
           flush=True)
     evidence = (OUTPUT / "oom-before.jsonl").read_bytes()
     command("systemctl", "stop", "sampler-oom-fixture.service")

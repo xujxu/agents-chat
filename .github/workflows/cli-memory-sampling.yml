@@ -12,6 +12,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - name: Check opt-in preload compatibility with the official standalone CLI
         run: |
           mkdir -p "$RUNNER_TEMP/copilot-runtime"
@@ -21,6 +24,8 @@ jobs:
           grep ' copilot-linux-x64.tar.gz$' SHA256SUMS.txt | sha256sum --check -
           tar -xzf copilot-linux-x64.tar.gz
           python3 "$GITHUB_WORKSPACE/ops/cpg/test_runtime_compatibility.py" ./copilot
+      - name: Check real internal telemetry, disconnects, and numeric overhead
+        run: python3 ops/cpg/test_runtime_preload.py "$RUNNER_TEMP/copilot-runtime/copilot"
   sampler:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
@@ -32,16 +37,16 @@ jobs:
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3
             cd /source
-            PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_memory_sampler.py test_memory_sampler_service.py test_continuous_sampler.py test_memory_sampler_metrics.py test_cpg.py
+            PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v test_memory_sampler.py test_memory_sampler_service.py test_continuous_sampler.py test_memory_sampler_metrics.py test_memory_sampler_runtime.py test_cpg.py
           '
       - name: Verify service resource limits and lifecycle in legacy-cgroup VM
         run: bash ops/cpg/ci-vm.sh memory_sampler_integration.py
       - name: Package standalone diagnostic tool
         run: |
           mkdir artifact
-          cp ops/cpg/memory_sampler.py ops/cpg/memory_sampler_incident.py ops/cpg/memory_sampler_metrics.py ops/cpg/memory_sampler_service.py ops/cpg/cpg_common.py ops/cpg/MEMORY-SAMPLING.txt artifact/
+          cp ops/cpg/memory_sampler*.py ops/cpg/memory_sampler_preload.cjs ops/cpg/cpg_common.py ops/cpg/cpg_launcher.py ops/cpg/cpg_admin.py ops/cpg/MEMORY-SAMPLING.txt ops/cpg/README.md artifact/
           printf '%s\n' "$GITHUB_SHA" > artifact/revision.txt
-          (cd artifact && sha256sum *.py MEMORY-SAMPLING.txt revision.txt > SHA256SUMS && sha256sum --check SHA256SUMS)
+          (cd artifact && sha256sum *.py *.cjs MEMORY-SAMPLING.txt README.md revision.txt > SHA256SUMS && sha256sum --check SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
           name: cli-memory-sampler-${{ github.sha }}

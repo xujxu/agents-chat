@@ -1,5 +1,85 @@
 CLI memory sampler (Linux cgroup v1, Python 3.8+ standard library)
 
+Opt-in internal telemetry and burst sampling
+-------------------------------------------
+Upgrade from the same green Actions package (do not mix revisions):
+
+  sudo python3 -B ./memory_sampler_service.py --install --uid "$(id -u)"
+  sudo python3 -B ./cpg_admin.py upgrade-launcher
+
+The first command restarts only the external sampler and preserves logs. The
+second updates only the recorded launcher/admin code, leaving live CLIs,
+configuration, guard units, and the 1536 MiB limit untouched. It refuses changed
+installation files or a mismatched common policy module.
+
+Start a NEW diagnostic session from an ordinary terminal:
+
+  cpg --memory-sampling --yolo
+
+The option must be first. Otherwise all arguments are forwarded literally.
+Plain cpg remains unchanged. Sampling requires the enabled guard and a working
+external service; failed preflight refuses to launch rather than quietly falling
+back. The original executable is started with Node SEA's --node-options channel,
+not NODE_OPTIONS (ignored by the tested standalone build). No CLI files are
+patched, no debugger port is opened, and no external Node installation is needed.
+Compatibility is verified against standalone CLI 1.0.88, not guaranteed for future
+builds: look for "[cpg-memory] internal numeric sampling connected (2s)" and actual
+runtime.samples records, not just the launcher's "requested" message.
+
+The preload samples every 2 seconds in the MAIN Node isolate only:
+  V8 heap used/total/limit, external and ArrayBuffer bytes;
+  V8 malloced/peak malloced bytes, native/detached context counts;
+  cumulative observed GC count/major count/duration;
+  timer delay, collection duration, sequence and dropped-sample count.
+process.memoryUsage() may walk page metadata; no heap objects are traversed.
+GC is observed, never forced. Timer delay is a coarse lag measurement, not a
+latency histogram. These metrics exclude other isolates' JS heaps and do NOT
+measure all Rust/C++ allocations. ArrayBuffers are included in external; do not
+add them together. RSS minus heap is not an exact native-memory measurement.
+No prompts, source, environment, raw memory, stacks or command lines are logged.
+
+PID scoping and main-thread checks prevent inherited worker/helper sampling.
+The preload does not keep the CLI alive. At most one small pending socket write
+is allowed; unavailable/backpressured receivers drop samples, report an explicit
+rate-limited warning and count drops. Reconnection retries are spaced by 10s.
+It cannot sample while the event loop is blocked or after SIGKILL. Data not yet
+received by the external service can be lost. This is attribution evidence, not
+a guarantee of identifying the exact leaking function.
+
+The external non-root service owns /run/cli-memory-sampler-UID/runtime.sock,
+inside its private 0700 RuntimeDirectory (socket 0600). It authenticates peers
+using SO_PEERCRED and checks executable, cgroup and process start ticks on first
+data. Identity stays bound to that connection, including buffered data after
+exit; data cannot supply a PID. Same-user IPC is not a malicious-user boundary.
+The numeric protocol has a 2 KiB record limit, 16 connections, 64 pending records
+and bounded per-cycle work. Rejected/dropped records are explicit counters and
+alerts. No network listener or additional privileged service is introduced.
+
+Only the external sampler writes files. Each ordinary sample contains runtime:
+  status, connections, rejected, dropped, samples[]
+Each internal entry has pid, start_ticks, received_monotonic_seconds, metrics.
+An empty list is NOT zero memory: inspect connection counts, times and sequences
+for missing/stale telemetry. Entries may belong to a process that just exited.
+Correlate with the outer boot_id and external PID/start_ticks; internal wall time
+and receipt time differ. A single external sample can include several internal
+records. Samples with internal records are flushed and fsynced; the same records
+are retained in oom-before/after with the existing incident capture mechanism.
+Only already-received records are durable against a CLI-only OOM.
+
+Continuous external basic sampling accelerates from 2s to 0.5s when group usage
+reaches 1126 MiB or rises by at least 128 MiB between observations, and stays fast
+for 60s after the last trigger. Smaps detail frequency is unchanged. Actual
+cadence is limited by reads and the existing 5% CPU quota. The 300-record incident
+ring now spans roughly 2.5-10 minutes depending on pressure; 24 MiB file bounds
+and 32 MiB external-service memory limit remain unchanged. Internal overhead is
+charged to the CLI's guard and is NOT capped by external-service limits.
+
+Actions checks the real standalone preload/IPC, synthetic allocation/GC and
+worker exclusion, reconnects, synthetic median extra CPU <1% of one core and
+peak RSS <10 MiB, and internal-data survival after a real disposable-VM OOM.
+These are synthetic acceptance budgets, not a bound on real interactive CLI
+workloads. Collection durations and dropped counts help detect observer effects.
+
 Enhanced numeric metrics (schema 2)
 ----------------------------------
 Upgrade an existing service with the same --install --uid command below, from
@@ -56,7 +136,7 @@ unchanged; larger records can shorten the history retained within those bounds.
 Continuous, boot-enabled service (recommended for capturing the next OOM)
 ----------------------------------------------------------------------
 The optional continuous mode samples normal activity every two seconds with
-no two-hour deadline. Install it once from the verified Actions package:
+no two-hour deadline (with faster pressure bursts described above). Install it once from the verified Actions package:
 
   sudo python3 -B ./memory_sampler_service.py --install --uid "$(id -u)"
 
@@ -84,7 +164,7 @@ For UID 1001:
 Storage is bounded, including over indefinite operation:
   samples.jsonl + .1/.2/.3: at most 4 MiB each, 16 MiB total; oldest overwritten.
   oom-before.jsonl: up to 4 MiB, at most 300 samples including the detected OOM
-                    (roughly ten minutes under normal two-second scheduling).
+                    (roughly ten minutes normally, 2.5 minutes during bursts).
   oom-after.jsonl: up to 4 MiB, observations through 60 seconds after detection.
   Total sample/evidence file content: at most 24 MiB, plus an empty .lock.
 
@@ -117,7 +197,8 @@ host available memory, exits and OOM counter deltas support correlation.
 An OOM counter increase proves an observed kill in the protected hierarchy,
 NOT which PID was killed. Two-second sampling can miss short-lived processes
 and fast peaks, and cannot identify JS/native allocations or prove a memory
-leak. Obtain the kernel OOM record with sudo for the exact victim and allocation
+leak. Opt-in internal metrics narrow this gap but do not identify allocation stacks.
+Obtain the kernel OOM record with sudo for the exact victim and allocation
 context. This tool never reads prompts, command lines, environments or heaps.
 
 The legacy bounded foreground/transient modes below remain available unchanged

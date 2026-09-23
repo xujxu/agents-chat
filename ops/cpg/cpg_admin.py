@@ -268,6 +268,33 @@ def set_enabled(value, enabled):
         print("cpg disabled: memory ceiling and alerts removed; running tasks were not killed.")
 
 
+def upgrade_launcher(value):
+    """Update only launcher/admin code, leaving live tasks and guard units alone."""
+    check_files(value)
+    if value["phase"] != "installed":
+        raise RuntimeError("Finish or remove the partial installation before upgrading")
+    source = Path(__file__).resolve().parent
+    if (source / "cpg_common.py").read_bytes() != common.LIB.joinpath("cpg_common.py").read_bytes():
+        raise RuntimeError("Launcher-only upgrade requires matching common policy code")
+    replacements = {
+        common.LAUNCHER: (source / "cpg_launcher.py").read_bytes(),
+        common.ADMIN: (source / "cpg_admin.py").read_bytes(),
+    }
+    original = {path: path.read_bytes() for path in replacements}
+    updated = dict(value, files=dict(value["files"]))
+    try:
+        for path, content in replacements.items():
+            common.write_bytes(path, content, mode=0o755)
+            updated["files"][str(path)] = fingerprint(content)
+        common.write_json(common.RECORD, updated, 0o600)
+    except Exception:
+        print("Launcher upgrade failed; restoring previous launcher/admin files.", file=sys.stderr)
+        for path, content in original.items():
+            common.write_bytes(path, content, mode=0o755)
+        raise
+    print("cpg launcher upgraded. Existing tasks, guard limits and units were not changed.")
+
+
 def json_report(config):
     import json
     report = {"enabled": config["enabled"], "configured_uid": config["uid"]}
@@ -323,7 +350,8 @@ def monitor():
 def main():
     os.umask(0o022)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("install", "enable", "disable", "uninstall", "status", "boot", "monitor"))
+    parser.add_argument("action", choices=("install", "upgrade-launcher", "enable", "disable",
+                                          "uninstall", "status", "boot", "monitor"))
     parser.add_argument("--uid", type=int)
     parser.add_argument("--copilot")
     args = parser.parse_args()
@@ -341,6 +369,8 @@ def main():
             value = record()
             if args.action == "uninstall":
                 uninstall(value, partial=value["phase"] == "installing")
+            elif args.action == "upgrade-launcher":
+                upgrade_launcher(value)
             elif args.action == "boot":
                 check_files(value)
                 configure_group(value["config"])
