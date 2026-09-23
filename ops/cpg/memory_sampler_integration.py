@@ -212,9 +212,13 @@ def persistent():
         "time.sleep(4); x=bytearray(80*1024*1024); time.sleep(90)"
     )
     previous_kills = common.read_group()["oom_kills"]
+    # Keep the child cgroup present so v1's local OOM counter is not removed.
+    supervisor = ("import subprocess,time; r=subprocess.run(" +
+                  repr([str(sender), "-c", oom_script]) +
+                  "); print('victim_returncode='+str(r.returncode),flush=True); time.sleep(90)")
     command("systemd-run", "--unit=sampler-oom-fixture", "--slice=cpg.slice",
             "--property=MemoryMax=48M", "--property=OOMPolicy=continue", "--property=User=1001",
-            str(sender), "-c", oom_script)
+            "/usr/bin/python3", "-c", supervisor)
     wait_for(lambda: common.read_group()["oom_kills"] > previous_kills)
     wait_for(lambda: (OUTPUT / "oom-before.jsonl").exists())
     before = [json.loads(line) for line in (OUTPUT / "oom-before.jsonl").read_text().splitlines()]
