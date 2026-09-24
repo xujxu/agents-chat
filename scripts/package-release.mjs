@@ -33,6 +33,8 @@ for (const path of ['.git', 'dist']) {
 
 const launcherDir = join(bundleDir, 'scripts');
 mkdirSync(launcherDir, { recursive: true });
+cpSync(join(projectDir, 'scripts', 'configure-voice.mjs'), join(launcherDir, 'configure-voice.mjs'));
+cpSync(join(projectDir, 'scripts', 'voice'), join(launcherDir, 'voice'), { recursive: true });
 
 writeFileSync(
   join(launcherDir, 'start-release.sh'),
@@ -83,6 +85,17 @@ Quick start:
 - Windows: powershell -ExecutionPolicy Bypass -File .\\scripts\\start-release.ps1
 
 Before starting, create .env.local from .env.example and fill in the required values.
+
+Optional voice setup (also run when upgrading an existing release):
+  node scripts/configure-voice.mjs
+The interactive menu defaults to keeping the current configuration.
+For automation use --non-interactive (preserve) or --model disabled.
+Enabling a native model currently requires a verified Linux x86_64 Actions
+package: --package-dir DIR --manifest-sha256 SHA256. Public runtime release
+publication and full voice acceptance are separate; no implicit download occurs.
+Keep .env.local and .data/voice when replacing application files during upgrades.
+Disabled voice hides the microphone button after restart/page reload.
+Windows/macOS native voice packages are not yet supported.
 `,
   'utf8',
 );

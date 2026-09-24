@@ -17,3 +17,4 @@ server-error.log
 
 .worktrees/
 .superpowers/
+.voice-setup-receipt.*

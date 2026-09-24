@@ -6,6 +6,7 @@ on:
       - 'scripts/voice/**'
       - 'scripts/configure-voice.mjs'
       - 'scripts/deploy.sh'
+      - 'scripts/upgrade.sh'
       - 'scripts/package-release.mjs'
       - 'tests/voice-setup*'
       - '.github/workflows/voice-setup.yml'
@@ -22,3 +23,4 @@ jobs:
         with:
           node-version: 24.20.0
       - run: node --test tests/voice-setup.test.mjs
+      - run: bash -n scripts/deploy.sh scripts/upgrade.sh
