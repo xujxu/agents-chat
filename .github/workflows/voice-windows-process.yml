@@ -29,7 +29,7 @@ jobs:
           $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           if (!$vs) { throw 'MSVC x64 build tools missing' }
           $devcmd = Join-Path $vs 'Common7\Tools\VsDevCmd.bat'
-          $job = 'cl /nologo /Bv /W4 /WX /EHsc /std:c++17 /MT /DUNICODE /D_UNICODE scripts\voice\windows\voice-job.cpp /Fo.data\voice-windows-build\voice-job.obj /Fe.data\voice-windows-build\voice-job.exe'
+          $job = 'cl /nologo /Bv /W4 /WX /EHsc /std:c++17 /MT /DUNICODE /D_UNICODE scripts\voice\windows\voice-job.cpp scripts\voice\windows\voice-files.cpp /Fo.data\voice-windows-build\ /Fe.data\voice-windows-build\voice-job.exe /link Advapi32.lib'
           $fixture = 'cl /nologo /W4 /WX /EHsc /std:c++17 /MT /DUNICODE /D_UNICODE tests\fixtures\voice-windows-policy.cpp /Fo.data\voice-windows-build\voice-policy.obj /Fe.data\voice-windows-build\voice-policy.exe'
           $provider = 'cl /nologo /W4 /WX /EHsc /std:c++17 /MT /DUNICODE /D_UNICODE tests\fixtures\voice-windows-provider.cpp /Fo.data\voice-windows-build\voice-provider.obj /Fe.data\voice-windows-build\voice-provider.exe'
           cmd /d /s /c "`"$devcmd`" -arch=x64 -host_arch=x64 && $job && $fixture && $provider"
@@ -53,6 +53,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Exercise Windows runtime contracts
         run: npx --yes --package=tsx@4.20.6 tsx --test --test-concurrency=1 tests/voice-windows-runtime.test.ts
+      - run: npx tsc --noEmit --incremental false
       - uses: actions/upload-artifact@v4
         if: always()
         with:

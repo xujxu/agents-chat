@@ -5,28 +5,14 @@
 #include <new>
 #include <string>
 #include <vector>
-
-struct Handle {
-    HANDLE value = nullptr;
-    Handle() = default;
-    Handle(const Handle&) = delete;
-    Handle& operator=(const Handle&) = delete;
-    ~Handle() {
-        if (value && value != INVALID_HANDLE_VALUE) CloseHandle(value);
-    }
-};
+#include "voice-native.h"
+#include "voice-files.h"
 
 struct Attributes {
     std::vector<unsigned char> storage;
     LPPROC_THREAD_ATTRIBUTE_LIST list = nullptr;
     ~Attributes() { if (list) DeleteProcThreadAttributeList(list); }
 };
-
-struct NativeError { DWORD code; };
-
-void require(BOOL ok) {
-    if (!ok) throw NativeError{ GetLastError() };
-}
 
 std::wstring quote(const std::wstring& input) {
     std::wstring result = L"\"";
@@ -159,7 +145,17 @@ int execute(int argc, wchar_t** argv) {
 }
 
 int wmain(int argc, wchar_t** argv) {
-    try { return execute(argc, argv); }
+    try {
+        if (argc == 3 && std::wcscmp(argv[1], L"--create-directory") == 0) {
+            createPrivateDirectory(argv[2]);
+            return 0;
+        }
+        if (argc == 3 && std::wcscmp(argv[1], L"--read-output") == 0) {
+            writeTranscript(argv[2]);
+            return 0;
+        }
+        return execute(argc, argv);
+    }
     catch (const NativeError& error) {
         std::fprintf(stderr, "voice_job_error:%lu\n", error.code);
         return 125;

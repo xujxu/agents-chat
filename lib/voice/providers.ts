@@ -11,6 +11,10 @@ export function voiceCommand(config: VoiceConfiguration, input: string, output: 
     ? ['-m', config.model, '-a', input, '--threads', String(config.threads), '--backend', 'cpu']
     : ['-m', config.model, '-f', input, '-of', output, '-otxt', '-l', 'auto',
       '-t', String(config.threads), '-p', '1', '-bs', '1', '-bo', '1', '-nt', '-np', '-ng'];
+  if (config.platform === 'win32') {
+    if (!config.launcher || config.resourcePolicy !== 'standard') throw new VoiceError('voice_not_configured', 503);
+    return { command: config.launcher, args: ['120000', config.binary, ...modelArgs] };
+  }
   return {
     command: '/usr/bin/nice',
     args: ['-n', '10', '/usr/bin/prlimit', ...limits, '--core=0', '--', config.binary, ...modelArgs],
