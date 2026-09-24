@@ -82,6 +82,12 @@ test('Windows verified import preserves config and rejects corruption before usi
   ], { encoding: 'utf8', timeout: 60000,
     env: Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('VOICE_'))) });
   let activated = configure('--model', manifest.modelId, '--package-dir', source,
+    '--manifest-sha256', '0'.repeat(64), '--receipt', receipt);
+  assert.notEqual(activated.status, 0);
+  assert.match(activated.stderr, /manifest checksum mismatch/);
+  await assert.rejects(readFile(receipt), { code: 'ENOENT' });
+  await unchanged();
+  activated = configure('--model', manifest.modelId, '--package-dir', source,
     '--manifest-sha256', sha, '--receipt', receipt);
   assert.equal(activated.status, 0, activated.stderr);
   const persisted = await voiceConfiguration(voiceValues(decodeEnvironment(await readFile(environment))));
