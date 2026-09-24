@@ -28,11 +28,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.20.0
-      - run: node --test tests/voice-setup.test.mjs tests/voice-setup-windows.test.mjs
+      - run: node --test tests/voice-setup.test.mjs tests/voice-setup-windows.test.mjs tests/voice-setup-files.test.mjs
       - run: python3 tests/voice-setup-pty.py
       - run: bash -n scripts/deploy.sh scripts/upgrade.sh
       - name: Actual deployment flow in isolated container
         run: docker run --rm -v "$PWD:/work:ro" -w /work node:24-bookworm bash tests/voice-setup-deploy.sh
+  windows-files:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: node --test tests/voice-setup-files.test.mjs
   integrity:
     if: github.event_name == 'workflow_dispatch'
     needs: contracts
