@@ -131,3 +131,72 @@ behavior as2/4threads. No VAD model, silence removal or source concatenation.
 Both resource profiles will run sequentially on ONE runner with the same binary,
 exact24 frozen samples and input hashes; retain native/container memory evidence.
 This follow-up is not an installer approval or a production deployment.
+
+Sense GGUF full-set follow-up, 2026-09-24
+---------------------------------------
+Resource probes: Actions35952708488 at823de93, artifact10789591311.
+48/48 delivered, same-host2/4thread profiles, approximately357.1MiB native RSS.
+Full frozen set: Actions35953083215 at768ed14, artifact10789128636.
+The preceding35953034495 failed a duration-classifier regression test BEFORE
+model inference.768ed14 fixed the shadowed function; no inference was reused
+from that failed test run.
+
+Official q8 model SHA256:
+4ae45c94422de949b387e2e0fb10d7e14e4c42c69db30c3444ecc7d4b844b7c5
+Explicit thread/error-exit patch and original upstream/model/dependency notices
+are preserved in each artifact's provenance directory.
+
+Same frozen60ASCEND +40AISHELL-4 utterances on one host, sequential budgets:
+                                   cpu2-ram4       cpu4-ram8
+Delivered                             100/100          100/100
+<=5s P95 seconds                         0.615            0.619
+5-15s P95 seconds                        1.166            1.126
+15-30s P95 seconds                       2.971            2.876
+Native process peak RSS MiB            357.234          357.109
+Container peak memory MiB              367.453          366.965
+Long Mandarin CER                      10.718%          10.718%
+Long mixed MER                         14.573%          14.573%
+Short mixed MER                        17.687%          17.687%
+Mixed5-15s MER                         16.444%          16.444%
+All mixed MER                          15.325%          15.325%
+
+Both profiles pass the original ENGINE-ONLY gates:100%delivery, short3s/long5s
+P95, every language/duration error rate within2percentage points of the original
+unconstrained whole-Sense baseline on identical samples. The mixed5-15s bucket
+is1.778points worse than baseline (16.444% vs14.667%); retain this regression,
+which is within the approved margin, rather than hiding it in aggregate scores.
+The timing still excludes HTTP/browser recording/encoding/upload overhead.
+Cold native process/model loading is included; disk cache can be warm.
+These already explored corpora are not a new generalization holdout.
+
+This is the first passing candidate in the expanded native-engine screen, not
+an accepted production model or proof all SenseVoice implementations pass.
+The previous ONNX budget failures and no-winner decisions remain historically
+correct for those implementations. Do not overwrite their reports.
+
+Suggested next integration target: exact Sense GGUF build with2model threads,
+retaining the tested4GiB voice budget as an explicit experimental allocation.
+4GiB is NOT a measured minimum;357MiB is NOT whole-host RAM or a safety margin.
+There is no material quality gain from4threads in this run, and the longP95
+reduction is small. No reason yet to recommend consuming4threads by default.
+
+Important installation blockers:
+- Actual /api/voice still uses Whisper arguments/output files and the unchanged
+  default1thread/384MiB RSS/1GiB address-space guard. It cannot simply be pointed
+  at the new Sense executable. ggml also uses virtual allocations, so an RSS
+  number below384MiB does not prove compatibility with1GiB address space.
+- Implement and validate model-specific arguments/output parsing, explicit
+  administrator resource profiles, bounded output, cancellation and failure
+  handling behind the common transcriber boundary before exposing this model.
+- Repeat actual authenticated browser/API gates; do not promote engine-only
+  timing to end-to-end latency. Verify source/build/dependency license notices
+  accompany the install bundle and atomic verified configuration.
+- FunASR-Nano and Qwen remain larger-CPU candidates, not rejected merely for
+  memory. Their current cold CLI latency/quality caveats remain visible; no
+  experimental option should be labelled as passing recommendation criteria.
+
+Full-set evidence:
+https://github.com/xujxu/agents-chat/actions/runs/35953083215/artifacts/10789128636
+
+No PROD, cpg, sampler or current service limit changed. Installer work remains
+pending; the completed result is model/runtime/resource qualification evidence.

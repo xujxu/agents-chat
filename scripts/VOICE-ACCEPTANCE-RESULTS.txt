@@ -122,3 +122,19 @@ but failed both latency bands and the quality gate. None is accepted.
 Reviewed decision Actions35946323331 uses the same outputs, no reinference.
 See VOICE-MODEL-CHOICE.txt for exact gates, metrics, provenance and artifact links.
 This screening does not replace or claim a new browser acceptance result.
+
+6. Expanded CPU/native-runtime follow-up (2026-09-24)
+---------------------------------------------------
+After the user expanded scope to shared high-resource CPU servers and required
+license-qualified install-time model selection, Actions35948880080 screened
+Whisper small/turbo, FunASR-Nano and Qwen under explicit2CPU/4GiB and4CPU/8GiB
+budgets. All192 attempts delivered, but cold latency failed prior gates.
+Separate runners expose different ISA flags; do not infer thread scaling.
+
+Official SenseVoiceSmall-GGUF q8 with a pinned native runtime and explicit
+thread setting subsequently passed ENGINE-ONLY frozen100-sample gates in
+Actions35953083215 (two same-host profiles,200/200 delivery).
+2thread short/long P95=.615/2.971s; peak process RSS357.234MiB.
+This does not invalidate old ONNX failures or constitute product acceptance.
+The actual API/installer integration and browser gates are still pending.
+See VOICE-DEPLOYMENT.txt for exact versions, license scope, scores and caveats.
