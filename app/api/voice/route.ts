@@ -6,6 +6,7 @@ import { MAX_VOICE_BYTES, MAX_VOICE_SECONDS, validateVoiceWav, VoiceError } from
 import { cancelVoiceJob, reserveVoiceJob } from '@/lib/voice/jobs';
 import { transcribeVoice, voiceConfiguration } from '@/lib/voice/transcriber';
 import { assertVoiceMemoryAvailable } from '@/lib/voice/memory';
+import { voiceCapabilities } from '@/lib/voice/configuration';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
   if (!await getAuthToken(req)) return json({ ok: false, error: 'unauthorized' }, 401);
   try {
     const configuration = await voiceConfiguration();
-    return json({ ok: true, enabled: !!configuration, maxSeconds: MAX_VOICE_SECONDS, model: 'base-q5_1' });
+    return json({ ok: true, ...voiceCapabilities(configuration), maxSeconds: MAX_VOICE_SECONDS });
   } catch (error) { return errorResponse(error); }
 }
 
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
     job = reserveVoiceJob(userId, requestId(req), req.signal);
     const bytes = await readAudio(req, job.signal);
     const { durationSeconds } = validateVoiceWav(bytes);
-    await assertVoiceMemoryAvailable();
+    if (configuration.resourcePolicy === 'legacy-low-memory') await assertVoiceMemoryAvailable();
     const started = performance.now();
     const text = await transcribeVoice(bytes, configuration, job.signal);
     const elapsedMs = Math.round(performance.now() - started);

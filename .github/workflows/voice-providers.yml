@@ -22,4 +22,5 @@ jobs:
           node-version: 24.20.0
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-providers.test.ts tests/voice-audio.test.ts tests/voice-jobs.test.ts tests/voice-memory.test.ts
+      - run: npx --yes --package=tsx@4.20.6 tsx --test --test-concurrency=1 tests/voice-providers.test.ts tests/voice-providers-process.test.ts tests/voice-audio.test.ts tests/voice-jobs.test.ts tests/voice-memory.test.ts
+      - run: npx tsc --noEmit --incremental false
