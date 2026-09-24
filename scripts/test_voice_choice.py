@@ -47,6 +47,12 @@ class ChoiceTests(unittest.TestCase):
         self.assertEqual(decide(candidates, baseline)["winner"], "y")
         self.assertIsNone(decide([row("a", "x", 10, duration=20, seconds=5.01)], baseline)["winner"])
 
+    def test_latency_gate_uses_duration_band_not_each_language(self):
+        baseline = [row(str(i), "sense", category="mixed" if i else "en") for i in range(20)]
+        candidates = [dict(item, variant="candidate", seconds=4 if i == 0 else 1)
+                      for i, item in enumerate(baseline)]
+        self.assertEqual(decide(candidates, baseline)["winner"], "candidate")
+
 
 if __name__ == "__main__":
     unittest.main()

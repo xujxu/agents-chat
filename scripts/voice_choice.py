@@ -62,6 +62,9 @@ def decide(rows, baseline):
                 raise ValueError("Compared input identity differs")
             buckets[row["category"], band(row["duration"])].append(row)
         metrics, violations = [], []
+        duration_groups = defaultdict(list)
+        for row in group:
+            duration_groups[band(row["duration"])].append(row)
         if any(row["failure"] or not row["text"] for row in group):
             violations.append("delivery_below_100_percent")
         for (category, duration_band), items in sorted(buckets.items()):
@@ -72,19 +75,27 @@ def decide(rows, baseline):
             limit = {"short": 3, "long": 5}.get(duration_band)
             if error > baseline_error + .02 + 1e-12:
                 violations.append(f"quality:{category}/{duration_band}")
-            if limit is not None and seconds > limit:
-                violations.append(f"latency:{category}/{duration_band}")
+            successful = [row["seconds"] for row in items if not row["failure"] and row["text"]]
             metrics.append({
                 "category": category, "duration_band": duration_band, "samples": len(items),
                 "error_rate": error, "baseline_error_rate": baseline_error,
                 "p95_seconds": seconds, "latency_limit_seconds": limit,
+                "successful_p95_seconds": p95(successful) if successful else None,
                 "failures": sum(bool(row["failure"]) for row in items),
             })
+        duration_metrics = []
+        for duration_band, items in sorted(duration_groups.items()):
+            seconds = p95([row["seconds"] for row in items])
+            limit = {"short": 3, "long": 5}.get(duration_band)
+            if limit is not None and seconds > limit:
+                violations.append(f"latency:{duration_band}")
+            duration_metrics.append({"duration_band": duration_band, "samples": len(items),
+                                     "p95_seconds": seconds, "latency_limit_seconds": limit})
         mixed = [row for row in group if row["category"] == "mixed"]
         mixed_rate = (sum(row["score"]["errors"] for row in mixed) /
                       sum(row["score"]["reference_tokens"] for row in mixed)) if mixed else None
         reports.append({"variant": variant, "eligible": not violations, "violations": violations,
-                        "metrics": metrics, "mixed_error_rate": mixed_rate,
+                        "metrics": metrics, "duration_metrics": duration_metrics, "mixed_error_rate": mixed_rate,
                         "p95_seconds": p95([row["seconds"] for row in group])})
     eligible = [row for row in reports if row["eligible"]]
     winner = None
@@ -98,11 +109,20 @@ def decide(rows, baseline):
             "scope": "Preliminary actual-transcriber gates only; browser/API P95 verification required before acceptance."}
 
 
-def scored_rows(root):
+def scored_rows(root, expected_variants):
     rows = []
-    for file in sorted(Path(root).glob("*/results.jsonl")):
-        for line in file.read_text().splitlines():
+    files = sorted(Path(root).glob("*/results.jsonl"))
+    if {file.parent.name for file in files} != set(expected_variants):
+        raise ValueError("Missing or unexpected candidate evidence")
+    for file in files:
+        completion = json.loads((file.parent / "complete.json").read_text())
+        lines = file.read_text().splitlines()
+        if completion["variant"] != file.parent.name or completion["count"] != len(lines):
+            raise ValueError("Incomplete candidate evidence")
+        for line in lines:
             row = json.loads(line)
+            if row["variant"] != file.parent.name:
+                raise ValueError("Candidate identity differs")
             row["score"] = evaluate(row)["delivered_score"]
             rows.append(row)
     return rows
@@ -121,7 +141,7 @@ def prepare_development(destination):
         raise ValueError("Development source checksum differs")
     parquet = pq.ParquetFile(cache)
     source_rows = parquet.read(columns=["id", "duration", "transcription"]).to_pylist()
-    eligible, inventory = select_rows(source_rows)
+    eligible, _ = select_rows(source_rows)
     selected = []
     for category in ("zh", "en", "mixed"):
         # Include the longest original development turns without fabricating long audio.
@@ -183,7 +203,7 @@ def prepare_test(short, meeting, baseline, long_baseline, destination):
 
 
 def freeze(source, output):
-    result = choose_development(scored_rows(source))
+    result = choose_development(scored_rows(source, ["segment-2", "segment-3", "segment-5"]))
     Path(output).write_text(json.dumps(result, indent=2))
     print(json.dumps(result), flush=True)
     # An empty value is explicit: do not substitute a failing development candidate.
@@ -191,8 +211,11 @@ def freeze(source, output):
         print(f"SELECTED={result['variant']}", flush=True)
 
 
-def report(source, test_set, output):
-    rows = scored_rows(source)
+def report(source, test_set, output, frozen):
+    selected = json.loads(Path(frozen).read_text())["variant"]
+    if selected not in (None, "segment-2", "segment-3", "segment-5"):
+        raise ValueError("Invalid frozen candidate")
+    rows = scored_rows(source, ["whole", "whisper"] + ([selected] if selected else []))
     baseline = json.loads((Path(test_set) / "baseline.json").read_text())
     result = decide(rows, baseline)
     output = Path(output)
@@ -203,6 +226,8 @@ def report(source, test_set, output):
              "Actual transcriber guards; cold model process per request. No HTTP/browser overhead yet.",
              "Failure-inclusive rates;100%delivery,+2pp per language/duration vs identical whole-Sense references.",
              "<=5s audio:P95<=3s;15-30s:P95<=5s;medium duration reported without invented latency limit.",
+             "Latency gates aggregate each duration band; language breakdowns below are diagnostic.",
+             "Attempt P95 includes rejections: it is NOT successful transcription latency when failures exist.",
              "Both original corpora are already explored: not an untouched generalization holdout.", "",
              "| Candidate | Group | N | Error | Baseline | Failures | P95 s |",
              "|---|---|---:|---:|---:|---:|---:|"]
@@ -211,7 +236,10 @@ def report(source, test_set, output):
             lines.append(f"| {candidate['variant']} | {row['category']}/{row['duration_band']} | "
                          f"{row['samples']} | {row['error_rate']:.2%} | {row['baseline_error_rate']:.2%} | "
                          f"{row['failures']} | {row['p95_seconds']:.2f} |")
-        lines.append(f"\n{candidate['variant']} violations: {candidate['violations']}\n")
+    for candidate in result["candidates"]:
+        lines.append(f"\n{candidate['variant']} violations: {candidate['violations']}")
+        for item in candidate["duration_metrics"]:
+            lines.append(f"- {item['duration_band']}: {item['samples']} attempts, P95 {item['p95_seconds']:.2f}s.")
     lines.append(f"\nPreliminary winner: {result['winner'] or 'NONE'}. Never deploy from this report alone.")
     (output / "REPORT.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines), flush=True)

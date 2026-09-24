@@ -10,6 +10,11 @@ on:
       - scripts/test_voice_choice.py
       - .github/workflows/voice-model-choice.yml
   workflow_dispatch:
+    inputs:
+      evidence_run:
+        description: Re-score completed evidence only; blank runs inference
+        type: string
+        default: ''
 permissions:
   contents: read
   actions: read
@@ -25,7 +30,7 @@ jobs:
       - run: python -m unittest discover -s scripts -p test_voice_choice.py -v
       - run: gcc -std=c11 -Wall -Wextra -Werror scripts/test-voice-segments.c -o /tmp/test-voice-segments && /tmp/test-voice-segments
   compare:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.evidence_run == ''
     needs: test
     runs-on: ubuntu-22.04
     timeout-minutes: 120
@@ -147,7 +152,7 @@ jobs:
           fi
       - name: Apply predetermined model selection gates
         run: |
-          python scripts/voice_choice.py report test-results fixed-test decision
+          python scripts/voice_choice.py report test-results fixed-test decision frozen.json
           cp frozen.json decision/
           cp scripts/VOICE-MODEL-CHOICE.txt decision/
           cat decision/REPORT.md >> "$GITHUB_STEP_SUMMARY"
@@ -160,7 +165,63 @@ jobs:
             decision/
             frozen.json
             fixed-test/samples.json
+            fixed-test/baseline.json
             fixed-test/*ATTRIBUTION.txt
             provenance/
+          if-no-files-found: error
+          retention-days: 30
+  report-existing:
+    if: github.event_name == 'workflow_dispatch' && inputs.evidence_run != ''
+    needs: test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.evidence_run }}
+          name: voice-choice-test-decision
+          path: evidence
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10751002303
+          merge-multiple: true
+          path: baseline
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35870441019
+          artifact-ids: 10755950119
+          merge-multiple: true
+          path: long-baseline
+      - name: Restore original baseline without any new inference
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          rows = [json.loads(line) for line in Path('baseline/scored-results.jsonl').read_text().splitlines()]
+          rows += json.loads(Path('long-baseline/long-report/scored-results.json').read_text())
+          prior = {row['id']: row for row in rows if row['variant'] == 'sense'}
+          result = []
+          for row in json.loads(Path('evidence/fixed-test/samples.json').read_text()):
+              original = prior[row['id']]
+              if original['failure'] or any(original[key] != row[key] for key in ('reference', 'audio_sha256')):
+                  raise ValueError('Original baseline identity differs')
+              result.append({**row, 'score': original['delivered_score']})
+          Path('evidence/fixed-test/baseline.json').write_text(json.dumps(result, ensure_ascii=False))
+          PY
+          python scripts/voice_choice.py report evidence/test-results evidence/fixed-test decision evidence/frozen.json
+          cp evidence/frozen.json decision/
+          cat decision/REPORT.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-choice-reviewed-decision
+          path: decision/
           if-no-files-found: error
           retention-days: 30
