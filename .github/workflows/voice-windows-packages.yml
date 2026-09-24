@@ -8,16 +8,45 @@ permissions:
   contents: read
 jobs:
   candidate:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-2022
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [sensevoice-small-q8, whisper-base-q5_1]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24.20.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - run: npm ci --no-audit --no-fund
+      - name: Build pinned native candidate
+        shell: pwsh
+        run: ./scripts/voice/windows/build-candidate.ps1 -Model '${{ matrix.model }}'
       - name: Real candidate contract
         env:
           VOICE_CANDIDATE_DIRECTORY: .data/windows-candidate
           VOICE_INSTALL_AUDIO: .data/voice-native-work/jfk.wav
         run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-windows-native.test.ts
+      - name: Retain passing candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-windows-candidate-${{ matrix.model }}-${{ github.sha }}
+          path: .data/windows-candidate/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Retain failure diagnostics only
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-windows-build-failure-${{ matrix.model }}-${{ github.sha }}
+          path: |
+            .data/voice-native-work/build/CMakeCache.txt
+            .data/voice-native-work/build/CMakeFiles/CMakeConfigureLog.yaml
+            .data/windows-candidate/provenance/
+          if-no-files-found: ignore
+          retention-days: 14
