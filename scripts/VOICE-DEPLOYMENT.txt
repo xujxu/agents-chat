@@ -380,3 +380,40 @@ This slice does not implement installation selection or publish an approved
 package. Next slices add verified atomic downloads/rollback, dependency notices,
 resource guidance/compatibility checks and real full-corpus API/browser gates.
 No runtime artifacts or services are installed on this development machine.
+
+Completed provider-adapter slice, 2026-09-24
+------------------------------------------
+Test-first80bd387 / Actions35964276127 failed for the expected missing provider
+configuration module;27 existing logic tests passed. Implementationc56500d /
+Actions35964480726 passed configuration/process contracts and TypeScript.
+Application testsdfbe605 initially failed35964853722 because the new standard
+policy test was accidentally nested in another test.3481d74 fixed registration.
+
+Final application run35965252088 at3481d74 passed:
+-36 logic/process tests, including real fixture subprocess output/errors,
+  cleanup, process-group cancellation and standard-mode400MiB allocation.
+-Build and TypeScript including generated routes.
+-17 desktop API/browser cases for each legacy Whisper, explicit standard Sense,
+  and explicit standard Whisper. One incompatible policy case skipped per phase.
+-22 mobile browser cases across Chromium Android and WebKit iPhone emulation.
+-Invalid configuration and disabled capability cases (one each).
+-One real pinned Sense GGUF q8 authenticated HTTP API smoke using JFK audio.
+Total76 passed Playwright cases,3 intentional policy-specific skips.
+Real API smoke proves wiring, not multilingual quality or tail-latency gates.
+Browser tests synthesize microphone audio and use a native fixture executable;
+do not describe them as real Sense microphone/recognition acceptance.
+
+Explicit standard configuration has no application CPU/RAM hard quota and no
+historical host-headroom watchdog. It still has thread selection, one active
+job,120second timeout,32KiB valid-UTF8 transcript bounds, niceness10, core dumps
+disabled and process-group cancellation. OS/container limits continue to apply.
+Old configurations retain the old one-thread Whisper memory/admission policy.
+No automatic migration or PROD settings change occurred.
+
+Evidence artifact10794510539 contains app/test logs, native source/model/build
+hashes and scoped license provenance. This runner-built Sense binary is only
+integration evidence, not a portable redistributable installation artifact.
+Installer selection/download verification/rollback and complete package notices
+remain next, followed by full actual-service quality/latency acceptance.
+
+https://github.com/xujxu/agents-chat/actions/runs/35965252088/artifacts/10794510539

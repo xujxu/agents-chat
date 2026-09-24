@@ -70,8 +70,10 @@ GGUF q8** build with the pinned thread/error patch. For explicit configuration,
 set `VOICE_MODEL=sensevoice-small-q8`, `VOICE_BINARY_PATH` and `VOICE_MODEL_PATH`
 to absolute paths to that executable and model. `VOICE_THREADS` accepts `1`, `2`
 or `4` (Sense defaults to `2`). Do not point this adapter at an unpatched upstream
-binary or an ONNX model. The installer and full API/browser acceptance are still
-pending; this is an integration candidate, not a released installation package.
+binary or an ONNX model. Adapter/API/browser fixture regressions and a real Sense
+authenticated-API smoke passed Actions35965252088. The installer and full-corpus
+API/browser quality/latency acceptance are still pending; this is an integration
+candidate, not a released installation package.
 See `scripts/VOICE-DEPLOYMENT.txt` for exact versions and qualification evidence.
 
 Explicit `VOICE_MODEL=whisper-base-q5_1` selects the compatibility model (default
