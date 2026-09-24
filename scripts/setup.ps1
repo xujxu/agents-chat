@@ -65,7 +65,7 @@ if (Test-Path $agentsFile) {
         Write-Host "  agents.json updated" -ForegroundColor Green
     }
 } else {
-    Write-Host "  agents.json not found — create one manually" -ForegroundColor Yellow
+    Write-Host "  agents.json not found - create one manually" -ForegroundColor Yellow
 }
 
 # ─── 4. Set up Dev Tunnel ───
@@ -101,25 +101,16 @@ if ($tunnelUrlMatch.Success) {
 }
 Write-Host "  Tunnel URL: $tunnelUrl" -ForegroundColor Green
 
-# ─── 5. Update .env.local and start.ps1 ───
+# ─── 5. Update .env.local ───
 Write-Host "[5/6] Updating configuration..." -ForegroundColor Cyan
 
 # Update .env.local
 $envFile = Join-Path $ProjectDir ".env.local"
 if (Test-Path $envFile) {
     Set-VoiceSafeEnvironmentUrl -ProjectDir $ProjectDir -Url $tunnelUrl
-    Write-Host "  .env.local → NEXTAUTH_URL=$tunnelUrl" -ForegroundColor Green
+    Write-Host "  .env.local -> NEXTAUTH_URL=$tunnelUrl" -ForegroundColor Green
 } else {
-    Write-Host "  WARNING: .env.local not found — create one with NEXTAUTH_SECRET, etc." -ForegroundColor Yellow
-}
-
-# Update start.ps1
-$startFile = Join-Path $PSScriptRoot "start.ps1"
-if (Test-Path $startFile) {
-    $content = Get-Content $startFile -Raw
-    $content = $content -replace '(\$DevTunnelUrl\s*=\s*")[^"]*(")', "`$1$tunnelUrl`$2"
-    $content | Set-Content $startFile
-    Write-Host "  start.ps1 → DevTunnelUrl=$tunnelUrl" -ForegroundColor Green
+    Write-Host "  WARNING: .env.local not found - create one with NEXTAUTH_SECRET, etc." -ForegroundColor Yellow
 }
 
 # ─── 6. Update Azure AD redirect (optional) ───
@@ -139,7 +130,7 @@ if (Get-Command az -ErrorAction SilentlyContinue) {
             else { Write-Host "  Warning: Failed to update Azure AD app" -ForegroundColor Yellow }
             Remove-Item $bodyFile -Force -ErrorAction SilentlyContinue
         } else {
-            Write-Host "  Skipped (app not found — run 'az login' first?)" -ForegroundColor Yellow
+            Write-Host "  Skipped (app not found - run 'az login' first?)" -ForegroundColor Yellow
         }
     } else {
         Write-Host "  Skipped (not logged in to Azure CLI)" -ForegroundColor Yellow

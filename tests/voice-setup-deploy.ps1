@@ -15,6 +15,12 @@ $global:FakeTask = [pscustomobject]@{
     State = 'Ready'
 }
 function npm { $global:LASTEXITCODE = 0 }
+function devtunnel {
+    $global:LASTEXITCODE = 0
+    if ($args[0] -eq 'show') { return 'https://fixture.devtunnels.ms' }
+    return 'acp-chat'
+}
+function az { $global:LASTEXITCODE = 1 }
 function git {
     $global:Pulls++
     $file = Join-Path $ProjectDir 'scripts\deploy.ps1'
@@ -48,7 +54,10 @@ $global:LASTEXITCODE = 0
 '@
 [IO.File]::WriteAllText((Join-Path $ProjectDir 'scripts\install-scheduled-task.ps1'), $installer)
 
-if ($Scenario -eq 'menu') {
+if ($Scenario -eq 'setup') {
+    & (Join-Path $ProjectDir 'scripts\setup.ps1') -VoiceModel disabled -NonInteractive
+    if ($LASTEXITCODE -ne 0) { throw 'Fresh setup failed.' }
+} elseif ($Scenario -eq 'menu') {
     . (Join-Path $ProjectDir 'scripts\voice\windows\configure.ps1')
     Invoke-VoiceConfiguration -ProjectDir $ProjectDir -Interactive $true
     Invoke-VoiceConfiguration -ProjectDir $ProjectDir -Interactive $true
@@ -79,8 +88,9 @@ if ($Scenario -eq 'menu') {
     }
 }
 $current = [IO.File]::ReadAllBytes($envFile)
-if ($Scenario -eq 'disable') {
+if ($Scenario -in @('disable', 'setup')) {
     if ([IO.File]::ReadAllText($envFile) -notmatch 'VOICE_ENABLED=0') { throw 'Explicit disable was not persisted.' }
+    if ([IO.File]::ReadAllText($envFile) -notmatch 'OTHER=') { throw 'Unrelated configuration was removed.' }
 } elseif ($Scenario -eq 'tamper') {
     if ([IO.File]::ReadAllText($envFile) -notmatch 'EDIT=admin') { throw 'Admin edit was overwritten.' }
 } elseif ([Convert]::ToBase64String($current) -ne [Convert]::ToBase64String($original)) { throw 'Prior configuration bytes were changed.' }

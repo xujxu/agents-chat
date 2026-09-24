@@ -24,10 +24,10 @@ test('Windows deploy preserves identity, re-enters updates and recovers activati
 }, async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'voice-deploy \u8bed\u97f3-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  for (const scenario of ['keep', 'disable', 'recover', 'tamper', 'no-wait', 'reentry', 'menu']) {
+  for (const scenario of ['keep', 'disable', 'recover', 'tamper', 'no-wait', 'reentry', 'menu', 'setup']) {
     const project = path.join(root, scenario);
     await mkdir(path.join(project, 'scripts'), { recursive: true });
-    for (const file of ['voice', 'configure-voice.mjs', 'deploy.ps1']) {
+    for (const file of ['voice', 'configure-voice.mjs', 'deploy.ps1', 'setup.ps1']) {
       await cp(path.join('scripts', file), path.join(project, 'scripts', file), { recursive: true });
     }
     await writeFile(path.join(project, '.env.local'), 'OTHER="\u4e2d\u6587"\r\nVOICE_ENABLED=1\r\n');
