@@ -6,6 +6,10 @@ on:
       - 'scripts/voice/**'
       - 'scripts/configure-voice.mjs'
       - 'scripts/deploy.sh'
+      - 'scripts/deploy.ps1'
+      - 'scripts/setup.ps1'
+      - 'scripts/start.ps1'
+      - 'scripts/install-scheduled-task.ps1'
       - 'scripts/upgrade.sh'
       - 'scripts/package-release.mjs'
       - 'tests/voice-setup*'
@@ -31,6 +35,7 @@ jobs:
       - run: node --test tests/voice-setup.test.mjs tests/voice-setup-windows.test.mjs tests/voice-setup-files.test.mjs tests/voice-setup-activation.test.mjs
       - run: python3 tests/voice-setup-pty.py
       - run: bash -n scripts/deploy.sh scripts/upgrade.sh
+      - run: node tests/deploy-script-scheduled-task.test.js && node tests/start-script-healthcheck.test.js
       - name: Actual deployment flow in isolated container
         run: docker run --rm -v "$PWD:/work:ro" -w /work node:24-bookworm bash tests/voice-setup-deploy.sh
   windows-files:
