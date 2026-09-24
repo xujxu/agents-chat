@@ -19,6 +19,8 @@ PROFILES = {"cpu2-ram4": {"threads": 2, "memory_gib": 4},
 VARIANTS = {"whisper-small": "whisper", "whisper-turbo": "whisper",
             "funasr-u8u8": "funasr", "qwen-int8": "qwen"}
 SENSE_VARIANTS = {"sense-gguf-q8": "sense-gguf"}
+NANO_QWEN_VARIANTS = {name: VARIANTS[name] for name in ("funasr-u8u8", "qwen-int8")}
+CANDIDATE_SETS = {"main": VARIANTS, "sense": SENSE_VARIANTS, "nano-qwen": NANO_QWEN_VARIANTS}
 
 
 def select_probes(rows):
@@ -39,6 +41,10 @@ def select_probes(rows):
 
 def p95(values):
     return sorted(values)[math.ceil(.95 * len(values)) - 1] if values else None
+
+
+def select_english(rows):
+    return [row for row in select_probes(rows) if row["category"] == "en"]
 
 
 def summarize_profile(manifest, rows):
@@ -95,7 +101,7 @@ def run(variant, profile, sample_set="probes"):
     budget = PROFILES[profile]
     model = {**VARIANTS, **SENSE_VARIANTS}[variant]
     source = json.loads(Path("../corpus/samples.json").read_text())
-    manifest = {"probes": select_probes, "fixed100": list}[sample_set](source)
+    manifest = {"probes": select_probes, "fixed100": list, "english6": select_english}[sample_set](source)
     if sample_set == "fixed100" and (len(manifest) != 100 or len({row["id"] for row in manifest}) != 100):
         raise ValueError("Incomplete frozen full corpus")
     output = Path("artifacts")
@@ -145,7 +151,7 @@ def run(variant, profile, sample_set="probes"):
 def report(profile, destination, candidate_set="main", sample_set="probes"):
     profiles = {}
     identity = None
-    for variant in {"main": VARIANTS, "sense": SENSE_VARIANTS}[candidate_set]:
+    for variant in CANDIDATE_SETS[candidate_set]:
         root = Path(f"case-{variant}/artifacts")
         complete = json.loads((root / "complete.json").read_text())
         expected_count = {"probes": 24, "fixed100": 100}[sample_set]
@@ -184,10 +190,24 @@ def report(profile, destination, candidate_set="main", sample_set="probes"):
     (output / "REPORT.md").write_text("\n".join(lines))
 
 
-def gates(profile_directory):
+def gates(profile_directory, candidate_set="sense"):
     directory = Path(profile_directory)
-    source = directory / "case-sense-gguf-q8/artifacts"
-    manifest = json.loads((source / "samples.json").read_text())
+    variants = CANDIDATE_SETS[candidate_set]
+    manifest, rows = None, []
+    for variant in variants:
+        source = directory / f"case-{variant}/artifacts"
+        current = json.loads((source / "samples.json").read_text())
+        complete = json.loads((source / "complete.json").read_text())
+        if complete != {"count": 100, "variant": variant, "profile": directory.name}:
+            raise ValueError("Incomplete full-set candidate evidence")
+        if manifest is not None and current != manifest:
+            raise ValueError("Candidate inputs differ")
+        manifest = current
+        candidate_rows = [json.loads(line) for line in (source / "results.jsonl").read_text().splitlines()]
+        if any(row["variant"] != variant or row["profile"] != directory.name for row in candidate_rows):
+            raise ValueError("Candidate/profile identity differs")
+        summarize_profile(manifest, candidate_rows)
+        rows.extend(candidate_rows)
     prior = [json.loads(line) for line in Path("baseline/scored-results.jsonl").read_text().splitlines()]
     prior += json.loads(Path("long-baseline/long-report/scored-results.json").read_text())
     sense = {row["id"]: row for row in prior if row["variant"] == "sense"}
@@ -197,7 +217,6 @@ def gates(profile_directory):
         if original["failure"] or any(sample[key] != original[key] for key in ("audio_sha256", "reference")):
             raise ValueError("Baseline identity differs")
         baseline.append({**sample, "score": original["delivered_score"]})
-    rows = [json.loads(line) for line in (source / "results.jsonl").read_text().splitlines()]
     if len(manifest) != 100:
         raise ValueError("Quality gates require the frozen100, not the resource probes")
     result = decide([{**row, "score": evaluate(row)["delivered_score"]} for row in rows], baseline)
