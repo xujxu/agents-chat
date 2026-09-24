@@ -45,7 +45,7 @@ Keep must not require service-account probing or rewrite configuration.
 
 ## Task 1: Failing activation contracts
 
-- [ ] Add pure conflict checks (Windows environment keys are case-insensitive):
+- [x] Add pure conflict checks (Windows environment keys are case-insensitive):
 
 ```js
 assert.throws(() => assertWindowsOverrides(
@@ -56,18 +56,18 @@ assert.throws(() => assertWindowsOverrides(
   { machine: {}, user: { VOICE_MODEL_PATH: 'old' }, volatile: {} }, 'sensevoice-small-q8'), /user/);
 ```
 
-- [ ] Test URL updates against UTF8, BOM and UTF16LE inputs. Preserve all voice
+- [x] Test URL updates against UTF8, BOM and UTF16LE inputs. Preserve all voice
   path values, reject invalid URL/newline input without replacing config, and do
   not rewrite already matching URL bytes. Run the real CLI with bad Windows
   package hash and require unchanged config/no receipt. Keep with a nonexistent
   service identity must remain a no-op.
 
-- [ ] Push tests; inspect `voice-setup.yml` red failure for missing module. No
+- [x] Push tests; inspect `voice-setup.yml` red failure for missing module. No
   local validation. Commit test-first and implementation separately.
 
 ## Task 2: Service context and persisted native activation
 
-- [ ] Export:
+- [x] Export:
 
 ```js
 export function assertWindowsOverrides(context, model);
@@ -81,7 +81,7 @@ export async function windowsSetupContext(serviceUser);
   must be disposed. Different account requires a loaded HKEY_USERS SID root.
   Registry values are never printed in errors/logs. Reject malformed results.
 
-- [ ] Add `--service-user` to configure CLI; reject it on non-Windows. Keep
+- [x] Add `--service-user` to configure CLI; reject it on non-Windows. Keep
   returns before account probing. Explicit changes probe account/overrides
   before model execution, then select importer:
 
@@ -95,7 +95,7 @@ const importer = process.platform === 'win32'
   saved SID, exact-byte checksum and original snapshot; do not expand access to
   Everyone/Users. Grant read/execute only if SID differs from existing full grants.
 
-- [ ] Through the existing real-model import test, call configure CLI with the
+- [x] Through the existing real-model import test, call configure CLI with the
   candidate hash, read persisted environment using the shared decoder/parser,
   transcribe JFK via application configuration and restore previous raw bytes.
   Test disable removes launcher/model keys. No fixture may replace real model
@@ -103,7 +103,7 @@ const importer = process.platform === 'win32'
 
 ## Task 3: Startup encoding and shared PowerShell menu
 
-- [ ] URL helper takes exactly environment file and URL arguments, requires
+- [x] URL helper takes exactly environment file and URL arguments, requires
   http(s), refuses controls/expansion characters, and edits only NEXTAUTH_URL:
 
 ```js
@@ -114,12 +114,13 @@ const lines = decodeEnvironment(original).split(/\r?\n/);
 
   If matching active URL already exists once, leave raw bytes untouched.
   Otherwise rewrite matching/commented URL entries or append one, preserving
-  all other text, then use checked private atomic write. Called under service
-  identity at startup, so default ACL belongs to that identity. No menu, package
+  all other text, then use checked atomic write from private staging. Preserve
+  the existing file's DACL, including explicit service read access; updating a
+  URL must not revoke another account's existing access. No menu, package
   lookup or model activation occurs here. Use strict UTF8/.NET BOM detection in
   PowerShell readers.
 
-- [ ] Shared PowerShell function takes ProjectDir, Model, PackageDir,
+- [x] Shared PowerShell function takes ProjectDir, Model, PackageDir,
   ManifestSha256, Threads, ServiceUser, Receipt, NonInteractive. If no explicit
   model and interactive console, display keep/Sense/Whisper/disabled every time:
 
@@ -139,12 +140,12 @@ $selection = switch ($answer.Trim()) {
 
 ## Task 4: Setup/deploy/standalone wiring
 
-- [ ] Setup calls wrapper after its environment URL update and before completion.
+- [x] Setup calls wrapper after its environment URL update and before completion.
   Add explicit VoiceModel/VoicePackageDir/VoiceManifestSha256/VoiceThreads and
   NonInteractive flags. Unattended voice defaults keep; this does not promise
   existing non-voice tunnel setup becomes fully unattended.
 
-- [ ] Deploy reads existing task principal without changing it. After a
+- [x] Deploy reads existing task principal without changing it. After a
   successful pull, re-enter the new script using bound parameters and SkipGitPull:
 
 ```powershell
@@ -162,26 +163,60 @@ exit $LASTEXITCODE
   requested. NoWait cannot accompany a changed voice config because it bypasses
   health-gated activation; detect before stopping the old task.
 
-- [ ] Standalone bundle keeps no-prompt startup and includes all ESM/PowerShell
+- [x] Standalone bundle keeps no-prompt startup and includes all ESM/PowerShell
   helpers. Document explicit reconfiguration after replacement. Old pre-feature
   deploy cannot gain new code while already running: document pull then invoke
   the new entry point as the first-migration bootstrap.
 
 ## Task 5: Actions evidence and handoff
 
-- [ ] Run pure/CLI cases on Linux and Windows. Add an isolated PowerShell harness
+- [x] Run pure/CLI cases on Linux and Windows. Add an isolated PowerShell harness
   with fake Scheduled Task/network/npm operations, but actual configurator and
   files. Check keep/default, disable, repeated prompts, account preservation,
   health failure rollback, changed-config refusal, no startup prompts and re-entry.
   No production task/network/process operations are allowed in that harness.
 
-- [ ] Dispatch real Windows candidates and Linux package regression:
+- [x] Dispatch real Windows candidates and Linux package regression:
 
 ```bash
 gh workflow run voice-windows-packages.yml -R xujxu/agents-chat --ref experiment/voice-natural-long
 gh workflow run voice-setup.yml -R xujxu/agents-chat --ref experiment/voice-natural-long
 ```
 
-- [ ] Update spec/ledger with exact commit/run IDs and limitations. Actual Win11,
+- [x] Update spec/ledger with exact commit/run IDs and limitations. Actual Win11,
   installed full-corpus/API acceptance and permanent licensed public packages
   remain gates even when setup/deploy contracts are green.
+
+## Execution evidence
+
+- Test-first `b1d30a7`, run `35985323383`: expected missing-context-module failure.
+- Account-aware activation `54e76b4`; deployment test-first `34d8a7b` failed
+  expected missing integration in `35985686642`; implementation `7deb566`.
+- Real-model run `35985456006` correctly rejected inherited CI-only VOICE keys.
+  The test now removes those harness variables from the configurator child;
+  production override detection remains unchanged.
+- Final shared configuration/runtime code `ccdc8b6` preserves service DACL on
+  startup URL replacement. Real-model run `35985984916` passed both candidates,
+  CLI-persisted configuration/transcription, keep/disable/rollback and typecheck.
+- PowerShell 5.1 parser exposed pre-existing UTF8-without-BOM em-dash strings in
+  setup.ps1. `4d69789` uses ASCII messages and removes obsolete source rewriting
+  of start.ps1, which now reads tunnel settings from the environment file.
+- Final installation run `35986352588` at `4d69789`: Windows ten contracts pass,
+  including eight isolated PowerShell setup/deploy scenarios; syntax and
+  no-prompt-startup checks pass. Linux fourteen passes/four Windows-only skips,
+  existing PTY/deploy regressions and both real-package integrity jobs pass.
+- Full Windows runtime/API/browser run `35985987964` at `ccdc8b6`: thirteen
+  lifecycle results, one multi-case runtime contract, build/typecheck and
+  thirty-six browser/API passes with two intentional legacy-policy skips.
+  Artifact `10802337585` contains runtime evidence, not real models.
+- Final real-candidate run `35987278609` at `86fa671` also passed explicit bad
+  manifest rejection through the CLI before any activation receipt is written,
+  for both models. Sense artifact `10802394350`, Whisper `10803120161`; digests
+  and retention are in the implementation ledger.
+
+These results do not test a physical Win11 machine, actually register a
+production Scheduled Task, prove access through every administrator-controlled
+parent/model directory, or measure full-corpus installed-service quality/latency.
+The deployment harness mocks task/network/npm operations; real candidate
+transcriptions use the application's native adapter, separately from fixture
+API/browser coverage. Public redistribution remains unapproved.

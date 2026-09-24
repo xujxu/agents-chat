@@ -3,11 +3,79 @@ Install-selected voice providers: approved direction and evidence plan
 
 Formal product specification (supersedes historical scope below):
 docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md
-Windows11 Intel/AMD x64 native support is required. Windows runtime and verified
-real-model import now pass; configuration/upgrade integration and Win11 acceptance
-remain pending. Linux-only statements below describe earlier implementation,
+Windows11 Intel/AMD x64 native support is required. Windows runtime, verified
+real-model activation and configuration/upgrade integration now pass Server CI;
+actual Win11 and final release acceptance remain pending.
+Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
+
+Windows activation and upgrade checkpoint (2026-09-24)
+-----------------------------------------------------
+Plan/test-firstb1d30a7:
+docs/superpowers/plans/2026-09-24-voice-windows-activation.md
+Actions35985323383 failed for expected missing setup-context module.
+Activation54e76b4; deployment test-first34d8a7b/35985686642 failed missing
+integration; implementation7deb566; startup ACL preservationccdc8b6;
+PowerShell5.1 setup compatibility4d69789.
+
+Installation/upgrade:
+https://github.com/xujxu/agents-chat/actions/runs/35986352588
+Code4d69789; Windows10contracts passed, including8isolated PowerShell scenarios:
+keep, disable, failed activation recovery, admin-edit refusal, NoWait rejection,
+fresh-code re-entry, repeated menu/default keep, and fresh setup.
+Syntax/no-startup-prompt checks passed. Linux14passed/4Windows-only skips,
+PTY/deploy regressions and both real-package integrity jobs passed.
+Task/network/npm/tunnel operations are mocked; configurator and files are real.
+No production Scheduled Task was created or changed by these tests.
+
+Real persisted-model activation:
+https://github.com/xujxu/agents-chat/actions/runs/35985984916
+Codeccdc8b6c81820810c262963bc853dc8813464323. Both candidates passed existing
+1/2/4thread smoke, CLI verified import, persisted configuration/transcription,
+keep/disable/exact-byte rollback and typecheck. Unicode/spaced paths included.
+Sense artifact10802620814:
+sha256:98808db3c1271c0a3b8947ef8e2b900a11dfb3d7e3686a48af450552668f3ce7
+Whisper artifact10801364336:
+sha256:1a6dd6fe7d25977e7d5ffa4cafc6f00865002283d430c9f7804bb7e92ad5a23a
+Both expire2026-10-24; candidate assets, not permanent public downloads.
+
+Final additional CLI-integrity run:
+https://github.com/xujxu/agents-chat/actions/runs/35987278609
+Code86fa6716eceaf4254fb020664338fcadcce37868; both candidate jobs passed.
+Adds explicit wrong-manifest CLI rejection with unchanged config and no receipt;
+retains real installed transcription and all prior candidate/import checks.
+Final Sense artifact10802394350:
+voice-windows-candidate-sensevoice-small-q8-86fa6716eceaf4254fb020664338fcadcce37868
+sha256:2796a7666cf36f1f9597af1978af1df1feeec648bbca1036a226cb99ddebe3ab
+Final Whisper artifact10803120161:
+voice-windows-candidate-whisper-base-q5_1-86fa6716eceaf4254fb020664338fcadcce37868
+sha256:35192e3ba9193527d19dd1043780ba0435410e8408db8e8a6fec7f82a1b7a1c5
+Both expire2026-10-24. GitHub artifact digests above are not manifest SHA values.
+
+Full Windows runtime/API/browser:
+https://github.com/xujxu/agents-chat/actions/runs/35985987964
+Codeccdc8b6;13lifecycle results,1multi-case runtime contract, build/typecheck,
+36API/browser passes/2intentional legacy-policy skips. Artifact10802337585.
+API/browser providers are native fixtures, distinct from real-model smoke.
+
+Windows CLI now accepts trusted version2 packages. Setup/deploy prompt on every
+interactive upgrade, default keep; explicit flags allow unattended change.
+Background startup/watchdog never configures voice. Existing task principal is
+preserved, fresh task defaults to installer. Account registry hive must be loaded;
+machine/user/volatile and process voice overrides checked case-insensitively.
+Target account gets environment read access, not receipt access. Startup URL
+updates retain existing DACL. Parent/model-directory access remains an operator
+responsibility; no claim to validate every custom deployment or stale logon env.
+
+Initial real CLI test35985456006 failed inherited CI VOICE harness variables;
+test-only child environment isolation fixed this without weakening overrides.
+Parser check35985981311 exposed existing setup.ps1 UTF8 em-dash parsing on PS5.1.
+ASCII messages and removal of obsolete start.ps1 source rewriting resolved it.
+
+Actual Win11 task/browser acceptance, final installed-service full-corpus gates,
+public helper/MSVC redistribution approval and permanent downloads remain open.
+No local validation, model execution, PROD/cpg/sampler changes or public release.
 
 Private Windows configuration checkpoint (2026-09-24)
 ----------------------------------------------------

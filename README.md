@@ -89,8 +89,9 @@ paths (Actions `35981880883`). Import checks CPU/OS compatibility and reports
 available resources without adding CPU/RAM quotas. The separate `candidate.json`
 inventory is not an import manifest. Private Windows configuration files and
 byte-preserving rollback now pass Actions `35984193290`, including old UTF-16LE
-configuration. Windows model activation and setup/upgrade integration remain
-gated; this is not yet a Windows installation option.
+configuration. The configurator and Windows setup/upgrade entry points now
+support these explicitly supplied candidate packages; they do not download a
+public runtime automatically.
 Actual Windows 11 qualification remains pending (CI uses Windows Server 2022).
 Full-corpus Windows acceptance and public redistribution approval remain pending.
 
@@ -156,7 +157,7 @@ Do not enable this PoC on multiple workers without a shared admission controller
 
 #### Voice setup on installation and upgrade
 
-Every **interactive Linux deployment/upgrade** offers voice configuration, with
+Every **interactive Linux or Windows deployment/upgrade** offers voice configuration, with
 **keep current settings** selected by pressing Enter. This preserves old Whisper
 paths and their resource policy. Fresh installs stay disabled unless explicitly
 configured. Noninteractive upgrades do not wait for input, do not download models,
@@ -185,8 +186,41 @@ sudo bash scripts/deploy.sh --no-pull
 
 Once updated, `sudo bash scripts/upgrade.sh` provides the pull-then-new-installer
 entry point. The new `deploy.sh` also re-executes itself after pulling updates.
-Starting the application is never an installation prompt. Windows setup/upgrade
-reports that native voice packages are currently Linux x86_64 only.
+Starting the application is never an installation prompt.
+
+For Windows source installations, `scripts/setup.ps1` and `scripts/deploy.ps1`
+offer keep/Sense/Whisper/disabled on every interactive invocation. Their
+`-NonInteractive` option preserves voice settings unless `-VoiceModel` is given
+(it does not automate unrelated tunnel/account setup prompts). Run deploy from
+an elevated PowerShell session:
+
+```powershell
+# First migration from an old release: pull before invoking the new script.
+git pull --ff-only
+.\scripts\deploy.ps1 -SkipGitPull
+
+.\scripts\deploy.ps1 -VoiceModel disabled -NonInteractive
+.\scripts\deploy.ps1 -VoiceModel sensevoice-small-q8 `
+  -VoicePackageDir 'C:\voice packages\sense' `
+  -VoiceManifestSha256 '<trusted-64-character-sha256>'
+```
+
+The new Windows deploy script re-enters the pulled version before configuration,
+preserves an existing Scheduled Task's account, and defaults new tasks to the
+installing account. `-NoWait` cannot be combined with a changed voice setting:
+activation must wait for app readiness. Failed activation attempts guarded
+configuration rollback and a normal task restart; incomplete recovery retains
+the private receipt and reports an error.
+
+Windows packages come from a successful **Voice Windows native candidates**
+Actions run and have a version 2 `voice-package.json` plus the matching helper.
+Use native Intel/AMD x64 Windows with the required CPU instructions and an NTFS
+configuration volume. For standalone/manual configuration targeting another
+service account, pass `--service-user ACCOUNT-OR-SID` (`setup.ps1`:
+`-VoiceServiceUser`). Its user registry hive must be loaded, normally by signing
+in as that account, so overrides can be inspected. The configurator does not
+load hives, change accounts or grant Everyone access. It gives the target account
+read access to the environment, but not to recovery receipts.
 
 **Candidate packages, not public releases:** the **Voice native installation
 packages** Actions workflow builds Sense GGUF q8 and Whisper base-q5_1 separately,
@@ -211,9 +245,12 @@ preserves the current configuration. Do not substitute a profiler's binary.
 Sense defaults to two threads; `--threads 1|2|4` (deploy: `--voice-threads`) changes
 the computation setting, not a hard CPU quota. Whisper defaults to one thread.
 
-Setup checks platform, instruction set, glibc, staging disk space, the manifest
-and every declared file's SHA-256. It shows available host memory, visible cgroup
-values and model measurements, not a fictitious 4GiB minimum. Installer resource
+Setup checks platform, instruction set, Linux glibc or Windows OS compatibility,
+staging disk space, the manifest and every declared file's SHA-256. Linux shows
+available host memory, visible cgroup values and model measurements; Windows
+reports physical memory, logical CPUs/current-group affinity and Job membership
+with effective nested Job limits explicitly unknown. Neither invents a 4GiB
+minimum. Installer resource
 observations may differ from a separately configured service. Lower resources
 can reduce performance or cause failure; no memory reservation is made.
 
@@ -222,8 +259,10 @@ by manifest hash. `.env.local` changes atomically after successful verification;
 unrelated keys are retained, and old packages are not automatically deleted.
 Conflicting inherited voice settings, `.env.production.local` or
 `/etc/agents-chat.env` block changes with an explicit error instead of silently
-overriding higher-priority configuration. Custom service-unit environment
-overrides must also be reviewed by the administrator.
+overriding higher-priority configuration. Windows also checks the target
+account's user/volatile and machine registry voice settings, case-insensitively.
+Custom service-unit/task environment overrides or stale logon environments must
+also be reviewed by the administrator. Keep never probes a different account.
 
 Standalone configuration saves a private recovery receipt at
 `.data/voice/last-setup.json`. It contains the prior environment file: **do not

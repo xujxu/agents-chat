@@ -7,8 +7,9 @@ the Windows 11 scope requested on 2026-09-24. The user selected **native Windows
 11 on Intel/AMD x64** as the initial Windows target; ARM64 is outside this slice.
 The user approved the written design after commit `98e06ce`. Windows runtime
 integration and verified real-model package import are now implemented.
-Private configuration/rollback is also implemented. Windows model activation,
-installation/upgrade integration and actual Win11 qualification remain pending.
+Private configuration/rollback, explicit Windows candidate activation and
+installation/upgrade integration are implemented with Windows Server Actions
+coverage. Actual Win11 qualification and final release acceptance remain pending.
 
 The feature's earlier design decisions and experiments were recorded in
 `scripts/VOICE-DEPLOYMENT.txt` rather than this repository's normal specification
@@ -132,6 +133,39 @@ This is the file-transaction prerequisite, not Windows installation completion.
 The CLI still rejects Windows model enablement. Deployment/task-account checks,
 startup-script encoding preservation, upgrade prompts and activation rollback
 remain to be integrated. CI is Windows Server 2022, not actual Windows 11.
+
+### Subsequent Windows activation and upgrade checkpoint
+
+Implementation `ccdc8b6` connects the verified Windows importer to the CLI and
+checks current/target service identity plus machine/user/volatile voice
+overrides. Keep remains a no-op without probing another account. Explicit changes
+require the target registry hive to be loaded. Private environment writes grant
+the target SID read access; recovery receipts remain restricted to the installer,
+SYSTEM and administrators. Startup URL edits preserve existing DACLs and Unicode
+voice paths without presenting a menu.
+
+Windows setup/deploy now offer voice configuration on interactive invocation;
+unattended upgrades preserve settings unless explicitly changed. Deploy re-enters
+new code after pull, preserves the existing task principal, defaults new tasks to
+the installing account, and attempts guarded configuration rollback/restart on
+activation failure. Administrator edits cause rollback refusal and retain the
+private receipt. Changed voice settings require readiness checks, not `-NoWait`.
+
+Actions `35986352588` at setup fix `4d69789` passed Windows configuration and
+isolated setup/deploy tests, PowerShell 5.1 parsing, Linux regressions and both
+Linux real-package integrity jobs. Real Windows model run `35985984916` at
+`ccdc8b6` passed both CLI-persisted model transcriptions and rollback.
+Runtime run `35985987964` passed lifecycle, build/typecheck and fixture API/browser
+coverage; artifact `10802337585` retains that evidence.
+Final real-package run `35987278609` at `86fa671` additionally checks wrong
+manifest hashes through the CLI, preserving configuration without creating an
+activation receipt. Both models pass; final candidate artifacts are
+`10802394350` (Sense) and `10803120161` (Whisper), expiring 2026-10-24.
+
+The deployment harness mocks Scheduled Task/network/npm operations; actual
+Win11 task execution and full installed-service corpus acceptance remain open.
+This supersedes the earlier Windows CLI gate, not the requirements for trusted
+explicit packages, redistribution approval or permanent downloads.
 
 ## Goal
 
