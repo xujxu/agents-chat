@@ -552,3 +552,20 @@ before release approval; a JFK smoke alone is insufficient.
 Evidence:
 https://github.com/xujxu/agents-chat/actions/runs/35968099304
 https://github.com/xujxu/agents-chat/actions/runs/35968098977
+
+Verified installer/upgrade foundation at5eaeeda:
+Actions35968626725 passed configuration/release contracts, actual terminal
+prompts and isolated deploy tests, plus integrity cases against BOTH previously
+built packages. Invalid manifest hashes, truncated binaries, symlink inputs and
+modified installed binaries were rejected without replacing prior configuration;
+staging/locks were cleaned. No native rebuild was needed for these checks.
+Actions35968629945 passed build/typecheck, provider/API/browser regressions,
+real Sense API smoke and the actual enabled-legacy -> configure disabled ->
+restart path. Disabled capabilities hide the voice button and show no voice
+error banner. Artifact10795830896 preserves application integration evidence.
+
+This completes the verified-package import/configuration/upgrade foundation,
+not automatic public model downloads or final full-corpus package acceptance.
+All changes are on the experiment branch; PROD/cpg/service settings unchanged.
+https://github.com/xujxu/agents-chat/actions/runs/35968626725
+https://github.com/xujxu/agents-chat/actions/runs/35968629945/artifacts/10795830896
