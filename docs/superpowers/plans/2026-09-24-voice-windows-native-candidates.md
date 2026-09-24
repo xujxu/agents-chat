@@ -10,6 +10,23 @@
 
 ---
 
+## Execution checkpoint (2026-09-24)
+
+Tasks 1-3 and Task 4's evidence step are complete. Test-first Actions
+`35977443809` failed for missing inventory. First build `35977603961` passed
+Whisper but exposed Python's Windows-default source encoding in the Sense patch
+tool. Fix `37f6612` selects explicit UTF-8/LF without changing patch replacements.
+
+Final Actions `35977946646` passed both real model jobs. Both ran through the
+application transcriber from Unicode/spaced paths at all three thread counts.
+Artifacts: Sense `10799057231`, Whisper `10799410956`. See
+`scripts/VOICE-DEPLOYMENT.txt` for exact artifact digests, build provenance and
+scope. No model artifacts were downloaded onto the development host.
+
+Task 4's separate installation/upgrade plan is the next task. Candidate inventories
+remain deliberately unrecognized by the Linux-only installer; public release,
+full-corpus and actual Win11 qualification are not complete.
+
 ## Scope, prior evidence and execution
 
 User approved the parent spec and inline execution. Shared Windows runtime

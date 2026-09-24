@@ -62,6 +62,28 @@ dependency/license review and setup/deploy integration are completed.
 Synthetic fixture results do not measure Windows speech accuracy/latency and
 Windows Server is not an actual Win11 acceptance environment.
 
+### Subsequent real Windows candidate checkpoint
+
+Actions
+[`35977946646`](https://github.com/xujxu/agents-chat/actions/runs/35977946646),
+commit `37f6612`, built the pinned real Sense GGUF q8 and Whisper base-q5_1
+engines on Windows Server 2022 x64. Both passed the application's transcriber
+with the JFK sample at 1/2/4 threads from paths containing spaces and Chinese
+characters. The engine manifest explicitly enables UTF-8; dependency inspection
+found only approved system DLLs, with static MSVC runtime/ggml.
+
+Artifacts `10799057231` (Sense) and `10799410956` (Whisper) contain real weights,
+engine, helper, notices, provenance and a checksummed **candidate inventory**.
+They are not installer-admitted manifests or public release packages.
+The successful smoke closes the native-build/Unicode-path uncertainty, not
+full-corpus quality/latency, installation/rollback, real Win11 or release approval.
+No new recommendation is granted to compatibility Whisper.
+
+Public distribution additionally requires explicit permission review for the
+application-owned helper: no root application LICENSE was found in this
+checkout. Retained upstream notices and Microsoft runtime documentation do not
+resolve that separate obligation.
+
 ## Goal
 
 Let an administrator choose a local speech-to-text model when installing or
@@ -454,6 +476,7 @@ Whisper remains a labelled compatibility option even if it runs successfully.
 | Actions `35972552477` | Windows Server native lifecycle foundation passes; no Windows model/app/Win11 qualification |
 | Actions `35975644625` | Windows Server native runtime, private files, fixture API/browser integration pass; real models and Win11 pending |
 | Actions `35974609962` | Shared runtime preserves Linux contracts, browser/API behavior and real pinned Sense smoke |
+| Actions `35977946646` | Both real Windows candidate engines transcribe via app helper at 1/2/4 threads from Unicode paths; installation/Win11/full-corpus gates remain |
 
 Remaining implementation slices, in order:
 

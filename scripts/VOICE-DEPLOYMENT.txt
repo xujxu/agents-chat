@@ -9,6 +9,59 @@ remain pending. Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Real Windows candidate checkpoint (2026-09-24)
+---------------------------------------------
+Plan20a893c:
+docs/superpowers/plans/2026-09-24-voice-windows-native-candidates.md
+Test-firsta3c4fbc/3b953a8, Actions35977443809 failed missing candidate.json.
+Buildera51fe14, first real run35977603961: Whisper passed; Sense failed BEFORE
+compilation/inference because Python used Windows cp1252 to read UTF8 source.
+Fix37f6612 makes patch-tool read/write encoding explicitUTF8 and retains LF.
+The six pinned thread/error source replacements and model bytes are unchanged.
+
+Final run:
+https://github.com/xujxu/agents-chat/actions/runs/35977946646
+Commit37f6612a03a43505b624c7c64d3e585fce63fe99, both matrix jobs successful.
+Windows Server2022 10.0.20348 x64; MSVC19.44.35228.0; SDK10.0.26100.0.
+CPU-only AVX2/FMA/F16C/BMI2, native tuning/OpenMP/GPU/backendDL off,
+static ggml and MSVC runtime. Both real engines embed activeCodePage UTF8.
+dumpbin checks found only approved Windows system DLL dependencies; full
+dependency listings, embedded manifest, CMakeCache and archive hashes retained.
+
+Each real model transcribed pinned JFK via voiceConfiguration/transcribeVoice,
+not a separate benchmark adapter. Both engine/helper/model paths included
+spaces and Chinese characters; threads1,2,4 all delivered nonempty output
+containing the expected reference word. All request temp directories cleaned.
+These6requests are a native/path/delivery smoke, NOT full100 corpus accuracy,
+latency gate evidence, microphone/API acceptance or Windows11 qualification.
+No claim that Windows inherited Linux quality scores; no Whisper recommendation.
+
+Sense artifact10799057231,244717394compressed bytes:
+voice-windows-candidate-sensevoice-small-q8-37f6612a03a43505b624c7c64d3e585fce63fe99
+GitHub artifact digest:
+sha256:dea76be6930947fcd9dc64189153f80abc9cf28278373825b3baa5ceccfb910d
+Whisper artifact10799410956,57917200compressed bytes:
+voice-windows-candidate-whisper-base-q5_1-37f6612a03a43505b624c7c64d3e585fce63fe99
+GitHub artifact digest:
+sha256:28a5bf6182c24048a0a49acb471cd97a75972dc45e285d43b13f909c0086adeb
+Retention expires2026-10-24; not a permanent production download channel.
+Each contains candidate.json/candidate.sha256 with per-file hashes and exact
+pinned model identity. These are NOT voice-package.json installer manifests.
+Existing installVoicePackage still rejects Windows; do not bypass it.
+
+Upstream model/runtime notices retained. Complete executables are not MIT-only:
+MSVC static runtime terms and application-helper redistribution require review.
+No root application LICENSE exists in this checkout; resolve helper permission
+before public release. This is an explicit release blocker, not license clearance.
+The artifacts include RELEASE-REVIEW-REQUIRED.txt and Microsoft terms reference.
+
+Next: Windows-compatible installer manifest/import of exact candidate assets,
+CPU/resource checks, protected config/receipts, encoding and path round trips,
+rollback, setup/deploy/standalone integration and every-interactive-upgrade menu.
+Actual Win11/full-corpus acceptance and permanent distribution remain separate.
+All builds/inference ran in Actions; no local model download, PROD/cpg/sampler
+changes or release publication.
+
 Windows runtime integration checkpoint (2026-09-24)
 --------------------------------------------------
 Plan9653e6d:

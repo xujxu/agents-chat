@@ -85,6 +85,10 @@ and `VOICE_MODEL_PATH`. The launcher must be the matching `voice-job.exe` with
 private-directory and bounded-file operations, not the earlier lifecycle-only
 build. Windows model packages, installer/upgrade integration and actual Windows
 11 qualification remain pending; this is not yet a Windows installation option.
+Real Windows engine candidates now pass a three-thread-setting transcription
+smoke from Unicode paths (Actions `35977946646`), but their `candidate.json`
+inventories are deliberately not installer-admitted package manifests.
+Full-corpus Windows acceptance and public redistribution approval remain pending.
 
 Explicit `VOICE_MODEL=whisper-base-q5_1` selects the compatibility model (default
 one thread) using `VOICE_BINARY_PATH`, or `VOICE_WHISPER_PATH` if the generic path
