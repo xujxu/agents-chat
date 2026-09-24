@@ -1,0 +1,24 @@
+name: Installed voice API acceptance
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - 'scripts/voice_installed_report.py'
+      - 'scripts/test_voice_installed_report.py'
+      - 'scripts/voice/installed-api-run.mjs'
+      - 'tests/voice-installed-corpus.spec.ts'
+      - '.github/workflows/voice-installed-api.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - run: python -m unittest discover -s scripts -p test_voice_installed_report.py -v
