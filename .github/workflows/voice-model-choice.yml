@@ -5,6 +5,7 @@ on:
     paths:
       - scripts/voice_choice*
       - scripts/voice-segments.h
+      - scripts/voice-sense-adapter.c
       - scripts/test-voice-segments.c
       - scripts/test_voice_choice.py
       - .github/workflows/voice-model-choice.yml
@@ -23,3 +24,143 @@ jobs:
       - run: pip install opencc-python-reimplemented==0.1.7
       - run: python -m unittest discover -s scripts -p test_voice_choice.py -v
       - run: gcc -std=c11 -Wall -Wextra -Werror scripts/test-voice-segments.c -o /tmp/test-voice-segments && /tmp/test-voice-segments
+  compare:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+      - run: pip install numpy==2.2.6 pyarrow==20.0.0 soundfile==0.13.1 opencc-python-reimplemented==0.1.7
+      - name: Memory regressions, build and typecheck
+        run: |
+          npx --yes --package=tsx@4.20.6 tsx --test tests/voice-memory.test.ts tests/voice-audio.test.ts tests/voice-jobs.test.ts
+          npm run build
+          npx tsc --noEmit --incremental false
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35591663846
+          artifact-ids: 10635141093
+          merge-multiple: true
+          path: native
+      - name: Prepare pinned candidate runtimes
+        run: |
+          (cd native && sha256sum --check voice-runtime.sha256 && tar -xzf voice-runtime.tar.gz)
+          (cd native/runtime && sha256sum --check SHA256SUMS)
+          mkdir sherpa sense provenance
+          curl -fL --retry 3 --max-time 240 https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared-no-tts.tar.bz2 -o runtime.tar.bz2
+          echo 'd0f96c8b65c6cd0974fada22737e337de81bc8cd2abbec2e39caf358b1eec5fc  runtime.tar.bz2' | sha256sum --check
+          tar -xjf runtime.tar.bz2 --strip-components=1 -C sherpa
+          curl -fL --retry 3 --max-time 600 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2 -o sense.tar.bz2
+          echo '7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e  sense.tar.bz2' | sha256sum --check
+          tar -xjf sense.tar.bz2 --strip-components=1 -C sense
+          gcc -std=c11 -Wall -Wextra -Werror -Isherpa/include scripts/voice-sense-adapter.c \
+            -Lsherpa/lib -Wl,-rpath,"$PWD/sherpa/lib" -lsherpa-onnx-c-api -o voice-sense-whole
+          for seconds in 2 3 5; do
+            gcc -std=c11 -Wall -Wextra -Werror -DSEGMENT_SECONDS="$seconds" \
+              -Isherpa/include scripts/voice-sense-adapter.c \
+              -Lsherpa/lib -Wl,-rpath,"$PWD/sherpa/lib" -lsherpa-onnx-c-api -o "voice-sense-segment-$seconds"
+          done
+          sha256sum voice-sense-* sense/model.int8.onnx scripts/voice-cpu-lowmem.config \
+            lib/voice/memory.ts native/runtime/whisper-cli native/runtime/ggml-base-q5_1.bin > provenance/checksums.txt
+          cp sense/LICENSE provenance/sense-LICENSE
+          cp -r native/runtime/licenses provenance/whisper-licenses
+          lscpu > provenance/cpu.txt
+      - name: Development-only configuration selection
+        id: freeze
+        run: |
+          python scripts/voice_choice.py dev development
+          for seconds in 2 3 5; do
+            npx --yes --package=tsx@4.20.6 tsx scripts/voice_choice_run.ts \
+              development "segment-$seconds" "development-results/segment-$seconds"
+          done
+          python scripts/voice_choice.py freeze development-results frozen.json
+          python - <<'PY'
+          import json, os
+          choice = json.load(open('frozen.json'))['variant'] or ''
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+              stream.write(f'variant={choice}\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-choice-development
+          path: |
+            development-results/
+            development/samples.json
+            development/method.txt
+            frozen.json
+            provenance/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10748244312
+          merge-multiple: true
+          path: short
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35863991538
+          artifact-ids: 10752270787
+          merge-multiple: true
+          path: meeting
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10751002303
+          merge-multiple: true
+          path: baseline
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35870441019
+          artifact-ids: 10755950119
+          merge-multiple: true
+          path: long-baseline
+      - name: Frozen test comparison on this same runner
+        env:
+          SELECTED: ${{ steps.freeze.outputs.variant }}
+        run: |
+          python scripts/voice_choice.py test short meeting baseline long-baseline fixed-test
+          for variant in whole whisper; do
+            npx --yes --package=tsx@4.20.6 tsx scripts/voice_choice_run.ts \
+              fixed-test "$variant" "test-results/$variant"
+          done
+          if [ -n "$SELECTED" ]; then
+            npx --yes --package=tsx@4.20.6 tsx scripts/voice_choice_run.ts \
+              fixed-test "$SELECTED" "test-results/$SELECTED"
+          fi
+      - name: Apply predetermined model selection gates
+        run: |
+          python scripts/voice_choice.py report test-results fixed-test decision
+          cp frozen.json decision/
+          cp scripts/VOICE-MODEL-CHOICE.txt decision/
+          cat decision/REPORT.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-choice-test-decision
+          path: |
+            test-results/
+            decision/
+            frozen.json
+            fixed-test/samples.json
+            fixed-test/*ATTRIBUTION.txt
+            provenance/
+          if-no-files-found: error
+          retention-days: 30

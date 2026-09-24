@@ -1,0 +1,54 @@
+Frozen budget-constrained model decision experiment
+==================================================
+
+User-approved scope2026-09-24: Whisper base-q5_1 versus SenseVoice INT8 whole
+and bounded segmented SenseVoice. FunASR prior results remain context, not a
+fresh candidate under384MiB. No deployment, host workload or resource changes.
+
+Run Budget-constrained voice model selection in GitHub Actions only.
+Use the fixed memory guard,1thread,384MiB RSS,1GiB address space,120s timeout.
+Every utterance goes through actual transcribeVoice and PCM validation, not a
+parallel imitation of the guard. Failed attempts remain in scoring.
+
+Development: pinned ASCEND validation partition,8 longest valid original
+utterances from each zh/en/mixed category. No artificial long concatenation.
+Predefined segment maxima2/3/5seconds. A simple energy boundary is selected in
+the final quarter (up to1s) of the bounded segment using10ms energy windows.
+Frames are assigned exactly once: no dropped silence, overlap or transcript
+deduplication. One recognizer load per request, new stream for each segment.
+Join nonempty segment text with spaces; expose accuracy loss through scoring.
+Select only a configuration with no failed/empty development output, by lowest
+micro error thenP95. If none qualifies, do not promote a failed configuration.
+Record frozen selection before downloading/evaluating the test corpus.
+
+Test: the existing fixed hash-ranked60 ASCEND short probes plus40 original
+AISHELL-4 continuous15-30s windows. No changing the sample set based on output.
+Shared input hashes; all candidates run sequentially on one Actions runner.
+Use prior whole-Sense references on exactly those same samples as the quality
+comparator. Its scores were measured unconstrained, not a deployment baseline.
+Retain per-category/duration rates; do not compare only successful outputs.
+
+Predetermined gates:
+-100% successful nonempty delivery, no limit/timeout failures.
+-Each language/duration error rate <= whole-Sense on same samples +2points.
+-Input <=5s: cold requestP95 <=3s; input15-30s: P95 <=5s.
+ Intermediate5-15s latency is reported, not given an invented threshold.
+-Among eligible candidates choose lower mixed error; within1point choose lower
+ overallP95. Corpus rates are micro CER/WER/MER, not sentence accuracies.
+
+Timing here includes validation/temporary audio/model cold start/cleanup, but
+not HTTP or browser overhead. Passing this stage is preliminary: a candidate
+must repeat the gates in the real browser/API path before product acceptance.
+No eligible candidate is a valid outcome. Do not select a winner by relaxing
+budgets or gates after seeing results.
+
+All corpora here have already been explored. Frozen development/test separation
+for this experiment does not prove pretraining independence or new holdout
+generalization. Long mixed coverage is only11 annotation-mixed meeting windows.
+CI CPU is not the deployed host. Silence/VAD and real microphone noise remain
+separate coverage limitations. The original native runtimes' licenses and both
+CC-BY-SA corpus attributions accompany artifacts.
+
+The bounded segmented adapter is CI-only and changes no product behavior.
+Stages are independently persisted to survive CLI session interruption:
+voice-choice-development and voice-choice-test-decision.
