@@ -1,13 +1,17 @@
 name: SenseVoice native CPU resource profiles
 on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - .github/workflows/voice-sense-native-profile.yml
+      - scripts/voice_sense_native_patch.py
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 jobs:
-  sense:
+  test:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,6 +23,17 @@ jobs:
           python -m unittest discover -s scripts -p test_voice_server_profiles.py -v
           python -m unittest discover -s scripts -p test_voice_corpus_baseline.py -v
           python -m unittest discover -s scripts -p test_voice_choice.py -v
+  sense:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
       - uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
