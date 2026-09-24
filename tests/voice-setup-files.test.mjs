@@ -106,15 +106,15 @@ test('Windows installed environment and recovery receipts have only private ACL 
   for (const target of [file, receipt]) {
     const probe = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), [
       '-NoProfile', '-NonInteractive', '-Command',
-      '$ErrorActionPreference="Stop"; $acl=Get-Acl -LiteralPath $env:ACL_TARGET; ' +
-      '$rules=@($acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier]) | ' +
-      'ForEach-Object { @{sid=$_.IdentityReference.Value; type=$_.AccessControlType.ToString(); rights=[int]$_.FileSystemRights} }); ' +
-      '@{current=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;rules=$rules} | ConvertTo-Json -Depth 4 -Compress',
-    ], { encoding: 'utf8', env: { ...childEnv, ACL_TARGET: target } });
+      '$ErrorActionPreference="Stop"; $acl=[System.IO.File]::GetAccessControl($env:ACL_TARGET); ' +
+      '[Console]::WriteLine([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value); ' +
+      'foreach ($rule in $acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])) { ' +
+      '[Console]::WriteLine(("{0}|{1}|{2}" -f $rule.IdentityReference.Value,$rule.AccessControlType,[int]$rule.FileSystemRights)) }',
+    ], { encoding: 'utf8', timeout: 10000, env: { ...childEnv, ACL_TARGET: target } });
     assert.equal(probe.status, 0, probe.stderr);
-    const acl = JSON.parse(probe.stdout);
-    const expected = new Set([acl.current, 'S-1-5-18', 'S-1-5-32-544']);
-    assert.deepEqual(new Set(acl.rules.map(rule => rule.sid)), expected);
-    assert.ok(acl.rules.every(rule => rule.type === 'Allow' && rule.rights === 2032127));
+    const [current, ...rules] = probe.stdout.trim().split(/\r?\n/);
+    const expected = new Set([current, 'S-1-5-18', 'S-1-5-32-544']);
+    assert.deepEqual(new Set(rules.map(rule => rule.split('|')[0])), expected);
+    assert.ok(rules.every(rule => rule.endsWith('|Allow|2032127')));
   }
 });

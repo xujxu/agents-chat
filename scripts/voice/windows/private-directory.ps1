@@ -6,7 +6,9 @@ if (-not $target -or $target -notmatch '^[A-Za-z]:[\\/]') {
 $target = [System.IO.Path]::GetFullPath($target)
 $drive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($target))
 if ($drive.DriveFormat -ne 'NTFS') { throw 'Private configuration requires NTFS.' }
-if (Test-Path -LiteralPath $target) { throw 'Private configuration directory already exists.' }
+if ([System.IO.Directory]::Exists($target) -or [System.IO.File]::Exists($target)) {
+    throw 'Private configuration directory already exists.'
+}
 $parent = [System.IO.DirectoryInfo]::new([System.IO.Path]::GetDirectoryName($target))
 if (-not $parent.Exists) { throw 'Configuration parent directory is missing.' }
 while ($null -ne $parent) {
@@ -15,7 +17,7 @@ while ($null -ne $parent) {
     }
     $parent = $parent.Parent
 }
-$security = New-Object System.Security.AccessControl.DirectorySecurity
+$security = [System.Security.AccessControl.DirectorySecurity]::new()
 $security.SetAccessRuleProtection($true, $false)
 $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
 foreach ($identity in @($sid, [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18'), [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))) {
@@ -23,4 +25,4 @@ foreach ($identity in @($sid, [System.Security.Principal.SecurityIdentifier]::ne
         $identity, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')
     $security.AddAccessRule($rule)
 }
-[System.IO.Directory]::CreateDirectory($target, $security) | Out-Null
+$null = [System.IO.Directory]::CreateDirectory($target, $security)
