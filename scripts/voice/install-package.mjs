@@ -3,38 +3,13 @@ import { createReadStream } from 'node:fs';
 import { access, chmod, copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, statfs, writeFile } from 'node:fs/promises';
 import { availableParallelism } from 'node:os';
 import path from 'node:path';
-import { models } from './setup-config.mjs';
+import { validateManifest } from './package-schema.mjs';
+export { validateManifest } from './package-schema.mjs';
 
 export async function fileSha256(file) {
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(file)) hash.update(chunk);
   return hash.digest('hex');
-}
-
-export function validateManifest(manifest, model) {
-  if (manifest.version !== 1 || manifest.modelId !== model || !Object.hasOwn(models, model)
-    || manifest.platform !== 'linux-x64' || manifest.minGlibc !== '2.35'
-    || !Array.isArray(manifest.files) || manifest.files.length < 3 || manifest.files.length > 200
-    || JSON.stringify(manifest.cpuFlags) !== JSON.stringify(['avx2', 'fma', 'f16c', 'bmi2'])) {
-    throw new Error('Unsupported voice package manifest.');
-  }
-  const seen = new Set();
-  for (const file of manifest.files) {
-    if (typeof file.path !== 'string' || !/^[a-zA-Z0-9_./-]+$/.test(file.path)
-      || file.path.split('/').some(part => !part || part === '.' || part === '..')
-      || seen.has(file.path) || !/^[0-9a-f]{64}$/.test(file.sha256)
-      || !Number.isSafeInteger(file.bytes) || file.bytes <= 0
-      || !['binary', 'model', 'license', 'provenance'].includes(file.role)) throw new Error('Invalid package file identity.');
-    seen.add(file.path);
-  }
-  const binaries = manifest.files.filter(file => file.role === 'binary');
-  const weights = manifest.files.filter(file => file.role === 'model');
-  if (binaries.length !== 1 || weights.length !== 1
-    || weights[0].sha256 !== models[model].modelSha256
-    || !manifest.files.some(file => file.role === 'license')) throw new Error('Incomplete or mismatched model package.');
-  const size = manifest.files.reduce((total, file) => total + file.bytes, 0);
-  if (!Number.isSafeInteger(size) || size > 2 * 1024 ** 3) throw new Error('Voice package exceeds supported size.');
-  return { binary: binaries[0].path, model: weights[0].path, size };
 }
 
 export async function installVoicePackage({ packageDir, manifestSha256, model, destination, threads, log = console.log }) {
@@ -50,6 +25,7 @@ export async function installVoicePackage({ packageDir, manifestSha256, model, d
     throw new Error('Voice package manifest checksum mismatch.');
   }
   const manifest = JSON.parse(raw);
+  if (manifest.platform !== 'linux-x64') throw new Error('Package does not match the Linux installer platform.');
   const identity = validateManifest(manifest, model);
   const glibc = process.report.getReport().header.glibcVersionRuntime;
   const version = /^(\d+)\.(\d+)$/.exec(glibc ?? '');

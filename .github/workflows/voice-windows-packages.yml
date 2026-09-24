@@ -32,6 +32,12 @@ jobs:
           VOICE_CANDIDATE_DIRECTORY: .data/windows-candidate
           VOICE_INSTALL_AUDIO: .data/voice-native-work/jfk.wav
         run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-windows-native.test.ts
+      - name: Verified package import and installed real engine
+        env:
+          VOICE_CANDIDATE_DIRECTORY: .data/windows-candidate
+          VOICE_INSTALL_AUDIO: .data/voice-native-work/jfk.wav
+        run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-windows-import.test.ts
+      - run: npx tsc --noEmit --incremental false
       - name: Retain passing candidate
         uses: actions/upload-artifact@v4
         with:

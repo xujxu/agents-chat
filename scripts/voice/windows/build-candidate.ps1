@@ -130,3 +130,4 @@ resolution: this checkout has no root application LICENSE file.
 No blanket licensing or public-distribution approval is claimed by this build.
 '@ | Set-Content "$package/licenses/RELEASE-REVIEW-REQUIRED.txt" -Encoding utf8
 Invoke-Checked 'node' @('scripts/voice/windows/candidate-inventory.mjs', $package, $Model)
+Invoke-Checked 'node' @('scripts/voice/package-manifest.mjs', $package, $Model, 'windows-x64')

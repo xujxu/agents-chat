@@ -7,6 +7,7 @@
 #include <vector>
 #include "voice-native.h"
 #include "voice-files.h"
+#include "voice-host.h"
 
 struct Attributes {
     std::vector<unsigned char> storage;
@@ -150,6 +151,10 @@ int execute(int argc, wchar_t** argv) {
 
 int wmain(int argc, wchar_t** argv) {
     try {
+        if (argc == 2 && std::wcscmp(argv[1], L"--inspect-host") == 0) {
+            writeHostInformation();
+            return 0;
+        }
         if (argc == 3 && std::wcscmp(argv[1], L"--create-directory") == 0) {
             createPrivateDirectory(argv[2]);
             return 0;
