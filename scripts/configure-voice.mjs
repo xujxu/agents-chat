@@ -99,7 +99,7 @@ async function run() {
       if (receipt.file !== file || typeof receipt.installedSha !== 'string'
         || digest(installed ?? '') !== receipt.installedSha) throw new Error('Rollback refused: configuration changed after setup.');
       if (previous === null) await rm(file);
-      else await atomicWrite(file, previous, installed, receipt.serviceSid);
+      else await atomicWrite(file, previous, installed, { readSid: receipt.serviceSid });
       console.log('Previous voice configuration restored; restart the app to apply it.');
       return;
     }
@@ -130,7 +130,7 @@ async function run() {
     const receiptPath = path.resolve(options.receipt ?? path.join(directory, 'last-setup.json'));
     // Save recovery before switching configuration, never after.
     await atomicWrite(receiptPath, JSON.stringify(receipt));
-    await atomicWrite(file, next, original, context?.serviceSid);
+    await atomicWrite(file, next, original, { readSid: context?.serviceSid });
     console.log(selection.model === 'disabled'
       ? 'Voice disabled. After restart/reload the microphone button is hidden.'
       : 'Verified voice package configured in standard mode. Restart the app to apply; this is not full release acceptance.');

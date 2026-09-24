@@ -7,6 +7,7 @@ param(
     [ValidateSet('keep', 'disabled', 'sensevoice-small-q8', 'whisper-base-q5_1')]
     [string]$VoiceModel,
     [string]$VoicePackageDir, [string]$VoiceManifestSha256,
+    [string]$VoiceServiceUser,
     [ValidateSet('1', '2', '4')][string]$VoiceThreads,
     [switch]$NonInteractive
 )
@@ -148,7 +149,7 @@ if (Get-Command az -ErrorAction SilentlyContinue) {
 }
 
 Invoke-VoiceConfiguration -ProjectDir $ProjectDir -Model $VoiceModel -PackageDir $VoicePackageDir `
-    -ManifestSha256 $VoiceManifestSha256 -Threads $VoiceThreads -NonInteractive:$NonInteractive
+    -ManifestSha256 $VoiceManifestSha256 -Threads $VoiceThreads -ServiceUser $VoiceServiceUser -NonInteractive:$NonInteractive
 
 # ─── Done ───
 Write-Host ""

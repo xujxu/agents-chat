@@ -93,8 +93,12 @@ test('Windows grants target service read access without granting it receipt acce
   t.after(() => rm(root, { recursive: true, force: true }));
   const file = path.join(root, '.env.local');
   const receipt = path.join(root, 'receipt.json');
-  await atomicWrite(file, Buffer.from('VOICE_ENABLED=0\n'), null, 'S-1-5-19');
+  await atomicWrite(file, Buffer.from('VOICE_ENABLED=0\n'), null, { readSid: 'S-1-5-19' });
   await atomicWrite(receipt, Buffer.from('{}'));
+  const update = spawnSync(process.execPath, [
+    'scripts/voice/windows/environment-url.mjs', file, 'https://preserve.example',
+  ], { encoding: 'utf8' });
+  assert.equal(update.status, 0, update.stderr);
   const system = process.env.SystemRoot;
   const result = spawnSync(path.join(system, 'System32/WindowsPowerShell/v1.0/powershell.exe'), [
     '-NoProfile', '-NonInteractive', '-Command',

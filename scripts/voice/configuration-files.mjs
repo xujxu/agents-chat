@@ -29,7 +29,7 @@ export async function optionalRead(file) {
   return await checkFile(file) ? readFile(file) : null;
 }
 
-export async function atomicWrite(file, bytes, expected, readSid) {
+export async function atomicWrite(file, bytes, expected, { readSid, preserveAcl = false } = {}) {
   await checkFile(file);
   let directory;
   let temp;
@@ -45,6 +45,9 @@ export async function atomicWrite(file, bytes, expected, readSid) {
     const handle = await open(temp, 'wx', 0o600);
     try { await handle.writeFile(bytes); await handle.sync(); }
     finally { await handle.close(); }
+    if (process.platform === 'win32' && preserveAcl) {
+      await runWindowsSetupScript('preserve-file-acl.ps1', { VOICE_ACL_SOURCE: file, VOICE_ACL_TARGET: temp });
+    }
     await checkFile(file);
     if (expected !== undefined) {
       const current = await optionalRead(file);

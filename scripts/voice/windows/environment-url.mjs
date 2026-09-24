@@ -15,7 +15,7 @@ try {
     const next = lines.filter(line => !key.test(line));
     while (next.at(-1) === '') next.pop();
     next.push(`NEXTAUTH_URL=${url}`, '');
-    await atomicWrite(file, encodeEnvironment(next.join('\n')), original);
+    await atomicWrite(file, encodeEnvironment(next.join('\n')), original, { preserveAcl: true });
   }
 } catch (error) {
   console.error(`Environment URL update failed: ${error.message}`);
