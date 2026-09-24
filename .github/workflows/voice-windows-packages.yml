@@ -1,0 +1,20 @@
+name: Voice Windows native candidates
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: npm ci --no-audit --no-fund
+      - name: Real candidate contract
+        env:
+          VOICE_CANDIDATE_DIRECTORY: .data/windows-candidate
+          VOICE_INSTALL_AUDIO: .data/voice-native-work/jfk.wav
+        run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-windows-native.test.ts
