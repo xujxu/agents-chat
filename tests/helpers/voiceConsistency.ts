@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { VoiceError } from '../../lib/voice/audio';
 import { voiceConfiguration, type VoiceConfiguration } from '../../lib/voice/configuration';
 import { runVoiceProcess } from '../../lib/voice/process';
 import { decodeVoiceText } from '../../lib/voice/providers';
 import { transcribeVoice } from '../../lib/voice/transcriber';
 import { createWindowsVoiceDirectory } from '../../lib/voice/windowsNative';
-import { decodeEnvironment } from '../../scripts/voice/configuration-files.mjs';
-import { voiceValues } from '../../scripts/voice/setup-config.mjs';
 
 export type ConsistencySample = {
   id: string; dataset: string; reference: string; category: string;
@@ -33,7 +33,20 @@ async function fileHash(file: string) {
 }
 
 export async function installedConsistencyConfiguration(threads: number) {
-  const config = await voiceConfiguration(voiceValues(decodeEnvironment(await readFile('.env.local'))));
+  // Keep native ESM installer modules outside Playwright's CommonJS transform.
+  const { stdout } = await promisify(execFile)(process.execPath, ['--input-type=module', '--eval', `
+    import { readFile } from 'node:fs/promises';
+    import { decodeEnvironment } from './scripts/voice/configuration-files.mjs';
+    import { voiceValues } from './scripts/voice/setup-config.mjs';
+    process.stdout.write(JSON.stringify(voiceValues(decodeEnvironment(await readFile('.env.local')))));
+  `], { encoding: 'utf8', timeout: 10000, maxBuffer: 32768, windowsHide: true });
+  const values: Record<string, unknown> = JSON.parse(stdout);
+  const environment: Record<string, string> = {};
+  for (const [name, value] of Object.entries(values)) {
+    assert.ok(name.startsWith('VOICE_') && typeof value === 'string', 'Invalid persisted voice value');
+    environment[name] = value;
+  }
+  const config = await voiceConfiguration(environment);
   assert.ok(config);
   assert.equal(config.modelId, 'sensevoice-small-q8');
   assert.equal(config.resourcePolicy, 'standard');
