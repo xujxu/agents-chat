@@ -1,0 +1,25 @@
+name: Voice provider integration
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - 'lib/voice/**'
+      - 'app/api/voice/**'
+      - 'tests/voice-providers*'
+      - 'tests/fixtures/voice-provider.py'
+      - '.github/workflows/voice-providers.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx --yes --package=tsx@4.20.6 tsx --test tests/voice-providers.test.ts tests/voice-audio.test.ts tests/voice-jobs.test.ts tests/voice-memory.test.ts

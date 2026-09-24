@@ -338,3 +338,45 @@ browser acceptance. No PROD, cpg, sampler or existing service defaults changed.
 Full evidence:
 https://github.com/xujxu/agents-chat/actions/runs/35955970940/artifacts/10791243313
 https://github.com/xujxu/agents-chat/actions/runs/35959837337/artifacts/10791527676
+
+Implementation design revision approved2026-09-24
+------------------------------------------------
+This section supersedes any earlier implication that every new installation
+must use a fixed2CPU/4GiB allocation or separate systemd/Docker voice service.
+The local cpg workaround is only for this machine's Copilot CLI, not a product
+dependency, installer prerequisite or policy for other deployments.
+
+Default to native per-request model processes with configurable computation
+threads, one active job,120second deadline, cancellation and bounded output.
+Do not impose experiment CPU/RAM hard limits on explicit new-model configuration.
+Respect externally configured OS/container limits; hard quotas are an optional
+operator deployment policy, not implied by a thread setting or advertised as an
+application guarantee. Preserve old Whisper environment behavior through an
+explicitly named legacy-low-memory policy; do not silently change old deployments.
+
+First implementation slice:
+1. tests/voice-providers.test.ts specifies model whitelist, disabled/invalid
+   configuration, standard versus legacy policy, command arguments and output.
+   voice-providers.yml runs it in Actions before implementation (expected red).
+2. lib/voice/configuration.ts owns typed model/configuration/capability metadata.
+   Explicit VOICE_MODEL selects sensevoice-small-q8 or whisper-base-q5_1.
+   VOICE_BINARY_PATH and VOICE_MODEL_PATH are absolute native artifact paths.
+   VOICE_THREADS accepts1/2/4 to match the pinned Sense CLI; defaults2 for Sense,
+   1 for Whisper. VOICE_RESOURCE_POLICY defaults standard for explicit models.
+   Old VOICE_WHISPER_PATH without VOICE_MODEL preserves legacy-low-memory.
+   That policy remains one-thread Whisper only, with the unchanged old guards.
+3. lib/voice/providers.ts owns model-specific arguments and strict bounded UTF-8
+   output. transcriber.ts owns subprocess/temp-file lifecycle and kills process
+   groups on cancellation/failure. Existing {binary,model} benchmark callers
+   retain legacy behavior. No transcript, raw output or audio is logged.
+4. app/api/voice/route.ts reports the real provider/model/threads/policy, null
+   model when disabled, and applies legacy admission only to legacy policy.
+   Authentication, account/origin checks, WAV limits and global admission stay.
+5. Fixture subprocess/API/browser tests plus real pinned Sense smoke run only
+   in Actions. Include nonzero exit, empty/oversized/invalid output, cancellation,
+   missing files and cleanup; build/typecheck and old Whisper API regressions.
+
+This slice does not implement installation selection or publish an approved
+package. Next slices add verified atomic downloads/rollback, dependency notices,
+resource guidance/compatibility checks and real full-corpus API/browser gates.
+No runtime artifacts or services are installed on this development machine.
