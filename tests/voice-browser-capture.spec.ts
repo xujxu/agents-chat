@@ -82,19 +82,18 @@ test('early stop and cancellation never claim complete source capture', async ({
 });
 
 test('API success without composer delivery stays observable as missing UI evidence', async ({ page }) => {
-  await prepare(page);
-  await page.evaluate(text => {
-    const input = document.querySelector<HTMLTextAreaElement>('textarea.composerTextarea');
-    if (!input) throw new Error('Composer missing');
-    const descriptor = Object.getOwnPropertyDescriptor(input, 'value')
-      ?? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
-    if (!descriptor?.set || !descriptor.get) throw new Error('Native textarea descriptor missing');
-    const setter = descriptor.set;
-    Object.defineProperty(input, 'value', {
-      ...descriptor,
-      set(value: string) { if (value !== text) setter.call(this, value); },
-    });
+  await page.addInitScript(text => {
+    for (const name of ['value', 'defaultValue']) {
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, name);
+      if (!descriptor?.set || !descriptor.get) throw new Error('Native textarea descriptor missing');
+      const setter = descriptor.set;
+      Object.defineProperty(HTMLTextAreaElement.prototype, name, {
+        ...descriptor,
+        set(value: string) { if (value !== text) setter.call(this, value); },
+      });
+    }
   }, transcript);
+  await prepare(page);
   await start(page);
   await page.waitForTimeout(1100);
   await page.getByRole('button', { name: 'Stop recording', exact: true }).click();

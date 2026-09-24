@@ -53,6 +53,13 @@ if (browser) {
   for (const name of ['samples.json', 'ASCEND-ATTRIBUTION.txt', 'AISHELL-4-ATTRIBUTION.txt']) {
     await copyFile(path.join('corpus', name), path.join(evidence, name));
   }
+  const implementation = {};
+  for (const name of ['app/features/composer/voice/voiceRecorder.ts', 'app/features/composer/voice/useVoiceInput.ts',
+    'public/voice/recorder-worklet.js', 'lib/voice/audio.ts', 'lib/voice/process.ts',
+    'tests/helpers/voiceBrowserCapture.ts', 'tests/voice-installed-browser.spec.ts']) {
+    implementation[name] = createHash('sha256').update(await readFile(name)).digest('hex');
+  }
+  await writeFile(path.join(evidence, 'implementation.json'), JSON.stringify(implementation, null, 2));
 }
 await writeFile(path.join(evidence, 'environment.json'), JSON.stringify({
   commit: process.env.GITHUB_SHA, run: process.env.GITHUB_RUN_ID, platform: process.platform,
@@ -83,6 +90,12 @@ try {
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
   assert.ok(ready, 'Installed app did not become ready');
+  if (browser) {
+    await run(['node_modules/@playwright/test/cli.js', 'test', '--config', 'tests/playwright.config.ts',
+      'tests/voice-browser-capture.spec.ts', 'tests/voice-input.spec.ts',
+      '--project=desktop-chromium', '--workers=1', '--reporter=line', '--trace=off',
+      '--output=browser-private-fixture-output']);
+  }
   await run(['node_modules/@playwright/test/cli.js', 'test', '--config', 'tests/playwright.config.ts',
     browser ? 'tests/voice-installed-browser.spec.ts' : 'tests/voice-installed-corpus.spec.ts',
     '--project=desktop-chromium', '--workers=1', '--reporter=line',
