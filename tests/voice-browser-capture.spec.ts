@@ -39,6 +39,7 @@ test('capture observer preserves upload bytes and stop-to-composer milestones', 
   await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
   await expect(page.locator('textarea.composerTextarea')).toHaveValue(transcript);
   await expect.poll(async () => (await snapshotBrowserCapture(page)).timing.composerAt).not.toBeNull();
+  await expect.poll(async () => (await snapshotBrowserCapture(page)).capture.contextClosed).toBe(true);
   const snapshot = await snapshotBrowserCapture(page, true);
   expect(snapshot.observerError).toBeNull();
   expect(Buffer.from(snapshot.uploadBase64!, 'base64')).toEqual(actual);
@@ -56,6 +57,7 @@ for (const status of [500, 0]) {
     await page.waitForTimeout(1100);
     await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
     await expect(page.getByRole('alert', { name: 'Voice input error' })).toBeVisible();
+    await expect.poll(async () => (await snapshotBrowserCapture(page)).capture.contextClosed).toBe(true);
     const snapshot = await snapshotBrowserCapture(page, true);
     expect(snapshot.timing.composerAt).toBeNull();
     expect(snapshot.uploadBase64).not.toBeNull();
@@ -71,11 +73,37 @@ test('early stop and cancellation never claim complete source capture', async ({
   await page.waitForTimeout(600);
   await page.getByRole('button', { name: 'Cancel voice input', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start voice input', exact: true })).toBeEnabled();
+  await expect.poll(async () => (await snapshotBrowserCapture(page)).capture.contextClosed).toBe(true);
   const snapshot = await snapshotBrowserCapture(page, true);
   expect(snapshot.capture.sourceCompleted).toBe(false);
   expect(snapshot.capture.tracksStopped).toBe(true);
   expect(snapshot.capture.contextClosed).toBe(true);
   expect(snapshot.uploadBase64).toBeNull();
+});
+
+test('API success without composer delivery stays observable as missing UI evidence', async ({ page }) => {
+  await prepare(page);
+  await page.evaluate(text => {
+    const input = document.querySelector<HTMLTextAreaElement>('textarea.composerTextarea');
+    if (!input) throw new Error('Composer missing');
+    const descriptor = Object.getOwnPropertyDescriptor(input, 'value')
+      ?? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+    if (!descriptor?.set || !descriptor.get) throw new Error('Native textarea descriptor missing');
+    const setter = descriptor.set;
+    Object.defineProperty(input, 'value', {
+      ...descriptor,
+      set(value: string) { if (value !== text) setter.call(this, value); },
+    });
+  }, transcript);
+  await start(page);
+  await page.waitForTimeout(1100);
+  await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
+  await expect.poll(async () => (await snapshotBrowserCapture(page)).timing.bodyAt).not.toBeNull();
+  await expect(page.getByRole('button', { name: 'Start voice input', exact: true })).toBeEnabled();
+  const snapshot = await snapshotBrowserCapture(page, true);
+  expect(snapshot.status).toBe(200);
+  expect(snapshot.timing.composerAt).toBeNull();
+  expect(snapshot.composerText).toBeNull();
 });
 
 test('real recorder automatic limit is observed without extending it', async ({ page }) => {

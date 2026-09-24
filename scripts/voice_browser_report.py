@@ -47,7 +47,7 @@ def validate_attempt(row):
     duration = row["uploadedDuration"]
     if duration is not None and (not finite(duration) or not 0 < duration <= 30):
         raise ValueError("Invalid uploaded duration")
-    if (duration is None) != (row["uploadedAudioSha256"] is None):
+    if (duration is not None and row["uploadedAudioSha256"] is None) or (success and duration is None):
         raise ValueError("Partial upload identity")
     if row["pipeline"] == "direct":
         if (row["uploadedAudioSha256"] != row["audio_sha256"] or duration != row["duration"]
