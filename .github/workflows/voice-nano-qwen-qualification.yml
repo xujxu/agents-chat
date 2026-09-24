@@ -9,6 +9,11 @@ on:
       - scripts/test_voice_model_notices.py
       - scripts/voice_model_notices.py
   workflow_dispatch:
+    inputs:
+      evidence_run:
+        description: Completed inference run to inspect notices only; blank runs inference
+        type: string
+        default: ''
 permissions:
   contents: read
   actions: read
@@ -27,7 +32,7 @@ jobs:
       - run: python -m unittest discover -s scripts -p test_voice_choice.py -v
       - run: python -m unittest discover -s scripts -p test_voice_corpus_baseline.py -v
   qualify:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.evidence_run == ''
     needs: test
     runs-on: ubuntu-22.04
     timeout-minutes: 120
@@ -183,5 +188,29 @@ jobs:
             stability/
             provenance/
             corpus/*ATTRIBUTION.txt
+          if-no-files-found: error
+          retention-days: 30
+  notices:
+    if: github.event_name == 'workflow_dispatch' && inputs.evidence_run != ''
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.evidence_run }}
+          name: voice-nano-qwen-qualification
+          path: evidence
+      - run: python scripts/voice_model_notices.py evidence notices
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-nano-qwen-notices
+          path: notices/
           if-no-files-found: error
           retention-days: 30
