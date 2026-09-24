@@ -10,6 +10,66 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Installed Sense browser recording checkpoint (2026-09-24)
+--------------------------------------------------------
+Approved spec4e80528, plan/test-first24034ce:
+docs/superpowers/specs/2026-09-24-voice-installed-browser-design.md
+docs/superpowers/plans/2026-09-24-voice-installed-browser.md
+Red36003951932 confirmed missing report module; implementatione40bd7b passed
+36004124645. Capture contracts6968c5a failed36004316002 for missing helper.
+Implementationfb80f5d passed report/type/build and14fixtures in36004719332;
+one UI-failure fixture did not block React defaultValue writes. Fix97977de
+intercepts both setters before React mounts only in that failure-injection test.
+
+https://github.com/xujxu/agents-chat/actions/runs/36007108166
+Code97977de37eb7eda0675a893eed516d90b11515fa.
+8Python contracts and15recorder/observer fixtures passed;2native-fixture-only
+skips. Explicit collector types/app builds/typechecks and both actual installed
+jobs passed. Each platform200/200paired deliveries,400/400total.
+All200browser capture/UI controls passed;200/200same-upload ONNX baseline
+diagnostics available,0unavailable. Report exits1 for a measured gate failure,
+not infrastructure or incomplete evidence.
+
+Host/path                 Primary P95 short/long    Original-stimulus gates
+Linux direct-WAV API       0.471947s /1.898069s       PASS
+Linux browser             0.346200s /1.728000s       PASS
+WindowsServer direct-WAV   0.806010s /4.253320s       FAIL mixed/medium quality
+WindowsServer browser     0.844300s /4.344300s       PASS
+
+Browser primary time is stop intent to observed composer text, including
+recording flush/resample/encode/upload/auth/inference/UI, excluding speaking.
+Browser HTTP short/longP95:Linux0.3242/1.6782s;Windows0.8026/4.2962s.
+Browser API-only short/longP95:Linux0.301/1.612s;Windows0.783/3.896s.
+Different timing surfaces and ordered trials are not pure overhead/speed proofs.
+Windows direct mixed/medium16.8889% exceeds baseline14.6667%+2pp=16.6667%.
+Browser mixed/mediumLinux14.2222%,Windows15.1111%; all browser buckets pass.
+Recorded input changes recognition; this cannot erase Windows's direct gate
+failure or justify tuning capture parameters/builds on inspected samples.
+Same-upload baseline scores remain diagnostic and never replace primary gates.
+
+Chromium147.0.7727.15 on both hosts;48k source context and real product recorder,
+resampler,WAV,authenticatedAPI and composer. LinuxAMD EPYC9V45;
+WindowsServer2022AMD EPYC7763;4logicalCPUs,~16GiB each. No new app quotas.
+Physical cores/effective quotas/native peakRSS unknown. Playwright DesktopChrome
+sets a Windows user-agent even on Linux; host metadata, not UA, identifies OS.
+Existing Sense engine/model/helper package hashes unchanged;2threads standard.
+
+Artifacts expire2026-10-24:
+10812231887 installed-browser-linux
+10812321924 installed-browser-win32
+10813275162 installed-browser-baseline
+10812857567 installed-browser-report
+Report digest:
+sha256:4cf58f0d12793589b38779586d4ef6950938973165edaa8bf1ef698c40b0467c
+Platform evidence includes actual capturedWAVs,source/upload hashes,milestones,
+all outcomes,attribution,package/browser/host and implementation identities.
+
+Bounded Chromium slice complete. Still open:Windows direct quality gate,
+actualWin11/ScheduledTask/physicalmicrophone,AEC,other-browser full-corpus,
+redistribution permissions and permanent trusted downloads. No model promotion,
+output-conditioned reruns,threshold changes or PROD/cpg/sampler modification.
+All validation/audio/models/servers ran in Actions.
+
 Sense feature-boundary exchange checkpoint (2026-09-24)
 ------------------------------------------------------
 Approved spec375b989; plan/red6546cd6:

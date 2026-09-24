@@ -11,8 +11,10 @@ Private configuration/rollback, explicit Windows candidate activation and
 installation/upgrade integration are implemented with Windows Server Actions
 coverage. Installed Linux Sense now passes frozen100 authenticated direct-WAV
 API gates. Windows Server Sense fails one accuracy gate; Whisper fails quality
-and latency on both platforms. Browser-corpus, actual Win11 qualification and
-final release acceptance remain pending.
+and latency on both platforms. Controlled Chromium frozen100 browser capture
+now passes on Linux and Windows Server, without superseding the Windows direct
+quality failure. Actual Win11, physical microphone, remaining browser matrices
+and final release acceptance remain pending.
 
 The feature's earlier design decisions and experiments were recorded in
 `scripts/VOICE-DEPLOYMENT.txt` rather than this repository's normal specification
@@ -227,6 +229,27 @@ default threads, and Windows's accuracy gate remains failed.
 See [the diagnostic specification](2026-09-24-voice-sense-consistency-design.md)
 for exact comparisons, artifact identities and causal limits. No product
 runtime code, model, threshold or release recommendation changed.
+
+### Subsequent feature-exchange and installed-browser checkpoints
+
+Feature exchange36001871106 at a07d091 completed216/216 attempts with all
+repetition, historical and own-feature controls passing. Decoded PCM matches;
+the two differing transcripts follow frontend feature values on either unchanged
+consumer. This localizes sufficient input differences without identifying a
+compiler/math defect or qualifying a replacement.
+See `2026-09-24-voice-feature-exchange-design.md`.
+
+Installed browser run36007108166 at97977de completed400/400paired API deliveries
+and200/200same-upload ONNX baseline diagnostics. Both controlled Chromium browser
+paths pass original-stimulus frozen quality/delivery/latency gates:
+Linux stop-to-composer P95 short/long0.3462/1.7280s;
+WindowsServer0.8443/4.3443s. Linux direct control also passes.
+Windows direct mixed/medium remains16.8889% against16.6667%ceiling, so the
+aggregate deliberately fails. Browser capture changes input bytes and does not
+erase that direct-input defect in qualification. No model/threshold was tuned.
+See `2026-09-24-voice-installed-browser-design.md` for artifact identities,
+timing definitions, same-byte diagnostic scope and remaining realWin11/physical
+microphone/other-browser/release gates.
 
 ## Goal
 

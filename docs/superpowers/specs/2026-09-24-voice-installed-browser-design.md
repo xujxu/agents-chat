@@ -251,3 +251,75 @@ even if measured gates fail, provided failures and evidence are complete and
 truthfully reported. Do not tune capture scheduling, model options or reference
 text to improve observed scores. Actual Win11/physical microphone, other
 browser matrices, redistribution and permanent distribution remain open.
+
+## Completed experiment (2026-09-24)
+
+Run [36007108166](https://github.com/xujxu/agents-chat/actions/runs/36007108166),
+commit `97977de37eb7eda0675a893eed516d90b11515fa`, completed both paired collectors
+and the same-upload baseline. All400API attempts delivered, all200browser
+captures passed the declared capture and UI controls, and all200ONNX diagnostic
+tuples have successful same-byte comparisons. No samples were omitted/retried.
+The report is intentionally red for a measured Windows direct-input quality
+failure, not an infrastructure or collection error.
+
+| Host/path | Delivery | Primary short P95 | Primary long P95 | Frozen gates |
+| --- | ---: | ---: | ---: | --- |
+| Linux direct WAV | 100/100 | 0.471947s | 1.898069s | Pass |
+| Linux browser | 100/100 | 0.346200s | 1.728000s | Pass |
+| Windows Server direct WAV | 100/100 | 0.806010s | 4.253320s | Fail mixed/medium quality |
+| Windows Server browser | 100/100 | 0.844300s | 4.344300s | Pass |
+
+Direct primary latency is authenticated request wall time; browser primary
+latency is stop intent to first observed composer text. Browser fetch/body
+short/long P95 is0.3242/1.6782s Linux and0.8026/4.2962s Windows.
+Browser API-only short/long P95 is0.301/1.612s Linux and0.783/3.896s Windows.
+These are different timing surfaces; their differences are not a pure causal
+overhead estimate, and ordered direct/browser trials are not randomized speed
+comparisons.
+
+Windows direct mixed/medium MER remains16.8889% against original14.6667%
+baseline, above the16.6667% ceiling. Browser mixed/medium is14.2222% Linux and
+15.1111% Windows; all browser language/duration buckets pass the original
+stimulus gates. This does NOT repair the Windows direct-input failure:
+recording/resampling changes input bytes and can improve or worsen individual
+recognitions. No waveform transformation, scheduling, threshold or build was
+selected in response to these scores.
+
+The report retains200per-sample same-upload comparisons, including installed
+API scores, captured-input ONNX scores and original-input ONNX scores. All are
+available, with zero unavailable inputs. They are diagnostics, not new gates.
+Original/upload hashes and waveform files are retained in the platform artifacts.
+
+Chromium147.0.7727.15 was used on both hosts. Linux host CPU:AMD EPYC9V45;
+WindowsServer2022 CPU:AMD EPYC7763. Both expose4logical CPUs and about16GiB RAM.
+Physical cores, effective quotas and native peak RSS remain unknown. The
+Playwright Desktop Chrome device descriptor supplies a Windows user-agent on
+both hosts; the user-agent is not evidence that the Linux runner is Windows.
+The source context is48000Hz; actual recorder metadata accompanies every sample.
+No physical-microphone, AEC, actualWin11 or other-browser full-corpus claim.
+
+The workflow passed eight Python contracts, explicit collector typechecks and
+application builds/typechecks. Fifteen recorder/observer fixture checks passed
+in the gate and on each consumer, with two intentional native-fixture-only
+skips; real installed-corpus inference is separately exercised here.
+Earlier36004719332 failed only the missing-UI test injection: React could still
+write defaultValue. Fix97977de intercepts both value setters before mounting in
+that test only; product recording and composition are unchanged.
+
+Artifacts expire2026-10-24:
+
+| Artifact | ID |
+| --- | --- |
+| installed-browser-linux | `10812231887` |
+| installed-browser-win32 | `10812321924` |
+| installed-browser-baseline | `10813275162` |
+| installed-browser-report | `10812857567` |
+
+Report archive digest:
+`sha256:4cf58f0d12793589b38779586d4ef6950938973165edaa8bf1ef698c40b0467c`.
+
+This closes the bounded Chromium installed-browser experiment. The Windows
+direct-input failure, actualWin11/task/physical-microphone qualification,
+remaining browser matrices, redistribution clearance and permanent trusted
+downloads still block broader qualification. Existing model/package/defaults,
+PROD, cpg and sampler are unchanged; every workload ran in Actions.
