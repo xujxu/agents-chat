@@ -22,9 +22,19 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m unittest discover -s scripts -p test_voice_consistency_report.py -v
+  collector-types:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: npm ci --no-audit --no-fund
+      - name: Typecheck diagnostic collector excluded by application tsconfig
+        run: npx tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2017 --module esnext --moduleResolution bundler --jsx react-jsx tests/voice-consistency.spec.ts
   diagnose:
     if: github.event_name == 'workflow_dispatch'
-    needs: contracts
+    needs: [contracts, collector-types]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 55
     strategy:
