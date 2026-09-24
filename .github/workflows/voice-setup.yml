@@ -1,0 +1,24 @@
+name: Voice installation and upgrades
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - 'scripts/voice/**'
+      - 'scripts/configure-voice.mjs'
+      - 'scripts/deploy.sh'
+      - 'scripts/package-release.mjs'
+      - 'tests/voice-setup*'
+      - '.github/workflows/voice-setup.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: node --test tests/voice-setup.test.mjs
