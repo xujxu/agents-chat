@@ -11,6 +11,11 @@ struct LocalMemory {
 };
 
 void createPrivateDirectory(const wchar_t* directory) {
+    wchar_t volume[32768]{};
+    require(GetVolumePathNameW(directory, volume, 32768));
+    DWORD flags = 0;
+    require(GetVolumeInformationW(volume, nullptr, 0, nullptr, nullptr, &flags, nullptr, 0));
+    if (!(flags & FILE_PERSISTENT_ACLS)) throw NativeError{ ERROR_NOT_SUPPORTED };
     Handle token;
     require(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token.value));
     DWORD bytes = 0;

@@ -20,6 +20,10 @@ test('Windows runtime preserves provider, privacy and cleanup contracts', { time
   const binary = path.join(root, 'engine space.exe');
   const launcher = path.resolve('.data/voice-windows-build/voice-job.exe');
   const model = path.join(root, 'model');
+  const marker = path.join(root, 'do-not-delete');
+  await writeFile(marker, 'unchanged');
+  await assert.rejects(exec(launcher, ['--create-directory', root]), { code: 125 });
+  assert.equal(await readFile(marker, 'utf8'), 'unchanged');
   await copyFile('.data/voice-windows-build/voice-provider.exe', binary);
   const before = await requests();
   for (const modelId of ['sensevoice-small-q8', 'whisper-base-q5_1']) {

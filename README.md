@@ -78,8 +78,13 @@ pending; these are installation candidates, not release-approved models.
 See `scripts/VOICE-DEPLOYMENT.txt` for exact versions and qualification evidence.
 The formal cross-platform design is
 [`docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md`](docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md).
-Native Windows 11 Intel/AMD x64 support is required by that design but is not
-implemented yet; the Linux-only limitations below describe current code.
+Native Windows 11 Intel/AMD x64 support is required by that design. A Windows
+development runtime path now requires explicit `VOICE_MODEL`, `standard` policy,
+absolute local `.exe` paths for `VOICE_BINARY_PATH` and `VOICE_LAUNCHER_PATH`,
+and `VOICE_MODEL_PATH`. The launcher must be the matching `voice-job.exe` with
+private-directory and bounded-file operations, not the earlier lifecycle-only
+build. Windows model packages, installer/upgrade integration and actual Windows
+11 qualification remain pending; this is not yet a Windows installation option.
 
 Explicit `VOICE_MODEL=whisper-base-q5_1` selects the compatibility model (default
 one thread) using `VOICE_BINARY_PATH`, or `VOICE_WHISPER_PATH` if the generic path
@@ -114,7 +119,8 @@ default 1 MiB limit, without FFmpeg or third-party transcription calls. Only
 authenticated, same-origin clients with the matching account may submit/cancel.
 One inference runs at a time per app process; excess requests are rejected
 instead of queued. The PoC assumes a single Next.js process. All providers use
-niceness 10 and a 120-second deadline. Only `legacy-low-memory` uses one
+a 120-second deadline; Linux additionally uses niceness 10.
+Only `legacy-low-memory` (Linux only) uses one
 thread, a 1 GiB **address-space** ceiling, and
 requires at least 768 MiB `MemAvailable` before starting. While running, a
 100 ms watchdog terminates inference if sampled peak RSS exceeds 384 MiB or host
@@ -126,10 +132,15 @@ inference deadline (`proxy_read_timeout 150s` for nginx); its upload-size limit
 does not need changing.
 Each request loads the model anew; there is no permanently resident model.
 Transcripts are bounded to 32 KiB of valid UTF-8. Cancellation and timeout
-terminate the native process group, including descendants.
+terminate the native process group on Linux or the owned Windows Job, including
+descendants. Windows Job configuration controls lifecycle, not CPU/RAM quotas.
 
 Temporary audio/results are deleted after success, failure, or cancellation and
-are not saved in chat history. Native core dumps are disabled. Logs contain durations, sizes, exit status, and
+are not saved in chat history. Linux native core dumps are disabled. Windows
+request directories are created with a protected ACL for the service identity,
+SYSTEM and administrators; the temporary volume must support persistent ACLs
+(for example NTFS, not FAT/exFAT). Whisper results are opened without following reparse
+points and reject directories, hard links and oversized files. Logs contain durations, sizes, exit status, and
 error codes, never audio/transcript contents. A host crash or forced application
 kill can bypass cleanup: `agents-chat-voice-*` directories in the OS temporary
 directory may require removal after confirming no transcription is running.
