@@ -6,6 +6,12 @@ on:
       - .github/workflows/voice-sense-native-profile.yml
       - scripts/voice_sense_native_patch.py
   workflow_dispatch:
+    inputs:
+      sample_set:
+        description: Resource probes or frozen full quality set
+        type: choice
+        options: [probes, fixed100]
+        default: probes
 permissions:
   contents: read
   actions: read
@@ -28,6 +34,8 @@ jobs:
     needs: test
     runs-on: ubuntu-22.04
     timeout-minutes: 60
+    env:
+      SAMPLE_SET: ${{ inputs.sample_set }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -49,6 +57,22 @@ jobs:
           merge-multiple: true
           path: meeting
       - run: python scripts/voice_chain_report.py prepare short meeting corpus
+      - uses: actions/download-artifact@v4
+        if: inputs.sample_set == 'fixed100'
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10751002303
+          merge-multiple: true
+          path: baseline
+      - uses: actions/download-artifact@v4
+        if: inputs.sample_set == 'fixed100'
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35870441019
+          artifact-ids: 10755950119
+          merge-multiple: true
+          path: long-baseline
       - name: Fetch pinned source, model and license evidence
         run: |
           mkdir -p source llama sense-model provenance/licenses
@@ -112,7 +136,7 @@ jobs:
               --cpus="$threads" --pids-limit=128 -e GITHUB_SHA -e GITHUB_RUN_ID \
               -e OPENBLAS_NUM_THREADS="$threads" -e OMP_NUM_THREADS="$threads" \
               -v "$PWD:/work" -w "/work/$profile/case-sense-gguf-q8" \
-              voice-sense-profile python scripts/voice_server_profiles.py run sense-gguf-q8 "$profile"; then
+              voice-sense-profile python scripts/voice_server_profiles.py run sense-gguf-q8 "$profile" "$SAMPLE_SET"; then
               echo "::error::Incomplete $profile; preserving partial evidence"
               failed=1
             fi
@@ -127,10 +151,14 @@ jobs:
           from pathlib import Path
           root = Path(os.environ['PROFILE']) / 'case-sense-gguf-q8/artifacts'
           logs = list(root.glob('*.log'))
-          if len(logs) != 24 or any(f"VOICE_THREADS={os.environ['THREADS']}\n" not in file.read_text() for file in logs):
+          count = 100 if os.environ['SAMPLE_SET'] == 'fixed100' else 24
+          if len(logs) != count or any(f"VOICE_THREADS={os.environ['THREADS']}\n" not in file.read_text() for file in logs):
               raise ValueError('Missing explicit per-request native thread evidence')
           PY
-            (cd "$profile" && python ../scripts/voice_server_profiles.py report "$profile" report sense)
+            (cd "$profile" && python ../scripts/voice_server_profiles.py report "$profile" report sense "$SAMPLE_SET")
+            if [ "$SAMPLE_SET" = fixed100 ]; then
+              python scripts/voice_server_profiles.py gates "$profile"
+            fi
             cat "$profile/report/REPORT.md" >> "$GITHUB_STEP_SUMMARY"
           done
       - uses: actions/upload-artifact@v4

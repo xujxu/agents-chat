@@ -64,6 +64,12 @@ class ServerProfileTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 summarize_profile(source, rows)
 
+    def test_medium_inputs_remain_separate_from_short_latency(self):
+        source = [sample("a", "en", 8)]
+        row = {**source[0], "text": "hello", "failure": None, "seconds": 2,
+               "peak_rss_kib": 1000, "variant": "candidate"}
+        self.assertEqual(summarize_profile(source, [row])["groups"][0]["duration_band"], "medium")
+
 
 if __name__ == "__main__":
     unittest.main()

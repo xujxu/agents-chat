@@ -11,6 +11,7 @@ import sys
 
 from voice_accuracy_benchmark import trial
 from voice_corpus_report import evaluate
+from voice_choice import band, decide
 
 
 PROFILES = {"cpu2-ram4": {"threads": 2, "memory_gib": 4},
@@ -58,7 +59,7 @@ def summarize_profile(manifest, rows):
         if row["peak_rss_kib"] is not None:
             peaks.append(row["peak_rss_kib"])
         scored = evaluate(row)
-        groups[row["category"], "long" if row["duration"] >= 15 else "short"].append(scored)
+        groups[row["category"], band(row["duration"])].append(scored)
     metrics = []
     for (category, band), items in sorted(groups.items()):
         successful = [row["seconds"] for row in items if not row["failure"] and row["text"]]
@@ -90,10 +91,13 @@ def cgroup_snapshot():
     }
 
 
-def run(variant, profile):
+def run(variant, profile, sample_set="probes"):
     budget = PROFILES[profile]
     model = {**VARIANTS, **SENSE_VARIANTS}[variant]
-    manifest = select_probes(json.loads(Path("../corpus/samples.json").read_text()))
+    source = json.loads(Path("../corpus/samples.json").read_text())
+    manifest = {"probes": select_probes, "fixed100": list}[sample_set](source)
+    if sample_set == "fixed100" and (len(manifest) != 100 or len({row["id"] for row in manifest}) != 100):
+        raise ValueError("Incomplete frozen full corpus")
     output = Path("artifacts")
     output.mkdir(exist_ok=False)
     before = cgroup_snapshot()
@@ -107,7 +111,8 @@ def run(variant, profile):
         "cpu_affinity": sorted(os.sched_getaffinity(0)),
         "platform": platform.platform(), "cgroup_before": before,
         "request_timeout_seconds": 120, "one_fresh_process_per_sample": True,
-        "production_transcriber": False, "medium_duration_probes": 0,
+        "production_transcriber": False, "sample_set": sample_set,
+        "medium_duration_probes": sum(5 < row["duration"] < 15 for row in manifest),
     }, indent=2))
     (output / "samples.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
     rows = []
@@ -137,13 +142,14 @@ def run(variant, profile):
     (output / "complete.json").write_text(json.dumps({"count": len(rows), "variant": variant, "profile": profile}))
 
 
-def report(profile, destination, candidate_set="main"):
+def report(profile, destination, candidate_set="main", sample_set="probes"):
     profiles = {}
     identity = None
     for variant in {"main": VARIANTS, "sense": SENSE_VARIANTS}[candidate_set]:
         root = Path(f"case-{variant}/artifacts")
         complete = json.loads((root / "complete.json").read_text())
-        if complete != {"count": 24, "variant": variant, "profile": profile}:
+        expected_count = {"probes": 24, "fixed100": 100}[sample_set]
+        if complete != {"count": expected_count, "variant": variant, "profile": profile}:
             raise ValueError("Incomplete candidate")
         manifest = json.loads((root / "samples.json").read_text())
         if identity is not None and identity != manifest:
@@ -157,13 +163,13 @@ def report(profile, destination, candidate_set="main"):
     output.mkdir(exist_ok=False)
     (output / "summary.json").write_text(json.dumps(profiles, indent=2))
     lines = [f"# CPU resource screen: {profile}", "",
-             "24 fixed probes; not minimum hardware or installation/quality approval.",
+             f"{expected_count} fixed samples; not minimum hardware or installation/quality approval.",
              "Cold native process including model load; no browser/API overhead. No resident-worker results.",
              "Failure-inclusive error; successful P95 is conditional and sample sizes are small.", "",
              "| Candidate | Delivered | Native peak MiB | Container peak MiB |",
              "|---|---:|---:|---:|"]
     for variant, summary in profiles.items():
-        lines.append(f"| {variant} | {summary['delivered']}/24 | "
+        lines.append(f"| {variant} | {summary['delivered']}/{expected_count} | "
                      f"{summary['peak_process_rss_mib']} | {summary['cgroup_peak_mib']:.1f} |")
     lines += ["", "| Candidate | Group | N | Delivered | Error | Successful P95 s |",
               "|---|---|---:|---:|---:|---:|"]
@@ -178,5 +184,28 @@ def report(profile, destination, candidate_set="main"):
     (output / "REPORT.md").write_text("\n".join(lines))
 
 
+def gates(profile_directory):
+    directory = Path(profile_directory)
+    source = directory / "case-sense-gguf-q8/artifacts"
+    manifest = json.loads((source / "samples.json").read_text())
+    prior = [json.loads(line) for line in Path("baseline/scored-results.jsonl").read_text().splitlines()]
+    prior += json.loads(Path("long-baseline/long-report/scored-results.json").read_text())
+    sense = {row["id"]: row for row in prior if row["variant"] == "sense"}
+    baseline = []
+    for sample in manifest:
+        original = sense[sample["id"]]
+        if original["failure"] or any(sample[key] != original[key] for key in ("audio_sha256", "reference")):
+            raise ValueError("Baseline identity differs")
+        baseline.append({**sample, "score": original["delivered_score"]})
+    rows = [json.loads(line) for line in (source / "results.jsonl").read_text().splitlines()]
+    if len(manifest) != 100:
+        raise ValueError("Quality gates require the frozen100, not the resource probes")
+    result = decide([{**row, "score": evaluate(row)["delivered_score"]} for row in rows], baseline)
+    result["scope"] = ("Engine-only under declared Docker CPU/RAM limits. NOT actual transcribeVoice "
+                       "or browser/API acceptance. Original +2pp/3s/5s/100% gates unchanged.")
+    (directory / "report/quality-gates.json").write_text(json.dumps(result, indent=2))
+    print(json.dumps(result, indent=2))
+
+
 if __name__ == "__main__":
-    {"run": run, "report": report}[sys.argv[1]](*sys.argv[2:])
+    {"run": run, "report": report, "gates": gates}[sys.argv[1]](*sys.argv[2:])
