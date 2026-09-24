@@ -68,7 +68,12 @@ jobs:
         run: |
           curl -fL --retry 3 --max-time 300 https://github.com/modelscope/FunASR/archive/3ff9259aade4f7e4360645df28cad8f81959ee91.tar.gz -o source.tar.gz
           mkdir source
-          tar -xzf source.tar.gz --strip-components=1 -C source
+          prefix=FunASR-3ff9259aade4f7e4360645df28cad8f81959ee91
+          tar -xzf source.tar.gz --strip-components=1 -C source \
+            "$prefix/LICENSE" \
+            "$prefix/runtime/llama.cpp/funasr-common/funasr_audio.h" \
+            "$prefix/runtime/llama.cpp/funasr-common/miniaudio.h" \
+            "$prefix/runtime/llama.cpp/sensevoice/funasr-sensevoice/funasr-sensevoice.cpp"
           python scripts/voice_feature_exchange.py generate source source.tar.gz extractor
       - name: Build only extractor with GCC12 on Ubuntu22.04
         if: matrix.platform == 'linux'

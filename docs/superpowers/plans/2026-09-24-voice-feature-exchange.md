@@ -13,6 +13,21 @@
 Written spec375b989 approved for inline execution. All commands below execute in
 Actions, never locally. No subagents, new product interfaces or resource caps.
 
+## Execution checkpoint
+
+The new session verified the prior written-spec approval and preserved both
+uncommitted implementation files before continuing. No old process was resumed.
+Red contract run36000009792 at6546cd6 failed for the missing data module.
+Run36000736020 at914af74 passed the data/report cases and failed for the missing
+process runner. Implementationba9cd71 passed run36001140133; expanded raw-output
+and aggregate-provenance contracts ate8f10c7 passed run36001243394.
+Real extraction/exchange run36001303004 ate8f10c7 passed Linux extraction but
+stopped before any replay: Windows Git Bash tar could not create unrelated
+upstream symlinks. The workflow now extracts only the four required source/
+license members, preserving their bytes. Windows builds, helper lifecycle and
+measured controls remain to be evaluated; passing synthetic contracts alone do
+not complete this experiment.
+
 ## Files and responsibilities
 
 | File | Responsibility |
