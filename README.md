@@ -72,9 +72,10 @@ to absolute paths to that executable and model. `VOICE_THREADS` accepts `1`, `2`
 or `4` (Sense defaults to `2`). Do not point this adapter at an unpatched upstream
 binary or an ONNX model. Adapter/API/browser fixture regressions and a real Sense
 authenticated-API smoke passed Actions35965252088. A transactional installer for
-verified Actions packages is available below. Full-corpus API/browser
-quality/latency acceptance and public runtime release publication are still
-pending; these are installation candidates, not release-approved models.
+verified Actions packages is available below. Installed Linux Sense passed the
+frozen100 authenticated direct-WAV API gates in Actions `35991326454`; browser
+capture full-corpus acceptance and public runtime release publication remain
+pending. These are installation candidates, not release-approved models.
 See `scripts/VOICE-DEPLOYMENT.txt` for exact versions and qualification evidence.
 The formal cross-platform design is
 [`docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md`](docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md).
@@ -93,7 +94,11 @@ configuration. The configurator and Windows setup/upgrade entry points now
 support these explicitly supplied candidate packages; they do not download a
 public runtime automatically.
 Actual Windows 11 qualification remains pending (CI uses Windows Server 2022).
-Full-corpus Windows acceptance and public redistribution approval remain pending.
+Installed Windows Server Sense delivered 100/100 frozen samples and passed latency
+gates, but failed the mixed-language medium-duration accuracy gate (16.89% error
+versus a 16.67% ceiling). Whisper failed quality and latency gates on both
+platforms. Windows full acceptance and public redistribution approval remain
+pending; successful installation does not imply qualified recognition quality.
 
 Explicit `VOICE_MODEL=whisper-base-q5_1` selects the compatibility model (default
 one thread) using `VOICE_BINARY_PATH`, or `VOICE_WHISPER_PATH` if the generic path

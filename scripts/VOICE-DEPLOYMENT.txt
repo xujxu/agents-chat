@@ -10,6 +10,59 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Installed-package authenticated API checkpoint (2026-09-24)
+----------------------------------------------------------
+Plan: docs/superpowers/plans/2026-09-24-voice-installed-api-acceptance.md
+Test-first0533b1b / Actions35990247734 failed for the expected missing
+voice_installed_report module. Implementation7d81928; explicit API500 failure
+accounting/separate processing timing0af98a3; timing contracts0cd5ae2.
+Final contracts pass, including invalid timing and failure-inclusive scoring.
+
+https://github.com/xujxu/agents-chat/actions/runs/35991326454
+Code0cd5ae21377d3e7845f93f6b4a56c3709ff3eb98.
+All four build/typecheck/install/collection stages passed; each delivered100/100.
+Workflow is deliberately red for measured qualification failures, not an
+infrastructure error. Original corpus, baseline, normalization and gates unchanged.
+Frozen corpus:60ASCEND/40AISHELL-4; duration bands50short/10medium/40long.
+
+Platform/model       HTTP P95 short/long     Qualification
+Linux Sense          0.400s / 2.284s         PASS
+Windows Server Sense 0.875s / 4.287s         FAIL mixed/medium quality
+Linux Whisper        6.949s / 9.826s         FAIL quality and short/long latency
+Windows Server Whisper7.366s /13.384s        FAIL quality and short/long latency
+
+Windows Sense mixed/medium MER16.89%, historical baseline14.67%; allowed ceiling
+16.67%. Linux16.44%. Do not round away failure or change the+2pp gate.
+Whisper fails7quality buckets (all except en/medium); remains compatibility-only.
+Prior run35990621467 at7d81928 had identical qualification outcomes:
+Linux Sense short/long0.289/1.487s; Windows Sense0.895/4.358s;
+Linux Whisper6.990/9.863s; Windows Whisper7.719/13.549s.
+Cross-platform transcript differences observed; numerical/build/CPU cause is
+not established. Do not tune on the already explored frozen test corpus.
+
+Final report artifacts, expire2026-10-24:
+10804222694 installed-api-ubuntu-24.04-sensevoice-small-q8
+10803903893 installed-api-windows-2022-sensevoice-small-q8
+10804772932 installed-api-ubuntu-24.04-whisper-base-q5_1
+10804813131 installed-api-windows-2022-whisper-base-q5_1
+These are report/attempt/host/package-manifest artifacts, not model downloads.
+Pinned source packages remain Linux35968099304/10794617845,10795017559 and
+Windows35987278609/10802394350,10803120161.
+
+All final hosts report4logical CPUs and approximately16GiB physical RAM.
+Linux Sense: AMD EPYC9V74; Linux Whisper: EPYC7763; Windows: Xeon Platinum8573C.
+Fresh native process each request, potentially warm filesystem cache; not a
+matched-hardware OS benchmark. Effective quotas/physical cores/native peak RSS
+unknown, not zero. Sense2threads/Whisper1thread, no new application hard quotas.
+API elapsedMs recorded separately; HTTP wall time remains the gate metric.
+
+This closes measurement/reporting, not overall feature acceptance. Windows
+Sense quality qualification, controlled browser-corpus capture/resampling,
+actual Win11/task/microphone behavior, helper/MSVC redistribution clearance and
+permanent trusted downloads remain open. Repository runners API returned0
+self-hosted runners; no runner installation authorized or performed.
+No local validation/inference/audio build, PROD/cpg/sampler changes or release.
+
 Windows activation and upgrade checkpoint (2026-09-24)
 -----------------------------------------------------
 Plan/test-firstb1d30a7:

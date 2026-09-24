@@ -38,7 +38,7 @@ metadata are retained even when a candidate fails gates.
 
 ## Task 1: Red reporting contracts
 
-- [ ] Add tests for an exact100 synthetic manifest with ASCEND60/AISHELL-4 40.
+- [x] Add tests for an exact100 synthetic manifest with ASCEND60/AISHELL-4 40.
   Require one output per ID, unchanged reference/category/duration/split/hash,
   valid finite nonnegative timings, failures scored as full reference deletions,
   and empty successes treated as delivery failure:
@@ -54,12 +54,12 @@ self.assertIn("delivery_below_100_percent",
               installed_report(manifest, attempts, baseline)["candidates"][0]["violations"])
 ```
 
-- [ ] Push tests/workflow registration; expected red is missing report module.
+- [x] Push tests/workflow registration; expected red is missing report module.
   `gh run view RUN -R xujxu/agents-chat --log-failed` must confirm it.
 
 ## Task 2: Shared report and frozen baseline
 
-- [ ] Implement `installed_report(manifest, attempts, baseline)` using existing
+- [x] Implement `installed_report(manifest, attempts, baseline)` using existing
   `validate_results`, `evaluate`, `decide` functions. Baseline is the existing
   original Sense ONNX reference used by `voice_server_profiles.gates`, not a
   new comparison selected from these results. Match all identity fields and
@@ -75,14 +75,14 @@ result["scope"] = "Installed package, authenticated direct-WAV API; no browser c
   to explicit `empty_transcript`. Reject NaN/Infinity/negative seconds and mixed
   model variant evidence. Preserve full failure accounting; do not skip errors.
 
-- [ ] CLI reads corpus/attempts/short-baseline/long-baseline, writes summary JSON
+- [x] CLI reads corpus/attempts/short-baseline/long-baseline, writes summary JSON
   and a concise Markdown table of per-language-duration error and latency. Exit1
   for failed gates **after** report creation; malformed/incomplete evidence is a
-  distinct surfaced error. No release-approved flag.
+  distinct surfaced error. Always retain `release_approved=False`.
 
 ## Task 3: Authenticated installed corpus runner
 
-- [ ] Test uses existing login fixture only for unrelated chat endpoints. Voice
+- [x] Test uses existing login fixture only for unrelated chat endpoints. Voice
   API remains unmocked. Require expected capability model/threads/standard policy:
 
 ```ts
@@ -100,7 +100,7 @@ const response = await page.context().request.post('/api/voice', {
   response/auth failures stop as infrastructure errors. Console shows ID/status/
   duration, not transcript. Write completion only after100 accounted attempts.
 
-- [ ] Orchestrator clears inherited VOICE_* harness keys, checks trusted downloaded
+- [x] Orchestrator clears inherited VOICE_* harness keys, checks trusted downloaded
   manifest, invokes `configure-voice.mjs --project-dir CHECKOUT --model MODEL
   --package-dir PACKAGE --manifest-sha256 SHA --non-interactive`. Next.js loads
   the actual resulting `.env.local`; do not replace it with synthetic env flags.
@@ -112,7 +112,7 @@ const response = await page.context().request.post('/api/voice', {
 
 ## Task 4: Actions matrix
 
-- [ ] Reuse corpus preparation:
+- [x] Reuse corpus preparation:
 
 ```bash
 python scripts/voice_chain_report.py prepare short meeting corpus
@@ -125,27 +125,54 @@ python scripts/voice_chain_report.py prepare short meeting corpus
   Artifacts must be unexpired. Trust is successful pinned run/artifact identity,
   not merely a digest from an arbitrary local package.
 
-- [ ] Four matrix cells: ubuntu-24.04/windows-2022 x Sense/Whisper. Node24.20.0,
+- [x] Four matrix cells: ubuntu-24.04/windows-2022 x Sense/Whisper. Node24.20.0,
   Python3.12/OpenCC0.1.7. Install dependencies/build app/Chromium only in Actions.
   Native binaries on Linux regain executable permission after artifact extraction.
   Preserve model bytes; no native rebuild. Default model threads (Sense2/Whisper1).
   Sequential requests, normal execution without new app quotas.
 
-- [ ] Upload only report/results/manifest/attribution/host provenance and bounded
+- [x] Upload only report/results/manifest/attribution/host provenance and bounded
   server log. Never `.env.local`, `.data/voice` receipts, browser storage state or
   entire project. Workflow gate failures are expected honest outcomes, not a
   reason to change thresholds or reclassify Whisper as recommended.
 
 ## Task 5: Execute and record
 
-- [ ] Push implementation and dispatch:
+- [x] Push implementation and dispatch:
 
 ```bash
 gh workflow run voice-installed-api.yml -R xujxu/agents-chat --ref experiment/voice-natural-long
 ```
 
-- [ ] Inspect all four matrix reports, diagnose infrastructure separately from
+- [x] Inspect all four matrix reports, diagnose infrastructure separately from
   measured gate failures. Record run/commit/artifact identities and exact100
   delivery, short<=3s/long<=5s aggregate P95 and each group<=baseline+2pp.
   State browser corpus, actual Win11, license and permanent release gates still
   pending. Do not claim feature release completion from Server API results.
+
+## Execution evidence and outcome
+
+Test-first `0533b1b`, run `35990247734`: expected missing report module.
+Implementation `7d81928`, first matrix `35990621467`: complete evidence from all
+four cells. Final failure-accounting/timing code `0cd5ae2`, matrix
+[`35991326454`](https://github.com/xujxu/agents-chat/actions/runs/35991326454):
+report contracts, build/typecheck and all four installed collections completed.
+Each model/platform delivered 100/100; three cells correctly fail measured gates.
+
+| Platform/model | Short HTTP P95 | Long HTTP P95 | Gate result | Artifact |
+| --- | ---: | ---: | --- | --- |
+| Linux Sense | 0.400 s | 2.284 s | Pass | `10804222694` |
+| Windows Server Sense | 0.875 s | 4.287 s | Mixed/medium accuracy fails | `10803903893` |
+| Linux Whisper | 6.949 s | 9.826 s | Quality and latency fail | `10804772932` |
+| Windows Server Whisper | 7.366 s | 13.384 s | Quality and latency fail | `10804813131` |
+
+Windows Sense mixed/medium error 16.89% exceeds baseline 14.67% + 2 percentage
+points. Linux Sense is 16.44%. Both runs produce the same qualification outcomes;
+no threshold, normalization, reference, package or model recommendation changed.
+Full per-group results and host provenance are in the report artifacts; the
+formal spec and `scripts/VOICE-DEPLOYMENT.txt` record their interpretation.
+
+This plan's measurement work is complete, not final feature acceptance.
+Windows quality qualification remains open. Browser-corpus, actual Win11,
+physical microphone/task behavior, redistribution permission and permanent
+downloads remain separate gates. No authorized Win11 runner is available.

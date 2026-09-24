@@ -9,7 +9,10 @@ The user approved the written design after commit `98e06ce`. Windows runtime
 integration and verified real-model package import are now implemented.
 Private configuration/rollback, explicit Windows candidate activation and
 installation/upgrade integration are implemented with Windows Server Actions
-coverage. Actual Win11 qualification and final release acceptance remain pending.
+coverage. Installed Linux Sense now passes frozen100 authenticated direct-WAV
+API gates. Windows Server Sense fails one accuracy gate; Whisper fails quality
+and latency on both platforms. Browser-corpus, actual Win11 qualification and
+final release acceptance remain pending.
 
 The feature's earlier design decisions and experiments were recorded in
 `scripts/VOICE-DEPLOYMENT.txt` rather than this repository's normal specification
@@ -167,6 +170,47 @@ Win11 task execution and full installed-service corpus acceptance remain open.
 This supersedes the earlier Windows CLI gate, not the requirements for trusted
 explicit packages, redistribution approval or permanent downloads.
 
+### Subsequent installed-package API checkpoint
+
+Actions
+[`35991326454`](https://github.com/xujxu/agents-chat/actions/runs/35991326454)
+at `0cd5ae21377d3e7845f93f6b4a56c3709ff3eb98` used the existing verified packages,
+the real configurator and persisted configuration, then authenticated API
+requests for the same frozen 60 ASCEND and 40 AISHELL-4 samples. All four cells
+delivered 100/100 nonempty transcripts. Build/typecheck and collection completed;
+the overall red result reflects measured gates, not failed infrastructure.
+
+| Installed package | Short HTTP P95 | Long HTTP P95 | Frozen gates | Evidence artifact |
+| --- | ---: | ---: | --- | --- |
+| Linux Sense, 2 threads | 0.400 s | 2.284 s | Pass | `10804222694` |
+| Windows Server Sense, 2 threads | 0.875 s | 4.287 s | Mixed/medium quality fails | `10803903893` |
+| Linux Whisper, 1 thread | 6.949 s | 9.826 s | Seven quality groups and both latency gates fail | `10804772932` |
+| Windows Server Whisper, 1 thread | 7.366 s | 13.384 s | Seven quality groups and both latency gates fail | `10804813131` |
+
+Short means <=5 seconds of audio, long >=15 seconds; unchanged aggregate P95
+ceilings are 3 and 5 seconds respectively. Medium latency is reported without
+a new threshold. Every language/duration group's error must remain no more than
+2 percentage points above the original identical-input Sense ONNX baseline.
+Windows Sense mixed/medium error is 16.89% versus baseline 14.67% (ceiling
+16.67%); Linux is 16.44%. The preceding run `35990621467` had the same qualification
+outcomes. Do not round this failure into a pass or tune against this explored
+test set. The source of cross-platform output differences is not established.
+
+These are hosted-runner measurements: 4 logical CPUs, approximately 16 GiB
+reported physical RAM, fresh native process per request with potentially warm
+file cache. Final Linux Sense used AMD EPYC 9V74, Linux Whisper EPYC 7763, and both
+Windows cells Intel Xeon Platinum 8573C. They are not a matched-hardware OS speed
+comparison or a minimum-resource prescription. Effective host quotas, physical
+core counts and native peak RSS were not measured. API processing time is
+reported separately from HTTP time, not substituted for the acceptance metric.
+
+The artifacts expire 2026-10-24. They contain evidence, not permanent model
+downloads. This checkpoint does not qualify browser recording/resampling,
+physical microphones, actual Windows 11 or real Scheduled Task execution.
+No registered self-hosted runner was available when checked on 2026-09-24.
+Windows quality qualification, browser-corpus acceptance, actual Win11 testing,
+helper/MSVC redistribution clearance and permanent downloads remain open.
+
 ## Goal
 
 Let an administrator choose a local speech-to-text model when installing or
@@ -228,7 +272,7 @@ platform + execution settings**, not merely a model brand.
 
 | Choice | Product role | Permission and qualification boundary |
 | --- | --- | --- |
-| Official SenseVoiceSmall GGUF q8 | First recommended integration candidate | Exact official weights declare Apache-2.0; pinned FunASR/llama.cpp code uses MIT. Linux engine gates passed; final installed-package and Windows qualification pending |
+| Official SenseVoiceSmall GGUF q8 | First recommended integration candidate | Exact official weights declare Apache-2.0; pinned FunASR/llama.cpp code uses MIT. Linux engine and installed direct-API gates passed; Windows accuracy and final browser/release qualification remain open |
 | Whisper base-q5_1 | Explicit compatibility option, not a quality/latency recommendation | MIT weights/code plus applicable runtime/dependency obligations; retain known gate failures |
 | Disabled | Default for an unconfigured fresh installation | No model install, inference or microphone control |
 
