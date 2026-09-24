@@ -444,6 +444,13 @@ Entry points and interaction:
   An explicitly requested setup that fails exits nonzero; it is not reported
   as successful configuration or silently replaced with another model.
 - Merely starting/restarting the app never opens an installation prompt.
+- Choosing not to install voice on a fresh installation, or explicitly disabling
+  voice during upgrade/reconfiguration, persists disabled capability. After the
+  configuration takes effect and the page reloads, the composer must omit the
+  voice button entirely, not show a greyed-out button or an installation warning.
+  No model download, inference process or microphone permission request occurs
+  for disabled voice. Keeping an already-enabled configuration is distinct from
+  explicitly disabling it; the menu must make that distinction clear.
 
 Upgrade and configuration preservation:
 - Read only voice-related keys for display. Never print authentication values
@@ -489,6 +496,9 @@ Compatibility and resource guidance:
 Actions-only acceptance:
 - Test fresh interactive selection, every-upgrade prompting, default keep,
   explicit disable/model switch, cancelled input and noninteractive preservation.
+- Verify fresh-install opt-out and enabled-to-disabled upgrade produce
+  /api/voice enabled=false and no microphone button or voice-error banner after
+  reload. Preserve the current frontend's disabled-capability rendering.
 - Test old Whisper compatibility and old versions without ANY voice keys.
 - Test old deploy-script upgrade reaching the new configurator, environment
   override detection, portable bundle inclusion and unsupported-platform errors.
