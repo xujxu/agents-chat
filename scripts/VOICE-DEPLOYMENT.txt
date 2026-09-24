@@ -80,3 +80,54 @@ Evidence-first implementation sequence
 
 The installer is not implemented yet. Do not publish unmeasured resource minima
 or mark the experimental candidates as approved installation choices.
+
+Completed CPU screen, 2026-09-24
+------------------------------
+Commit b7bcd7d, Actions35948880080. All192 attempts delivered nonempty text:
+4 variants x24 original probes x2 resource profiles. No timeout/OOM failures.
+
+                                2CPU/4GiB                 4CPU/8GiB
+                            RSSMiB short/long P95s    RSSMiB short/long P95s
+Whisper small-q5_1             345.6  12.19/13.95       345.6  14.50/16.01
+Whisper large-v3-turbo-q5_0     724.1  68.37/69.47       723.7  79.82/81.90
+Fun-ASR-Nano U8U8 ONNX        2188.8   4.98/10.04      2090.4   6.14/12.97
+Qwen3-ASR0.6B INT8 ONNX       2337.4   4.52/10.14      2397.7   5.79/13.57
+
+RSS is process peak, not reserved RAM or total application/host requirement.
+P95 is nearest-rank over18 short and6 long probes; includes fresh process/model
+load but excludes HTTP/browser. Small sample counts do not establish production
+tail latency. None meets both previously agreed3s/5s latency gates in this mode.
+Model persistence, faster kernels and alternate runtimes remain separate tests.
+
+Important hardware limitation:
+Each profile used its own runner. Both report AMD EPYC9V74, but cpu2 exposes
+AVX512/VNNI while cpu4 does not.4CPU quota also does not prove4 dedicated physical
+cores. Do NOT infer CPU/thread scaling from the cross-runner timing difference.
+Within each profile the candidates ran sequentially on the same host.
+
+Qwen English outputs differ on2 of6 clips: WER52.17% in cpu2 versus0% in cpu4.
+The total reference has only23 English words. One cpu2 output was Spanish for
+an English reference. This is a hardware/thread/run-correlated observation, NOT
+a proven quantization or SIMD cause. Preserve both outputs and don't promote
+Qwen using only the favorable profile. Both profiles were recorded with seed42.
+Long Mandarin CER: Qwen8.45%/7.43%, Nano25%/25%, Whisper turbo11.15%/11.15%;
+only3 long Mandarin samples, so these do not replace the previous larger tests.
+
+Evidence:
+https://github.com/xujxu/agents-chat/actions/runs/35948880080/artifacts/10788977130
+https://github.com/xujxu/agents-chat/actions/runs/35948880080/artifacts/10788838715
+
+SenseVoice follow-up boundary:
+FunASR README at3ff9259aade4f7e4360645df28cad8f81959ee91 explicitly delegates
+weight permission to each model card (custom MODEL_LICENSE applies when linked).
+Official SenseVoiceSmall-GGUF at90c1c61912018b70ada0fcc024ea24aca62f2e63 declares
+Apache-2.0 and does not link the custom agreement. This supports evaluating that
+exact official artifact separately from original custom-licensed ONNX weights.
+Runtime at the above FunASR pin uses MIT; llama.cpp pin is
+803b7fcae893e9caaee3921779628fef83ac0965 (MIT). Retain transitive notices too.
+Stock Sense GGUF hardcodes8 ggml threads. The experimental build will add an
+explicit bounded thread argument and log its value. Never mislabel stock8thread
+behavior as2/4threads. No VAD model, silence removal or source concatenation.
+Both resource profiles will run sequentially on ONE runner with the same binary,
+exact24 frozen samples and input hashes; retain native/container memory evidence.
+This follow-up is not an installer approval or a production deployment.

@@ -34,6 +34,16 @@ class ServerProfileTests(unittest.TestCase):
         self.assertIn("--num-threads=4", args)
         self.assertIn("--num-threads=2", command("funasr", {"id": "probe"}))
 
+    def test_native_sense_threads_are_explicit_not_upstream_default_eight(self):
+        for threads in (2, 4):
+            args = command("sense-gguf", {"id": "probe"}, threads=threads)
+            self.assertEqual(args, ["sense-runtime/bin/llama-funasr-sensevoice",
+                                   "-m", "model/sensevoice-small-q8.gguf",
+                                   "-a", "accuracy-samples/probe.wav",
+                                   "--threads", str(threads), "--backend", "cpu"])
+        with self.assertRaises(ValueError):
+            command("sense-gguf", {"id": "probe"}, threads=8)
+
     def test_failed_attempts_are_scored_and_not_success_latency(self):
         source = [sample("a", "en", 3), sample("b", "en", 3)]
         rows = [{**row, "text": "hello", "failure": None, "seconds": 2,
