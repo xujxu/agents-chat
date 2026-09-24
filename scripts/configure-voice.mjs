@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { models, selectVoiceAction, updateVoiceEnvironment, voiceValues } from './voice/setup-config.mjs';
 import { installVoicePackage } from './voice/install-package.mjs';
+import { importWindowsVoicePackage } from './voice/windows/import-package.mjs';
+import { assertWindowsOverrides, windowsSetupContext } from './voice/windows/setup-context.mjs';
 import { atomicWrite, decodeEnvironment, encodeEnvironment, optionalRead, previousReceiptBytes } from './voice/configuration-files.mjs';
 
 const digest = text => createHash('sha256').update(text).digest('hex');
@@ -16,13 +18,14 @@ function parseArgs(args) {
   for (let i = 0; i < args.length; i++) {
     const name = args[i];
     if (name === '--non-interactive' || name === '--help') options[name.slice(2)] = true;
-    else if (['--project-dir', '--model', '--package-dir', '--manifest-sha256', '--threads', '--receipt', '--rollback-receipt'].includes(name)) {
+    else if (['--project-dir', '--model', '--package-dir', '--manifest-sha256', '--threads', '--receipt', '--rollback-receipt', '--service-user'].includes(name)) {
       if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`Missing value for ${name}.`);
       if (Object.hasOwn(options, name.slice(2))) throw new Error(`Duplicate option ${name}.`);
       options[name.slice(2)] = args[++i];
     } else throw new Error(`Unknown option: ${name}`);
   }
   if (options.threads !== undefined && !/^(1|2|4)$/.test(options.threads)) throw new Error('Threads must be 1, 2 or 4.');
+  if (options['service-user'] && process.platform !== 'win32') throw new Error('--service-user is Windows-only.');
   return options;
 }
 
@@ -31,7 +34,7 @@ async function choose() {
   console.log(`2) ${models['sensevoice-small-q8'].label}\n   ${models['sensevoice-small-q8'].description}`);
   console.log(`3) ${models['whisper-base-q5_1'].label}\n   ${models['whisper-base-q5_1'].description}`);
   console.log('4) Disable voice input (hide microphone button)');
-  if (process.platform !== 'linux' || process.arch !== 'x64') {
+  if (!['linux', 'win32'].includes(process.platform) || process.arch !== 'x64') {
     console.log('This platform does not support the native packages. Only keep/disable is available.');
   }
   const reader = createInterface({ input: process.stdin, output: process.stdout });
@@ -47,6 +50,7 @@ async function run() {
   if (options.help) {
     console.log('Usage: node scripts/configure-voice.mjs [--model keep|disabled|sensevoice-small-q8|whisper-base-q5_1] [--non-interactive]');
     console.log('Enable with a trusted verified package: --package-dir DIR --manifest-sha256 SHA256 [--threads 1|2|4]');
+    console.log('Windows: --service-user ACCOUNT-OR-SID checks the target account; omitted means current account.');
     console.log('Configuration is applied on app restart/page reload. No services are started by this command.');
     return;
   }
@@ -95,34 +99,38 @@ async function run() {
       if (receipt.file !== file || typeof receipt.installedSha !== 'string'
         || digest(installed ?? '') !== receipt.installedSha) throw new Error('Rollback refused: configuration changed after setup.');
       if (previous === null) await rm(file);
-      else await atomicWrite(file, previous, installed);
+      else await atomicWrite(file, previous, installed, receipt.serviceSid);
       console.log('Previous voice configuration restored; restart the app to apply it.');
       return;
     }
     const wanted = selection.model === 'disabled' ? { VOICE_ENABLED: '0' } : {
       VOICE_ENABLED: '1', VOICE_MODEL: selection.model, VOICE_RESOURCE_POLICY: 'standard',
     };
+    const context = process.platform === 'win32' ? await windowsSetupContext(options['service-user']) : null;
+    if (context) assertWindowsOverrides(context, selection.model);
     for (const [name, values] of [
       ['inherited environment', process.env],
       ['.env.production.local', voiceValues(decodeEnvironment(await optionalRead(path.join(project, '.env.production.local'))))],
       ...(process.platform === 'linux' ? [['/etc/agents-chat.env', voiceValues(decodeEnvironment(await optionalRead('/etc/agents-chat.env')))]] : []),
     ]) {
-      if (Object.keys(values).some(key => key.startsWith('VOICE_') && (
-        Object.hasOwn(wanted, key) ? values[key] !== wanted[key] : selection.model !== 'disabled'
+      if (Object.keys(values).some(key => (context ? key.toUpperCase() : key).startsWith('VOICE_') && (
+        Object.hasOwn(wanted, context ? key.toUpperCase() : key) ? values[key] !== wanted[context ? key.toUpperCase() : key] : selection.model !== 'disabled'
       ))) throw new Error(`Conflicting voice override in ${name}; update that source explicitly before configuring project voice.`);
     }
-    const configuration = selection.model === 'disabled' ? null : await installVoicePackage({
+    const importer = process.platform === 'win32' ? importWindowsVoicePackage : installVoicePackage;
+    const configuration = selection.model === 'disabled' ? null : await importer({
       packageDir: options['package-dir'], manifestSha256: options['manifest-sha256'],
       model: selection.model, destination: directory,
       threads: Number(options.threads ?? models[selection.model].threads),
     });
     const next = encodeEnvironment(updateVoiceEnvironment(originalText, selection.model, configuration));
     if (!equalBytes(await optionalRead(file), original)) throw new Error('Configuration changed during setup; refusing to overwrite it.');
-    const receipt = { version: 2, changed: true, file, previous: original === null ? null : original.toString('base64'), installedSha: digest(next) };
+    const receipt = { version: 2, changed: true, file, previous: original === null ? null : original.toString('base64'), installedSha: digest(next),
+      ...(context ? { serviceSid: context.serviceSid } : {}) };
     const receiptPath = path.resolve(options.receipt ?? path.join(directory, 'last-setup.json'));
     // Save recovery before switching configuration, never after.
     await atomicWrite(receiptPath, JSON.stringify(receipt));
-    await atomicWrite(file, next, original);
+    await atomicWrite(file, next, original, context?.serviceSid);
     console.log(selection.model === 'disabled'
       ? 'Voice disabled. After restart/reload the microphone button is hidden.'
       : 'Verified voice package configured in standard mode. Restart the app to apply; this is not full release acceptance.');

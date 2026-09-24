@@ -1,11 +1,7 @@
-import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
-
-const execute = promisify(execFile);
+import { runWindowsSetupScript } from './windows/powershell.mjs';
 
 export function decodeEnvironment(bytes) {
   if (bytes === null) return '';
@@ -33,28 +29,17 @@ export async function optionalRead(file) {
   return await checkFile(file) ? readFile(file) : null;
 }
 
-export async function atomicWrite(file, bytes, expected) {
+export async function atomicWrite(file, bytes, expected, readSid) {
   await checkFile(file);
   let directory;
   let temp;
   try {
     if (process.platform === 'win32') {
-      const root = Object.entries(process.env).find(([key]) => key.toLowerCase() === 'systemroot')?.[1];
-      if (!root || !/^[a-z]:[\\/]/i.test(root)) throw new Error('Windows SystemRoot is unavailable.');
+      if (readSid && !/^S-1-(?:\d+-)*\d+$/.test(readSid)) throw new Error('Invalid Windows read identity.');
       directory = path.join(path.dirname(file), `.voice-private-${randomUUID()}`);
-      const script = fileURLToPath(new URL('./windows/private-directory.ps1', import.meta.url));
-      const invocation = execute(path.join(root, 'System32/WindowsPowerShell/v1.0/powershell.exe'), [
-        '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script,
-      ], {
-        windowsHide: true, timeout: 10000, maxBuffer: 16384,
-        env: { SystemRoot: root, WINDIR: root, PATH: path.join(root, 'System32'), VOICE_PRIVATE_DIRECTORY: directory },
+      await runWindowsSetupScript('private-directory.ps1', {
+        VOICE_PRIVATE_DIRECTORY: directory, ...(readSid ? { VOICE_READ_SID: readSid } : {}),
       });
-      invocation.child.stdin.end();
-      try { await invocation; }
-      catch (error) {
-        if (error.killed) throw new Error('Windows private-directory helper exceeded its 10-second deadline.');
-        throw error;
-      }
       temp = path.join(directory, 'configuration.tmp');
     } else temp = `${file}.${randomUUID()}.tmp`;
     const handle = await open(temp, 'wx', 0o600);

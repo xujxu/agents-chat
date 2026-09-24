@@ -25,4 +25,10 @@ foreach ($identity in @($sid, [System.Security.Principal.SecurityIdentifier]::ne
         $identity, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')
     $security.AddAccessRule($rule)
 }
+if ($env:VOICE_READ_SID -and $env:VOICE_READ_SID -ne $sid.Value -and
+    $env:VOICE_READ_SID -ne 'S-1-5-18' -and $env:VOICE_READ_SID -ne 'S-1-5-32-544') {
+    $reader = [System.Security.Principal.SecurityIdentifier]::new($env:VOICE_READ_SID)
+    $security.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
+        $reader, 'ReadAndExecute', 'ContainerInherit, ObjectInherit', 'None', 'Allow'))
+}
 $null = [System.IO.Directory]::CreateDirectory($target, $security)

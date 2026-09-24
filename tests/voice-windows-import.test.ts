@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { lstat, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -7,6 +8,8 @@ import { test } from 'node:test';
 import { importWindowsVoicePackage } from '../scripts/voice/windows/import-package.mjs';
 import { voiceConfiguration } from '../lib/voice/configuration';
 import { transcribeVoice } from '../lib/voice/transcriber';
+import { decodeEnvironment } from '../scripts/voice/configuration-files.mjs';
+import { voiceValues } from '../scripts/voice/setup-config.mjs';
 
 test('Windows verified import preserves config and rejects corruption before using the real model', {
   timeout: 240000,
@@ -72,6 +75,29 @@ test('Windows verified import preserves config and rejects corruption before usi
   const text = await transcribeVoice(await readFile(process.env.VOICE_INSTALL_AUDIO), config, AbortSignal.timeout(120000));
   assert.match(text, /country/i);
   assert.deepEqual(await invoke(), result);
+  await unchanged();
+  const receipt = path.join(root, 'activation.json');
+  const configure = (...args: string[]) => spawnSync(process.execPath, [
+    'scripts/configure-voice.mjs', '--project-dir', root, ...args,
+  ], { encoding: 'utf8', timeout: 60000 });
+  let activated = configure('--model', manifest.modelId, '--package-dir', source,
+    '--manifest-sha256', sha, '--receipt', receipt);
+  assert.equal(activated.status, 0, activated.stderr);
+  const persisted = await voiceConfiguration(voiceValues(decodeEnvironment(await readFile(environment))));
+  assert.ok(persisted);
+  assert.equal(persisted.resourcePolicy, 'standard');
+  const installedText = await transcribeVoice(await readFile(process.env.VOICE_INSTALL_AUDIO), persisted, AbortSignal.timeout(120000));
+  assert.match(installedText, /country/i);
+  activated = configure('--model', 'keep', '--non-interactive');
+  assert.equal(activated.status, 0, activated.stderr);
+  activated = configure('--rollback-receipt', receipt);
+  assert.equal(activated.status, 0, activated.stderr);
+  await unchanged();
+  activated = configure('--model', 'disabled', '--receipt', receipt);
+  assert.equal(activated.status, 0, activated.stderr);
+  assert.deepEqual(voiceValues(decodeEnvironment(await readFile(environment))), { VOICE_ENABLED: '0' });
+  activated = configure('--rollback-receipt', receipt);
+  assert.equal(activated.status, 0, activated.stderr);
   await unchanged();
   await writeFile(result.binary, 'modified installed executable');
   await assert.rejects(invoke(), /checksum mismatch/);
