@@ -9,6 +9,42 @@ remain pending. Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Private Windows configuration checkpoint (2026-09-24)
+----------------------------------------------------
+Plan/test-first59b299f:
+docs/superpowers/plans/2026-09-24-voice-windows-private-configuration.md
+Actions35983021333 failed missing configuration-files module on both platforms.
+Implementation23dfb21; snapshot/path guard3bd6b28; .NET helper fix15f4ce0;
+final contractsfd80b9a.
+
+Final run:
+https://github.com/xujxu/agents-chat/actions/runs/35984193290
+Windows5contracts passed. Linux12passed/1Windows-only skip, terminal interaction,
+isolated deploy preservation/re-entry/activation rollback and both real-package
+integrity jobs passed. No model rebuild, local validation or service changes.
+
+Keep and rollback preserve UTF8/BOM/UTF16LE raw bytes. Explicit writes emit
+Windows UTF8 BOM; version2 receipts carry base64 previous bytes and exact-byte
+installed checksum. Old UTF8 receipts remain supported. Malformed receipts,
+stale configuration, symlink/hardlink files and receipt/config collisions fail.
+Launcher key is managed; Windows paths use forward slashes, including apostrophes.
+
+Windows NTFS staging directory has private inherited grants from creation for
+installer identity/SYSTEM/Administrators. Tests inspect final env/receipt ACLs,
+not only the staging directory. Same-volume rename replaces without deleting
+the original first. Junction components/existing directories are refused.
+No secret data is passed to PowerShell arguments/environment/output.
+
+Initial helper timed out; bounded diagnostics35983725074 isolated Test-Path
+under the sanitized environment. Direct .NET filesystem/ACL APIs avoid that
+module-dependent operation. Earlier stdin fix alone did not solve the issue.
+Temporary diagnostic script removed; ACL and rollback assertions retained.
+
+Still pending: Windows CLI model enablement, task-account/environment override
+checks, startup-script encoding preservation, setup/deploy upgrade prompts and
+activation recovery. This checkpoint does not claim those are implemented.
+Actual Win11/full-corpus/public redistribution gates remain. PROD/cpg unchanged.
+
 Verified Windows import checkpoint (2026-09-24)
 ----------------------------------------------
 Plan/test-firste2096bb:

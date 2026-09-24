@@ -7,8 +7,8 @@ the Windows 11 scope requested on 2026-09-24. The user selected **native Windows
 11 on Intel/AMD x64** as the initial Windows target; ARM64 is outside this slice.
 The user approved the written design after commit `98e06ce`. Windows runtime
 integration and verified real-model package import are now implemented.
-Configuration/rollback, installation/upgrade integration and actual Win11
-qualification remain pending.
+Private configuration/rollback is also implemented. Windows model activation,
+installation/upgrade integration and actual Win11 qualification remain pending.
 
 The feature's earlier design decisions and experiments were recorded in
 `scripts/VOICE-DEPLOYMENT.txt` rather than this repository's normal specification
@@ -110,6 +110,28 @@ receipts or service settings, and the configuration CLI still gates Windows
 enablement. Private configuration transactions, upgrade menus, actual Win11 and
 full-corpus acceptance remain separate work. This supersedes the earlier
 candidate-only inventory limitation, not the release or installation gates.
+
+### Subsequent private configuration checkpoint
+
+Implementation `fd80b9a`, Actions
+[`35984193290`](https://github.com/xujxu/agents-chat/actions/runs/35984193290),
+passes Windows configuration file/CLI and Linux installation regressions.
+Keep and rollback preserve exact UTF8, UTF8-BOM and UTF16LE-BOM bytes. New receipts
+store versioned base64 snapshots; legacy UTF8 receipts remain readable.
+Concurrent edits, invalid snapshots and receipt/config path collisions fail
+explicitly. Windows paths serialize with forward slashes and the launcher key
+is removed when disabling or switching away.
+
+Before writing secrets, Windows PowerShell 5.1/.NET creates an NTFS staging
+directory with a private inheritable DACL. Only installer identity, SYSTEM and
+Administrators receive grants; final environment and receipt ACLs are checked in
+CI after same-volume rename. Directory/reparse targets are refused. No secrets
+are supplied to the PowerShell child. Linux retains private mode 0600 files.
+
+This is the file-transaction prerequisite, not Windows installation completion.
+The CLI still rejects Windows model enablement. Deployment/task-account checks,
+startup-script encoding preservation, upgrade prompts and activation rollback
+remain to be integrated. CI is Windows Server 2022, not actual Windows 11.
 
 ## Goal
 

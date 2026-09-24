@@ -87,8 +87,10 @@ build. Both real Windows model candidates now have version 2 import manifests
 and pass verified staging plus installed-engine transcription from Unicode
 paths (Actions `35981880883`). Import checks CPU/OS compatibility and reports
 available resources without adding CPU/RAM quotas. The separate `candidate.json`
-inventory is not an import manifest. Windows configuration/rollback and upgrade
-integration remain gated; this is not yet a Windows installation option.
+inventory is not an import manifest. Private Windows configuration files and
+byte-preserving rollback now pass Actions `35984193290`, including old UTF-16LE
+configuration. Windows model activation and setup/upgrade integration remain
+gated; this is not yet a Windows installation option.
 Actual Windows 11 qualification remains pending (CI uses Windows Server 2022).
 Full-corpus Windows acceptance and public redistribution approval remain pending.
 
