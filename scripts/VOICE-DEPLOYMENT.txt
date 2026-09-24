@@ -1,0 +1,82 @@
+Install-selected voice providers: approved direction and evidence plan
+===================================================================
+
+Scope agreed 2026-09-24
+---------------------
+One active local model per deployment, chosen by the administrator at install.
+The browser continues to use authenticated /api/voice, independent of engine.
+No per-chat model switching, public model server, silent fallback, automatic
+resource expansion or changes to current PROD/cpg/service defaults.
+
+Most target deployments are CPU-only shared servers, e.g.8cores/16GB or
+16cores/32GB. Total host capacity is NOT the voice budget. Installation must
+show compatible CPU architecture/instructions, allocated threads/CPU quota,
+measured process/container memory, recommended reserved capacity, model size,
+license, quality/latency status and evidence source for each exact combination.
+Do not report GPU VRAM, model download size or parameter-derived estimates as
+measured CPU RAM requirements. Unknown measurements block recommended status.
+
+The deployable identity is model + weight revision/quantization + engine build
++ resource profile. Resource compatibility and quality acceptance are separate.
+Keep the current1thread/384MiB monitoredRSS/1GiBAS profile unchanged. Any larger
+profile requires an explicit administrator choice and must not consume all host
+resources. Admission, cancellation and timeout must apply to the entire backend.
+Large or persistent workers need independent process-tree memory enforcement,
+idle-memory accounting and crash/cancellation recovery before installation.
+
+License admission
+-----------------
+Verify weights, runtime and redistributed dependencies independently. Prefer
+MIT/Apache-2.0/BSD-style permissions permitting use, commercial use and
+redistribution; retain notices. No custom/unclear license is automatically
+admitted. No claim of zero legal risk.
+Whisper weights/code are MIT. Existing static binaries additionally include
+GCC runtime libraries under GPL with the standard GCC Runtime Library Exception;
+never label the complete distribution "MIT only".
+
+The exact official Fun-ASR-Nano-2512 and Nano-GGUF model cards declare Apache-2.0;
+these are candidates, not a blanket approval of every FunASR model/package.
+Original SenseVoiceSmall points to a custom license, while official
+SenseVoiceSmall-GGUF declares Apache-2.0. Resolve that exact artifact's applicable
+permission before distribution; don't infer relicensing from a format change.
+Qwen3-ASR0.6B/1.7B official cards and official inference code declare Apache-2.0;
+converted weights, tokenizer and full runtime dependency tree require review.
+Historical internal experiments do not grant redistributable-install status.
+
+Evidence-first implementation sequence
+--------------------------------------
+1. Add failing tests for fixed profiling sample coverage, voice budget/thread
+   propagation, failure-inclusive scoring, and incomplete/mismatched evidence.
+   Run tests in GitHub Actions; no local test/build/model workloads.
+2. Profile larger CPU candidates with explicit isolated budgets:
+   cpu2-ram4 =2 model threads,2CPU quota,4GiB container memory;
+   cpu4-ram8 =4 model threads,4CPU quota,8GiB container memory.
+   These are trial allocations, not universal minimums or host-size labels.
+3. Reuse pinned native runtimes and artifact checksums. Initial cold-process
+   screen: Whisper small-q5_1, large-v3-turbo-q5_0, FunASR-Nano safe U8U8 ONNX,
+   Qwen3-ASR0.6B INT8 ONNX. Compare sequentially on the same runner within a
+   profile; record CPU identity and quota instead of claiming to simulate an
+   entire8/16-core deployment. Do not silently substitute native/FP32/GGUF paths.
+4. Use24 predetermined probes from the existing frozen100-sample chain corpus:
+   6 each zh/en/mixed at<=5s,3 each zh/mixed at15-30s; hash ordering with a fixed
+   seed. No concatenation or transcript-based sample choice. This is a resource
+   screen with indicative scores, not a new untouched holdout or finalP95 claim.
+   Every timeout, OOM, empty and invalid output stays in delivered scoring.
+5. Measure cold request latency including process/model loading, peak RSS and
+   cgroup memory/OOM events. Missing measurements stay unknown. Native model
+   workers and whole-container memory are separate quantities. Filesystem cache
+   may be warm. This stage does not measure a resident model's idle/warm latency.
+6. Inspect runtime/model notices in downloaded packages before installer
+   admission. Deferred/rejected variants remain visible in experiment reports,
+   not selectable as approved installs.
+7. After resource/permission review, define the first installable catalogue and
+   implement focused model/config/engine boundaries, atomic verified downloads,
+   explicit resource selection and a disabled option. Unknown models/configs
+   fail explicitly. Preserve legacy Whisper configuration with truthful API
+   metadata, and document precedence/migration.
+8. Exercise installer corruption/rollback/disabled/missing-resource cases and
+   actual API delivery/model metadata/cancellation/memory recovery in Actions.
+   Run build/typecheck and relevant existing E2E; do not deploy this work.
+
+The installer is not implemented yet. Do not publish unmeasured resource minima
+or mark the experimental candidates as approved installation choices.
