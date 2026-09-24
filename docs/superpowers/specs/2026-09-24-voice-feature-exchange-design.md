@@ -3,7 +3,8 @@
 ## Status and authority
 
 On 2026-09-24 the user chose feature exchange before compiler or strict-floating-
-point comparisons. This written specification awaits approval before implementation.
+point comparisons. The user approved specification375b989 and inline implementation
+in the prior session; the handoff verified that approval on2026-09-24.
 The parent design and completed consistency experiment remain authoritative:
 
 - `2026-09-24-install-selected-voice-input-design.md`
