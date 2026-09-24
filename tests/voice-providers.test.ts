@@ -74,3 +74,34 @@ test('bounded UTF-8 output is mandatory for both adapters', () => {
   assert.throws(() => decodeVoiceText(Buffer.from([0xff])), /voice_invalid_result/);
   assert.throws(() => decodeVoiceText(Buffer.from('hello\0world')), /voice_invalid_result/);
 });
+
+test('Windows requires an explicit model, native launcher and standard policy', () => {
+  const windows = {
+    VOICE_ENABLED: '1', VOICE_MODEL: 'sensevoice-small-q8',
+    VOICE_BINARY_PATH: 'C:\\voice engine\\engine.exe',
+    VOICE_LAUNCHER_PATH: 'C:\\voice engine\\voice-job.exe',
+    VOICE_MODEL_PATH: 'C:\\voice engine\\model.gguf',
+  };
+  const config = parseVoiceConfiguration(windows, 'win32', 'x64')!;
+  assert.equal(voiceCommand(config, 'C:\\temp\\audio.wav', 'C:\\temp\\result').command,
+    windows.VOICE_LAUNCHER_PATH);
+  assert.deepEqual(voiceCommand(config, 'C:\\temp\\audio.wav', 'C:\\temp\\result').args, [
+    '120000', windows.VOICE_BINARY_PATH, '-m', windows.VOICE_MODEL_PATH,
+    '-a', 'C:\\temp\\audio.wav', '--threads', '2', '--backend', 'cpu',
+  ]);
+  assert.equal(config.resourcePolicy, 'standard');
+  for (const change of [
+    { VOICE_LAUNCHER_PATH: undefined },
+    { VOICE_BINARY_PATH: 'C:relative.exe' },
+    { VOICE_BINARY_PATH: '\\\\server\\share\\engine.exe' },
+    { VOICE_BINARY_PATH: 'C:\\engine.cmd' },
+    { VOICE_MODEL_PATH: 'C:\\model:stream' },
+    { VOICE_MODEL_PATH: 'C:\\bad\0model' },
+    { VOICE_RESOURCE_POLICY: 'legacy-low-memory' },
+    { VOICE_MODEL: undefined },
+  ]) {
+    assert.throws(() => parseVoiceConfiguration({ ...windows, ...change }, 'win32', 'x64'),
+      /voice_not_configured/);
+  }
+  assert.throws(() => parseVoiceConfiguration(windows, 'win32', 'arm64'), /voice_not_configured/);
+});
