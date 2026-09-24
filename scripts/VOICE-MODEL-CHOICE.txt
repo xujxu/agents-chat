@@ -1,12 +1,12 @@
 Frozen budget-constrained model decision experiment
 ==================================================
 
-User-approved scope2026-09-24: Whisper base-q5_1 versus SenseVoice INT8 whole
+User-approved scope 2026-09-24: Whisper base-q5_1 versus SenseVoice INT8 whole
 and bounded segmented SenseVoice. FunASR prior results remain context, not a
 fresh candidate under384MiB. No deployment, host workload or resource changes.
 
 Run Budget-constrained voice model selection in GitHub Actions only.
-Use the fixed memory guard,1thread,384MiB RSS,1GiB address space,120s timeout.
+Use the fixed memory guard, 1 thread, 384MiB RSS, 1GiB address space, 120s timeout.
 Every utterance goes through actual transcribeVoice and PCM validation, not a
 parallel imitation of the guard. Failed attempts remain in scoring.
 
@@ -31,7 +31,8 @@ Retain per-category/duration rates; do not compare only successful outputs.
 Predetermined gates:
 -100% successful nonempty delivery, no limit/timeout failures.
 -Each language/duration error rate <= whole-Sense on same samples +2points.
--Input <=5s: cold requestP95 <=3s; input15-30s: P95 <=5s.
+-Input <=5s: cold request P95 <=3s; input15-30s: P95 <=5s.
+ Aggregate latency by duration band; language-specific latency is diagnostic.
  Intermediate5-15s latency is reported, not given an invented threshold.
 -Among eligible candidates choose lower mixed error; within1point choose lower
  overallP95. Corpus rates are micro CER/WER/MER, not sentence accuracies.
@@ -52,3 +53,74 @@ CC-BY-SA corpus attributions accompany artifacts.
 The bounded segmented adapter is CI-only and changes no product behavior.
 Stages are independently persisted to survive CLI session interruption:
 voice-choice-development and voice-choice-test-decision.
+
+Results and decision: 2026-09-24
+===============================
+
+Decision: NONE of the approved candidates meets the fixed gates.
+Do not ship Whisper just because it fits memory; do not ship Sense just because
+its successful requests are fast. No browser acceptance rerun is needed to
+reject candidates already failing actual-transcriber screening.
+
+Inference commit 9be8888, Actions 35944684486.
+Development artifact 10786098480; test artifact 10787280400.
+Reviewed report commit 4dfa740, Actions 35946323331, artifact 10786533959.
+The review uses the exact same inference outputs, not a new model run. It
+corrects latency gating to aggregate duration bands (not individual languages),
+enforces complete candidate evidence, and labels rejection timing explicitly.
+This reporting correction does not change the no-winner decision.
+
+Development, 24 official validation examples:
+  segment-2: 19 delivered, 5 voice_memory_limit.
+  segment-3: 19 delivered, 5 voice_memory_limit.
+  segment-5: 19 delivered, 5 voice_memory_limit.
+No configuration meets the preregistered all-delivered development gate.
+frozen.json therefore contains variant:null. No segmented test candidate was
+substituted after seeing test results. These results establish failure of these
+implementations, not impossibility of every segmentation technique.
+
+Fixed test, 60 ASCEND utterances plus 40 continuous AISHELL-4 windows:
+                                Whisper base-q5_1    Sense whole INT8
+  Total delivered               100/100              46/100
+  <=5s delivered                 50/50                39/50
+  5-15s delivered                10/10                 7/10
+  15-30s delivered               40/40                 0/40
+  voice_memory_limit              0                   54
+  <=5s successful P95 seconds     7.92                 1.42 (39 successes only)
+  15-30s successful P95 seconds   9.31                 unavailable
+  Max sampled process RSS MiB   152.58               444.33
+
+Whisper exceeds both aggregate latency limits (3s/5s) before HTTP/browser
+overhead. Its long Mandarin CER is34.36% versus10.76% for the identical-input
+unconstrained Sense baseline. Long mixed MER is40.58% versus14.70%; short
+mixed MER31.29% versus19.05%. It fails the +2point quality gate as well.
+All quality scores compare identical samples, not full-corpus versus subsets.
+
+Sense long failure-inclusive error is100% because no transcript was delivered;
+that is not its unconstrained linguistic recognition error. Its2.42s long
+attempt P95 measures rejection, NOT fast transcription.
+
+Memory: complete CI service logs contain272 numeric sampledPeakRssKiB records,
+one for each72 development +200 test attempts in sequential workflow order.
+The dev maxima were443.95/428.54/443.89MiB for2/3/5s respectively.
+Whisper native final HWM remains null in per-row artifacts;152.58MiB above is
+the existing service monitor's sampled HWM, not an invented native measurement.
+The100ms RSS guard can observe a transient overshoot before killing the child;
+384MiB remains the rejection budget, not a hard RSS cgroup. All69 failures
+across development and test were voice_memory_limit; zero voice_memory_unknown.
+This is evidence the prior exit-race fix remains effective in this experiment,
+not evidence that the separate CLI OOM problem is resolved.
+
+No production configuration, deployment, cpg limit or sampler changed.
+The chosen candidate set is exhausted under the approved gates. Further work
+requires a separately defined implementation/model hypothesis, not adjusting
+these gates or repeatedly tuning against these test outputs.
+
+Artifacts:
+https://github.com/xujxu/agents-chat/actions/runs/35944684486/artifacts/10786098480
+https://github.com/xujxu/agents-chat/actions/runs/35944684486/artifacts/10787280400
+https://github.com/xujxu/agents-chat/actions/runs/35946323331/artifacts/10786533959
+
+To re-score an existing inference artifact without any audio/model processing,
+dispatch this workflow with evidence_run=<inference run ID>. Reports preserve
+the original frozen selection and verify original reference/audio identities.

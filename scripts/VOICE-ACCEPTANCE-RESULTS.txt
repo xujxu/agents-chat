@@ -108,5 +108,17 @@ same saved inferences, without rerunning models or changing configurations.
 
 Actual microphone/AEC, other devices, WebKit corpus accuracy, broader natural
 mixed speech and speaker/domain generalization remain unproven. Product quality
-and latency acceptance thresholds still require agreement. No passed workflow
+and latency acceptance thresholds still required agreement at this checkpoint. No passed workflow
 or small corpus score is permission to deploy or increase service/CLI limits.
+
+5. Approved constrained model selection follow-up (2026-09-24)
+------------------------------------------------------------
+The user subsequently approved concrete delivery/quality/latency gates.
+Actions35944684486 compared actual guarded whole-Sense and Whisper base-q5_1
+on the fixed100 samples after development-only2/3/5s segment selection.
+No segment configuration achieved full delivery on its24 validation examples;
+none was promoted. Whole-Sense delivered46/100 (zero long), Whisper100/100
+but failed both latency bands and the quality gate. None is accepted.
+Reviewed decision Actions35946323331 uses the same outputs, no reinference.
+See VOICE-MODEL-CHOICE.txt for exact gates, metrics, provenance and artifact links.
+This screening does not replace or claim a new browser acceptance result.
