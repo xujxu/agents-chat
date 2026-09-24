@@ -30,6 +30,24 @@ class InstalledReportTests(unittest.TestCase):
         result = installed_report(manifest, attempts, baseline)
         self.assertIn("delivery_below_100_percent", result["candidates"][0]["violations"])
 
+    def test_processing_timing_is_separate_and_excludes_failures(self):
+        manifest, attempts, baseline = self.fixture()
+        for row in attempts:
+            row["apiElapsedMs"] = 250
+        attempts[0].update(failure="voice_failed", text=None, apiElapsedMs=100000)
+        result = installed_report(manifest, attempts, baseline)
+        self.assertEqual(result["delivered"], 99)
+        self.assertEqual(result["api_success_timing"], [
+            {"duration_band": "short", "measured_successes": 59, "p95_seconds": .25},
+            {"duration_band": "medium", "measured_successes": 0, "p95_seconds": None},
+            {"duration_band": "long", "measured_successes": 40, "p95_seconds": .25},
+        ])
+        self.assertEqual(result["candidates"][0]["p95_seconds"], 1)
+        for value in (True, -1, float("nan"), float("inf"), "250"):
+            attempts[1]["apiElapsedMs"] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                installed_report(manifest, attempts, baseline)
+
     def test_incomplete_changed_duplicate_or_nonfinite_is_rejected(self):
         manifest, attempts, baseline = self.fixture()
         for change in ("missing", "duplicate", "reference", "dataset", "nan", "negative", "baseline"):
