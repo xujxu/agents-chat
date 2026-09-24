@@ -36,6 +36,11 @@ test('launcher keys and Windows paths round trip without escaped backslashes', (
   assert.equal(voiceValues(next).VOICE_MODEL_PATH, 'C:/voice folder/model.gguf');
   assert.doesNotMatch(updateVoiceEnvironment(next, 'disabled'), /LAUNCHER_PATH/);
   assert.match(updateVoiceEnvironment(next, 'disabled'), /OTHER=unchanged/);
+  const apostrophe = updateVoiceEnvironment('', 'whisper-base-q5_1', {
+    binary: "C:\\O'Brien\\engine.exe", launcher: "C:\\O'Brien\\voice-job.exe",
+    model: "C:\\O'Brien\\model.bin", threads: 1,
+  });
+  assert.equal(voiceValues(apostrophe).VOICE_BINARY_PATH, "C:/O'Brien/engine.exe");
 });
 
 test('keep and rollback preserve exact bytes; receipts refuse later edits and accept legacy format', async t => {
@@ -91,6 +96,7 @@ test('private writes clean failed replacements and reject linked configuration r
   await writeFile(file, 'VOICE_ENABLED=1\n');
   assert.notEqual(invoke(root, '--model', 'keep', '--receipt', file).status, 0);
   assert.equal(await readFile(file, 'utf8'), 'VOICE_ENABLED=1\n');
+  assert.ok(!(await readdir(root)).some(name => name.startsWith('.voice-private-')));
 });
 
 test('Windows installed environment and recovery receipts have only private ACL grants', {
@@ -117,4 +123,17 @@ test('Windows installed environment and recovery receipts have only private ACL 
     assert.deepEqual(new Set(rules.map(rule => rule.split('|')[0])), expected);
     assert.ok(rules.every(rule => rule.endsWith('|Allow|2032127')));
   }
+  const linked = path.join(root, 'junction');
+  const actual = path.join(root, 'actual');
+  await mkdir(actual);
+  await symlink(actual, linked, 'junction');
+  await assert.rejects(atomicWrite(path.join(linked, 'config'), 'private'), /reparse point/);
+  assert.deepEqual(await readdir(actual), []);
+  const helper = spawnSync(path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), [
+    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', path.resolve('scripts/voice/windows/private-directory.ps1'),
+  ], { encoding: 'utf8', timeout: 10000, env: { ...childEnv, VOICE_PRIVATE_DIRECTORY: root } });
+  assert.notEqual(helper.status, 0);
+  assert.match(helper.stderr, /already exists/);
+  assert.equal(decodeEnvironment(await readFile(file)), 'OTHER=private\nVOICE_ENABLED=0\n');
 });

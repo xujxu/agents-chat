@@ -61,7 +61,7 @@ export function updateVoiceEnvironment(original, model, configuration) {
   };
   for (const [key, value] of Object.entries(values)) {
     if (typeof value !== 'string' || !value || /[$\r\n\0]/.test(value)
-      || (configuration?.launcher && /["'\x00-\x1f]/.test(value))) throw new Error('Invalid voice configuration value.');
+      || (configuration?.launcher && /["\x00-\x1f]/.test(value))) throw new Error('Invalid voice configuration value.');
     lines.push(`${key}=${/^[A-Za-z0-9_./:-]+$/.test(value) ? value : JSON.stringify(value)}`);
   }
   return lines.join('\n') + '\n';

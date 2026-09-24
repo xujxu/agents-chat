@@ -42,9 +42,6 @@ jobs:
         with:
           node-version: 24.20.0
       - run: node --test tests/voice-setup-files.test.mjs
-      - name: Diagnose PowerShell bootstrap without application secrets
-        if: failure()
-        run: node tests/voice-setup-powershell-diagnostic.mjs
   integrity:
     if: github.event_name == 'workflow_dispatch'
     needs: contracts
