@@ -4,7 +4,7 @@
 
 On2026-09-24 the user chose browser recording acceptance over further frontend
 numerical localization and approved the design below for a written specification.
-This document awaits written-spec approval before implementation.
+The user approved written specification4e80528 and inline implementation.
 
 The authoritative product requirements remain:
 `2026-09-24-install-selected-voice-input-design.md`.
