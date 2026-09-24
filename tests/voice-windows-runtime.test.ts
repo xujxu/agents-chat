@@ -74,7 +74,7 @@ test('Windows runtime preserves provider, privacy and cleanup contracts', { time
         if (!descendant) await new Promise(resolve => setTimeout(resolve, 25));
       }
       assert.ok(descendant > 0);
-      const { stdout, stderr } = await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      const { stdout, stderr } = await exec('pwsh.exe', ['-NoProfile', '-NonInteractive', '-Command',
         '$ErrorActionPreference = "Stop"; $acl = Get-Acl -LiteralPath $env:VOICE_TEST_DIRECTORY; ' +
         '@{ protected = $acl.AreAccessRulesProtected; ' +
         'current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; ' +
