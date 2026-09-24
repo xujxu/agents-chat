@@ -13,7 +13,7 @@ export const models = {
   },
 };
 
-const voiceKey = /^\s*(?:export\s+)?(VOICE_(?:ENABLED|MODEL|WHISPER_PATH|BINARY_PATH|MODEL_PATH|THREADS|RESOURCE_POLICY))\s*=/;
+const voiceKey = /^\s*(?:export\s+)?(VOICE_(?:ENABLED|MODEL|WHISPER_PATH|BINARY_PATH|LAUNCHER_PATH|MODEL_PATH|THREADS|RESOURCE_POLICY))\s*=/;
 export function voiceValues(text) {
   const values = {};
   for (const line of text.split(/\r?\n/)) {
@@ -51,14 +51,17 @@ export function updateVoiceEnvironment(original, model, configuration) {
   voiceValues(original);
   const lines = original.split(/\r?\n/).filter(line => !voiceKey.test(line));
   while (lines.at(-1) === '') lines.pop();
+  const configPath = value => configuration?.launcher && typeof value === 'string' ? value.replaceAll('\\', '/') : value;
   const values = model === 'disabled' ? { VOICE_ENABLED: '0' } : {
     VOICE_ENABLED: '1', VOICE_MODEL: model,
-    VOICE_BINARY_PATH: configuration?.binary, VOICE_MODEL_PATH: configuration?.model,
+    VOICE_BINARY_PATH: configPath(configuration?.binary), VOICE_MODEL_PATH: configPath(configuration?.model),
+    ...(configuration?.launcher ? { VOICE_LAUNCHER_PATH: configPath(configuration.launcher) } : {}),
     VOICE_THREADS: String(configuration?.threads ?? models[model].threads),
     VOICE_RESOURCE_POLICY: 'standard',
   };
   for (const [key, value] of Object.entries(values)) {
-    if (typeof value !== 'string' || !value || /[$\r\n\0]/.test(value)) throw new Error('Invalid voice configuration value.');
+    if (typeof value !== 'string' || !value || /[$\r\n\0]/.test(value)
+      || (configuration?.launcher && /["'\x00-\x1f]/.test(value))) throw new Error('Invalid voice configuration value.');
     lines.push(`${key}=${/^[A-Za-z0-9_./:-]+$/.test(value) ? value : JSON.stringify(value)}`);
   }
   return lines.join('\n') + '\n';

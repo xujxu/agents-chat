@@ -1,27 +1,15 @@
 #!/usr/bin/env node
-import { createHash, randomUUID } from 'node:crypto';
-import { chmod, lstat, mkdir, open, readFile, rename, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { chmod, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { models, selectVoiceAction, updateVoiceEnvironment, voiceValues } from './voice/setup-config.mjs';
 import { installVoicePackage } from './voice/install-package.mjs';
+import { atomicWrite, decodeEnvironment, encodeEnvironment, optionalRead, previousReceiptBytes } from './voice/configuration-files.mjs';
 
 const digest = text => createHash('sha256').update(text).digest('hex');
-async function optionalRead(file) {
-  try { return await readFile(file, 'utf8'); }
-  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
-}
-
-async function atomicWrite(file, text) {
-  const temp = `${file}.${randomUUID()}.tmp`;
-  try {
-    const handle = await open(temp, 'wx', 0o600);
-    try { await handle.writeFile(text); await handle.sync(); }
-    finally { await handle.close(); }
-    await rename(temp, file);
-  } finally { await rm(temp, { force: true }); }
-}
+const equalBytes = (left, right) => left === null ? right === null : right !== null && left.equals(right);
 
 function parseArgs(args) {
   const options = {};
@@ -66,8 +54,8 @@ async function run() {
   if (/[$\r\n\0]/.test(project)) throw new Error('Project path contains unsupported environment characters.');
   const file = path.join(project, '.env.local');
   const original = await optionalRead(file);
-  if (original !== null && !(await lstat(file)).isFile()) throw new Error('.env.local must be a regular file, not a symlink.');
-  const known = voiceValues(original ?? '');
+  const originalText = decodeEnvironment(original);
+  const known = voiceValues(originalText);
   console.log(`Project voice setting: ${known.VOICE_ENABLED === '1' ? 'enabled' : 'disabled or not configured'} (service overrides may differ).`);
   if (known.VOICE_ENABLED === '1') {
     const model = known.VOICE_MODEL ?? 'whisper-base-q5_1';
@@ -96,13 +84,13 @@ async function run() {
   }
   try {
     if (options['rollback-receipt']) {
-      const receipt = JSON.parse(await readFile(path.resolve(options['rollback-receipt']), 'utf8'));
+      const receipt = JSON.parse(decodeEnvironment(await optionalRead(path.resolve(options['rollback-receipt']))));
       if (receipt.changed === false) return;
+      const previous = previousReceiptBytes(receipt);
       if (receipt.file !== file || typeof receipt.installedSha !== 'string'
-        || (receipt.previous !== null && typeof receipt.previous !== 'string')
         || digest(await optionalRead(file) ?? '') !== receipt.installedSha) throw new Error('Rollback refused: configuration changed after setup.');
-      if (receipt.previous === null) await rm(file);
-      else await atomicWrite(file, receipt.previous);
+      if (previous === null) await rm(file);
+      else await atomicWrite(file, previous);
       console.log('Previous voice configuration restored; restart the app to apply it.');
       return;
     }
@@ -111,8 +99,8 @@ async function run() {
     };
     for (const [name, values] of [
       ['inherited environment', process.env],
-      ['.env.production.local', voiceValues(await optionalRead(path.join(project, '.env.production.local')) ?? '')],
-      ['/etc/agents-chat.env', voiceValues(await optionalRead('/etc/agents-chat.env') ?? '')],
+      ['.env.production.local', voiceValues(decodeEnvironment(await optionalRead(path.join(project, '.env.production.local'))))],
+      ...(process.platform === 'linux' ? [['/etc/agents-chat.env', voiceValues(decodeEnvironment(await optionalRead('/etc/agents-chat.env')))]] : []),
     ]) {
       if (Object.keys(values).some(key => key.startsWith('VOICE_') && (
         Object.hasOwn(wanted, key) ? values[key] !== wanted[key] : selection.model !== 'disabled'
@@ -123,9 +111,9 @@ async function run() {
       model: selection.model, destination: directory,
       threads: Number(options.threads ?? models[selection.model].threads),
     });
-    const next = updateVoiceEnvironment(original ?? '', selection.model, configuration);
-    if (await optionalRead(file) !== original) throw new Error('Configuration changed during setup; refusing to overwrite it.');
-    const receipt = { changed: true, file, previous: original, installedSha: digest(next) };
+    const next = encodeEnvironment(updateVoiceEnvironment(originalText, selection.model, configuration));
+    if (!equalBytes(await optionalRead(file), original)) throw new Error('Configuration changed during setup; refusing to overwrite it.');
+    const receipt = { version: 2, changed: true, file, previous: original === null ? null : original.toString('base64'), installedSha: digest(next) };
     const receiptPath = path.resolve(options.receipt ?? path.join(directory, 'last-setup.json'));
     if (receiptPath === file) throw new Error('Recovery receipt must not overwrite the environment file.');
     // Save recovery before switching configuration, never after.
