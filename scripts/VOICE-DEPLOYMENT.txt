@@ -417,3 +417,83 @@ Installer selection/download verification/rollback and complete package notices
 remain next, followed by full actual-service quality/latency acceptance.
 
 https://github.com/xujxu/agents-chat/actions/runs/35965252088/artifacts/10794510539
+
+Installation and upgrade flow design, 2026-09-24
+-----------------------------------------------
+The user explicitly selected: prompt on EVERY interactive upgrade, with keep
+current configuration as the default. Voice setup is not first-install-only.
+This design extends the approved catalogue, native execution and resource policy;
+it does not change model qualification gates or introduce a compulsory service.
+
+Entry points and interaction:
+- A reusable configuration command serves fresh installation, upgrades and
+  later reconfiguration. Linux deploy.sh invokes it after obtaining the new
+  application version and before activating/restarting the service.
+- Interactive first install with no configuration defaults to voice disabled.
+  Interactive upgrade displays effective current state and defaults to KEEP,
+  including preservation of an old Whisper/legacy-low-memory configuration.
+- The menu permits keep, configure Sense GGUF q8, configure Whisper compatibility,
+  or disable. Model entries show qualification status, weight/runtime license,
+  download size, tested CPU/thread/memory observations and platform requirements.
+  Sense is not advertised as release-approved before remaining package gates.
+- Noninteractive installs/upgrades never read stdin or wait for a choice. With no
+  explicit selection they preserve current configuration (disabled if absent),
+  print current state and the exact reconfiguration command, and continue.
+  Explicit command-line selections use the same validation/install transaction.
+- Closing input or cancelling the menu preserves the current configuration.
+  An explicitly requested setup that fails exits nonzero; it is not reported
+  as successful configuration or silently replaced with another model.
+- Merely starting/restarting the app never opens an installation prompt.
+
+Upgrade and configuration preservation:
+- Read only voice-related keys for display. Never print authentication values
+  or rewrite unrelated environment settings.
+- Keep means no voice configuration migration, model download, policy change or
+  automatic enablement. An explicit switch to a new model uses standard policy.
+- Report higher-priority service environment overrides, including
+  /etc/agents-chat.env, rather than claiming a project setting will take effect
+  when it is overridden. Do not silently modify machine-level overrides.
+- Preserve prior model/configuration until the new selection is fully prepared
+  and verified. Stage downloads and configuration separately; commit configuration
+  atomically only after all required checks succeed. Retain a recoverable prior
+  configuration for a failed activation. Do not delete old model assets on switch.
+- The first upgrade from an OLD deploy script must also reach the new setup
+  logic: do not rely solely on code parsed by the shell before git pull. Cover
+  the old-script/new-checkout transition explicitly in integration tests.
+
+Supported distribution surfaces:
+- Initial native packages are Linux x86_64 only. Windows/macOS install/upgrade
+  documentation must clearly report unsupported local speech packages, not
+  offer a Linux binary as a working native option.
+- Standalone release bundles include the configuration command and instructions,
+  rather than assuming users have the source checkout or development dependencies.
+  Replacing app files must preserve external configuration/model data.
+- Pin portable runtime build identity and each downloaded model/runtime checksum.
+  Retain weight declarations, source revisions, the native patch, engine licenses
+  and relevant transitive/system-library notices alongside installed assets.
+- Current Actions-built smoke binaries are not release packages. Build/qualify
+  portable bundles in Actions before enabling their installer catalogue entries.
+  Tests use controlled download fixtures and Actions artifacts. Public release
+  publication is a separate explicit step, not an implicit production deployment.
+
+Compatibility and resource guidance:
+- Reject incompatible architecture/instruction set/runtime dependencies, corrupt
+  downloads, invalid paths and insufficient disk for staging/installation.
+- Present actual available CPU/memory and existing deployment constraints, with
+  measured model use and uncertainty. Low-resource warnings do not manufacture
+  a minimum4GiB requirement from the experimental allocation.
+- No mandatory new cgroup, Docker or systemd voice unit. Thread configuration is
+  not a CPU quota; standard mode has no added CPU/RAM cap. Explain that operators
+  may set deployment limits, and insufficient memory can still cause failure.
+
+Actions-only acceptance:
+- Test fresh interactive selection, every-upgrade prompting, default keep,
+  explicit disable/model switch, cancelled input and noninteractive preservation.
+- Test old Whisper compatibility and old versions without ANY voice keys.
+- Test old deploy-script upgrade reaching the new configurator, environment
+  override detection, portable bundle inclusion and unsupported-platform errors.
+- Test corrupt/truncated downloads, interruption, concurrent setup protection,
+  staging cleanup, unchanged previous settings on failure and activation recovery.
+- Run real pinned native artifacts through the installed configuration and
+  authenticated API, plus browser capture/cancellation and frozen quality/latency
+  gates. No production enablement follows merely from passing fixture tests.
