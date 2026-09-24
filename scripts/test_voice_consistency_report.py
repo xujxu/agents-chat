@@ -1,9 +1,12 @@
 import base64
 import copy
 import hashlib
+import json
+from pathlib import Path
+import tempfile
 import unittest
 
-from voice_consistency_report import platform_report, select_samples
+from voice_consistency_report import aggregate, platform_report, select_samples
 
 
 class ConsistencyTests(unittest.TestCase):
@@ -98,6 +101,59 @@ class ConsistencyTests(unittest.TestCase):
         self.assertEqual(len(result["failures"]), 324)
         for name in ("repeatability", "layers", "threads"):
             self.assertTrue(all(row["equal"] is None for row in result[name]))
+
+    def test_aggregate_keeps_stable_differences_and_checks_history(self):
+        manifest, selected, identity, rows = self.fixture()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for platform in ("linux", "win32"):
+                package = {"files": [
+                    {"role": role, "sha256": digest} for role, digest in identity.items()
+                    if role in ("binary", "model")
+                ] + ([{"role": "helper", "sha256": "d" * 64}] if platform == "win32" else [])}
+                package_bytes = json.dumps(package).encode()
+                current_identity = {**identity, "manifest": hashlib.sha256(package_bytes).hexdigest(),
+                                    "helper": "d" * 64 if platform == "win32" else None}
+                current = copy.deepcopy(rows)
+                for row in current:
+                    row.update(platform=platform, identity=current_identity)
+                    if platform == "win32" and row["surface"] == "transcriber" and row["id"] == selected[0]["id"]:
+                        row["text"] = "different"
+                folder = root / platform
+                folder.mkdir()
+                (folder / "samples.json").write_text(json.dumps(selected))
+                (folder / "environment.json").write_text(json.dumps({"platform": platform, "identity": current_identity}))
+                (folder / "package-manifest.json").write_bytes(package_bytes)
+                for thread in (2, 1, 4):
+                    (folder / f"attempts-{thread}.jsonl").write_text("\n".join(
+                        json.dumps(row) for row in current if row["threads"] == thread))
+                    (folder / f"complete-{thread}.json").write_text(json.dumps({"threads": thread, "count": 108}))
+                prior = root / f"prior-{platform}" / "installed-evidence"
+                prior.mkdir(parents=True)
+                (prior / "environment.json").write_text(json.dumps({
+                    "manifestSha256": current_identity["manifest"], "platform": platform}))
+                (prior / "package-manifest.json").write_bytes(package_bytes)
+                (prior / "complete.json").write_text(json.dumps({"count": 100, "variant": "sensevoice-small-q8"}))
+                (prior / "results.jsonl").write_text("\n".join(json.dumps({
+                    **row, "variant": "sensevoice-small-q8", "text": "hello", "failure": None,
+                }) for row in manifest))
+            args = [root / name for name in ("linux", "win32", "prior-linux", "prior-win32", "report")]
+            self.assertEqual(aggregate(*args), 0)
+            report = json.loads((root / "report/summary.json").read_text())
+            self.assertEqual(sum(row["equal"] is False for row in report["cross_platform"]), 9)
+            self.assertTrue(all(row["equal"] is True for row in report["platforms"]["win32"]["repeatability"]))
+            file = root / "linux/attempts-2.jsonl"
+            changed = [json.loads(line) for line in file.read_text().splitlines()]
+            changed[1].update(failure="voice_timeout", text=None)
+            file.write_text("\n".join(map(json.dumps, changed)))
+            self.assertEqual(aggregate(*args), 1)
+            prior = root / "prior-linux/installed-evidence/environment.json"
+            prior.write_text(json.dumps({"manifestSha256": "0" * 64, "platform": "linux"}))
+            with self.assertRaises(ValueError):
+                aggregate(*args)
+            (root / "linux/complete-2.json").unlink()
+            with self.assertRaises(FileNotFoundError):
+                aggregate(*args)
 
 
 if __name__ == "__main__":
