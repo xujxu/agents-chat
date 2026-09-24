@@ -74,13 +74,14 @@ test('Windows runtime preserves provider, privacy and cleanup contracts', { time
         if (!descendant) await new Promise(resolve => setTimeout(resolve, 25));
       }
       assert.ok(descendant > 0);
-      const { stdout } = await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-        '$acl = Get-Acl -LiteralPath $env:VOICE_TEST_DIRECTORY; ' +
+      const { stdout, stderr } = await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+        '$ErrorActionPreference = "Stop"; $acl = Get-Acl -LiteralPath $env:VOICE_TEST_DIRECTORY; ' +
         '@{ protected = $acl.AreAccessRulesProtected; ' +
         'current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; ' +
         'sids = @($acl.Access | ForEach-Object { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value }) ' +
         '} | ConvertTo-Json -Compress',
       ], { env: { ...process.env, VOICE_TEST_DIRECTORY: directory }, windowsHide: true, timeout: 10000 });
+      assert.equal(stderr.trim(), '', 'ACL inspection must not hide PowerShell errors');
       const acl = JSON.parse(stdout) as { protected: boolean; current: string; sids: string[] };
       assert.equal(acl.protected, true);
       assert.deepEqual([...new Set(acl.sids)].sort(), ['S-1-5-18', 'S-1-5-32-544', acl.current].sort());
