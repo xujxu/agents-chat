@@ -1,0 +1,25 @@
+name: Budget-constrained voice model selection
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - scripts/voice_choice*
+      - scripts/voice-segments.h
+      - scripts/test-voice-segments.c
+      - scripts/test_voice_choice.py
+      - .github/workflows/voice-model-choice.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - run: python -m unittest discover -s scripts -p test_voice_choice.py -v
+      - run: gcc -std=c11 -Wall -Wextra -Werror scripts/test-voice-segments.c -o /tmp/test-voice-segments && /tmp/test-voice-segments
