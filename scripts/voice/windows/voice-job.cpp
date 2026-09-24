@@ -138,7 +138,11 @@ int execute(int argc, wchar_t** argv) {
         }
         if (wait != WAIT_TIMEOUT) throw NativeError{ GetLastError() };
         if (cancelled(control)) { result = 126; break; }
-        if (GetTickCount64() >= deadline) { result = 124; break; }
+        if (GetTickCount64() >= deadline) {
+            std::fprintf(stderr, "voice_job_timeout\n");
+            result = 124;
+            break;
+        }
     }
     terminateAndWait(job.value);
     return static_cast<int>(result);

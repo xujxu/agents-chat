@@ -78,8 +78,8 @@ export function runVoiceProcess(
       logger.info({ elapsedMs: Math.round(performance.now() - started), exitCode: code, signal: exitSignal, sampledPeakRssKiB }, 'Voice inference finished');
       if (signal.aborted) reject(signal.reason);
       else if (failure) reject(failure);
+      else if (windows && code === 124 && /^voice_job_timeout\r?\n$/.test(diagnostic)) reject(new VoiceError('voice_timeout', 504));
       else if (windows && diagnostic) reject(new VoiceError('voice_process_failed', 503));
-      else if (windows && code === 124) reject(new VoiceError('voice_timeout', 504));
       else if (code !== 0) reject(new VoiceError('voice_inference_failed', 502));
       else resolve(Buffer.concat(chunks));
     });

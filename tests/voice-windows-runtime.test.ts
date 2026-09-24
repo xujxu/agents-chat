@@ -41,6 +41,7 @@ test('Windows runtime preserves provider, privacy and cleanup contracts', { time
     for (const [mode, error] of [
       ['empty', 'voice_no_speech'], ['oversized', 'voice_invalid_result'],
       ['invalid', 'voice_invalid_result'], ['nul', 'voice_invalid_result'], ['fail', 'voice_inference_failed'],
+      ['fail124', 'voice_inference_failed'],
       ...(modelId === 'whisper-base-q5_1' ? [
         ['missing', 'voice_invalid_result'], ['directory', 'voice_invalid_result'],
         ['reparse', 'voice_invalid_result'], ['hardlink', 'voice_invalid_result'],

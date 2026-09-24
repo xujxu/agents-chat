@@ -57,6 +57,7 @@ int wmain(int argc, wchar_t** argv) {
         Sleep(120000);
     }
     if (mode == "fail") return 3;
+    if (mode == "fail124") return 124;
     std::vector<unsigned char> allocation;
     if (sample == 16384 || mode == "memory") {
         allocation.resize(400 * 1024 * 1024, 42);
