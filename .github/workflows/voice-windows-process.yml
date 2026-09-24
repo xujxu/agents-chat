@@ -1,0 +1,47 @@
+name: Voice Windows process foundation
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - 'scripts/voice/windows/**'
+      - 'tests/voice-windows-job.test.mjs'
+      - 'tests/fixtures/voice-windows-*'
+      - '.github/workflows/voice-windows-process.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lifecycle:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - name: Compile if native sources exist
+        shell: pwsh
+        run: |
+          if (!(Test-Path scripts/voice/windows/voice-job.cpp)) {
+            Write-Host 'Test-first checkpoint: native launcher not implemented'
+            exit 0
+          }
+          New-Item -ItemType Directory -Force .data/voice-windows-build | Out-Null
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs) { throw 'MSVC x64 build tools missing' }
+          $devcmd = Join-Path $vs 'Common7\Tools\VsDevCmd.bat'
+          $job = 'cl /nologo /W4 /WX /EHsc /std:c++17 /MT /DUNICODE /D_UNICODE scripts\voice\windows\voice-job.cpp /Fo.data\voice-windows-build\voice-job.obj /Fe.data\voice-windows-build\voice-job.exe'
+          $fixture = 'cl /nologo /W4 /WX /EHsc /std:c++17 /MT /DUNICODE /D_UNICODE tests\fixtures\voice-windows-policy.cpp /Fo.data\voice-windows-build\voice-policy.obj /Fe.data\voice-windows-build\voice-policy.exe'
+          cmd /d /s /c "`"$devcmd`" -arch=x64 -host_arch=x64 && $job && $fixture"
+          if ($LASTEXITCODE -ne 0) { throw 'Native compilation failed' }
+      - name: Exercise owned process trees
+        shell: pwsh
+        run: node --test --test-concurrency=1 tests/voice-windows-job.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-windows-process-${{ github.sha }}
+          path: .data/voice-windows-build/*.exe
+          if-no-files-found: ignore
+          retention-days: 14
