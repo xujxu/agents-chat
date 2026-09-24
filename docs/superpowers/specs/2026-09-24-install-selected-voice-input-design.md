@@ -5,8 +5,9 @@
 This document consolidates the previously approved voice-input design and adds
 the Windows 11 scope requested on 2026-09-24. The user selected **native Windows
 11 on Intel/AMD x64** as the initial Windows target; ARM64 is outside this slice.
-The user approved the written design after commit `98e06ce`. Windows
-implementation remains pending; approval is not platform qualification.
+The user approved the written design after commit `98e06ce`. Windows runtime
+integration is now implemented and fixture-verified; native model packages,
+installation/upgrade integration and actual Win11 qualification remain pending.
 
 The feature's earlier design decisions and experiments were recorded in
 `scripts/VOICE-DEPLOYMENT.txt` rather than this repository's normal specification
@@ -27,7 +28,7 @@ As of commit `14c7f47`:
 | Automatic trusted public downloads | Not implemented; explicit local package and trusted manifest hash required |
 | Full acceptance of final platform-specific installed packages | Pending |
 
-The Linux-only restriction is **current implementation status**, not the final
+The Linux-only restriction above describes that historical implementation, not the final
 feature scope. Windows 11 support is required for completing this feature.
 
 ### Subsequent process-foundation checkpoint
@@ -36,9 +37,30 @@ Implementation `684cc30` adds the standalone Windows Job launcher, not Windows
 voice availability. Actions
 [`35972552477`](https://github.com/xujxu/agents-chat/actions/runs/35972552477)
 passed the native lifecycle contracts on Windows Server 2022; artifact
-`10796434034` retains binaries and provenance. The application still rejects
-Windows configuration. Model integration, packages, installer upgrades and
-actual Windows 11 acceptance remain pending.
+`10796434034` retains binaries and provenance. At that checkpoint the application
+still rejected Windows configuration; the next checkpoint supersedes that
+restriction, not the pending real-model and Win11 acceptance gates.
+
+### Subsequent runtime-integration checkpoint
+
+Implementation `852fcc1` supports explicit Windows x64 native configuration,
+the matching `VOICE_LAUNCHER_PATH`, lifecycle-only Job supervision, a sanitized
+engine environment, private ACL request directories and bounded handle-based
+Whisper result reads. Legacy Linux configurations retain their existing policy.
+
+Windows Server 2022 Actions
+[`35975644625`](https://github.com/xujxu/agents-chat/actions/runs/35975644625)
+passed native lifecycle/runtime, build/typecheck and authenticated fixture
+API/browser coverage. Artifact `10797918486` contains helpers, synthetic engines
+and provenance, **not an installable speech model**.
+Linux Actions
+[`35974609962`](https://github.com/xujxu/agents-chat/actions/runs/35974609962)
+passed the shared runtime's regressions and real pinned Sense API smoke.
+
+Windows installation remains unsupported until compatible real packages,
+dependency/license review and setup/deploy integration are completed.
+Synthetic fixture results do not measure Windows speech accuracy/latency and
+Windows Server is not an actual Win11 acceptance environment.
 
 ## Goal
 
@@ -430,20 +452,19 @@ Whisper remains a labelled compatibility option even if it runs successfully.
 | Actions `35968626725` | Package integrity, setup interaction, release inclusion and isolated deployment tests passed |
 | Actions `35968629945` | Installer-driven disabled upgrade hides microphone/no error banner; Linux integration passes |
 | Actions `35972552477` | Windows Server native lifecycle foundation passes; no Windows model/app/Win11 qualification |
+| Actions `35975644625` | Windows Server native runtime, private files, fixture API/browser integration pass; real models and Win11 pending |
+| Actions `35974609962` | Shared runtime preserves Linux contracts, browser/API behavior and real pinned Sense smoke |
 
 Remaining implementation slices, in order:
 
-1. Approve this specification and write the implementation plan under
-   `docs/superpowers/plans/` before Windows code changes. Use separate bounded
-   plans for native Windows runtime, installer/deployment integration, and
-   qualification/distribution; do not combine them into an unreviewable plan.
-2. Add Windows-native process ownership and platform-aware configuration, with
-   failing lifecycle/configuration tests first.
-3. Build candidate Windows runtimes and implement Windows-safe package/config
+1. Keep the approved spec and completed foundation/runtime plans under
+   `docs/superpowers/`. Write separate bounded plans for package/installation
+   integration and qualification/distribution before those code changes.
+2. Build candidate Windows runtimes and implement Windows-safe package/config
    transactions; integrate setup/deploy/release entry points.
-4. Complete installed-package accuracy/latency, actual Windows 11, API/browser
+3. Complete installed-package accuracy/latency, actual Windows 11, API/browser
    and failure/rollback acceptance. Keep blocked gates explicit.
-5. Finalize notices and permanent trusted distribution, enable automatic
+4. Finalize notices and permanent trusted distribution, enable automatic
    downloads and publish only approved platform catalogue entries.
 
 No Windows support or public automatic installation is claimed complete by

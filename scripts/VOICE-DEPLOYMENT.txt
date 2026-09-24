@@ -3,10 +3,64 @@ Install-selected voice providers: approved direction and evidence plan
 
 Formal product specification (supersedes historical scope below):
 docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md
-Windows11 Intel/AMD x64 native support is now a required target, not implemented
-or qualified yet. Linux-only statements below describe earlier scope/current
-implementation, not an exclusion from the final feature. This file remains the
+Windows11 Intel/AMD x64 native support is required. Windows runtime fixture
+integration now passes; real-model packages, installation and Win11 acceptance
+remain pending. Linux-only statements below describe earlier implementation,
+not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
+
+Windows runtime integration checkpoint (2026-09-24)
+--------------------------------------------------
+Plan9653e6d:
+docs/superpowers/plans/2026-09-24-voice-windows-runtime-integration.md
+Test-firstb8de002 failed as intended on Windows35974222190 and Linux35974222219
+with voice_not_configured. Runtime implementation30ef70b, API/browser wiring
+e38bdd5, ACL probe fixd545208, final ACL-volume guard/docs852fcc1.
+
+Final Windows validation:
+https://github.com/xujxu/agents-chat/actions/runs/35975644625
+Commit852fcc18a6b8213edbfec6e8c2e57737822cc24f.
+Windows Server2022 Datacenter10.0.20348 x64, Node24.20.0, MSVC C++17 /MT.
+13 lifecycle node:test results and1 runtime test containing both providers'
+success/failure, Unicode paths, environment-secret exclusion,400MiB standard
+mode, ACL inspection, cancellation/descendant cleanup and early-abort cases.
+Whisper rejects missing/directory/reparse/hardlink/oversized/invalidUTF8/NUL
+outputs. Actual engine exit124 is not mistaken for launcher timeout.
+Existing directories are never adopted by the private-directory helper.
+Temporary volumes without FILE_PERSISTENT_ACLS are explicitly rejected.
+Build/typecheck passed. Browser/API:36passed,2intentional legacy-watchdog skips
+(17each Sense/Whisper fixture +1invalid +1disabled).
+Artifact10797918486,888627compressed bytes:
+voice-windows-process-852fcc18a6b8213edbfec6e8c2e57737822cc24f
+Includes helper, synthetic provider/policy executables, provenance and CI logs.
+Not an installable model or release-approved package.
+
+Earlier Windows runs35974484493/35974701879 failed in the TEST ACL inspector:
+PowerShell5 could not load Microsoft.PowerShell.Security in the inherited
+PowerShell7 runner environment. Switching the inspector to pwsh preserved the
+ACL assertions;35974871913 then passed the full Windows application phase.
+No permission checks were removed or silently ignored.
+
+Linux regression of shared runtimee38bdd5:
+https://github.com/xujxu/agents-chat/actions/runs/35974609962
+37contracts passed; build/typecheck passed;76Playwright passed with3intentional
+policy skips, including mobile capture, invalid/disabled capabilities and real
+pinned Sense authenticated API smoke. Artifact10797423324.
+Subsequent runtime code changes were Windows-native ACL-volume guard only;
+other changes were Windows-test fixes or documentation.
+
+Windows configuration requires explicit model, standard policy, readable local
+model and.exe engine/helper paths, and VOICE_LAUNCHER_PATH pointing at this
+matching helper build. Helpers now include private-directory and bounded-file
+operations; earlier lifecycle-only artifacts are insufficient.
+No new application CPU/RAM hard quota. Linux legacy memory guards unchanged.
+No API/UX behavior weakened; actual route exercised with compiled native fixtures.
+
+Pending: real Windows engines/models and DLL licensing; verified package
+manifest/import and installer/repeated-upgrade support; exact-package corpus
+quality/latency; actual Win11 Actions runner; permanent trusted distribution.
+All validation ran in Actions. No local model/test servers, PROD/cpg/sampler
+changes, native model downloads on this host, or release publication.
 
 Windows process foundation checkpoint (2026-09-24)
 -------------------------------------------------

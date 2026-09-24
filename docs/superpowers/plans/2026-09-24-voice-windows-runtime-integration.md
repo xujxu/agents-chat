@@ -10,6 +10,27 @@
 
 ---
 
+## Completed execution checkpoint (2026-09-24)
+
+Tasks 1-6 completed through implementation `852fcc1` using inline execution.
+Red evidence: `b8de002`, Windows `35974222190` and Linux `35974222219`.
+Windows final Actions `35975644625` passed lifecycle/runtime contracts,
+build/typecheck and 36 API/browser tests (two policy-specific skips).
+Artifact `10797918486` contains synthetic fixtures, helper and provenance.
+Linux Actions `35974609962` passed 37 contracts and 76 Playwright checks
+(three policy skips), including the real pinned Sense API smoke.
+
+The ACL inspector initially mixed PowerShell 5 with a PowerShell 7 module
+environment. It now uses the runner's `pwsh` and errors explicitly; ACL
+assertions remain unchanged. Implementation additionally rejects temporary
+volumes without persistent ACL support and distinguishes a supervisor timeout
+from an engine that itself exits with status 124.
+
+The checked-in implementation is authoritative over the original sketches.
+The next separate plan covers native model packages and installation/upgrade.
+No Windows model package, final speech qualification or actual Win11 acceptance
+is claimed by this completed fixture integration.
+
 ## Scope and execution
 
 The approved cross-platform spec and user-selected inline execution apply.
