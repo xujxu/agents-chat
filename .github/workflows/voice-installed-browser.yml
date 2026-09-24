@@ -24,3 +24,35 @@ jobs:
           python-version: '3.12'
       - run: pip install opencc-python-reimplemented==0.1.7
       - run: python -m unittest discover -s scripts -p 'test_voice_browser_*.py' -v
+  capture-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-browser-contract-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2017 --lib dom,dom.iterable,esnext --module esnext --moduleResolution bundler --jsx react-jsx tests/voice-browser-capture.spec.ts
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Observational capture and existing recorder regressions
+        shell: bash
+        run: |
+          node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3011 > fixture-server.log 2>&1 &
+          app=$!
+          trap 'kill "$app"; wait "$app" || true' EXIT
+          ready=0
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent --max-time 2 http://localhost:3011/api/auth/providers >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          npx playwright test --config tests/playwright.config.ts tests/voice-browser-capture.spec.ts tests/voice-input.spec.ts --project=desktop-chromium --workers=1 --reporter=line --trace=off
