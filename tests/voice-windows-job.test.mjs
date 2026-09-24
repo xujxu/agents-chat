@@ -41,11 +41,11 @@ function stop(pid) {
   if (pid && alive(pid)) process.kill(pid, 'SIGKILL');
 }
 
-function run(binary, args) {
-  const child = spawn(binary, args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+function run(binary, args, control = 'pipe') {
+  const child = spawn(binary, args, { windowsHide: true, stdio: [control, 'pipe', 'pipe'] });
   const stdout = [];
   const stderr = [];
-  child.stdin.on('error', error => {
+  child.stdin?.on('error', error => {
     if (error.code !== 'EPIPE' && error.code !== 'ECONNRESET') throw error;
   });
   child.stdout.on('data', chunk => stdout.push(chunk));
@@ -67,9 +67,10 @@ test('Windows Job launcher contracts', { timeout: 90000 }, async t => {
   t.after(() => rm(root, { recursive: true, force: true }));
   const tracked = new Set();
   t.after(() => { for (const pid of tracked) stop(pid); });
-  const start = (binary, args) => {
-    const result = run(binary, args);
+  const start = (binary, args, control = 'pipe') => {
+    const result = run(binary, args, control);
     if (result.child.pid) tracked.add(result.child.pid);
+    result.child.once('close', () => tracked.delete(result.child.pid));
     return result;
   };
   const engine = (args, deadline = '5000', executable = launcher) =>
@@ -95,6 +96,31 @@ test('Windows Job launcher contracts', { timeout: 90000 }, async t => {
     assert.equal(result.stdout, '');
     assert.match(result.stderr, /^voice_job_error:\d+\r?\n$/);
     assert.ok(!result.stderr.includes(root));
+  });
+
+  await t.test('rejects invalid deadline, path and control transport before engine execution', async () => {
+    const badArgs = [
+      ['0', process.execPath],
+      ['120001', process.execPath],
+      ['999999999999999999999', process.execPath],
+      ['+100', process.execPath],
+      ['100x', process.execPath],
+      ['1000', 'relative.exe'],
+      ['1000', 'C:relative.exe'],
+      ['1000', '\\\\server\\share\\engine.exe'],
+      ['1000', 'C:\\engine.exe:stream'],
+    ];
+    for (const args of badArgs) {
+      const result = await start(launcher, args).done;
+      assert.equal(result.code, 125);
+      assert.equal(result.stdout, '');
+      assert.match(result.stderr, /^voice_job_error:\d+\r?\n$/);
+    }
+    const result = await start(launcher,
+      ['5000', process.execPath, fixture, 'args', 'must-not-execute'], 'ignore').done;
+    assert.equal(result.code, 125);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /^voice_job_error:\d+\r?\n$/);
   });
 
   await t.test('inner Job sets lifecycle only, including when nested', async () => {
@@ -133,6 +159,7 @@ test('Windows Job launcher contracts', { timeout: 90000 }, async t => {
       }
       await until(() => !alive(pids.engine) && !alive(pids.descendant),
         `${mode} left running processes`);
+      tracked.delete(pids.engine); tracked.delete(pids.descendant);
     });
   }
 
@@ -149,6 +176,7 @@ test('Windows Job launcher contracts', { timeout: 90000 }, async t => {
     await parent.done;
     await until(() => !alive(owner.launcher) && !alive(pids.engine) && !alive(pids.descendant),
       'parent death leaked its launcher or engine tree');
+    tracked.delete(owner.launcher); tracked.delete(pids.engine); tracked.delete(pids.descendant);
   });
 
   await t.test('repeated early cancellation does not spawn a late engine', async () => {
