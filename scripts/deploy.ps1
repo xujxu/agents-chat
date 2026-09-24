@@ -16,6 +16,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Write-Host "Native voice packages currently require Linux x86_64. This Windows upgrade preserves voice settings; it does not install a Linux model." -ForegroundColor Yellow
 
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()

@@ -11,8 +11,14 @@ on:
       - 'tests/voice-setup*'
       - '.github/workflows/voice-setup.yml'
   workflow_dispatch:
+    inputs:
+      package_run:
+        description: Completed native-package run for integrity tests without rebuilding models
+        type: string
+        default: '35968099304'
 permissions:
   contents: read
+  actions: read
 jobs:
   contracts:
     runs-on: ubuntu-24.04
@@ -27,3 +33,25 @@ jobs:
       - run: bash -n scripts/deploy.sh scripts/upgrade.sh
       - name: Actual deployment flow in isolated container
         run: docker run --rm -v "$PWD:/work:ro" -w /work node:24-bookworm bash tests/voice-setup-deploy.sh
+  integrity:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        model: [sensevoice-small-q8, whisper-base-q5_1]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.package_run }}
+          name: voice-install-${{ matrix.model }}
+          path: package
+      - run: node --test tests/voice-setup-package.test.mjs
+        env:
+          VOICE_PACKAGE_DIR: package

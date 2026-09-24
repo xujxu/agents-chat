@@ -11,6 +11,7 @@ $ProjectDir = Split-Path -Parent $PSScriptRoot
 
 Write-Host "=== ACP Chat Setup ===" -ForegroundColor Cyan
 Write-Host ""
+Write-Host "Optional native voice packages currently require Linux x86_64. Windows voice installation is not available; existing settings are preserved." -ForegroundColor Yellow
 
 # ─── 1. Check prerequisites ───
 Write-Host "[1/6] Checking prerequisites..." -ForegroundColor Cyan

@@ -465,8 +465,12 @@ Upgrade and configuration preservation:
   atomically only after all required checks succeed. Retain a recoverable prior
   configuration for a failed activation. Do not delete old model assets on switch.
 - The first upgrade from an OLD deploy script must also reach the new setup
-  logic: do not rely solely on code parsed by the shell before git pull. Cover
-  the old-script/new-checkout transition explicitly in integration tests.
+  logic: do not rely solely on code parsed by the shell before git pull.
+  An already-running historical script cannot be retroactively changed. The
+  documented bootstrap is git pull --ff-only followed by the NEW deploy.sh
+  --no-pull. The new upgrade.sh entry point and deploy.sh re-exec after pull
+  handle subsequent upgrades. This first-migration command is required, not an
+  automatic capability of old releases.
 
 Supported distribution surfaces:
 - Initial native packages are Linux x86_64 only. Windows/macOS install/upgrade
@@ -502,8 +506,49 @@ Actions-only acceptance:
 - Test old Whisper compatibility and old versions without ANY voice keys.
 - Test old deploy-script upgrade reaching the new configurator, environment
   override detection, portable bundle inclusion and unsupported-platform errors.
+  Distinguish the documented first-migration bootstrap from the tested new-script
+  re-exec path; never claim an unmodified old running shell gains new behavior.
 - Test corrupt/truncated downloads, interruption, concurrent setup protection,
   staging cleanup, unchanged previous settings on failure and activation recovery.
 - Run real pinned native artifacts through the installed configuration and
   authenticated API, plus browser capture/cancellation and frozen quality/latency
   gates. No production enablement follows merely from passing fixture tests.
+
+Installer execution checkpoint, 2026-09-24
+-----------------------------------------
+Implemented files:
+- scripts/voice/setup-config.mjs: menu/whitelist and voice-only environment edits.
+- scripts/voice/install-package.mjs: trusted-manifest local package import,
+  compatibility/disk/resource guidance, full-file checksums and staged assets.
+- scripts/configure-voice.mjs: standalone CLI, terminal interaction, override
+  checks, exclusive setup lock, atomic environment update and guarded rollback.
+- scripts/deploy.sh / upgrade.sh: every-interactive-upgrade setup, unattended
+  preservation, fresh code after pull and voice activation rollback.
+- scripts/package-release.mjs: include dependency-free configurator/modules;
+  Windows setup/deploy only report unsupported native-package platform.
+- voice-native-packages.yml: portable pinned Sense/Whisper candidate builds with
+  dependency notices, manifest, actual import/transcribe/rollback in Actions.
+
+Test-first52a6fd6 / Actions35967551424 failed expected missing module.
+Implementation8fa044c /35967784681 passed initial4 contracts.
+a2f15bf /35968098977 passed6 contracts,2 actual terminal scenarios including
+repeat upgrades/EOF/Ctrl-C, shell syntax and isolated mocked-systemd deploy
+preservation/re-exec/disable/failed-health rollback.
+Native run35968099304 at a2f15bf passed both candidate package builds and real
+installed-provider transcriptions. No builds or test servers ran locally.
+Sense artifact10794617845; Whisper artifact10795017559.
+
+Scope not yet complete:
+The CLI currently imports trusted extracted packages; it DOES NOT fetch a
+publicly released package automatically. Model selection without package-dir
+and trusted manifestSHA fails explicitly, leaving configuration intact.
+This is a tested installation foundation, not the final one-command public
+installer experience. A public download catalogue needs approved permanent
+runtime distribution and independent trusted checksums; never invent URLs or
+promote short-retention Actions artifacts as a permanent update channel.
+New portable runtime builds need full actual-service quality/latency gates
+before release approval; a JFK smoke alone is insufficient.
+
+Evidence:
+https://github.com/xujxu/agents-chat/actions/runs/35968099304
+https://github.com/xujxu/agents-chat/actions/runs/35968098977

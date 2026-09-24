@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { access, chmod, copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, statfs } from 'node:fs/promises';
+import { access, chmod, copyFile, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, statfs, writeFile } from 'node:fs/promises';
+import { availableParallelism } from 'node:os';
 import path from 'node:path';
 import { models } from './setup-config.mjs';
 
@@ -66,6 +67,15 @@ export async function installVoicePackage({ packageDir, manifestSha256, model, d
   const available = /^MemAvailable:\s+(\d+)\s+kB$/m.exec(memory);
   if (!available) throw new Error('Cannot determine available memory for installation guidance.');
   log(`Host MemAvailable: ${Math.floor(Number(available[1]) / 1024)} MiB (not reserved; external cgroup limits may be lower).`);
+  log(`Installer CPU affinity exposes ${availableParallelism()} logical CPUs; this is not a dedicated CPU reservation.`);
+  for (const name of ['cpu.max', 'memory.max', 'memory.current']) {
+    try { log(`Visible cgroup ${name}: ${(await readFile(`/sys/fs/cgroup/${name}`, 'utf8')).trim()}`); }
+    catch (error) {
+      if (!['ENOENT', 'EACCES'].includes(error.code)) throw error;
+      log(`Visible cgroup ${name}: unavailable; deployment-specific limits must be checked by the administrator.`);
+    }
+  }
+  log('These observations describe the installer environment, not a guarantee about a separately configured application service.');
   log(`Model threads: ${threads}. No new CPU/RAM hard quota. Shared hosts require administrator capacity planning.`);
   if (Number(available[1]) < 768 * 1024) log('WARNING: less than 768 MiB host memory available; this is a caution, not a measured model minimum.');
   const space = await statfs(destination);
@@ -84,12 +94,14 @@ export async function installVoicePackage({ packageDir, manifestSha256, model, d
       if ((await lstat(to)).size !== file.bytes || await fileSha256(to) !== file.sha256) throw new Error('Voice package file checksum mismatch.');
       await chmod(to, file.role === 'binary' ? 0o755 : 0o644);
     }
+    await writeFile(path.join(stage, 'voice-package.json'), raw, { mode: 0o644 });
     try { await rename(stage, installed); }
     catch (error) {
       if (!['EEXIST', 'ENOTEMPTY'].includes(error.code)) throw error;
       for (const file of manifest.files) {
         const target = path.join(installed, file.path);
-        if (!(await lstat(target)).isFile() || await fileSha256(target) !== file.sha256) throw new Error('Previously installed package was modified.');
+        if (!(await realpath(target)).startsWith(installed + path.sep)
+          || !(await lstat(target)).isFile() || await fileSha256(target) !== file.sha256) throw new Error('Previously installed package was modified.');
       }
     }
     return { binary: path.join(installed, identity.binary), model: path.join(installed, identity.model), threads };

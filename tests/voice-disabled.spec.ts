@@ -11,4 +11,5 @@ test('disabled voice API has no capability and refuses transcription', async ({ 
     headers: { 'content-type': 'audio/wav', 'x-voice-user-id': 'admin@local' }, data: Buffer.alloc(46),
   })).status()).toBe(503);
   await expect(page.getByRole('button', { name: 'Start voice input', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('alert', { name: 'Voice input error' })).toHaveCount(0);
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash, randomUUID } from 'node:crypto';
-import { chmod, lstat, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
@@ -43,6 +43,9 @@ async function choose() {
   console.log(`2) ${models['sensevoice-small-q8'].label}\n   ${models['sensevoice-small-q8'].description}`);
   console.log(`3) ${models['whisper-base-q5_1'].label}\n   ${models['whisper-base-q5_1'].description}`);
   console.log('4) Disable voice input (hide microphone button)');
+  if (process.platform !== 'linux' || process.arch !== 'x64') {
+    console.log('This platform does not support the native packages. Only keep/disable is available.');
+  }
   const reader = createInterface({ input: process.stdin, output: process.stdout });
   return new Promise(resolve => {
     reader.once('close', () => resolve(null));
@@ -66,6 +69,12 @@ async function run() {
   if (original !== null && !(await lstat(file)).isFile()) throw new Error('.env.local must be a regular file, not a symlink.');
   const known = voiceValues(original ?? '');
   console.log(`Project voice setting: ${known.VOICE_ENABLED === '1' ? 'enabled' : 'disabled or not configured'} (service overrides may differ).`);
+  if (known.VOICE_ENABLED === '1') {
+    const model = known.VOICE_MODEL ?? 'whisper-base-q5_1';
+    console.log(`Current model: ${Object.hasOwn(models, model) ? model : 'unrecognized (preserved by keep)'}.`);
+    console.log(`Policy: ${known.VOICE_RESOURCE_POLICY === 'standard' || (!known.VOICE_RESOURCE_POLICY && known.VOICE_MODEL)
+      ? 'standard' : 'legacy or custom (preserved by keep)'}.`);
+  }
   console.log('Reconfigure later: node scripts/configure-voice.mjs');
   let selection = selectVoiceAction({ interactive: !options['non-interactive'] && !!process.stdin.isTTY && !!process.stdout.isTTY, model: options.model });
   if (!options['rollback-receipt'] && selection.prompt) {
@@ -117,8 +126,10 @@ async function run() {
     const next = updateVoiceEnvironment(original ?? '', selection.model, configuration);
     if (await optionalRead(file) !== original) throw new Error('Configuration changed during setup; refusing to overwrite it.');
     const receipt = { changed: true, file, previous: original, installedSha: digest(next) };
+    const receiptPath = path.resolve(options.receipt ?? path.join(directory, 'last-setup.json'));
+    if (receiptPath === file) throw new Error('Recovery receipt must not overwrite the environment file.');
     // Save recovery before switching configuration, never after.
-    await atomicWrite(path.resolve(options.receipt ?? path.join(directory, 'last-setup.json')), JSON.stringify(receipt));
+    await atomicWrite(receiptPath, JSON.stringify(receipt));
     await atomicWrite(file, next);
     console.log(selection.model === 'disabled'
       ? 'Voice disabled. After restart/reload the microphone button is hidden.'

@@ -71,9 +71,10 @@ set `VOICE_MODEL=sensevoice-small-q8`, `VOICE_BINARY_PATH` and `VOICE_MODEL_PATH
 to absolute paths to that executable and model. `VOICE_THREADS` accepts `1`, `2`
 or `4` (Sense defaults to `2`). Do not point this adapter at an unpatched upstream
 binary or an ONNX model. Adapter/API/browser fixture regressions and a real Sense
-authenticated-API smoke passed Actions35965252088. The installer and full-corpus
-API/browser quality/latency acceptance are still pending; this is an integration
-candidate, not a released installation package.
+authenticated-API smoke passed Actions35965252088. A transactional installer for
+verified Actions packages is available below. Full-corpus API/browser
+quality/latency acceptance and public runtime release publication are still
+pending; these are installation candidates, not release-approved models.
 See `scripts/VOICE-DEPLOYMENT.txt` for exact versions and qualification evidence.
 
 Explicit `VOICE_MODEL=whisper-base-q5_1` selects the compatibility model (default
@@ -129,6 +130,94 @@ error codes, never audio/transcript contents. A host crash or forced application
 kill can bypass cleanup: `agents-chat-voice-*` directories in the OS temporary
 directory may require removal after confirming no transcription is running.
 Do not enable this PoC on multiple workers without a shared admission controller.
+
+#### Voice setup on installation and upgrade
+
+Every **interactive Linux deployment/upgrade** offers voice configuration, with
+**keep current settings** selected by pressing Enter. This preserves old Whisper
+paths and their resource policy. Fresh installs stay disabled unless explicitly
+configured. Noninteractive upgrades do not wait for input, do not download models,
+and preserve existing settings. Explicitly disabling voice hides the microphone
+button after service restart and page reload; it is not a greyed-out control.
+
+The configurator can also be run separately, including from a standalone release
+bundle. It needs Node.js, but no npm install or development dependencies:
+
+```bash
+node scripts/configure-voice.mjs                      # interactive menu
+node scripts/configure-voice.mjs --non-interactive    # preserve, no prompt
+node scripts/configure-voice.mjs --model disabled     # persist opt-out
+sudo bash scripts/deploy.sh --voice disabled         # configure + build/restart
+sudo bash scripts/deploy.sh --voice keep --non-interactive
+```
+
+**First upgrade from a version predating voice setup:** the old deployment script
+cannot be made to execute new code it has already read. Pull the new version
+first, then invoke its installer, so voice setup is offered on that upgrade:
+
+```bash
+git pull --ff-only
+sudo bash scripts/deploy.sh --no-pull
+```
+
+Once updated, `sudo bash scripts/upgrade.sh` provides the pull-then-new-installer
+entry point. The new `deploy.sh` also re-executes itself after pulling updates.
+Starting the application is never an installation prompt. Windows setup/upgrade
+reports that native voice packages are currently Linux x86_64 only.
+
+**Candidate packages, not public releases:** the **Voice native installation
+packages** Actions workflow builds Sense GGUF q8 and Whisper base-q5_1 separately,
+targeting glibc 2.35+ with AVX2/FMA/F16C/BMI2. Download and extract the appropriate
+`voice-install-*` artifact from a trusted successful run. Obtain the SHA-256 of
+`voice-package.json` through that trusted artifact/evidence; a checksum supplied
+by an untrusted download alone does not establish authenticity.
+
+```bash
+node scripts/configure-voice.mjs --model sensevoice-small-q8 \
+  --package-dir /absolute/path/to/extracted-package \
+  --manifest-sha256 <trusted-64-character-sha256>
+# Or combine verified package import with deployment:
+sudo bash scripts/deploy.sh --voice sensevoice-small-q8 \
+  --voice-package /absolute/path/to/extracted-package \
+  --voice-manifest-sha256 <trusted-64-character-sha256>
+```
+
+There is no automatic model/runtime download in the configurator yet. Choosing
+an enabled model without the verified package arguments fails explicitly and
+preserves the current configuration. Do not substitute a profiler's binary.
+Sense defaults to two threads; `--threads 1|2|4` (deploy: `--voice-threads`) changes
+the computation setting, not a hard CPU quota. Whisper defaults to one thread.
+
+Setup checks platform, instruction set, glibc, staging disk space, the manifest
+and every declared file's SHA-256. It shows available host memory, visible cgroup
+values and model measurements, not a fictitious 4GiB minimum. Installer resource
+observations may differ from a separately configured service. Lower resources
+can reduce performance or cause failure; no memory reservation is made.
+
+Assets and license/provenance files are staged under `.data/voice`, then installed
+by manifest hash. `.env.local` changes atomically after successful verification;
+unrelated keys are retained, and old packages are not automatically deleted.
+Conflicting inherited voice settings, `.env.production.local` or
+`/etc/agents-chat.env` block changes with an explicit error instead of silently
+overriding higher-priority configuration. Custom service-unit environment
+overrides must also be reviewed by the administrator.
+
+Standalone configuration saves a private recovery receipt at
+`.data/voice/last-setup.json`. It contains the prior environment file: **do not
+publish it or attach it to issue reports**. To undo that change:
+
+```bash
+node scripts/configure-voice.mjs --rollback-receipt .data/voice/last-setup.json
+```
+
+Rollback refuses to overwrite configuration changed since setup. Restart the app
+after standalone setup/rollback. `deploy.sh` uses a private temporary receipt and
+restores voice configuration if activation/health checking fails; it does not
+roll back application code or unrelated deployment changes. `--wait 0` skips the
+health check and therefore cannot detect subsequent activation failure.
+An interrupted installer can leave `.data/voice/setup.lock`; check that no setup
+is running before removing that specific lock. Preserve `.env.local` and
+`.data/voice` when replacing standalone release files.
 
 ### Chat persistence and proxy limits
 

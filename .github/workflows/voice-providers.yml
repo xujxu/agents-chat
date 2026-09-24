@@ -106,7 +106,12 @@ jobs:
         run: |
           for mode in invalid disabled; do
             export VOICE_MODEL=invalid VOICE_ENABLED=1
-            if [ "$mode" = disabled ]; then export VOICE_ENABLED=0; fi
+            if [ "$mode" = disabled ]; then
+              unset VOICE_ENABLED VOICE_MODEL
+              printf 'VOICE_ENABLED=1\nVOICE_WHISPER_PATH=/old/whisper\nVOICE_MODEL_PATH=/old/model\n' > .env.local
+              node scripts/configure-voice.mjs --model disabled --non-interactive
+              grep -qx 'VOICE_ENABLED=0' .env.local
+            fi
             node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 >"artifacts/$mode-server.log" 2>&1 &
             server_pid=$!
             echo "$server_pid" > artifacts/server.pid
@@ -131,6 +136,7 @@ jobs:
           done
       - name: Build the pinned Sense CPU runtime for integration smoke only
         run: |
+          rm -f .env.local
           mkdir -p source llama sense-model artifacts/sense-provenance/licenses
           curl -fL --retry 3 --max-time 600 https://github.com/modelscope/FunASR/archive/3ff9259aade4f7e4360645df28cad8f81959ee91.tar.gz -o source.tar.gz
           tar -xzf source.tar.gz --strip-components=1 -C source
