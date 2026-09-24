@@ -22,3 +22,101 @@ jobs:
           python-version: '3.12'
       - run: pip install opencc-python-reimplemented==0.1.7
       - run: python -m unittest discover -s scripts -p test_voice_installed_report.py -v
+  acceptance:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contracts
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            model: sensevoice-small-q8
+            package_run: '35968099304'
+            artifact: '10794617845'
+          - os: ubuntu-24.04
+            model: whisper-base-q5_1
+            package_run: '35968099304'
+            artifact: '10795017559'
+          - os: windows-2022
+            model: sensevoice-small-q8
+            package_run: '35987278609'
+            artifact: '10802394350'
+          - os: windows-2022
+            model: whisper-base-q5_1
+            package_run: '35987278609'
+            artifact: '10803120161'
+    env:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-installed-voice-ci-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10748244312
+          merge-multiple: true
+          path: short
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35863991538
+          artifact-ids: 10752270787
+          merge-multiple: true
+          path: meeting
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10751002303
+          merge-multiple: true
+          path: baseline
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35870441019
+          artifact-ids: 10755950119
+          merge-multiple: true
+          path: long-baseline
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ matrix.package_run }}
+          artifact-ids: ${{ matrix.artifact }}
+          merge-multiple: true
+          path: package
+      - run: python scripts/voice_chain_report.py prepare short meeting corpus
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npx tsc --noEmit --incremental false
+      - name: Actual installation and authenticated frozen corpus
+        run: node scripts/voice/installed-api-run.mjs package ${{ matrix.model }}
+      - name: Failure-inclusive frozen gates
+        if: ${{ !cancelled() }}
+        run: python scripts/voice_installed_report.py corpus installed-evidence baseline/scored-results.jsonl long-baseline/long-report/scored-results.json installed-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installed-api-${{ matrix.os }}-${{ matrix.model }}
+          path: |
+            installed-evidence/
+            installed-report/
+            corpus/samples.json
+            corpus/*ATTRIBUTION.txt
+          if-no-files-found: error
+          retention-days: 30

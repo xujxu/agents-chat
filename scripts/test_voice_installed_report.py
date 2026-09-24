@@ -22,7 +22,7 @@ class InstalledReportTests(unittest.TestCase):
         attempts[0].update(failure="voice_timeout", text=None)
         result = installed_report(manifest, attempts, baseline)["candidates"][0]
         self.assertIn("delivery_below_100_percent", result["violations"])
-        self.assertGreater(result["metrics"][0]["error_rate"], 0)
+        self.assertTrue(any(row["error_rate"] > 0 for row in result["metrics"]))
 
     def test_empty_success_is_not_delivery(self):
         manifest, attempts, baseline = self.fixture()
