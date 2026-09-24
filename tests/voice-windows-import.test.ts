@@ -44,6 +44,11 @@ test('Windows verified import preserves config and rejects corruption before usi
     await writeFile(helper, 'truncated executable');
     await assert.rejects(invoke(), /checksum mismatch/);
     await unchanged();
+    const corrupted = await readFile(backup);
+    corrupted[0] ^= 0xff;
+    await writeFile(helper, corrupted);
+    await assert.rejects(invoke(), /checksum mismatch/);
+    await unchanged();
     await rm(helper);
     await symlink(backup, helper);
     await assert.rejects(invoke(), /ordinary unlinked/);

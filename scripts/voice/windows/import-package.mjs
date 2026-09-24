@@ -87,6 +87,7 @@ export async function importWindowsVoicePackage({
   try {
     for (const file of manifest.files) {
       const from = await regularFile(source, file.path);
+      if ((await lstat(from)).size !== file.bytes) throw new Error('Voice package file checksum mismatch.');
       const to = path.join(stage, file.path);
       await mkdir(path.dirname(to), { recursive: true });
       await copyFile(from, to);
