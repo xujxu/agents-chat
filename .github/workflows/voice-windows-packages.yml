@@ -1,5 +1,8 @@
 name: Voice Windows native candidates
 on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths: [.github/workflows/voice-windows-packages.yml]
   workflow_dispatch:
 permissions:
   contents: read
