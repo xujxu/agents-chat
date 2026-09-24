@@ -33,7 +33,7 @@ export async function optionalRead(file) {
   return await checkFile(file) ? readFile(file) : null;
 }
 
-export async function atomicWrite(file, bytes) {
+export async function atomicWrite(file, bytes, expected) {
   await checkFile(file);
   let directory;
   let temp;
@@ -55,6 +55,12 @@ export async function atomicWrite(file, bytes) {
     try { await handle.writeFile(bytes); await handle.sync(); }
     finally { await handle.close(); }
     await checkFile(file);
+    if (expected !== undefined) {
+      const current = await optionalRead(file);
+      if (expected === null ? current !== null : current === null || !expected.equals(current)) {
+        throw new Error('Configuration changed during setup; refusing to overwrite it.');
+      }
+    }
     await rename(temp, file);
   } finally {
     if (temp) await rm(temp, { force: true });

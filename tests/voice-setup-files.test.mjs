@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { atomicWrite, decodeEnvironment, optionalRead } from '../scripts/voice/configuration-files.mjs';
+import { atomicWrite, decodeEnvironment, optionalRead, previousReceiptBytes } from '../scripts/voice/configuration-files.mjs';
 import { updateVoiceEnvironment, voiceValues } from '../scripts/voice/setup-config.mjs';
 
 const childEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
@@ -23,6 +23,8 @@ test('strict environment decoding accepts UTF8/BOM/UTF16LE and refuses malformed
   for (const bytes of [Buffer.from([0xff]), Buffer.from([0xff, 0xfe, 0x61]), Buffer.from('NUL=\0')]) {
     assert.throws(() => decodeEnvironment(bytes), /encoding/);
   }
+  assert.throws(() => previousReceiptBytes({ version: 2, previous: 'not!base64' }), /encoding/);
+  assert.throws(() => previousReceiptBytes({ version: 3, previous: null }), /version/);
 });
 
 test('launcher keys and Windows paths round trip without escaped backslashes', () => {
@@ -78,11 +80,17 @@ test('private writes clean failed replacements and reject linked configuration r
   assert.deepEqual(await readdir(root), ['target']);
   const original = path.join(root, 'original');
   await writeFile(original, 'unchanged');
+  await assert.rejects(atomicWrite(original, Buffer.from('replace'), Buffer.from('stale')), /changed during setup/);
+  assert.equal(await readFile(original, 'utf8'), 'unchanged');
   const linked = path.join(root, 'linked');
   await symlink(original, linked);
   await assert.rejects(optionalRead(linked), /regular single-link/);
   await assert.rejects(atomicWrite(linked, Buffer.from('replace')), /regular single-link/);
   assert.equal(await readFile(original, 'utf8'), 'unchanged');
+  const file = path.join(root, '.env.local');
+  await writeFile(file, 'VOICE_ENABLED=1\n');
+  assert.notEqual(invoke(root, '--model', 'keep', '--receipt', file).status, 0);
+  assert.equal(await readFile(file, 'utf8'), 'VOICE_ENABLED=1\n');
 });
 
 test('Windows installed environment and recovery receipts have only private ACL grants', {

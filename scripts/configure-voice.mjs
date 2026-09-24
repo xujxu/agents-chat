@@ -53,6 +53,10 @@ async function run() {
   const project = path.resolve(options['project-dir'] ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..'));
   if (/[$\r\n\0]/.test(project)) throw new Error('Project path contains unsupported environment characters.');
   const file = path.join(project, '.env.local');
+  const comparablePath = value => process.platform === 'win32' ? value.toLowerCase() : value;
+  if (options.receipt && comparablePath(path.resolve(options.receipt)) === comparablePath(file)) {
+    throw new Error('Recovery receipt must not overwrite the environment file.');
+  }
   const original = await optionalRead(file);
   const originalText = decodeEnvironment(original);
   const known = voiceValues(originalText);
@@ -87,10 +91,11 @@ async function run() {
       const receipt = JSON.parse(decodeEnvironment(await optionalRead(path.resolve(options['rollback-receipt']))));
       if (receipt.changed === false) return;
       const previous = previousReceiptBytes(receipt);
+      const installed = await optionalRead(file);
       if (receipt.file !== file || typeof receipt.installedSha !== 'string'
-        || digest(await optionalRead(file) ?? '') !== receipt.installedSha) throw new Error('Rollback refused: configuration changed after setup.');
+        || digest(installed ?? '') !== receipt.installedSha) throw new Error('Rollback refused: configuration changed after setup.');
       if (previous === null) await rm(file);
-      else await atomicWrite(file, previous);
+      else await atomicWrite(file, previous, installed);
       console.log('Previous voice configuration restored; restart the app to apply it.');
       return;
     }
@@ -115,10 +120,9 @@ async function run() {
     if (!equalBytes(await optionalRead(file), original)) throw new Error('Configuration changed during setup; refusing to overwrite it.');
     const receipt = { version: 2, changed: true, file, previous: original === null ? null : original.toString('base64'), installedSha: digest(next) };
     const receiptPath = path.resolve(options.receipt ?? path.join(directory, 'last-setup.json'));
-    if (receiptPath === file) throw new Error('Recovery receipt must not overwrite the environment file.');
     // Save recovery before switching configuration, never after.
     await atomicWrite(receiptPath, JSON.stringify(receipt));
-    await atomicWrite(file, next);
+    await atomicWrite(file, next, original);
     console.log(selection.model === 'disabled'
       ? 'Voice disabled. After restart/reload the microphone button is hidden.'
       : 'Verified voice package configured in standard mode. Restart the app to apply; this is not full release acceptance.');
