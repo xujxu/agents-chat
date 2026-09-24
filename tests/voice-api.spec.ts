@@ -139,20 +139,21 @@ test('RSS watchdog terminates an oversized native process and releases admission
     headers, data: Buffer.from(encodeVoiceWav(new Float32Array(16_000).fill(0.5))),
   });
 
-  test('standard mode does not apply the historical 384 MiB watchdog', async ({ page }) => {
-    test.skip(process.env.VOICE_EXPECT_POLICY !== 'standard', 'Explicit new-model configuration only');
-    await installMobileChatFixture(page);
-    await loginMobileFixture(page);
-    const response = await page.context().request.post('/api/voice', {
-      headers: { 'content-type': 'audio/wav', 'x-voice-user-id': 'admin@local' },
-      data: Buffer.from(encodeVoiceWav(new Float32Array(16_000).fill(0.5))),
-    });
-    expect(response.status()).toBe(200);
-    expect(await response.json()).toMatchObject({ ok: true, text: '你好，voice PoC.' });
-  });
   expect(response.status()).toBe(503);
   expect(await response.json()).toMatchObject({ error: 'voice_memory_limit' });
   expect((await api.post('/api/voice', {
     headers, data: Buffer.from(encodeVoiceWav(new Float32Array(16_000).fill(0.2))),
   })).status()).toBe(200);
+});
+
+test('standard mode does not apply the historical 384 MiB watchdog', async ({ page }) => {
+  test.skip(process.env.VOICE_EXPECT_POLICY !== 'standard', 'Explicit new-model configuration only');
+  await installMobileChatFixture(page);
+  await loginMobileFixture(page);
+  const response = await page.context().request.post('/api/voice', {
+    headers: { 'content-type': 'audio/wav', 'x-voice-user-id': 'admin@local' },
+    data: Buffer.from(encodeVoiceWav(new Float32Array(16_000).fill(0.5))),
+  });
+  expect(response.status()).toBe(200);
+  expect(await response.json()).toMatchObject({ ok: true, text: '你好，voice PoC.' });
 });
