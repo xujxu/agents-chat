@@ -8,6 +8,41 @@ or qualified yet. Linux-only statements below describe earlier scope/current
 implementation, not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Windows process foundation checkpoint (2026-09-24)
+-------------------------------------------------
+Approved implementation plan:
+docs/superpowers/plans/2026-09-24-voice-windows-process-foundation.md
+
+Test-first commit0beee04, Actions35972124200 failed as intended: missing
+voice-job.exe / ENOENT. Native implementation0fb5cf9 passed Actions35972356566.
+Final implementation/tests/workflow684cc30dc3c4e51bd68d8f31246f26f28a3eae4a:
+https://github.com/xujxu/agents-chat/actions/runs/35972552477
+13 node:test results passed (12 subtests plus parent); no skips or failures.
+Artifact10796434034,167534 compressed bytes:
+voice-windows-process-684cc30dc3c4e51bd68d8f31246f26f28a3eae4a
+Includes launcher, test-only policy probe and provenance.json.
+voice-job.exe181760bytes, SHA256:
+9c426babaa01de3ae94d8d6fc9f454fa42aa2131a05d4f9dec8cb19bf1c747eb
+
+Runner: Windows Server2022 Datacenter10.0.20348 x64, NOT Windows11.
+Compiler: MSVC19.44.35228.0 x64, C++17 /MT /W4 /WX; Node24.20.0.
+Verified atomic suspended-engine Job assignment, exact Unicode/space/quote/
+backslash arguments, suppressed native stderr, sanitized failures, invalid
+deadline/path/control rejection, nested Jobs and actual installed Job flags.
+Inner Job flags exactly0x2000(KILL_ON_JOB_CLOSE), CPU-control flags0:
+no application CPU or memory hard quota. External OS/runner limits still apply.
+Real descendants were removed for control EOF, cancellation, deadline,
+launcher death, engine completion and actual Node-parent death.
+Early cancellation repeated12times. Control pipe is not inherited by engine.
+
+Only a standalone lifecycle foundation: lib/voice still rejects Windows.
+No model weights were downloaded, no model inference/quality measured, no app
+integration, no public runtime package, no model license-release closure.
+Win11-specific acceptance, engine/DLL packaging, private request directories,
+Windows-safe transcript files, API/UI integration and setup/upgrade remain.
+The launcher artifact is not yet an installable or release-approved model.
+PROD, cpg and sampler unchanged. All compilation/tests ran in Actions.
+
 Scope agreed 2026-09-24
 ---------------------
 One active local model per deployment, chosen by the administrator at install.

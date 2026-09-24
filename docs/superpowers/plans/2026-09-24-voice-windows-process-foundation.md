@@ -10,6 +10,25 @@
 
 ---
 
+## Execution checkpoint (2026-09-24)
+
+The user selected inline execution. Tasks 1-2 and Task 3 steps 1-3 are complete:
+test-first run `35972124200` failed for the missing executable; implementation
+run `35972356566` passed; final run `35972552477` passed all 13 reported results
+(12 subtests and the parent test), with no skips. Final code is `684cc30`,
+artifact `10796434034`. Task 3 step 4 is the next separate planning task.
+
+Implementation refinements preserve this plan's boundary: capture Win32 error
+codes before handle destructors run, reject malformed deadlines/paths/control
+handles explicitly, avoid retaining completed PIDs in test cleanup, and retain
+compiler/OS/binary provenance. The checked-in code and workflow are authoritative
+over the original implementation sketches below. No model integration or Windows
+11 qualification is implied.
+
+All `gh` commands below must target `xujxu/agents-chat` explicitly with
+`-R xujxu/agents-chat`; this checkout's CLI default can resolve the upstream fork
+instead. No local build or test command was run.
+
 ## Approval, scope and staged delivery
 
 The user approved
@@ -71,7 +90,7 @@ or recovery receipts.
 
 **Files:** create the workflow, JS fixtures and JS tests listed above.
 
-- [ ] **Step 1: Add the synthetic engine fixture.**
+- [x] **Step 1: Add the synthetic engine fixture.**
 
 `tests/fixtures/voice-windows-engine.mjs`:
 
@@ -128,7 +147,7 @@ child.once('spawn', () => writeFileSync(parentFile, JSON.stringify({ launcher: c
 setInterval(() => {}, 1000);
 ```
 
-- [ ] **Step 2: Add concrete lifecycle tests.**
+- [x] **Step 2: Add concrete lifecycle tests.**
 
 `tests/voice-windows-job.test.mjs`:
 
@@ -308,7 +327,7 @@ The nested fixture creates its own inner control pipe. Directly making a launche
 the engine of another launcher would deliberately give it `NUL` for stdin and
 test an invalid control transport instead of nested-Job compatibility.
 
-- [ ] **Step 3: Add the dedicated workflow.**
+- [x] **Step 3: Add the dedicated workflow.**
 
 `.github/workflows/voice-windows-process.yml`:
 
@@ -362,7 +381,7 @@ jobs:
           retention-days: 14
 ```
 
-- [ ] **Step 4: Commit and push only these test/workflow files.**
+- [x] **Step 4: Commit and push only these test/workflow files.**
 
 ```bash
 git add .github/workflows/voice-windows-process.yml tests/voice-windows-job.test.mjs tests/fixtures/voice-windows-engine.mjs tests/fixtures/voice-windows-parent.mjs
@@ -371,7 +390,7 @@ git push origin HEAD:experiment/voice-natural-long
 gh run list --workflow voice-windows-process.yml --branch experiment/voice-natural-long --limit 3 --json databaseId,headSha,status,conclusion
 ```
 
-- [ ] **Step 5: Inspect the run for this commit, not an older passing run.**
+- [x] **Step 5: Inspect the run for this commit, not an older passing run.**
 
 ```bash
 gh run view RUN_ID --log-failed
@@ -387,7 +406,7 @@ anything on the development host.
 **Files:** create `scripts/voice/windows/voice-job.cpp` and
 `tests/fixtures/voice-windows-policy.cpp`.
 
-- [ ] **Step 1: Add the launcher below.**
+- [x] **Step 1: Add the launcher below.**
 
 `scripts/voice/windows/voice-job.cpp`:
 
@@ -570,7 +589,7 @@ Exit statuses: engine status on completion, 124 deadline, 125 supervisor failure
 launcher error: the future adapter must use its own cancellation/deadline state
 and sanitized supervisor diagnostic to distinguish outcomes.
 
-- [ ] **Step 2: Add a test-only policy probe.**
+- [x] **Step 2: Add a test-only policy probe.**
 
 `tests/fixtures/voice-windows-policy.cpp`:
 
@@ -597,7 +616,7 @@ The expected inner-Job limit is exactly `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`
 not merely a comment or a 400 MiB allocation. Outer runner/administrator Job
 constraints can still apply.
 
-- [ ] **Step 3: Push the native implementation and inspect Actions.**
+- [x] **Step 3: Push the native implementation and inspect Actions.**
 
 ```bash
 git add scripts/voice/windows/voice-job.cpp tests/fixtures/voice-windows-policy.cpp
@@ -622,7 +641,7 @@ integrating with the app.
 
 **Files:** workflow, spec and `scripts/VOICE-DEPLOYMENT.txt`.
 
-- [ ] **Step 1: Remove the temporary test-first compilation escape.**
+- [x] **Step 1: Remove the temporary test-first compilation escape.**
 
 Delete this exact block from the workflow after the implementation exists:
 
@@ -636,7 +655,7 @@ if (!(Test-Path scripts/voice/windows/voice-job.cpp)) {
 Rename the step to `Compile native launcher and policy fixture`. A missing
 source must now be a build failure, not silently defer to tests.
 
-- [ ] **Step 2: Commit/push and record the final run for that exact commit.**
+- [x] **Step 2: Commit/push and record the final run for that exact commit.**
 
 ```bash
 git add .github/workflows/voice-windows-process.yml
@@ -650,7 +669,7 @@ addition. The application code and configuration availability are unchanged.
 Once runtime integration begins, run the existing Linux provider workflow and
 its dispatch-only API/browser coverage as well.
 
-- [ ] **Step 3: Append factual evidence after the final Actions run passes.**
+- [x] **Step 3: Append factual evidence after the final Actions run passes.**
 
 Include actual commit SHA, run URL, runner OS/build, compiler version, artifact
 ID and each exercised termination mode. State explicitly: no model weights

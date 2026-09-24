@@ -30,6 +30,16 @@ As of commit `14c7f47`:
 The Linux-only restriction is **current implementation status**, not the final
 feature scope. Windows 11 support is required for completing this feature.
 
+### Subsequent process-foundation checkpoint
+
+Implementation `684cc30` adds the standalone Windows Job launcher, not Windows
+voice availability. Actions
+[`35972552477`](https://github.com/xujxu/agents-chat/actions/runs/35972552477)
+passed the native lifecycle contracts on Windows Server 2022; artifact
+`10796434034` retains binaries and provenance. The application still rejects
+Windows configuration. Model integration, packages, installer upgrades and
+actual Windows 11 acceptance remain pending.
+
 ## Goal
 
 Let an administrator choose a local speech-to-text model when installing or
@@ -419,6 +429,7 @@ Whisper remains a labelled compatibility option even if it runs successfully.
 | Actions `35968099304` | Linux portable candidate package build, verified import, native transcription and rollback passed |
 | Actions `35968626725` | Package integrity, setup interaction, release inclusion and isolated deployment tests passed |
 | Actions `35968629945` | Installer-driven disabled upgrade hides microphone/no error banner; Linux integration passes |
+| Actions `35972552477` | Windows Server native lifecycle foundation passes; no Windows model/app/Win11 qualification |
 
 Remaining implementation slices, in order:
 
