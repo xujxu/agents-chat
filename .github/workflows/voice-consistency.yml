@@ -1,0 +1,24 @@
+name: Installed Sense consistency diagnostics
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - scripts/voice_consistency_report.py
+      - scripts/test_voice_consistency_report.py
+      - scripts/voice/consistency-run.mjs
+      - tests/helpers/voiceConsistency.ts
+      - tests/voice-consistency.spec.ts
+      - .github/workflows/voice-consistency.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s scripts -p test_voice_consistency_report.py -v
