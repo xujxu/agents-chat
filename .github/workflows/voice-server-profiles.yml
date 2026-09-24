@@ -4,6 +4,7 @@ on:
     branches: [experiment/voice-natural-long]
     paths:
       - scripts/voice_server_profiles.py
+      - scripts/voice_accuracy_benchmark.py
       - scripts/test_voice_server_profiles.py
       - .github/workflows/voice-server-profiles.yml
   workflow_dispatch:
@@ -20,3 +21,149 @@ jobs:
           python-version: '3.12'
       - run: pip install opencc-python-reimplemented==0.1.7
       - run: python -m unittest discover -s scripts -p test_voice_server_profiles.py -v
+      - run: python -m unittest discover -s scripts -p test_voice_corpus_baseline.py -v
+      - run: python -m unittest discover -s scripts -p test_voice_choice.py -v
+  profile:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - profile: cpu2-ram4
+            threads: 2
+            memory: 4g
+          - profile: cpu4-ram8
+            threads: 4
+            memory: 8g
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10748244312
+          merge-multiple: true
+          path: short
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35863991538
+          artifact-ids: 10752270787
+          merge-multiple: true
+          path: meeting
+      - run: python scripts/voice_chain_report.py prepare short meeting corpus
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35591663846
+          artifact-ids: 10635141093
+          merge-multiple: true
+          path: native
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35619891005
+          artifact-ids: 10650339950
+          merge-multiple: true
+          path: quantized
+      - name: Prepare checksummed CPU runtimes and weights
+        run: |
+          (cd native && sha256sum --check voice-runtime.sha256 && tar -xzf voice-runtime.tar.gz)
+          (cd native/runtime && sha256sum --check SHA256SUMS)
+          echo '258f71d72806834e0b1df98a0e6025d5c4cba1464ac4da9ad26e767ed4e555d8  quantized/u8u8/llm.int8.onnx' | sha256sum --check
+          echo 'b428cd7d87593b29af27077a5a7f758e4475c4e20856a7f7a64cb08cd9a2aa2c  quantized/encoder/encoder_adaptor.int8.onnx' | sha256sum --check
+          mkdir sherpa original qwen whisper-models provenance
+          curl -fL --retry 3 --max-time 240 https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared-no-tts.tar.bz2 -o runtime.tar.bz2
+          echo 'd0f96c8b65c6cd0974fada22737e337de81bc8cd2abbec2e39caf358b1eec5fc  runtime.tar.bz2' | sha256sum --check
+          tar -xjf runtime.tar.bz2 --strip-components=1 -C sherpa
+          curl -fL --retry 3 --max-time 600 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-funasr-nano-int8-2025-12-30.tar.bz2 -o original.tar.bz2
+          echo 'eb43d7ccc2e86b243f6a03b7df361033dda66db9523d1a92bf6aca2b50c9476b  original.tar.bz2' | sha256sum --check
+          tar -xjf original.tar.bz2 --strip-components=1 -C original
+          curl -fL --retry 3 --max-time 600 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25.tar.bz2 -o qwen.tar.bz2
+          echo '393f8a14e2f5fb96746aaab342997a40641001fbd5bf9592a080a8329178ee96  qwen.tar.bz2' | sha256sum --check
+          tar -xjf qwen.tar.bz2 --strip-components=1 -C qwen
+          curl -fL --retry 3 --max-time 600 https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small-q5_1.bin -o whisper-models/small.bin
+          echo 'ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb  whisper-models/small.bin' | sha256sum --check
+          curl -fL --retry 3 --max-time 600 https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo-q5_0.bin -o whisper-models/turbo.bin
+          echo '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2  whisper-models/turbo.bin' | sha256sum --check
+          sha256sum runtime.tar.bz2 original.tar.bz2 qwen.tar.bz2 whisper-models/*.bin \
+            native/runtime/whisper-cli quantized/u8u8/llm.int8.onnx \
+            quantized/encoder/encoder_adaptor.int8.onnx > provenance/checksums.txt
+          rm runtime.tar.bz2 original.tar.bz2 qwen.tar.bz2
+          cp -r native/runtime/licenses provenance/whisper-licenses
+          find original qwen sherpa -maxdepth 3 -type f -iname '*license*' -exec cp --parents '{}' provenance/ \;
+          curl -fL --retry 3 https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/raw/272c57b82523ada6fd87095e955f8e29100979ab/README.md -o provenance/nano-model-card.txt
+          curl -fL --retry 3 https://huggingface.co/Qwen/Qwen3-ASR-0.6B/raw/5eb144179a02acc5e5ba31e748d22b0cf3e303b0/README.md -o provenance/qwen-model-card.txt
+          lscpu > provenance/cpu.txt
+          cp scripts/VOICE-DEPLOYMENT.txt provenance/
+      - name: Prepare isolated benchmark image
+        run: |
+          docker build -t voice-cpu-profile - <<'DOCKER'
+          FROM python:3.12-bookworm
+          RUN apt-get update -qq && apt-get install -y -qq time && \
+              pip install --quiet opencc-python-reimplemented==0.1.7
+          DOCKER
+          docker image inspect voice-cpu-profile > provenance/container-image.json
+      - name: Sequential candidates under an explicit voice-only budget
+        env:
+          PROFILE: ${{ matrix.profile }}
+          THREADS: ${{ matrix.threads }}
+          MEMORY: ${{ matrix.memory }}
+        run: |
+          failed=0
+          for variant in whisper-small whisper-turbo funasr-u8u8 qwen-int8; do
+            mkdir -p "case-$variant/model"
+            ln -s ../corpus/audio "case-$variant/accuracy-samples"
+            ln -s ../scripts "case-$variant/scripts"
+            ln -s ../sherpa "case-$variant/sherpa"
+            ln -s ../native "case-$variant/native"
+            case "$variant" in
+              whisper-small) ln -s ../../whisper-models/small.bin "case-$variant/model/ggml.bin" ;;
+              whisper-turbo) ln -s ../../whisper-models/turbo.bin "case-$variant/model/ggml.bin" ;;
+              funasr-u8u8)
+                ln -s ../../original/embedding.int8.onnx "case-$variant/model/embedding.int8.onnx"
+                ln -s ../../original/Qwen3-0.6B "case-$variant/model/Qwen3-0.6B"
+                ln -s ../../quantized/u8u8/llm.int8.onnx "case-$variant/model/llm.int8.onnx"
+                ln -s ../../quantized/encoder/encoder_adaptor.int8.onnx "case-$variant/model/encoder_adaptor.int8.onnx"
+                ;;
+              qwen-int8)
+                for name in conv_frontend.onnx encoder.int8.onnx decoder.int8.onnx tokenizer; do
+                  ln -s "../../qwen/$name" "case-$variant/model/$name"
+                done
+                ;;
+            esac
+            if ! docker run --rm --network=none --memory="$MEMORY" --memory-swap="$MEMORY" \
+              --cpus="$THREADS" --pids-limit=128 \
+              -e GITHUB_SHA -e GITHUB_RUN_ID -e OPENBLAS_NUM_THREADS="$THREADS" -e OMP_NUM_THREADS="$THREADS" \
+              -e LD_LIBRARY_PATH=/work/sherpa/lib -v "$PWD:/work" -w "/work/case-$variant" \
+              voice-cpu-profile python scripts/voice_server_profiles.py run "$variant" "$PROFILE"; then
+              echo "::error::Incomplete $variant/$PROFILE; preserving all partial evidence"
+              failed=1
+            fi
+          done
+          exit "$failed"
+      - name: Report all attempts without promoting models to install status
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          python scripts/voice_server_profiles.py report "$PROFILE" report
+          cat report/REPORT.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-server-${{ matrix.profile }}
+          path: |
+            case-*/artifacts/
+            report/
+            provenance/
+            corpus/*ATTRIBUTION.txt
+          if-no-files-found: error
+          retention-days: 30

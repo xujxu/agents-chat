@@ -18,11 +18,19 @@ import time
 from voice_accuracy_metrics import score
 
 
-def command(model, sample):
+def command(model, sample, *, threads=2):
+    if threads not in (1, 2, 4):
+        raise ValueError("Unsupported model thread allocation")
+    if model == "whisper":
+        return ["native/runtime/whisper-cli", "-m", "model/ggml.bin",
+                "-f", f"accuracy-samples/{sample['id']}.wav",
+                "-of", f"artifacts/{sample['id']}", "-otxt", "-l", "auto",
+                "-t", str(threads), "-p", "1", "-bs", "1", "-bo", "1",
+                "-nt", "-np", "-ng"]
     if model == "funasr-python":
         return ["/usr/bin/env", "-u", "LD_LIBRARY_PATH", sys.executable,
                 "scripts/voice_funasr_python.py", f"accuracy-samples/{sample['id']}.wav"]
-    args = ["sherpa/bin/sherpa-onnx-offline", "--num-threads=2",
+    args = ["sherpa/bin/sherpa-onnx-offline", f"--num-threads={threads}",
             "--provider=cpu", "--debug=0"]
     if model == "sense":
         args += ["--tokens=model/tokens.txt", "--sense-voice-model=model/model.int8.onnx",
@@ -49,14 +57,16 @@ def command(model, sample):
     return args + [f"accuracy-samples/{sample['id']}.wav"]
 
 
-def trial(model, sample, *, score_reference=True):
+def trial(model, sample, *, score_reference=True, threads=2, memory_gib=4):
+    if memory_gib not in (4, 8):
+        raise ValueError("Unsupported experiment memory allocation")
     prefix = Path("artifacts") / sample["id"]
     failure = None
     started = time.monotonic()
     with prefix.with_suffix(".log").open("w") as log, prefix.with_suffix(".stdout").open("w") as stdout:
         process = subprocess.Popen(
             ["/usr/bin/time", "-f", "%M", "-o", str(prefix.with_suffix(".rss")),
-             *command(model, sample)], stdout=stdout, stderr=log, start_new_session=True)
+             *command(model, sample, threads=threads)], stdout=stdout, stderr=log, start_new_session=True)
         try:
             code = process.wait(timeout=120)
         except subprocess.TimeoutExpired:
@@ -78,6 +88,11 @@ def trial(model, sample, *, score_reference=True):
             continue
         if isinstance(candidate, dict) and isinstance(candidate.get("text"), str):
             result, text = candidate, candidate["text"]
+    if model == "whisper" and prefix.with_suffix(".txt").exists():
+        try:
+            text = prefix.with_suffix(".txt").read_text().strip()
+        except UnicodeDecodeError:
+            failure = failure or "invalid_utf8_output"
     if code != 0:
         failure = failure or f"exit_{code}"
     if text is None:
@@ -87,7 +102,7 @@ def trial(model, sample, *, score_reference=True):
     rss = int(lines[-1]) if lines and lines[-1].isdigit() else None
     if rss is None:
         failure = failure or "missing_peak_memory"
-    elif rss > 4 * 1024 * 1024:
+    elif rss > memory_gib * 1024 * 1024:
         failure = failure or "rss_limit"
     if result and isinstance(result.get("tokens"), list) and len(result["tokens"]) >= 512:
         failure = failure or "possible_token_limit"
