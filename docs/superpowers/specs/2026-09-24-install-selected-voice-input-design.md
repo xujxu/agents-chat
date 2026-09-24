@@ -5,7 +5,8 @@
 This document consolidates the previously approved voice-input design and adds
 the Windows 11 scope requested on 2026-09-24. The user selected **native Windows
 11 on Intel/AMD x64** as the initial Windows target; ARM64 is outside this slice.
-Detailed Windows architecture below is proposed for review, not implemented.
+The user approved the written design after commit `98e06ce`. Windows
+implementation remains pending; approval is not platform qualification.
 
 The feature's earlier design decisions and experiments were recorded in
 `scripts/VOICE-DEPLOYMENT.txt` rather than this repository's normal specification
@@ -215,8 +216,10 @@ not CPU-rate or memory-limit settings. A small audited native launcher is the
 proposed implementation boundary, avoiding a global Node native-addon dependency.
 It is a shipped executable, not a permanently running service.
 
-The launcher creates the engine suspended, assigns it to the Job, then resumes
-it. If assignment or initialization fails, terminate the suspended child and
+The launcher creates the engine suspended with atomic Job assignment through
+`PROC_THREAD_ATTRIBUTE_JOB_LIST`, then resumes it. Do not leave a
+create-then-assign interval in which launcher death can orphan a suspended child.
+If assignment or initialization fails, terminate any created child and
 report an explicit failure. Never continue with an unowned process tree.
 The Job must cover descendants and close on normal completion, timeout,
 cancellation or launcher shutdown. A dedicated parent control pipe lets parent
