@@ -21,7 +21,7 @@ if sample == 13107 or mode == "wait":
     time.sleep(120)
 if mode == "fail":
     sys.exit(3)
-if mode == "memory":
+if mode == "memory" or sample == 16384:
     allocation = bytearray(400 * 1024 * 1024)
     time.sleep(0.5)
 if mode == "stderr":

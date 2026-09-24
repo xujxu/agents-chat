@@ -2,9 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import { encode } from 'next-auth/jwt';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
 
-async function prepare(page: Page, enabled = true) {
+async function prepare(page: Page, enabled = true, nativeBackend = false) {
   const fixture = await installMobileChatFixture(page);
-  await page.route('**/api/voice', async route => {
+  if (!nativeBackend) await page.route('**/api/voice', async route => {
     if (route.request().method() === 'GET') {
       return route.fulfill({ json: { ok: true, enabled, maxSeconds: 30, model: 'base-q5_1' } });
     }
@@ -54,6 +54,19 @@ async function prepare(page: Page, enabled = true) {
   await loginMobileFixture(page);
   return fixture;
 }
+
+test('selected native provider delivers through recording and the real voice API', async ({ page }) => {
+  test.skip(process.env.VOICE_API_FIXTURE !== '1', 'Requires the Actions native fixture server');
+  const fixture = await prepare(page, true, true);
+  const capabilities = await (await page.context().request.get('/api/voice')).json();
+  expect(capabilities.model).toBe(process.env.VOICE_EXPECT_MODEL || 'base-q5_1');
+  const input = page.locator('textarea.composerTextarea');
+  await input.fill('Keep my draft');
+  await record(page);
+  await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
+  await expect(input).toHaveValue('Keep my draft\n你好，voice PoC.');
+  expect(fixture.acpRequests.filter(request => request.action === 'send')).toHaveLength(0);
+});
 
 async function record(page: Page) {
   await page.getByRole('button', { name: 'Start voice input', exact: true }).click();

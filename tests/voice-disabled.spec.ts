@@ -6,7 +6,7 @@ test('disabled voice API has no capability and refuses transcription', async ({ 
   await installMobileChatFixture(page);
   await loginMobileFixture(page);
   const api = page.context().request;
-  expect(await (await api.get('/api/voice')).json()).toMatchObject({ ok: true, enabled: false });
+  expect(await (await api.get('/api/voice')).json()).toMatchObject({ ok: true, enabled: false, model: null, provider: null });
   expect((await api.post('/api/voice', {
     headers: { 'content-type': 'audio/wav', 'x-voice-user-id': 'admin@local' }, data: Buffer.alloc(46),
   })).status()).toBe(503);

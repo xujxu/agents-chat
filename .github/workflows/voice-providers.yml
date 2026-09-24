@@ -6,6 +6,10 @@ on:
       - 'lib/voice/**'
       - 'app/api/voice/**'
       - 'tests/voice-providers*'
+      - 'tests/voice-api.spec.ts'
+      - 'tests/voice-input.spec.ts'
+      - 'tests/voice-disabled.spec.ts'
+      - 'tests/voice-real-model.spec.ts'
       - 'tests/fixtures/voice-provider.py'
       - '.github/workflows/voice-providers.yml'
   workflow_dispatch:
@@ -24,3 +28,172 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npx --yes --package=tsx@4.20.6 tsx --test --test-concurrency=1 tests/voice-providers.test.ts tests/voice-providers-process.test.ts tests/voice-audio.test.ts tests/voice-jobs.test.ts tests/voice-memory.test.ts
       - run: npx tsc --noEmit --incremental false
+  application:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-voice-provider-ci-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Build application and typecheck generated routes
+        run: |
+          npm run build
+          npx tsc --noEmit --incremental false
+      - name: Legacy and explicit providers through real API and browser capture
+        run: |
+          mkdir -p artifacts
+          chmod +x tests/fixtures/voice-provider.py tests/fixtures/voice-whisper.py
+          printf valid > artifacts/fixture-model
+          for mode in legacy sense whisper; do
+            export VOICE_ENABLED=1
+            unset VOICE_MODEL VOICE_BINARY_PATH VOICE_RESOURCE_POLICY VOICE_THREADS
+            if [ "$mode" = legacy ]; then
+              export VOICE_WHISPER_PATH="$PWD/tests/fixtures/voice-whisper.py"
+              export VOICE_MODEL_PATH="$VOICE_WHISPER_PATH"
+              export VOICE_EXPECT_MODEL=base-q5_1 VOICE_EXPECT_POLICY=legacy-low-memory
+            else
+              export VOICE_BINARY_PATH="$PWD/tests/fixtures/voice-provider.py"
+              export VOICE_MODEL_PATH="$PWD/artifacts/fixture-model"
+              export VOICE_EXPECT_POLICY=standard
+              if [ "$mode" = sense ]; then
+                export VOICE_MODEL=sensevoice-small-q8 VOICE_EXPECT_MODEL=sensevoice-small-q8
+              else
+                export VOICE_MODEL=whisper-base-q5_1 VOICE_EXPECT_MODEL=base-q5_1
+              fi
+            fi
+            node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 >"artifacts/$mode-server.log" 2>&1 &
+            server_pid=$!
+            echo "$server_pid" > artifacts/server.pid
+            trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+            ready=0
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent --max-time 2 http://localhost:3011/api/auth/providers >/dev/null; then ready=1; break; fi
+              sleep 1
+            done
+            test "$ready" = 1
+            VOICE_API_FIXTURE=1 npx playwright test --config tests/playwright.config.ts \
+              tests/voice-api.spec.ts tests/voice-input.spec.ts \
+              --project=desktop-chromium --workers=1 --timeout=45000 --global-timeout=300000 \
+              --max-failures=2 --reporter=line --trace=retain-on-failure --output="artifacts/$mode-tests"
+            if [ "$mode" = sense ]; then
+              VOICE_API_FIXTURE=1 npx playwright test --config tests/playwright.config.ts \
+                tests/voice-input.spec.ts --project=iphone-webkit --project=android-chromium \
+                --workers=1 --timeout=45000 --global-timeout=300000 --max-failures=2 \
+                --reporter=line --trace=retain-on-failure --output=artifacts/sense-mobile
+            fi
+            kill "$server_pid"
+            wait "$server_pid" || true
+            trap - EXIT
+            rm artifacts/server.pid
+            if find /tmp -maxdepth 1 -type d -name 'agents-chat-voice-*' | grep -q .; then
+              echo 'Voice request directories leaked'; exit 1
+            fi
+          done
+      - name: Invalid and disabled model configuration
+        run: |
+          for mode in invalid disabled; do
+            export VOICE_MODEL=invalid VOICE_ENABLED=1
+            if [ "$mode" = disabled ]; then export VOICE_ENABLED=0; fi
+            node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 >"artifacts/$mode-server.log" 2>&1 &
+            server_pid=$!
+            echo "$server_pid" > artifacts/server.pid
+            trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+            ready=0
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent --max-time 2 http://localhost:3011/api/auth/providers >/dev/null; then ready=1; break; fi
+              sleep 1
+            done
+            test "$ready" = 1
+            if [ "$mode" = invalid ]; then
+              VOICE_EXPECT_INVALID=1 npx playwright test --config tests/playwright.config.ts \
+                tests/voice-providers-api.spec.ts --project=desktop-chromium --reporter=line --output=artifacts/invalid
+            else
+              VOICE_EXPECT_DISABLED=1 npx playwright test --config tests/playwright.config.ts \
+                tests/voice-disabled.spec.ts --project=desktop-chromium --reporter=line --output=artifacts/disabled
+            fi
+            kill "$server_pid"
+            wait "$server_pid" || true
+            trap - EXIT
+            rm artifacts/server.pid
+          done
+      - name: Build the pinned Sense CPU runtime for integration smoke only
+        run: |
+          mkdir -p source llama sense-model artifacts/sense-provenance/licenses
+          curl -fL --retry 3 --max-time 600 https://github.com/modelscope/FunASR/archive/3ff9259aade4f7e4360645df28cad8f81959ee91.tar.gz -o source.tar.gz
+          tar -xzf source.tar.gz --strip-components=1 -C source
+          curl -fL --retry 3 --max-time 600 https://github.com/ggml-org/llama.cpp/archive/803b7fcae893e9caaee3921779628fef83ac0965.tar.gz -o llama.tar.gz
+          tar -xzf llama.tar.gz --strip-components=1 -C llama
+          curl -fL --retry 3 --max-time 600 https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF/resolve/90c1c61912018b70ada0fcc024ea24aca62f2e63/sensevoice-small-q8.gguf -o sense-model/sensevoice-small-q8.gguf
+          echo '4ae45c94422de949b387e2e0fb10d7e14e4c42c69db30c3444ecc7d4b844b7c5  sense-model/sensevoice-small-q8.gguf' | sha256sum --check
+          cp source/LICENSE artifacts/sense-provenance/licenses/FunASR-MIT.txt
+          cp llama/LICENSE artifacts/sense-provenance/licenses/llama-MIT.txt
+          cp -r llama/licenses artifacts/sense-provenance/licenses/llama-dependencies
+          cp source/runtime/llama.cpp/funasr-common/miniaudio.h artifacts/sense-provenance/licenses/
+          curl -fL --retry 3 https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF/raw/90c1c61912018b70ada0fcc024ea24aca62f2e63/README.md -o artifacts/sense-provenance/model-card.txt
+          python3 scripts/voice_sense_native_patch.py \
+            source/runtime/llama.cpp/sensevoice/funasr-sensevoice/funasr-sensevoice.cpp \
+            artifacts/sense-provenance/native-thread-error.patch
+          cmake -S source/runtime/llama.cpp -B sense-runtime \
+            -DFETCHCONTENT_SOURCE_DIR_LLAMA="$PWD/llama" -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DGGML_BLAS=OFF
+          cmake --build sense-runtime --target llama-funasr-sensevoice --parallel 2
+          sha256sum source.tar.gz llama.tar.gz sense-model/* sense-runtime/bin/llama-funasr-sensevoice > artifacts/sense-provenance/SHA256SUMS
+          lscpu > artifacts/sense-provenance/cpu.txt
+          ldd sense-runtime/bin/llama-funasr-sensevoice > artifacts/sense-provenance/linked-libraries.txt
+          curl -fL --retry 3 https://raw.githubusercontent.com/ggml-org/whisper.cpp/5670d5c0bbcb148feabef84400a07cfca9aa3b30/samples/jfk.wav -o /tmp/provider-jfk.wav
+          python3 - <<'PY'
+          import wave
+          with wave.open('/tmp/provider-jfk.wav', 'rb') as source:
+              params = source.getparams()
+              audio = source.readframes(source.getnframes())
+          assert params.framerate == 16000 and params.nchannels == 1 and params.sampwidth == 2
+          with wave.open('artifacts/jfk.wav', 'wb') as output:
+              output.setparams(params)
+              output.writeframes(audio)
+          PY
+      - name: Real Sense through authenticated application API
+        run: |
+          VOICE_ENABLED=1 VOICE_MODEL=sensevoice-small-q8 \
+            VOICE_BINARY_PATH="$PWD/sense-runtime/bin/llama-funasr-sensevoice" \
+            VOICE_MODEL_PATH="$PWD/sense-model/sensevoice-small-q8.gguf" \
+            node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 >artifacts/real-sense-server.log 2>&1 &
+          server_pid=$!
+          echo "$server_pid" > artifacts/server.pid
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --max-time 2 http://localhost:3011/api/auth/providers >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          VOICE_REAL_SAMPLE=artifacts/jfk.wav VOICE_EXPECT_MODEL=sensevoice-small-q8 \
+            npx playwright test --config tests/playwright.config.ts tests/voice-real-model.spec.ts \
+            --project=desktop-chromium --workers=1 --timeout=150000 --reporter=line --output=artifacts/real-sense
+          if find /tmp -maxdepth 1 -type d -name 'agents-chat-voice-*' | grep -q .; then exit 1; fi
+          printf '%s\n' 'Real Sense API smoke only; not full-corpus/browser quality acceptance or distributable runtime approval.' > artifacts/SCOPE.txt
+      - name: Stop isolated application
+        if: always()
+        run: |
+          if [ -f artifacts/server.pid ] && kill -0 "$(cat artifacts/server.pid)" 2>/dev/null; then
+            kill "$(cat artifacts/server.pid)"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-provider-integration
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14

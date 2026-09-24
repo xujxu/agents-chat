@@ -61,8 +61,37 @@ builds and verifies an AVX2/FMA/F16C/BMI2 x86_64 Linux CPU-only `whisper-cli` co
 2.31+, together with the multilingual `ggml-base-q5_1.bin` model and licenses.
 Configure `VOICE_ENABLED=1`, `VOICE_WHISPER_PATH`, and `VOICE_MODEL_PATH` using
 absolute paths to those verified artifacts, then restart the app. The host needs
-`/usr/bin/nice`, `/usr/bin/prlimit`, and `/proc/meminfo`. Do not expose a separate
-Whisper server port. Set `VOICE_ENABLED=0` and restart to disable the capability.
+`/usr/bin/nice`, `/usr/bin/prlimit`, and (for the legacy policy) `/proc/meminfo`.
+Do not expose a separate model server port. Set `VOICE_ENABLED=0` and restart to
+disable the capability.
+
+The unified native adapter also supports the qualified **official SenseVoiceSmall
+GGUF q8** build with the pinned thread/error patch. For explicit configuration,
+set `VOICE_MODEL=sensevoice-small-q8`, `VOICE_BINARY_PATH` and `VOICE_MODEL_PATH`
+to absolute paths to that executable and model. `VOICE_THREADS` accepts `1`, `2`
+or `4` (Sense defaults to `2`). Do not point this adapter at an unpatched upstream
+binary or an ONNX model. The installer and full API/browser acceptance are still
+pending; this is an integration candidate, not a released installation package.
+See `scripts/VOICE-DEPLOYMENT.txt` for exact versions and qualification evidence.
+
+Explicit `VOICE_MODEL=whisper-base-q5_1` selects the compatibility model (default
+one thread) using `VOICE_BINARY_PATH`, or `VOICE_WHISPER_PATH` if the generic path
+is unset. Explicit models default to `VOICE_RESOURCE_POLICY=standard`: normal
+per-request subprocesses, **no application CPU/RAM hard quota**, and no additional
+systemd or Docker requirement. Thread count is not a CPU quota. External
+OS/container limits still apply. Administrators on shared hosts should provision
+adequate memory or configure deployment-level limits; standard mode does not
+promise protection against host-wide memory pressure. The experimental 2CPU/4GiB
+allocation is not a minimum installation requirement.
+
+Existing configurations with no `VOICE_MODEL` retain `legacy-low-memory`.
+Switching an existing deployment to standard mode must be an explicit
+administrator change; no production settings are modified automatically.
+The legacy policy can also be explicitly selected for one-thread Whisper only.
+Unknown model IDs, unsupported policies/threads, and missing native files fail
+with `voice_not_configured`, never an automatic model fallback. `/api/voice`
+reports the selected model, provider, threads and resource policy; disabled
+capabilities have a null model.
 
 The microphone appears beside the attachment button when configured. HTTPS (or
 localhost), microphone permission, AudioWorklet, and OfflineAudioContext are
@@ -77,8 +106,9 @@ The browser uploads at most 960,044 bytes of 16 kHz mono 16-bit WAV, below nginx
 default 1 MiB limit, without FFmpeg or third-party transcription calls. Only
 authenticated, same-origin clients with the matching account may submit/cancel.
 One inference runs at a time per app process; excess requests are rejected
-instead of queued. The PoC assumes a single Next.js process. Inference uses one
-thread, niceness 10, a 120-second deadline, a 1 GiB **address-space** ceiling, and
+instead of queued. The PoC assumes a single Next.js process. All providers use
+niceness 10 and a 120-second deadline. Only `legacy-low-memory` uses one
+thread, a 1 GiB **address-space** ceiling, and
 requires at least 768 MiB `MemAvailable` before starting. While running, a
 100 ms watchdog terminates inference if sampled peak RSS exceeds 384 MiB or host
 available memory falls below 256 MiB. The address-space limit includes virtual
@@ -88,6 +118,8 @@ host-wide memory/CPU pressure. The proxy must allow at least the 120-second
 inference deadline (`proxy_read_timeout 150s` for nginx); its upload-size limit
 does not need changing.
 Each request loads the model anew; there is no permanently resident model.
+Transcripts are bounded to 32 KiB of valid UTF-8. Cancellation and timeout
+terminate the native process group, including descendants.
 
 Temporary audio/results are deleted after success, failure, or cancellation and
 are not saved in chat history. Native core dumps are disabled. Logs contain durations, sizes, exit status, and
