@@ -2,6 +2,8 @@
 
 import itertools
 import math
+import base64
+import hashlib
 
 SAMPLE_KEYS = ("id", "reference", "category", "duration", "split", "dataset", "audio_sha256")
 CONSUMERS = ("linux", "win32")
@@ -31,6 +33,15 @@ def exchange_report(samples, rows, history):
                 raise ValueError("Invalid failed outcome")
         elif not isinstance(row["text"], str) or not row["text"].strip() or "\0" in row["text"]:
             raise ValueError("Invalid successful text")
+        if row["failure"] is not None:
+            if row["stdoutBase64"] is not None or row["stdoutSha256"] is not None:
+                raise ValueError("Failed delivery cannot claim successful bytes")
+        else:
+            raw = base64.b64decode(row["stdoutBase64"], validate=True)
+            if (len(raw) > 32768 or base64.b64encode(raw).decode() != row["stdoutBase64"]
+                    or raw.decode("utf-8").strip() != row["text"]
+                    or hashlib.sha256(raw).hexdigest() != row["stdoutSha256"]):
+                raise ValueError("Native output identity differs")
     results = []
     for sample in samples:
         sid = sample["id"]

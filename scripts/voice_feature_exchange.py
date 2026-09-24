@@ -14,7 +14,7 @@ from voice_consistency_report import platform_report, read_json, read_rows, sele
 from voice_feature_data import (generate, numeric_difference, read_bounded, sha, validate_bundle,
                                 validate_feature, validate_pcm, validate_selection, validate_wav)
 from voice_feature_process import run_native
-from voice_feature_report import CONSUMERS, SAMPLE_KEYS, SOURCES, exchange_report
+from voice_feature_report import CONSUMERS, SOURCES, exchange_report
 
 REVISION = "3ff9259aade4f7e4360645df28cad8f81959ee91"
 
