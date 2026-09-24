@@ -1,10 +1,10 @@
-# Installs Agents-Chat as a Scheduled Task running as the wulei user.
+# Installs Agents-Chat as a Scheduled Task running as the specified user.
 # This uses the service-watchdog.ps1 wrapper, so start.ps1 is restarted if it exits.
 
 param(
     [string]$TaskName = 'Agents-Chat-Startup',
     [string]$ProjectDir = (Split-Path -Parent $PSScriptRoot),
-    [string]$UserId = 'FAREAST\wulei',
+    [string]$UserId = ([Security.Principal.WindowsIdentity]::GetCurrent().Name),
     [ValidateSet('Interactive', 'S4U')]
     [string]$LogonType = 'Interactive',
     [ValidateSet('AtLogOn', 'AtStartup')]
@@ -61,7 +61,7 @@ Register-ScheduledTask `
     -Trigger $Trigger `
     -Principal $Principal `
     -Settings $Settings `
-    -Description 'Start Agents-Chat as wulei and watchdog start.ps1.' `
+    -Description 'Start Agents-Chat and watchdog start.ps1.' `
     -Force | Out-Null
 
 $Task = Get-ScheduledTask -TaskName $TaskName

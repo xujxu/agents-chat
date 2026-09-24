@@ -3,15 +3,20 @@
 # Prerequisites: Node.js 18+, Dev Tunnel CLI (winget install Microsoft.devtunnel), agency CLI
 param(
     [string]$TunnelName = "acp-chat",
-    [string]$AppId = "144243eb-8775-41e5-a57d-9bae004dbc7b"
+    [string]$AppId = "144243eb-8775-41e5-a57d-9bae004dbc7b",
+    [ValidateSet('keep', 'disabled', 'sensevoice-small-q8', 'whisper-base-q5_1')]
+    [string]$VoiceModel,
+    [string]$VoicePackageDir, [string]$VoiceManifestSha256,
+    [ValidateSet('1', '2', '4')][string]$VoiceThreads,
+    [switch]$NonInteractive
 )
 
 $ErrorActionPreference = "Stop"
 $ProjectDir = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'voice\windows\configure.ps1')
 
 Write-Host "=== ACP Chat Setup ===" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Optional native voice packages currently require Linux x86_64. Windows voice installation is not available; existing settings are preserved." -ForegroundColor Yellow
 
 # ─── 1. Check prerequisites ───
 Write-Host "[1/6] Checking prerequisites..." -ForegroundColor Cyan
@@ -101,13 +106,7 @@ Write-Host "[5/6] Updating configuration..." -ForegroundColor Cyan
 # Update .env.local
 $envFile = Join-Path $ProjectDir ".env.local"
 if (Test-Path $envFile) {
-    $lines = Get-Content $envFile
-    $found = $false
-    $lines = $lines | ForEach-Object {
-        if ($_ -match "^\s*#?\s*NEXTAUTH_URL\b") { $found = $true; "NEXTAUTH_URL=$tunnelUrl" } else { $_ }
-    }
-    if (-not $found) { $lines += "NEXTAUTH_URL=$tunnelUrl" }
-    $lines | Set-Content $envFile
+    Set-VoiceSafeEnvironmentUrl -ProjectDir $ProjectDir -Url $tunnelUrl
     Write-Host "  .env.local → NEXTAUTH_URL=$tunnelUrl" -ForegroundColor Green
 } else {
     Write-Host "  WARNING: .env.local not found — create one with NEXTAUTH_SECRET, etc." -ForegroundColor Yellow
@@ -147,6 +146,9 @@ if (Get-Command az -ErrorAction SilentlyContinue) {
 } else {
     Write-Host "  Skipped (Azure CLI not installed)" -ForegroundColor Yellow
 }
+
+Invoke-VoiceConfiguration -ProjectDir $ProjectDir -Model $VoiceModel -PackageDir $VoicePackageDir `
+    -ManifestSha256 $VoiceManifestSha256 -Threads $VoiceThreads -NonInteractive:$NonInteractive
 
 # ─── Done ───
 Write-Host ""

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { assertWindowsOverrides, windowsSetupContext } from '../scripts/voice/windows/setup-context.mjs';
-import { decodeEnvironment } from '../scripts/voice/configuration-files.mjs';
+import { atomicWrite, decodeEnvironment } from '../scripts/voice/configuration-files.mjs';
 
 test('Windows overrides are case insensitive and never print their values', () => {
   assert.throws(() => assertWindowsOverrides({
@@ -84,4 +84,29 @@ test('Windows setup resolves identity; keep never probes an unavailable service 
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(await readFile(file), original);
   await assert.rejects(windowsSetupContext('no-such-voice-account'));
+});
+
+test('Windows grants target service read access without granting it receipt access', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'voice service acl-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const file = path.join(root, '.env.local');
+  const receipt = path.join(root, 'receipt.json');
+  await atomicWrite(file, Buffer.from('VOICE_ENABLED=0\n'), null, 'S-1-5-19');
+  await atomicWrite(receipt, Buffer.from('{}'));
+  const system = process.env.SystemRoot;
+  const result = spawnSync(path.join(system, 'System32/WindowsPowerShell/v1.0/powershell.exe'), [
+    '-NoProfile', '-NonInteractive', '-Command',
+    '$ErrorActionPreference="Stop"; foreach ($file in @($env:ACL_FILE,$env:ACL_RECEIPT)) { ' +
+    '$acl=[IO.File]::GetAccessControl($file); $rights=0; ' +
+    'foreach ($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) { ' +
+    'if ($rule.IdentityReference.Value -eq "S-1-5-19") { $rights=$rights -bor [int]$rule.FileSystemRights } }; ' +
+    '[Console]::WriteLine($rights) }',
+  ], { encoding: 'utf8', timeout: 10000, env: { SystemRoot: system, WINDIR: system, ACL_FILE: file, ACL_RECEIPT: receipt } });
+  assert.equal(result.status, 0, result.stderr);
+  const [fileRights, receiptRights] = result.stdout.trim().split(/\r?\n/).map(Number);
+  assert.equal(fileRights & 131241, 131241);
+  assert.equal(fileRights & (2 | 4 | 65536 | 262144), 0);
+  assert.equal(receiptRights, 0);
 });

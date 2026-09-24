@@ -90,12 +90,17 @@ Optional voice setup (also run when upgrading an existing release):
   node scripts/configure-voice.mjs
 The interactive menu defaults to keeping the current configuration.
 For automation use --non-interactive (preserve) or --model disabled.
-Enabling a native model currently requires a verified Linux x86_64 Actions
+Enabling a native model currently requires a verified Linux x86_64 or Windows x64 Actions
 package: --package-dir DIR --manifest-sha256 SHA256. Public runtime release
 publication and full voice acceptance are separate; no implicit download occurs.
 Keep .env.local and .data/voice when replacing application files during upgrades.
 Disabled voice hides the microphone button after restart/page reload.
-Windows/macOS native voice packages are not yet supported.
+Windows: use --service-user ACCOUNT-OR-SID when the server runs as a different
+account. Its registry hive must be loaded to check environment overrides.
+Source Windows installs/upgrades use scripts/setup.ps1 or scripts/deploy.ps1;
+interactive voice selection defaults to keep on every upgrade. Startup never prompts.
+Native macOS voice packages are not yet supported. Windows Server CI does not
+constitute actual Windows 11 or full-corpus release acceptance.
 `,
   'utf8',
 );
