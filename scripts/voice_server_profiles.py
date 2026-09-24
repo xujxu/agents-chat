@@ -61,10 +61,10 @@ def summarize_profile(manifest, rows):
         scored = evaluate(row)
         groups[row["category"], band(row["duration"])].append(scored)
     metrics = []
-    for (category, band), items in sorted(groups.items()):
+    for (category, duration_band), items in sorted(groups.items()):
         successful = [row["seconds"] for row in items if not row["failure"] and row["text"]]
         metrics.append({
-            "category": category, "duration_band": band, "samples": len(items),
+            "category": category, "duration_band": duration_band, "samples": len(items),
             "delivered": len(successful),
             "error_rate": sum(row["delivered_score"]["errors"] for row in items) /
                           sum(row["delivered_score"]["reference_tokens"] for row in items),
