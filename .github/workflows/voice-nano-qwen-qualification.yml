@@ -6,6 +6,8 @@ on:
       - .github/workflows/voice-nano-qwen-qualification.yml
       - scripts/voice_model_stability.py
       - scripts/test_voice_model_stability.py
+      - scripts/test_voice_model_notices.py
+      - scripts/voice_model_notices.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,6 +22,7 @@ jobs:
           python-version: '3.12'
       - run: pip install opencc-python-reimplemented==0.1.7
       - run: python -m unittest discover -s scripts -p test_voice_model_stability.py -v
+      - run: python -m unittest discover -s scripts -p test_voice_model_notices.py -v
       - run: python -m unittest discover -s scripts -p test_voice_server_profiles.py -v
       - run: python -m unittest discover -s scripts -p test_voice_choice.py -v
       - run: python -m unittest discover -s scripts -p test_voice_corpus_baseline.py -v
