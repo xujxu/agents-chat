@@ -27,11 +27,11 @@ runs in Actions, never on this machine. Preserve PROD/cpg/sampler.
 
 ## Task 1: Red report contracts
 
-- [ ] Define synthetic frozen100 with exactly eight mixed/medium rows and the
+- [x] Define synthetic frozen100 with exactly eight mixed/medium rows and the
   four control strata. Call `select_samples(manifest)` and require 12 unique
   rows, order invariance and all eight target IDs. Mutate a duplicate and a
   missing stratum and require `ValueError`.
-- [ ] Define synthetic 324-row evidence with these exact tuple dimensions:
+- [x] Define synthetic 324-row evidence with these exact tuple dimensions:
 
 ```python
 for threads in (2, 1, 4):
@@ -52,7 +52,7 @@ for threads in (2, 1, 4):
   Linux. Test missing/duplicate tuples, changed audio/package identity, negative/
   nonfinite timing, invalid native bytes/hash, empty success, failed delivery,
   within-surface instability and all-failed comparisons remaining unavailable.
-- [ ] Register contracts workflow on branch push, commit tests and push. Inspect:
+- [x] Register contracts workflow on branch push, commit tests and push. Inspect:
 
 ```bash
 gh run list -R xujxu/agents-chat --workflow voice-consistency.yml --limit 3
@@ -63,7 +63,7 @@ gh run view RUN -R xujxu/agents-chat --log-failed
 
 ## Task 2: Selection and strict reporting
 
-- [ ] Implement `select_samples(manifest)` with target count eight, control
+- [x] Implement `select_samples(manifest)` with target count eight, control
   strata and SHA256 ranking from the spec. Require frozen100 identity and dataset
   counts. CLI `select corpus diagnostics` writes `diagnostics/samples.json`
   before execution, retaining original audio paths in `corpus/audio/`.
@@ -73,12 +73,12 @@ rank = lambda row: (hashlib.sha256(
     ("sense-consistency-v1:" + row["id"]).encode()).hexdigest(), row["id"])
 ```
 
-- [ ] Implement `platform_report(samples, rows, identity)` and reject any tuple
+- [x] Implement `platform_report(samples, rows, identity)` and reject any tuple
   outside the complete Cartesian product. Match every sample reference/category/
   duration/split/dataset/audio hash and every package identity. Require supported
   platform, valid finite timings, bounded canonical base64 and matching stdout
   SHA256/text on successful native attempts. Failures have no text.
-- [ ] Return explicit `attempts`, `delivered`, failed tuple list, repeatability,
+- [x] Return explicit `attempts`, `delivered`, failed tuple list, repeatability,
   per-repetition layer pairs and thread pairs. Every comparison records either
   equality of successful text or an unavailable state due to a failed attempt:
 
@@ -87,7 +87,7 @@ equal = None if left["failure"] or right["failure"] else left["text"] == right["
 ```
 
   No equality-of-null shortcuts, error-rate scoring or new recommendation.
-- [ ] Add aggregate CLI to read both platform artifacts, validate their complete
+- [x] Add aggregate CLI to read both platform artifacts, validate their complete
   tuple sets and original selected identity, then compare matching tuples across
   platforms. Validate historical API count/identity/manifest before comparisons
   at thread2. Write JSON and Markdown before returning a failed-delivery exit1.
@@ -95,17 +95,17 @@ equal = None if left["failure"] or right["failure"] else left["text"] == right["
 
 ## Task 3: Three-surface collector
 
-- [ ] Implement focused helper using existing named exports:
+- [x] Implement focused helper using existing named exports:
   `decodeEnvironment`, `voiceValues`, `voiceConfiguration`, `runVoiceProcess`,
   `decodeVoiceText`, `transcribeVoice`, `createWindowsVoiceDirectory`.
   Read the actual `.env.local` configuration; assert Sense/standard/requested
   threads. Compute installed file hashes once per thread phase, compare declared
   manifest role hashes, and include stable identity with every attempt.
-- [ ] Native helper creates a private platform-specific directory, writes the
+- [x] Native helper creates a private platform-specific directory, writes the
   checked original bytes, calls `runVoiceProcess` with `AbortSignal.timeout(120000)`,
   retains successful raw stdout and decodes it. Always remove its owned directory
   in `finally`. Transcriber surface reuses `transcribeVoice` unchanged.
-- [ ] Actions-only Playwright spec loads selected samples, verifies SHA/WAV, logs
+- [x] Actions-only Playwright spec loads selected samples, verifies SHA/WAV, logs
   in using the existing fixture and asserts real voice capabilities. For each
   repetition/sample run native, transcriber and API sequentially:
 
@@ -125,7 +125,7 @@ const response = await page.context().request.post('/api/voice', {
 
 ## Task 4: Isolated installed runner and Actions
 
-- [ ] Node orchestrator filters inherited VOICE_* keys and restores Linux binary
+- [x] Node orchestrator filters inherited VOICE_* keys and restores Linux binary
   execute permission after artifact extraction. Read trusted downloaded manifest
   hash. For each thread2/1/4, invoke actual configurator:
 
@@ -139,7 +139,7 @@ node scripts/configure-voice.mjs --project-dir CHECKOUT
   diagnostic spec with current expected threads; stop/wait owned app in finally.
   File logs stay local to the Actions workspace, outside the uploaded allowlist.
   Check no new request directories remain. Save bounded host/package metadata.
-- [ ] Two platform jobs reuse source artifacts specified in the spec and the
+- [x] Two platform jobs reuse source artifacts specified in the spec and the
   existing corpus prepare command. Install dependencies, build, typecheck and
   execute only in Actions:
 
@@ -155,23 +155,43 @@ node scripts/voice/consistency-run.mjs package
 
   Jobs run under55-minute bounds with fail-fast false. Upload diagnostics only
   after any outcome; no weights, environment, receipts or auth data.
-- [ ] Aggregate job runs even when a platform fails (unless cancelled), downloads
+- [x] Aggregate job runs even when a platform fails (unless cancelled), downloads
   both evidence artifacts and pinned historical API reports, writes comparisons
   and uploads the final report even on delivery failure. Missing evidence fails
   explicitly. Retention30days.
 
 ## Task 5: Execute, interpret and persist
 
-- [ ] Push implementation; contract workflow must turn green. Dispatch:
+- [x] Push implementation; contract workflow must turn green. Dispatch:
 
 ```bash
 gh workflow run voice-consistency.yml -R xujxu/agents-chat --ref experiment/voice-natural-long
 ```
 
-- [ ] Inspect bounded failure logs for infrastructure errors; fix and repeat
+- [x] Inspect bounded failure logs for infrastructure errors; fix and repeat
   remotely if needed. Never change the fixed selection or package identity to
   improve results. Preserve complete failed-delivery reports.
-- [ ] Record exact counts, differing/unstable tuples, historical agreements,
+- [x] Record exact counts, differing/unstable tuples, historical agreements,
   host differences and causal limits. Update this plan, spec and
   `scripts/VOICE-DEPLOYMENT.txt`; commit/push. Stop progress reminder.
   A diagnostic result is not a Windows quality pass or feature completion.
+
+## Execution record
+
+- Red `f0e8e0f` / `35993962964`: expected missing report module.
+- Implementation `af2d012` / `35996206590`: report contracts pass; both collectors
+  abort before inference because Playwright transforms installer ESM imports.
+- Fix `6f55377` / `35996836383`: native Node ESM loader reads persisted config;
+  both platforms and aggregate complete successfully. All648 attempts delivered.
+- Aggregate artifact `10807156055`; Linux `10806103628`, Windows `10806823293`.
+  Within-platform repetition/layer/thread comparisons all equal; cross-platform
+  270equal/54different, exactly two samples across every setting. Both platform
+  historical comparisons all equal. Full interpretation is in the spec/ledger.
+
+Application tsconfig excludes tests. Workflow follow-up `6d7d08f` explicitly
+typechecks the diagnostic spec and helper separately without repeating inference.
+Its initial command omitted the application's ESNext library declarations;
+`1529212` restores them. Actions `35998236233` passes the targeted strict
+collector typecheck and all five reporting contracts. No inference code changed.
+The experiment concludes stable native-path differences on this subset, not a
+proven compiler/CPU cause and not a successful Windows accuracy qualification.

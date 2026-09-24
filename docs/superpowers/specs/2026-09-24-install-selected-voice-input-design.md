@@ -211,6 +211,23 @@ No registered self-hosted runner was available when checked on 2026-09-24.
 Windows quality qualification, browser-corpus acceptance, actual Win11 testing,
 helper/MSVC redistribution clearance and permanent downloads remain open.
 
+### Subsequent installed Sense consistency checkpoint
+
+Actions `35996836383` at `6f55377` completed 648 diagnostic attempts over twelve
+fixed samples, 1/2/4 threads, three repetitions and native/transcriber/API
+surfaces. All attempts delivered. Within each platform, outputs matched across
+repeats, surfaces and threads, and default-thread API outputs matched the prior
+run. Exactly two samples differed consistently across platforms (54 of324 matched
+tuples), already at supervised native stdout.
+
+This narrows the observed difference below HTTP/text composition; it does not
+isolate compiler, OS, CPU or numerical causes. Windows ran on AMD in this run
+and matched its earlier Intel outputs. There is no evidence here for changing
+default threads, and Windows's accuracy gate remains failed.
+See [the diagnostic specification](2026-09-24-voice-sense-consistency-design.md)
+for exact comparisons, artifact identities and causal limits. No product
+runtime code, model, threshold or release recommendation changed.
+
 ## Goal
 
 Let an administrator choose a local speech-to-text model when installing or

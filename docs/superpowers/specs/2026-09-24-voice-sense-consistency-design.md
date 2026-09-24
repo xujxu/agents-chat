@@ -3,8 +3,9 @@
 ## Status and authority
 
 The user approved diagnosing the existing packages before controlled rebuilds
-or browser-corpus work on 2026-09-24. This specification defines that bounded
-diagnostic slice. Implementation waits for review of this written specification.
+or browser-corpus work on 2026-09-24, then approved this written specification
+at `f30443f` for inline implementation. This bounded diagnostic slice is now
+implemented and measured; the result below does not grant quality acceptance.
 The parent product design remains
 `2026-09-24-install-selected-voice-input-design.md`.
 
@@ -187,3 +188,56 @@ Choose any subsequent rebuild experiment separately based on those findings.
 
 PROD, cpg's existing 1.5 GiB limit and the old sampler remain untouched. Actual
 Win11, browser-corpus and redistribution/download gates remain open.
+
+## Measured outcome
+
+Actions [`35996836383`](https://github.com/xujxu/agents-chat/actions/runs/35996836383)
+at `6f5537744d862618d16d4d38c167b4b82c06d796` completed all 648 attempts:
+324/324 successful on each platform. The same selected waveforms and weights
+were verified. No failure was excluded.
+
+| Comparison | Equal | Different | Unavailable |
+| --- | ---: | ---: | ---: |
+| Cross-platform matched tuples | 270 | 54 | 0 |
+| Linux repeatability groups | 108 | 0 | 0 |
+| Windows repeatability groups | 108 | 0 | 0 |
+| Linux layer pairs | 324 | 0 | 0 |
+| Windows layer pairs | 324 | 0 | 0 |
+| Linux thread pairs | 324 | 0 | 0 |
+| Windows thread pairs | 324 | 0 | 0 |
+| Linux prior default-thread API pairs | 36 | 0 | 0 |
+| Windows prior default-thread API pairs | 36 | 0 | 0 |
+
+The 54 differing tuples are exactly two samples, `test-00949` and `test-01056`,
+each differing across all three threads, repetitions and surfaces (27 tuples
+per sample). For example, Linux retains `fin tech` where Windows emits `fint`;
+the other sample differs at `smarll phone` versus `smar phone`. The remaining
+ten samples match across platforms.
+
+**Bounded conclusion:** stable native-output differences are present in the
+installed binaries' execution paths, before HTTP/text composition. There is no
+observed same-host repeat instability, layer-associated difference or thread
+sensitivity on these twelve samples. Changing threads is not supported as a fix.
+The shared supervisor/decoder remains part of the native observation surface;
+compiler, OS, CPU and numerical implementation causes are not isolated.
+
+Linux ran on AMD EPYC 7763; Windows Server ran on AMD EPYC 9V74. Previous Windows
+API evidence was on Intel Xeon Platinum 8573C, yet all selected default-thread
+outputs agree with that history. This weakens a simple Intel-versus-AMD
+explanation; it does not establish CPU independence.
+
+Evidence artifacts (expire 2026-10-24):
+
+- Linux `10806103628`, Windows `10806823293`.
+- Aggregate `10807156055`, digest
+  `sha256:714580d83ed0efb6f53d509f0ef02c487a8f46b1c7e9688896db8ba9316c2eb6`.
+
+The first implementation run `35996206590` failed before inference because
+Playwright transformed an installer ESM dependency into CommonJS. The diagnostic
+loader now calls a bounded native Node ESM child to read the real persisted
+voice values; product configuration/runtime code did not change. The complete
+rerun above supersedes that incomplete experiment.
+
+Windows Sense's original mixed/medium accuracy failure remains open. Any next
+compiler/numerical investigation needs a separately controlled design; do not
+select a build because it improves these already explored test examples.
