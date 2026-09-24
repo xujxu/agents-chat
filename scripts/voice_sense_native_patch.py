@@ -36,9 +36,10 @@ def patch(source):
 
 if __name__ == "__main__":
     source, evidence = map(Path, sys.argv[1:])
-    original = source.read_text()
+    original = source.read_text(encoding="utf-8")
     modified = patch(original)
     evidence.write_text("".join(difflib.unified_diff(
         original.splitlines(keepends=True), modified.splitlines(keepends=True),
-        fromfile="upstream/funasr-sensevoice.cpp", tofile="bounded/funasr-sensevoice.cpp")))
-    source.write_text(modified)
+        fromfile="upstream/funasr-sensevoice.cpp", tofile="bounded/funasr-sensevoice.cpp")),
+        encoding="utf-8", newline="\n")
+    source.write_text(modified, encoding="utf-8", newline="\n")
