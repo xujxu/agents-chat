@@ -17,6 +17,7 @@ PROFILES = {"cpu2-ram4": {"threads": 2, "memory_gib": 4},
             "cpu4-ram8": {"threads": 4, "memory_gib": 8}}
 VARIANTS = {"whisper-small": "whisper", "whisper-turbo": "whisper",
             "funasr-u8u8": "funasr", "qwen-int8": "qwen"}
+SENSE_VARIANTS = {"sense-gguf-q8": "sense-gguf"}
 
 
 def select_probes(rows):
@@ -91,7 +92,7 @@ def cgroup_snapshot():
 
 def run(variant, profile):
     budget = PROFILES[profile]
-    model = VARIANTS[variant]
+    model = {**VARIANTS, **SENSE_VARIANTS}[variant]
     manifest = select_probes(json.loads(Path("../corpus/samples.json").read_text()))
     output = Path("artifacts")
     output.mkdir(exist_ok=False)
@@ -103,6 +104,7 @@ def run(variant, profile):
         "variant": variant, "profile": profile, **budget,
         "sha": os.environ.get("GITHUB_SHA"), "run": os.environ.get("GITHUB_RUN_ID"),
         "cpu": Path("/proc/cpuinfo").read_text().split("\n\n")[0],
+        "cpu_affinity": sorted(os.sched_getaffinity(0)),
         "platform": platform.platform(), "cgroup_before": before,
         "request_timeout_seconds": 120, "one_fresh_process_per_sample": True,
         "production_transcriber": False, "medium_duration_probes": 0,
@@ -135,10 +137,10 @@ def run(variant, profile):
     (output / "complete.json").write_text(json.dumps({"count": len(rows), "variant": variant, "profile": profile}))
 
 
-def report(profile, destination):
+def report(profile, destination, candidate_set="main"):
     profiles = {}
     identity = None
-    for variant in VARIANTS:
+    for variant in {"main": VARIANTS, "sense": SENSE_VARIANTS}[candidate_set]:
         root = Path(f"case-{variant}/artifacts")
         complete = json.loads((root / "complete.json").read_text())
         if complete != {"count": 24, "variant": variant, "profile": profile}:
@@ -171,6 +173,7 @@ def report(profile, destination):
             lines.append(f"| {variant} | {group['category']}/{group['duration_band']} | "
                          f"{group['samples']} | {group['delivered']} | {group['error_rate']:.2%} | "
                          f"{latency if latency is not None else 'unavailable'} |")
+    for variant, summary in profiles.items():
         lines.append(f"\n{variant} failures: {summary['failures']}\n")
     (output / "REPORT.md").write_text("\n".join(lines))
 

@@ -21,6 +21,11 @@ from voice_accuracy_metrics import score
 def command(model, sample, *, threads=2):
     if threads not in (1, 2, 4):
         raise ValueError("Unsupported model thread allocation")
+    if model == "sense-gguf":
+        return ["sense-runtime/bin/llama-funasr-sensevoice",
+                "-m", "model/sensevoice-small-q8.gguf",
+                "-a", f"accuracy-samples/{sample['id']}.wav",
+                "--threads", str(threads), "--backend", "cpu"]
     if model == "whisper":
         return ["native/runtime/whisper-cli", "-m", "model/ggml.bin",
                 "-f", f"accuracy-samples/{sample['id']}.wav",
@@ -88,6 +93,8 @@ def trial(model, sample, *, score_reference=True, threads=2, memory_gib=4):
             continue
         if isinstance(candidate, dict) and isinstance(candidate.get("text"), str):
             result, text = candidate, candidate["text"]
+    if model == "sense-gguf":
+        text = log.strip()
     if model == "whisper" and prefix.with_suffix(".txt").exists():
         try:
             text = prefix.with_suffix(".txt").read_text().strip()
