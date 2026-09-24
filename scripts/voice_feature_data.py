@@ -1,13 +1,60 @@
 """Strict diagnostic input boundary and verbatim pinned frontend extraction."""
 
 import hashlib
+import json
 import math
 from pathlib import Path
+import re
 import struct
 
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def read_bounded(path, limit):
+    with Path(path).open("rb") as file:
+        raw = file.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError(f"Diagnostic file exceeds size bound: {Path(path).name}")
+    return raw
+
+
+def validate_selection(samples, expected):
+    if samples != expected or len(samples) != 12 or len({s["id"] for s in samples}) != 12:
+        raise ValueError("Frozen selected samples differ")
+    if any(not re.fullmatch(r"[A-Za-z0-9_-]+", s["id"]) for s in samples):
+        raise ValueError("Unsafe sample identity")
+
+
+def validate_bundle(root, expected, producer, run, commit):
+    root = Path(root)
+    samples = json.loads(read_bounded(root / "samples.json", 262144))
+    validate_selection(samples, expected)
+    manifest = json.loads(read_bounded(root / "features.json", 262144))
+    if (manifest["producer"], manifest["run"], manifest["commit"]) != (producer, run, commit):
+        raise ValueError("Producer execution identity differs")
+    entries = manifest["samples"]
+    if len(entries) != 12 or {s["id"] for s in entries} != {s["id"] for s in samples}:
+        raise ValueError("Producer feature coverage differs")
+    indexed = {s["id"]: s for s in entries}
+    arrays = {}
+    for sample in samples:
+        sid = sample["id"]
+        entry = indexed[sid]
+        wav = read_bounded(root / "audio" / f"{sid}.wav", 960044)
+        n = validate_wav(wav)
+        if sha(wav) != sample["audio_sha256"] or entry["frames"] != n:
+            raise ValueError("Producer waveform identity differs")
+        pcm = read_bounded(root / "pcm" / f"{sid}.f32", n * 4)
+        features = read_bounded(root / "features" / f"{sid}.fbank", 8 + 500 * 560 * 4)
+        if sha(pcm) != entry["pcmSha256"] or sha(features) != entry["featureSha256"]:
+            raise ValueError("Producer data hash differs")
+        values = validate_feature(features, n)
+        if entry["shape"] != [len(values) // 560, 560]:
+            raise ValueError("Producer shape differs")
+        arrays[sid] = {"pcm": validate_pcm(pcm, n), "features": values}
+    return manifest, arrays
 
 
 def extract_block(source):

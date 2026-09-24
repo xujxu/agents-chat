@@ -1,14 +1,51 @@
 import copy
 import hashlib
 import math
+import json
+from pathlib import Path
 import struct
+import tempfile
 import unittest
 
-from voice_feature_data import extract_block, validate_feature, validate_pcm, validate_wav, numeric_difference
+from voice_feature_data import (extract_block, validate_feature, validate_pcm, validate_wav,
+                               numeric_difference, validate_selection, validate_bundle, sha)
 from voice_feature_report import exchange_report
 
 
 class FeatureTests(unittest.TestCase):
+    def test_exact_selection_and_entire_producer_preflight(self):
+        samples, _, _ = self.fixture()
+        n = 400
+        wav = struct.pack("<4sI4s4sIHHIIHH4sI", b"RIFF", 36+n*2, b"WAVE", b"fmt ", 16,
+                          1, 1, 16000, 32000, 2, 16, b"data", n*2) + b"\0" * (n*2)
+        for sample in samples:
+            sample["audio_sha256"] = sha(wav)
+        with self.assertRaises(ValueError):
+            validate_selection(samples[::-1], samples)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("audio", "pcm", "features"):
+                (root / name).mkdir()
+            pcm = b"\0" * (n*4)
+            feature = struct.pack("<ii", 1, 560) + b"\0" * (560*4)
+            entries = []
+            for sample in samples:
+                sid = sample["id"]
+                (root / "audio" / f"{sid}.wav").write_bytes(wav)
+                (root / "pcm" / f"{sid}.f32").write_bytes(pcm)
+                (root / "features" / f"{sid}.fbank").write_bytes(feature)
+                entries.append({"id": sid, "frames": n, "shape": [1, 560],
+                                "pcmSha256": sha(pcm), "featureSha256": sha(feature)})
+            manifest = {"producer": "linux", "run": "1", "commit": "commit", "samples": entries}
+            (root / "samples.json").write_text(json.dumps(samples))
+            (root / "features.json").write_text(json.dumps(manifest))
+            validate_bundle(root, samples, "linux", "1", "commit")
+            with self.assertRaises(ValueError):
+                validate_bundle(root, samples, "linux", "other", "commit")
+            (root / "features" / "s11.fbank").write_bytes(feature[:-1] + b"x")
+            with self.assertRaises(ValueError):
+                validate_bundle(root, samples, "linux", "1", "commit")
+
     def test_source_extraction_requires_unique_pinned_anchors(self):
         block = "static const int FS=16000;\nstatic int compute_fbank(){\n  T_out=Tl; return out;\n}\n\n"
         source = "prefix\n" + block + "struct cfg { other"

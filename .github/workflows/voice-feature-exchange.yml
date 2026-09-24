@@ -19,3 +19,223 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m unittest discover -s scripts -p 'test_voice_feature_*.py' -v
+  produce:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contracts
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+          - os: windows-2022
+            platform: win32
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10748244312
+          merge-multiple: true
+          path: short
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35863991538
+          artifact-ids: 10752270787
+          merge-multiple: true
+          path: meeting
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35996836383
+          artifact-ids: 10806103628
+          merge-multiple: true
+          path: prior
+      - run: python scripts/voice_chain_report.py prepare short meeting corpus
+      - run: python scripts/voice_feature_exchange.py prepare corpus prior producer
+      - name: Fetch pinned original frontend
+        shell: bash
+        run: |
+          curl -fL --retry 3 --max-time 300 https://github.com/modelscope/FunASR/archive/3ff9259aade4f7e4360645df28cad8f81959ee91.tar.gz -o source.tar.gz
+          mkdir source
+          tar -xzf source.tar.gz --strip-components=1 -C source
+          python scripts/voice_feature_exchange.py generate source source.tar.gz extractor
+      - name: Build only extractor with GCC12 on Ubuntu22.04
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          cat > extractor/commands.txt <<'COMMANDS'
+          cmake -S extractor -B extractor/native -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-12 -DFUNASR_COMMON=/work/source/runtime/llama.cpp/funasr-common
+          cmake --build extractor/native --config Release --verbose --parallel 2
+          COMMANDS
+          docker run --rm -v "$PWD:/work" -w /work ubuntu:22.04 bash -euc '
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq g++-12 cmake
+            bash -ex extractor/commands.txt
+          ' 2>&1 | tee extractor/build.log
+      - name: Build only extractor with MSVC2022
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        run: |
+          $common = "$PWD/source/runtime/llama.cpp/funasr-common".Replace('\','/')
+          $manifest = "$PWD/scripts/voice/windows/utf8.manifest".Replace('\','/')
+          $options = @('-S','extractor','-B','extractor/native','-G','Visual Studio 17 2022','-A','x64',
+            '-DCMAKE_BUILD_TYPE=Release',"-DFUNASR_COMMON=$common","-DUTF8_MANIFEST=$manifest")
+          @("cmake $($options -join ' ')", 'cmake --build extractor/native --config Release --verbose --parallel 2') |
+            Set-Content extractor/commands.txt -Encoding utf8
+          & cmake @options 2>&1 | Tee-Object extractor/build.log
+          if ($LASTEXITCODE -ne 0) { throw 'Extractor configure failed' }
+          & cmake --build extractor/native --config Release --verbose --parallel 2 2>&1 |
+            Tee-Object -Append extractor/build.log
+          if ($LASTEXITCODE -ne 0) { throw 'Extractor compile failed' }
+      - name: Extract and preflight every frozen input
+        shell: bash
+        run: |
+          if [ '${{ matrix.platform }}' = win32 ]; then
+            binary=extractor/native/Release/feature-extractor.exe
+          else
+            binary=extractor/native/feature-extractor
+          fi
+          python scripts/voice_feature_exchange.py extract "$binary" extractor producer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: feature-producer-${{ matrix.platform }}
+          path: producer/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: feature-build-failure-${{ matrix.platform }}
+          path: |
+            extractor/*.txt
+            extractor/*.log
+            extractor/*.json
+            extractor/extractor.cpp
+            extractor/native/CMakeCache.txt
+            extractor/native/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: ignore
+          retention-days: 30
+  consume:
+    if: github.event_name == 'workflow_dispatch'
+    needs: produce
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+            package_run: '35968099304'
+            package_artifact: '10794617845'
+            prior_artifact: '10806103628'
+          - os: windows-2022
+            platform: win32
+            package_run: '35987278609'
+            package_artifact: '10802394350'
+            prior_artifact: '10806823293'
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: feature-producer-linux
+          path: producers/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: feature-producer-win32
+          path: producers/win32
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35996836383
+          artifact-ids: ${{ matrix.prior_artifact }}
+          merge-multiple: true
+          path: prior
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ matrix.package_run }}
+          artifact-ids: ${{ matrix.package_artifact }}
+          merge-multiple: true
+          path: package
+      - name: Verify installed package, lifecycle and 108 sequential replays
+        run: python scripts/voice_feature_exchange.py consume producers/linux producers/win32 prior package consumer
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: feature-consumer-${{ matrix.platform }}
+          path: |
+            consumer/attempts.jsonl
+            consumer/complete.json
+            consumer/environment.json
+            consumer/package-manifest.json
+            consumer/samples.json
+          if-no-files-found: error
+          retention-days: 30
+  report:
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
+    needs: [produce, consume]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: feature-producer-linux
+          path: producers/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: feature-producer-win32
+          path: producers/win32
+      - uses: actions/download-artifact@v4
+        with:
+          name: feature-consumer-linux
+          path: consumers/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: feature-consumer-win32
+          path: consumers/win32
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35996836383
+          artifact-ids: 10806103628
+          merge-multiple: true
+          path: prior/linux
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35996836383
+          artifact-ids: 10806823293
+          merge-multiple: true
+          path: prior/win32
+      - run: python scripts/voice_feature_exchange.py aggregate producers consumers prior feature-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: feature-exchange-report
+          path: feature-report/
+          if-no-files-found: error
+          retention-days: 30
