@@ -43,12 +43,18 @@ export async function atomicWrite(file, bytes, expected) {
       if (!root || !/^[a-z]:[\\/]/i.test(root)) throw new Error('Windows SystemRoot is unavailable.');
       directory = path.join(path.dirname(file), `.voice-private-${randomUUID()}`);
       const script = fileURLToPath(new URL('./windows/private-directory.ps1', import.meta.url));
-      await execute(path.join(root, 'System32/WindowsPowerShell/v1.0/powershell.exe'), [
+      const invocation = execute(path.join(root, 'System32/WindowsPowerShell/v1.0/powershell.exe'), [
         '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script,
       ], {
         windowsHide: true, timeout: 10000, maxBuffer: 16384,
         env: { SystemRoot: root, WINDIR: root, PATH: path.join(root, 'System32'), VOICE_PRIVATE_DIRECTORY: directory },
       });
+      invocation.child.stdin.end();
+      try { await invocation; }
+      catch (error) {
+        if (error.killed) throw new Error('Windows private-directory helper exceeded its 10-second deadline.');
+        throw error;
+      }
       temp = path.join(directory, 'configuration.tmp');
     } else temp = `${file}.${randomUUID()}.tmp`;
     const handle = await open(temp, 'wx', 0o600);
