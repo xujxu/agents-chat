@@ -227,3 +227,114 @@ Do not infer that a successful experiment means the entire package is cleared.
 6. Summarize exact install-candidate statuses with quality/resource/license/
    stability columns. Do not change existing latency thresholds to produce
    more passing models. Installer and actual browser acceptance stay deferred.
+
+Completed Nano/Qwen qualification, 2026-09-24
+-------------------------------------------
+Inference: Actions35955970940, commit34476f7, artifact10791243313.
+All424 planned attempts completed:400 full-set attempts plus24 extra English
+repeats.422 delivered valid nonempty text; Qwen failed on the same long Mandarin
+sample once in each profile. A green workflow means complete evidence, NOT that
+either candidate passed the frozen gates.
+
+Both budgets ran sequentially on one AMD EPYC7763 runner exposing4 logical CPUs,
+2cores/2threads per core and AVX2, without AVX512. CPU quotas are not dedicated
+physical cores. This removes the earlier between-profile host difference, but
+does not establish behavior across CPU instruction sets or deployment hosts.
+
+                           cpu2-ram4                  cpu4-ram8
+                       Nano U8U8   Qwen INT8      Nano U8U8   Qwen INT8
+Full-set delivered      100/100      99/100        100/100      99/100
+<=5s P95 seconds          6.180       5.227          6.140       5.383
+5-15s P95 seconds         8.240       7.383          8.192       7.643
+15-30s P95 seconds       11.694      12.149         11.558      12.112
+Process peak RSS MiB   2188.965    2392.918       2114.859    2376.840
+Container peak MiB     2190.004    2393.914       2115.633    2377.766
+Long Mandarin CER      27.746%     12.201%        27.746%     12.201%
+Long mixed MER         17.714%      8.291%        17.714%      8.291%
+Medium mixed MER       11.556%     17.333%        11.556%     17.333%
+All mixed MER          16.267%     11.130%        16.267%     11.130%
+Frozen gates             FAIL        FAIL           FAIL        FAIL
+
+P95 uses aggregate duration bands, not the maximum language-specific P95.
+Failures remain in primary error scores as reference deletions. Cold process
+and model loading are included; HTTP/browser latency is not. The report's
+generic summary.scope still says "Small CPU resource screen"; these full-set
+counts and quality-gates.json identify this run as frozen100, not the24 probes.
+No evidence was altered or favorable subset selected to improve the verdict.
+
+Nano: full delivery and sufficient allocated memory do not offset quality and
+latency failures. Long Mandarin is+16.990percentage points versus10.756% baseline;
+long mixed is+3.015points versus14.698%. Both exceed the unchanged+2point margin.
+Its improvements on short/medium mixed speech do not erase long-speech failures.
+
+Qwen: long mixed improves substantially, but medium mixed is+2.667points versus
+14.667% baseline, exceeding the margin. Both duration latency gates also fail.
+Both profiles record missing_json_text for
+aishell4-S_R004S02C01-21783148-22229072 (27.87025seconds). Raw stdout contains
+Cyrillic text with literal unescaped newlines inside JSON strings, despite exit0.
+Thus this is invalid structured output and wrong-script content, not a timeout,
+an empty stdout or a demonstrated memory failure. Do not silently repair JSON
+or count exit0 as successful delivery. Cause within model/runtime is unresolved.
+
+Qwen repeatability: all6 predetermined English probes x3observations x2profiles
+=36 observations (12 from full100,24 extra), no failure or exact-text changes,
+0%WER in every repeat on this host. This does not erase the earlier cross-host
+English disagreement or the current long-Mandarin wrong-script output. Across
+the full short-English group of19 samples, Qwen WER is15.625%, not0%.
+
+Scoped license evidence: Actions35959837337 atc940524, artifact10791527676.
+This was an evidence-only run, with no model download or reinference.
+Both ModelScope converted-weight repositories explicitly declare Apache-2.0.
+All10 named file hashes match the actual inference provenance:
+- Nano: original embedding and3 tokenizer files (4matches).
+- Qwen: frontend/encoder/decoder and3 tokenizer files (6matches).
+Nano's locally transformed encoder/LLM remain separately traced to quantization
+Actions35619891005 and the pinned FP32 source archive; they are NOT among those
+4 byte-identity matches. A model-level declaration is not a blanket approval of
+every conversion script, derivative or binary dependency.
+
+Saved source notices cover Sherpa Apache-2.0, ONNX Runtime MIT and its omnibus
+third-party notices, Qwen tokenizer Apache-2.0 and simple-sentencepiece Apache-2.0.
+Linked-library evidence includes ONNX Runtime, glibc, libstdc++ and libgcc_s;
+retain applicable system-library and build obligations when defining a bundle.
+An omnibus ORT notice mentioning an optional library does not prove it is linked.
+Converter repositories lack independent LICENSE files; do not distribute their
+code on the assumption that separately licensed output weights license the code.
+The evidence deliberately leaves installation_approved=false. Exact packaging
+and transitive-notice closure remain release work, not a zero-risk legal promise.
+
+Candidate-list decision after the approved experiments
+-----------------------------------------------------
+Identity                               Status for first installer implementation
+SenseVoiceSmall official GGUF q8       Sole passing ENGINE integration candidate;
+  pinned FunASR/llama.cpp build        prefer tested2thread/4GiB explicit profile.
+Whisper base-q5_1                      Preserve existing compatibility only;
+                                      failed prior quality/latency gates.
+Whisper small-q5_1                     Not in recommended list; failed CPU screen.
+Whisper large-v3-turbo-q5_0             Not in recommended list; high cold latency.
+Fun-ASR-Nano U8U8 / Sherpa1.13.8        Deferred; full quality and latency failures.
+Qwen3-ASR0.6B INT8 / Sherpa1.13.8       Deferred; delivery, quality, latency failures.
+Original SenseVoiceSmall ONNX          Not admitted under the selected permissive
+                                      license policy; prior low-budget failures.
+Other Nano/Qwen runtimes or sizes      Unqualified, not implicitly approved.
+
+Only Sense GGUF advances toward the recommended catalogue; this is NOT a claim
+that an installable, end-to-end-qualified package already exists. Keep disabled
+voice as an installation choice. Failed candidates stay in experiment reports,
+not silently selectable as approved alternatives. A future explicitly approved
+experimental catalogue or resident-worker/alternate-runtime study is separate
+scope and must not reuse this result as acceptance.
+
+No evidence supports requiring4threads/8GiB for Nano or Qwen: both ran within
+the tested2CPU/4GiB allocation, but neither met interaction gates. Likewise,
+4GiB is an evaluated speech allocation, not a measured minimum or total host RAM.
+Do not infer that more host memory fixes quality, serialization or cold latency.
+
+Installation implementation remains deferred at this qualification checkpoint.
+Next integration still needs provider-specific parsing/arguments, explicit
+resource enforcement, complete distributable notices and authenticated API/
+browser acceptance. No PROD, cpg, sampler or existing service defaults changed.
+
+Full evidence:
+https://github.com/xujxu/agents-chat/actions/runs/35955970940/artifacts/10791243313
+https://github.com/xujxu/agents-chat/actions/runs/35959837337/artifacts/10791527676
