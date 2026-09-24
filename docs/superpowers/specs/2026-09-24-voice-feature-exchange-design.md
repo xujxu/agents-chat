@@ -198,3 +198,72 @@ a separately justified design and full qualification, not this diagnostic subset
 
 All builds, audio processing, inference and verification remain in Actions.
 PROD, cpg's1.5GiB limit, the old sampler and live services remain unchanged.
+
+## Completed evidence (2026-09-24)
+
+Run [36001871106](https://github.com/xujxu/agents-chat/actions/runs/36001871106),
+commit `a07d091d1e755081e4e1d0433090823a5132455b`, completed all six jobs.
+Nine synthetic contracts passed; each consumer also passed three real helper/
+process lifecycle contracts before inference. Both consumers delivered108/108
+attempts,216/216 total. There are no failed or unavailable controls.
+
+All72 repetition groups are stable. All24 sample/consumer own-feature versus
+native-WAV controls and all24 current versus historical native controls agree.
+For each of the two fixed feature sources, all12 cross-consumer texts agree.
+Thus every sample passes the specified causal controls; this is not a selected
+control-passing subset.
+
+The decoded PCM hashes and values are identical for all12 samples. Feature
+hashes differ for all12; finite dimensions and exact lengths pass. Ten samples
+retain the same text under both feature producers. The two previously differing
+samples follow the feature producer on either unchanged consumer engine:
+
+| Sample | Shape | Changed feature elements | Max absolute difference | RMS difference | Classification |
+| --- | --- | ---: | ---: | ---: | --- |
+| test-00949 | 148 x560 | 6245 /82880 | 8.392333984375e-05 | 8.336426125497626e-07 | frontend-sufficient |
+| test-01056 | 113 x560 | 6290 /63280 | 9.775161743164062e-05 | 9.124661140040466e-07 | frontend-sufficient |
+
+This supports the frontend feature values as sufficient to explain these two
+observed transcript differences, after identical decoded PCM. No downstream text
+difference remains on the tested identical feature inputs. It does NOT identify
+a particular math operation, compiler defect, OS or CPU cause, establish all
+downstream intermediate values as identical, or prove general cross-platform
+equivalence. No numerical tolerance was used as a pass gate.
+
+The extractor source is identical across producers. Linux uses GNU12.3.0 in
+Ubuntu22.04; Windows uses MSVC19.44.35228.0 on Server2022, not Windows11.
+The unchanged original header and frontend block are retained by provenance:
+
+| Source identity | SHA256 |
+| --- | --- |
+| Upstream archive | `9e1e2abf5070caf2f16752c3412272924730173c48ac85ec2dcacc4c7545a284` |
+| Original frontend block | `9b9d0d10eaf24467c2baa30ae73dd197d001ac34d4560b7230cd14cf7064d597` |
+| Generated translation unit | `31ca0b44453ca9692c096bd19bf252d792a2823b247c5580fb2c1307cd470de4` |
+
+Artifacts expire2026-10-24:
+
+| Artifact | ID |
+| --- | --- |
+| feature-producer-linux | `10807514811` |
+| feature-producer-win32 | `10808691728` |
+| feature-consumer-linux | `10808388857` |
+| feature-consumer-win32 | `10808457656` |
+| feature-exchange-report | `10808697424` |
+
+Report artifact digest:
+`sha256:392c161cf4b8c152bc86ba2efbf15cfde8992799a2a69a802e38aca27f5bdbda`.
+Its summary retains per-sample PCM/feature numerical differences, text matrices,
+control results, package and producer identities. Producer artifacts retain
+original selected WAVs, attribution, feature/PCM bytes and compiler provenance;
+consumer artifacts retain all raw successful stdout bytes and attempted tuples.
+
+The first real run36001303004 stopped before replay because Git Bash tar on
+Windows could not create unrelated upstream symbolic links. The corrected
+workflow extracts only the required four source/license members. No frontend
+formula, compiler option, engine or weight changed in response to output.
+
+This bounded diagnostic slice is complete. The original Windows mixed/medium
+quality failure remains, as do browser-corpus, actual Windows11, redistribution
+and permanent-download qualification. There is no model promotion or production
+change. Further numerical localization or product correction requires a new
+justified design; do not choose a build by accuracy on these explored samples.

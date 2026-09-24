@@ -10,6 +10,64 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Sense feature-boundary exchange checkpoint (2026-09-24)
+------------------------------------------------------
+Approved spec375b989; plan/red6546cd6:
+docs/superpowers/specs/2026-09-24-voice-feature-exchange-design.md
+docs/superpowers/plans/2026-09-24-voice-feature-exchange.md
+The new session preserved prior uncommitted data/report implementations.
+Red36000009792 confirmed missing data module;914af74/run36000736020 confirmed
+missing process runner with data/report contracts passing. Implementation
+ba9cd71/run36001140133 passed; expanded aggregation/raw-stdout contractse8f10c7
+passed36001243394. First real run36001303004 stopped before replay because
+Windows Git Bash tar could not create unrelated upstream symlinks. Fixa07d091
+extracts only the required four source/license members, without changing bytes.
+
+https://github.com/xujxu/agents-chat/actions/runs/36001871106
+Codea07d091d1e755081e4e1d0433090823a5132455b; all six jobs passed.
+Nine contracts; three lifecycle contracts per consumer before real inference.
+Both unchanged installed Sense engines delivered108/108,216/216 total.
+12fixed samples x3repetitions x3inputs(WAV/Linux-features/Windows-features)
+x2consumers,2threads,standard policy. No model/engine/helper replacement.
+All72repeatability groups stable; all24own-replay and24historical controls
+agree. Both consumers produce identical text on each fixed feature source.
+PCM bytes match on all12 samples; features differ on all12. Ten texts unchanged.
+test-00949 and test-01056 follow the feature producer on either consumer.
+No failed controls or exclusions. Classification:10unchanged,2frontend-sufficient.
+
+test-00949:148x560,6245changed values,maxAbs8.392333984375e-05,
+RMS8.336426125497626e-07.
+test-01056:113x560,6290changed values,maxAbs9.775161743164062e-05,
+RMS9.124661140040466e-07.
+No tolerance pass criterion, reference scoring, ranking or latency approval.
+Conclusion: after identical decoded PCM, frontend feature values suffice to
+explain these two observed transcript differences. No downstream TEXT difference
+on these identical inputs; not proof of identical internal graph values.
+Specific math function/compiler/OS/CPU cause remains unidentified.
+
+Extractor toolchains: GNU12.3.0/Ubuntu22.04; MSVC19.44.35228.0/WindowsServer2022.
+Original pinned source/header/block and generated translation unit match between
+producers. Generated sourceSHA256:
+31ca0b44453ca9692c096bd19bf252d792a2823b247c5580fb2c1307cd470de4
+Original blockSHA256:
+9b9d0d10eaf24467c2baa30ae73dd197d001ac34d4560b7230cd14cf7064d597
+Compiler commands/logs/cache, PCM/features and their hashes retained in artifacts.
+
+Artifacts expire2026-10-24:
+10807514811 feature-producer-linux
+10808691728 feature-producer-win32
+10808388857 feature-consumer-linux
+10808457656 feature-consumer-win32
+10808697424 feature-exchange-report
+Report archive digest:
+sha256:392c161cf4b8c152bc86ba2efbf15cfde8992799a2a69a802e38aca27f5bdbda
+
+This diagnostic slice is complete, not product qualification. Windows original
+mixed/medium gate failure remains; browser corpus, actual Win11, redistribution
+permissions and permanent distribution remain open. No tuned replacement or
+new build selected. Further numerical localization requires a separate design.
+All builds/tests/audio/inference ran in Actions; PROD/cpg/sampler untouched.
+
 Installed Sense consistency checkpoint (2026-09-24)
 --------------------------------------------------
 Approved specf30443f and plan/test-firstf0e8e0f:
