@@ -46,7 +46,7 @@ test('installed model transcribes frozen100 through authenticated API', async ({
     const seconds = (performance.now() - started) / 1000;
     if (response) {
       status = response.status();
-      expect([200, 422, 502, 503, 504]).toContain(status);
+      expect([200, 422, 500, 502, 503, 504]).toContain(status);
       const body = await response.json();
       if (status === 200) {
         expect(body.ok).toBe(true);

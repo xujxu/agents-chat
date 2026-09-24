@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 import sys
 
-from voice_choice import decide
+from voice_choice import band, decide, p95
 from voice_corpus_report import evaluate, validate_results
 
 
@@ -30,6 +30,10 @@ def installed_report(manifest, attempts, baseline):
         seconds = row["seconds"]
         if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or seconds < 0:
             raise ValueError("Invalid attempt latency")
+        elapsed = row.get("apiElapsedMs")
+        if elapsed is not None and (isinstance(elapsed, bool) or not isinstance(elapsed, (int, float))
+                                    or not math.isfinite(elapsed) or elapsed < 0):
+            raise ValueError("Invalid API processing latency")
         original = prior.get(row["id"])
         if not original or original["failure"] or not isinstance(original["text"], str) or not original["text"].strip():
             raise ValueError("Missing successful baseline")
@@ -51,6 +55,14 @@ def installed_report(manifest, attempts, baseline):
         scope="Installed package, authenticated direct-WAV API; no browser capture timing.",
         baseline="Historical original Sense ONNX identical-input baseline used in prior engine gates.",
         release_approved=False,
+        api_success_timing=[{
+            "duration_band": duration_band,
+            "measured_successes": len(values),
+            "p95_seconds": p95(values) if values else None,
+        } for duration_band in ("short", "medium", "long")
+          for values in [[row["apiElapsedMs"] / 1000 for row in scored
+                          if not row["failure"] and row.get("apiElapsedMs") is not None
+                          and band(row["duration"]) == duration_band]]],
     )
     return result
 
@@ -60,7 +72,7 @@ def main(corpus, evidence, short_baseline, long_baseline, destination):
     manifest = json.loads((corpus / "samples.json").read_text(encoding="utf-8"))
     attempts = [json.loads(line) for line in (evidence / "results.jsonl").read_text(encoding="utf-8").splitlines()]
     complete = json.loads((evidence / "complete.json").read_text(encoding="utf-8"))
-    if complete != {"count": 100, "variant": attempts[0]["variant"]}:
+    if not attempts or complete != {"count": 100, "variant": attempts[0]["variant"]}:
         raise ValueError("Incomplete collector")
     prior = [json.loads(line) for line in Path(short_baseline).read_text(encoding="utf-8").splitlines()]
     prior += json.loads(Path(long_baseline).read_text(encoding="utf-8"))
@@ -80,6 +92,7 @@ def main(corpus, evidence, short_baseline, long_baseline, destination):
     for row in candidate["duration_metrics"]:
         lines.append(f"- {row['duration_band']}: P95 {row['p95_seconds']:.3f}s; limit {row['latency_limit_seconds']}")
     lines += ["", "Failures count as complete reference deletions. Normalization and thresholds unchanged.",
+              f"Successful API processing timing (excludes upload/auth): {result['api_success_timing']}",
               "Historical baseline is not a same-host timing comparison. Cold process, potentially warm file cache.",
               "No native peak RSS measurement; no physical microphone, browser-corpus or actual Win11 claim.",
               "No package redistribution or release approval follows from these results."]
