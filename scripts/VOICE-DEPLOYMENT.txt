@@ -200,3 +200,30 @@ https://github.com/xujxu/agents-chat/actions/runs/35953083215/artifacts/10789128
 
 No PROD, cpg, sampler or current service limit changed. Installer work remains
 pending; the completed result is model/runtime/resource qualification evidence.
+
+Nano/Qwen completion plan approved2026-09-24
+------------------------------------------
+Finish model qualification BEFORE implementation of the installation interface.
+Do not infer that a successful experiment means the entire package is cleared.
+
+1. Add scripts/test_voice_model_stability.py; require complete samples x2profiles
+   x3repetitions, unchanged input identity, explicit failure scoring, and separate
+   within-profile/cross-profile differences. Run in Actions before implementing
+   scripts/voice_model_stability.py. Incomplete evidence must raise ValueError.
+2. Extend voice_server_profiles.py with candidate set nano-qwen, generic full100
+   quality gates and english6 sample selection from the existing fixed24 probes.
+   Keep original Sense and four-candidate reports reproducible.
+3. Add voice-nano-qwen-qualification.yml. Same runner, sequential two candidates
+   in each2CPU/4GiB and4CPU/8GiB profile, frozen100 audio, current decoder settings.
+   Then repeat all6 preselected English probes twice per profile for Qwen.
+   Count400 full-set +24 additional stability attempts. Never tune prompts,
+   normalization, languages, quantization or test-set selection against results.
+4. Persist every attempt, native/cgroup memory, hardware flags, pinned model
+   hashes, baseline identity, quality violations and output stability. The
+   six base English observations come from the full100 run, not a favorable rerun.
+5. Trace official model cards, converter provenance, tokenizer and linked
+   runtime/dependency license notices. Missing license metadata remains an
+   unresolved scope, not automatic proof of illegality or permission.
+6. Summarize exact install-candidate statuses with quality/resource/license/
+   stability columns. Do not change existing latency thresholds to produce
+   more passing models. Installer and actual browser acceptance stay deferred.
