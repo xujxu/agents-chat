@@ -35,3 +35,25 @@ This does not fix real SenseVoice over-budget long utterances or prove a complet
 browser/API acceptance pass; rerun that separately, preserving its failures.
 
 The patch is on the experimental branch only; no PROD deployment or cpg change.
+
+Completed follow-up evidence
+---------------------------
+Actions35881791120 at commit86f56ef succeeded; artifact10761575019.
+27 memory/audio/job regressions passed, along with application build/typecheck
+and6 authenticated API tests including20 successive normal native exits,
+cancellation, concurrency and actual memory-limit rejection.
+
+The repeated80 exit probes +60 fixed short inferences produced884 status reads.
+18 snapshots lacked memory fields and all18 had PF_EXITING. Outcomes:
+  131 completed without monitor/inference errors;
+  9 voice_memory_limit rejections;
+  0 voice_memory_unknown.
+The diagnostic observer adds IO, so these counts are bounded reproduction
+evidence, not proof that every possible monitoring error has been eliminated.
+Live unreadable/malformed process information still fails closed.
+
+This resolves the reproduced exit-race defect. It does not reclassify historical
+chain failures, establish new full-browser success rates, or solve genuine
+over-budget long utterances. The fixed guard has not been deployed to PROD.
+Copilot CLI session OOM is a separate issue; this experiment did not investigate
+or fix it, restart its sampler, or change its1.5GiB cpg limit.

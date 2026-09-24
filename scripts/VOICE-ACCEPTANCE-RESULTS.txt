@@ -88,12 +88,15 @@ delivered, NOT that the recognizer's raw linguistic error rate is100%.
 Fast rejection times are not successful transcription latency measurements.
 The memory_unknown failure mechanism has not been established by this run;
 do not silently recategorize those failures as genuine budget exceedances.
+Subsequent investigation reproduced an exit-race cause and verified a fix in
+Actions35881791120 (see VOICE-MEMORY-DIAGNOSTICS.txt). The historical numbers
+above remain unchanged; the full browser corpus has not been rerun with the fix.
 
 4. Remaining gates and recommended direction
 -------------------------------------------
 The completed experiment does not support shipping either candidate unchanged.
 To continue without raising limits, evaluate an explicitly approved bounded
-segmentation/VAD candidate and independently investigate memory_unknown events.
+segmentation/VAD candidate with the corrected memory monitor.
 Measure boundary omissions/repetitions on the same natural audio; never join
 source clips to pretend they were a natural long input.
 
