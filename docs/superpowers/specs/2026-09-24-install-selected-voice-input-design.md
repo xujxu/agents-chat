@@ -6,8 +6,9 @@ This document consolidates the previously approved voice-input design and adds
 the Windows 11 scope requested on 2026-09-24. The user selected **native Windows
 11 on Intel/AMD x64** as the initial Windows target; ARM64 is outside this slice.
 The user approved the written design after commit `98e06ce`. Windows runtime
-integration is now implemented and fixture-verified; native model packages,
-installation/upgrade integration and actual Win11 qualification remain pending.
+integration and verified real-model package import are now implemented.
+Configuration/rollback, installation/upgrade integration and actual Win11
+qualification remain pending.
 
 The feature's earlier design decisions and experiments were recorded in
 `scripts/VOICE-DEPLOYMENT.txt` rather than this repository's normal specification
@@ -83,6 +84,32 @@ Public distribution additionally requires explicit permission review for the
 application-owned helper: no root application LICENSE was found in this
 checkout. Retained upstream notices and Microsoft runtime documentation do not
 resolve that separate obligation.
+
+### Subsequent verified Windows import checkpoint
+
+Implementation `1bc1299` adds Windows version 2 import manifests, verifies all
+staged files before executing the included helper, and rejects incompatible
+CPU/OS instruction support. The baseline-x64 helper reports physical memory,
+logical CPUs, current-group affinity and Job membership without applying quotas.
+Effective nested Job limits remain explicitly unknown.
+
+Actions
+[`35981880883`](https://github.com/xujxu/agents-chat/actions/runs/35981880883)
+passed both real models' candidate and installed-import transcription contracts,
+including Unicode paths, wrong manifest hash, truncated/same-size-corrupted and
+symlink helpers, idempotence, tampered installed binaries and unchanged config.
+Artifacts `10800701498` (Sense) and `10800204124` (Whisper) contain the new manifests
+and matching host-probe helper; they expire on 2026-10-24 and are not permanent
+downloads or release-approved packages.
+Windows lifecycle/runtime regression `35981880643` also passed.
+Linux setup `35981511559` at shared-schema implementation `0637dbc` passed all
+eight contracts and both existing-package integrity jobs.
+
+The importer only returns checked paths. It does not write configuration,
+receipts or service settings, and the configuration CLI still gates Windows
+enablement. Private configuration transactions, upgrade menus, actual Win11 and
+full-corpus acceptance remain separate work. This supersedes the earlier
+candidate-only inventory limitation, not the release or installation gates.
 
 ## Goal
 

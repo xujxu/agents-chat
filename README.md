@@ -83,11 +83,13 @@ development runtime path now requires explicit `VOICE_MODEL`, `standard` policy,
 absolute local `.exe` paths for `VOICE_BINARY_PATH` and `VOICE_LAUNCHER_PATH`,
 and `VOICE_MODEL_PATH`. The launcher must be the matching `voice-job.exe` with
 private-directory and bounded-file operations, not the earlier lifecycle-only
-build. Windows model packages, installer/upgrade integration and actual Windows
-11 qualification remain pending; this is not yet a Windows installation option.
-Real Windows engine candidates now pass a three-thread-setting transcription
-smoke from Unicode paths (Actions `35977946646`), but their `candidate.json`
-inventories are deliberately not installer-admitted package manifests.
+build. Both real Windows model candidates now have version 2 import manifests
+and pass verified staging plus installed-engine transcription from Unicode
+paths (Actions `35981880883`). Import checks CPU/OS compatibility and reports
+available resources without adding CPU/RAM quotas. The separate `candidate.json`
+inventory is not an import manifest. Windows configuration/rollback and upgrade
+integration remain gated; this is not yet a Windows installation option.
+Actual Windows 11 qualification remains pending (CI uses Windows Server 2022).
 Full-corpus Windows acceptance and public redistribution approval remain pending.
 
 Explicit `VOICE_MODEL=whisper-base-q5_1` selects the compatibility model (default

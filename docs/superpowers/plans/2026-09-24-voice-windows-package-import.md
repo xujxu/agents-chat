@@ -37,13 +37,13 @@ full-corpus acceptance remain open gates.
 | `scripts/voice/windows/voice-job.cpp` | Dispatch `--inspect-host` |
 | `scripts/voice/package-manifest.mjs` | Generate explicit `windows-x64` manifests alongside existing Linux mode |
 | `scripts/voice/windows/build-candidate.ps1` | Generate version 2 CI import manifest after existing candidate inventory |
-| `tests/voice-setup.test.mjs` | Pure cross-platform schema/host-observation negative tests, run on Linux |
+| `tests/voice-setup-windows.test.mjs` | Pure cross-platform schema/host-observation negative tests, run on Linux |
 | `tests/voice-windows-import.test.ts` | Actual import, corruption, idempotence and installed real transcription in Windows Actions |
 | `.github/workflows/voice-windows-packages.yml` | Run imported-package smoke after real candidate smoke |
 
 ## Task 1: Red schema and resource contracts
 
-- [ ] Add schema tests defining Windows identity:
+- [x] Add schema tests defining Windows identity:
 
 ```js
 const windows = {
@@ -68,24 +68,24 @@ assert.equal(validateManifest(windows, windows.modelId).helper, 'bin/voice-job.e
   wrong weights, oversize inventories and unqualified helper protocol.
   Keep every existing Linux contract unchanged.
 
-- [ ] Test `validateWindowsHost(info, manifest)` as a pure boundary. Reject a
+- [x] Test `validateWindowsHost(info, manifest)` as a pure boundary. Reject a
   missing CPU flag, OS build below declared minimum, nonfinite/negative memory,
   absent OS-state-supported AVX, inconsistent counts and malformed observations.
   Unknown enclosing Job quotas remain unknown, not unlimited.
 
-- [ ] Commit tests, push and inspect the existing `voice-setup.yml` contracts.
+- [x] Commit tests, push and inspect the existing `voice-setup.yml` contracts.
   Expected red: Windows schema unsupported / missing helper module. Do not
   accept a runner infrastructure failure as evidence of the intended test.
 
 ## Task 2: Exact manifest and conservative import
 
-- [ ] Extract existing schema into `package-schema.mjs`, keep re-export from
+- [x] Extract existing schema into `package-schema.mjs`, keep re-export from
   `install-package.mjs`. Add one helper role only for Windows version 2 and
   require `.exe` for binary/helper. Minimum build 19041 is an implementation
   compatibility floor for UTF-8 paths, not a Win11 qualification claim.
   Validate Windows names case-insensitively and detect parent-file collisions.
 
-- [ ] Export the Windows importer and host validator:
+- [x] Export the Windows importer and host validator:
 
 ```js
 export function validateWindowsHost(info, manifest);
@@ -102,7 +102,7 @@ export async function importWindowsVoicePackage({
   Recheck every staged file's byte count/SHA256 **before** executing the helper.
   Never execute a helper directly from unchecked downloaded files.
 
-- [ ] After all copied bytes match, run checked helper with `--inspect-host`:
+- [x] After all copied bytes match, run checked helper with `--inspect-host`:
 
 ```js
 const { stdout } = await execFileAsync(helper, ['--inspect-host'], {
@@ -118,7 +118,7 @@ const { stdout } = await execFileAsync(helper, ['--inspect-host'], {
   enclosing Job presence, explicitly distinguishing them from target-service
   reservations/quotas. Low memory is guidance, not an invented measured minimum.
 
-- [ ] Rename completed staging into `packages/<manifestSHA>`. If already present,
+- [x] Rename completed staging into `packages/<manifestSHA>`. If already present,
   verify its manifest and all declared files before returning it; tampering
   fails rather than overwriting. Handle only known rename collisions and
   preserve errors such as access denial. Always remove this invocation's stage.
@@ -128,7 +128,7 @@ const { stdout } = await execFileAsync(helper, ['--inspect-host'], {
 
 ## Task 3: Native host probe and manifest production
 
-- [ ] Add `--inspect-host` to the verified native helper:
+- [x] Add `--inspect-host` to the verified native helper:
 
 ```cpp
 if (argc == 2 && std::wcscmp(argv[1], L"--inspect-host") == 0) {
@@ -146,7 +146,7 @@ if (argc == 2 && std::wcscmp(argv[1], L"--inspect-host") == 0) {
   version virtualization does not turn the value into a guessed Win11 version.
   Set `jobLimitsKnown:false`; nested effective limits are not fully discovered.
 
-- [ ] Extend manifest generator invocation:
+- [x] Extend manifest generator invocation:
 
 ```bash
 node scripts/voice/package-manifest.mjs DIRECTORY MODEL windows-x64
@@ -161,17 +161,17 @@ node scripts/voice/package-manifest.mjs DIRECTORY MODEL windows-x64
 
 ## Task 4: Real import and corruption regression
 
-- [ ] Add test that reads the actual version 2 manifest produced in CI and
+- [x] Add test that reads the actual version 2 manifest produced in CI and
   imports it into a Unicode/spaced temporary project. Before success, exercise
   wrong manifest hash, truncated helper and symlink helper and require errors
   with no staged files/configuration changes.
-- [ ] Restore originals, import correctly, require returned helper path, log
+- [x] Restore originals, import correctly, require returned helper path, log
   CPU/memory guidance and no new caps. Run the actual `transcribeVoice` against
   imported real model and pinned JFK at the model's default threads.
-- [ ] Repeat import for idempotence; alter installed binary and require refusal.
+- [x] Repeat import for idempotence; alter installed binary and require refusal.
   Verify the project `.env.local` sentinel is byte-for-byte unchanged throughout.
   Finally remove only the test's resolved temporary root.
-- [ ] Push, dispatch Windows native candidates and Linux setup integrity:
+- [x] Push, dispatch Windows native candidates and Linux setup integrity:
 
 ```bash
 gh workflow run voice-windows-packages.yml -R xujxu/agents-chat --ref experiment/voice-natural-long
@@ -183,7 +183,7 @@ gh workflow run voice-setup.yml -R xujxu/agents-chat --ref experiment/voice-natu
 
 ## Task 5: Persist boundary and continue configuration integration
 
-- [ ] Update spec/ledger to state verified import is implemented, but Windows
+- [x] Update spec/ledger to state verified import is implemented, but Windows
   CLI activation/menu and setup/deploy upgrades remain gated. Preserve old
   candidate/source evidence and expired-artifact warnings.
 - [ ] Next bounded plan: UTF-8/BOM/UTF-16LE config decoding, common path quoting
@@ -193,3 +193,13 @@ gh workflow run voice-setup.yml -R xujxu/agents-chat --ref experiment/voice-natu
 
 All commits include the standard Copilot trailer. No new model or resource-policy
 decision is introduced by this prerequisite slice.
+
+## Execution evidence
+
+Test-first `e2096bb`, Actions `35981279455`: expected schema/module failures.
+Implementation `0637dbc`, final guard/test `1bc1299`.
+Windows real candidate/import matrix `35981880883` and lifecycle/runtime
+`35981880643` passed. Linux setup `35981511559` at `0637dbc` passed eight contracts
+and both existing-model integrity jobs. Final artifacts: Sense `10800701498`,
+Whisper `10800204124`. Exact hashes/retention are recorded in
+`scripts/VOICE-DEPLOYMENT.txt`. No local validation or production changes.

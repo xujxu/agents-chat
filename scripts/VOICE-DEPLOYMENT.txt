@@ -3,11 +3,51 @@ Install-selected voice providers: approved direction and evidence plan
 
 Formal product specification (supersedes historical scope below):
 docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md
-Windows11 Intel/AMD x64 native support is required. Windows runtime fixture
-integration now passes; real-model packages, installation and Win11 acceptance
+Windows11 Intel/AMD x64 native support is required. Windows runtime and verified
+real-model import now pass; configuration/upgrade integration and Win11 acceptance
 remain pending. Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
+
+Verified Windows import checkpoint (2026-09-24)
+----------------------------------------------
+Plan/test-firste2096bb:
+docs/superpowers/plans/2026-09-24-voice-windows-package-import.md
+Actions35981279455 failed for unsupported Windows schema and missing importer.
+Implementation0637dbc; pre-copy size guard and same-size corruption coverage
+1bc1299756ff84d81637cc114e53b095739fb4ab.
+
+Final Windows real-package run:
+https://github.com/xujxu/agents-chat/actions/runs/35981880883
+Both Sense/Whisper passed existing real1/2/4thread smoke, verified import and
+installed-engine transcription plus typecheck. Corrupt manifest/truncated and
+same-size-corrupted helper/symlink input refused; stages cleaned and config
+unchanged. Repeated import is idempotent; modified installed executable refused.
+All files hash-verified before running the helper host probe. Version2 manifests
+require the matching helper and pinned model bytes. CPU/OS instructions checked;
+physical memory/CPU/current-group affinity/Job observations are guidance only.
+Nested effective Job limits remain unknown. No CPU/RAM hard quota added.
+
+Sense artifact10800701498,244720036compressed bytes:
+voice-windows-candidate-sensevoice-small-q8-1bc1299756ff84d81637cc114e53b095739fb4ab
+sha256:d09beef5323d20386b15bc42bed2c8f882fa5026bd50faf28fe0fabe36b0c14e
+Whisper artifact10800204124,57919539compressed bytes:
+voice-windows-candidate-whisper-base-q5_1-1bc1299756ff84d81637cc114e53b095739fb4ab
+sha256:644a4044e630a3e133aacaf6f5091a34139fd49c27df4067630b5be65baa36aa
+Expire2026-10-24; Windows Server2022 evidence, NOT Win11 acceptance.
+Artifacts now contain voice-package.json/voice-package.sha256 in addition to
+candidate inventory. These are import candidates, not public release approval.
+
+Windows lifecycle/runtime regression35981880643 at1bc1299 passed.
+Linux setup35981511559 at0637dbc passed8contracts and both model integrity jobs;
+shared Linux manifest/import behavior preserved. Initial real import35981508119
+also passed before the additional pre-copy guard.
+
+The importer returns checked paths only, never writes environment/receipts.
+Windows CLI enablement remains gated pending private config transactions,
+rollback and setup/deploy upgrade integration. Startup/watchdog must not prompt.
+Public redistribution permission, permanent downloads, actual Win11 and
+full-corpus quality/latency remain open. PROD/cpg/sampler unchanged.
 
 Real Windows candidate checkpoint (2026-09-24)
 ---------------------------------------------
