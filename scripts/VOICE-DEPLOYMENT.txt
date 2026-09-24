@@ -1,6 +1,13 @@
 Install-selected voice providers: approved direction and evidence plan
 ===================================================================
 
+Formal product specification (supersedes historical scope below):
+docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md
+Windows11 Intel/AMD x64 native support is now a required target, not implemented
+or qualified yet. Linux-only statements below describe earlier scope/current
+implementation, not an exclusion from the final feature. This file remains the
+experiment and implementation evidence log; the formal spec owns product design.
+
 Scope agreed 2026-09-24
 ---------------------
 One active local model per deployment, chosen by the administrator at install.

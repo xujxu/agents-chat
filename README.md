@@ -76,6 +76,10 @@ verified Actions packages is available below. Full-corpus API/browser
 quality/latency acceptance and public runtime release publication are still
 pending; these are installation candidates, not release-approved models.
 See `scripts/VOICE-DEPLOYMENT.txt` for exact versions and qualification evidence.
+The formal cross-platform design is
+[`docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md`](docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md).
+Native Windows 11 Intel/AMD x64 support is required by that design but is not
+implemented yet; the Linux-only limitations below describe current code.
 
 Explicit `VOICE_MODEL=whisper-base-q5_1` selects the compatibility model (default
 one thread) using `VOICE_BINARY_PATH`, or `VOICE_WHISPER_PATH` if the generic path

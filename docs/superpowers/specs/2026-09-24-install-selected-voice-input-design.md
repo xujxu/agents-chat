@@ -1,0 +1,437 @@
+# Install-selected local voice input on Linux and Windows 11
+
+## Status and authority
+
+This document consolidates the previously approved voice-input design and adds
+the Windows 11 scope requested on 2026-09-24. The user selected **native Windows
+11 on Intel/AMD x64** as the initial Windows target; ARM64 is outside this slice.
+Detailed Windows architecture below is proposed for review, not implemented.
+
+The feature's earlier design decisions and experiments were recorded in
+`scripts/VOICE-DEPLOYMENT.txt` rather than this repository's normal specification
+directory. That was a documentation omission. This specification is now the
+product design reference; the script-side documents remain historical evidence.
+Do not rewrite old experiment failures as successes or treat this retrospective
+document as proof that Windows code or final acceptance already exists.
+
+As of commit `14c7f47`:
+
+| Surface | Actual state |
+| --- | --- |
+| Browser recording, authenticated API, provider configuration | Implemented; Linux Actions coverage |
+| Sense GGUF and Whisper native adapters | Linux implementation; fixture regressions and real API smoke passed |
+| Interactive setup, upgrade preservation, disable, verified package import, rollback | Linux foundation implemented and verified |
+| Portable native packages | Linux candidate artifacts, not public release-approved packages |
+| Windows native execution, model installation and upgrade integration | Not implemented; currently rejected or reported unsupported |
+| Automatic trusted public downloads | Not implemented; explicit local package and trusted manifest hash required |
+| Full acceptance of final platform-specific installed packages | Pending |
+
+The Linux-only restriction is **current implementation status**, not the final
+feature scope. Windows 11 support is required for completing this feature.
+
+## Goal
+
+Let an administrator choose a local speech-to-text model when installing or
+upgrading Agents Chat, and let authenticated users dictate into the composer.
+The application must work natively on supported Linux x64 and Windows 11 x64
+hosts, without a cloud transcription account, GPU, WSL, Docker, or additional
+always-running model service as a prerequisite.
+
+Model selection is deployment-wide. The browser speaks to one stable voice API,
+not directly to a model executable. Installing voice is optional.
+
+## Scope and non-goals
+
+Include recording, bounded upload, transcription, cancellation, capability
+discovery, installation/reconfiguration, upgrades, package integrity, licensing,
+platform compatibility and truthful resource guidance.
+
+Do not add per-chat model switching, automatic sending, streaming transcription,
+speaker diarization, model fine-tuning, cloud fallback, arbitrary executable
+downloads, multi-worker shared admission, or a permanently resident model.
+Windows ARM64, native macOS packages and GPU profiles require separate work.
+Windows Server CI evidence is useful but is not itself Windows 11 acceptance.
+
+The local `cpg` workaround only concerns this development machine's Copilot CLI.
+It is not a product dependency or a resource policy for other installations.
+No change here authorizes deployment to PROD or alteration of that workaround.
+
+## User-visible behavior
+
+The microphone button appears only when the authenticated capability response
+enables voice and the browser has the required capture APIs. Initial capability
+state is unavailable, so no microphone-button flash precedes the response.
+
+Choosing not to install voice, or explicitly disabling it during an upgrade,
+persists `VOICE_ENABLED=0`. After configuration activation and page reload:
+
+- The microphone control is absent, not greyed out.
+- There is no missing-model or voice-error banner for intentional opt-out.
+- No model process is started and no microphone permission is requested.
+- Text entry, attachments and normal chat submission remain unchanged.
+
+A separate explicit configuration failure may show an error; it must not be
+silently presented as either working voice or intentional opt-out.
+
+Recording requires HTTPS or localhost and microphone permission. It stops at
+30 seconds. The browser produces 16 kHz mono 16-bit WAV, at most 960,044 bytes,
+without FFmpeg. Transcribed text appends to the latest draft without replacing
+edits or sending automatically. Cancellation, chat/account changes and existing
+background/unmount behavior discard stale results.
+
+Windows 11 users can access a Windows-hosted or Linux-hosted application using
+supported browsers. Host runtime support and browser capture support are
+different acceptance dimensions.
+
+## Model catalogue and qualification
+
+An installation identity is **model revision + quantization + engine build +
+platform + execution settings**, not merely a model brand.
+
+| Choice | Product role | Permission and qualification boundary |
+| --- | --- | --- |
+| Official SenseVoiceSmall GGUF q8 | First recommended integration candidate | Exact official weights declare Apache-2.0; pinned FunASR/llama.cpp code uses MIT. Linux engine gates passed; final installed-package and Windows qualification pending |
+| Whisper base-q5_1 | Explicit compatibility option, not a quality/latency recommendation | MIT weights/code plus applicable runtime/dependency obligations; retain known gate failures |
+| Disabled | Default for an unconfigured fresh installation | No model install, inference or microphone control |
+
+FunASR-Nano U8U8, Qwen3-ASR 0.6B INT8 and other screened Whisper variants remain
+outside the approved first catalogue because of measured failures or incomplete
+qualification. The original SenseVoice ONNX permission question is not resolved
+by the separate official GGUF declaration. Do not silently substitute weights.
+
+The two native model identities are Windows build targets, not pre-approved
+Windows options. A Windows package appears as enabled/installable only after its
+required compatibility and lifecycle checks pass. Quality status stays visible.
+
+Installation shows model/runtime license, artifact size, CPU architecture and
+instruction requirements, thread setting, measured memory/latency and acceptance
+status. Linux measurements are labelled Linux observations, not invented Windows
+minimum requirements. Unknown measurements remain unknown.
+
+## Architecture and ownership
+
+Keep `app/page.tsx` and `ChatPageClient.tsx` as composition shells.
+
+| Area | Responsibility |
+| --- | --- |
+| `app/features/composer/voice/` | Capture, capability state, controls, cancellation and draft behavior |
+| `app/api/voice/route.ts` | Authenticate; validate origin, account, request and WAV; call focused helpers |
+| `lib/voice/configuration.ts` | Typed catalogue, environment precedence, platform/config validation and safe capability metadata |
+| `lib/voice/providers.ts` | Model-specific arguments and bounded strict UTF-8 result interpretation |
+| `lib/voice/transcriber.ts` | Request temporary files, execution, deadline, result and cleanup |
+| New focused `lib/voice/process.ts` | Platform launch/termination contract; isolate POSIX and Windows mechanics from model parsing |
+| `lib/voice/jobs.ts` | One global active job per app process, early cancellation and deadline |
+| `lib/voice/memory.ts` | Existing opt-in legacy Linux memory policy; not a Windows resource detector |
+| `scripts/voice/` and `configure-voice.mjs` | Catalogue presentation, compatible package import, configuration transaction and rollback |
+| Platform deployment/setup scripts | Invoke configurator at installation/upgrade, activate and recover |
+| Actions workflows | Build pinned platform artifacts, retain notices and qualify actual installed behavior |
+
+Reuse existing helpers where possible. Platform detection belongs in focused
+helpers, not scattered `win32` conditionals through API or browser code.
+Use named exports and explicit TypeScript boundary types. No new UI styling
+framework or unrelated architecture rewrite is required.
+
+### Request flow and protocol
+
+1. Authenticated `GET /api/voice` reports `enabled`, `model`, `provider`, `threads`,
+   `resourcePolicy` and `maxSeconds`. Disabled model/provider fields are null.
+   Filesystem paths and raw configuration never appear in this response.
+2. `POST` checks auth, origin/account ownership, request identity, content type,
+   size and WAV structure, then reserves the single inference slot.
+3. Write audio into a private request directory and launch the selected provider.
+4. Read a bounded transcript, return text and timing, then remove temporary files.
+5. `DELETE`, disconnection or deadline terminates the owned task and descendants.
+   Release admission only after teardown; do not allow stale work to overlap the
+   next request. Existing early-cancel semantics remain intact.
+
+Sense uses its native CPU arguments and stdout. Whisper uses its established
+arguments and text output file. Results must be nonempty, at most 32 KiB and valid
+UTF-8 without NUL characters. Nonzero exit, missing output, invalid encoding or
+oversized output is an explicit failure, not a successful empty transcript.
+
+## Configuration and resource policy
+
+Retain the shared environment contract:
+
+```env
+VOICE_ENABLED=1
+VOICE_MODEL=sensevoice-small-q8
+VOICE_BINARY_PATH=/absolute/path/to/platform-engine
+VOICE_MODEL_PATH=/absolute/path/to/model
+VOICE_THREADS=2
+VOICE_RESOURCE_POLICY=standard
+```
+
+Paths above illustrate Linux syntax. Windows requires an absolute local Windows
+path and a matching Windows executable, not a Linux path or WSL translation.
+
+Explicit model configuration defaults to **standard**: ordinary on-demand native
+processes with thread control, one active request, 120-second deadline, bounded
+output and cancellation. There is no additional application CPU/RAM hard quota.
+Existing OS/container/Job limits are respected and never escaped.
+The pinned Sense thread adaptation currently accepts 1, 2 and 4; expose only
+supported values. Defaults remain two threads for Sense and one for Whisper.
+
+Existing Linux Whisper configurations without `VOICE_MODEL` retain
+`legacy-low-memory`: one thread, historical 1 GiB address-space cap, 384 MiB
+sampled peak RSS watchdog and existing host-headroom admission. This is migration
+compatibility, not the new-install default. Reject that Linux-specific policy
+on Windows rather than silently dropping its promised protections.
+Windows had no previously supported voice deployment to migrate to that policy.
+
+Installation checks compatibility, free staging disk and available resource
+observations. Distinguish CPU affinity, logical CPU count, actual hard quota,
+physical RAM and remaining constrained memory. An install-time observation is
+not a resource reservation or guarantee about a differently configured service.
+Use Windows-native resource APIs on Windows; never require `/proc` or assume
+Node's host-wide memory figure represents every enclosing Job limit.
+
+The measured 2 CPU/4 GiB Linux allocation is neither a compulsory cap nor a proven
+minimum. Warn about low resources using clearly labelled guidance; reject only
+known incompatibility, invalid configuration or unsatisfied package requirements.
+Hard quotas are optional deployment policy, not required feature infrastructure.
+
+## Native Windows 11 execution design
+
+### Alternatives and selected direction
+
+1. **Native Windows x64 engine and shared app/API**: recommended; fits the existing
+   Windows deployment and standalone ZIP without requiring another OS layer.
+2. WSL-hosted Linux engine: reuses artifacts but adds installation, filesystem
+   and lifecycle complexity; not the Windows support definition for this feature.
+3. Separate model service/container: potentially useful for later resident-model
+   deployments, but introduces another service and changes measured behavior.
+
+Do not make either alternative a hidden fallback when native execution fails.
+
+### Platform process adapter
+
+POSIX execution keeps its current process-group ownership, niceness and core-dump
+handling. Windows must not attempt to run `nice`, `prlimit`, `kill(-pid)` or use
+`X_OK` as proof that a native executable can load.
+
+Use an owned Windows Job Object for task **lifecycle**, with kill-on-job-close,
+not CPU-rate or memory-limit settings. A small audited native launcher is the
+proposed implementation boundary, avoiding a global Node native-addon dependency.
+It is a shipped executable, not a permanently running service.
+
+The launcher creates the engine suspended, assigns it to the Job, then resumes
+it. If assignment or initialization fails, terminate the suspended child and
+report an explicit failure. Never continue with an unowned process tree.
+The Job must cover descendants and close on normal completion, timeout,
+cancellation or launcher shutdown. A dedicated parent control pipe lets parent
+closure trigger Job teardown; it is separate from transcript stdout.
+A parent-disappearance test is required, not just ordinary cancellation.
+
+Launch without a command shell, hide console windows, use Unicode Win32 APIs and
+correct Windows argument quoting. Limit inherited handles. Supply only the
+needed Windows runtime environment such as `SystemRoot`, temporary-directory and
+explicit runtime search paths; do not forward unrelated application secrets.
+Keep transcript stdout separate from launcher status and native diagnostics.
+
+A Job Object is a standard Windows process-ownership mechanism here, **not a
+reintroduction of mandatory resource limits**. Test operation inside an existing
+Scheduled Task/runner Job; do not request breakaway to bypass administrator limits.
+No additional administrator rights should be required just to transcribe.
+Microsoft's [Job Objects documentation](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
+describes group termination, inherited membership and nested Jobs separately
+from optional CPU/memory limits. This is lifecycle supervision for trusted
+shipped engines, not a sandbox for arbitrary executables.
+
+## Installation, upgrades and opt-out
+
+Every interactive fresh installation and upgrade offers:
+
+1. Keep current settings (Enter/default; unconfigured installations stay disabled).
+2. Configure Sense GGUF q8, when a qualified compatible package is available.
+3. Configure Whisper compatibility mode, with its known limitations shown.
+4. Disable voice and hide its microphone controls.
+
+EOF or cancelling the menu preserves settings. Unattended execution does not
+read stdin; default to keep, print state and an exact reconfiguration command.
+Explicit command-line choices invoke the same transaction. Startup, watchdog
+restarts and normal application launches never prompt.
+
+For Windows, integrate with `setup.ps1`, `deploy.ps1` and the standalone ZIP.
+Run configuration before stopping the working app/activating the replacement
+where feasible. Scheduled Task logon/startup and `service-watchdog.ps1` must not
+unexpectedly present menus or download models. Preserve existing task identity,
+ports, tunnel configuration and unrelated environment values.
+
+Upgrade must execute the newly downloaded setup logic. The new deployment entry
+points must re-enter the new script after pulling, preserving explicit options.
+For releases older than those entry points, document and test the bootstrap:
+pull first, then invoke the new deployment script (`--no-pull` on Linux,
+`-SkipGitPull` on Windows). A historical running script cannot be retroactively
+given new behavior merely by updating its file.
+
+### Configuration transaction and platform details
+
+- Inspect effective voice keys without logging secrets. Respect process/service
+  overrides and `.env.production.local`; Linux additionally accounts for
+  `/etc/agents-chat.env`. Windows user/machine environment and the actual
+  Scheduled Task account may differ from the interactive installer account.
+- Keep performs no migration, download or enablement.
+- Use an exclusive setup lock, verify staged assets, then switch configuration.
+  Keep old assets until explicit later cleanup.
+- Retain unrelated `.env.local` settings. On Windows, support UTF-8 with/without
+  BOM and Windows PowerShell-produced Unicode environment files, CRLF, spaces
+  and non-ASCII paths. Reject unsupported encodings explicitly.
+- Current JSON-style backslash escaping is not automatically compatible with
+  `start.ps1`'s simple dotenv reader. Use a shared supported quoting contract;
+  installer, Next.js and PowerShell must resolve the same Windows path.
+- Windows path checks reject drive-relative paths, device paths, alternate data
+  streams, archive traversal, reparse-point escapes and case-insensitive
+  duplicate destinations. Do not reuse POSIX-only path assumptions.
+- Use platform-supported atomic replacement. Locked files/antivirus interference
+  yield a bounded explicit failure; never delete the old config first.
+- Private receipts can contain the previous entire environment file. Unix mode
+  0600 is not a Windows ACL guarantee: restrict access to the deploying/service
+  identity and trusted administrators with Windows ACLs and verify access.
+- Activation failure restores only the prior voice configuration and attempts
+  the platform's normal restart. Preserve an actionable recovery receipt when
+  recovery fails. Refuse rollback if an administrator changed config meanwhile.
+- Application health alone is not model health. The completed installer must
+  verify the selected installed runtime can launch before declaring voice ready.
+  Do not claim full quality acceptance from that startup/smoke check.
+
+Standalone bundles include the configurator and helpers, require no development
+dependency installation, and preserve `.env.local` and model data across upgrades.
+
+## Artifacts, licensing and distribution
+
+Build platform-specific runtime packages in Actions from pinned sources and the
+documented Sense thread/error patch. Reuse exact verified model weights, but
+never reuse Linux executable compatibility or license closure as proof for a
+Windows executable.
+
+The manifest must identify OS/architecture, native engine/build revision, model
+hash, required CPU flags, minimum runtime/OS dependencies, executable/model paths,
+file sizes/checksums and notices. Current Linux `minGlibc` validation must become
+platform-specific; Windows declares Windows/runtime dependencies, not glibc.
+
+Windows packages must include or explicitly require their selected C/C++ runtime
+and any DLL dependencies, with redistribution notices checked. Decide compiler
+and link mode during the pinned-build spike based on the actual dependency graph;
+the manifest must record the resulting choice. No invented Windows measurements
+or "MIT-only binary" label.
+
+The existing local package-import transaction is the first delivery path.
+Automatic downloads remain a release requirement: publish reviewed immutable
+platform assets and a trusted catalogue with checksums, bound download sizes and
+timeouts, verify before extraction/activation, and preserve settings on failure.
+Do not use mutable latest links, arbitrary URLs or expiring Actions artifacts
+as an automatic production update channel. Package publication is explicit and
+does not authorize deployment to PROD.
+
+The permission policy prefers MIT/Apache-2.0/BSD-style model/runtime permissions.
+Retain actual third-party obligations, including runtime exceptions where
+applicable. Open source does not mean no notice obligations or zero legal risk.
+Do not ship experiment corpus audio as part of model installation.
+
+## Error handling, security and privacy
+
+Preserve authentication, account ownership, origin checks, request-ID validation,
+WAV validation, bounded upload and one-process admission. Windows is not a
+reason to bypass API checks or add an unauthenticated local model port.
+
+Unknown model/policy, missing binary/DLL, package mismatch, unsupported CPU,
+launch failure, timeout, invalid output and cancellation have explicit outcomes.
+No fallback to another model, unbounded execution or success-shaped empty output.
+
+Do not log audio, transcript, native stdout, auth configuration or recovery
+receipt contents. Keep only model/build identity, durations, sizes, exit status,
+error codes and clearly scoped resource observations.
+No shell-interpolated user audio paths or uploaded model filenames are allowed.
+Windows error reporting must not expose private filesystem paths in API bodies.
+Clean temporary audio/results after success, failure and cancellation; distinguish
+normal teardown guarantees from machine crashes and abrupt OS shutdown.
+
+## Validation and acceptance
+
+Follow the repository's test-first practice: add focused failing logic/API tests,
+implement, then cover user-visible behavior with Playwright. Use existing
+`node:test`/tsx and Playwright infrastructure; do not add a framework solely for
+this feature. All builds, inference, audio processing and validation run in
+GitHub Actions, not on this development host.
+
+### Platform matrix
+
+| Environment | Required coverage |
+| --- | --- |
+| Linux x64 | Existing legacy compatibility; standard Sense/Whisper lifecycle; install/upgrade/rollback; browser/API regressions |
+| Windows hosted Actions runner | Native builds, manifest/dependency tests, Windows paths/ACLs, process Job lifecycle, PowerShell setup/deploy and API/browser smoke |
+| Actual Windows 11 x64 via an Actions runner | Required before claiming Windows 11 qualification; Scheduled Task deployment, runtime behavior and browser permission/capture checks |
+| Browser clients | Desktop Chromium/Edge on Windows, existing desktop/mobile Chromium and WebKit regression coverage |
+
+Do not equate a `windows-latest` runner label or passing Windows Server tests
+with an actual Windows 11 run. If a suitable Win11 Actions runner is unavailable,
+report that acceptance gate as blocked; do not run validation locally as a
+workaround. A physical microphone test is distinct from synthetic Playwright
+audio and must be labelled as such.
+
+### Required regressions
+
+- Fresh opt-out and enabled-to-disabled upgrade hide controls without an error.
+- Every interactive upgrade prompts; Enter/EOF/cancel preserves settings.
+- Unattended upgrade never blocks; explicit keep/disable/switch is deterministic.
+- Old installations without voice keys and legacy Linux configurations migrate
+  only by explicit choice; unsupported legacy Windows policy fails clearly.
+- Bad manifest, interrupted/corrupt download, disk exhaustion, concurrent setup,
+  platform mismatch, locked config and conflicting overrides preserve old state.
+- Windows quoting/encoding, spaces/non-ASCII paths, DLL lookup, ACL protection,
+  environment precedence and Scheduled Task identity are exercised.
+- Cancellation/timeout/disconnection kills descendants, releases admission and
+  deletes temporary files. Parent death and nested-Job behavior are tested.
+- Failed process assignment cannot leave a suspended/running orphan.
+- Standard mode has no application CPU/RAM hard cap; legacy Linux guards still
+  fail closed. Thread settings are not advertised as quota tests.
+- Installed real packages, not only mocks, transcribe through authenticated API.
+- Standalone Linux and Windows bundles include working reconfiguration tooling.
+
+### Model and end-to-end gates
+
+Reuse frozen 60 ASCEND + 40 AISHELL-4 samples, identities, transcripts and
+normalization. Score failed requests as reference deletions. Preserve the
+approved 100% nonempty delivery requirement, aggregate short-input P95 at most
+3 seconds, long-input P95 at most 5 seconds, and each language/duration error
+rate within +2 percentage points of the identical-input unconstrained baseline.
+Do not invent a middle-duration latency threshold or tune against test outputs.
+
+Re-run the actual installed package/service path on each release-target platform
+before recommendation. Record CPU model/flags, logical versus physical cores,
+threads, any external quota, memory accounting and cold-process/cache scope.
+Report API and browser timing separately from engine timing and state what each
+includes. Already inspected corpora are not untouched holdouts.
+Windows or rebuilt portable packages do not inherit Linux engine acceptance.
+Whisper remains a labelled compatibility option even if it runs successfully.
+
+## Existing evidence and remaining work
+
+| Evidence | Meaning |
+| --- | --- |
+| Actions `35953083215` | Sense GGUF frozen100 engine gates passed in both Linux profiles |
+| Actions `35955970940` | Full Nano/Qwen experiment completed; neither passed all gates |
+| Actions `35965252088` | Linux provider build/typecheck, fixture API/browser and real Sense API smoke passed |
+| Actions `35968099304` | Linux portable candidate package build, verified import, native transcription and rollback passed |
+| Actions `35968626725` | Package integrity, setup interaction, release inclusion and isolated deployment tests passed |
+| Actions `35968629945` | Installer-driven disabled upgrade hides microphone/no error banner; Linux integration passes |
+
+Remaining implementation slices, in order:
+
+1. Approve this specification and write the implementation plan under
+   `docs/superpowers/plans/` before Windows code changes. Use separate bounded
+   plans for native Windows runtime, installer/deployment integration, and
+   qualification/distribution; do not combine them into an unreviewable plan.
+2. Add Windows-native process ownership and platform-aware configuration, with
+   failing lifecycle/configuration tests first.
+3. Build candidate Windows runtimes and implement Windows-safe package/config
+   transactions; integrate setup/deploy/release entry points.
+4. Complete installed-package accuracy/latency, actual Windows 11, API/browser
+   and failure/rollback acceptance. Keep blocked gates explicit.
+5. Finalize notices and permanent trusted distribution, enable automatic
+   downloads and publish only approved platform catalogue entries.
+
+No Windows support or public automatic installation is claimed complete by
+writing this document. Existing Linux evidence and working behavior must remain
+intact throughout the cross-platform implementation.
