@@ -14,6 +14,7 @@ Assert-Mode '-File "C:\app\watchdog.ps1"' $true $true $true
 Assert-Mode '-File "C:\a -NoTunnel dir\watchdog.ps1"' $false $false $false
 $root = Join-Path ([IO.Path]::GetTempPath()) ('service-mode-' + [guid]::NewGuid().ToString())
 New-Item -ItemType Directory -Path (Join-Path $root 'scripts') -Force | Out-Null
+Push-Location
 try {
     Copy-Item (Join-Path $PSScriptRoot '..\scripts\service-watchdog.ps1') (Join-Path $root 'scripts\service-watchdog.ps1')
     [IO.File]::WriteAllText((Join-Path $root 'scripts\start.ps1'), '')
@@ -32,6 +33,7 @@ try {
     & (Join-Path $root 'scripts\service-watchdog.ps1') -NoTunnel
     if (-not (Test-Path (Join-Path $root '.service-stop'))) { throw 'Watchdog never launched child.' }
 } finally {
+    Pop-Location
     $env:GH_TOKEN = $savedGh
     $env:GITHUB_TOKEN = $savedGithub
     Remove-Item -LiteralPath $root -Recurse -Force
