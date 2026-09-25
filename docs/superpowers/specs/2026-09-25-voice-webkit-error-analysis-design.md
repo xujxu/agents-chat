@@ -227,3 +227,20 @@ its selected file SHA256 is
 `e1885a092e759fa33c6640d9101929fae46c04e291ae9b7c07b5e38ecede64f2`.
 That historical artifact expires2026-10-23; analysis output does not extend
 source artifact retention. All prior acceptance failures remain unchanged.
+
+### Subsequent retained waveform diagnostics
+
+The proposed all-eight waveform inspection was separately approved as
+`2026-09-25-voice-webkit-signal-design.md` (`0bc59dd`) and completed in
+run36094215228, code`9c62b34`, without new capture or inference.
+All hashes/identities verified. Only1/8global fixed-shift matches is reliable;
+all8segment-offset differences remain null under the predefined rules.
+`test-00949` has lower whole-file RMS and weak global/local matching, but
+improved `test-00554` has an even larger whole-file RMS reduction and ambiguous
+matching. Neither level nor offset candidates establish the MER root cause.
+
+Artifact10847180649 expires2026-10-25; digest
+`sha256:9a0bc4ecb15b7943398ecf2ee8ee518255c5a6f3103b0cf585a3041da07cd532`.
+Detailed metrics, limitations and the proposed separately scoped no-ASR
+controlled audio-graph experiment are in that specification. No recorder fix,
+threshold tuning, transformed inference input or acceptance promotion.

@@ -37,7 +37,7 @@ the browser/error-analysis workflows.
 
 ## Task 1: Algorithm red contracts
 
-- [ ] Add seeded synthetic tests before implementing the helper:
+- [x] Add seeded synthetic tests before implementing the helper:
 
 ```python
 source = np.random.default_rng(17).normal(0, .1, 80000)
@@ -53,7 +53,7 @@ rail counts, zero dBFS representation,10ms threshold equality and remainders.
 Test known inserted/deleted segments shifting late windows relative to early
 windows, local full-window constraints and unchanged input arrays.
 
-- [ ] Create contracts-only push workflow installing
+- [x] Create contracts-only push workflow installing
 `numpy==2.2.6 opencc-python-reimplemented==0.1.7` in Actions.
 
 ```sh
@@ -62,12 +62,12 @@ python -m unittest discover -s scripts -p 'test_voice_webkit_*.py' -v
 python -m unittest discover -s scripts -p 'test_voice_browser_*.py' -v
 ```
 
-- [ ] Commit/push and inspect the expected missing `voice_signal_metrics`
+- [x] Commit/push and inspect the expected missing `voice_signal_metrics`
 failure before implementing the helper.
 
 ## Task 2: Fixed numeric implementation
 
-- [ ] Implement PCM validation and full-signal stats. Use float64 conversion,
+- [x] Implement PCM validation and full-signal stats. Use float64 conversion,
 nonoverlapping160sample RMS frames and fixed-60/-50/-40dBFS levels; include all
 low-energy intervals, leading/trailing durations and discarded partial-frame
 size. Return null dBFS for zero with an explicit flag. Preserve rail statistics.
@@ -78,7 +78,7 @@ frames = values[:len(values) // 160 * 160].reshape(-1, 160)
 frame_rms = np.sqrt(np.mean(frames * frames, axis=1))
 ```
 
-- [ ] Implement full correlation using FFT with enough padding to avoid circular
+- [x] Implement full correlation using FFT with enough padding to avoid circular
 aliasing, and vectorized prefix sums for each candidate overlap:
 
 ```python
@@ -96,14 +96,14 @@ Discard insufficient-overlap/variance candidates before dividing. Full-window
 mode requires count==len(x). Correlation clamp applies only to floating error;
 gross out-of-range/nonfinite values fail explicitly.
 
-- [ ] Select maximum absolute correlation with exact tie order(abs lag,lag).
+- [x] Select maximum absolute correlation with exact tie order(abs lag,lag).
 Return raw signed peak and best alternative outside160samples, weakness<.8,
 ambiguity gap<.05, search boundary and reliable status. No candidate returns
 explicit unavailable metrics/reason, not zero.
-- [ ] Calculate raw-amplitude overlap residual/RMS ratio and centered gain
+- [x] Calculate raw-amplitude overlap residual/RMS ratio and centered gain
 estimate. Preserve unmatched source/upload prefixes/suffixes and full coverage.
 Do not synthesize compared padding or normalize residual amplitudes.
-- [ ] Implement1second windows centered at20/50/80%of source duration.
+- [x] Implement1second windows centered at20/50/80%of source duration.
 Translate local correlation lag to global coordinates using source window
 start; clip candidate global lags to+-16000and global selected+-1600. Report
 local energy/flags and conditional status; compute last-minus-first only if
@@ -112,21 +112,21 @@ with inserted/deleted segments and no mutation of inputs.
 
 ## Task 3: Strict evidence joins and output
 
-- [ ] Reuse existing archive digest verification/extraction and
+- [x] Reuse existing archive digest verification/extraction and
 `load_platform(..., SOURCE_RUN, SOURCE_COMMIT, CASE)` unchanged. Allow the shared
 downloader to receive an explicit fixed mapping/commit map while preserving its
 existing defaults; extend metadata contracts for nondefault historical commits.
-- [ ] Add `load_pairs(inputs)` yielding selected metadata and validated source/
+- [x] Add `load_pairs(inputs)` yielding selected metadata and validated source/
 upload PCM arrays one sample at a time. Require exact eight IDs, original
 manifest identities, historical error-analysis status/source/analysis identity,
 source/upload hashes and canonical WAV lengths/durations.
 Use existing bounded WAV parser/read helpers and existing source selection
 rules; reject missing, extra, duplicate or corrupted data.
-- [ ] Test the pair join with synthetic manifests/PCM and patched historical
+- [x] Test the pair join with synthetic manifests/PCM and patched historical
 browser loader, plus existing unpatched browser artifact corruption contracts.
 Include changed original audio, changed upload identity, missing/duplicate IDs,
 wrong source run and wrong decomposition commit.
-- [ ] Emit`summary.json`,`samples.json`,`REPORT.md`,`ASCEND-ATTRIBUTION.txt`.
+- [x] Emit`summary.json`,`samples.json`,`REPORT.md`,`ASCEND-ATTRIBUTION.txt`.
 Include source/decomposition/new-analysis provenance, original signed error
 contributions, method constants and NumPy/Python versions. Keep transcripts and
 audio out of output. Fail input/algorithm errors explicitly with a failure JSON.
@@ -135,7 +135,7 @@ by retries.
 
 ## Task 4: Actions execution and persistent evidence
 
-- [ ] Add manual analysis job depending on all contracts:
+- [x] Add manual analysis job depending on all contracts:
 
 ```sh
 python scripts/voice_webkit_signal.py inputs signal-report
@@ -144,13 +144,13 @@ python scripts/voice_webkit_signal.py inputs signal-report
 Only three pinned artifacts from the spec are downloaded. No model, browser,
 server, transcription or build command. Process one pair at a time; upload
 derived reports30days even on failure. Record exact archive/file digests.
-- [ ] Push, inspect all contracts, and dispatch the manual job. Inspect actual
+- [x] Push, inspect all contracts, and dispatch the manual job. Inspect actual
 eight-pair coverage, unaligned metrics, sign conventions, selected lags, flags,
 local windows and explicit uncertainty. Never widen bounds after seeing data.
-- [ ] Record numerical findings, uncertainty and the smallest justified
+- [x] Record numerical findings, uncertainty and the smallest justified
 follow-up in the approved signal spec, prior error-analysis spec and
 `scripts/VOICE-DEPLOYMENT.txt`. Preserve all failed acceptance gates.
-- [ ] Commit/push evidence with the required coauthor trailer, stop progress
+- [x] Commit/push evidence with the required coauthor trailer, stop progress
 reminder and close tracking. No product or causal fix is claimed.
 
 ## Self-review
@@ -159,3 +159,22 @@ All fixed input IDs/digests and eight controls remain intact. Numeric policy
 matches the approved spec, including signed lags, full-signal metrics before
 overlap metrics, explicit invalid/uncertain outcomes and no transformed audio.
 Synthetic algorithm contracts and historical provenance contracts are separate.
+
+## Execution evidence
+
+Approved written spec `0bc59dd`; plan/test-first `36097fa`.
+Run36093953092 confirmed missing helper. Implementation `9c62b34` passed
+run36094169057, then manual run36094215228 at
+`9c62b34914e350c0b171e0d0f6e23233dd1f3fb6` completed all8pairs.
+Nine signal/evidence, seven decomposition and fourteen browser contracts passed.
+Tests are grouped under `test_voice_signal_*.py` to keep NumPy out of the
+unchanged prior error-analysis workflow.
+
+Only1/8global correlations is reliable and0/8segment comparisons is jointly
+reliable. All8offset differences remain null under fixed policy; weak/ambiguous
+estimates were not promoted or retried. Full level/rail/frame/overlap/window
+evidence and uncertainty are retained in artifact10847180649, expiry2026-10-25:
+`sha256:9a0bc4ecb15b7943398ecf2ee8ee518255c5a6f3103b0cf585a3041da07cd532`.
+The phase spec, preceding analysis spec and deployment ledger record exact
+observations and the proposed separately scoped no-ASR graph investigation.
+No waveform transformation, new capture/inference or product change.

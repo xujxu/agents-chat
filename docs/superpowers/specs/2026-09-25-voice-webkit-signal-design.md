@@ -198,3 +198,90 @@ Completion is a verified description of all8retained signal pairs with explicit
 uncertainty. Any subsequent corrective experiment, new recording/inference,
 product change or wider browser/device validation needs a separate decision.
 All original accuracy/delivery failures and thresholds remain unchanged.
+
+## Completed diagnostics: 2026-09-25
+
+Written specification `0bc59dd` approved for inline execution. Plan/red contracts
+`36097fa` failed as expected in run36093953092 for missing signal helper.
+Implementation `9c62b34` passed run36094169057.
+
+Fixed-data run:
+https://github.com/xujxu/agents-chat/actions/runs/36094215228
+at `9c62b34914e350c0b171e0d0f6e23233dd1f3fb6`.
+Nine signal/evidence contracts, seven previous error-analysis contracts and
+fourteen browser evidence contracts passed. All three archive identities/digests,
+eight source/upload byte hashes, durations and historical provenance verified.
+NumPy2.2.6/Python3.12.14; all numeric computation in Actions, one pair at a time.
+No new recording, inference, resampling or modified-audio output.
+
+| Sample | Prior error delta | Extra uploaded duration s | Best lag samples | Signed correlation | Global flags |
+| --- | ---: | ---: | ---: | ---: | --- |
+| test-00332 | +1 | 0.2438125 | 1586 | 0.927421 | none |
+| test-00364 | +2 | 0.3606875 | 1714 | 0.417434 | weak |
+| test-00554 | -1 | 0.2360625 | 1553 | 0.235666 | weak, ambiguous |
+| test-00949 | +5 | 0.2312500 | 1633 | 0.494327 | weak |
+| test-01049 | 0 | 0.2478125 | 1795 | 0.473650 | weak |
+| test-01050 | 0 | 0.2528125 | 1796 | 0.663284 | weak |
+| test-01056 | -1 | 0.3053125 | 1846 | 0.747826 | weak |
+| test-01058 | 0 | 0.2511250 | 1679 | 0.515582 | weak |
+
+The best lag is a search result, not a verified delay when flagged.
+Only1/8global matches satisfies the fixed reliability rules; none reaches a
+search boundary. All8last-minus-first offsets are explicitly null because the
+global/local requirements are not jointly satisfied. This is completed uncertain
+diagnostic evidence, not an incomplete analysis or permission to relax thresholds.
+
+| Sample | Original RMS dBFS | Upload RMS dBFS | Local candidate lags, samples |
+| --- | ---: | ---: | --- |
+| test-00332 | -19.7161 | -19.9171 | 1586,1586,1672 |
+| test-00364 | -18.5231 | -21.1141 | 1672,1757,1864 |
+| test-00554 | -24.8905 | -32.9525 | 1569,1611,1633 |
+| test-00949 | -29.6415 | -35.4113 | 1633,1633,1675 |
+| test-01049 | -11.2006 | -14.9540 | 1775,1795,1881 |
+| test-01050 | -15.4349 | -15.6057 | 1625,1770,1796 |
+| test-01056 | -14.7182 | -14.9164 | 1846,1889,1889 |
+| test-01058 | -13.5944 | -16.2603 | 1615,1679,1722 |
+
+Local candidates for weak global matches are conditional, even where a local
+peak is strong. For `test-00332`, early/late correlations are0.996013/0.996291,
+but the middle window is0.455166(weak); therefore no reliable overall segment
+offset-difference claim. For `test-01056`, local peaks are all above0.997, but
+the global0.747826is weak; again no accepted offset-consistency result.
+Mixed signed local peaks on other clips do not establish whole-signal inversion.
+
+Signal-level observations and limitations:
+
+- Uploaded files are longer by0.231250to0.3606875seconds. Unmatched prefixes/
+  suffixes and low-energy intervals are retained; longer files are not proof
+  of duplicated or missing speech.
+- `test-00949` (largest recognition regression) has lower whole-file RMS
+  (-29.6415to-35.4113dBFS) and peak(-12.1200to-19.6183dBFS), with no rail or
+  near-rail samples in either file. Its global/three local matches are weak.
+  There is a level difference, but these data do not locate its pipeline cause.
+- `test-00554` improves recognition despite lower whole-file RMS
+  (-24.8905to-32.9525dBFS) and the weakest/ambiguous global alignment.
+  There is no justified monotonic mapping from these signal metrics to MER.
+- Exact rail hits exist in both original and uploaded `test-01049`,
+  `test-01050`, `test-01056`, `test-01058`, with fewer uploaded hits. Their
+  original negative/positive rail counts are786/475,95/60,72/87,85/104;
+  uploaded counts9/10,46/36,49/58,0/2. This is not proof of new browser clipping
+  or preservation of original waveform shape.
+- No single fixed shift reliably explains seven full recordings. Waveform
+  residuals and selected local offsets remain descriptions, not a confirmed
+  clock, recorder, resampler, channel-mixing or dropped-buffer defect.
+
+The bounded phase is complete with explicit uncertainty. The smallest justified
+next experiment is a separately approved no-ASR controlled audio-graph probe:
+use deterministic signals through the existing source/MediaStream/recorder path,
+observe intermediate rate/channel/timing boundaries, and determine where level
+or piecewise-offset differences first appear. Include fixed controls and do not
+tune on one corpus sample or silently change product recording behavior.
+This experiment was not performed here. Another corpus replay, global gain
+compensation or time warping would not establish the missing causal evidence.
+Prior recognition failures and Windows transport uncertainty remain unchanged.
+
+Artifact10847180649, `webkit-signal-report`, expires2026-10-25:
+`sha256:9a0bc4ecb15b7943398ecf2ee8ee518255c5a6f3103b0cf585a3041da07cd532`.
+Contains summary/sample JSON, full unaligned/overlap/window metrics, source
+hashes, explicit flags, method versions and ASCEND attribution; no audio or
+transcripts. Original source artifact10748244312 still expires2026-10-07.

@@ -10,6 +10,56 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Retained WebKit waveform diagnostics (2026-09-25)
+------------------------------------------------
+Approved spec0bc59dd;plan/red36097fa:
+docs/superpowers/specs/2026-09-25-voice-webkit-signal-design.md
+docs/superpowers/plans/2026-09-25-voice-webkit-signal.md
+Red36093953092:missing helper. Implementation9c62b34 passes36094169057.
+
+https://github.com/xujxu/agents-chat/actions/runs/36094215228
+Code9c62b34914e350c0b171e0d0f6e23233dd1f3fb6.
+9signal/evidence+7error-analysis+14browser contracts pass.
+Source10748244312/WebKit10844047138/decomposition10845901259 archive digests,
+all8source/upload hashes/durations and historical identities verified.
+NumPy2.2.6/Python3.12.14. All computation in Actions,one pair at a time.
+No new recording,inference,resampling,warping or modified-audio output.
+
+ID          Prior error delta  Best lag samples  Correlation  Global status
+test-00332  +1                 1586              0.927421     reliable
+test-00364  +2                 1714              0.417434     weak
+test-00554  -1                 1553              0.235666     weak+ambiguous
+test-00949  +5                 1633              0.494327     weak
+test-01049   0                 1795              0.473650     weak
+test-01050   0                 1796              0.663284     weak
+test-01056  -1                 1846              0.747826     weak
+test-01058   0                 1679              0.515582     weak
+
+Only1/8global matches reliable;no search-boundary cases. All8last-minus-first
+offsets null because required global/local controls are not jointly reliable.
+Local peaks remain conditional where global matching is weak;no clock-drift
+or lost-buffer conclusion. test-00332 early/late correlation~0.996but middle
+0.455weak;test-01056 local peaks>0.997but global0.748weak.
+
+Uploads longer0.231250..0.3606875s;this is not proof of lost/duplicated speech.
+test-00949 original/upload whole-fileRMS -29.6415/-35.4113dBFS,
+peak-12.1200/-19.6183dBFS,no rail hits;all matching weak.
+Improved test-00554 RMS -24.8905/-32.9525dBFS and weak/ambiguous matching:
+signal differences do not map monotonically to MER.
+Four other clips have existing source rails and fewer uploaded rails;not proof
+of browser clipping or waveform fidelity. Original bytes/failed gates unchanged.
+
+Bounded diagnostic complete with explicit uncertainty,not a root-cause fix.
+Next proposed separate experiment:no-ASR deterministic audio-graph probes with
+intermediate rate/channel/timing observations to localize level/piecewise-offset
+differences. Not executed or approved here;do not gain-correct,time-warp or
+repeat corpus ASR to obtain a pass. Windows transport issue remains separate.
+
+Artifact10847180649 webkit-signal-report expires2026-10-25.
+Digest:sha256:9a0bc4ecb15b7943398ecf2ee8ee518255c5a6f3103b0cf585a3041da07cd532.
+Small derived metrics/provenance/attribution only,no audio or transcripts.
+Original source10748244312 expires2026-10-07.
+
 Retained WebKit error decomposition (2026-09-25)
 -----------------------------------------------
 Approved spece4e1fea;plan/red9b67975:
