@@ -16,6 +16,7 @@ param(
     [ValidateSet('keep', 'disabled', 'sensevoice-small-q8', 'whisper-base-q5_1')]
     [string]$VoiceModel,
     [string]$VoicePackageDir, [string]$VoiceManifestSha256,
+    [switch]$VoiceExperimentalDownload,
     [ValidateSet('1', '2', '4')][string]$VoiceThreads,
     [switch]$NonInteractive
 )
@@ -154,7 +155,7 @@ if (-not $DeploymentUser) { throw 'Scheduled Task identity is unavailable; refus
 $VoiceReceipt = Join-Path $ProjectDir ('.voice-setup-receipt.' + [guid]::NewGuid().ToString() + '.json')
 $voiceChanged = Invoke-VoiceConfiguration -ProjectDir $ProjectDir -Model $VoiceModel -PackageDir $VoicePackageDir `
     -ManifestSha256 $VoiceManifestSha256 -Threads $VoiceThreads -ServiceUser $DeploymentUser `
-    -Receipt $VoiceReceipt -NonInteractive:$NonInteractive
+    -Receipt $VoiceReceipt -ExperimentalDownload:$VoiceExperimentalDownload -NonInteractive:$NonInteractive
 $activationStarted = $false
 try {
 if ($voiceChanged -and $NoWait) { throw 'Voice changes require readiness confirmation; omit -NoWait.' }

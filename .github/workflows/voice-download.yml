@@ -27,11 +27,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.20.0
-      - name: Generate dependency lock without installation scripts
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - uses: actions/upload-artifact@v4
-        with:
-          name: voice-download-lock-${{ matrix.os }}
-          path: package-lock.json
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: node --test --test-concurrency=1 tests/voice-download.test.mjs tests/voice-setup.test.mjs tests/voice-setup-files.test.mjs tests/voice-setup-activation.test.mjs
+      - run: node --test --test-concurrency=1 tests/voice-download.test.mjs tests/voice-setup-files.test.mjs tests/voice-setup-activation.test.mjs
+      - if: runner.os == 'Linux'
+        run: node --test tests/voice-setup.test.mjs
+      - if: runner.os == 'Linux'
+        run: bash -n scripts/deploy.sh scripts/upgrade.sh
+      - if: runner.os == 'Windows'
+        shell: powershell
+        run: ./tests/voice-setup-scripts.ps1

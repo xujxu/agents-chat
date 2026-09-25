@@ -29,10 +29,14 @@ def prepare(host):
     if os.environ.get("GITHUB_ACTIONS") != "true" or host not in PACKAGES:
         raise ValueError("Supported Actions host required")
     root = Path("lifecycle-inputs")
-    provenance = download(root, {"source": SOURCE, "package": PACKAGES[host]},
-                          {"source": "1f773d5996f5d684ce1570705b6bb2344beee264",
-                           "package": COMMITS[host]})
-    if file_hash(root / "package/voice-package.json") != MANIFESTS[host]:
+    experimental = os.environ.get("VOICE_LIFECYCLE_DOWNLOAD") == "true"
+    artifacts = {"source": SOURCE}
+    commits = {"source": "1f773d5996f5d684ce1570705b6bb2344beee264"}
+    if not experimental:
+        artifacts["package"] = PACKAGES[host]
+        commits["package"] = COMMITS[host]
+    provenance = download(root, artifacts, commits)
+    if not experimental and file_hash(root / "package/voice-package.json") != MANIFESTS[host]:
         raise ValueError("Unexpected package manifest")
     metadata = json.loads((root / "source/samples.json").read_text(encoding="utf-8"))
     selected = []

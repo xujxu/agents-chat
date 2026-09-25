@@ -9,6 +9,11 @@ on:
       - 'tests/playwright.voice-lifecycle.config.ts'
       - '.github/workflows/voice-lifecycle.yml'
   workflow_dispatch:
+    inputs:
+      experimental_download:
+        description: Real CLI acquires pinned candidate (no package prepared ahead of installation)
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -111,11 +116,15 @@ jobs:
       - name: Verify retained packages and fixed speech inputs
         env:
           GH_TOKEN: ${{ github.token }}
+          VOICE_LIFECYCLE_DOWNLOAD: ${{ inputs.experimental_download }}
         run: python scripts/voice_lifecycle_prepare.py ${{ matrix.platform }}
       - run: npm ci --no-audit --no-fund
       - run: npx playwright install --with-deps ${{ matrix.browsers }}
       - run: npm run build
       - name: Install enable real speech draft and disable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VOICE_LIFECYCLE_DOWNLOAD: ${{ inputs.experimental_download }}
         run: node scripts/voice/lifecycle-run.mjs
       - uses: actions/upload-artifact@v4
         if: always()
@@ -144,6 +153,8 @@ jobs:
           name: voice-lifecycle-win32
           path: lifecycle-hosts/win32
       - run: node scripts/voice/lifecycle-report.mjs
+        env:
+          VOICE_LIFECYCLE_DOWNLOAD: ${{ inputs.experimental_download }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:

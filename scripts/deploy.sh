@@ -16,6 +16,7 @@
 #   sudo ./scripts/deploy.sh --voice keep  # unattended/preserve voice configuration
 #   sudo ./scripts/deploy.sh --voice disabled
 #   sudo ./scripts/deploy.sh --voice sensevoice-small-q8 --voice-package DIR --voice-manifest-sha256 SHA
+#   sudo ./scripts/deploy.sh --voice sensevoice-small-q8 --voice-experimental-download
 
 set -euo pipefail
 original_args=("$@")
@@ -39,6 +40,7 @@ while [[ $# -gt 0 ]]; do
     --wait)       wait_secs=$2; shift 2 ;;
     --voice) voice_args+=(--model "${2:?Missing voice selection}"); shift 2 ;;
     --voice-package) voice_args+=(--package-dir "${2:?Missing package directory}"); shift 2 ;;
+    --voice-experimental-download) voice_args+=(--experimental-download); shift ;;
     --voice-manifest-sha256) voice_args+=(--manifest-sha256 "${2:?Missing manifest checksum}"); shift 2 ;;
     --voice-threads) voice_args+=(--threads "${2:?Missing thread count}"); shift 2 ;;
     --non-interactive) voice_args+=(--non-interactive); shift ;;

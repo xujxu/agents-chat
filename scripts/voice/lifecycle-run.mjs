@@ -8,16 +8,22 @@ import path from 'node:path';
 import { decodeEnvironment } from './configuration-files.mjs';
 import { voiceValues } from './setup-config.mjs';
 import { manifestHashes, phases, validateHost } from './lifecycle-contract.ts';
+import { catalogue } from './download-catalog.mjs';
 
 assert.equal(process.env.GITHUB_ACTIONS, 'true', 'Lifecycle execution requires Actions');
 assert.ok(process.platform === 'linux' || process.platform === 'win32');
 const output = 'lifecycle-evidence';
 await mkdir(output, { recursive: true });
-const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('VOICE_')));
+const experimental = process.env.VOICE_LIFECYCLE_DOWNLOAD === 'true';
+const credentialKey = key => /^(GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)$/i.test(key);
+const credentials = Object.fromEntries(Object.entries(process.env).filter(([key]) => credentialKey(key)));
+const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+  !key.toUpperCase().startsWith('VOICE_') && !credentialKey(key)));
 const host = { platform: process.platform, run: process.env.GITHUB_RUN_ID, commit: process.env.GITHUB_SHA,
   status: 'failed', phases: phases.map(name => ({ name, status: 'blocked', error: null })),
   records: [], identity: null, temporaryDirectoriesRestored: false,
   environment: { release: release(), cpu: cpus()[0]?.model, logicalCpus: cpus().length, memory: totalmem() },
+  acquisition: { mode: experimental ? 'experimental-download' : 'offline', verified: false },
 };
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const persist = () => writeFile(path.join(output, 'host.json'), JSON.stringify(host, null, 2));
@@ -41,6 +47,7 @@ async function phase(name, action) {
   return state.status === 'passed';
 }
 async function browserPhase(name) {
+  assert.ok(!Object.keys(environment).some(credentialKey), 'Credentials must not enter app/browser environment');
   const log = await open('lifecycle-private-server.log', 'w');
   const server = spawn(process.execPath,
     ['node_modules/next/dist/bin/next', 'start', '--hostname', '127.0.0.1', '--port', '3011'],
@@ -80,7 +87,7 @@ async function browserPhase(name) {
   }
 }
 async function verifyInstalled() {
-  const raw = await readFile('lifecycle-inputs/package/voice-package.json');
+  const raw = await readFile(path.join('.data/voice/packages', manifestHashes[process.platform], 'voice-package.json'));
   assert.equal(digest(raw), manifestHashes[process.platform], 'Untrusted package manifest');
   const manifest = JSON.parse(raw);
   const values = voiceValues(decodeEnvironment(await readFile('.env.local')));
@@ -120,6 +127,11 @@ try {
   const initial = await phase('initial', () => browserPhase('initial'));
   if (initial) {
     const installed = await phase('install', async () => {
+      if (experimental) {
+        assert.ok(!(await readdir('lifecycle-inputs')).includes('package'), 'Experimental package must be acquired by the CLI');
+        await run(['scripts/configure-voice.mjs', '--project-dir', process.cwd(), '--model', 'sensevoice-small-q8',
+          '--experimental-download', '--non-interactive'], { ...environment, ...credentials });
+      } else {
       const packagePath = path.resolve('lifecycle-inputs/package');
       const raw = await readFile(path.join(packagePath, 'voice-package.json'));
       assert.equal(digest(raw), manifestHashes[process.platform]);
@@ -130,7 +142,10 @@ try {
       }
       await run(['scripts/configure-voice.mjs', '--project-dir', process.cwd(), '--model', 'sensevoice-small-q8',
         '--package-dir', packagePath, '--manifest-sha256', manifestHashes[process.platform], '--non-interactive']);
+      }
       await verifyInstalled();
+      host.acquisition = { mode: experimental ? 'experimental-download' : 'offline', verified: true,
+        ...(experimental ? { catalogue: catalogue[process.platform] } : {}) };
     });
     if (installed) {
       await phase('enabled', () => browserPhase('enabled'));

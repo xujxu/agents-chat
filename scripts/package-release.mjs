@@ -1,4 +1,5 @@
-import { chmodSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,6 +36,20 @@ const launcherDir = join(bundleDir, 'scripts');
 mkdirSync(launcherDir, { recursive: true });
 cpSync(join(projectDir, 'scripts', 'configure-voice.mjs'), join(launcherDir, 'configure-voice.mjs'));
 cpSync(join(projectDir, 'scripts', 'voice'), join(launcherDir, 'voice'), { recursive: true });
+
+// CLI-only dependencies are not discovered by Next's standalone tracer.
+function copyCliDependency(name, requireFrom) {
+  const manifest = requireFrom.resolve(`${name}/package.json`);
+  const destination = join(bundleDir, 'node_modules', name);
+  if (existsSync(destination)) return;
+  cpSync(dirname(manifest), destination, { recursive: true });
+  for (const dependency of Object.keys(JSON.parse(readFileSync(manifest, 'utf8')).dependencies ?? {})) {
+    copyCliDependency(dependency, createRequire(manifest));
+  }
+}
+if (existsSync(join(projectDir, 'node_modules/yauzl/package.json'))) {
+  copyCliDependency('yauzl', createRequire(join(projectDir, 'package.json')));
+}
 
 writeFileSync(
   join(launcherDir, 'start-release.sh'),
@@ -91,8 +106,11 @@ Optional voice setup (also run when upgrading an existing release):
 The interactive menu defaults to keeping the current configuration.
 For automation use --non-interactive (preserve) or --model disabled.
 Enabling a native model currently requires a verified Linux x86_64 or Windows x64 Actions
-package: --package-dir DIR --manifest-sha256 SHA256. Public runtime release
-publication and full voice acceptance are separate; no implicit download occurs.
+package: --package-dir DIR --manifest-sha256 SHA256. Alternatively opt in to
+--model sensevoice-small-q8 --experimental-download with authenticated gh.
+This fetches pinned, expiring Actions candidates, not public release-approved
+packages. Public runtime publication and full acceptance remain separate.
+If upgrading, keep performs no download; no implicit acquisition occurs.
 Keep .env.local and .data/voice when replacing application files during upgrades.
 Disabled voice hides the microphone button after restart/page reload.
 Windows: use --service-user ACCOUNT-OR-SID when the server runs as a different

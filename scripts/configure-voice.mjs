@@ -17,7 +17,7 @@ function parseArgs(args) {
   const options = {};
   for (let i = 0; i < args.length; i++) {
     const name = args[i];
-    if (name === '--non-interactive' || name === '--help') options[name.slice(2)] = true;
+    if (['--non-interactive', '--help', '--experimental-download'].includes(name)) options[name.slice(2)] = true;
     else if (['--project-dir', '--model', '--package-dir', '--manifest-sha256', '--threads', '--receipt', '--rollback-receipt', '--service-user'].includes(name)) {
       if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`Missing value for ${name}.`);
       if (Object.hasOwn(options, name.slice(2))) throw new Error(`Duplicate option ${name}.`);
@@ -50,6 +50,7 @@ async function run() {
   if (options.help) {
     console.log('Usage: node scripts/configure-voice.mjs [--model keep|disabled|sensevoice-small-q8|whisper-base-q5_1] [--non-interactive]');
     console.log('Enable with a trusted verified package: --package-dir DIR --manifest-sha256 SHA256 [--threads 1|2|4]');
+    console.log('Explicit experimental Sense download: --experimental-download (requires authenticated gh; expiring Actions candidates, not public releases).');
     console.log('Windows: --service-user ACCOUNT-OR-SID checks the target account; omitted means current account.');
     console.log('Configuration is applied on app restart/page reload. No services are started by this command.');
     return;
@@ -118,11 +119,24 @@ async function run() {
       ))) throw new Error(`Conflicting voice override in ${name}; update that source explicitly before configuring project voice.`);
     }
     const importer = process.platform === 'win32' ? importWindowsVoicePackage : installVoicePackage;
-    const configuration = selection.model === 'disabled' ? null : await importer({
-      packageDir: options['package-dir'], manifestSha256: options['manifest-sha256'],
-      model: selection.model, destination: directory,
+    const install = source => importer({
+      ...source, model: selection.model, destination: directory,
       threads: Number(options.threads ?? models[selection.model].threads),
     });
+    let configuration = null;
+    if (selection.model !== 'disabled') {
+      if (options['experimental-download']) {
+        if (options['package-dir'] !== undefined || options['manifest-sha256'] !== undefined) {
+          throw new Error('Cannot combine --experimental-download with local package arguments.');
+        }
+        const { selectDownload } = await import('./voice/download-catalog.mjs');
+        const entry = selectDownload(selection.model);
+        const { withDownloadedPackage } = await import('./voice/download-package.mjs');
+        configuration = await withDownloadedPackage(entry, install);
+      } else {
+        configuration = await install({ packageDir: options['package-dir'], manifestSha256: options['manifest-sha256'] });
+      }
+    }
     const next = encodeEnvironment(updateVoiceEnvironment(originalText, selection.model, configuration));
     if (!equalBytes(await optionalRead(file), original)) throw new Error('Configuration changed during setup; refusing to overwrite it.');
     const receipt = { version: 2, changed: true, file, previous: original === null ? null : original.toString('base64'), installedSha: digest(next),

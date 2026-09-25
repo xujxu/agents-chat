@@ -10,6 +10,35 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Explicit experimental voice acquisition (implementation in progress, 2026-09-25)
+----------------------------------------------------------------------------
+Design e7b3ccd; plan/red ab5bb42. No public Release is published by this work.
+Only SenseVoiceSmall q8 on Linux/Windows x64 is available for automatic selection.
+Install GitHub CLI (gh), authenticate with access to this repository's Actions
+artifacts, then explicitly opt in:
+
+  node scripts/configure-voice.mjs --model sensevoice-small-q8 --experimental-download
+  sudo ./scripts/deploy.sh --voice sensevoice-small-q8 --voice-experimental-download
+  sudo ./scripts/upgrade.sh --voice sensevoice-small-q8 --voice-experimental-download
+  .\scripts\setup.ps1 -VoiceModel sensevoice-small-q8 -VoiceExperimentalDownload
+  .\scripts\deploy.ps1 -VoiceModel sensevoice-small-q8 -VoiceExperimentalDownload
+
+Use --non-interactive / -NonInteractive for unattended deployment.
+Running with sudo requires gh authentication accessible to the installing
+identity. Do not put tokens in command arguments, .env.local or service units.
+Prefer the installing user's gh credential store or a narrowly scoped temporary
+environment; never persist credentials in configuration or service environments.
+
+This downloads fixed candidate artifacts, checks source/repository, archive and
+manifest hashes, then uses the existing verified importer. Candidates currently
+expire 2026-10-24. Expired or inaccessible artifacts fail explicitly; there is no
+fallback, auto-build, automatic latest upgrade or permanent-download promise.
+Do not mix the download switch with local package arguments. Offline setup
+continues to use --package-dir/--manifest-sha256 or corresponding wrapper flags.
+Keep/default and disable do not download or require gh. Restart/reload applies
+configuration; remote browser microphones require HTTPS (loopback is exempt).
+Real system-service new-install/upgrade E2E remains the next separate project.
+
 Installed voice lifecycle E2E (2026-09-25)
 ----------------------------------------
 Accuracy investigation paused by user. Scope:voice-component install/enable,
