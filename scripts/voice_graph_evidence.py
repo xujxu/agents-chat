@@ -68,6 +68,9 @@ def read_wav(root, item):
         channels, rate, width = wav.getnchannels(), wav.getframerate(), wav.getsampwidth()
         if channels not in (1, 2) or rate != 16000 or width != 2:
             raise ValueError("Invalid WAV format")
+        if (int.from_bytes(data[28:32], "little") != rate * channels * width
+                or int.from_bytes(data[32:34], "little") != channels * width):
+            raise ValueError("Invalid WAV rate/alignment")
         pcm = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2").reshape(-1, channels)
     if len(data) != 44 + pcm.size * 2 or not 1 <= len(pcm) <= 30 * rate:
         raise ValueError("Invalid WAV count")
@@ -88,6 +91,13 @@ def load_attempt(root, row):
             or not all(snapshot["capture"][key] for key in
                        ("sourceCompleted", "tracksStopped", "contextClosed"))):
         raise ValueError("Incomplete capture evidence")
+    timing = snapshot["timing"]
+    ordered = [timing[key] for key in ("stopAt", "workletStopAt", "fetchAt", "composerAt")]
+    if (timing["stopKind"] != "manual" or any(not isinstance(value, (int, float)) for value in ordered)
+            or ordered != sorted(ordered) or not isinstance(timing["bodyAt"], (int, float))
+            or timing["bodyAt"] < timing["fetchAt"]
+            or row["receiver"] != {"requests": 1, "error": None}):
+        raise ValueError("Invalid capture event order or receiver status")
     if row["F"]["sha256"] != row["received"]["sha256"]:
         raise ValueError("Receiver mismatch")
     read_bytes(root, row["received"])
@@ -100,6 +110,15 @@ def load_attempt(root, row):
         probe = row["probe"]
         if probe["errors"] or probe["terminals"] != ["finished"] or not probe["recorderClosed"]:
             raise ValueError("Incomplete passive observation")
+        events = probe["events"]
+        kinds = [event["kind"] for event in events]
+        if (not probe["tracks"] or not events
+                or [event["at"] for event in events] != sorted(event["at"] for event in events)
+                or any(kinds.count(name) != 1 for name in ("worklet_created", "B_start", "finished", "D_start", "E_rendered"))
+                or not (kinds.index("worklet_created") < kinds.index("B_start") < kinds.index("finished")
+                        < kinds.index("D_start") < kinds.index("E_rendered"))
+                or kinds.count("chunk") != len(probe["chunkLengths"])):
+            raise ValueError("Invalid passive event sequence")
         for name in "BCDE":
             stage = row[name]
             rate = stage["rate"]

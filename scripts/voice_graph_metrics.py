@@ -35,7 +35,7 @@ def stats(values, rate, pcm=False):
     values = finite(values)
     valid_rate(rate)
     peak, energy = float(np.max(np.abs(values))), rms(values)
-    return {"samples": len(values), "duration_seconds": len(values) / rate,
+    return {"rate": rate, "samples": len(values), "duration_seconds": len(values) / rate,
             "minimum": float(values.min()), "maximum": float(values.max()),
             "peak": peak, "peak_dbfs": dbfs(peak), "rms": energy, "rms_dbfs": dbfs(energy),
             "dc": float(values.mean()), "zero_signal": not bool(np.any(values)),

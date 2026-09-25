@@ -8,6 +8,7 @@ export type ProbeSnapshot = {
   recorderClosed: boolean;
   events: { kind: string; at: number; contextTime: number }[];
   nodes: { kind: string; channels: number; mode: string; interpretation: string }[];
+  tracks: { id: string; settings: MediaTrackSettings }[];
 };
 type ProbeState = Omit<ProbeSnapshot, 'stages'> & {
   stages: Partial<Record<'B' | 'C' | 'D' | 'E', Stage>>;
@@ -22,11 +23,19 @@ export async function installGraphProbe(page: Page): Promise<void> {
     if (window.__voiceGraphProbe) throw new Error('Probe already installed');
     const state: ProbeState = {
       stages: {}, chunks: [], errors: [], chunkLengths: [], terminals: [],
-      recorderClosed: false, events: [], nodes: [],
+      recorderClosed: false, events: [], nodes: [], tracks: [],
     };
     window.__voiceGraphProbe = state;
     let recorder: BaseAudioContext | undefined;
     const observedSources = new WeakSet<AudioBufferSourceNode>();
+    const decodedBuffers = new WeakSet<AudioBuffer>();
+    const nativeDecode = BaseAudioContext.prototype.decodeAudioData;
+    BaseAudioContext.prototype.decodeAudioData = function (...args: Parameters<typeof nativeDecode>) {
+      const pending = nativeDecode.apply(this, args);
+      void pending.then(buffer => { decodedBuffers.add(buffer); },
+        () => { state.errors.push('native_decode_rejected'); });
+      return pending;
+    };
     const event = (kind: string, context: BaseAudioContext) => {
       state.events.push({ kind, at: performance.now(), contextTime: context.currentTime });
     };
@@ -48,6 +57,9 @@ export async function installGraphProbe(page: Page): Promise<void> {
       observedSources.add(this);
       const kind = this.context instanceof OfflineAudioContext ? 'D' : 'B';
       if (this.context === recorder) state.errors.push('unexpected_recorder_buffer_source');
+      if (kind === 'B' && (!this.buffer || !decodedBuffers.has(this.buffer))) {
+        state.errors.push('source_buffer_not_observed_decode');
+      }
       copy(kind, this.buffer);
       event(`${kind}_start`, this.context);
       nodeMetadata(kind, this);
@@ -75,6 +87,7 @@ export async function installGraphProbe(page: Page): Promise<void> {
     AudioContext.prototype.createMediaStreamSource = function (...args: Parameters<typeof nativeMediaSource>) {
       const result = nativeMediaSource.apply(this, args);
       nodeMetadata('media_source', result);
+      state.tracks.push(...args[0].getAudioTracks().map(track => ({ id: track.id, settings: track.getSettings() })));
       return result;
     };
     const PreviousWorklet = window.AudioWorkletNode;
@@ -132,6 +145,7 @@ export async function graphSnapshot(page: Page): Promise<ProbeSnapshot | null> {
       }) };
     }
     return { stages, errors: state.errors, chunkLengths: state.chunkLengths,
-      terminals: state.terminals, recorderClosed: state.recorderClosed, events: state.events, nodes: state.nodes };
+      terminals: state.terminals, recorderClosed: state.recorderClosed, events: state.events,
+      nodes: state.nodes, tracks: state.tracks };
   });
 }

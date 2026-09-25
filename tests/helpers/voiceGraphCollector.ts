@@ -129,6 +129,32 @@ export async function collectGraph(page: Page, info: TestInfo, stimulus: GraphSt
     return row;
   } catch (error) {
     row.error = error instanceof Error ? error.message : String(error);
+    try {
+      if (!row.snapshot) {
+        const { uploadBase64, ...metadata } = await snapshotBrowserCapture(page, true);
+        row.snapshot = metadata;
+        if (uploadBase64 && !row.F) row.F = save('upload.wav', Buffer.from(uploadBase64, 'base64'));
+      }
+      if (received && !row.received) row.received = save('received.wav', received);
+      if (!row.probe) {
+        const probe = await graphSnapshot(page);
+        if (probe) {
+          const { stages, ...metadata } = probe;
+          row.probe = metadata;
+          for (const key of ['B', 'C', 'D', 'E'] as const) {
+            const stage = stages[key];
+            if (stage && !row[key]) row[key] = {
+              rate: stage.rate, channels: stage.channels.map((value, channel) => {
+                const bytes = Buffer.from(value, 'base64');
+                return save(`${key}-${channel}.f32`, bytes, bytes.length / 4);
+              }),
+            };
+          }
+        }
+      }
+    } catch (recoveryError) {
+      row.evidenceRecoveryError = recoveryError instanceof Error ? recoveryError.message : String(recoveryError);
+    }
     throw error;
   } finally {
     row.receiver = { requests, error: receiverFailure };
