@@ -29,7 +29,12 @@ function Stop-OwnedTree([int]$ProcessId) {
         Stop-OwnedTree ([int]$child.ProcessId)
     }
     $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
-    if ($process) { Stop-Process -Id $ProcessId -Force -ErrorAction Stop }
+    if ($process) {
+        try { $process.Kill(); $process.WaitForExit(10000) | Out-Null }
+        catch {
+            if (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue) { throw }
+        }
+    }
 }
 if ($Action -eq 'preflight') {
     if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { throw 'Task already exists.' }
@@ -86,10 +91,19 @@ if ($Action -eq 'preflight') {
         $null = Get-OwnedTask
         $watchdogs = @(Get-OwnedWatchdogs)
         New-Item -ItemType File -Path (Join-Path $Project '.service-stop') -Force | Out-Null
-        foreach ($watchdog in $watchdogs) { Stop-OwnedTree ([int]$watchdog.ProcessId) }
+        $deadline = (Get-Date).AddSeconds(15)
+        while ((Get-OwnedWatchdogs).Count -gt 0 -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
+        foreach ($watchdog in $watchdogs) {
+            $current = Get-CimInstance Win32_Process -Filter "ProcessId=$($watchdog.ProcessId)"
+            if ($current -and $current.CreationDate -eq $watchdog.CreationDate) {
+                Stop-OwnedTree ([int]$watchdog.ProcessId)
+            }
+        }
         Stop-ScheduledTask -TaskName $TaskName -ErrorAction Stop
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
     }
+    $deadline = (Get-Date).AddSeconds(10)
+    while ((Get-Listeners).Count -gt 0 -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
     if ((Get-Listeners).Count) { throw 'Owned app listener remains after cleanup.' }
     @{removed=$true;portClosed=$true} | ConvertTo-Json -Compress
 }

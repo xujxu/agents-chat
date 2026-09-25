@@ -44,6 +44,8 @@ async function execute(command, args, { cwd = project, environment = env, captur
   const child = spawn(command, args, { cwd, env: environment, windowsHide: true,
     stdio: ['ignore', capture ? 'pipe' : log.fd, log ? log.fd : 'pipe'] });
   const chunks = [];
+  const errors = [];
+  let errorBytes = 0;
   let bytes = 0;
   if (capture) {
     child.stdout.on('data', chunk => {
@@ -51,7 +53,10 @@ async function execute(command, args, { cwd = project, environment = env, captur
       if (bytes > 1024 * 1024) child.kill('SIGKILL');
       else chunks.push(chunk);
     });
-    child.stderr.resume();
+    child.stderr.on('data', chunk => {
+      errorBytes += chunk.length;
+      if (errorBytes <= 64 * 1024) errors.push(chunk);
+    });
   }
   const timer = setTimeout(() => child.kill('SIGKILL'), 15 * 60_000);
   try {
@@ -64,6 +69,10 @@ async function execute(command, args, { cwd = project, environment = env, captur
           /Error:|ERROR:|Voice setup failed:|throw |Exception:|fatal:|npm error/i.test(line)).slice(-8)
           .map(line => knownSecrets.reduce((value, secret) => value.split(secret).join('[redacted]'), line).slice(0, 500));
         if (errors.length) host.diagnostics = errors;
+      } else if (errors.length) {
+        host.diagnostics = Buffer.concat(errors).toString('utf8').split(/\r?\n/).filter(Boolean).slice(-12)
+          .map(line => Object.values(tokens).filter(Boolean).reduce(
+            (value, secret) => value.split(secret).join('[redacted]'), line).slice(0, 500));
       }
       throw new Error(`Service operation failed: ${path.basename(command)} ${args[0]}; private operation ${operation}`);
     }
