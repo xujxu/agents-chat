@@ -10,6 +10,91 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Pre-publication source/license audit (2026-09-25; NOT release clearance)
+----------------------------------------------------------------------
+Scope: the two pinned Sense candidates in scripts/voice/download-catalog.mjs.
+This is a technical inventory of source declarations and build evidence, not
+a legal opinion, an assignment of rights or permission to publish. No Release,
+tag, model mirror or new licensing declaration was created by this audit.
+Original builds: Linux35968099304/a2f15bff;Windows35987278609/86fa6716.
+The audit read pinned upstream texts, local recipes and original build logs;
+it did not extract/re-audit every file of the binary artifacts. A complete
+artifact notice/link-input inventory remains a release gate.
+
+Verified declarations:
+- Official SenseVoiceSmall-GGUF revision90c1c61912018b70ada0fcc024ea24aca62f2e63
+  declares Apache-2.0 in its model card. The pinned repository listing contains
+  the card and weights, with no separate LICENSE or NOTICE member.
+  Existing recipes include model-card.txt and Apache-2.0.txt; preserve upstream
+  attribution and any applicable NOTICE/modified-file obligations.
+- FunASR3ff9259aade4f7e4360645df28cad8f81959ee91 and
+  llama.cpp803b7fcae893e9caaee3921779628fef83ac0965 root licenses are MIT.
+  Both builders retain those licenses; llama/licenses contains LICENSE-jsonhpp.
+  Do not infer a complete binary bill of materials from root licenses alone.
+- The pinned bundled miniaudio.h offers Unlicense or MIT No Attribution.
+  Builders include the full header; embedded codec notices still belong in
+  the artifact-level inventory, not a blanket "everything is MIT" statement.
+- Linux statically links libstdc++/libgcc and dynamically uses system libraries.
+  The GCC Runtime Library Exception3.1 grants conditional target-code permission;
+  applicability depends on the actual runtime files and eligible compilation.
+  Recipe includes GCC/glibc copyright and GPL/LGPL texts. Confirm the shipped
+  exception text and runtime scope from actual package evidence before release.
+- Windows engine and voice-job helper use static /MT runtime. Retained Sense
+  build logs identify VS2022 Enterprise, Developer Prompt17.14.40,
+  compiler19.44.35228.0. System-DLL-only dumpbin output is dependency evidence,
+  NOT proof that Microsoft redistribution obligations are absent.
+  Microsoft directs distributors to applicable license terms/REDIST scope.
+  The official linked Enterprise/Professional2022 terms include distribution
+  requirements and restrictions. Exact static-runtime scope, downstream terms
+  and the relevant build/distribution entitlement remain unclosed here.
+  Do not treat an unverified search summary about .lib files as a license grant.
+
+Rights-holder decision required:
+The only tracked LICENSE file is for the frontend-design skill, not application
+code. GitHub repository metadata also reports license:null. Candidate build
+already explicitly flags helper permission in RELEASE-REVIEW-REQUIRED.txt.
+The Windows helper source/headers and repository-owned native patch changes
+need an explicit authorized licensing/distribution decision. Public repository
+visibility and upstream MIT licenses do not establish permission for these
+separate contributions. A narrowly scoped license is an option; do not apply
+MIT to the whole repository, or choose copyright ownership, without authority.
+This audit does not determine that redistribution is prohibited, only that the
+recorded permission/compliance basis is incomplete.
+
+Reproducibility and expiration:
+- ASCEND is pinned to737e9800ae31be9932ba8464c80366559bd28424 with test parquet
+  SHA256a4c81d2b5ed6124f052089a695972808c16e0ce0c365ec9773c5d1a8fcf043a7.
+  Its pinned card declares CC-BY-SA-4.0. Retain attribution, change notices and
+  the applicable ShareAlike terms separately from executable/model licenses.
+  Recommend rebuilding only the existing two speech fixtures in Actions from
+  that source, requiring their current WAV hashes to match. Do not mirror the
+  speech corpus into runtime installation packages or assume software licensing
+  covers it. This audit did not run the regeneration or prove byte identity.
+- Existing voice-corpus-baseline.yml dispatch also runs full engine comparisons.
+  A separate source-only path is needed to avoid restarting paused accuracy work.
+- Native source commits/model checksum are pinned, but compiler, apt packages,
+  runner images and archives are not a bit-reproducible toolchain. Rebuilding
+  produces a new candidate requiring new hashes and admission; never silently
+  replace existing catalogue hashes or fall back to a latest artifact.
+- Source artifact expires2026-10-07;native candidates2026-10-24.
+  Artifact retention alone is not a permanent distribution solution.
+- Existing release.yml builds application bundles on v* tags and uploads with
+  --clobber. It is not an immutable, reviewed native-candidate promotion flow.
+  Do not tag/publish via that workflow to work around this review.
+
+Primary sources checked2026-09-25:
+https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF/raw/90c1c61912018b70ada0fcc024ea24aca62f2e63/README.md
+https://raw.githubusercontent.com/modelscope/FunASR/3ff9259aade4f7e4360645df28cad8f81959ee91/LICENSE
+https://raw.githubusercontent.com/ggml-org/llama.cpp/803b7fcae893e9caaee3921779628fef83ac0965/LICENSE
+https://www.apache.org/licenses/LICENSE-2.0.txt
+https://www.gnu.org/licenses/gcc-exception-3.1.html
+https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files?view=msvc-170
+https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution
+https://visualstudio.microsoft.com/license-terms/vs2022-ga-proenterprise/
+https://visualstudio.microsoft.com/wp-content/uploads/2021/11/Visual-Studio-2022-Enterprise-Professional-License-EN.docx
+https://huggingface.co/datasets/CAiRE/ASCEND/raw/737e9800ae31be9932ba8464c80366559bd28424/README.md
+https://creativecommons.org/licenses/by-sa/4.0/
+
 Real service deployment (2026-09-25, hosted functional flow passed)
 ---------------------------------------------------------
 Spec24f28fa; plan/red5e90931;red Actions36139526145 confirmed missing contracts.
