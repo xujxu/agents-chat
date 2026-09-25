@@ -26,6 +26,63 @@ This project-wide criterion extends beyond the two voice packages: application
 runtime dependencies, shipped transitive dependencies and build/package tooling
 still need an inventory. The voice source audit below is not that full audit.
 
+External-service boundary subsequently confirmed by the user:
+Optional paid service integrations may remain. Software components supplied
+with the project must meet the free-use and compliant-redistribution criterion;
+external account, subscription and usage charges must be distinguished clearly.
+This does not certify any particular external client's license or entitlement.
+Azure Relay is optional for remote nodes, not required for local voice inference.
+Its official FAQ describes billable relay usage and outbound data transfer.
+Separately installed ACP agents/models may also have account or usage conditions.
+Do not describe the complete application plus arbitrary agents as cost-free.
+
+Project-wide source inventory (partial; actual shipped contents unverified):
+- package-lock.json pins next16.2.3 (MIT), with optional sharp0.34.5
+  (Apache-2.0). Linux x64 sharp-libvips1.2.4 declares LGPL-3.0-or-later;
+  sharp-win32-x64 declares Apache-2.0 AND LGPL-3.0-or-later.
+  LGPL is not grounds for automatic replacement. If those libraries ship,
+  review the actual link arrangement, notices, GPL/LGPL text, corresponding
+  source provision and applicable replacement/relinking conditions. A shared
+  library arrangement alone does not discharge obligations for a distributed
+  copy of the library. Do not infer all platform variants ship from a lockfile.
+- caniuse-lite1.0.30001788 declares CC-BY-4.0. Track attribution for any
+  distributed copy; its lockfile entry alone does not establish bundle presence.
+  Other declarations include BSD-2-Clause for @mixmark-io/domino2.2.0,
+  MIT OR WTFPL for expand-template2.0.3, and BSD-2-Clause OR MIT OR Apache-2.0
+  for rc1.2.8. Preserve expression semantics; alternatives are not cumulative.
+- hyco-ws1.0.5 declares MIT and depends on http via a "latest" range, resolved
+  in the root lockfile to http0.0.1-security. The registry calls this a
+  "security holding package" and supplies no license field. This is not the
+  Node.js built-in HTTP module's license evidence and is not proof of a
+  violation. Actual installed files, license basis and shipment remain unknown.
+- scripts/package-release.mjs copies Next standalone output, static/public
+  assets and the voice scripts, plus the CLI-only yauzl dependency closure.
+  It has no explicit consolidated third-party notice assembly or license gate.
+  That observation does not prove individual license files are absent: the
+  copied output and bundled/compiled dependency notices still need inspection.
+  Native payloads such as better-sqlite3, Next/SWC and sharp require more than
+  their top-level npm license labels. Build-only and shipped code must be
+  distinguished, including compiled JavaScript and client assets.
+- app/api/nodes/setup/route.ts builds a ZIP containing setup-node.ps1 and
+  relay-listener.js, not an installed npm tree. The PowerShell script separately
+  obtains Node.js, Azure CLI and the selected Copilot/Agency launcher, and runs
+  an unversioned npm install hyco-ws. The root lockfile therefore does not pin
+  this downstream installation. Downloaded tools and their dependencies need
+  a separate inventory; do not run the remote Agency installer merely to audit
+  it or treat the launcher as license-cleared. No external agent/service has
+  been installed or invoked for this audit.
+
+Next evidence step requires an approved, Actions-only inventory design.
+No automated dependency scan, new workflow, package replacement or publishing
+has been performed. The findings above are source/metadata observations, not
+an exhaustive bill of materials or a distribution approval.
+
+Additional primary sources:
+https://sharp.pixelplumbing.com/install/
+https://www.gnu.org/licenses/lgpl-3.0.en.html
+https://registry.npmjs.org/http/0.0.1-security
+https://learn.microsoft.com/en-us/azure/azure-relay/relay-faq
+
 Scope: the two pinned Sense candidates in scripts/voice/download-catalog.mjs.
 This is a technical inventory of source declarations and build evidence, not
 a legal opinion, an assignment of rights or permission to publish. No Release,
