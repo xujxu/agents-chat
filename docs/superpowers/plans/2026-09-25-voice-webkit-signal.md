@@ -24,7 +24,7 @@ No local server, dependency installation, inference or audio transformation.
 - `scripts/voice_webkit_signal.py`: fixed source/measurement/decomposition
   identities, strict selected-pair loader, report generation and Actions CLI.
 - `scripts/test_voice_signal_metrics.py`: synthetic algorithm contracts.
-- `scripts/test_voice_webkit_signal.py`: exact eight-row join and historical
+- `scripts/test_voice_signal_evidence.py`: exact eight-row join and historical
   provenance contracts.
 - `scripts/voice_webkit_evidence.py`: surgical extraction of the existing
   archive download mechanism into a reusable fixed-input helper. Preserve

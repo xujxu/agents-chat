@@ -34,8 +34,8 @@ def file_hash(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def validate_metadata(metadata, key):
-    artifact_id, run, name, digest = INPUTS[key]
+def validate_metadata(metadata, key, specifications=INPUTS, commits=None):
+    artifact_id, run, name, digest = specifications[key]
     actual = metadata.get("digest", "")
     if (str(metadata.get("id")) != artifact_id or metadata.get("expired") is not False
             or str(metadata.get("workflow_run", {}).get("id")) != run
@@ -44,7 +44,8 @@ def validate_metadata(metadata, key):
             or any(c not in "0123456789abcdef" for c in actual[7:])
             or (digest is not None and actual != "sha256:" + digest)):
         raise ValueError(f"Artifact metadata differs: {key}")
-    if key != "original" and metadata["workflow_run"].get("head_sha") != SOURCE_COMMIT:
+    expected_commit = commits[key] if commits is not None else (SOURCE_COMMIT if key != "original" else None)
+    if expected_commit is not None and metadata["workflow_run"].get("head_sha") != expected_commit:
         raise ValueError(f"Artifact source commit differs: {key}")
     return actual[7:]
 
@@ -69,13 +70,13 @@ def extract_verified(archive, destination, expected):
         zipped.extractall(destination)
 
 
-def download(inputs):
+def download(inputs, specifications=INPUTS, commits=None):
     inputs.mkdir(parents=True, exist_ok=False)
     provenance = {}
-    for key, (artifact_id, _, _, _) in INPUTS.items():
+    for key, (artifact_id, _, _, _) in specifications.items():
         endpoint = f"repos/{REPO}/actions/artifacts/{artifact_id}"
         metadata = json.loads(subprocess.check_output(["gh", "api", endpoint], timeout=60))
-        expected = validate_metadata(metadata, key)
+        expected = validate_metadata(metadata, key, specifications, commits)
         archive = inputs / f"{key}.zip"
         with archive.open("wb") as stream:
             subprocess.run(["gh", "api", endpoint + "/zip"], stdout=stream, check=True, timeout=300)

@@ -67,6 +67,7 @@ class SignalMetricsTests(unittest.TestCase):
 
     def test_local_offsets_detect_inserted_and_deleted_segments(self):
         source = np.random.default_rng(21).integers(-8000, 8000, 96000, dtype=np.int16)
+        source[60000:] //= 4
         for shift in (120, -120):
             if shift > 0:
                 upload = np.concatenate((source[:60000], source[59880:60000], source[60000:]))
