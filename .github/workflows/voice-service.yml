@@ -63,7 +63,6 @@ jobs:
     env:
       PYTHONUTF8: '1'
       NEXT_TELEMETRY_DISABLED: '1'
-      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/service-browsers
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -72,6 +71,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Set isolated browser cache
+        shell: bash
+        run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/service-browsers" >> "$GITHUB_ENV"
       - run: npm ci --no-audit --no-fund
       - run: npx tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2017 --lib dom,dom.iterable,esnext --module esnext --moduleResolution bundler --jsx react-jsx tests/voice-lifecycle.spec.ts
       - run: npx playwright install --with-deps ${{ matrix.browsers }}
