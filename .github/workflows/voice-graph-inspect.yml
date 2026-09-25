@@ -1,0 +1,59 @@
+name: Inspect retained graph receiver mismatch
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 36099685493
+          artifact-ids: 10848817152
+          path: retained
+          merge-multiple: true
+      - name: Compare retained upload and receiver bytes without recording
+        run: |
+          python - <<'PY'
+          import hashlib, json, pathlib, struct
+          rows = []
+          for path in pathlib.Path("retained").rglob("attempt.json"):
+              row = json.loads(path.read_text())
+              directory = path.parent
+              upload = (directory / "upload.wav").read_bytes()
+              received = (directory / "received.wav").read_bytes()
+              for name, data in (("F", upload), ("received", received)):
+                  if hashlib.sha256(data).hexdigest() != row[name]["sha256"]:
+                      raise ValueError("Stored bytes do not match manifest")
+              mismatch = [i for i, (a, b) in enumerate(zip(upload, received)) if a != b]
+              rows.append({
+                  "id": row["id"], "error": row["error"], "snapshot": row["snapshot"],
+                  "probe_errors": row["probe"]["errors"], "receiver": row["receiver"],
+                  "hashes": {name: row[name]["sha256"] for name in ("F", "received")},
+                  "lengths": [len(upload), len(received)],
+                  "first64_hex": [upload[:64].hex(), received[:64].hex()],
+                  "mismatch_count": len(mismatch) + abs(len(upload) - len(received)),
+                  "first_mismatch": mismatch[:20], "last_mismatch": mismatch[-20:],
+                  "received_zero_bytes": received.count(0),
+                  "upload_zero_bytes": upload.count(0),
+                  "received_is_upload_prefix": upload.startswith(received),
+                  "upload_in_received": received.find(upload),
+              })
+          if len(rows) != 2:
+              raise ValueError("Expected both retained contract attempts")
+          pathlib.Path("inspection.json").write_text(json.dumps(rows, indent=2) + "\n")
+          print(json.dumps(rows, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: graph-receiver-inspection
+          path: inspection.json
+          if-no-files-found: error
+          retention-days: 30
