@@ -126,6 +126,111 @@ delivery, exact native link inputs, unlicensed declarations, repository-owned
 code authorization, build-tool entitlements and separately downloaded tools.
 No component was removed or relicensed on the basis of this partial review.
 
+Runtime/tooling and service-boundary follow-up (2026-09-25):
+- Microsoft CRT documentation distinguishes /MT inputs libucrt.lib (Windows
+  SDK), libvcruntime.lib and libcmt.lib, plus C++ libcpmt.lib when applicable.
+  Debug variants are expressly marked not redistributable. These are the
+  documented inputs to investigate, not a measured link map of our binaries.
+  /MD still statically includes startup code; changing /MT to /MD would not
+  by itself eliminate runtime licensing review.
+- The public Microsoft STL source at tag vs-2022-17.14 has Apache-2.0 WITH
+  LLVM-exception terms. The exception permits qualifying compiled embedded
+  portions without Apache sections4(a),4(b),4(d). Do not extend that exception
+  to UCRT/VCRuntime, all Visual Studio files, or unidentified linked inputs.
+  It also means "MSVC runtime is entirely proprietary" is too broad a label.
+- Re-read the official VS2022 Enterprise/Professional license: section5
+  references the Distributable List, requires significant application
+  functionality, downstream protective terms and indemnity, and restricts
+  Microsoft components marked Preview/Pre-release/Beta. That section defines
+  distribution to include application deployment for third parties to access
+  over the Internet. Existing experimental artifacts are not automatically
+  exempt from upstream obligations merely because no public Release exists.
+  The Build Devices clause permits specified build uses subject to the
+  agreement. Neither clause on its own closes our exact /MT input coverage
+  or identifies the applicable hosted-build/distributor entitlement.
+- Official REDIST documentation conditions redistribution on licensed use
+  and the applicable terms; its listed VC redist directories are not a
+  blanket, verified grant for every .lib under VC/Tools or the Windows SDK.
+  Official GitHub runner docs confirm preinstalled tools and per-run image
+  references, not a complete runtime redistribution grant. No conclusion
+  that every builder must buy a personal Enterprise subscription is drawn.
+  A search summary claimed hosted-build entitlement and personal-license
+  redistribution rules but cited a third-party guide; it was not accepted as
+  proof of either claim. An authoritative applicable entitlement basis is
+  still needed; installation on the image is not the missing evidence.
+- Next16.2.3 contains a large packages/next/src/compiled tree beyond the
+  dependencies visible in our root lockfile. Representative pinned notices:
+  ua-parser-js is MIT, terser has BSD-2-Clause terms, and web-vitals is
+  Apache-2.0. Do not assign an unrelated latest release's license to an older
+  embedded copy. These checks are not an exhaustive review of that tree or
+  proof that every embedded component reaches the application bundle.
+- TypeScript5.8.3 and Playwright1.59.1 root licenses are Apache-2.0.
+  Playwright's license does not replace licenses of downloaded browsers,
+  codecs or OS packages. CI installs Chromium/WebKit/Edge depending on the
+  workflow; browser and native build inputs remain a separate tooling scope.
+  tsx4.20.6 is also acquired through npx outside the root package manifest;
+  voice CI uses Python packages and apt-installed compilers/libraries.
+  These must not silently disappear from an "all project components" inventory.
+- Node24.20.0, pinned in the service workflow, has an MIT-style project license
+  and a consolidated LICENSE with separately maintained dependencies.
+  Do not describe the complete Node binary as MIT-only or transfer this
+  version's evidence to the unpinned OpenJS.NodeJS.LTS winget installation.
+  The release packager writes launchers that call an external node executable;
+  it does not explicitly acquire/bundle Node.js itself.
+- Azure CLI source commit7bf31a4fd49c252209732a8b0cf874ecaccdf06a and
+  GitHub CLI commit9b031151a825bda919203c5202876a725d637368 have MIT licenses.
+  These are reviewed upstream snapshots, not pins for our users' installations.
+  Their licenses neither make Azure/GitHub hosted services free nor cover
+  GitHub Copilot CLI, Agency, or those tools' separately downloaded payloads.
+- scripts/setup.ps1 provisions Dev Tunnels; scripts/start.ps1 defaults to it.
+  Microsoft's overview explicitly describes Dev Tunnels as adhoc testing and
+  development, not production workloads; it is preview with no SLA.
+  The MIT license in microsoft/dev-tunnels covers that source repository,
+  not automatically the separately downloaded CLI and hosted service. The
+  official FAQ directs CLI users to https://aka.ms/devtunnels/tos.
+  That link resolves to a PDF; the full EULA was not text-reviewed here because
+  no PDF reader was available. No packages were installed to work around this.
+  The production-use caveat above is supported by official documentation;
+  this audit does not claim to have determined an EULA violation.
+- scripts/start.ps1 -Cloudflare starts a TryCloudflare Quick Tunnel, not a
+  configured production tunnel. Cloudflare's official docs also limit its
+  intended use to testing/development, offer no SLA, and explicitly say Quick
+  Tunnels do not support SSE. This is an upstream service limitation, not a
+  newly reproduced failure of our chat UI. The source repository's Apache-2.0
+  license is separate from hosted-service terms. Do not automatically replace
+  Dev Tunnels with this existing quick-tunnel mode for production.
+- The existing Windows deploy.ps1 -NoTunnel path bypasses Dev Tunnels and was
+  used in the completed service E2E. A real remote deployment still needs an
+  appropriate HTTPS endpoint/reverse proxy and its own service/OS entitlements.
+  This source review changes no deployment defaults and approves no proxy or
+  tunnel provider; public-server suitability is not inferred from CI success.
+
+Actionable obligation checklist (not a release approval):
+1. SHIPPED CONTENT EVIDENCE REQUIRED: Identify actual application/native
+   payloads, versions and embedded code before assembling distribution notices.
+   Preserve MIT/BSD notices and Apache texts/NOTICE/modified-file notices where
+   applicable; account for Next's compiled dependencies and browser assets.
+2. SOURCE/RELINKING EVIDENCE REQUIRED: For shipped LGPL/MPL code, identify the
+   exact source, modifications and applicable source-delivery/linking route.
+   A project homepage or license label alone does not implement that route.
+3. ATTRIBUTION REQUIRED IF SHIPPED: Preserve CC-BY caniuse data attribution;
+   keep ASCEND audio's distinct CC-BY-SA obligations separate. Do not ship
+   test speech merely to satisfy a runtime application's dependency list.
+4. RIGHTS/ENTITLEMENT UNRESOLVED: Match actual MSVC/SDK runtime inputs and
+   hosted-build/distribution rights to authoritative terms. Keep the explicit
+   candidate review notice. Establish authorized licensing of our helper,
+   patches and application code without inventing copyright ownership.
+5. DECLARATION UNRESOLVED: http's placeholder has no grant in the inspected
+   source. Determine actual shipment and applicable permission before deciding
+   whether an approved dependency/packaging change is necessary.
+6. SERVICE BOUNDARY REQUIRED: Document optional fees, accounts and supported
+   deployment purposes. Do not market Dev Tunnels or TryCloudflare Quick
+   Tunnels as a qualified free production-hosting solution. External launcher
+   and CLI licenses remain separate from service subscriptions.
+7. SCOPE STILL INCOMPLETE: Exact unpinned external installations, full compiled
+   trees and browser/build-tool payloads have not all been reviewed. A green
+   source-declaration check cannot certify an uninspected installation/archive.
+
 Additional primary sources:
 https://sharp.pixelplumbing.com/install/
 https://www.gnu.org/licenses/lgpl-3.0.en.html
@@ -142,6 +247,24 @@ https://raw.githubusercontent.com/WiseLibs/better-sqlite3/v12.9.0/deps/sqlite3.g
 https://www.sqlite.org/copyright.html
 https://raw.githubusercontent.com/browserslist/caniuse-lite/1.0.30001788/LICENSE
 https://github.com/npm/security-holder/tree/ac50be87aafecba67fcacca3b32bf36a1f8f7a71
+https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features?view=msvc-170
+https://raw.githubusercontent.com/microsoft/STL/vs-2022-17.14/LICENSE.txt
+https://docs.github.com/en/actions/concepts/runners/github-hosted-runners
+https://github.com/vercel/next.js/tree/v16.2.3/packages/next/src/compiled
+https://raw.githubusercontent.com/vercel/next.js/v16.2.3/packages/next/src/compiled/ua-parser-js/LICENSE
+https://raw.githubusercontent.com/vercel/next.js/v16.2.3/packages/next/src/compiled/terser/LICENSE
+https://raw.githubusercontent.com/vercel/next.js/v16.2.3/packages/next/src/compiled/web-vitals/LICENSE
+https://raw.githubusercontent.com/microsoft/TypeScript/v5.8.3/LICENSE.txt
+https://raw.githubusercontent.com/microsoft/playwright/v1.59.1/LICENSE
+https://raw.githubusercontent.com/nodejs/node/v24.20.0/LICENSE
+https://raw.githubusercontent.com/Azure/azure-cli/7bf31a4fd49c252209732a8b0cf874ecaccdf06a/LICENSE
+https://raw.githubusercontent.com/cli/cli/9b031151a825bda919203c5202876a725d637368/LICENSE
+https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/overview
+https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/faq
+https://raw.githubusercontent.com/microsoft/dev-tunnels/main/LICENSE
+https://aka.ms/devtunnels/tos
+https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/
+https://raw.githubusercontent.com/cloudflare/cloudflared/master/LICENSE
 
 Scope: the two pinned Sense candidates in scripts/voice/download-catalog.mjs.
 This is a technical inventory of source declarations and build evidence, not
