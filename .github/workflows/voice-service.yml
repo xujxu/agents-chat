@@ -1,0 +1,37 @@
+name: Real service voice deployment E2E
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - 'scripts/voice/service-*'
+      - 'scripts/voice/windows/service-*'
+      - 'scripts/voice/windows/task-mode.ps1'
+      - 'scripts/deploy.ps1'
+      - 'scripts/install-scheduled-task.ps1'
+      - 'scripts/service-watchdog.ps1'
+      - 'scripts/agents-chat.service'
+      - 'tests/voice-service*'
+      - '.github/workflows/voice-service.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  contracts:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: node --test tests/voice-service.test.mjs
+      - if: runner.os == 'Windows'
+        shell: powershell
+        run: ./tests/voice-service-mode.ps1
+      - run: node --test --test-concurrency=1 tests/voice-setup-files.test.mjs tests/voice-setup-activation.test.mjs
+      - run: node tests/deploy-script-scheduled-task.test.js
+      - run: node tests/start-script-healthcheck.test.js
