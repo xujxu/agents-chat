@@ -10,6 +10,54 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Controlled passive audio-graph probe (2026-09-25)
+------------------------------------------------
+Spec770b45a;plan/red3f2e15d;code8e15b60841b757ad2ca0f88171ddb91f08cd6358.
+docs/superpowers/specs/2026-09-25-voice-audio-graph-probe-design.md
+docs/superpowers/plans/2026-09-25-voice-audio-graph-probe.md
+https://github.com/xujxu/agents-chat/actions/runs/36100708842
+36/36 synthetic recordings,18 minimal/full pairs,zero retries/measurement skips.
+11 graph+9 inherited signal contracts;build/typechecks;36 browser preflight
+passes,4 existing native-fixture-server-only skips. No ASR/models/corpus.
+
+All18full C-Dfloat32 exact;all18E-Findependent PCM quantization exact;
+offline lengths correct;all36Blob/receiver bytes match;source/cleanup complete.
+Larger WebKit fitted-tone/residual differences first observed B-C:
+decoded source -> MediaStream/implicit conversion/channel handling/worklet.
+WebKit mono250Hz Cfits .025355/.017220/.040003 vs B~.040004;
+Cresidual .030944/.036117/.000013. Reduced fitted coefficient is NOT proof
+of gain loss:phase/time variation or unmatched content can also reduce fits.
+Chromium stereo repeat2 has Cresidual .002908;retain counterexample.
+Both browsers source48k/recorder44.1k/offline16k;rate alone proves no defect.
+
+Marker interval differences(ms),first/second:
+Chromium full(+10,0),(+10,0),(0,0);minimal all(0,0).
+WebKit full(+16,0),(+13,0),(+5,+5);minimal(+6,unknown),(+8,+13),(+8,+3).
+One minimal WebKit final marker weak;null retained. C/D/E/Fpositions agree
+at1ms resolution. Paired tone/timing variation means no non-interference claim.
+No lost-block/clock-drift/channel-gain/browser-bug or ASR causal verdict.
+
+Preflight36099685493 failed before measurements:WebKit Blob272926bytes,
+URL-rewritten receiver0bytes. Inspection36100233494 verified retained hashes.
+Fixture-only8e15b60 sends original Blob natively to loopback without Playwright
+POST URL rewriting;real API POST blocked;receiver rejects empty bodies.
+Historical helper and product recorder/worklet/encoder unchanged.
+
+Artifacts expire2026-10-25:
+10849108554 graph-report
+  84a1aa1d7d6b33fac810cdb5dfadb0da9cfb9725bbce25e9ef4ef78850b8a7e3
+10848599202 graph-evidence
+  b0e65d6f93bf6e1584ddfc60dbad282373adeb610908580ec7f351c9b3126142
+10848584232 graph-contract-evidence
+  1dead84afc42fa8bd7487682f7a5b8f50ac3179f996b9649ffe12c94c9d08b0e
+Failed-preflight10848817152 digest
+  498f3e12d7fd0ded5dc289aebede2220e69ed072dd6fdc4c628d751505da13a3
+Inspection10849043143 digest
+  3185b7df9fd2ea401d6d3d8151cc2a9d98227f465a3460767b34d9dcf9bbdc5a
+LinuxEPYC7763/4logical/~16GiB;Chromium147.0.7727.15/WebKit26.4/PW1.59.1.
+Browser executable hashes not retained;versions/settings are retained.
+All historical quality/delivery failures and real-device blockers unchanged.
+
 Retained WebKit waveform diagnostics (2026-09-25)
 ------------------------------------------------
 Approved spec0bc59dd;plan/red36097fa:

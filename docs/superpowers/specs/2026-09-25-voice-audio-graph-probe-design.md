@@ -294,3 +294,128 @@ Complete by reviewing every scheduled attempt and diagnostic flag, publishing
 the report and synthetic evidence artifacts, and committing/pushing a result
 ledger with limits and unchanged failed acceptance outcomes. Do not silently
 escalate to extra taps, forced rates, speech recapture or product fixes.
+
+## Completed experiment: 2026-09-25
+
+Run: https://github.com/xujxu/agents-chat/actions/runs/36100708842
+Measured code: `8e15b60841b757ad2ca0f88171ddb91f08cd6358`.
+All 36 scheduled attempts completed, with 18 minimal/full pairs, no retries and
+no missing/invalid evidence. This is diagnostic completion, not product
+qualification. The preceding run `36099685493` remains a failed preflight; it
+performed no measured attempts and is not overwritten.
+
+Actions passed 11 new numerical/evidence contracts, 9 inherited signal
+contracts, production build, app/test strict type checks and 36 browser
+regressions/contracts. Four existing native-fixture-only tests were skipped
+because this workflow deliberately has no native recognition fixture server.
+The measurement itself passed all 36 recording fixtures without skips.
+
+Environment: Ubuntu 24.04 runner, Linux `6.17.0-1022-azure`, x64, AMD EPYC 7763,
+4 logical CPUs, 16766410752 bytes memory. Playwright 1.59.1; Chromium
+147.0.7727.15 and WebKit 26.4. The latter reused iPhone 14 Pro Max, 430x740,
+scale 3, mobile/touch. Both actual source contexts were 48000 Hz; recorder
+contexts were 44100 Hz; offline output and upload were 16000 Hz.
+The report retains actual versions/settings and implementation fingerprints,
+but not a browser executable hash; do not claim binary-digest identity.
+The Chromium desktop descriptor's Windows user-agent is not the Linux host OS.
+
+| Artifact | ID | Archive SHA256 |
+| --- | --- | --- |
+| graph-report | 10849108554 | 84a1aa1d7d6b33fac810cdb5dfadb0da9cfb9725bbce25e9ef4ef78850b8a7e3 |
+| graph-evidence | 10848599202 | b0e65d6f93bf6e1584ddfc60dbad282373adeb610908580ec7f351c9b3126142 |
+| graph-contract-evidence | 10848584232 | 1dead84afc42fa8bd7487682f7a5b8f50ac3179f996b9649ffe12c94c9d08b0e |
+
+These expire 2026-10-25. `summary.json`, `attempts.json`, `pairs.json` and
+`REPORT.md` retain all results. Synthetic binary stages remain in graph-evidence;
+no corpus/model was downloaded or inferred.
+
+### Exact boundaries and localization
+
+All 18 full-arm recordings had exact C-D float32 equality, correct offline
+output lengths and exact independently quantized E-F PCM equality. All 36
+uploads matched independently received bytes. Source completion and cleanup
+were observed throughout.
+
+This rules out an observed chunk-assembly or PCM-encoding mismatch for these
+attempts. It does not prove fidelity of unobserved worklet input, every product
+recording or real microphones. Offline conversion is not bit-preserving:
+for example Chromium's 3000 Hz fitted amplitude changes from about 0.039995 at
+D to 0.039390 at E. Both browser configurations exhibit this smaller conversion
+effect; it is distinct from the larger, variable differences already present at C.
+
+WebKit B preserves the three mono tone fitted amplitudes near 0.04. At C,
+the 250/1000 Hz fits and residuals differ markedly in two of three full-arm
+attempts; the third remains near the source fit:
+
+| WebKit mono repeat | C 250 Hz | C 1000 Hz | C 3000 Hz | C fit residual RMS |
+| --- | --- | --- | --- | --- |
+| 0 | 0.025354632 | 0.025350435 | 0.039991898 | 0.030943854 |
+| 1 | 0.017219900 | 0.017210749 | 0.039984204 | 0.036117388 |
+| 2 | 0.040002696 | 0.039997445 | 0.039996106 | 0.000013134 |
+
+The WebKit B residual is approximately 0.000006812. C-D equality and E-F
+equality show these observations are not newly introduced by assembly/encoding.
+The earliest observed interval for these larger differences is therefore B-C:
+decoded source buffer through MediaStream, implicit conversion/channel handling
+and worklet output. This experiment cannot resolve individual operations inside
+that interval.
+
+Do not call the reduced fitted coefficient a measured gain loss: a fixed
+two-second sinusoidal fit can decrease with phase/timing discontinuities or
+other unmatched content even when overall RMS is similar. The retained large
+fit residuals are essential context. No phase discontinuity, dropped block,
+clock drift, gain mechanism or specific browser implementation bug is established.
+
+For WebKit stereo tones, B's arithmetic-mean prediction is about 0.049998 at
+500 Hz and 0.029994 at 1500 Hz. The C fits at 500 Hz are
+0.025968667, 0.029894947 and 0.029172490; 1500 Hz remains near 0.029994-0.029996,
+with residual RMS 0.028339-0.030210. These differences again first appear in
+B-C, not proof of channel attenuation. Chromium has near-source C mono fits
+in all three attempts, but its stereo repeat 2 has a C residual of 0.002907631
+and fitted amplitudes 0.049747803/0.029842612; retain this counterexample rather
+than claiming an exclusively WebKit phenomenon.
+
+### Marker timing and observer uncertainty
+
+All full-arm marker positions are reliable under the predeclared policy.
+B offsets are zero; C/D/E/F offsets agree at the reported 1 ms resolution.
+The known three-second intervals differ as follows:
+
+| Browser/arm | Repeat 0 interval differences ms | Repeat 1 | Repeat 2 |
+| --- | --- | --- | --- |
+| Chromium full | +10, 0 | +10, 0 | 0, 0 |
+| Chromium minimal | 0, 0 | 0, 0 | 0, 0 |
+| WebKit full | +16, 0 | +13, 0 | +5, +5 |
+| WebKit minimal | +6, unknown | +8, +13 | +8, +3 |
+
+WebKit minimal repeat 0's final marker is weak, so its second interval and
+the corresponding paired comparison remain null, not filled with a guessed
+value. The full WebKit marker offsets are [89,105,105], [86,99,99],
+[97,102,107] ms; these include ordinary initial recording delay as well as
+within-recording interval differences. They are not cross-clock subtraction.
+
+Incremental observer comparisons are not identical. WebKit mono F 250 Hz fits
+are minimal/full 0.004498/0.025351, 0.018083/0.017216 and 0.021020/0.039998.
+WebKit stereo repeat 2 changes from 0.048286 to 0.029161 at 500 Hz.
+Thus differences exist without intermediate hooks, but full-only behavior
+cannot be assumed to represent the uninstrumented path. Chromium's +10 ms
+first-interval changes occur in two full-arm pairs but not their minimal arms;
+that too is an observer/runtime variability warning, not a causal verdict.
+
+All 18 paired output/duration/timing differences remain in `pairs.json`;
+fixture stop-to-composer timing is not installed-ASR latency acceptance.
+Only three repeats and one hosted runner were measured, with no statistical
+non-interference claim or engine-only attribution.
+
+### Bounded conclusion and remaining work
+
+The probe narrows the larger observed synthetic discrepancies to B-C while
+finding no C-D/E-F integrity mismatch. It does not establish the cause of the
+historical mixed/medium ASR failure. No production recording change, gain
+compensation, alternative sample rate, new graph tap or corpus rerun is justified
+by this result alone; all historical failed gates remain failed.
+
+A possible next bounded diagnostic is to inspect the already retained B/C
+synthetic arrays for local phase/timing behavior, including both browsers and
+all repeats, with a separately approved fixed method. That is not implemented
+or authorized by completion of this experiment.

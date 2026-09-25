@@ -171,7 +171,7 @@ export default defineConfig({
   dispatch, enable `VOICE_GRAPH_MEASURE=1` and run only probe recordings.
   Write evidence even on failure and run analysis with `if: always()` only when
   collection was attempted. Upload evidence and separate small reports.
-- [ ] Inspect Actions failures; fix only proven infrastructure defects.
+- [x] Inspect Actions failures; fix only proven infrastructure defects.
   Do not retry selected stimuli, alter thresholds or add graph taps.
   After green checks:
 
@@ -182,12 +182,12 @@ gh run list -R xujxu/agents-chat --workflow voice-audio-graph.yml --limit 5
 
 ## Task 6: Persistent results
 
-- [ ] Download only summary/attempt/report JSON/Markdown locally. Review all
+- [x] Download only summary/attempt/report JSON/Markdown locally. Review all
   36 attempts, all flags and all 18 pairs. Separate evidence success from acoustic
   differences and observer uncertainty.
-- [ ] Append run/commit/artifact IDs/digests/expiration and bounded conclusions
+- [x] Append run/commit/artifact IDs/digests/expiration and bounded conclusions
   to the approved spec and deployment ledger; mark this plan's completed steps.
-- [ ] Commit/push with the Copilot trailer, verify clean worktree, stop reminder
+- [x] Commit/push with the Copilot trailer, verify clean worktree, stop reminder
   #7 and complete session todos. No product acceptance promotion.
 
 ## Self-review
@@ -210,4 +210,14 @@ historical helper.
   Actions `36099253859` passed numerical contracts, inherited signal contracts,
   build, app/test type checks and Chromium/WebKit voice regressions.
 - Manual fixed measurement dispatched as `36099685493` at `004535c`.
-  No measurement outcome is asserted until its report is reviewed.
+  It failed preflight on an empty WebKit receiver body; no measured attempts ran.
+- Retained-byte inspection `36100233494` confirmed a 272926-byte Blob versus
+  zero received bytes. Fixture-only `8e15b60` removes POST protocol URL rewriting,
+  forwards the original Blob directly to loopback, blocks real API POST and
+  retains byte-equality checks. No historical helper or product edits.
+- `36100708842` at `8e15b60` passed preflight and all 36 fixed attempts.
+  Small report reviewed: 18 complete pairs; all C-D/E-F exact checks pass.
+  Larger tone-fit/residual and marker differences are already at B-C; paired
+  variability precludes a claim of observer non-interference.
+- Detailed results/artifact hashes are in the spec and deployment ledger.
+  No root-cause or historical-ASR acceptance promotion.
