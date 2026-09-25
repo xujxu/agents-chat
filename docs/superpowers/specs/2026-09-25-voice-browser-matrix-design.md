@@ -221,3 +221,84 @@ artifact IDs and interpretation limits in this spec, the parent design and
 ActualWin11, physical microphones/AEC, released Safari/iOS/Android devices,
 Windows direct quality remediation, redistribution and permanent trusted
 downloads remain separate work.
+
+## Completed measurement: 2026-09-25
+
+Written revision `6d64296` was approved for inline execution. Test-first
+run36083976647 demonstrated the missing case module while the eight legacy
+contracts passed. Implementation `b340f99` and expanded contracts `c1f2d7c`
+added case-aware selection, collection and evidence validation.
+
+The existing iPhone/WebKit voice regressions were reused, not replaced.
+Initial compatibility runs36084214690/36084280859 exposed assumptions in the
+new capture fixtures: WebKit's Playwright request observer did not expose the
+Blob body, and an exactly30second synthetic input could finish before automatic
+stop. The fixtures now compare the observation to an independent loopback HTTP
+receiver's actual bytes and use a32second generated input to verify the unchanged
+30second recording cap. Follow-up run36084652722 exposed fixture CORS handling
+and per-wrapper track-stop observation problems. `7b680ac` corrects those
+test-only mechanisms, forwarding native track stop and tracking owned resources
+by stable track ID. No production recorder, API, model or inference change.
+
+Run36085061136 passed both target compatibility jobs and the14Python contracts.
+Legacy Chromium regression run36085061185 passed without rerunning its corpus.
+
+Full measurement:
+https://github.com/xujxu/agents-chat/actions/runs/36085430283
+at `7b680acb264b466868cff05a6f8dd9b40d856dcc`.
+All14Python contracts, explicit collector/config typechecks, application builds
+and typechecks passed. Each compatibility job and installed collector passed
+15voice/observer fixtures with2explicit native-fixture-server-only skips.
+Both actual installed collectors completed200attempts:400total,399deliveries.
+All200browser attempts delivered with valid capture/UI evidence.
+All200same-upload ONNX diagnostics completed, with no unavailable input.
+
+| Case | Path | Delivery | Short P95 seconds | Long P95 seconds | Primary gates |
+| --- | --- | ---: | ---: | ---: | --- |
+| `win32-edge` | Direct WAV/API | 99/100 | 0.7601374 | 3.5804406 | Fail delivery and mixed/medium quality |
+| `win32-edge` | Browser | 100/100 | 0.6800 | 3.4040 | Pass |
+| `linux-webkit-mobile` | Direct WAV/API | 100/100 | 0.469156775 | 1.820615395 | Pass |
+| `linux-webkit-mobile` | Browser | 100/100 | 0.4970 | 1.7050 | Fail mixed/medium quality |
+
+The mixed/medium baseline is14.6667%, with an unchanged ceiling of16.6667%.
+WebKit browser error is17.3333%; Windows direct error is26.6667%, including
+the failed `test-01049` attempt as full reference deletions. That attempt has
+`transport_error`, null HTTP status and0.0055659seconds; the retained category
+does not identify a socket, server, native-engine or infrastructure root cause.
+Its paired browser attempt succeeded. It was not retried or excluded.
+Windows browser mixed/medium is14.6667%; Linux direct is16.4444%.
+
+The aggregate exits1 deliberately for measured failures, not an incomplete
+matrix or report infrastructure error. No threshold changes, selective repeats
+or Windows qualification promotion. Same-upload diagnostics remain secondary;
+they do not turn the original-stimulus WebKit quality failure into a pass.
+
+Actual Edge is154.0.4258.37, with matching executable version and retained
+SHA256 `f530bafcdb7e529bd21dd8be46e20c82b5c70fa0ffd770fe4c45a5c2c054c211`.
+The Desktop Edge descriptor supplies an emulated147user-agent; do not infer the
+installed version from it. WebKit reports26.4 under Playwright1.59.1, with the
+existing iPhone14ProMax descriptor (430x740, scale3, mobile/touch).
+Linux host: AMD EPYC9V45, kernel6.17.0-1022-azure.
+Windows host: Server2022/10.0.20348, AMD EPYC9V74.
+Both have4logical CPUs and about16GiB RAM; effective quotas/physical cores/native
+peak RSS remain unknown. Cross-host timings are not causal browser comparisons.
+
+Artifacts expire2026-10-25:
+
+| Artifact | ID |
+| --- | --- |
+| `compatibility-win32-edge` | 10843349224 |
+| `compatibility-linux-webkit-mobile` | 10843254794 |
+| `installed-browser-win32-edge` | 10844652395 |
+| `installed-browser-linux-webkit-mobile` | 10844047138 |
+| `installed-matrix-baseline` | 10844915649 |
+| `installed-matrix-report` | 10845090269 |
+
+Report digest:
+`sha256:5dc240fda7861a20ce471c7746bf9cf22337cbc220222af0c83070b6b945acea`.
+Per-case artifacts retain source/upload manifests, actual captured WAVs,
+milestones/outcomes, package/implementation fingerprints and browser/host
+identities. The bounded measurement is complete, but product acceptance fails.
+Windows direct quality/reliability and WebKit recorded-input quality remain
+open, alongside actualWin11, physical microphones/AEC, real Safari/iOS/Android,
+redistribution permission and permanent trusted downloads.

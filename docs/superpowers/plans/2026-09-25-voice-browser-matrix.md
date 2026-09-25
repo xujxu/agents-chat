@@ -40,7 +40,7 @@ decision and are not authorized here.
 
 ## Task 1: Test-first case identity
 
-- [ ] Add fixed-selection and isolation contracts before the implementation.
+- [x] Add fixed-selection and isolation contracts before the implementation.
 
 ```python
 from voice_browser_cases import CASES, validate_browser
@@ -69,19 +69,19 @@ swapped baseline cases, changed upload hashes, source identity, source-duration
 grouping and failed/null timing by running both new and unchanged old contracts.
 Use deep copies per mutation. Test exact fixed case keys and case fingerprints.
 
-- [ ] Add push-only Python contracts workflow with checkout, Python3.12 and
+- [x] Add push-only Python contracts workflow with checkout, Python3.12 and
 `pip install opencc-python-reimplemented==0.1.7`.
 
 ```yaml
 - run: python -m unittest discover -s scripts -p 'test_voice_browser_*.py' -v
 ```
 
-- [ ] Commit tests/workflow/plan, push, inspect Actions. Expected initial failure:
+- [x] Commit tests/workflow/plan, push, inspect Actions. Expected initial failure:
 `ModuleNotFoundError: No module named 'voice_browser_cases'`.
 
 ## Task 2: Fixed selection and focused projects
 
-- [ ] Create the shared fixed selection:
+- [x] Create the shared fixed selection:
 
 ```json
 {
@@ -107,7 +107,7 @@ and `browserEvidenceDirectory(caseId)`. Parse JSON as unknown, validate all five
 fields and reject unknown cases; never default a supplied unknown case to
 Chromium. Python loads the same file as `CASES`.
 
-- [ ] Add the focused Playwright config using the existing base config. Match
+- [x] Add the focused Playwright config using the existing base config. Match
 only these exact files, keep one worker and no retries:
 
 ```typescript
@@ -123,7 +123,7 @@ exists. Edge uses `devices['Desktop Edge']` with `channel: 'msedge'`.
 Project names come from the fixed mapping. No unrelated tests or base project
 matching changes.
 
-- [ ] Extend the launcher with an optional fourth positional case argument.
+- [x] Extend the launcher with an optional fourth positional case argument.
 
 ```javascript
 const [packageDirectory, model, mode = 'direct', caseId] = process.argv.slice(2);
@@ -140,7 +140,7 @@ both fixture and corpus commands. Retain install hash verification and cleanup.
 Fingerprint selection/config/launcher/helper/collector and product implementation
 files. Host metadata includes case identity and actual host OS.
 
-- [ ] Collector validates project, engine, channel and descriptor settings
+- [x] Collector validates project, engine, channel and descriptor settings
 against the fixed selection before recording. Record Playwright version,
 actual browser version/UA, requested and effective device settings. Edge must
 show `Edg/` branding; record executable path/version/hash from the Windows runner.
@@ -150,7 +150,7 @@ Use the case evidence directory for every write, preserving legacy output.
 
 ## Task 3: Case-aware scoring and evidence
 
-- [ ] Add optional keyword-only `cases=None` to `browser_report`. Keep legacy
+- [x] Add optional keyword-only `cases=None` to `browser_report`. Keep legacy
 calls unchanged. Select the grouping field explicitly:
 
 ```python
@@ -167,32 +167,32 @@ the actual host `platform` and explicit `caseId`. Do not replace the host with
 the case ID. Preserve scoring math, failure deletion handling, quality ceilings,
 short/long P95 thresholds, original duration grouping and diagnostic-only status.
 
-- [ ] Add optional `case_id=None` to `load_platform`, checking strict case-bound
+- [x] Add optional `case_id=None` to `load_platform`, checking strict case-bound
 completion, host, browser and row identities. Check manifest case, source list
 and upload hashes. Verify `implementation.json` against checked-out files before
 accepting case evidence. `validate_browser(browser, case_id)` checks engine,
 project/channel/device, source rate, versions and requested/effective settings;
 Edge branding and executable identity are mandatory.
 
-- [ ] Add explicit final CLI selector `matrix` for baseline/evidence commands;
+- [x] Add explicit final CLI selector `matrix` for baseline/evidence commands;
 legacy invocation remains unchanged. Use case paths and `load_platform` with
 the selected host. Baseline rows include case and host; baseline completion and
 environment include the exact case list, run and commit. Never infer a case
 from missing metadata. Validate baseline case provenance before scoring.
 
-- [ ] Produce case-labelled Markdown and JSON. For an incomplete collection,
+- [x] Produce case-labelled Markdown and JSON. For an incomplete collection,
 retain `status: incomplete` with a concrete reason and nonzero process exit;
 do not score a passing subset. Preserve complete per-case measurements if the
 other case is blocked. Catch only anticipated evidence input errors at the
 report entry point; unexpected programming errors still fail visibly.
 
-- [ ] Push and inspect Python contracts. Expected: both legacy and matrix
+- [x] Push and inspect Python contracts. Expected: both legacy and matrix
 contracts pass. Add artifact mutation tests for case manifest, completion,
 fingerprints and captured WAV corruption before accepting evidence.
 
 ## Task 4: Actions compatibility and measurement
 
-- [ ] Extend the workflow with two target compatibility jobs, using
+- [x] Extend the workflow with two target compatibility jobs, using
 `windows-2022`/`msedge` and `ubuntu-24.04`/`webkit`, fail-fast false. Install Node
 24.20.0 and browsers. Build/typecheck the app and explicitly typecheck the
 focused config, shared selection, collector and helper:
@@ -207,7 +207,7 @@ fixtures for the selected project before enabling its corpus. Retain explicit
 compatibility status and sanitized Playwright line output. No private app logs.
 Do not skip target assertions on failure.
 
-- [ ] Manual collection reuses the pinned downloads, corpus preparation,
+- [x] Manual collection reuses the pinned downloads, corpus preparation,
 package installer and build from `voice-installed-browser.yml`. Commands:
 
 ```sh
@@ -218,7 +218,7 @@ node scripts/voice/installed-api-run.mjs package sensevoice-small-q8 browser lin
 One command per corresponding host. Artifacts use the case evidence directory
 and name. Preserve100sources/200attempts per host, no selective retries.
 
-- [ ] Baseline/report retain pinned archive downloads and original baseline
+- [x] Baseline/report retain pinned archive downloads and original baseline
 downloads from the existing workflow, with case-named artifact paths:
 
 ```sh
@@ -230,7 +230,7 @@ Upload results even on measured failure, retain30days, never upload model
 weights/private logs/configuration. Baseline or corpus failure must not prevent
 an explicit incomplete report job from running.
 
-- [ ] Push, inspect target fixture outcomes. Adapt only the observer if
+- [x] Push, inspect target fixture outcomes. Adapt only the observer if
 evidenced necessary; push fixes and rerun contracts before measurement.
 Dispatch the expensive workflow only once both targets pass. Inspect actual
 run/commit, case coverage,400attempts,200diagnostic tuples and all thresholds.
@@ -238,21 +238,21 @@ Failed quality gates are results, not justification to tune or rerun samples.
 
 ## Task 5: Persistent evidence and closure
 
-- [ ] Record run/commit/artifact IDs, checksums, case-level delivery/quality/P95,
+- [x] Record run/commit/artifact IDs, checksums, case-level delivery/quality/P95,
 diagnostic availability and interpretation limits in:
 `docs/superpowers/specs/2026-09-25-voice-browser-matrix-design.md`,
 `docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md`,
 and `scripts/VOICE-DEPLOYMENT.txt`.
-- [ ] Mark completed plan steps with evidence; explicitly mark any blocked
+- [x] Mark completed plan steps with evidence; explicitly mark any blocked
 step rather than claiming completion. Preserve the prior Windows direct quality
 failure regardless of these browser measurements.
-- [ ] Commit/push documentation with the required coauthor trailer:
+- [x] Commit/push documentation with the required coauthor trailer:
 
 ```text
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ```
 
-- [ ] Stop the15minute progress reminder at completion or a genuine approval/
+- [x] Stop the15minute progress reminder at completion or a genuine approval/
 environment blocker. Report actual outcomes, not real-device qualification.
 
 ## Self-review
@@ -262,3 +262,35 @@ compatibility-before-corpus, original gates, bounded same-byte diagnostics,
 Actions-only execution and durable evidence. Legacy Chromium remains a separate
 mode and its completed corpus is not rerun. `caseId` is consistently the join
 identity while `platform` always describes the actual host.
+
+## Execution checkpoints
+
+- [x] Written-spec approval and inline execution recorded; plan committed in
+  `4c1ae62`.
+- [x] Test-first run36083976647 failed for missing `voice_browser_cases`;
+  unchanged eight legacy Python contracts passed.
+- [x] Case mapping, focused projects, case-bound collector, baseline and report
+  implemented in `b340f99`; artifact corruption/incomplete-report contracts
+  added in `c1f2d7c`.
+- [x] Compatibility runs36084214690/36084280859 exposed two test assumptions:
+  WebKit did not expose the Blob request body to Playwright's request observer;
+  an exactly30second stimulus could complete before automatic stop.
+- [x] Fixture-only corrections use an independent loopback HTTP receiver for
+  exact upload bytes and a32second generated stimulus for the unchanged30second
+  recording cap. Run36084652722 additionally exposed fixture transport and
+  native-wrapper cleanup problems; `7b680ac` supplies CORS handling and observes
+  owned tracks by stable native track ID through the shared stop prototype.
+  Native stop is always forwarded. Production recorder/inference code unchanged.
+- [x] Run36085061136 at`7b680ac` passed Python contracts and both actual target
+  compatibility jobs. Legacy Chromium regression run36085061185 also passed;
+  no completed Chromium corpus was rerun.
+- [x] Dispatched full measurement run36085430283 at`7b680ac`.
+- [x] Full run36085430283 completed both collectors and baseline; all400attempts
+  and200diagnostic tuples retained. Browser delivery200/200; Windows direct
+  delivers99/100 because `test-01049` has a transport error. Edge browser and
+  Linux direct pass. WebKit browser mixed/medium17.3333% exceeds16.6667%;
+  Windows direct mixed/medium26.6667% includes the failed reference deletion.
+  The report correctly exits1; no sample was retried or excluded.
+- [x] Durable result/host/version/artifact/digest/interpretation evidence recorded
+  in this phase's specification, the parent product spec and deployment ledger.
+  Product acceptance remains failed; no algorithm fix or real-device claim.

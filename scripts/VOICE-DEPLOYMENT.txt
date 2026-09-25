@@ -10,6 +10,72 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Installed Sense Edge/WebKit checkpoint (2026-09-25)
+--------------------------------------------------
+Approved revised spec6d64296; plan/test-first4c1ae62:
+docs/superpowers/specs/2026-09-25-voice-browser-matrix-design.md
+docs/superpowers/plans/2026-09-25-voice-browser-matrix.md
+Existing AndroidChromium/iPhoneWebKit E2E already existed and passed; this phase
+reused mobile settings/voice regressions and added installed-Sense corpus data.
+No replacement mobile test suite, Android corpus expansion or Chromium rerun.
+
+Red36083976647:missing case module,8legacy contracts pass.
+Implementationb340f99,artifact contractsc1f2d7c.
+Compatibility36084214690/36084280859:Edge passes;WebKit capture fixtures expose
+missing Playwright Blob-body observation and exact30s source-completion assumption.
+3852b67 uses an actual loopback HTTP byte receiver and32s test stimulus for the
+unchanged30s recording cap. 36084652722 exposes fixture CORS/track-wrapper issues.
+7b680ac supplies CORS and stable-ID prototype observation for owned track cleanup.
+Native stop always forwarded; production recorder/API/model unchanged.
+Both target jobs and14Python contracts pass36085061136;legacy Chromium
+regression36085061185 passes without repeating completed corpus collection.
+
+https://github.com/xujxu/agents-chat/actions/runs/36085430283
+Code7b680acb264b466868cff05a6f8dd9b40d856dcc.
+14Python contracts,explicit test/config types,app builds/typechecks pass.
+15voice/observer fixtures pass per compatibility/installed job;2intentional
+native-fixture-server-only skips. Both collectors complete200attempts each.
+400attempts,399deliveries;all200browser capture/UI deliveries valid.
+200/200same-upload ONNX diagnostics complete;0unavailable.
+Report exits1 for measured failures,not incomplete evidence/infrastructure.
+
+Case/path                 Primary P95 short/long    Original-stimulus gates
+WindowsServer direct-WAV   0.760137s /3.580441s       FAIL delivery+mixed/medium
+WindowsServer Edge        0.680000s /3.404000s       PASS
+Linux direct-WAV API       0.469157s /1.820615s       PASS
+Linux WebKit mobile        0.497000s /1.705000s       FAIL mixed/medium quality
+
+Mixed/medium baseline14.6667%,ceiling16.6667%.
+Edge browser14.6667%;WebKit browser17.3333%;Linux direct16.4444%.
+Windows direct26.6667%,including test-01049 transport_error as full deletions:
+null HTTPstatus,0.0055659s;paired browser succeeded. No retry/exclusion.
+Underlying transport root cause not retained by this outcome category;
+do not label it a native model defect or erase earlier Windows quality failures.
+Same-upload diagnostics cannot rescue WebKit's original-stimulus quality gate.
+
+ActualEdge154.0.4258.37(executable version matches);descriptorUA says147.
+ExecutableSHA256:f530bafcdb7e529bd21dd8be46e20c82b5c70fa0ffd770fe4c45a5c2c054c211.
+WebKit26.4,Playwright1.59.1,iPhone14ProMax descriptor430x740/scale3/mobile/touch.
+LinuxAMD EPYC9V45;WindowsServer2022AMD EPYC9V74;4logicalCPUs,~16GiB each.
+48k source;standard2threads;unchanged package/model/helper identities.
+No cross-host/browser speed causality or real-device qualification claim.
+
+Artifacts expire2026-10-25:
+10843349224 compatibility-win32-edge
+10843254794 compatibility-linux-webkit-mobile
+10844652395 installed-browser-win32-edge
+10844047138 installed-browser-linux-webkit-mobile
+10844915649 installed-matrix-baseline
+10845090269 installed-matrix-report
+Report digest:
+sha256:5dc240fda7861a20ce471c7746bf9cf22337cbc220222af0c83070b6b945acea
+Case-bound source/upload manifests,captured WAVs,outcomes,milestones,
+implementation/package/browser/host identities retained.
+Bounded measurement complete;overall product acceptance still fails.
+Still open:Windows direct quality/reliability,WebKit captured-input quality,
+actualWin11,physical microphones/AEC,real Safari/iOS/Android,redistribution
+permissions/permanent trusted downloads. No PROD/cpg/sampler modification.
+
 Installed Sense browser recording checkpoint (2026-09-24)
 --------------------------------------------------------
 Approved spec4e80528, plan/test-first24034ce:

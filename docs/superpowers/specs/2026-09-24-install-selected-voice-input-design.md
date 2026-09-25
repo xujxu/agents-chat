@@ -13,8 +13,11 @@ coverage. Installed Linux Sense now passes frozen100 authenticated direct-WAV
 API gates. Windows Server Sense fails one accuracy gate; Whisper fails quality
 and latency on both platforms. Controlled Chromium frozen100 browser capture
 now passes on Linux and Windows Server, without superseding the Windows direct
-quality failure. Actual Win11, physical microphone, remaining browser matrices
-and final release acceptance remain pending.
+quality failure. The subsequent Edge/WebKit measurement is complete: Edge's
+browser path passes, but mobile-emulated WebKit fails mixed/medium accuracy;
+the Windows direct control also has one transport failure. Overall acceptance
+still fails. Actual Win11, physical microphones, real Safari/iOS/Android and
+final release acceptance remain pending.
 
 The feature's earlier design decisions and experiments were recorded in
 `scripts/VOICE-DEPLOYMENT.txt` rather than this repository's normal specification
@@ -37,6 +40,34 @@ As of commit `14c7f47`:
 
 The Linux-only restriction above describes that historical implementation, not the final
 feature scope. Windows 11 support is required for completing this feature.
+
+### Subsequent Edge and mobile WebKit measurement checkpoint
+
+Actions
+[`36085430283`](https://github.com/xujxu/agents-chat/actions/runs/36085430283),
+code `7b680acb264b466868cff05a6f8dd9b40d856dcc`, reused existing mobile settings
+and voice regressions, adding installed-model corpus evidence rather than
+claiming previously missing iPhone E2E coverage. Both target compatibility jobs,
+14Python contracts and installed collectors passed;400attempts produced
+399deliveries, including200/200browser deliveries. All200same-upload ONNX
+diagnostics completed. The aggregate deliberately fails measured gates.
+
+WindowsServer2022 actual Edge154.0.4258.37 browser path passes: short/long P95
+0.680/3.404seconds, mixed/medium14.6667%. Its direct control delivers99/100:
+`test-01049` has a transport error of unresolved cause; failure-inclusive
+mixed/medium26.6667% exceeds the16.6667%ceiling.
+Linux WebKit26.4 with the existing iPhone14ProMax descriptor delivers100/100
+and has short/long P95 of0.497/1.705seconds, but mixed/medium17.3333% fails
+the same ceiling. Linux direct remains passing. No selective retries or gate
+changes were made. Earlier Chromium/Windows findings remain intact.
+
+Artifacts10844652395(Edge),10844047138(WebKit),10844915649(baseline) and
+10845090269(report) expire2026-10-25. Report digest:
+`sha256:5dc240fda7861a20ce471c7746bf9cf22337cbc220222af0c83070b6b945acea`.
+Full evidence and fixture-only adaptations:
+`2026-09-25-voice-browser-matrix-design.md`.
+WebKit simulation is not real Safari/iPhone qualification, Server is not Win11,
+and same-upload diagnostics cannot override original-stimulus quality gates.
 
 ### Subsequent process-foundation checkpoint
 
