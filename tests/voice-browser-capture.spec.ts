@@ -1,12 +1,20 @@
 import { expect, test, type Page } from '@playwright/test';
+import { createServer } from 'node:http';
 import { encodeVoiceWav, validateVoiceWav } from '../lib/voice/audio';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
 import { armBrowserCapture, installBrowserCapture, playBrowserCapture, snapshotBrowserCapture } from './helpers/voiceBrowserCapture';
 
 const transcript = 'Captured fixture text';
 function audio(seconds = 1) {
-  return Buffer.from(encodeVoiceWav(Float32Array.from(
-    { length: Math.floor(seconds * 16000) }, (_, index) => .1 * Math.sin(index * .1))));
+  const second = Buffer.from(encodeVoiceWav(Float32Array.from(
+    { length: 16000 }, (_, index) => .1 * Math.sin(index * .1))));
+  // The automatic-stop fixture needs an input longer than the product's recording cap.
+  const pcm = Buffer.concat(Array.from({ length: Math.ceil(seconds) }, () => second.subarray(44)))
+    .subarray(0, Math.floor(seconds * 16000) * 2);
+  const wav = Buffer.concat([second.subarray(0, 44), pcm]);
+  wav.writeUInt32LE(wav.length - 8, 4);
+  wav.writeUInt32LE(pcm.length, 40);
+  return wav;
 }
 
 async function prepare(page: Page, response = 200) {
@@ -29,25 +37,54 @@ async function start(page: Page, seconds = 1) {
 }
 
 test('capture observer preserves upload bytes and stop-to-composer milestones', async ({ page }) => {
-  await prepare(page);
   let actual: Buffer | null = null;
-  page.on('request', request => {
-    if (request.url().endsWith('/api/voice') && request.method() === 'POST') actual = request.postDataBuffer();
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    request.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size <= 960044) chunks.push(chunk);
+    });
+    request.on('end', () => {
+      if (request.method !== 'POST' || size > 960044) {
+        response.writeHead(400).end();
+        return;
+      }
+      actual = Buffer.concat(chunks);
+      response.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+      response.end(JSON.stringify({ ok: true, text: transcript, elapsedMs: 1 }));
+    });
+    request.on('error', error => response.destroy(error));
   });
-  await start(page);
-  await page.waitForTimeout(1100);
-  await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
-  await expect(page.locator('textarea.composerTextarea')).toHaveValue(transcript);
-  await expect.poll(async () => (await snapshotBrowserCapture(page)).timing.composerAt).not.toBeNull();
-  await expect.poll(async () => (await snapshotBrowserCapture(page)).capture.contextClosed).toBe(true);
-  const snapshot = await snapshotBrowserCapture(page, true);
-  expect(snapshot.observerError).toBeNull();
-  expect(Buffer.from(snapshot.uploadBase64!, 'base64')).toEqual(actual);
-  expect(validateVoiceWav(Buffer.from(snapshot.uploadBase64!, 'base64')).durationSeconds).toBeGreaterThanOrEqual(1);
-  expect(snapshot.timing.stopKind).toBe('manual');
-  expect(snapshot.timing.fetchAt!).toBeGreaterThanOrEqual(snapshot.timing.workletStopAt!);
-  expect(snapshot.timing.composerAt!).toBeGreaterThan(snapshot.timing.stopAt!);
-  expect(snapshot.capture).toMatchObject({ sourceRate: 48000, sourceCompleted: true, tracksStopped: true, contextClosed: true });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  try {
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Upload fixture did not bind TCP');
+    await prepare(page);
+    await page.route('**/api/voice', route => route.request().method() === 'POST'
+      ? route.continue({ url: `http://127.0.0.1:${address.port}/upload` }) : route.fallback());
+    await start(page);
+    await page.waitForTimeout(1100);
+    await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
+    await expect(page.locator('textarea.composerTextarea')).toHaveValue(transcript);
+    await expect.poll(async () => (await snapshotBrowserCapture(page)).timing.composerAt).not.toBeNull();
+    await expect.poll(async () => (await snapshotBrowserCapture(page)).capture.contextClosed).toBe(true);
+    const snapshot = await snapshotBrowserCapture(page, true);
+    expect(snapshot.observerError).toBeNull();
+    expect(actual).not.toBeNull();
+    expect(Buffer.from(snapshot.uploadBase64!, 'base64')).toEqual(actual);
+    expect(validateVoiceWav(Buffer.from(snapshot.uploadBase64!, 'base64')).durationSeconds).toBeGreaterThanOrEqual(1);
+    expect(snapshot.timing.stopKind).toBe('manual');
+    expect(snapshot.timing.fetchAt!).toBeGreaterThanOrEqual(snapshot.timing.workletStopAt!);
+    expect(snapshot.timing.composerAt!).toBeGreaterThan(snapshot.timing.stopAt!);
+    expect(snapshot.capture).toMatchObject({ sourceRate: 48000, sourceCompleted: true, tracksStopped: true, contextClosed: true });
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
 });
 
 for (const status of [500, 0]) {
@@ -107,7 +144,7 @@ test('API success without composer delivery stays observable as missing UI evide
 
 test('real recorder automatic limit is observed without extending it', async ({ page }) => {
   await prepare(page);
-  await start(page, 30);
+  await start(page, 32);
   await expect(page.locator('textarea.composerTextarea')).toHaveValue(transcript, { timeout: 35000 });
   const snapshot = await snapshotBrowserCapture(page, true);
   expect(snapshot.timing.stopKind).toBe('automatic');
