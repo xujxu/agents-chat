@@ -72,16 +72,76 @@ Project-wide source inventory (partial; actual shipped contents unverified):
   it or treat the launcher as license-cleared. No external agent/service has
   been installed or invoked for this audit.
 
-Next evidence step requires an approved, Actions-only inventory design.
-No automated dependency scan, new workflow, package replacement or publishing
-has been performed. The findings above are source/metadata observations, not
-an exhaustive bill of materials or a distribution approval.
+The user selected continued read-only source/license review instead of the
+proposed Actions inventory collector. No new scanner/workflow is approved.
+No automated dependency scan, package replacement or publishing has been
+performed. The findings above are source/metadata observations, not an
+exhaustive bill of materials or a distribution approval.
+
+Read-only upstream follow-up:
+- sharp0.34.5 LICENSE explicitly grants no-charge copyright/patent permissions
+  subject to its terms. Redistribution requires the license, applicable
+  upstream attribution/NOTICE preservation, and notices of modified files.
+  This does not relicense libvips or its embedded dependencies as Apache-only.
+- sharp-libvips v1.2.4 THIRD-PARTY-NOTICES lists cairo under MPL-2.0;
+  libvips, glib, pango and several others under LGPLv3; aom under BSD-2-Clause
+  plus an AOM patent license; and additional MIT/BSD-like/font/image licenses.
+  This is an upstream notice inventory, not proof that every listed component
+  is present in both application packages. The MPL-2.0 sections2.1/3.1-3.4
+  grant royalty-free use and require covered source availability and notice
+  preservation on distribution; they do not require an unrelated larger work
+  to adopt MPL. Applicable LGPL source/linking obligations remain separate.
+- The v1.2.4 Windows packaging recipe fetches a libvips "static" web archive
+  but copies DLLs into its output. An archive name does not establish the
+  final link arrangement. It also downloads THIRD-PARTY-NOTICES.md from main,
+  not the tag: the tagged notice file is a useful lead, not proof of the exact
+  notice bytes present in a previously built package.
+- better-sqlite3 v12.9.0 LICENSE is MIT and requires retention of its copyright
+  and permission notice. Its binding.gyp links the SQLite target defined in
+  deps/sqlite3.gyp, which is a static library; that target's Windows Release
+  configuration sets RuntimeLibrary0 (static release). The source recipe
+  therefore makes MSVC runtime review relevant beyond the voice helper.
+  It does not prove which prebuilt binary npm actually installed, or that the
+  whole binding uses identical compiler settings. Inspect actual build/binary
+  provenance before closing that runtime obligation.
+  SQLite's own official copyright page dedicates deliverable SQLite code to
+  the public domain and permits commercial/noncommercial use/distribution.
+  Its optional paid Warranty of Title is not a general runtime license fee.
+  This SQLite statement does not cover better-sqlite3 or compiler runtimes.
+- caniuse-lite's exact1.0.30001788 LICENSE confirms CC-BY-4.0. Sections2/3
+  grant royalty-free rights subject to retaining supplied creator/copyright,
+  license/disclaimer and source-link information, and indicating modifications
+  when shared. It is not CC-BY-SA and does not itself impose ShareAlike on the
+  application. Whether the data ships still needs output evidence.
+- http0.0.1-security registry gitHead points to security-holder commit
+  ac50be87aafecba67fcacca3b32bf36a1f8f7a71. Its source tree contains only
+  README.md and package.json; neither states a license. The README describes
+  reserving the package name against malicious reuse. This explains the
+  placeholder but does not supply a redistribution grant; retain it as an
+  unresolved declaration, not "MIT", not a vulnerability finding.
+
+These texts substantiate free-use grants for the specific covered code above,
+not a project-wide clearance. Open items include actual shipped notices/source
+delivery, exact native link inputs, unlicensed declarations, repository-owned
+code authorization, build-tool entitlements and separately downloaded tools.
+No component was removed or relicensed on the basis of this partial review.
 
 Additional primary sources:
 https://sharp.pixelplumbing.com/install/
 https://www.gnu.org/licenses/lgpl-3.0.en.html
 https://registry.npmjs.org/http/0.0.1-security
 https://learn.microsoft.com/en-us/azure/azure-relay/relay-faq
+https://raw.githubusercontent.com/lovell/sharp/v0.34.5/LICENSE
+https://raw.githubusercontent.com/lovell/sharp/v0.34.5/npm/win32-x64/package.json
+https://raw.githubusercontent.com/lovell/sharp-libvips/v1.2.4/THIRD-PARTY-NOTICES.md
+https://raw.githubusercontent.com/lovell/sharp-libvips/v1.2.4/build/win.sh
+https://www.mozilla.org/en-US/MPL/2.0/
+https://raw.githubusercontent.com/WiseLibs/better-sqlite3/v12.9.0/LICENSE
+https://raw.githubusercontent.com/WiseLibs/better-sqlite3/v12.9.0/binding.gyp
+https://raw.githubusercontent.com/WiseLibs/better-sqlite3/v12.9.0/deps/sqlite3.gyp
+https://www.sqlite.org/copyright.html
+https://raw.githubusercontent.com/browserslist/caniuse-lite/1.0.30001788/LICENSE
+https://github.com/npm/security-holder/tree/ac50be87aafecba67fcacca3b32bf36a1f8f7a71
 
 Scope: the two pinned Sense candidates in scripts/voice/download-catalog.mjs.
 This is a technical inventory of source declarations and build evidence, not
