@@ -144,3 +144,86 @@ Completion means verified decomposition of the existing failure and explicit
 limits of inference. It does not require or authorize a product fix, model
 promotion, threshold relaxation, repeated acceptance until passing, or claims
 about real Safari/iPhone or an untouched holdout.
+
+## Completed analysis: 2026-09-25
+
+The user approved written specification `e4e1fea` and inline execution.
+Plan/contracts `9b67975` produced the expected missing-analysis-module failure
+in run36090714673. Implementation `9655742` passed focused contracts in
+run36090937196. The interrupted session did not lose these commits.
+
+Analysis run:
+https://github.com/xujxu/agents-chat/actions/runs/36090984994
+at `965574245761448173414b83ef454f4042442b5a`.
+Seven new contracts and14existing browser evidence/scoring contracts passed.
+All four downloaded archives passed identity/digest checks; historical WebKit
+package, implementation, case, source/upload and baseline evidence passed.
+Rescored sample diagnostics and unrounded bucket rates agree with the retained
+measurement. No recording, inference, model download or product change.
+
+The bucket has8samples and225reference units, with all four paths delivered
+for all8samples:
+
+| Retained path | Errors | S | D | I | MER |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Original ONNX | 33 | 20 | 11 | 2 | 14.666667% |
+| Original native | 37 | 19 | 14 | 4 | 16.444444% |
+| Captured ONNX | 37 | 19 | 14 | 4 | 16.444444% |
+| Captured native | 39 | 21 | 16 | 2 | 17.333333% |
+
+| Sample | Original ONNX errors | Original native errors | Captured ONNX errors | Captured native errors | Primary delta | Contribution pp |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| test-00332 | 0 | 1 | 0 | 1 | +1 | +0.444444 |
+| test-00364 | 5 | 6 | 6 | 7 | +2 | +0.888889 |
+| test-00554 | 4 | 4 | 3 | 3 | -1 | -0.444444 |
+| test-00949 | 10 | 12 | 14 | 15 | +5 | +2.222222 |
+| test-01049 | 7 | 7 | 7 | 7 | 0 | 0 |
+| test-01050 | 3 | 3 | 3 | 3 | 0 | 0 |
+| test-01056 | 2 | 2 | 2 | 1 | -1 | -0.444444 |
+| test-01058 | 2 | 2 | 2 | 2 | 0 | 0 |
+
+Primary means captured-native minus original-ONNX errors. Net+6errors produces
++2.666667percentage points; the unchanged allowed increase is2points.
+The bucket therefore remains failed, at17.333333% versus16.666667%ceiling.
+No sample is excluded, including the two improvements.
+
+Observed contrasts:
+
+- `test-00949` is the largest positive contributor (+5primary errors); both
+  fixed recognizers produce more errors on its captured input than on original
+  input: ONNX+4 and native+3. This is not solely a difference between backends.
+- Original native already has4more aggregate errors than original ONNX.
+  Captured native adds2net errors relative to original native; the entire
+  primary+6difference cannot be attributed to newly recorded input alone.
+- Captured ONNX is+4relative to original ONNX. On identical captured bytes,
+  native is+2net errors relative to ONNX. These are observational contrasts
+  involving fixed implementations, not independent additive physical causes.
+- Original native and captured ONNX happen to have equal aggregate errors and
+  S/D/I totals. Their per-sample counts differ; this is not equal transcripts
+  or interchangeable recognition behavior.
+- All8captures report completed source playback, manual stop, tracks stopped
+  and source context closed. The source context is48000Hz and recorder44100Hz.
+  These controls establish their stated events, not waveform fidelity, absence
+  of lost/altered speech, or a resampler defect.
+
+Smallest justified next investigation: validate and align the retained original
+and uploaded WAVs for all8samples, including improvements and unchanged controls,
+in Actions. Quantify timing offsets, duration/silence, level/clipping and aligned
+signal differences before proposing any recorder or inference change. Do not
+feed transformed audio to inference, retune on `test-00949`, or label44100Hz
+alone a defect. This is a follow-up proposal, not an executed or approved audio
+experiment. Further causal separation would require separately approved
+controlled inputs. Windows transport root cause remains a separate open issue.
+
+Report artifact `10845901259`, `webkit-error-analysis`, expires2026-10-25:
+`sha256:52e23b1399a98828f7a409a713a6009cc1f9f8022f69cdc1f5541d5214a475de`.
+It contains summary/sample JSON, the full8sample count table and raw/normalized
+transcripts, hashes/capture context, four-path scores and ASCEND attribution.
+Raw corpus text/audio is not committed to the repository.
+Source run/commit remain36085430283/7b680ac, distinct from the analysis identity.
+The original baseline artifact's verified digest is
+`sha256:7f02f1a934411dcc01c869bab78c829d13de5311f886cc8525462b26aae12c01`;
+its selected file SHA256 is
+`e1885a092e759fa33c6640d9101929fae46c04e291ae9b7c07b5e38ecede64f2`.
+That historical artifact expires2026-10-23; analysis output does not extend
+source artifact retention. All prior acceptance failures remain unchanged.

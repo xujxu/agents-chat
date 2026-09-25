@@ -10,6 +10,57 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Retained WebKit error decomposition (2026-09-25)
+-----------------------------------------------
+Approved spece4e1fea;plan/red9b67975:
+docs/superpowers/specs/2026-09-25-voice-webkit-error-analysis-design.md
+docs/superpowers/plans/2026-09-25-voice-webkit-error-analysis.md
+Red36090714673 confirms missing analysis module;implementation9655742 passes
+36090937196. OOM interruption did not lose the pushed plan/contracts.
+
+https://github.com/xujxu/agents-chat/actions/runs/36090984994
+Analysis code965574245761448173414b83ef454f4042442b5a.
+7new contracts+14existing browser contracts pass.
+Historical evidence36085430283/code7b680ac remains separate from analysis.
+Four fixed archives verified against artifact metadata/digests; existing
+package/implementation/case/source/upload/baseline checks pass.
+No new capture,inference,model download,product change or acceptance rerun.
+
+8mixed/medium ASCEND samples,225reference units:
+Path               Errors  S/D/I       MER
+Original ONNX      33      20/11/2     14.666667%
+Original native    37      19/14/4     16.444444%
+Captured ONNX      37      19/14/4     16.444444%
+Captured native    39      21/16/2     17.333333%
+All four paths deliver8/8. Counts/unrounded rates match saved report.
+Primary+6errors=+2.666667pp;ceiling16.666667% unchanged;FAIL preserved.
+Primary per-sample error changes:
+test-00332 +1;test-00364 +2;test-00554 -1;test-00949 +5;
+test-01049 0;test-01050 0;test-01056 -1;test-01058 0.
+
+test-00949 is the dominant positive contributor. Original-to-captured errors
+increase10->14for ONNX and12->15for native. Both input paths and backend
+differences matter observationally;no proof of a particular acoustic/numerical
+defect. Native aggregate already37vs originalONNX33before browser recording.
+Original-native and capturedONNX equal totals do not imply equal transcripts.
+All8manual stops/source completion/track/context cleanup recorded;source48kHz,
+recorder44.1kHz. This is context,not proof of fidelity or a resampler defect.
+
+Next proposed bounded step:in Actions,align/inspect retained source/uploadWAVs
+for all8samples,including improvements/unchanged controls;quantify offsets,
+duration/silence,levels/clipping and aligned differences. No transformed-input
+inference or tuning on one inspected sample;requires separate approval.
+Windows transport diagnosis remains separate. No causal claim or model promotion.
+
+Artifact10845901259 webkit-error-analysis expires2026-10-25.
+Digest:sha256:52e23b1399a98828f7a409a713a6009cc1f9f8022f69cdc1f5541d5214a475de.
+Contains summary/samples/report and ASCEND attribution;raw text/audio not committed.
+Original baseline10751002303 digest:
+sha256:7f02f1a934411dcc01c869bab78c829d13de5311f886cc8525462b26aae12c01.
+Original scored-results.jsonl SHA256:
+e1885a092e759fa33c6640d9101929fae46c04e291ae9b7c07b5e38ecede64f2.
+That source expires2026-10-23;analysis does not extend upstream retention.
+
 Installed Sense Edge/WebKit checkpoint (2026-09-25)
 --------------------------------------------------
 Approved revised spec6d64296; plan/test-first4c1ae62:

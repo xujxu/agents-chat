@@ -302,3 +302,21 @@ identities. The bounded measurement is complete, but product acceptance fails.
 Windows direct quality/reliability and WebKit recorded-input quality remain
 open, alongside actualWin11, physical microphones/AEC, real Safari/iOS/Android,
 redistribution permission and permanent trusted downloads.
+
+### Subsequent retained WebKit error decomposition
+
+Analysis run36090984994 at`9655742` verified the historical artifacts and rescored
+the eight mixed/medium samples without recording or inference. Over225reference
+units, original ONNX/original native/captured ONNX/captured native have33/37/37/39
+errors. All counts and unrounded rates agree with this measurement.
+`test-00949` contributes+5of the net+6primary errors; `test-00332` contributes+1,
+`test-00364`+2, `test-00554`and`test-01056`-1each, with the other three unchanged.
+Both recognizers degrade on the captured `test-00949` input, but this does not
+identify waveform damage or a browser/resampler defect. Native already differs
+from original ONNX before browser capture. The failure remains unchanged.
+
+Full interpretation and proposed bounded signal-integrity follow-up:
+`2026-09-25-voice-webkit-error-analysis-design.md`.
+Artifact10845901259 expires2026-10-25; digest
+`sha256:52e23b1399a98828f7a409a713a6009cc1f9f8022f69cdc1f5541d5214a475de`.
+No product fix, gate relaxation or selected sample rerun was performed.
