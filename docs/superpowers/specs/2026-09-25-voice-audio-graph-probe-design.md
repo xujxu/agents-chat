@@ -143,6 +143,16 @@ to an Actions-local HTTP receiver returning explicit fixture text, without any
 recognizer. Require exact Blob/receiver byte equality and composer delivery.
 Label returned text as fixture data, never an ASR result.
 
+Fixture transport clarification after preflight run `36099685493`: Playwright's
+POST URL rewrite delivered an empty WebKit request although the observed Blob
+contained 272926 bytes. Retained inspection `36100233494` verified both saved
+hashes. No measured schedule started. The probe instead redirects the fetch
+URL inside the page, forwarding the same original Blob and init to native fetch;
+POSTs reaching the real API are blocked. The fixture-specific fetch observer
+copies the same milestones/Blob without modifying the historical helper.
+This is a test endpoint substitution, not a product-network or latency claim.
+The receiver rejects empty bodies and byte equality remains mandatory.
+
 Continue the predeclared schedule after a per-recording failure where safe,
 retaining each failure without retry. If browser setup is unavailable, record
 the affected attempts as not run; never substitute another browser. Missing

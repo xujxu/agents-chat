@@ -64,7 +64,7 @@ export async function collectGraph(page: Page, info: TestInfo, stimulus: GraphSt
     });
     request.on('error', error => { receiverFailure = error.message; response.destroy(error); });
     request.on('end', () => {
-      if (request.method !== 'POST' || size > 960044 || requests !== 1) {
+      if (request.method !== 'POST' || size < 46 || size > 960044 || requests !== 1) {
         receiverFailure = 'invalid_receiver_request';
         response.writeHead(400).end(); return;
       }
@@ -82,9 +82,38 @@ export async function collectGraph(page: Page, info: TestInfo, stimulus: GraphSt
     await installMobileChatFixture(page);
     await installBrowserCapture(page);
     await page.route('**/api/voice', route => route.request().method() === 'POST'
-      ? route.continue({ url: `http://127.0.0.1:${address.port}/upload` })
+      ? route.abort('blockedbyclient')
       : route.fulfill({ json: { ok: true, enabled: true, model: 'sensevoice-small-q8', threads: 2, resourcePolicy: 'standard' } }));
     await loginMobileFixture(page);
+    await page.evaluate(url => {
+      const previous = window.fetch;
+      window.fetch = (input, init) => {
+        const state = window.__installedVoiceCapture;
+        if (input !== '/api/voice' || init?.method !== 'POST' || !(init.body instanceof Blob)) {
+          return previous.call(window, input, init);
+        }
+        if (!state?.active) throw new Error('Graph receiver capture was not armed');
+        // Avoid Playwright's WebKit Blob-body interception; send the original Blob natively.
+        const pending = previous.call(window, url, init);
+        state.timing.fetchAt = performance.now();
+        void init.body.arrayBuffer().then(buffer => {
+          let encoded = '';
+          const bytes = new Uint8Array(buffer);
+          for (let start = 0; start < bytes.length; start += 8192) {
+            encoded += String.fromCharCode(...bytes.subarray(start, start + 8192));
+          }
+          state.uploadBase64 = btoa(encoded);
+        }, () => { state.observerError = 'upload_copy_failed'; });
+        void pending.then(response => {
+          state.status = response.status;
+          return response.clone().json().then((body: unknown) => {
+            state.body = body;
+            state.timing.bodyAt = performance.now();
+          }, () => { state.observerError = 'invalid_api_body'; });
+        }, () => { state.fetchFailure = 'transport_error'; });
+        return pending;
+      };
+    }, `http://127.0.0.1:${address.port}/upload`);
     if (mode === 'full') await installGraphProbe(page);
     await armBrowserCapture(page, source.toString('base64'));
     await page.getByRole('button', { name: 'Start voice input', exact: true }).click();
