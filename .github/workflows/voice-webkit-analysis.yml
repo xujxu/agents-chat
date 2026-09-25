@@ -21,3 +21,25 @@ jobs:
       - run: pip install opencc-python-reimplemented==0.1.7
       - run: python -m unittest discover -s scripts -p 'test_voice_webkit_*.py' -v
       - run: python -m unittest discover -s scripts -p 'test_voice_browser_*.py' -v
+  analyze:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - name: Verify and analyze retained evidence without inference
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/voice_webkit_evidence.py inputs webkit-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webkit-error-analysis
+          path: webkit-report/
+          if-no-files-found: error
+          retention-days: 30
