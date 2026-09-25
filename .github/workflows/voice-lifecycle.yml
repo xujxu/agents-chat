@@ -1,0 +1,27 @@
+name: Installed voice lifecycle E2E
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - 'scripts/voice/lifecycle-*'
+      - 'scripts/voice_lifecycle_prepare.py'
+      - 'tests/voice-lifecycle*'
+      - 'tests/playwright.voice-lifecycle.config.ts'
+      - '.github/workflows/voice-lifecycle.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  contracts:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: node --test tests/voice-lifecycle.test.mjs
