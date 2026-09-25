@@ -1,5 +1,8 @@
 name: Inspect retained graph receiver mismatch
 on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths: ['.github/workflows/voice-graph-inspect.yml']
   workflow_dispatch:
 permissions:
   contents: read
