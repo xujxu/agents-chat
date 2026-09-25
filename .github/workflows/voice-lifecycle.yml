@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: 24.20.0
       - run: node --test tests/voice-lifecycle.test.mjs
-      - run: node --test tests/voice-setup-files.test.mjs tests/voice-setup-activation.test.mjs
+      - run: node --test --test-concurrency=1 tests/voice-setup-files.test.mjs tests/voice-setup-activation.test.mjs
   preflight:
     needs: contracts
     runs-on: ${{ matrix.os }}
