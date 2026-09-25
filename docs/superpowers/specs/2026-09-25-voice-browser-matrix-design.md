@@ -3,6 +3,8 @@
 ## Authority and scope
 
 The user selected Edge/WebKit coverage and approved this design on2026-09-25.
+After reviewing existing mobile coverage, the user approved retaining the two
+measurement cases while reusing the existing mobile configuration and tests.
 Written-spec approval is required before implementation.
 The parent requirements remain `2026-09-24-install-selected-voice-input-design.md`
 and the measurement definitions in `2026-09-24-voice-installed-browser-design.md`.
@@ -17,11 +19,44 @@ ActualWin11/physical microphone qualification remains blocked by environment.
 No runner installation, local validation, production deployment or public
 package publication is authorized by this slice.
 
+## Existing coverage and the specific evidence gap
+
+The repository already has mobile E2E coverage. This phase does not establish a
+new iPhone/WebKit test suite or claim that mobile checks were missing.
+
+| Existing surface | Coverage | Verified Actions evidence |
+| --- | --- | --- |
+| `tests/playwright.config.ts` | `android-chromium` with Pixel7 and `iphone-webkit` with iPhone14ProMax; selected mobile layout, composer viewport, typography, reading, persistence and voice specs | Configuration reused by the workflows below |
+| `.github/workflows/playwright.yml` | Separate Android Chromium and iPhone WebKit checks on Ubuntu | Run35849926730 at638c553c: both jobs passed |
+| `.github/workflows/voice-input.yml` | WebKit voice capture and cancellation using `tests/voice-input.spec.ts` | Run35850016943 atb0a4292b: the WebKit step passed |
+
+Existing voice tests exercise browser recording, WAV upload, composer insertion,
+cancellation/late-response isolation and automatic stopping. They use synthetic
+microphone audio and controlled transcription responses or a native backend
+fixture. Their success is useful regression evidence, but does not measure the
+installed Sense package against the frozen100 speech corpus, original-reference
+accuracy ceilings and stop-to-composer P95 thresholds.
+
+The new evidence is that specific installed-model measurement on Edge and
+mobile-emulated WebKit. Reuse existing device settings and regression specs;
+extend only diagnostic selection, observation and evidence identity where
+required. Do not duplicate mobile UX tests or broaden unrelated CI suites.
+Running existing voice regressions as a prerequisite checks the current
+measurement revision; it is not a new mobile-coverage deliverable.
+
+Android Chromium remains covered by existing E2E checks. Its full installed-Sense
+corpus measurement is outside this bounded two-case phase, and must not be
+reported as completed. Neither existing nor new Linux WebKit evidence qualifies
+released Safari or physical iPhone/iOS behavior.
+
 ## Choices and fixed matrix
 
 Chosen: extend the existing diagnostic collector with explicit browser-case
-identity and reuse its controls. Alternatives were further Windows numerical
-localization or distribution/licensing work; neither closes this browser gap.
+identity and reuse its controls and existing mobile E2E configuration.
+Using only existing E2E results would leave installed-model quality/latency
+unmeasured; adding Android corpus collection would expand this bounded phase.
+Further Windows numerical localization or distribution/licensing work remains
+separate from this measurement gap.
 Do not introduce a general configurable benchmark framework.
 
 | Case ID | Host | Browser launch | Device settings | Meaning |
@@ -32,7 +67,9 @@ Do not introduce a general configurable benchmark framework.
 Use a focused diagnostic Playwright config or narrowly selected dedicated
 projects so these corpus specs cannot accidentally join normal unrelated test
 matrices. Preserve existing desktop/mobile projects and default Chromium runner
-behavior. An explicit case selection must determine expected platform, project,
+behavior. Reuse the existing `iphone-webkit` device settings and
+`tests/voice-input.spec.ts`, rather than building parallel mobile regression
+coverage. An explicit case selection must determine expected platform, project,
 engine, channel and device configuration; unknown/mismatched selections fail.
 
 Record actual host OS separately from browser engine/version, requested channel,
