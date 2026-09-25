@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import platform
+import wave
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +33,8 @@ def difference(a, b):
 
 
 def analyze(root, row):
+    if row.get("error"):
+        raise ValueError(row["error"])
     fingerprints = {file: hashlib.sha256(Path(file).read_bytes()).hexdigest() for file in FILES}
     if row["environment"]["implementation"] != fingerprints:
         raise ValueError("Implementation fingerprint mismatch")
@@ -111,7 +114,7 @@ def run(root, output, contracts=False):
             results.append(result)
             if contracts and any(not check["equal"] for check in result["checks"].values()):
                 failures.append(f'{row["id"]}: exact boundary contract failed')
-        except (ValueError, KeyError, TypeError, OSError) as error:
+        except (ValueError, KeyError, TypeError, OSError, wave.Error, EOFError) as error:
             failures.append(f'{row.get("id", "unknown")}: {error}')
             results.append({"id": row.get("id"), "status": "evidence_failure", "error": str(error)})
     if not contracts:
@@ -149,6 +152,20 @@ def run(root, output, contracts=False):
         lines.append(f"| {result['id']} | {result['status']} | "
                      f"{checks.get('C_D', {}).get('equal', 'not collected')} | "
                      f"{checks.get('E_F', {}).get('equal', 'not collected')} |")
+    lines += ["", "## Stage observations",
+              "Tone amplitudes are fitted on seconds 3-5 of each native sample grid.",
+              "Marker offsets are in milliseconds; flags are retained without correction.", "",
+              "| Attempt | Stage/channel | Rate | RMS dBFS | Tone amplitudes or marker offsets/flags |",
+              "| --- | --- | --- | --- | --- |"]
+    for result in results:
+        for stage, channels in result.get("metrics", {}).items():
+            for index, channel in enumerate(channels):
+                details = channel.get("tones", {}).get("amplitudes")
+                if details is None:
+                    details = [{"offset_ms": value["offset_ms"], "flags": value["flags"]}
+                               for value in channel["markers"]]
+                lines.append(f"| {result['id']} | {stage}/{index} | {channel['stats']['rate']} | "
+                             f"{channel['stats']['rms_dbfs']} | {json.dumps(details)} |")
     lines += ["", "## Failures", *failures, "", "## Limits", *summary["limits"],
               "", "All stage measurements and reliability flags: attempts.json.",
               "All signed incremental-observer comparisons: pairs.json.",

@@ -140,4 +140,14 @@ def load_attempt(root, row):
 
 
 def rows_from(root):
-    return [json.loads(path.read_text()) for path in sorted(root.glob("*/*/*/*/attempt.json"))]
+    rows = []
+    for path in sorted(root.glob("*/*/*/*/attempt.json")):
+        identity = path.parent.relative_to(root).as_posix()
+        try:
+            row = json.loads(path.read_text())
+            if not isinstance(row, dict) or row.get("id") != identity:
+                raise ValueError("Attempt directory identity mismatch")
+            rows.append(row)
+        except (ValueError, OSError, UnicodeError) as error:
+            rows.append({"id": identity, "error": f"Unreadable attempt metadata: {error}"})
+    return rows

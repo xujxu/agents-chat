@@ -10,7 +10,7 @@ from unittest.mock import patch
 import numpy as np
 
 from voice_graph_evidence import expected_ids, load_attempt, read_array, read_wav, unique_attempts
-from voice_graph_report import difference
+from voice_graph_report import difference, run
 
 
 def fixture(root):
@@ -120,6 +120,17 @@ class GraphEvidenceTests(unittest.TestCase):
             (root / "invalid.wav").write_bytes(data)
             with self.assertRaises(ValueError):
                 read_wav(root, {"file": "invalid.wav", "sha256": hashlib.sha256(data).hexdigest()})
+
+    @patch.dict(os.environ, {"GITHUB_RUN_ID": "1", "GITHUB_SHA": "abc"})
+    def test_incomplete_and_corrupt_reports_explicitly_fail(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.assertEqual(run(root / "missing", root / "report"), 1)
+            attempt = root / "evidence/desktop-chromium/mono-tones/0/full"
+            attempt.mkdir(parents=True)
+            (attempt / "attempt.json").write_text("{invalid")
+            self.assertEqual(run(root / "evidence", root / "corrupt-report"), 1)
+            self.assertIn("Unreadable attempt metadata", (root / "corrupt-report/summary.json").read_text())
 
 
 if __name__ == "__main__":
