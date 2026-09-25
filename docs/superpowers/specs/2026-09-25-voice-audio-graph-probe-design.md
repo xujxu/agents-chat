@@ -88,8 +88,11 @@ synthetic source context from recorder/offline hooks by object identity.
 Unrecognized contexts, duplicate starts, missing buffers and hook failures are
 explicit instrumentation errors.
 
-Reuse the unchanged source helper and UI fixtures; install the extra hooks before
-page scripts run. The new helper must compose with existing native forwarding
+Reuse the unchanged source helper and UI fixtures. Install the existing source
+init script before navigation, then activate extra hooks after navigation and
+before arming/starting recording. This explicitly orders constructor composition
+without relying on the order of separate Playwright init scripts; no audio
+graph exists yet. The new helper must compose with existing native forwarding
 without changing the old helper. If a required boundary cannot be observed
 without changing the audio path, stop with a documented blocker rather than
 silently adding a tap or a product hook.
