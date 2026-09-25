@@ -160,3 +160,17 @@ manifest/importer checks still run. No tokens enter configuration or service
 children. Existing default/offline behavior and paused accuracy gates are
 preserved. Public release, true system services and physical devices remain
 explicitly outside A.
+
+## Execution result
+
+- [x] Task 1: red `36106050780` at `ab5bb42`, Actions-generated lock retained.
+- [x] Task 2: pinned metadata, bounded gh streams and safe ZIP staging implemented.
+- [x] Task 3: CLI/all wrappers/release closure wired; contracts and existing
+  platform setup regressions passed at `02d5720`.
+- [x] Task 4: real automatic acquisition `36106345674` passed both hosts,
+  16 records/eight ASR attempts without lifecycle retries/skips.
+- [x] Task 5: result IDs/digests/expiry retained in spec and deployment ledger.
+
+The per-step boxes above are the original execution recipe; these task-level
+checks are the completion authority. Real service deployment remains B,
+not an implied result of this implementation.

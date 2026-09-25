@@ -175,3 +175,29 @@ Scheduled Task new-install/upgrade execution, explicit no-tunnel propagation
 with unchanged defaults, service-owned processes and cleanup, and token isolation.
 No production service or existing local task may be touched. Publishing a
 permanent/public release remains a separate approval and redistribution matter.
+
+## Verified implementation checkpoint
+
+Implementation `02d572042dee8df4b6a607fae731014c4701b4a8` passed real automatic
+acquisition lifecycle Actions `36106345674` on both hosts. Preparation fetched
+only speech; the real configuration CLI used gh and the checked-in catalogue.
+Both installed manifests and binary/model/helper role hashes match previous
+verified candidates. All ten host phases, 16 browser records and eight real
+ASR-to-draft attempts passed; no retry or lifecycle skip.
+
+Acquisition contracts `36106345364`, setup regressions `36106345458`, Windows
+foundation `36106345412` and lifecycle push preflight `36106345362` passed.
+The red checkpoint `ab5bb42` / `36106050780` failed on both hosts because
+implementation modules were absent. That new workflow also initially invoked
+Linux-only legacy setup assertions on Windows (BOM mismatch); its invocation was
+corrected to preserve the existing platform split, not alter product encoding.
+The generated lock was retrieved from that Actions run; no local npm was run.
+
+| Artifact | ID | SHA256 | Expiry |
+| --- | --- | --- | --- |
+| voice-lifecycle-linux | 10851173108 | d0d67bcaae1450f330e6a03864150329c75e71e18ab06beb94ce5d7e77bfe16a | 2026-10-25 |
+| voice-lifecycle-win32 | 10852145601 | 18ddf8c07a26c9221ce0b0dbaa80b3211dea0838a3cd7e680f3c17ec509c5a86 | 2026-10-25 |
+| voice-lifecycle-report | 10851163250 | 573d4162cc667670750506c277cb2c50130c711f27478fc3c9e9c98963a04ef6 | 2026-10-25 |
+
+No published release, accuracy qualification, physical-device claim or actual
+system-service deployment acceptance follows from this result. B is next.

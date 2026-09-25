@@ -10,7 +10,7 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
-Explicit experimental voice acquisition (implementation in progress, 2026-09-25)
+Explicit experimental voice acquisition (passed functional lifecycle, 2026-09-25)
 ----------------------------------------------------------------------------
 Design e7b3ccd; plan/red ab5bb42. No public Release is published by this work.
 Only SenseVoiceSmall q8 on Linux/Windows x64 is available for automatic selection.
@@ -38,6 +38,19 @@ continues to use --package-dir/--manifest-sha256 or corresponding wrapper flags.
 Keep/default and disable do not download or require gh. Restart/reload applies
 configuration; remote browser microphones require HTTPS (loopback is exempt).
 Real system-service new-install/upgrade E2E remains the next separate project.
+
+Measured02d572042dee8df4b6a607fae731014c4701b4a8:
+https://github.com/xujxu/agents-chat/actions/runs/36106345674
+Both platforms fetched candidates through real CLI, not preparation fixtures.
+16/16 browser records;8/8 real ASR attempts;all install/enable/disable phases pass.
+Report10851163250 SHA256573d4162cc667670750506c277cb2c50130c711f27478fc3c9e9c98963a04ef6.
+Linux10851173108 SHA256d0d67bcaae1450f330e6a03864150329c75e71e18ab06beb94ce5d7e77bfe16a.
+Windows10852145601 SHA25618ddf8c07a26c9221ce0b0dbaa80b3211dea0838a3cd7e680f3c17ec509c5a86.
+Result artifacts expire2026-10-25;package/source expiry is unchanged.
+Contracts36106345364,setup36106345458,Windows foundation36106345412,
+lifecycle preflight36106345362 passed. Red36106050780 retained missing-module
+failures;Linux-only legacy setup tests are no longer invoked on Windows.
+No historical quality gate was changed or declared passing by these results.
 
 Installed voice lifecycle E2E (2026-09-25)
 ----------------------------------------
