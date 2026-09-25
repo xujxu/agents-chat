@@ -12,6 +12,20 @@ experiment and implementation evidence log; the formal spec owns product design.
 
 Pre-publication source/license audit (2026-09-25; NOT release clearance)
 ----------------------------------------------------------------------
+User acceptance requirement clarified2026-09-25:
+Components used by this project must be free to use; any redistribution must
+comply with each upstream component's applicable license. Open-source-only is
+NOT a requirement. A proprietary component is not rejected solely because it
+is proprietary, nor accepted solely because a download is free.
+Review fees, permitted uses and redistribution conditions separately for the
+exact component/version and intended use. Distinguish build-tool entitlement
+from the end user's runtime rights; document platform/hosting costs separately.
+The clarification does not authorize relicensing repository-owned code or
+publishing packages. Unknown terms remain unverified, not compliant by default.
+This project-wide criterion extends beyond the two voice packages: application
+runtime dependencies, shipped transitive dependencies and build/package tooling
+still need an inventory. The voice source audit below is not that full audit.
+
 Scope: the two pinned Sense candidates in scripts/voice/download-catalog.mjs.
 This is a technical inventory of source declarations and build evidence, not
 a legal opinion, an assignment of rights or permission to publish. No Release,
