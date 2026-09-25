@@ -40,7 +40,7 @@ Specification: `docs/superpowers/specs/2026-09-25-voice-audio-graph-probe-design
 
 ## Task 1: Test-first numerical/evidence contracts
 
-- [ ] Add synthetic tests importing the absent metrics/evidence modules.
+- [x] Add synthetic tests importing the absent metrics/evidence modules.
   Establish weighted 44.1 kHz bins, known sinusoid amplitude/DC, marker offset,
   uncertainty and independent signed quantization before implementation:
 
@@ -54,7 +54,7 @@ def test_fractional_envelope(self):
     np.testing.assert_allclose(result, np.ones(100), atol=1e-12)
 ```
 
-- [ ] Add push-triggered workflow contracts:
+- [x] Add push-triggered workflow contracts:
 
 ```yaml
 - uses: actions/setup-python@v5
@@ -64,13 +64,13 @@ def test_fractional_envelope(self):
 - run: python -m unittest discover -s scripts -p 'test_voice_graph_*.py' -v
 ```
 
-- [ ] Commit/push; inspect the exact missing-module red result through
+- [x] Commit/push; inspect the exact missing-module red result through
   `gh run list -R xujxu/agents-chat --workflow voice-audio-graph.yml`.
   No local Python execution.
 
 ## Task 2: Pure analysis and strict evidence
 
-- [ ] Implement exact PCM quantization without using the product encoder:
+- [x] Implement exact PCM quantization without using the product encoder:
 
 ```python
 def quantize(values):
@@ -79,26 +79,26 @@ def quantize(values):
     return np.floor(bounded * np.where(bounded < 0, 32768, 32767) + .5).astype("<i2")
 ```
 
-- [ ] Implement 1 ms envelopes using an integral over squared piecewise-constant
+- [x] Implement 1 ms envelopes using an integral over squared piecewise-constant
   sample intervals, evaluated at each bin edge. For tone fit, form a matrix of
   sin/cos columns at the fixed frequencies plus ones, then use
   `np.linalg.lstsq(..., rcond=None)` on stage seconds 3-5.
-- [ ] Implement positive normalized marker correlation with the approved
+- [x] Implement positive normalized marker correlation with the approved
   +/-1000-bin search, >10-bin alternative exclusion, .8/.05 flags and explicit
   missing/zero/boundary reasons. Retain each reliable interval separately.
-- [ ] Read float32 planar little-endian arrays and canonical PCM16 WAVs,
+- [x] Read float32 planar little-endian arrays and canonical PCM16 WAVs,
   requiring matching SHA256, dimensions, byte counts and finite values.
   Enforce exact 36 identities, correct mode-specific boundaries and fixed
   stimulus hashes across repeats/browsers.
-- [ ] Keep C-D comparison and E-F quantization mismatch as valid findings.
+- [x] Keep C-D comparison and E-F quantization mismatch as valid findings.
   Treat corrupt files, receiver disagreement and hook failures as evidence
   errors. Preserve report output before CLI exit 1.
-- [ ] Add negative contracts for traversal, hash corruption, duplicate IDs,
+- [x] Add negative contracts for traversal, hash corruption, duplicate IDs,
   missing records, nonfinite input and missing full-arm boundaries.
 
 ## Task 3: Browser stimuli and passive observation
 
-- [ ] Implement fixed generator with unsigned xorshift:
+- [x] Implement fixed generator with unsigned xorshift:
 
 ```typescript
 let state = seed >>> 0;
@@ -110,40 +110,40 @@ function bit(): number {
 }
 ```
 
-- [ ] Generate the exact mono tones, amplitude-coded markers and stereo tones
+- [x] Generate the exact mono tones, amplitude-coded markers and stereo tones
   from the specification. Write independent header/interleave/value assertions.
-- [ ] Install original source helper and extra hooks in one ordered init script
+- [x] Install original source helper and extra hooks in one ordered init script
   sequence; avoid Playwright's unspecified order across separate init scripts
   by making the extra hook initializer explicit after navigation, before arming.
   Instrument prototype methods for decode, source start and offline render;
   wrap the existing AudioWorkletNode constructor without losing its old behavior.
-- [ ] Copy B from the actual decoded buffer; C from additional port listeners;
+- [x] Copy B from the actual decoded buffer; C from additional port listeners;
   D from actual offline source start; E from the original rendering promise.
   Use Float32Array copies; never transfer product buffers.
-- [ ] Retain return/argument forwarding counters and native failures. Add
+- [x] Retain ordered forwarding events and native failures. Add
   browser contracts for exact promise identity and native invalid start errors.
   Observe rather than replace production message handlers.
-- [ ] Serialize each channel as bounded base64 little-endian bytes; remove
+- [x] Serialize each channel as bounded base64 little-endian bytes; remove
   large buffers from JSON metadata and release the page at the end.
 
 ## Task 4: Fixture collection, regression and schedule
 
-- [ ] Create an independent Node HTTP receiver using explicit CORS and a
+- [x] Create an independent Node HTTP receiver using explicit CORS and a
   960044-byte limit. Route POST to it, GET to the fixture capability response.
   Return literal fixture text and require exact upload-byte/composer checks.
-- [ ] Each attempt uses `browser.newContext(testInfo.project.use)` through the
+- [x] Each attempt uses a fresh browser context with project settings through the
   Playwright page fixture, installs chat/source fixtures, logs in, arms input,
   starts the real voice UI, plays source and stops at duration+100 ms.
   Preserve attempt JSON in `finally` including error and snapshot when present.
-- [ ] Full mode collects A-F; minimal collects only A/F. Write unique attempt
+- [x] Full mode collects A-F; minimal collects only A/F. Write unique attempt
   directories by project/stimulus/repetition/mode, never overwrite old attempts.
-- [ ] Run sequential predeclared minimal/full, full/minimal, minimal/full pairs,
+- [x] Define sequential predeclared minimal/full, full/minimal, minimal/full pairs,
   with each recording its own test and fresh page. Playwright continues other
   tests on failure; report identifies absent records explicitly.
-- [ ] Add probe browser contract recording separate from the 36 measurements.
+- [x] Add probe browser contract recording separate from the 36 measurements.
   Use the same runtime hooks and verify C-D equality, E-F equality downstream.
   Keep contract evidence out of the measured schedule.
-- [ ] Derive narrow projects from existing config:
+- [x] Derive narrow projects from existing config:
 
 ```typescript
 export default defineConfig({
@@ -159,15 +159,15 @@ export default defineConfig({
 
 ## Task 5: Actions-only validation and measurement
 
-- [ ] Expand the workflow after the intended red result. Contracts run on push;
+- [x] Expand the workflow after the intended red result. Contracts run on push;
   browser validation depends on them. Use Node 24.20.0, `npm ci`, pinned Python
   dependencies and `playwright install --with-deps chromium webkit`.
-- [ ] Run build and full app typecheck, plus explicit strict typecheck of the
+- [x] Run build and full app typecheck, plus explicit strict typecheck of the
   test config/spec (the app's tsconfig excludes tests).
-- [ ] Start the Next fixture in Actions on 3011 with existing isolated fixture
+- [x] Start the Next fixture in Actions on 3011 with existing isolated fixture
   credentials. Readiness checks process liveness and `/api/auth/providers`;
   EXIT trap kills only the captured server PID. Never upload private server logs.
-- [ ] Run contracts/voice regressions before the fixed schedule. On manual
+- [x] Run contracts/voice regressions before the fixed schedule. On manual
   dispatch, enable `VOICE_GRAPH_MEASURE=1` and run only probe recordings.
   Write evidence even on failure and run analysis with `if: always()` only when
   collection was attempted. Upload evidence and separate small reports.
@@ -198,3 +198,16 @@ validation, task 6 covers durable evidence. No stage adds a tap or changes rates
 The extra hooks activate after the old init script has executed but before
 recording; this resolves constructor composition ordering without editing the
 historical helper.
+
+## Execution checkpoints
+
+- `3f2e15d`: plan and red contracts; Actions `36095410734` failed solely because
+  the two intended implementation modules did not yet exist.
+- `d541c86`: initial implementation; Actions `36099042121` passed.
+- `7d94ab8`: decoded-buffer identity, track metadata, event/provenance checks,
+  partial evidence retention and expanded synthetic contracts.
+- `004535c`: explicit corrupt/missing-report handling and readable stage table.
+  Actions `36099253859` passed numerical contracts, inherited signal contracts,
+  build, app/test type checks and Chromium/WebKit voice regressions.
+- Manual fixed measurement dispatched as `36099685493` at `004535c`.
+  No measurement outcome is asserted until its report is reviewed.
