@@ -10,6 +10,7 @@ import sys
 from voice_browser_evidence import BASELINE_ARCHIVES, load_platform
 from voice_feature_exchange import file_hash, write_json
 from voice_feature_process import run_native
+from voice_browser_cases import CASES
 
 
 def parse_text(stdout):
@@ -27,11 +28,15 @@ def parse_text(stdout):
     return values[0].strip()
 
 
-def run(evidence, runtime, model, output):
+def run(evidence, runtime, model, output, mode=None):
+    if mode not in (None, "matrix"):
+        raise ValueError("Unknown browser baseline mode")
+    cases = CASES if mode == "matrix" else None
     if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "linux":
         raise RuntimeError("Baseline replay requires Linux Actions")
     evidence, runtime, model, output = map(Path, (evidence, runtime, model, output))
     identity = {"run": os.environ["GITHUB_RUN_ID"], "commit": os.environ["GITHUB_SHA"]}
+    case_identity = {"cases": list(cases)} if cases is not None else {}
     for name, expected in BASELINE_ARCHIVES.items():
         if file_hash(f"{name}.tar.bz2") != expected:
             raise ValueError("Frozen baseline archive differs")
@@ -42,16 +47,19 @@ def run(evidence, runtime, model, output):
             "--sense-voice-language=auto", "--sense-voice-use-itn=1"]
     output.mkdir(parents=True, exist_ok=False)
     write_json(output / "environment.json", {
-        **identity, "archives": BASELINE_ARCHIVES, "platform": platform.platform(),
+        **identity, **case_identity, "archives": BASELINE_ARCHIVES, "platform": platform.platform(),
         "files": {str(p): file_hash(p) for p in (binary, model / "model.int8.onnx", model / "tokens.txt")},
         "arguments": args, "libraryPath": str(runtime.resolve() / "lib"), "threads": 2, "timeout": 120,
         "scope": "Same-upload accuracy diagnostic only; no quality-gate substitution or latency approval.",
     })
     with (output / "results.jsonl").open("w", encoding="utf-8", buffering=1) as log:
-        for producer in ("linux", "win32"):
-            _, rows, _ = load_platform(evidence / producer, producer, **identity)
+        for producer in cases if cases is not None else ("linux", "win32"):
+            host = cases[producer]["platform"] if cases is not None else producer
+            _, rows, _ = load_platform(evidence / producer, host, **identity,
+                                      case_id=producer if cases is not None else None)
             for row in sorted((r for r in rows if r["pipeline"] == "browser"), key=lambda r: r["id"]):
-                result = {"platform": producer, "id": row["id"],
+                result = {"platform": host, "id": row["id"],
+                          **({"caseId": producer} if cases is not None else {}),
                           "uploadedAudioSha256": row["uploadedAudioSha256"],
                           "text": None, "failure": "unavailable_input", "seconds": None, "unavailable": True}
                 if row["uploadedDuration"] is not None:
@@ -68,7 +76,7 @@ def run(evidence, runtime, model, output):
                             result["failure"] = "invalid_baseline_json"
                 log.write(json.dumps(result, ensure_ascii=False) + "\n")
                 print(f"{producer}/{row['id']} failure={result['failure']}", flush=True)
-    write_json(output / "complete.json", {"count": 200, **identity})
+    write_json(output / "complete.json", {"count": 200, **identity, **case_identity})
 
 
 if __name__ == "__main__":

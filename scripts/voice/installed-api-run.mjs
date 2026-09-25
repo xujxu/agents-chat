@@ -1,20 +1,27 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { chmod, copyFile, mkdir, open, readFile, readdir, writeFile } from 'node:fs/promises';
 import { cpus, release, totalmem, freemem, tmpdir } from 'node:os';
 import path from 'node:path';
 import { decodeEnvironment } from './configuration-files.mjs';
 import { voiceValues } from './setup-config.mjs';
+import { browserEvidenceDirectory, browserImplementationFiles, selectBrowserCase } from './browser-cases.ts';
 
-const [packageDirectory, model, mode = 'direct'] = process.argv.slice(2);
+const [packageDirectory, model, mode = 'direct', caseId] = process.argv.slice(2);
 assert.ok(['sensevoice-small-q8', 'whisper-base-q5_1'].includes(model));
 assert.ok(['direct', 'browser'].includes(mode));
 assert.ok(mode !== 'browser' || model === 'sensevoice-small-q8');
 const browser = mode === 'browser';
-const evidence = browser ? 'installed-browser-evidence' : 'installed-evidence';
-const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('VOICE_')));
+const selectedCase = caseId === undefined ? undefined : selectBrowserCase(caseId);
+assert.ok(!selectedCase || (browser && selectedCase.platform === process.platform), 'Case/host mismatch');
+const evidence = browser ? browserEvidenceDirectory(caseId) : 'installed-evidence';
+const config = selectedCase ? 'tests/playwright.voice-matrix.config.ts' : 'tests/playwright.config.ts';
+const project = selectedCase?.project ?? 'desktop-chromium';
+const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+  !key.toUpperCase().startsWith('VOICE_') && key !== 'INSTALLED_BROWSER_CASE'));
+if (caseId !== undefined) environment.INSTALLED_BROWSER_CASE = caseId;
 function closed(child) {
   return new Promise((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
 }
@@ -23,6 +30,12 @@ async function run(args, env = environment) {
   assert.equal(await closed(child), 0, 'Acceptance subprocess failed');
 }
 await mkdir(evidence, { recursive: true });
+async function phase(status) {
+  if (selectedCase) await writeFile(path.join(evidence, 'status.json'), JSON.stringify({
+    caseId, status, run: process.env.GITHUB_RUN_ID, commit: process.env.GITHUB_SHA,
+  }));
+}
+await phase('installing');
 const raw = await readFile(path.join(packageDirectory, 'voice-package.json'));
 const digest = createHash('sha256').update(raw).digest('hex');
 const manifest = JSON.parse(raw);
@@ -54,14 +67,29 @@ if (browser) {
     await copyFile(path.join('corpus', name), path.join(evidence, name));
   }
   const implementation = {};
-  for (const name of ['app/features/composer/voice/voiceRecorder.ts', 'app/features/composer/voice/useVoiceInput.ts',
+  for (const name of selectedCase ? browserImplementationFiles : ['app/features/composer/voice/voiceRecorder.ts', 'app/features/composer/voice/useVoiceInput.ts',
     'public/voice/recorder-worklet.js', 'lib/voice/audio.ts', 'lib/voice/process.ts',
     'tests/helpers/voiceBrowserCapture.ts', 'tests/voice-installed-browser.spec.ts']) {
     implementation[name] = createHash('sha256').update(await readFile(name)).digest('hex');
   }
   await writeFile(path.join(evidence, 'implementation.json'), JSON.stringify(implementation, null, 2));
 }
+if (selectedCase?.channel === 'msedge') {
+  const programFiles = process.env['ProgramFiles(x86)'];
+  assert.ok(programFiles, 'Edge installation root unavailable');
+  const executable = path.join(programFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe');
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(executable)) hash.update(chunk);
+  const version = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    '(Get-Item -LiteralPath $env:EDGE_DIAGNOSTIC_PATH).VersionInfo.ProductVersion'],
+  { encoding: 'utf8', env: { ...environment, EDGE_DIAGNOSTIC_PATH: executable } }).trim();
+  assert.ok(version, 'Edge executable version unavailable');
+  await writeFile(path.join(evidence, 'edge-executable.json'), JSON.stringify({
+    path: executable, version, sha256: hash.digest('hex'),
+  }));
+}
 await writeFile(path.join(evidence, 'environment.json'), JSON.stringify({
+  ...(selectedCase ? { caseId, selectedCase } : {}),
   commit: process.env.GITHUB_SHA, run: process.env.GITHUB_RUN_ID, platform: process.platform,
   release: release(), architecture: process.arch, cpu: cpus()[0]?.model, logicalCpus: cpus().length,
   totalPhysicalBytes: totalmem(), availablePhysicalBytes: freemem(), model,
@@ -91,14 +119,17 @@ try {
   }
   assert.ok(ready, 'Installed app did not become ready');
   if (browser) {
-    await run(['node_modules/@playwright/test/cli.js', 'test', '--config', 'tests/playwright.config.ts',
+    await phase('compatibility_running');
+    await run(['node_modules/@playwright/test/cli.js', 'test', '--config', config,
       'tests/voice-browser-capture.spec.ts', 'tests/voice-input.spec.ts',
-      '--project=desktop-chromium', '--workers=1', '--reporter=line', '--trace=off',
+      `--project=${project}`, '--workers=1', '--reporter=line', '--trace=off',
       '--output=browser-private-fixture-output']);
+    await phase('compatibility_passed');
   }
-  await run(['node_modules/@playwright/test/cli.js', 'test', '--config', 'tests/playwright.config.ts',
+  await phase('corpus_running');
+  await run(['node_modules/@playwright/test/cli.js', 'test', '--config', config,
     browser ? 'tests/voice-installed-browser.spec.ts' : 'tests/voice-installed-corpus.spec.ts',
-    '--project=desktop-chromium', '--workers=1', '--reporter=line',
+    `--project=${project}`, '--workers=1', '--reporter=line',
     browser ? '--global-timeout=4600000' : '--global-timeout=1900000', '--trace=off', '--output=installed-test-output'],
   { ...environment, [browser ? 'INSTALLED_BROWSER_ACCEPTANCE' : 'INSTALLED_VOICE_ACCEPTANCE']: '1', INSTALLED_MODEL: model });
 } finally {
@@ -108,3 +139,4 @@ try {
 }
 assert.deepEqual((await readdir(tmpdir())).filter(name => name.startsWith('agents-chat-voice-')).sort(), before,
   'Installed requests leaked temporary directories');
+await phase('complete');

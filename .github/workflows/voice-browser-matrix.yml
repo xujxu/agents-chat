@@ -26,3 +26,226 @@ jobs:
           python-version: '3.12'
       - run: pip install opencc-python-reimplemented==0.1.7
       - run: python -m unittest discover -s scripts -p 'test_voice_browser_*.py' -v
+  compatibility:
+    needs: contracts
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            case: win32-edge
+            browser: msedge
+            project: installed-edge
+          - os: ubuntu-24.04
+            case: linux-webkit-mobile
+            browser: webkit
+            project: installed-webkit-mobile
+    env:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-browser-matrix-fixture-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
+      INSTALLED_BROWSER_CASE: ${{ matrix.case }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2017 --lib dom,dom.iterable,esnext --module esnext --moduleResolution bundler --jsx react-jsx tests/playwright.voice-matrix.config.ts tests/voice-installed-browser.spec.ts tests/voice-browser-capture.spec.ts
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: npm run build
+      - run: npx tsc --noEmit --incremental false
+      - name: Existing voice regressions and observational capture controls
+        run: |
+          mkdir -p compatibility
+          node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3011 > matrix-private-server.log 2>&1 &
+          app=$!
+          trap 'kill "$app"; wait "$app" || true' EXIT
+          ready=0
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent --max-time 2 http://localhost:3011/api/auth/providers >/dev/null; then ready=1; break; fi
+            if ! kill -0 "$app" 2>/dev/null; then echo 'Fixture server exited before readiness'; exit 1; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          npx playwright test --config tests/playwright.voice-matrix.config.ts \
+            tests/voice-browser-capture.spec.ts tests/voice-input.spec.ts \
+            --project=${{ matrix.project }} --workers=1 --reporter=line --trace=off \
+            --global-timeout=600000 2>&1 | tee compatibility/fixtures.log
+      - name: Retain explicit compatibility status
+        if: always()
+        env:
+          COMPATIBILITY_STATUS: ${{ job.status }}
+        run: |
+          mkdir -p compatibility
+          node -e "require('fs').writeFileSync('compatibility/status.json', JSON.stringify({caseId:process.env.INSTALLED_BROWSER_CASE,status:process.env.COMPATIBILITY_STATUS,run:process.env.GITHUB_RUN_ID,commit:process.env.GITHUB_SHA}))"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compatibility-${{ matrix.case }}
+          path: compatibility/
+          if-no-files-found: error
+          retention-days: 30
+  collect:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [contracts, compatibility]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 95
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            case: win32-edge
+            browser: msedge
+            package_run: '35987278609'
+            artifact: '10802394350'
+          - os: ubuntu-24.04
+            case: linux-webkit-mobile
+            browser: webkit
+            package_run: '35968099304'
+            artifact: '10794617845'
+    env:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-installed-matrix-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10748244312
+          merge-multiple: true
+          path: short
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35863991538
+          artifact-ids: 10752270787
+          merge-multiple: true
+          path: meeting
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ matrix.package_run }}
+          artifact-ids: ${{ matrix.artifact }}
+          merge-multiple: true
+          path: package
+      - run: python scripts/voice_chain_report.py prepare short meeting corpus
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: npm run build
+      - name: Installed Sense paired API and browser corpus
+        run: node scripts/voice/installed-api-run.mjs package sensevoice-small-q8 browser ${{ matrix.case }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installed-browser-${{ matrix.case }}
+          path: installed-browser-${{ matrix.case }}/
+          if-no-files-found: error
+          retention-days: 30
+  baseline:
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
+    needs: collect
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        with:
+          name: installed-browser-win32-edge
+          path: evidence/win32-edge
+      - uses: actions/download-artifact@v4
+        with:
+          name: installed-browser-linux-webkit-mobile
+          path: evidence/linux-webkit-mobile
+      - name: Prepare original fixed ONNX baseline
+        run: |
+          mkdir sherpa sense
+          curl -fL --retry 3 --max-time 240 https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared-no-tts.tar.bz2 -o runtime.tar.bz2
+          echo 'd0f96c8b65c6cd0974fada22737e337de81bc8cd2abbec2e39caf358b1eec5fc  runtime.tar.bz2' | sha256sum --check
+          tar -xjf runtime.tar.bz2 --strip-components=1 -C sherpa
+          curl -fL --retry 3 --max-time 600 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2 -o model.tar.bz2
+          echo '7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e  model.tar.bz2' | sha256sum --check
+          tar -xjf model.tar.bz2 --strip-components=1 -C sense
+      - run: python scripts/voice_browser_baseline.py evidence sherpa sense baseline matrix
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installed-matrix-baseline
+          path: baseline/
+          if-no-files-found: error
+          retention-days: 30
+  report:
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
+    needs: [collect, baseline]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: installed-browser-win32-edge
+          path: evidence/win32-edge
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: installed-browser-linux-webkit-mobile
+          path: evidence/linux-webkit-mobile
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: installed-matrix-baseline
+          path: baseline
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10751002303
+          merge-multiple: true
+          path: short-baseline
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35870441019
+          artifact-ids: 10755950119
+          merge-multiple: true
+          path: long-baseline
+      - run: python scripts/voice_browser_evidence.py evidence baseline short-baseline/scored-results.jsonl long-baseline/long-report/scored-results.json browser-report matrix
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installed-matrix-report
+          path: browser-report/
+          if-no-files-found: error
+          retention-days: 30

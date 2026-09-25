@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { errors, expect, test, type Page } from '@playwright/test';
+import { devices, errors, expect, test, type Page } from '@playwright/test';
+import { browserEvidenceDirectory, selectBrowserCase } from '../scripts/voice/browser-cases';
 import { validateVoiceWav, VoiceError } from '../lib/voice/audio';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
 import { armBrowserCapture, installBrowserCapture, playBrowserCapture, snapshotBrowserCapture,
@@ -9,11 +10,15 @@ import { armBrowserCapture, installBrowserCapture, playBrowserCapture, snapshotB
 type Sample = { id: string; reference: string; category: string; dataset: string; duration: number;
   split: string; audio_sha256: string };
 type Attempt = Sample & {
+  caseId?: string;
   platform: string; pipeline: 'direct' | 'browser'; text: string | null; apiText: string | null;
   failure: string | null; seconds: number | null; status: number | null; apiElapsedMs: number | null;
   uploadedAudioSha256: string | null; uploadedDuration: number | null;
   timing: BrowserCaptureSnapshot['timing'] | null; capture: BrowserCaptureSnapshot['capture'] | null;
 };
+const caseId = process.env.INSTALLED_BROWSER_CASE;
+const selectedCase = caseId === undefined ? undefined : selectBrowserCase(caseId);
+const evidence = browserEvidenceDirectory(caseId);
 type ResponseBody = { ok: true; text: string; elapsedMs: number } | { ok: false; error: string };
 function bodyOf(value: unknown, status: number): ResponseBody {
   if (!value || typeof value !== 'object' || !('ok' in value)) throw new Error('Invalid voice response object');
@@ -26,7 +31,7 @@ function bodyOf(value: unknown, status: number): ResponseBody {
   throw new Error('Unexpected voice status or response fields');
 }
 function initial(sample: Sample, pipeline: Attempt['pipeline']): Attempt {
-  return { ...sample, platform: process.platform, pipeline, text: null, apiText: null, failure: null,
+  return { ...sample, ...(selectedCase ? { caseId } : {}), platform: process.platform, pipeline, text: null, apiText: null, failure: null,
     seconds: null, status: null, apiElapsedMs: null, uploadedAudioSha256: null, uploadedDuration: null,
     timing: null, capture: null };
 }
@@ -106,7 +111,7 @@ async function browser(page: Page, sample: Sample, audio: Buffer): Promise<Attem
   row.capture = snapshot.capture;
   if (snapshot.uploadBase64 !== null) {
     const bytes = Buffer.from(snapshot.uploadBase64, 'base64');
-    await writeFile(`installed-browser-evidence/captured/${sample.id}.wav`, bytes);
+    await writeFile(`${evidence}/captured/${sample.id}.wav`, bytes);
     row.uploadedAudioSha256 = createHash('sha256').update(bytes).digest('hex');
     try {
       row.uploadedDuration = validateVoiceWav(bytes).durationSeconds;
@@ -127,36 +132,69 @@ async function browser(page: Page, sample: Sample, audio: Buffer): Promise<Attem
   return row;
 }
 
-test('installed Sense records frozen100 through actual paired browser and API paths', async ({ page, browserName, browser: instance }) => {
+test('installed Sense records frozen100 through actual paired browser and API paths', async ({ page, browserName, browser: instance }, testInfo) => {
   test.skip(process.env.INSTALLED_BROWSER_ACCEPTANCE !== '1', 'Actions-only installed browser corpus');
   test.setTimeout(4_500_000);
   const samples: Sample[] = JSON.parse(await readFile('corpus/samples.json', 'utf8'));
   expect(samples).toHaveLength(100);
   expect(new Set(samples.map(sample => sample.id)).size).toBe(100);
-  await mkdir('installed-browser-evidence/captured', { recursive: true });
-  await writeFile('installed-browser-evidence/results.jsonl', '');
+  await mkdir(`${evidence}/captured`, { recursive: true });
+  await writeFile(`${evidence}/results.jsonl`, '');
+  let caseMetadata = {};
+  if (selectedCase) {
+    expect(process.platform).toBe(selectedCase.platform);
+    expect(testInfo.project.name).toBe(selectedCase.project);
+    expect(browserName).toBe(selectedCase.browserName);
+    expect(testInfo.project.use.channel ?? null).toBe(selectedCase.channel);
+    const descriptor = devices[selectedCase.device];
+    const requestedDeviceSettings = {
+      viewport: descriptor.viewport, isMobile: descriptor.isMobile, hasTouch: descriptor.hasTouch,
+      deviceScaleFactor: descriptor.deviceScaleFactor, userAgent: descriptor.userAgent,
+    };
+    const deviceSettings = {
+      viewport: testInfo.project.use.viewport, isMobile: testInfo.project.use.isMobile,
+      hasTouch: testInfo.project.use.hasTouch, deviceScaleFactor: testInfo.project.use.deviceScaleFactor,
+      userAgent: testInfo.project.use.userAgent,
+    };
+    expect(deviceSettings).toEqual(requestedDeviceSettings);
+    const userAgent = await page.evaluate(() => navigator.userAgent);
+    const executable: unknown = selectedCase.channel === 'msedge'
+      ? JSON.parse(await readFile(`${evidence}/edge-executable.json`, 'utf8')) : null;
+    if (selectedCase.channel === 'msedge') expect(userAgent).toMatch(/\bEdg\/\d/);
+    const playwrightPackage: unknown = JSON.parse(await readFile('node_modules/@playwright/test/package.json', 'utf8'));
+    if (!playwrightPackage || typeof playwrightPackage !== 'object' || !('version' in playwrightPackage)
+      || typeof playwrightPackage.version !== 'string') throw new Error('Missing Playwright version');
+    caseMetadata = { ...selectedCase, caseId, deviceSettings, requestedDeviceSettings,
+      executable, playwrightVersion: playwrightPackage.version };
+    await writeFile(`${evidence}/source-manifest.json`, JSON.stringify({ caseId, samples }));
+  }
   await installMobileChatFixture(page);
   await installBrowserCapture(page);
   await loginMobileFixture(page);
   expect(await (await page.context().request.get('/api/voice')).json()).toMatchObject({
     enabled: true, model: 'sensevoice-small-q8', resourcePolicy: 'standard', threads: 2,
   });
-  await writeFile('installed-browser-evidence/browser.json', JSON.stringify({
+  await writeFile(`${evidence}/browser.json`, JSON.stringify({
+    ...caseMetadata,
     browserName, version: instance.version(), userAgent: await page.evaluate(() => navigator.userAgent),
     sourceRate: 48000, composerObservation: 'requestAnimationFrame after actual value update',
     scope: 'Controlled public-corpus MediaStream; no physical microphone, AEC or actual Win11 claim.',
   }, null, 2));
+  const uploads: { caseId: string | undefined; id: string; uploadedAudioSha256: string | null }[] = [];
   for (const sample of samples.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) {
     const audio = await readFile(`corpus/audio/${sample.id}.wav`);
     expect(createHash('sha256').update(audio).digest('hex')).toBe(sample.audio_sha256);
     expect(validateVoiceWav(audio).durationSeconds).toBeCloseTo(sample.duration, 6);
     for (const collect of [direct, browser]) {
       const row = await collect(page, sample, audio);
-      await appendFile('installed-browser-evidence/results.jsonl', JSON.stringify(row) + '\n');
+      await appendFile(`${evidence}/results.jsonl`, JSON.stringify(row) + '\n');
+      if (row.pipeline === 'browser') uploads.push({ caseId, id: sample.id, uploadedAudioSha256: row.uploadedAudioSha256 });
       console.log(`${sample.id} ${row.pipeline} status=${row.status} failure=${row.failure} seconds=${row.seconds}`);
     }
   }
-  await writeFile('installed-browser-evidence/complete.json', JSON.stringify({
+  if (selectedCase) await writeFile(`${evidence}/upload-manifest.json`, JSON.stringify({ caseId, uploads }));
+  await writeFile(`${evidence}/complete.json`, JSON.stringify({
+    ...(selectedCase ? { caseId, run: process.env.GITHUB_RUN_ID, commit: process.env.GITHUB_SHA } : {}),
     platform: process.platform, sources: 100, attempts: 200, model: 'sensevoice-small-q8',
   }));
 });

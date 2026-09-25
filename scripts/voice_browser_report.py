@@ -81,14 +81,24 @@ def validate_attempt(row):
             raise ValueError("Successful browser capture is incomplete")
 
 
-def browser_report(samples, rows, original, baseline):
+def browser_report(samples, rows, original, baseline, *, cases=None):
+    group_key = "caseId" if cases is not None else "platform"
+    groups = tuple(cases) if cases is not None else PLATFORMS
+    if cases is not None:
+        for row in rows + baseline:
+            if row.get("caseId") not in cases or row.get("platform") != cases[row["caseId"]]["platform"]:
+                raise ValueError("Case/host identity differs")
+
+    def identity(group):
+        return {"caseId": group, "platform": cases[group]["platform"]} if cases is not None else {"platform": group}
+
     selected = {s["id"]: s for s in samples}
     if (len(samples) != 100 or len(selected) != 100
             or Counter(s["dataset"] for s in samples) != {"ASCEND": 60, "AISHELL-4": 40}
             or any(not digest(s["audio_sha256"]) or not finite(s["duration"]) for s in samples)):
         raise ValueError("Expected frozen100 source identities")
-    expected = set(itertools.product(PLATFORMS, selected, PIPELINES))
-    indexed = {(r["platform"], r["id"], r["pipeline"]): r for r in rows}
+    expected = set(itertools.product(groups, selected, PIPELINES))
+    indexed = {(r[group_key], r["id"], r["pipeline"]): r for r in rows}
     if len(indexed) != len(rows) or set(indexed) != expected:
         raise ValueError("Incomplete, duplicate or unexpected browser matrix")
     prior = {r["id"]: r for r in original}
@@ -106,8 +116,8 @@ def browser_report(samples, rows, original, baseline):
         validate_attempt(row)
     prior_scores = {sid: evaluate(row)["delivered_score"] for sid, row in prior.items()}
     cells = []
-    for platform, pipeline in itertools.product(PLATFORMS, PIPELINES):
-        group = [r for r in rows if (r["platform"], r["pipeline"]) == (platform, pipeline)]
+    for platform, pipeline in itertools.product(groups, PIPELINES):
+        group = [r for r in rows if (r[group_key], r["pipeline"]) == (platform, pipeline)]
         scores = {r["id"]: evaluate(r)["delivered_score"] for r in group}
         quality, duration_metrics, violations = [], [], []
         if any(r["failure"] for r in group):
@@ -142,12 +152,12 @@ def browser_report(samples, rows, original, baseline):
                                      "successful_p95_seconds": p95(successful) if successful else None,
                                      "http_observed": len(http), "http_p95_seconds": p95(http) if http else None,
                                      "api_observed": len(api), "api_p95_seconds": p95(api) if api else None})
-        cells.append({"platform": platform, "pipeline": pipeline, "delivered": sum(not r["failure"] for r in group),
+        cells.append({**identity(platform), "pipeline": pipeline, "delivered": sum(not r["failure"] for r in group),
                       "eligible": not violations, "violations": violations, "quality": quality,
                       "duration": duration_metrics,
                       "failures": [{"id": r["id"], "failure": r["failure"]} for r in group if r["failure"]]})
-    baseline_index = {(r["platform"], r["id"]): r for r in baseline}
-    if len(baseline_index) != len(baseline) or set(baseline_index) != set(itertools.product(PLATFORMS, selected)):
+    baseline_index = {(r[group_key], r["id"]): r for r in baseline}
+    if len(baseline_index) != len(baseline) or set(baseline_index) != set(itertools.product(groups, selected)):
         raise ValueError("Same-byte baseline coverage differs")
     comparisons = []
     for key, reference in baseline_index.items():
@@ -163,7 +173,7 @@ def browser_report(samples, rows, original, baseline):
             if not digest(reference["uploadedAudioSha256"]) or not finite(reference["seconds"]):
                 raise ValueError("Baseline execution identity/timing differs")
             available = reference["failure"] is None and row["status"] == 200 and bool(row["apiText"])
-        comparison = {"platform": key[0], "id": key[1], "available": available,
+        comparison = {**identity(key[0]), "id": key[1], "available": available,
                       "input_unavailable": reference["unavailable"], "baseline_failure": reference["failure"],
                       "primary_failure": row["failure"]}
         if available:
@@ -173,11 +183,11 @@ def browser_report(samples, rows, original, baseline):
                 original_baseline_score=prior_scores[key[1]],
             )
         comparisons.append(comparison)
-    pairs = [{"platform": platform, "id": sid,
+    pairs = [{**identity(platform), "id": sid,
               "both_delivered": not indexed[platform, sid, "direct"]["failure"] and not indexed[platform, sid, "browser"]["failure"],
               "equal": None if indexed[platform, sid, "direct"]["failure"] or indexed[platform, sid, "browser"]["failure"]
               else indexed[platform, sid, "direct"]["text"] == indexed[platform, sid, "browser"]["text"]}
-             for platform, sid in itertools.product(PLATFORMS, selected)]
+             for platform, sid in itertools.product(groups, selected)]
     return {"attempts": len(rows), "cells": cells, "primary_pass": all(c["eligible"] for c in cells),
             "release_approved": False, "comparison": "Original-stimulus end-to-end; not identical recognizer PCM.",
             "diagnostics": {"available": sum(c["available"] for c in comparisons),
