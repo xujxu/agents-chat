@@ -38,7 +38,17 @@ async function start(page: Page, seconds = 1) {
 
 test('capture observer preserves upload bytes and stop-to-composer milestones', async ({ page }) => {
   let actual: Buffer | null = null;
+  const requests: { method: string | undefined; bytes: number }[] = [];
   const server = createServer((request, response) => {
+    response.setHeader('access-control-allow-origin', new URL(process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3010').origin);
+    response.setHeader('access-control-allow-credentials', 'true');
+    response.setHeader('access-control-allow-methods', 'POST, OPTIONS');
+    response.setHeader('access-control-allow-headers', 'content-type, x-voice-user-id, x-voice-request-id');
+    if (request.method === 'OPTIONS') {
+      requests.push({ method: request.method, bytes: 0 });
+      response.writeHead(204).end();
+      return;
+    }
     const chunks: Buffer[] = [];
     let size = 0;
     request.on('data', (chunk: Buffer) => {
@@ -46,12 +56,13 @@ test('capture observer preserves upload bytes and stop-to-composer milestones', 
       if (size <= 960044) chunks.push(chunk);
     });
     request.on('end', () => {
+      requests.push({ method: request.method, bytes: size });
       if (request.method !== 'POST' || size > 960044) {
         response.writeHead(400).end();
         return;
       }
       actual = Buffer.concat(chunks);
-      response.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+      response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ ok: true, text: transcript, elapsedMs: 1 }));
     });
     request.on('error', error => response.destroy(error));
@@ -81,6 +92,13 @@ test('capture observer preserves upload bytes and stop-to-composer milestones', 
     expect(snapshot.timing.fetchAt!).toBeGreaterThanOrEqual(snapshot.timing.workletStopAt!);
     expect(snapshot.timing.composerAt!).toBeGreaterThan(snapshot.timing.stopAt!);
     expect(snapshot.capture).toMatchObject({ sourceRate: 48000, sourceCompleted: true, tracksStopped: true, contextClosed: true });
+  } catch (error) {
+    const snapshot = await snapshotBrowserCapture(page);
+    console.error('Upload fixture evidence', {
+      requests, status: snapshot.status, body: snapshot.body, fetchFailure: snapshot.fetchFailure,
+      observerError: snapshot.observerError, timing: snapshot.timing, capture: snapshot.capture,
+    });
+    throw error;
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));

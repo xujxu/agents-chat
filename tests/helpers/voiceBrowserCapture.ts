@@ -24,6 +24,17 @@ declare global {
 
 export async function installBrowserCapture(page: Page): Promise<void> {
   await page.addInitScript(() => {
+    const ownedTracks = new Map<string, () => void>();
+    const nativeStop = MediaStreamTrack.prototype.stop;
+    // WebKit can return different JS wrappers for the same native track.
+    MediaStreamTrack.prototype.stop = function () {
+      nativeStop.call(this);
+      const cleanup = ownedTracks.get(this.id);
+      if (cleanup) {
+        ownedTracks.delete(this.id);
+        cleanup();
+      }
+    };
     const nativeFetch = window.fetch;
     window.fetch = (input, init) => {
       const pending = nativeFetch.call(window, input, init);
@@ -108,15 +119,13 @@ export async function installBrowserCapture(page: Page): Promise<void> {
           source.start();
         };
         for (const track of destination.stream.getTracks()) {
-          const stop = track.stop.bind(track);
-          track.stop = () => {
+          ownedTracks.set(track.id, () => {
             state.capture.sourceCompleted = complete();
             state.capture.tracksStopped = true;
-            stop();
             if (startTime !== null) source.stop();
             void context.close().then(() => { state.capture.contextClosed = true; },
               () => { state.observerError = 'source_context_cleanup_failed'; });
-          };
+          });
         }
         return destination.stream;
       },
