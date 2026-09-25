@@ -15,7 +15,7 @@ for (const sid of selected) {
   test(`installed lifecycle ${activePhase}${sid ? ` ${sid}` : ''}`, async ({ page, browser }, info) => {
     test.skip(!phase, 'Requires the Actions installed lifecycle runner');
     const id = `${info.project.name}/${activePhase}${sid ? `/${sid}` : ''}`;
-    const directory = `lifecycle-evidence/records/${id}`;
+    const directory = `${process.env.LIFECYCLE_RECORD_ROOT || 'lifecycle-evidence/records'}/${id}`;
     mkdirSync(directory, { recursive: true });
     const row: LifecycleRecord = {
       id, project: info.project.name, phase: activePhase, sample: sid,

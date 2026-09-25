@@ -6,6 +6,7 @@ param(
     [string]$TaskName = 'Agents-Chat-Startup',
     [string]$ProjectDir = (Split-Path -Parent $PSScriptRoot),
     [switch]$SkipGitPull,
+    [switch]$NoTunnel,
     [switch]$RemoveTask,
     [ValidateSet('Interactive', 'S4U')]
     [string]$TaskLogonType = 'Interactive',
@@ -23,6 +24,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'voice\windows\configure.ps1')
+. (Join-Path $PSScriptRoot 'voice\windows\task-mode.ps1')
 
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -87,7 +89,8 @@ function Test-TaskMatchesExpectedConfiguration {
         $Task.Triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' }
     }
 
-    return $hasExpectedLogon -and $hasExpectedAction -and [bool]$hasExpectedTrigger
+    $hasExpectedMode = (Get-TaskNoTunnelMode -Task $Task) -eq $EffectiveNoTunnel
+    return $hasExpectedLogon -and $hasExpectedAction -and [bool]$hasExpectedTrigger -and $hasExpectedMode
 }
 
 function Install-AgentsChatTask {
@@ -96,7 +99,7 @@ function Install-AgentsChatTask {
         throw "Install script not found: $InstallScript"
     }
 
-    & $InstallScript -TaskName $TaskName -ProjectDir $ProjectDir -UserId $DeploymentUser -LogonType $TaskLogonType -TriggerType $TaskTriggerType
+    & $InstallScript -TaskName $TaskName -ProjectDir $ProjectDir -UserId $DeploymentUser -LogonType $TaskLogonType -TriggerType $TaskTriggerType -NoTunnel:$EffectiveNoTunnel
     if ($LASTEXITCODE -ne 0) { throw "Failed to install Scheduled Task via $InstallScript" }
 }
 
@@ -150,6 +153,7 @@ npm install --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
 
 $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+$EffectiveNoTunnel = Get-TaskNoTunnelMode -Task $task -Explicit $PSBoundParameters.ContainsKey('NoTunnel') -Requested ([bool]$NoTunnel)
 $DeploymentUser = if ($task) { $task.Principal.UserId } else { [Security.Principal.WindowsIdentity]::GetCurrent().Name }
 if (-not $DeploymentUser) { throw 'Scheduled Task identity is unavailable; refusing voice configuration.' }
 $VoiceReceipt = Join-Path $ProjectDir ('.voice-setup-receipt.' + [guid]::NewGuid().ToString() + '.json')

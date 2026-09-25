@@ -35,3 +35,103 @@ jobs:
       - run: node --test --test-concurrency=1 tests/voice-setup-files.test.mjs tests/voice-setup-activation.test.mjs
       - run: node tests/deploy-script-scheduled-task.test.js
       - run: node tests/start-script-healthcheck.test.js
+  service:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contracts
+    timeout-minutes: 55
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+            browsers: chromium webkit
+            scenario: fresh-selected
+          - os: ubuntu-24.04
+            platform: linux
+            browsers: chromium webkit
+            scenario: upgrade-enable
+          - os: windows-2022
+            platform: win32
+            browsers: msedge
+            scenario: fresh-selected
+          - os: windows-2022
+            platform: win32
+            browsers: msedge
+            scenario: upgrade-enable
+    env:
+      PYTHONUTF8: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/service-browsers
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2017 --lib dom,dom.iterable,esnext --module esnext --moduleResolution bundler --jsx react-jsx tests/voice-lifecycle.spec.ts
+      - run: npx playwright install --with-deps ${{ matrix.browsers }}
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - name: Prepare fixed speech only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VOICE_LIFECYCLE_DOWNLOAD: 'true'
+        run: python scripts/voice_lifecycle_prepare.py ${{ matrix.platform }}
+      - if: runner.os == 'Linux'
+        name: Actual systemd install and upgrades
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sudo --preserve-env=PATH,GH_TOKEN,GITHUB_ACTIONS,GITHUB_RUN_ID,GITHUB_SHA,RUNNER_ENVIRONMENT,RUNNER_TEMP,PLAYWRIGHT_BROWSERS_PATH node scripts/voice/service-run.mjs ${{ matrix.scenario }}
+      - if: runner.os == 'Windows'
+        name: Actual Scheduled Task install and upgrades
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/voice/service-run.mjs ${{ matrix.scenario }}
+      - if: ${{ always() && runner.os == 'Linux' }}
+        name: Owned systemd fallback cleanup
+        run: sudo --preserve-env=PATH,GITHUB_ACTIONS,GITHUB_RUN_ID,GITHUB_SHA,RUNNER_ENVIRONMENT,RUNNER_TEMP node scripts/voice/service-run.mjs ${{ matrix.scenario }} --cleanup
+      - if: ${{ always() && runner.os == 'Windows' }}
+        name: Owned Scheduled Task fallback cleanup
+        run: node scripts/voice/service-run.mjs ${{ matrix.scenario }} --cleanup
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-service-${{ matrix.platform }}-${{ matrix.scenario }}
+          path: service-evidence/
+          if-no-files-found: error
+          retention-days: 30
+  report:
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
+    needs: service
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: voice-service-*
+          path: service-downloads
+      - run: |
+          mkdir service-hosts
+          for platform in linux win32; do
+            for scenario in fresh-selected upgrade-enable; do
+              if test -d "service-downloads/voice-service-$platform-$scenario"; then
+                mv "service-downloads/voice-service-$platform-$scenario" "service-hosts/$platform-$scenario"
+              fi
+            done
+          done
+          node scripts/voice/service-report.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-service-report
+          path: service-report/
+          if-no-files-found: error
+          retention-days: 30

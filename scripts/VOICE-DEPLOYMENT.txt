@@ -10,6 +10,20 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Real service deployment work (2026-09-25, not yet accepted)
+---------------------------------------------------------
+Spec24f28fa; plan/red5e90931;red Actions36139526145 confirmed missing contracts.
+Windows scheduled deployment now accepts -NoTunnel, forwards it through the task
+and watchdog, and preserves that mode on upgrades when the switch is omitted.
+Explicit -NoTunnel:$false switches back to existing tunnel behavior.
+Fresh deployments without -NoTunnel retain their prior tunnel-enabled default.
+Use -NoTunnel only behind your own HTTPS reverse proxy or for loopback access;
+remote microphone capture still requires HTTPS. No tunnel account is configured.
+scripts/setup.ps1 remains the tunnel-provisioning helper; service E2E uses deploy.
+Acquisition token variables are stripped from service app launch environments.
+The actual four-job service matrix is pending; do not count direct-CLI evidence
+below as systemd/Scheduled Task acceptance.
+
 Explicit experimental voice acquisition (passed functional lifecycle, 2026-09-25)
 ----------------------------------------------------------------------------
 Design e7b3ccd; plan/red ab5bb42. No public Release is published by this work.

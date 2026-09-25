@@ -5,6 +5,7 @@ param(
     [string]$TaskName = 'Agents-Chat-Startup',
     [string]$ProjectDir = (Split-Path -Parent $PSScriptRoot),
     [string]$UserId = ([Security.Principal.WindowsIdentity]::GetCurrent().Name),
+    [switch]$NoTunnel,
     [ValidateSet('Interactive', 'S4U')]
     [string]$LogonType = 'Interactive',
     [ValidateSet('AtLogOn', 'AtStartup')]
@@ -31,9 +32,11 @@ if (-not (Test-Path $WatchdogScript)) {
 # Do not let a previous graceful-stop marker prevent the watchdog loop.
 Remove-Item (Join-Path $ProjectDir '.service-stop') -Force -ErrorAction SilentlyContinue
 
+$WatchdogArguments = "-NoProfile -ExecutionPolicy Bypass -File `"$WatchdogScript`""
+if ($NoTunnel) { $WatchdogArguments += ' -NoTunnel' }
 $Action = New-ScheduledTaskAction `
     -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$WatchdogScript`"" `
+    -Argument $WatchdogArguments `
     -WorkingDirectory $ProjectDir
 
 $Trigger = if ($TriggerType -eq 'AtStartup') {
