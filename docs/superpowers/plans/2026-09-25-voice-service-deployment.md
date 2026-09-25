@@ -155,3 +155,21 @@ Both installation choices, real Git re-entry, preservation, disablement,
 ownership, temporary namespaces, credentials and cleanup map to Tasks2-4.
 Fixture commits are synthetic, separate from implementation SHA. Public release,
 historical-version migrations and physical-device accuracy remain out of scope.
+
+## Execution outcome
+
+- [x] Task 1: red `36139526145` at `5e90931` confirmed absent implementation.
+- [x] Task 2: mode forwarding/preservation, sentinel token isolation and existing
+  task/start/setup regressions passed. Watchdog process-tree helper no longer
+  tries to bind the read-only PowerShell PID variable.
+- [x] Task 3: actual manager drivers, Git fixture upgrades, fixed browser
+  milestone records, installed identity and owned cleanup implemented.
+- [x] Task 4: final `36141303634` at `8f4edba` passed four jobs, 44 browser
+  records, 32 real ASR attempts and primary cleanup. Artifact identities,
+  synthetic fixture commits, failure history and limitations retained in spec.
+
+The unchecked lists above retain the original implementation recipe; this
+outcome records completed tasks and actual evidence. No separate mock-provider
+API-negative suite was rerun; the final service flow exercised the real native
+authenticated API. Spec execution notes distinguish Windows launch-boundary
+token checks from direct Linux process-environment inspection.

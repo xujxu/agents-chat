@@ -10,7 +10,7 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
-Real service deployment work (2026-09-25, not yet accepted)
+Real service deployment (2026-09-25, hosted functional flow passed)
 ---------------------------------------------------------
 Spec24f28fa; plan/red5e90931;red Actions36139526145 confirmed missing contracts.
 Windows scheduled deployment now accepts -NoTunnel, forwards it through the task
@@ -21,8 +21,34 @@ Use -NoTunnel only behind your own HTTPS reverse proxy or for loopback access;
 remote microphone capture still requires HTTPS. No tunnel account is configured.
 scripts/setup.ps1 remains the tunnel-provisioning helper; service E2E uses deploy.
 Acquisition token variables are stripped from service app launch environments.
-The actual four-job service matrix is pending; do not count direct-CLI evidence
-below as systemd/Scheduled Task acceptance.
+Measured8f4edba2ddd6df786c3874f3f1a4c470a08206ba:
+https://github.com/xujxu/agents-chat/actions/runs/36141303634
+Actual systemd on ubuntu-24.04 and S4U/AtStartup Scheduled Task on windows-2022.
+Four jobs: each OS fresh-selected and upgrade-enable. All14deployment milestones,
+44browser records and32real ASR attempts passed, including keep and disable.
+Both hosts verified service-owned listener/restart identity and installed hashes;
+all four primary cleanup paths removed owned resources and closed app ports.
+Browser versions: Chromium147.0.7727.15, iPhone-descriptor WebKit26.4,
+actual Edge154.0.4258.37. No physical-device or accuracy qualification.
+Real Git pull/re-entry used synthetic marker commits, not historical releases.
+Linux inspects actual process environment; Windows verifies no persisted tokens,
+watchdog stripping and executable sentinel contract, not remote PEB inspection.
+Full evidence and fixture commits:
+docs/superpowers/specs/2026-09-25-voice-service-deployment-design.md
+
+Report10867621949 SHA25667c41f475ec49df00775ec9c78688bc689d7050d17c00a05f37928e00a59b74e.
+Linux fresh10867376159 SHA25648dad8094d077d0f2ce68c9199860758f20e1b95f9dc4646f54fe446729fb491.
+Linux upgrade10867511171 SHA2569c395bbefb4e845f5f492d3f78708e616e0996057f8a3d30dcec4189e7823a09.
+Windows fresh10867326594 SHA25632fd9a4095bdb9c54c812bb2af18236d2b7657879ead26c272ee1047b274797b.
+Windows upgrade10867581432 SHA256eac831cd2e0b5bfb89f2b2728e6050b0e544c68997061fee4ac80e45fb3e0aa9.
+Result artifacts expire2026-10-25;source2026-10-07;candidate packages2026-10-24.
+Earlier36140169698 passed deployment/browser milestones but failed initial
+Windows cleanup;fallback succeeded. Final fix adds graceful stop/exit waiting
+and bounded driver diagnostics;exact prior exception was not retained.
+Setup36141303617,Windows foundation36141303577,service contracts36141303814 pass.
+No historical failed quality gate was changed. Public permanent releases,
+redistribution approval, tunnel provisioning and physical devices remain outside
+this completed functional scope.
 
 Explicit experimental voice acquisition (passed functional lifecycle, 2026-09-25)
 ----------------------------------------------------------------------------
@@ -51,7 +77,7 @@ Do not mix the download switch with local package arguments. Offline setup
 continues to use --package-dir/--manifest-sha256 or corresponding wrapper flags.
 Keep/default and disable do not download or require gh. Restart/reload applies
 configuration; remote browser microphones require HTTPS (loopback is exempt).
-Real system-service new-install/upgrade E2E remains the next separate project.
+Real system-service new-install/upgrade E2E is now covered by the result above.
 
 Measured02d572042dee8df4b6a607fae731014c4701b4a8:
 https://github.com/xujxu/agents-chat/actions/runs/36106345674

@@ -189,3 +189,92 @@ B is complete only when the real service matrix passes and evidence is
 committed/pushed. Linux/Windows Server CI is not physical Win11/mobile Safari
 acceptance; loopback microphones do not establish remote HTTPS readiness.
 Expired candidate/source artifacts remain explicit external blockers.
+
+## Completed execution evidence (2026-09-25)
+
+The real service matrix passed in
+https://github.com/xujxu/agents-chat/actions/runs/36141303634
+at measured implementation `8f4edba2ddd6df786c3874f3f1a4c470a08206ba`.
+All four jobs and the failure-inclusive aggregate passed: 14 deployment
+milestones, 44 browser records and 32 real ASR-to-draft attempts, with no
+browser retries or lifecycle skips. Each job removed its service/task and
+confirmed the listening port closed.
+
+| Host/scenario | Passed milestones | Browser records | Real ASR |
+| --- | --- | --- | --- |
+| Linux fresh-selected | selected, keep, disabled | 15 | 12 |
+| Linux upgrade-enable | initial, enabled, keep, disabled | 18 | 12 |
+| Windows fresh-selected | selected, keep, disabled | 5 | 4 |
+| Windows upgrade-enable | initial, enabled, keep, disabled | 6 | 4 |
+
+Linux used actual systemd on ubuntu-24.04, with listener cgroup ownership,
+activation identity and request-temp inspection through the service root view.
+Windows used actual S4U/AtStartup Scheduled Tasks on windows-2022 under the
+runner account, with watchdog ancestry, activation identity and local
+no-tunnel mode preserved across upgrade. Native manifest/role hashes and voice
+configuration remained unchanged on keep; both disable paths hid the microphone.
+
+Browsers were Chromium 147.0.7727.15 (desktop and Android descriptor),
+WebKit 26.4 (iPhone descriptor) and actual Edge 154.0.4258.37.
+Real login, same-origin voice POST, native candidate inference, exact API-text
+append to the retained draft, no automatic chat send, recording cleanup and
+idle UI assertions were reused without modifying accuracy acceptance.
+
+### Upgrade and credential evidence boundaries
+
+The actual entrypoints performed Git fast-forwards and re-entry against local
+marker-only fixture commits. These are not application release migrations:
+
+| Host/scenario | Enable fixture commit | Keep fixture commit |
+| --- | --- | --- |
+| Linux fresh-selected | measured implementation | 328f2ceb9f73ca29e7067c0839de76b40db13858 |
+| Linux upgrade-enable | f77a1de9cbe5dcbe5defe8a9c53c9a9cbc3b8485 | e5fe1efafd5de1f3b51569041636719e88b29a57 |
+| Windows fresh-selected | measured implementation | dc4d0f6c79fc4b6ddcbb44bde449164e6c1d084d |
+| Windows upgrade-enable | 1fb7222f5bd39cb525cd9372b8a3ba8075d80b47 | 0da95d0ae1f7684e04d3b192b962be426953e298 |
+
+Linux checked the listening process environment and unit UnsetEnvironment.
+Windows checked no persisted User/Machine GitHub tokens and the watchdog's
+token-removal launch path; the executable watchdog contract supplied transient
+sentinel tokens and verified they were absent at child launch. This is not a
+remote Windows process-environment/PEB inspection. No token was added to the
+configuration or task arguments.
+
+### Failure history and supporting runs
+
+- Red `36139526145` at `5e90931`: missing service-contract implementation.
+- `41dfef4`: Actions rejected job-level `runner.temp`; `ce268b3` moved cache
+  initialization into a runner step.
+- `36139992813`: Windows mode contract changed cwd into its temporary fixture,
+  preventing cleanup. `4e6cea8` restored cwd; real deployments had not run.
+- `36140169698`: all deployment/browser milestones passed and Linux cleaned up.
+  Initial Windows cleanup failed; separate fallback cleanup succeeded.
+  No raw captured driver stderr was retained, so the precise first cleanup
+  exception is not established. `8f4edba` added graceful-stop/exit waiting,
+  process-exit race handling and bounded sanitized driver diagnostics.
+- Final `36141303634`: all four complete paths, including primary cleanup, passed.
+  No failed earlier run was reclassified.
+
+Existing setup regressions `36141303617`, Windows foundation `36141303577`
+and service push contracts `36141303814` passed at the measured commit.
+The earlier implementation's lifecycle UI/capture preflight `36139965174` passed.
+Real deployments built the app, and the service workflow checked the reused
+browser spec's strict types. A separate mock-provider API-negative suite was
+not rerun; native authenticated voice requests were covered by the 32 attempts.
+
+### Retained artifacts
+
+All five result artifacts expire 2026-10-25. Source speech still expires
+2026-10-07 and candidate packages 2026-10-24.
+
+| Artifact | ID | SHA256 |
+| --- | --- | --- |
+| voice-service-report | 10867621949 | 67c41f475ec49df00775ec9c78688bc689d7050d17c00a05f37928e00a59b74e |
+| voice-service-linux-fresh-selected | 10867376159 | 48dad8094d077d0f2ce68c9199860758f20e1b95f9dc4646f54fe446729fb491 |
+| voice-service-linux-upgrade-enable | 10867511171 | 9c395bbefb4e845f5f492d3f78708e616e0996057f8a3d30dcec4189e7823a09 |
+| voice-service-win32-fresh-selected | 10867326594 | 32fd9a4095bdb9c54c812bb2af18236d2b7657879ead26c272ee1047b274797b |
+| voice-service-win32-upgrade-enable | 10867581432 | eac831cd2e0b5bfb89f2b2728e6050b0e544c68997061fee4ac80e45fb3e0aa9 |
+
+This closes B's hosted functional service flow, not public-release approval,
+all historical-version upgrades, tunnel provisioning, physical-device capture
+or the paused quality gates. Experimental acquisition still needs authenticated
+gh and live pinned artifacts; remote microphones still require HTTPS.
