@@ -1,0 +1,27 @@
+name: Retained WebKit signal diagnostics
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - 'scripts/voice_signal_*.py'
+      - 'scripts/test_voice_signal_*.py'
+      - 'scripts/voice_webkit_signal.py'
+      - 'scripts/test_voice_webkit_signal.py'
+      - 'scripts/voice_webkit_evidence.py'
+      - '.github/workflows/voice-webkit-signal.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy==2.2.6 opencc-python-reimplemented==0.1.7
+      - run: python -m unittest discover -s scripts -p 'test_voice_signal_*.py' -v
+      - run: python -m unittest discover -s scripts -p 'test_voice_webkit_*.py' -v
+      - run: python -m unittest discover -s scripts -p 'test_voice_browser_*.py' -v
