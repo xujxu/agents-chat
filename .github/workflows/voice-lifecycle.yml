@@ -25,3 +25,129 @@ jobs:
         with:
           node-version: 24.20.0
       - run: node --test tests/voice-lifecycle.test.mjs
+      - run: node --test tests/voice-setup-files.test.mjs tests/voice-setup-activation.test.mjs
+  preflight:
+    needs: contracts
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            browsers: chromium webkit
+            config: tests/playwright.config.ts
+            projects: --project=desktop-chromium --project=android-chromium --project=iphone-webkit
+          - os: windows-2022
+            browsers: msedge
+            config: tests/playwright.voice-matrix.config.ts
+            projects: --project=installed-edge
+    env:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-lifecycle-preflight-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2017 --lib dom,dom.iterable,esnext --module esnext --moduleResolution bundler --jsx react-jsx tests/playwright.voice-lifecycle.config.ts tests/voice-lifecycle.spec.ts
+      - run: npx playwright install --with-deps ${{ matrix.browsers }}
+      - run: npm run build
+      - run: npx tsc --noEmit --incremental false
+      - name: Existing voice UI and capture regressions
+        run: |
+          node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3011 > lifecycle-private-preflight.log 2>&1 &
+          app=$!
+          trap 'kill "$app"; wait "$app" || true' EXIT
+          ready=0
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent --max-time 2 http://localhost:3011/api/auth/providers >/dev/null; then ready=1; break; fi
+            if ! kill -0 "$app" 2>/dev/null; then echo 'Fixture server exited'; exit 1; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          npx playwright test --config ${{ matrix.config }} tests/voice-input.spec.ts tests/voice-browser-capture.spec.ts \
+            ${{ matrix.projects }} --workers=1 --reporter=line --trace=off --global-timeout=900000
+  lifecycle:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [contracts, preflight]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+            browsers: chromium webkit
+          - os: windows-2022
+            platform: win32
+            browsers: msedge
+    env:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-lifecycle-real-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - name: Verify retained packages and fixed speech inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/voice_lifecycle_prepare.py ${{ matrix.platform }}
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps ${{ matrix.browsers }}
+      - run: npm run build
+      - name: Install enable real speech draft and disable
+        run: node scripts/voice/lifecycle-run.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-lifecycle-${{ matrix.platform }}
+          path: lifecycle-evidence/
+          if-no-files-found: error
+          retention-days: 30
+  report:
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
+    needs: lifecycle
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: voice-lifecycle-linux
+          path: lifecycle-hosts/linux
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: voice-lifecycle-win32
+          path: lifecycle-hosts/win32
+      - run: node scripts/voice/lifecycle-report.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-lifecycle-report
+          path: lifecycle-report/
+          if-no-files-found: error
+          retention-days: 30
