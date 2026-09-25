@@ -10,6 +10,47 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
+Installed voice lifecycle E2E (2026-09-25)
+----------------------------------------
+Accuracy investigation paused by user. Scope:voice-component install/enable,
+real speech through authenticated API/model to existing draft,then disable.
+Spec8e7b3f1;plan/redfd1af66;implementation6c822f3;CI sequencing2e1b640.
+docs/superpowers/specs/2026-09-25-voice-lifecycle-e2e-design.md
+docs/superpowers/plans/2026-09-25-voice-lifecycle-e2e.md
+https://github.com/xujxu/agents-chat/actions/runs/36103664749
+Measured2e1b640cee48f75ba350cb84b29139953f05e21d.
+
+Both Linux and Windows passed initial-disabled/install/enabled/disable/disabled.
+16/16browser records;8/8real ASR attempts,two fixed ASCEND samples per project:
+Linux desktopChromium147.0.7727.15,AndroidChromium147.0.7727.15,
+iPhoneWebKit26.4;WindowsServer2022 actualEdge154.0.4258.37.
+Real CLI and pinned manifests/install role hashes;SenseGGUF standard2threads.
+Real login/capability/native POST;no voice response mock or URL rewriting.
+Every result nonempty HTTP200;exact API-text append to original draft;
+one POST,zero automatic sends,source completion,tracks/context cleanup,idle UI.
+Native temporary-directory baselines restored. Disabled UI hidden after restart.
+No CER/MER/reference equality/P95 computed;all old failed gates remain unchanged.
+
+Red36103108141 missing module. First manual36103364885 blocked before real
+attempts by existing Windows helper10s timeout under concurrent setup tests;
+2e1b640 serializes test files without changing product deadline or retries.
+Final5new contracts/OS;Windows10setup passes,Linux6passes+4Windows-only skips;
+preflight33Linux+15Edge passes,6+2native-fixture-only skips;build/typechecks pass.
+Separate mock-provider API negative suite not rerun;actual API covered above.
+
+Artifacts expire2026-10-25:
+10850192539 voice-lifecycle-linux
+  ca88963f6cc927d6dfb4e38ff40ecaaafe25ff823a602e403223c6a398309dfc
+10850890933 voice-lifecycle-win32
+  0103b833530ff764fb4c0dfa8e3ca7d9f40e7611bbc6b728f07b480bd4c50440
+10850722426 voice-lifecycle-report
+  f0c302e20ccb0ea84d30812a051e7009666dd6123fa89d6c8a83cf8c83a97a93
+Small report includes all8actual API/composer outcomes;host artifacts include
+milestone screenshots,verified input provenance and attribution,no model/config.
+Source expiry2026-10-07;candidate package expiry2026-10-24 remains.
+No system-service/public-package/physical-microphone/real-phone/Win11 acceptance.
+Agent send/reply/persistence outside requested scope.
+
 Controlled passive audio-graph probe (2026-09-25)
 ------------------------------------------------
 Spec770b45a;plan/red3f2e15d;code8e15b60841b757ad2ca0f88171ddb91f08cd6358.

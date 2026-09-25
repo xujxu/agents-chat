@@ -198,3 +198,91 @@ only passes fixtures must never be reported as real-model E2E completion.
 Completion requires a persistent report and committed result ledger, with all
 eight real attempts and lifecycle states reviewed. Historical quality and
 real-device qualification remain separate and unresolved.
+
+## Completed functional lifecycle: 2026-09-25
+
+Run: https://github.com/xujxu/agents-chat/actions/runs/36103664749
+Measured commit: `2e1b640cee48f75ba350cb84b29139953f05e21d`.
+Both hosts passed initial-disabled, verified installation, enabled delivery,
+CLI disable and restarted-disabled phases. All 16 expected browser records
+passed, including all eight fixed real-ASR attempts, with no retries.
+
+| Host/browser | Initial hidden | Real ASR to existing draft | Disabled hidden |
+| --- | --- | --- | --- |
+| Linux desktop Chromium 147.0.7727.15 | pass | 2/2 | pass |
+| Linux Android Chromium 147.0.7727.15 | pass | 2/2 | pass |
+| Linux iPhone WebKit 26.4 | pass | 2/2 | pass |
+| Windows Server Edge 154.0.4258.37 | pass | 2/2 | pass |
+
+Every real attempt received HTTP 200, nonempty native output and exact
+`original draft + newline + actual API text` in the composer. Each made exactly
+one same-origin voice POST and zero chat sends. All source-playback completion,
+owned-track stop, source-context close and idle-control checks passed.
+Both hosts' native request temporary-directory sets returned to their baselines.
+These are real configuration/authentication/voice API/model/UI outcomes;
+unrelated chat data remained fixtures. No reference-text match was required.
+
+Enabled capability consistently reported Sense GGUF, `sensevoice-small-q8`,
+two threads, standard policy and 30 seconds. Disabled capability reported false
+and null model/provider/threads on both initial and final starts. The real CLI
+wrote the configuration; server restarts applied each change.
+Installed role hashes matched the pinned manifests. Both hosts used weights
+`4ae45c94422de949b387e2e0fb10d7e14e4c42c69db30c3444ecc7d4b844b7c5`.
+Linux binary SHA256:
+`fa68535a57da529fa2a981bcc62fa68b44ec592a0489f8a817770851ec98e091`.
+Windows binary SHA256:
+`c53d5fe6bb7b7956ee107cddf41a463687e7239f8387f90da6b899a7d974a2f1`.
+Windows job launcher SHA256:
+`2f69ea32a07b6bd3ca3df26eb61a0842d1f2d4c432b377e80b5cc8efbf749593`.
+
+The fixed source hashes agreed across all four projects:
+
+- `test-00332`: `86cbadba60ab717a2a6db0165f02224a4620931a1c54915510293432621c707c`
+- `test-00949`: `a4f525f98df1764fc3bd893106c440e38593ad579c4cf22d6db37283b3db0fc3`
+
+Both hosted runners exposed EPYC 7763, four logical CPUs and about 16 GiB memory.
+Linux kernel was `6.17.0-1022-azure`; Windows release `10.0.20348`.
+Actual source/recorder rates were 48000/44100 Hz throughout; this is descriptive,
+not a defect or quality finding. Raw API/composer output is retained in the
+small report without computing accuracy metrics or P95.
+
+### Validation and preserved failures
+
+Red run `36103108141` confirmed the absent contract module on both OSes.
+Implementation `6c822f3` added the runner/spec/report without product changes.
+First manual run `36103364885` was blocked before installation/inference:
+an existing Windows setup regression hit its unchanged 10-second helper
+deadline while test files ran concurrently. The independent push run passed
+those same tests. Commit `2e1b640` serialized setup test files in this workflow;
+it did not change product deadlines or retry a speech sample. The failed run
+and its failure-inclusive aggregate report remain retained.
+
+Final run passed five new contracts per OS; existing setup/activation tests
+passed 10 on Windows and six on Linux, with four Windows-only Linux skips.
+Build, app type check and strict focused Playwright type check passed on both
+OSes. Existing preflight UI/capture coverage passed 33 Linux and 15 Edge tests;
+six Linux/two Edge native-fixture-server-only cases intentionally skipped.
+The dedicated real lifecycle records had zero skips.
+
+The preflight did not run the separate mock-provider `voice-api.spec.ts` suite.
+No production API code changed; this phase's actual authenticated capability
+and POST path was covered by the eight native-model deliveries. It is not a
+claim that every existing API negative case was rerun.
+
+### Artifacts and limits
+
+| Artifact | ID | Archive SHA256 |
+| --- | --- | --- |
+| voice-lifecycle-linux | 10850192539 | ca88963f6cc927d6dfb4e38ff40ecaaafe25ff823a602e403223c6a398309dfc |
+| voice-lifecycle-win32 | 10850890933 | 0103b833530ff764fb4c0dfa8e3ca7d9f40e7611bbc6b728f07b480bd4c50440 |
+| voice-lifecycle-report | 10850722426 | f0c302e20ccb0ea84d30812a051e7009666dd6123fa89d6c8a83cf8c83a97a93 |
+
+Artifacts expire 2026-10-25; source corpus still expires 2026-10-07 and package
+artifacts 2026-10-24. The host artifacts retain sanitized phase/attempt evidence,
+milestone screenshots and attribution, not model weights or private config.
+
+The requested voice-only functional loop is complete in hosted Actions.
+Accuracy research remains paused; earlier quality/latency/delivery gates are
+neither rerun nor promoted. This does not qualify public package distribution,
+system services, physical microphones/phones, real Safari or Windows 11, and
+does not include sending text to an agent.
