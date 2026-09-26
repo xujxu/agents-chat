@@ -97,7 +97,7 @@ jobs:
           cat artifacts/server.log
           exit 1
       - name: Check chat scroll geometry
-        run: node --test tests/chat-scroll-geometry.test.mjs
+        run: node --experimental-vm-modules --test tests/chat-scroll-geometry.test.mjs tests/chat-scroll-controller.test.mjs
       - name: Check chat reading position
         if: ${{ !cancelled() && steps.start-app.outcome == 'success' }}
         run: >-

@@ -7,7 +7,8 @@ import { instrumentController, restoreController, controllerSha } from './helper
 import { initializeControllerDiagnostics, requireCompleteReport } from './helpers/controllerStateRecorder.ts';
 
 test('instrumentation is pinned, reversible and rejects missing/duplicated sites', async () => {
-  const source = await readFile('app/features/chat/runtime/chatScrollController.ts', 'utf8');
+  assert.ok(process.env.DIAGNOSTIC_CONTROLLER_SOURCE, 'Pinned controller source is required');
+  const source = await readFile(process.env.DIAGNOSTIC_CONTROLLER_SOURCE, 'utf8');
   const output = instrumentController(source);
   assert.notEqual(output, source);
   assert.equal(restoreController(output), source);

@@ -16,12 +16,18 @@ jobs:
   contracts:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    env:
+      DIAGNOSTIC_CONTROLLER_SOURCE: diagnostic-baseline/app/features/chat/runtime/chatScrollController.ts
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 20f5f0e3e55569a4ac7f0878f314f1d8c7b2e009
+          path: diagnostic-baseline
       - uses: actions/setup-node@v4
         with:
           node-version: 24.20.0
-      - run: node --test tests/voice-pr-diagnostics.test.mjs tests/reading-controller-diagnostics.test.mjs
+      - run: node --experimental-vm-modules --test tests/voice-pr-diagnostics.test.mjs tests/reading-controller-diagnostics.test.mjs tests/chat-scroll-geometry.test.mjs tests/chat-scroll-controller.test.mjs
   windows:
     if: github.event_name == 'workflow_dispatch' && inputs.run_cohorts
     needs: contracts

@@ -180,6 +180,52 @@ test('keeps latest messages at the bottom through orientation round trips', asyn
   }
 });
 
+for (const height of [192, 181]) {
+  test(`keeps following an accepted ${height}->${height + 3}->179 layout clamp`, async ({ page }) => {
+    await page.setViewportSize(landscape);
+    await settleLayout(page);
+    const chat = page.locator('.chatContainer');
+    const originalStyle = await chat.getAttribute('style');
+    try {
+      await chat.evaluate((element, initialHeight) => {
+        element.style.setProperty('flex', 'none', 'important');
+        element.style.setProperty('box-sizing', 'border-box', 'important');
+        element.style.setProperty('border', '0', 'important');
+        element.style.height = `${initialHeight}px`;
+        element.scrollTop = element.scrollHeight;
+      }, height);
+      await settleLayout(page);
+      const initial = await chat.evaluate(element => ({
+        height: element.clientHeight, top: element.scrollTop,
+        distance: element.scrollHeight - element.clientHeight - element.scrollTop,
+      }));
+      expect(initial.height).toBe(height);
+      expect(initial.distance).toBeLessThanOrEqual(4);
+      const sequence = await chat.evaluate((element, initialHeight) => {
+        element.style.height = `${initialHeight + 3}px`;
+        const expandedHeight = element.clientHeight;
+        element.scrollTop = Math.min(element.scrollTop, element.scrollHeight - expandedHeight);
+        const expandedTop = element.scrollTop;
+        element.dispatchEvent(new Event('scroll'));
+        element.style.height = '179px';
+        return { expandedHeight, expandedTop, finalHeight: element.clientHeight };
+      }, height);
+      expect(sequence.expandedHeight).toBe(height + 3);
+      expect(sequence.expandedTop).toBe(initial.top - 3);
+      expect(sequence.finalHeight).toBe(179);
+      await settleLayout(page);
+      await expect.poll(() => chat.evaluate(element =>
+        element.scrollHeight - element.clientHeight - element.scrollTop,
+      )).toBeLessThanOrEqual(4);
+    } finally {
+      await chat.evaluate((element, style) => {
+        if (style === null) element.removeAttribute('style');
+        else element.setAttribute('style', style);
+      }, originalStyle);
+    }
+  });
+}
+
 test('keeps latest messages at the bottom while the composer is remeasured', async ({ page }) => {
   const chat = page.locator('.chatContainer');
   const composer = page.locator('textarea.composerTextarea');
