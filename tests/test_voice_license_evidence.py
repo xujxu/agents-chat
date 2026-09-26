@@ -1,9 +1,11 @@
 import hashlib
+import io
 import json
 import stat
 import sys
 import tempfile
 import unittest
+import urllib.error
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,8 +13,9 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "voice"))
 import license_archive
+import license_evidence
 from license_archive import inspect_archive
-from license_evidence import inspect_all, validate_metadata
+from license_evidence import download_entry, inspect_all, validate_metadata
 
 
 def sha(data):
@@ -73,6 +76,14 @@ class EvidenceTests(unittest.TestCase):
         raw = json.dumps(manifest).encode()
         files["voice-package.json"] = raw
         files["voice-package.sha256"] = (sha(raw) + "  voice-package.json\n").encode()
+        if windows:
+            candidate = json.dumps({
+                "modelId": "sensevoice-small-q8", "platform": "windows-x64",
+                "files": [dict(record, role="engine" if record["role"] == "binary" else record["role"])
+                          for record in records],
+            }).encode()
+            files["candidate.json"] = candidate
+            files["candidate.sha256"] = (sha(candidate) + "  candidate.json\n").encode()
         if bad_member:
             files["models/model.gguf"] = b"BAD A MODEL"
         archive = self.root / (platform + ".zip")
@@ -151,6 +162,43 @@ class EvidenceTests(unittest.TestCase):
                 with patch.object(license_archive, constant, limit), self.assertRaises(ValueError):
                     self.inspect(fixture)
 
+    def rewrite(self, fixture, member, data):
+        archive, entry, model = fixture
+        with zipfile.ZipFile(archive) as z:
+            files = {name: z.read(name) for name in z.namelist()}
+        files[member] = data
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
+            for name, content in files.items():
+                z.writestr(name, content)
+        entry.update(bytes=archive.stat().st_size, archiveSha256=sha(archive.read_bytes()))
+        return archive, entry, model
+
+    def test_bookkeeping_and_duplicate_rejection(self):
+        for member in ("candidate.sha256", "voice-package.sha256"):
+            with self.subTest(member=member), self.assertRaises(ValueError):
+                self.inspect(self.rewrite(self.fixture("win32"), member, b"0" * 64))
+        with self.assertWarns(UserWarning):
+            fixture = self.fixture(extra=("licenses/model-card.txt", b"duplicate"))
+        with self.assertRaises(ValueError):
+            self.inspect(fixture)
+
+    def test_unidentified_exception_is_manual_not_present(self):
+        fixture = self.fixture()
+        archive, entry, model = fixture
+        with zipfile.ZipFile(archive) as z:
+            manifest = json.loads(z.read("voice-package.json"))
+        text = b"Refer to a website for GCC licensing"
+        record = next(row for row in manifest["files"] if row["path"] == "licenses/gcc-runtime.txt")
+        record.update(bytes=len(text), sha256=sha(text))
+        raw = json.dumps(manifest).encode()
+        self.rewrite(fixture, "licenses/gcc-runtime.txt", text)
+        self.rewrite(fixture, "voice-package.json", raw)
+        self.rewrite(fixture, "voice-package.sha256", (sha(raw) + "  voice-package.json\n").encode())
+        entry["manifestSha256"] = sha(raw)
+        result = self.inspect((archive, entry, model))
+        row = next(row for row in result["license_evidence"] if row["id"] == "gcc-exception")
+        self.assertEqual(row["status"], "needs-manual-review")
+
     def metadata(self, entry):
         return {
             "id": entry["artifact"], "name": entry["name"], "expired": False,
@@ -190,6 +238,36 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(len(report["candidates"]), 1)
         self.assertEqual(len(report["errors"]), 1)
         self.assertIn("Windows", (output / "REPORT.md").read_text())
+
+    def test_download_is_bounded_and_does_not_forward_token(self):
+        archive, entry, _ = self.fixture()
+        payload = archive.read_bytes()
+
+        class Response(io.BytesIO):
+            status = 200
+            headers = {}
+
+        signed_url = "https://example.invalid/archive?signature=private"
+        for payload_bytes, valid in ((payload, True), (payload[:-1], False),
+                                     (payload + b"extra", False), (b"x" * len(payload), False)):
+            directory = self.root / ("download-" + str(len(payload_bytes)) + "-" + str(valid))
+            directory.mkdir(exist_ok=True)
+            redirect = urllib.error.HTTPError(
+                "https://api.github.com", 302, "Found", {"Location": signed_url}, None)
+            with patch.object(license_evidence, "api_response", side_effect=[
+                Response(json.dumps(self.metadata(entry)).encode()), redirect,
+            ]), patch.object(license_evidence.urllib.request, "build_opener") as opener:
+                opener.return_value.open.return_value = Response(payload_bytes)
+                if valid:
+                    download_entry(entry, directory, "never-forward-this-token")
+                    self.assertEqual((directory / "linux.zip").read_bytes(), payload)
+                else:
+                    with self.assertRaises(ValueError):
+                        download_entry(entry, directory, "never-forward-this-token")
+                    self.assertFalse((directory / "linux.zip").exists())
+                opener.return_value.open.assert_called_once_with(
+                    signed_url, timeout=license_evidence.READ_TIMEOUT)
+                self.assertFalse((directory / "linux.partial").exists())
 
 
 if __name__ == "__main__":
