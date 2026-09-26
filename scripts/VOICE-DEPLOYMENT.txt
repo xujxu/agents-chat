@@ -157,6 +157,91 @@ Public publication/self-code permission is not granted by this technical report.
 Whisper archives, application-bundled yauzl/pend files, old application components
 and Dev Tunnels were not inspected by this two-candidate run.
 
+Targeted Windows terms follow-up (2026-09-26; no component change)
+----------------------------------------------------------------
+User requires reasons and explicit approval before changing any component.
+This applies to proposed toolchain/runtime/model replacements; continued
+investigation is not approval to implement them. No such change is proposed
+as necessary on the evidence currently available.
+
+Original Sense build35987278609, job107592809692 records:
+- Runner image reference win22/20260913.307.
+- Visual Studio2022 Enterprise, tools directory14.44.35207,
+  Developer Command Prompt17.14.40, compiler19.44.35228.0.
+- CMake selected Windows SDK10.0.26100.0 targeting Windows10.0.20348.
+The historical image recipe installs SDK via linkid2349110, which Microsoft's
+SDK download page identifies as10.0.26100.7705. This is an installation-recipe
+lead, not proof of the exact patched SDK files read by the linker. The image's
+toolset configuration selects the Visual Studio release channel.
+
+New primary-source evidence for SDK static libraries:
+Both Microsoft.Windows.SDK.CPP NuGet pages10.0.26100.0 and10.0.26100.7705 link
+their license to https://aka.ms/WinSDKLicenseURL. That official redirect returns
+sdk_license.rtf, titled Microsoft Windows Software Development Kit for Windows10.
+Section2(a)(i) grants object-code distribution for code on its REDIST lists.
+Section2(a)(ii) specifically requires that, for Distributable Code with a .lib
+extension, only the results of linking it with the program be distributed.
+Other conditions include significant primary functionality, protective downstream
+terms, valid program copyright notice and indemnity. A title mentioning Windows10
+is not used to substitute for applicability evidence: the version-specific
+package pages above supply the link; the old runner's local EULA was not retained.
+
+The referenced REDIST link resolves to:
+https://learn.microsoft.com/en-us/legal/windows-sdk/redist
+Its "Static LIB files" section expressly permits unmodified .lib files under
+Windows Kits/10/Lib/<version>/um/x64 and ucrt/x64 (and other named architectures)
+when built as part of a program, subject to the SDK license. <version> is a
+publicly released SDK version. This supplies a concrete conditional distribution
+basis for SDK UCRT/UM static-library inputs, rather than an inference from a DLL
+download page. No per-copy royalty requirement was identified in these clauses;
+free distribution still requires meeting their other conditions.
+
+Limit: SDK directory scope does not include
+Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/lib/x64.
+Do not apply the SDK grant to libvcruntime.lib/libcmt.lib from that directory.
+Likewise the public STL license/exception is not a blanket VC runtime grant.
+The candidate still lacks retained local VC/SDK license files and a full linker
+input record. Hosted-build/distributor entitlement and the applicable VC static
+runtime grant remain unclosed; no statement that a paid subscription is required
+or that redistribution is prohibited follows from this evidence gap.
+
+Concrete question prepared for official clarification (NOT sent):
+For a Windows x64 application built on the GitHub-hosted windows-2022 runner
+win22/20260913.307 with Visual Studio2022 Enterprise17.14, MSVC14.44 /MT Release
+and Windows SDK26100, which applicable license clause/REDIST entry covers
+libvcruntime.lib and libcmt.lib embedded by the linker in the application's
+executables? Does the hosted runner arrangement provide the relevant build
+and redistribution entitlement, or must the distributor separately establish it?
+Which notices/downstream terms are required when distributing those executables
+at no charge, without shipping any compiler, SDK, debug runtime or standalone
+.lib files? Request authoritative terms, not only technical linking guidance.
+Sending a support request or disclosing additional project details requires a
+separate authorization; none has been sent.
+
+Component decision:
+- Keep Sense model, FunASR/ggml, yauzl/pend and Linux package unchanged:
+  the review found no reason to replace them.
+- Keep the current Windows MSVC build unchanged while its narrow remaining
+  permission question is unresolved. Unknown evidence alone is not a reason
+  to invalidate working code or incur a full toolchain requalification.
+- MinGW/LLVM-MinGW is only a possible contingency, not an approved plan.
+  If later proposed, explain the permission problem it addresses, its own
+  runtime terms, compatibility risks, helper/engine rebuild and Windows
+  cancellation/Unicode/install/service E2E requalification before requesting
+  approval. A switch to clang-cl or /MD alone does not eliminate this review.
+
+Sources for this follow-up:
+https://github.com/xujxu/agents-chat/actions/runs/35987278609/job/107592809692
+https://github.com/actions/runner-images/blob/win22/20260913.307/images/windows/Windows2022-Readme.md
+https://github.com/actions/runner-images/blob/win22/20260913.307/images/windows/scripts/build/Install-VisualStudio.ps1
+https://github.com/actions/runner-images/blob/win22/20260913.307/images/windows/toolsets/toolset-2022.json
+https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads
+https://www.nuget.org/packages/Microsoft.Windows.SDK.CPP/10.0.26100.0
+https://www.nuget.org/packages/Microsoft.Windows.SDK.CPP/10.0.26100.7705
+https://aka.ms/WinSDKLicenseURL
+https://download.microsoft.com/download/0/F/F/0FF2B061-47DD-4F55-89B6-FD1D8C44F14D/sdk_license.rtf
+https://learn.microsoft.com/en-us/legal/windows-sdk/redist
+
 Additional pinned sources for the narrowed review:
 https://raw.githubusercontent.com/thejoshwolfe/yauzl/3.4.0/LICENSE
 https://raw.githubusercontent.com/andrewrk/node-pend/1.2.0/LICENSE
