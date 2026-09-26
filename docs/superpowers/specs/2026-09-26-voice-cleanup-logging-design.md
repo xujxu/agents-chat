@@ -110,3 +110,89 @@ No frontend behavior is changed, so no new UI-specific test is required.
 Persist Actions identities and limitations in this specification and Draft
 PR #2. Do not merge, publish, replace components or claim that logging itself
 removes any residual directory. Creation ownership remains a separate design.
+
+## Execution evidence
+
+Written specification9df15da and inline execution plan1cd6983 were approved.
+Regression tests638a35f preceded the product change:
+
+- Red Actions36232508784:34tests,32passed,2failed precisely because the
+  independent cleanup warning was missing. Both direct-transcriber rejection
+  identity checks passed already; neither failed test was a fixture/link error.
+- Product1dedadcf8cc0408fdb5d79c6a99328cd1c20b7b4 changes only
+  `lib/voice/transcriber.ts`: existing logger plus narrow catch/log/rethrow
+  around the single awaited deletion.
+- Green Actions36232554524:34/34passed. Both Windows and WebKit diagnostic
+  cohorts were skipped. All six API scenarios, their normal recovery requests,
+  the unknown-mode guard and both direct rejection checks passed.
+
+The green report records one independent `voice_cleanup_failed` warning before
+the route warning for each deletion-failure mode. `aborted` is true for injected
+cancellation and false otherwise;499/voice_cancelled and500/voice_failed remain
+unchanged. Successful cleanup and creation failure produce no cleanup warning.
+Simulated residual counts and single deletion-attempt counts remain unchanged.
+The fixture checks complete warning arguments before capturing allowlisted
+records, and verifies the original cleanup rejection object is preserved.
+
+Artifact `voice-cleanup-faults-36232554524`, ID10902822164,1183bytes,
+GitHub archive SHA256
+`fa80f608f242805262271ec18e022dbbe181df7e3eebdba1a30e1ef9efbe009a`,
+expires2026-10-10. Report retained in session files
+`voice-cleanup-faults-36232554524/voice-cleanup-faults.json`.
+The actual transcriber source hash is
+`1d3bf921573d911a38f70a5255247a7ea848762e599bf43cf4f9305db6e0fa5a`.
+The report's other four actual-source hashes match historical36230917732:
+route, Windows wrapper, jobs and audio are unchanged.
+
+Ordinary automatically triggered Voice input PoC36232557538 passed both jobs,
+including build/typecheck,27logic tests,11WebKit capture/cancellation tests,
+28API/Chromium tests plus1existing skip,1real-model API smoke test and17existing
+composer/mobile/disabled-voice tests. The temporary-directory assertion passed.
+It checked out PR integration revision
+`9c295b41dca7676b21dc25860d6594b570e1c03b` (main638c553 plus head1dedadc),
+not a merge of PR #2 into main.
+
+Full E2E36232557443 passed all6jobs. Typography36232557446 passed all3jobs.
+Persistence36232557503 did **not** pass: build/typecheck, persistence logic,
+desktop persistence and existing-send steps passed, but mobile persistence
+had37passed and1failed. The subsequent repeated WebKit network step was skipped.
+Do not describe the full implementation-revision check set as green.
+
+The failed case was `tests/chat-persistence.spec.ts:354`, iPhone WebKit,
+lost commit acknowledgement. Its functional assertions passed in the trace;
+an asynchronous fixture route callback at line137 was still writing its
+synthetic reply when the test navigated away and tore down the context:
+
+| Trace call | Relative time (ms) | Outcome |
+| --- | --- | --- |
+| `pw:api@94`, fixture POST `/api/chats` |247987.286start|Still pending during final assertion/cleanup|
+| `expect@95`, stored-message count |248127.193end|Passed|
+| `pw:api@96`, navigate `about:blank` |248128.047start /248154.962end|Passed|
+| `pw:api@97`, delete fixture chat |248156.147start /248177.671end|Passed|
+| `pw:api@94`, fixture POST |248186.334end|Target page/context/browser closed|
+
+The fixture increments `sent` at line124 before awaiting its synthetic reply
+write at line137; this test waits for `sent.length` and the user-message count,
+not callback completion, before its finally block at lines364-367. The retained
+sequence identifies an outstanding fixture operation across teardown. It does
+not justify suppressing errors, widening timeouts or altering persistence
+product behavior as part of the logging repair.
+
+Failure artifact `chat-persistence-evidence`, ID10902778379,42446bytes,
+GitHub archive SHA256
+`c8d1e0201a82dd5d8525b41c53b94f3ed9a96d967b922f46638717f93c614f8f`,
+retained under session files `cleanup-log-persistence-36232557503/`.
+The small `test.trace` was inspected without running a local browser or test.
+No rerun-to-green or unrelated fixture/product edit was performed.
+Complete integration acceptance remains blocked on this separate failure;
+a bounded fixture-lifecycle repair requires separate scope approval.
+
+Automatic push checks also passed: provider36232554525 (contracts passed,
+application skipped), Windows foundation36232554543, and natural-long
+36232554551 (selection-tests/report only; inventory/compare skipped).
+These were existing triggers, not newly dispatched diagnostic experiments.
+No accuracy study or new Windows/WebKit comparison batch was launched.
+
+The original Windows residual cause remains unknown. This repair restores
+cleanup-failure visibility; it does not remove residuals, recover lost creation
+ownership, or prove native deletion reliability.

@@ -28,7 +28,7 @@ No local validation or dependency installation.
 
 ## Task 1: Regression expectations before product implementation
 
-- [ ] Extend the fixture state with `warnings = []` and a stable per-fixture
+- [x] Extend the fixture state with `warnings = []` and a stable per-fixture
   cleanup error; replace only the existing cleanup throw with that object:
 
 ```js
@@ -39,7 +39,7 @@ const cleanupError = Object.assign(
 throw cleanupError;
 ```
 
-- [ ] Replace the logger mock with strict argument checks. Use the existing
+- [x] Replace the logger mock with strict argument checks. Use the existing
   `guard` to retain violations even if product code catches a mock exception:
 
 ```js
@@ -73,7 +73,7 @@ createLogger: name => ({
   Reset `warnings` beside existing per-request event/code/violation resets.
   Include cloned `warnings` in each request result.
 
-- [ ] Extract the existing request preparation (mode validation, state reset,
+- [x] Extract the existing request preparation (mode validation, state reset,
   UUID assignment and WAV generation) into `prepare(nextMode)`; the existing
   `request` calls it without changing headers, Request or POST handling:
 
@@ -109,7 +109,7 @@ async transcribe(nextMode) {
 },
 ```
 
-- [ ] In the six API scenarios replace the existing log-code equality with
+- [x] In the six API scenarios replace the existing log-code equality with
   exact expected records (host-created records avoid VM prototype comparisons):
 
 ```js
@@ -135,7 +135,7 @@ assert.deepEqual(result.logCodes, expectedWarnings.map(item => item.fields.code)
   Label the report additionally with
   `purpose: 'cleanup-warning-regression-not-native-leak-repair'`.
 
-- [ ] Add two direct rejection regressions, recording only sanitized result
+- [x] Add two direct rejection regressions, recording only sanitized result
   labels in a `directRejections` report array:
 
 ```js
@@ -161,7 +161,7 @@ for (const mode of ['cleanup-failure', 'cancel-cleanup-failure']) {
 }
 ```
 
-- [ ] Commit/push tests and dispatch contracts with both cohort gates false:
+- [x] Commit/push tests and dispatch contracts with both cohort gates false:
 
 ```bash
 git add tests/helpers/voiceFaultFixture.mjs tests/voice-cleanup-faults.test.mjs
@@ -177,7 +177,7 @@ gh workflow run voice-pr-diagnostics.yml -R xujxu/agents-chat --ref experiment/v
 
 ## Task 2: Narrow product change and green contracts
 
-- [ ] Add the existing logger import and module-level logger to transcriber:
+- [x] Add the existing logger import and module-level logger to transcriber:
 
 ```ts
 import { createLogger } from '../logger';
@@ -198,7 +198,7 @@ try {
 }
 ```
 
-- [ ] Commit/push, dispatch the same contracts-only command and inspect results:
+- [x] Commit/push, dispatch the same contracts-only command and inspect results:
 
 ```bash
 git add lib/voice/transcriber.ts
@@ -214,7 +214,7 @@ gh workflow run voice-pr-diagnostics.yml -R xujxu/agents-chat --ref experiment/v
 
 ## Task 3: Integration and persistent evidence
 
-- [ ] Inspect PR-triggered workflows for the implementation revision:
+- [x] Inspect PR-triggered workflows for the implementation revision:
 
 ```bash
 gh run list -R xujxu/agents-chat --branch experiment/voice-natural-long --limit 15 --json databaseId,headSha,status,conclusion,workflowName
@@ -235,10 +235,10 @@ gh workflow run voice-input.yml -R xujxu/agents-chat --ref experiment/voice-natu
 - [ ] Inspect logs/artifacts for failures; repair only directly related
   regressions and repeat affected Actions checks. No local tests or servers.
   Report progress at least every15minutes, including while awaiting Actions.
-- [ ] Record exact red/green and integration revision/run IDs, artifact
+- [x] Record exact red/green and integration revision/run IDs, artifact
   metadata, source hashes and the logging-only limitation in the specification.
   Refresh PR #2 body before adding evidence; keep it Draft.
-- [ ] Commit/push evidence with the required coauthor trailer. Verify clean
+- [x] Commit/push evidence with the required coauthor trailer. Verify clean
   pushed state, close task records, stop the reminder. Original Windows cause
   and creation-ownership work remain unconfirmed/deferred respectively.
 
@@ -249,3 +249,19 @@ response/deletion semantics and original rejection identity have independent
 assertions. No new production helper, route change, retry or native cohort is
 needed. Existing fixture context already links the five required actual modules.
 Only the transcriber production hash is expected to change.
+
+## Execution checkpoint
+
+Tests638a35f produced the exact intended red in36232508784 (32pass/2missing
+cleanup-warning failures). Product1dedadc passed34/34in36232554524; both
+diagnostic cohorts were skipped. The report preserves original API responses,
+direct error identity and residual counts while recording fixed sanitized
+cleanup warnings.
+
+Voice integration36232557538, full E2E36232557443 and typography36232557446
+passed. Existing Windows foundation/provider push checks also passed.
+Persistence36232557503 failed one iPhone case during teardown while a fixture
+route POST was pending; its final functional assertion had passed. The spec
+records trace ordering and artifact identity. The remaining Task3 acceptance
+item is blocked, not silently waived: no unrelated persistence edit or
+repetition was made. Further fixture repair requires separately approved scope.
