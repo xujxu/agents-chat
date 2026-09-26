@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 5
     env:
       DIAGNOSTIC_CONTROLLER_SOURCE: diagnostic-baseline/app/features/chat/runtime/chatScrollController.ts
+      VOICE_FAULT_REPORT: voice-cleanup-faults.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -27,7 +28,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.20.0
-      - run: node --experimental-vm-modules --test tests/voice-pr-diagnostics.test.mjs tests/reading-controller-diagnostics.test.mjs tests/chat-scroll-geometry.test.mjs tests/chat-scroll-controller.test.mjs
+      - run: node --experimental-vm-modules --test tests/voice-pr-diagnostics.test.mjs tests/reading-controller-diagnostics.test.mjs tests/chat-scroll-geometry.test.mjs tests/chat-scroll-controller.test.mjs tests/voice-cleanup-faults.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-cleanup-faults-${{ github.run_id }}
+          path: voice-cleanup-faults.json
+          if-no-files-found: warn
+          retention-days: 14
   windows:
     if: github.event_name == 'workflow_dispatch' && inputs.run_cohorts
     needs: contracts
