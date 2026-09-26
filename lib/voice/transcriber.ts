@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { createLogger } from '../logger';
 import { VoiceError } from './audio';
 import { legacyVoiceConfiguration, type VoiceConfiguration } from './configuration';
 import { decodeVoiceText, readWhisperOutput } from './providers';
@@ -8,6 +9,8 @@ import { runVoiceProcess } from './process';
 import { createWindowsVoiceDirectory, readWindowsVoiceOutput } from './windowsNative';
 
 export { voiceConfiguration } from './configuration';
+
+const logger = createLogger('voice.transcriber');
 
 export async function transcribeVoice(
   audio: Uint8Array, configuration: VoiceConfiguration | { binary: string; model: string }, signal: AbortSignal,
@@ -31,6 +34,14 @@ export async function transcribeVoice(
     }
     return await readWhisperOutput(`${output}.txt`, signal);
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    try {
+      await rm(directory, { recursive: true, force: true });
+    } catch (error) {
+      logger.warn(
+        { code: 'voice_cleanup_failed', aborted: signal.aborted },
+        'Voice temporary directory cleanup failed',
+      );
+      throw error;
+    }
   }
 }
