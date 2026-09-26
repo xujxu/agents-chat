@@ -196,3 +196,73 @@ contracts in Actions, then dispatch once with `run_cohorts=true` and
 `run_webkit=false`. A separate default-false WebKit input prevents accidental
 repeat of the completed WebKit cohort. WebKit follow-up is read-only code and
 existing-evidence analysis. Product fixes remain subject to approval.
+
+### WebKit read-only follow-up
+
+The retained voice trace from `36225934786` adds two observations:
+
+- A `ResizeObserver loop completed with undelivered notifications.` page error
+  occurs at trace time15421.578, during the **first, successful** landscape
+  transition (viewport call15200.032). It is not direct proof of the later
+  failure: the failing landscape call starts16244.685 and has no additional
+  recorded loop error.
+- Snapshot `after@call@100` at16767.570, after settling that failing transition,
+  explicitly adds the `Jump to latest messages` button. Unlike the geometry
+  samples, this is evidence that the UI was notified of a non-bottom position.
+  Snapshot HTML uses references; absence of the literal in later deltas does
+  not prove removal.
+
+`chatScrollController.ts`, `chatScrollGeometry.ts`, `useChatScroll.ts` and
+`ChatShell.css` have no diff between the pinned main and voice products.
+The composer resize helper differs only by the unused-in-this-case voice
+transcript append callback. No evidence establishes voice-only causation.
+
+The controller checks `isIndependentScroll` before enforcing `following`.
+A classification as independent calls `captureUserPosition`, which can switch
+following off and retain a historical anchor. Conversely, if following stays
+true and the last observed geometry is184px tall at top7877, a correction at
+179px with unchanged content8061 should write7882, not retain7877.
+This narrows the remaining question to actual controller state/callback
+sequencing (including independent-scroll classification), but does not answer
+it: the retained sampler observes document scroll and viewport resize, not
+controller state or ResizeObserver delivery. The button alone is not a
+snapshot of `following`.
+
+The existing composer ResizeObserver synchronously remeasures textarea height
+when its width changes; the header has geometry-affecting transitions. Both
+are investigation context, not proven causes. Do not remove transitions,
+force-follow after all resizes, alter the4px threshold, or change manual
+scroll/history anchoring based on this evidence. Product changes still need
+separate approval and a causal regression case.
+
+### Windows-only supplement result
+
+Contracts `36227022903` and supplement `36227059166` passed at harness
+`b3613f62a537f121d8a6bfcf7853f0af06758b2f`; five metadata contracts passed.
+The product remained `20f5f0e3e55569a4ac7f0878f314f1d8c7b2e009`.
+Both Windows arms used Node24.20.0 and runner image20260920.314.1.
+WebKit was skipped as approved.
+
+Sampling0 and sampling1 each completed3/3rounds, all four modes per round.
+Every Sense/Whisper invocation passed17cases with1existing skip; invalid and
+disabled modes passed1case each. That is108passed/6skipped case executions per
+arm, not216unique tests. All24original post-stop directory assertions passed;
+all24post-stop snapshots contained0directories, with empty initial baselines.
+Six retained lifecycle reports each contain16events,0dropped and no error or
+snapshotError. Sampling1 emitted216before/after records with empty directories;
+sampling0 emitted none, as expected.
+
+Removing the watcher eliminated the native assertion in this collection.
+This is a repaired diagnostic harness, **not a fix for the original leak**.
+The leak did not reproduce in either arm, so neither a cause nor the absence
+of an instrumentation timing effect is established. The approved supplemental
+budget is exhausted; no further batch or product change was started.
+
+| Artifact | ID | Bytes | SHA256 |
+| --- | --- | --- | --- |
+| `windows-cleanup-sampling-0-36227059166` |10901048865|1723253|`522b52ad5c54a0e07636405d43db7fcb1a89f170ba3144928a1a0f7ecaaaa55f`|
+| `windows-cleanup-sampling-1-36227059166` |10901435657|1723282|`c6fce70e738ee5e9d6ba3ba7e01eb34b3dd05fbb6ed503fb5f3eb122490dbdd5`|
+
+Artifacts expire2026-10-10; local evidence is retained under session files
+`voice-pr-diag-36227059166/`. PR #2 remains Draft. Windows's original residual
+and the reproduced WebKit orientation failure remain unresolved.

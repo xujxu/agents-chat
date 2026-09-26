@@ -4,7 +4,7 @@
 
 **Goal:** Capture evidence for Windows cleanup and WebKit orientation failures without changing product code or acceptance criteria.
 
-**Architecture:** A manual-only Actions workflow checks out pinned products separately from the harness. A standard-library Windows recorder observes directory events and post-stop metadata; an opt-in browser sampler records numeric geometry. Contract tests precede the single bounded cohort batch.
+**Architecture:** A manual-only Actions workflow checks out pinned products separately from the harness. The original Windows filesystem watcher was replaced by a lifecycle-only recorder after a native crash; post-stop metadata remains. An opt-in browser sampler records numeric geometry. Contract tests precede each explicitly approved bounded batch; WebKit now requires its own default-false input.
 
 **Tech Stack:** Node 24.20.0 standard library, existing Playwright and MSVC fixtures, GitHub Actions.
 
@@ -118,3 +118,21 @@ Node/libuv assertion, leaving provenance only. WebKit main passed5/5; voice
 failed its first repetition at5px vs4px. Findings/artifact identities are in the
 spec's execution record. Further diagnostic repair/collection needs approval;
 no product changes or fixes have been claimed.
+
+## Approved supplemental execution checkpoint
+
+The user subsequently approved Windows-only repair and bounded collection, with
+WebKit read-only analysis. `b3613f6` removes `fs.watch` entirely and records only
+explicit lifecycle boundaries, preserving the original stop/assertion order.
+It also adds the lifecycle recorder contract and default-false `run_webkit`
+workflow input. Contracts-only Actions `36227022903` passed; both cohorts were
+skipped. Windows-only supplement `36227059166` was dispatched exactly once with
+`run_cohorts=true`, `run_webkit=false`; its budget is3rounds per sampling arm.
+No additional batch, browser execution or product changes are authorized.
+
+Supplement completed successfully: each Windows arm3/3rounds, all24post-stop
+assertions/snapshots empty,96lifecycle events with0dropped across6reports.
+Sampling1's216per-case records are empty; sampling0 emitted none.
+No leak reproduced; no leak fix is inferred. WebKit skipped. The spec retains
+artifact hashes and the read-only trace/controller findings. This supplemental
+execution is complete; product diagnosis remains unresolved and PR #2 Draft.
