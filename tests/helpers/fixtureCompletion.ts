@@ -35,14 +35,16 @@ export function createFixtureCompletion() {
       const running = Promise.resolve().then(work);
       const operation: Operation = {
         done: running.then(
-          (): Outcome => ({ ok: true }),
-          (error: unknown): Outcome => ({ ok: false, error }),
+          (): Outcome => {
+            operation.outcome = { ok: true };
+            return operation.outcome;
+          },
+          (error: unknown): Outcome => {
+            operation.outcome = { ok: false, error };
+            return operation.outcome;
+          },
         ),
       };
-      operation.done = operation.done.then(outcome => {
-        operation.outcome = outcome;
-        return outcome;
-      });
       operations.push(operation);
       return running;
     },
