@@ -1,6 +1,8 @@
 import { test } from '@playwright/test';
+import { registerReadingControllerDiagnostics } from './readingControllerDiagnostics';
 
 export function registerReadingGeometryDiagnostics() {
+  registerReadingControllerDiagnostics();
   if (process.env.READING_GEOMETRY_DIAGNOSTICS !== '1') return;
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {

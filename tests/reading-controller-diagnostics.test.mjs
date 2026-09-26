@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { stripTypeScriptTypes } from 'node:module';
 import test from 'node:test';
 import { instrumentController, restoreController, controllerSha } from './helpers/instrumentScrollController.mjs';
 import { initializeControllerDiagnostics, requireCompleteReport } from './helpers/controllerStateRecorder.ts';
@@ -10,6 +11,7 @@ test('instrumentation is pinned, reversible and rejects missing/duplicated sites
   const output = instrumentController(source);
   assert.notEqual(output, source);
   assert.equal(restoreController(output), source);
+  assert.doesNotThrow(() => stripTypeScriptTypes(output));
   assert.equal(createHash('sha256').update(source).digest('hex'), controllerSha);
   assert.throws(() => instrumentController(source + '\n'), /revision/);
   assert.throws(() => instrumentController(source.replace('function onScroll()', 'function other()')), /revision/);
