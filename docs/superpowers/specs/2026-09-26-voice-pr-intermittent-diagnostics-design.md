@@ -177,3 +177,22 @@ The batch is stopped. Do not rerun either cohort automatically. A further
 Windows attempt requires repairing/replacing the diagnostic watcher and explicit
 approval for the revised collection method/budget. No product fix is justified
 as completed by these results. PR #2 remains Draft.
+
+### Approved Windows-only supplement (2026-09-26)
+
+After an interrupted approval prompt, the user explicitly approved removal of
+the crashing filesystem watcher and a bounded Windows-only supplemental batch.
+This supersedes the event-notification requirement for that supplement, not the
+original failure record. Use lifecycle timestamps plus post-stop residual
+metadata and sampling off/on, at most3rounds per arm, stopping at first failure.
+Product baseline remains `20f5f0e`; no native/runtime code changes.
+
+The lifecycle recorder no longer opens any filesystem watcher. Consequently
+it cannot identify directory creation/removal times except through retained
+filesystem timestamps and optional per-case snapshots; report this limitation.
+The exact original libuv assertion trigger remains undiagnosed, not fixed in
+Node itself. Add a contract for recorder context, timestamps and bounds, run
+contracts in Actions, then dispatch once with `run_cohorts=true` and
+`run_webkit=false`. A separate default-false WebKit input prevents accidental
+repeat of the completed WebKit cohort. WebKit follow-up is read-only code and
+existing-evidence analysis. Product fixes remain subject to approval.

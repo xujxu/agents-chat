@@ -3,7 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       run_cohorts:
-        description: Run the single approved bounded Windows/WebKit comparison batch
+        description: Run an explicitly approved bounded Windows comparison batch
+        type: boolean
+        default: false
+      run_webkit:
+        description: Also run WebKit comparison (requires separate approval)
         type: boolean
         default: false
 permissions:
@@ -96,7 +100,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   webkit:
-    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.run_cohorts && needs.contracts.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.run_cohorts && inputs.run_webkit && needs.contracts.result == 'success' }}
     needs: [contracts, windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 15

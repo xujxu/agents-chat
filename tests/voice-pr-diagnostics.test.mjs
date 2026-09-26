@@ -3,7 +3,23 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { boundedEvents, directorySnapshot, saveDiagnosticReport } from './helpers/voiceLifecycleDiagnostics.mjs';
+import { boundedEvents, directorySnapshot, saveDiagnosticReport, recordVoiceLifecycle } from './helpers/voiceLifecycleDiagnostics.mjs';
+
+test('lifecycle-only recorder records context without a filesystem watcher', () => {
+  let phase = 'tests';
+  const recorder = recordVoiceLifecycle(() => ({ phase, round: 1 }));
+  recorder.record('server-ready', { pid: 123 });
+  phase = 'stopping';
+  recorder.record('server-stop-request');
+  const report = recorder.snapshot();
+  assert.equal(report.collection, 'lifecycle-only-no-filesystem-watcher');
+  assert.deepEqual(report.events.map(event => event.phase), ['tests', 'stopping']);
+  assert.equal(report.events[0].pid, 123);
+  assert.ok(report.events.every(event => Number.isFinite(Date.parse(event.observedAt))));
+  for (let index = 0; index < 4096; index++) recorder.record('extra');
+  assert.equal(recorder.snapshot().events.length, 4096);
+  assert.equal(recorder.snapshot().dropped, 2);
+});
 
 test('event history retains its bound and reports lost events', () => {
   const buffer = boundedEvents(2);

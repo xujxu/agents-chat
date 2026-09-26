@@ -1,4 +1,3 @@
-import { watch } from 'node:fs';
 import { lstat, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -44,29 +43,13 @@ export async function saveDiagnosticReport(file, report) {
   await writeFile(file, JSON.stringify(report, null, 2));
 }
 
-export function watchVoiceDirectories(root, context) {
+export function recordVoiceLifecycle(context) {
   const events = boundedEvents(4096);
-  const errors = boundedEvents(32);
   const record = (kind, details = {}) => events.push({
     observedAt: new Date().toISOString(), ...context(), kind, ...details,
   });
-  let watcher;
-  try {
-    watcher = watch(root, (kind, filename) => {
-      if (filename === null) {
-        errors.push({ code: 'missing_filename', observedAt: new Date().toISOString() });
-        return;
-      }
-      const name = filename.toString();
-      if (name.startsWith('agents-chat-voice-')) record('directory-notification', { notification: kind, name });
-    });
-    watcher.on('error', error => errors.push({ code: error.code ?? error.name, observedAt: new Date().toISOString() }));
-  } catch (error) {
-    errors.push({ code: error.code ?? error.name, observedAt: new Date().toISOString() });
-  }
   return {
     record,
-    close() { watcher?.close(); },
-    snapshot() { return { ...events.snapshot(), captureErrors: errors.snapshot() }; },
+    snapshot() { return { ...events.snapshot(), collection: 'lifecycle-only-no-filesystem-watcher' }; },
   };
 }

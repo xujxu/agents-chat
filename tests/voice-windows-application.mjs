@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { open, mkdir, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { directorySnapshot, saveDiagnosticReport, watchVoiceDirectories } from './helpers/voiceLifecycleDiagnostics.mjs';
+import { directorySnapshot, saveDiagnosticReport, recordVoiceLifecycle } from './helpers/voiceLifecycleDiagnostics.mjs';
 
 assert.equal(process.platform, 'win32');
 const artifacts = path.resolve('.data/voice-windows-build');
@@ -37,7 +37,7 @@ for (let round = 1; round <= rounds; round++) {
   await mkdir(output, { recursive: true });
   let mode = 'starting';
   let phase = 'round-start';
-  const observer = diagnostic ? watchVoiceDirectories(tmpdir(), () => ({ round, mode, phase })) : null;
+  const observer = diagnostic ? recordVoiceLifecycle(() => ({ round, mode, phase })) : null;
   const report = { productSha: process.env.DIAGNOSTIC_PRODUCT_SHA, harnessSha: process.env.GITHUB_SHA,
     sampling, requestedRounds: rounds, round, completedRounds: round - 1, completedModes: [],
     initialDirectories, status: 'running', postStop: [] };
@@ -105,7 +105,6 @@ for (let round = 1; round <= rounds; round++) {
     report.error = { name: error.name, message: error.message };
     throw error;
   } finally {
-    observer?.close();
     if (observer) {
       if (report.status === 'failed') {
         try {
@@ -115,9 +114,6 @@ for (let round = 1; round <= rounds; round++) {
         }
       }
       const observation = observer.snapshot();
-      if (observation.captureErrors.events.length || observation.captureErrors.dropped) {
-        report.status = report.status === 'failed' ? 'failed' : 'capture-incomplete';
-      }
       await saveDiagnosticReport(path.join(output, 'lifecycle.json'), { ...report, observation });
     }
   }
