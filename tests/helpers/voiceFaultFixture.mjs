@@ -95,6 +95,7 @@ export async function createVoiceFaultFixture() {
       },
     },
     'next/server': {
+      NextRequest: Request,
       NextResponse: { json: (body, options) => ({ body, status: options.status }) },
     },
     'lib/auth.ts': { getAuthToken: async () => ({ email: 'fixture-user' }) },
