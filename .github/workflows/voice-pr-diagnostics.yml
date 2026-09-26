@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.20.0
-      - run: node --test tests/voice-pr-diagnostics.test.mjs
+      - run: node --test tests/voice-pr-diagnostics.test.mjs tests/reading-controller-diagnostics.test.mjs
   windows:
     if: github.event_name == 'workflow_dispatch' && inputs.run_cohorts
     needs: contracts
