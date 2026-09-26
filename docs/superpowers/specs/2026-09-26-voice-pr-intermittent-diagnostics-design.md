@@ -266,3 +266,86 @@ budget is exhausted; no further batch or product change was started.
 Artifacts expire2026-10-10; local evidence is retained under session files
 `voice-pr-diag-36227059166/`. PR #2 remains Draft. Windows's original residual
 and the reproduced WebKit orientation failure remain unresolved.
+
+## Approved WebKit controller-state diagnosis
+
+The user approved a new WebKit-only bounded diagnosis, then explicitly selected
+Actions-product-copy instrumentation instead of a permanent product debug
+interface. This is a separate budget from the completed geometry comparison.
+Written-spec review and an implementation plan precede implementation.
+
+### Isolation and alternatives
+
+Keep tracked production controller, geometry helpers, composer and CSS
+unchanged. A test-owned instrumenter modifies only the disposable pinned
+product checkout inside Actions. Before writing, require an exact expected
+controller revision and uniquely matched insertion sites; mismatch fails
+explicitly without a partially instrumented output. Retain original and
+instrumented SHA256 values plus the instrumentation diff in the artifact.
+Apply identical instrumentation to both baselines:
+
+- Main: `638c553c62406dbb7e6b5aeb41cdddf4cd6de179`.
+- Voice: `20f5f0e3e55569a4ac7f0878f314f1d8c7b2e009`.
+
+A permanent production debug hook would increase shipped surface unnecessarily.
+External geometry-only sampling cannot resolve internal state transitions.
+The selected overlay avoids both limitations, but its extra reads and recording
+can still affect scheduling; a passing result cannot establish absence of a race.
+
+### Observation and evidence
+
+Use a test-owned typed recorder with an explicit event/state schema. Browser
+initialization enables it only for this diagnostic case. Give controller
+instances page-local numeric IDs; record relative timestamps and event order.
+Capture callback entry, relevant branch decisions and state transitions for
+layout correction, independent-scroll classification, user-position capture,
+ResizeObserver delivery, correction scheduling and scroll-position writes.
+Include user-intent and lifecycle transitions needed to distinguish an
+intentionally suspended/disposed controller from missing correction delivery.
+
+Record `following`, `userIntent`, `jumping`, `suspended`, `disposed`,
+`multiTouch`, `scrollbarDrag`, pending-correction state, anchor-presence only,
+`expectedTop`, `lastTop`, cached/current numeric geometry, scrollTop and the
+requested write target where relevant. Record the decision actually taken,
+not a second evaluation of a predicate presented as the original result.
+Do not change predicate order, thresholds, scroll writes, scheduling policy,
+event registration semantics or return values. No chat text, anchor text/DOM
+references, audio, transcript, credentials or persistent user identifiers.
+
+Each page retains at most2048state events with a dropped count; errors have
+a separate bound of16 and an overflow count. Do not overwrite earlier events.
+Missing initialization, zero controller events, malformed reports or capture
+errors are explicit collection failures. Saturation marks evidence incomplete,
+not a complete successful diagnosis. Preserve the original test failure and
+available partial evidence even when collection also fails. Attach state data
+beside existing numeric geometry and final-geometry reports, with pinned
+product/harness identity and repetition index.
+
+### Workflow and stop rules
+
+Extend the existing manual diagnostic workflow, with independent default-false
+Windows and WebKit gates. The new state-diagnostic dispatch runs no Windows
+jobs. No temporary push registration or default-branch modification is needed.
+
+Use the existing Node24.20.0, Ubuntu24.04 and lockfile-defined browser tooling.
+Run contracts first in Actions: injection succeeds only on the expected source,
+rejects changed/missing/duplicate sites before writing, preserves the original
+product body except declared instrumentation, and records correct state,
+timestamps, ordering, bounds and explicit capture failures. Verify instrumented
+TypeScript via the existing build/typecheck in Actions. No local validation,
+dependency installation, server or browser execution.
+
+After contracts pass, dispatch exactly one batch, main and voice each at most
+3repetitions of the existing orientation round-trip case. Keep its actions,
+settling helper and4px acceptance threshold unchanged. Each arm uses1worker,
+0retries and max-failures1; a failure stops that arm, not the other arm.
+No additional browser smoke batch or automatic retries. Upload available
+evidence even on failure, including provenance and instrumentation diff.
+
+Classify each arm as reproduced, not reproduced within its completed budget,
+or collection blocked/incomplete. Report actual counts rather than requested
+counts. A causal conclusion requires a recorded path linking state/decision to
+the missed bottom correction; a ResizeObserver error or button appearance
+alone is insufficient. Keep PR #2 Draft. Any proposed product fix must explain
+its evidence and effect on manual scrolling/history anchoring and receive
+separate approval before implementation. Licensing and accuracy work stay paused.
