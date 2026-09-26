@@ -20,6 +20,14 @@ voice-only decision. Do not reopen Next/sharp/SQLite/relay licensing here.
 Free redistribution still requires compliance with upstream conditions;
 giving binaries away does not waive notices or runtime redistribution terms.
 
+User disposition (2026-09-26):
+Stop this licensing review and do not pursue public distribution of the Windows
+voice package for now. Retain the Windows static-runtime permission question as
+unconfirmed, not cleared or prohibited. No support inquiry or toolchain
+replacement is authorized by this decision. Existing implementation, candidate
+archives and review-required notices remain unchanged; this is not authorization
+to publish them or a new conclusion about non-public distribution rights.
+
 Voice-only source-level findings:
 - Recommended SenseVoiceSmall q8 GGUF: pinned official model card declares
   Apache-2.0. This permits no-charge use and distribution subject to license,
