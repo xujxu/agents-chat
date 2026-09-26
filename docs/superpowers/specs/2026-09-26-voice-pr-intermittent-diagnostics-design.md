@@ -349,3 +349,93 @@ the missed bottom correction; a ResizeObserver error or button appearance
 alone is insufficient. Keep PR #2 Draft. Any proposed product fix must explain
 its evidence and effect on manual scrolling/history anchoring and receive
 separate approval before implementation. Licensing and accuracy work stay paused.
+
+### Controller-state execution and causal evidence
+
+The written specification was approved, with inline execution. Red contracts
+`36228324769` failed for the intended missing instrumenter; green contracts
+`36228414785` passed10/10 at harness
+`60851557134a6df63aa91e3e56f695c6afbedc42`. The only cohort batch was
+`36228445199` at that same harness, dispatched with Windows false/WebKit true.
+Both product builds/typechecks passed; Windows was skipped.
+
+| Arm | Completed result | Remaining not run | Controller events |
+| --- | --- | --- | --- |
+| Main | Repeat0passed; repeat1failed at16px vs4px, cycle1 landscape |1|184(pass),111(fail)|
+| Voice | Repeat0failed at5px vs4px, cycle1 landscape |2|107(fail)|
+
+All3state reports have0dropped events,0capture errors and0error overflow.
+Each failing test has only the original orientation assertion error, not a
+diagnostic-collection error. Both original controller hashes are
+`3ebb63ffe07e976b9f0c3154206418a5691dd3c3a5f96f69d3af1d63eb69f94e`;
+both instrumented hashes are
+`13c8066e8988cab7eaa409031c9a9ca103dfecfc32218c08a1eb14230d042ebb`.
+The retained diff records all injection changes. Node24.20.0 and runner
+image20260920.314.1 match in both provenance reports.
+
+The two failures expose the same stale-layout-state path, not merely a missing
+final resize notification. Event sequence numbers below are zero-based within
+each failing page, controller1; times are performance milliseconds.
+
+| Stage | Main repeat1 | Voice repeat0 |
+| --- | --- | --- |
+| Bottom write recorded | #89 at2851: height192, top/lastTop7869 | #85 at3965: height181, top/lastTop7880 |
+| Intermediate expansion clamps top by3px | #93 at3124: height195, top7866 | #89 at4135: height184, top7877 |
+| Scroll correctly classified as layout | #95 `scroll:layout`; cached height192/lastTop7869 unchanged | #91 `scroll:layout`; cached height181/lastTop7880 unchanged |
+| Following frame sees final height179 | #101 at3127 `correct:independent`, top7866 vs cached lastTop7869 | #97 at4137 `correct:independent`, top7877 vs cached lastTop7880 |
+| Position capture disables following | #103 at3132: followingfalse, anchorpresent | #99 at4141: followingfalse, anchorpresent |
+| Resize callback is delivered afterward | #104 at3133 | #100 at4141 |
+| Historical-anchor correction preserves wrong gap | #108-110 at3351-3352 write7866, final16pxgap | #104-106 at4274 write7877, final5pxgap |
+
+Width844 and contentHeight8061 are unchanged over each critical intermediate
+expansion/final contraction. `userIntent` isfalse throughout this sequence;
+neither page has an `intent:marked` event. The test performs viewport changes,
+not a manual scroll gesture during these transitions.
+
+Explanation supported by both recorded branches:
+`onScroll` accepts the intermediate top as a valid layout clamp and schedules
+correction, but retains the geometry/lastTop from the earlier write.
+Before that correction executes, the viewport contracts again.
+`correctLayout` then applies `isIndependentScroll` using the stale pair.
+Clamping the stale lastTop against the *final* maximum7882 produces7869/main
+or7880/voice, which differs from the actual top by3px, beyond the1px layout
+tolerance. It therefore calls `captureUserPosition`, and the non-bottom
+position turns following off. The next callback now deliberately preserves
+the captured historical anchor instead of restoring bottom following.
+
+This establishes the causal path for these instrumented reproductions in
+both pinned products. It does not prove every earlier uninstrumented failure
+had this path or identify every source of intermediate size changes.
+The diagnostic reads can affect scheduling. Nevertheless the observation
+rules out voice-only causation and missing ResizeObserver delivery for these
+two failures, while reproducing the prior5px/16px symptoms without changing
+test thresholds or scroll policy.
+
+### Proposed product-fix boundary (not approved or implemented)
+
+Candidate: in the controller's already-classified layout-scroll path, retain
+the accepted intermediate geometry/top for subsequent independent-scroll
+classification, without changing following or the historical anchor.
+Reason: avoid reinterpreting a previously accepted layout clamp as user
+movement merely because another resize occurs before the queued frame.
+Review `expectedTop` handling together with that transition; do not blindly
+force following, ignore genuine manual/programmatic independent scrolling,
+remove CSS transitions or widen tolerances.
+
+Before implementing, obtain separate approval for the controller change and
+focused regression coverage. A deterministic regression should replay both
+recorded expansion/contraction sequences and remain failing before the fix.
+Guard genuine independent/user scrolling and historical reading-anchor
+behavior as well as bottom following, then use existing Actions browser
+coverage. No component replacement is proposed. No product code was changed
+by this diagnosis, and no further batch is authorized by the completed budget.
+
+| Artifact | ID | Bytes | GitHub SHA256 |
+| --- | --- | --- | --- |
+| `webkit-orientation-main-36228445199` |10902250320|1487996|`8c883662d457b19f1a89b938cedeb1497bd06343493ec8f9a9369d7788cd8125`|
+| `webkit-orientation-voice-36228445199` |10902345145|1294740|`6b2a296bc652874851eba7c8c0a11321f03bf2ea294f2fad10eaaf67502247e0`|
+
+Artifacts expire2026-10-10; local reports and traces are retained in session
+files `webkit-state-36228445199/`. PR #2 remains Draft. Windows's original
+residual-directory cause is still unconfirmed; licensing and accuracy remain
+paused.

@@ -214,3 +214,24 @@ browser batch. Source identity and typecheck guard against applying stale
 instrumentation. Original behavior is preserved, but timing interference
 remains explicitly possible. The user has already selected inline execution;
 no additional execution-choice prompt is needed.
+
+## Execution checkpoint
+
+Tasks1-3complete. Red contracts `36228324769` at `c481787` failed with the
+expected missing instrumenter module; existing5contracts passed. Implementation
+`6085155` passed all10contracts in `36228414785`, including transformed
+TypeScript syntax parsing. No product file is changed in the branch.
+The implementation uses a narrowed, typed recorder reference instead of the
+plan's non-null assertion. The approved single batch `36228445199` was
+dispatched at `6085155` with Windows false and WebKit true. It completed with
+product assertion failures, not collection failures: main1pass+1fail16px+
+1notrun; voice1fail5px+2notrun. Builds/typechecks passed, Windows skipped.
+
+Task4complete. Both failing state histories show an accepted intermediate
+layout clamp left out of cached geometry/lastTop, followed by a false
+independent-scroll classification and loss of following. Subsequent resize
+callbacks were delivered but preserved the captured historical anchor.
+The specification retains exact event numbers, timings, hashes, artifact IDs
+and a proposed product-fix boundary requiring separate approval.
+All3reports are within bounds and have0capture errors/drops. The budget is
+complete; do not rerun after interruption. Product code remains unchanged.
