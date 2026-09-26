@@ -10,7 +10,95 @@ Linux-only statements below describe earlier implementation,
 not an exclusion from the final feature. This file remains the
 experiment and implementation evidence log; the formal spec owns product design.
 
-Pre-publication source/license audit (2026-09-25; NOT release clearance)
+Current license review scope (2026-09-26; supersedes broad audit scope below)
+----------------------------------------------------------------------------
+User narrowed the task to components newly added to support voice input:
+confirm free use and upstream-compliant, no-license-fee redistribution.
+Ignore Dev Tunnel and preexisting application components. The historical
+project-wide audit below is retained as evidence, not a prerequisite for this
+voice-only decision. Do not reopen Next/sharp/SQLite/relay licensing here.
+Free redistribution still requires compliance with upstream conditions;
+giving binaries away does not waive notices or runtime redistribution terms.
+
+Voice-only source-level findings:
+- Recommended SenseVoiceSmall q8 GGUF: pinned official model card declares
+  Apache-2.0. This permits no-charge use and distribution subject to license,
+  applicable notices and modification requirements. No hosted speech API or
+  per-transcription license charge is required by the implemented local path.
+- FunASR native runtime and ggml from the pinned llama.cpp source: MIT, allowing
+  free use and redistribution with copyright/permission notices. The selected
+  Sense target links ggml and Threads, not the llama language-model target.
+  Preserve the bundled jsonhpp MIT notice where applicable; carrying extra
+  upstream notices does not imply every component is actually linked.
+- miniaudio v0.11.25 in the pinned FunASR header: offers Unlicense OR MIT-0.
+  The MIT-0 alternative expressly allows free use/copy/distribution. Both
+  builders retain the full header, including its license declarations.
+- ZIP acquisition: yauzl3.4.0 and its pend1.2.0 dependency are MIT. Commit
+  ab5bb42 added yauzl to package.json for voice acquisition. Preserve both
+  copyright/permission texts. package-release.mjs copies their package trees
+  recursively for the CLI path; this is source-level preservation evidence,
+  not a fresh inspection of an archived release.
+- Optional compatibility model: pinned whisper.cpp is MIT; the pinned OpenAI
+  Whisper README expressly covers both code and weights under MIT. Preserve
+  both upstream notices. The converted GGML model hash remains pinned.
+  This licensing finding does not change its failed quality/latency gates;
+  automatic acquisition still selects only Sense, not Whisper.
+- Linux native runtime: GCC libstdc++/libgcc use GPLv3 with Runtime Library
+  Exception3.1 for covered files. That exception permits qualifying compiled
+  combinations with independent modules under their own terms; static linking
+  does not by itself require relicensing the application under GPL.
+  The recipe uses GCC12 without an indicated non-eligible optimizer/plugin and
+  copies GCC copyright/GPL text. The exact packaged exception/covered inputs
+  remain to be matched to the candidate; retain those notices.
+- Windows native runtime: the new engine/helper embeds /MT runtime code.
+  This is within scope even though unrelated old Windows components are not.
+  Free redistribution of the MIT/Apache model/engine does not establish the
+  Microsoft runtime grant. Exact applicable runtime/distributor terms remain
+  unclosed; do not state that the complete Windows candidate is cleared.
+
+Distribution handling already present:
+The native recipes collect upstream license/model-card files; package-manifest
+records their hashes and role; install-package copies and hash-checks every
+manifest member, retaining notices instead of discarding them at installation.
+The schema only requires at least one license member, not a complete legal
+notice checklist. No complete-archive clearance is inferred from that check.
+
+Boundaries for this narrowed decision:
+- Voice capture uses browser APIs and project code; backend inference invokes
+  the locally selected native binary. No added paid recording/ASR SDK was
+  found in that path. Existing React/Node/OS rights are not re-audited.
+- Linux invokes existing system nice/prlimit; the voice recipe does not bundle
+  those utilities or system glibc. Do not add their entire source distributions
+  to the voice package merely because they are used on the host.
+- Python research tools, FFmpeg, alternative experimental ASR engines and
+  ASCEND/JFK test audio are not required by this selected native installation.
+  They are not part of this end-user voice-runtime clearance; any future
+  redistribution of those test assets/tools needs its own applicable notices.
+- Repository-owned helper/patch licensing is separate from the third-party
+  component question. No whole-repository license decision is required merely
+  to establish the above upstream grants, and none is made by this review.
+  A public package must still be distributed by a party entitled to distribute
+  its own code; no copyright ownership is invented here.
+
+Conclusion: the reviewed voice-specific models, engines and new npm libraries
+have free-use and redistribution grants with ordinary upstream conditions.
+No paid ASR service is required. This is not yet unconditional clearance of
+both finished platform packages: only the voice package notice/runtime closure
+(especially Windows /MT) remains relevant, not the old project-wide checklist.
+No runtime, dependency, default, license grant or publication was changed.
+
+Additional pinned sources for the narrowed review:
+https://raw.githubusercontent.com/thejoshwolfe/yauzl/3.4.0/LICENSE
+https://raw.githubusercontent.com/andrewrk/node-pend/1.2.0/LICENSE
+https://raw.githubusercontent.com/modelscope/FunASR/3ff9259aade4f7e4360645df28cad8f81959ee91/runtime/llama.cpp/CMakeLists.txt
+https://raw.githubusercontent.com/modelscope/FunASR/3ff9259aade4f7e4360645df28cad8f81959ee91/runtime/llama.cpp/funasr-common/miniaudio.h
+https://raw.githubusercontent.com/ggml-org/llama.cpp/803b7fcae893e9caaee3921779628fef83ac0965/licenses/LICENSE-jsonhpp
+https://raw.githubusercontent.com/ggml-org/whisper.cpp/5670d5c0bbcb148feabef84400a07cfca9aa3b30/LICENSE
+https://raw.githubusercontent.com/openai/whisper/6e3be77e1a105e59086e3e21ff5f609fd6fa89a5/README.md
+https://raw.githubusercontent.com/openai/whisper/6e3be77e1a105e59086e3e21ff5f609fd6fa89a5/LICENSE
+https://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
+
+Historical pre-publication audit (2026-09-25; NOT release clearance)
 ----------------------------------------------------------------------
 User acceptance requirement clarified2026-09-25:
 Components used by this project must be free to use; any redistribution must
