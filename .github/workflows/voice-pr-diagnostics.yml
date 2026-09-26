@@ -1,5 +1,8 @@
 name: Bounded voice PR diagnostics
 on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths: ['.github/workflows/voice-pr-diagnostics.yml', 'tests/voice-pr-diagnostics.test.mjs']
   workflow_dispatch:
     inputs:
       run_cohorts:
