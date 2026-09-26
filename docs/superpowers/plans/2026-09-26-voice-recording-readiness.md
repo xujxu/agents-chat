@@ -231,7 +231,7 @@ run_id=$(gh run list -R xujxu/agents-chat --commit "$revision" \
   --workflow voice-input.yml --limit 1 --json databaseId --jq '.[0].databaseId')
 test -n "$run_id" && test "$run_id" != null &&
 gh run view "$run_id" -R xujxu/agents-chat --log-failed |
-  rg -n -C 5 'recording readiness|Expected|Received|Error:|failed|passed'
+  grep -n -E -C 5 'recording readiness|Expected|Received|Error:|failed|passed'
 ```
 
 Expected: the controlled two-second wait fails after the existing assertion
@@ -328,11 +328,49 @@ completion or an approval wait. The streaming-save baseline proceeds through
 its own design approval; historical ECONNRESET and Windows residual findings
 remain unresolved.
 
+## Observed red evidence and diagnostic refinement
+
+Red source c687254e7fbc8e860db85003e19e7f8fd20b9416, Actions
+[36251145916](https://github.com/xujxu/agents-chat/actions/runs/36251145916),
+failed precisely the controlled two-second waiter (5000ms) and the predicate
+boundary at02. Build/typecheck and native prerequisite passed. The existing
+two-failure limit stopped the remaining12 WebKit cases; later integration
+steps were skipped, not passed.
+
+Artifact10908739863, `voice-app-79d36c353363df0f27f0795d27d2098f74774bfd`,
+is44634 bytes; archive digest
+`73b539685ed32fe3b4b8057dd5cce37762c7e088b997f11e56d308da2a5dfe32`.
+Eight recorded browser evaluations in the controlled two-second trace returned
+`Recording 0:02 / 0:30` and all three visibility/enabled flags true. This
+establishes the intended predicate failure, not a DOM observer failure.
+
+The red log also revealed that `toMatchObject({ ready: true })` hides the
+additional observation fields in its assertion diff. To satisfy the approved
+failure-diagnostic contract, the green waiter returns `'ready'` only on success
+and otherwise returns the complete observation, then asserts `.toBe('ready')`.
+This changes only failure rendering alongside the predicate repair, not the
+timeout, polling, accepted states, or regression expectations:
+
+```ts
+export async function waitForVoiceRecordingReady(page: Page): Promise<void> {
+  await expect.poll(async () => {
+    const observation = await observeVoiceRecording(page);
+    return isVoiceRecordingReady(observation) ? 'ready' : observation;
+  }, {
+    message: 'Expected visible recording at 1-29 seconds with an enabled stop button',
+  }).toBe('ready');
+}
+```
+
+The local shell has no `rg` binary; the evidence inspection command above uses
+available `grep`. This is log inspection, not local validation.
+
 ## Plan self-review
 
 The helper has one responsibility and no product dependencies. Task1 checks
 the shared wait at02, predicate range boundaries, invalid status, and inactive
-controls. Task2 changes only the semantic predicate; all audio, cancellation
+controls. Task2 changes the semantic predicate and retains complete failure
+observations as described above; all audio, cancellation
 and duration assertions remain intact. Existing workflow selection covers
 all three browser projects. No local validation or timeout/retry expansion is
 introduced. Each exported symbol and test input is defined above.

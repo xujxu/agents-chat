@@ -38,14 +38,14 @@ export function isVoiceRecordingReady(observation: VoiceRecordingObservation): b
   return observation.statusVisible
     && observation.stopVisible
     && observation.stopEnabled
-    && observation.statusText === 'Recording 0:01 / 0:30';
+    && /^Recording 0:(?:0[1-9]|1[0-9]|2[0-9]) \/ 0:30(?![\s\S])/.test(observation.statusText ?? '');
 }
 
 export async function waitForVoiceRecordingReady(page: Page): Promise<void> {
   await expect.poll(async () => {
     const observation = await observeVoiceRecording(page);
-    return { ready: isVoiceRecordingReady(observation), observation };
+    return isVoiceRecordingReady(observation) ? 'ready' : observation;
   }, {
     message: 'Expected visible recording at 1-29 seconds with an enabled stop button',
-  }).toMatchObject({ ready: true });
+  }).toBe('ready');
 }
