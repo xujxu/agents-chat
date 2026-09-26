@@ -54,9 +54,29 @@ case, not a guarantee across every browser or OS version.
 
 For persistent deployment, use one of the platform-specific scripts below. Both handle build + restart + health check in one command.
 
-### Optional self-hosted voice input (PoC)
+### Optional self-hosted voice input (experimental)
 
-Voice input is disabled by default. The **Voice input PoC** Actions workflow
+Voice input is **disabled by default**; installation and upgrades preserve that
+state unless an administrator explicitly enables it. The selected local model
+transcribes into the existing draft without sending a message or invoking an
+agent. No paid speech API is required.
+
+**Current status:** optional installation, upgrade/keep/disable, and real
+browser-to-model-to-draft flows passed GitHub Actions using Linux systemd and
+Windows Server 2022 Scheduled Tasks ([service evidence](https://github.com/xujxu/agents-chat/actions/runs/36141303634)).
+This is functional coverage, not real Windows 11, physical-microphone or
+real-phone qualification. Accuracy research is paused; previous failed quality
+gates remain failed. Windows voice package public distribution is deferred and
+its static-runtime redistribution permission remains unconfirmed. No native
+voice package is approved as a permanent public release.
+
+Start with the [installation and upgrade instructions](#voice-setup-on-installation-and-upgrade)
+below. SenseVoiceSmall q8 is the current experimental acquisition option;
+Whisper remains an explicitly configured compatibility option, not an automatic
+fallback. Model/native binaries are acquired separately, not shipped inside the
+application's standalone bundle.
+
+For historical/manual Whisper configuration, the **Voice input PoC** Actions workflow
 builds and verifies an AVX2/FMA/F16C/BMI2 x86_64 Linux CPU-only `whisper-cli` compatible with glibc
 2.31+, together with the multilingual `ggml-base-q5_1.bin` model and licenses.
 Configure `VOICE_ENABLED=1`, `VOICE_WHISPER_PATH`, and `VOICE_MODEL_PATH` using
@@ -65,7 +85,7 @@ absolute paths to those verified artifacts, then restart the app. The host needs
 Do not expose a separate model server port. Set `VOICE_ENABLED=0` and restart to
 disable the capability.
 
-The unified native adapter also supports the qualified **official SenseVoiceSmall
+The unified native adapter also supports the pinned **official SenseVoiceSmall
 GGUF q8** build with the pinned thread/error patch. For explicit configuration,
 set `VOICE_MODEL=sensevoice-small-q8`, `VOICE_BINARY_PATH` and `VOICE_MODEL_PATH`
 to absolute paths to that executable and model. `VOICE_THREADS` accepts `1`, `2`
@@ -73,9 +93,12 @@ or `4` (Sense defaults to `2`). Do not point this adapter at an unpatched upstre
 binary or an ONNX model. Adapter/API/browser fixture regressions and a real Sense
 authenticated-API smoke passed Actions35965252088. A transactional installer for
 verified Actions packages is available below. Installed Linux Sense passed the
-frozen100 authenticated direct-WAV API gates in Actions `35991326454`; browser
-capture full-corpus acceptance and public runtime release publication remain
-pending. These are installation candidates, not release-approved models.
+frozen100 authenticated direct-WAV API gates in Actions `35991326454`.
+Controlled Chromium browser measurements subsequently passed on Linux and
+Windows Server; Edge passed its browser path, while mobile-emulated WebKit
+failed a mixed-language quality gate. Overall quality acceptance and public
+runtime release publication remain pending. These are installation candidates,
+not release-approved models.
 See `scripts/VOICE-DEPLOYMENT.txt` for exact versions and qualification evidence.
 The formal cross-platform design is
 [`docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md`](docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md).
@@ -244,9 +267,38 @@ sudo bash scripts/deploy.sh --voice sensevoice-small-q8 \
   --voice-manifest-sha256 <trusted-64-character-sha256>
 ```
 
-There is no automatic model/runtime download in the configurator yet. Choosing
-an enabled model without the verified package arguments fails explicitly and
-preserves the current configuration. Do not substitute a profiler's binary.
+**Explicit experimental acquisition:** authenticated GitHub CLI (`gh`) with
+access to this repository's Actions artifacts can retrieve the fixed Sense
+candidate instead of requiring a manually extracted package:
+
+```bash
+node scripts/configure-voice.mjs --model sensevoice-small-q8 --experimental-download
+sudo bash scripts/deploy.sh --voice sensevoice-small-q8 --voice-experimental-download
+# Later upgrades can opt in explicitly too:
+sudo bash scripts/upgrade.sh --voice sensevoice-small-q8 --voice-experimental-download
+```
+
+The implemented Windows equivalents are `-VoiceModel sensevoice-small-q8
+-VoiceExperimentalDownload` on `setup.ps1` / `deploy.ps1`; their existence does
+not clear or authorize public distribution of the Windows candidate.
+When deploying without Dev Tunnels, `deploy.ps1 -NoTunnel` uses the existing
+loopback/own-HTTPS-proxy mode; `setup.ps1` still includes tunnel provisioning.
+
+The catalog pins repository/run/artifact identities, archive and manifest hashes;
+it does not select the latest build. **Current candidates expire on 2026-10-24.**
+Expired, inaccessible or mismatched artifacts fail explicitly, without fallback
+or changing the voice configuration. There is no permanent-download promise.
+Do not combine experimental acquisition with local package arguments. Keep and
+disable do not download or require GitHub authentication.
+
+With `sudo`, the installing identity must have access to the GitHub credentials.
+Do not put tokens in command arguments, `.env.local`, service units or issue
+reports. The configurator imports ZIP files using bundled CLI dependencies; the
+offline import path does not require `gh`. Standalone configuration does not
+restart a service: restart the app and reload the page afterward.
+
+Without `--experimental-download`, enabling requires the verified local package
+arguments above and otherwise fails explicitly. Do not substitute a profiler's binary.
 Sense defaults to two threads; `--threads 1|2|4` (deploy: `--voice-threads`) changes
 the computation setting, not a hard CPU quota. Whisper defaults to one thread.
 

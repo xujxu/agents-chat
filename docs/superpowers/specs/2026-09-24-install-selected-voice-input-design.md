@@ -2,6 +2,27 @@
 
 ## Status and authority
 
+### Current functional scope and deferred release (2026-09-26)
+
+The subsequent user-approved functional scope is complete on hosted Linux and
+Windows Server: optional installation, upgrades/keep/disable, actual
+systemd/Scheduled Task lifecycle, and browser recording through real local ASR
+into the existing draft. Actions `36141303634` at `8f4edba` passed four service
+scenarios, 44 browser records and 32 real ASR attempts. No message is sent.
+Explicit pinned experimental acquisition also passed (`36106345674`); candidates
+expire on 2026-10-24 and are not permanent public downloads.
+
+The user paused accuracy research and, on 2026-09-26, stopped licensing review
+and deferred Windows voice package public distribution. The unresolved Windows
+static-runtime redistribution question remains unconfirmed. No component
+replacement or public package publication is authorized. Historical failed
+quality gates below remain failures; real Windows 11, physical microphones and
+real Safari/iOS/Android remain outside the hosted functional evidence.
+
+The following checkpoints preserve the evolving implementation history. Their
+earlier statements about missing installation/download support are superseded
+by this current functional checkpoint, not by a claim of full product acceptance.
+
 This document consolidates the previously approved voice-input design and adds
 the Windows 11 scope requested on 2026-09-24. The user selected **native Windows
 11 on Intel/AMD x64** as the initial Windows target; ARM64 is outside this slice.
