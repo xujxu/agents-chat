@@ -166,3 +166,22 @@ exercise the controller rather than a copied classifier; anchor traversal is
 covered by existing actual-browser tests. Historical instrumentation retains
 its original exact hash. All execution is Actions-only. The user already chose
 inline implementation; no additional execution-choice prompt is needed.
+
+## Execution checkpoint
+
+Tasks1-3implemented. Red tests/workflow wiring `2684e6e` ran contracts in
+`36229138812`:21passed,4failed, with all four measured-clamp variants failing
+`following` false versus true. Preservation and historical diagnostic contracts
+passed. The old product controller was unchanged for that run.
+
+Repair `51c9708` changes only the accepted-layout branch. Green contracts
+`36229178244` passed25/25; diagnostic Windows/WebKit cohorts skipped.
+Existing ordinary PR typography run `36229180746` is the build/three-browser
+validation for this product revision, executed on GitHub's PR merge
+f2c3419 (parents638c553 and51c9708). It passed all3jobs: reading suites
+22desktop,22Android,21iPhone+1existing wheel skip; both new clamp cases passed
+in each browser. Builds/typechecks and15controller/geometry tests passed
+per job. No duplicate browser run or diagnostic cohort was dispatched.
+Automatic full E2E36229180748 passed6/6jobs; persistence36229180752 and
+Linux voice36229180776 also passed. Task4evidence is recorded in the
+specification; PR closeout retains Windows uncertainty and Draft status.

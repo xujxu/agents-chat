@@ -439,3 +439,14 @@ Artifacts expire2026-10-10; local reports and traces are retained in session
 files `webkit-state-36228445199/`. PR #2 remains Draft. Windows's original
 residual-directory cause is still unconfirmed; licensing and accuracy remain
 paused.
+
+### Subsequent approved repair
+
+The previously proposed product-fix boundary was subsequently approved,
+specified and implemented as51c9708. See
+`2026-09-26-scroll-layout-cache-design.md` for deterministic pre-fix red
+contracts, green25/25contracts and ordinary three-browser acceptance in
+36229180746. Only accepted-layout cached geometry/top and stale expectedTop
+were changed. The diagnostic evidence and budget records above remain
+historical; no diagnostic batch was repeated to validate this repair.
+Windows cleanup uncertainty and Draft PR status remain unchanged.

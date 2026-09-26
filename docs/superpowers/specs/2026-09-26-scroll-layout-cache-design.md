@@ -82,3 +82,58 @@ Retain exact red/green/build/browser outcomes and any unresolved failures.
 Persist source, tests and documentation, update Draft PR #2, and stop reminders.
 Keep Windows's original residual-directory cause unresolved; do not rerun it.
 Licensing and accuracy remain paused. No PR merge, release or publication.
+
+## Implementation and acceptance record
+
+The written specification was approved with inline implementation. Tests were
+committed first in2684e6e, without changing the product controller.
+Actions contracts36229138812 failed the four causal layout-clamp variants
+(two measured sequences, with/without scrollend), each on followingfalse versus
+expectedtrue. The other21tests passed, including independent movement,
+wheel intent, historical anchoring, suspension and the historical diagnostic
+source/hash contracts.
+
+Product repair51c9708 updates only geometry, lastTop and expectedTop in the
+already-accepted layout branch before scheduling correction. It does not set
+following or anchor and does not change CSS, predicates or tolerances.
+Actions contracts36229178244 passed25/25 on that branch revision; both
+diagnostic cohorts were skipped.
+
+Ordinary PR typography validation36229180746 passed all three browser jobs,
+including build/typecheck, controller/geometry contracts, reading-position
+tests, typography behavior/policy and existing mobile/desktop regressions.
+The run's PR head is51c9708a2d4d52735114e5b74d1d4881153ea1b2; checkout and
+artifacts identify the GitHub-generated PR merge revision
+f2c3419bf46523c65050681fa68cd7c6904270c4, whose parents are main638c553 and
+that head. This is normal PR integration validation, not a merge of PR #2.
+No controller instrumentation was enabled in these product browser checks.
+
+| Reading-position project | Result |
+| --- | --- |
+| Desktop Chromium |22passed|
+| Android Chromium |22passed|
+| iPhone WebKit |21passed,1existing mobile-wheel skip|
+
+Both new192->195->179 and181->184->179 browser cases passed in all projects,
+as did the unchanged orientation case. Each job also passed all15controller/
+geometry tests. The deterministic pre-fix failure and post-fix success establish
+the repaired path more directly than a passing intermittent orientation case
+alone; this is not a claim about all possible scroll races.
+
+The automatically triggered full E2E run36229180748 also passed all6jobs
+(four desktop shards, Android Chromium and iPhone WebKit) for PR head51c9708.
+Automatic chat persistence36229180752 and Linux voice36229180776 passed.
+These existing workflows were not manually duplicated.
+
+Artifacts below expire2026-10-10 and use the prefix
+`typography-f2c3419bf46523c65050681fa68cd7c6904270c4-`:
+
+| Project suffix | Artifact ID | Bytes | GitHub SHA256 |
+| --- | --- | --- | --- |
+| `desktop-chromium` |10901591807|26147562|`0b5c5b4457ecae45f98c39f00c10a74e24ac2cbe72b87da29c3b709310a4236e`|
+| `android-chromium` |10902406395|8038597|`3fd9020b8d5762fdfab895808c48acb383389157da638d783e2f113f9bd0cc47`|
+| `iphone-webkit` |10902067531|7371589|`7eaf499e8bc300f2b2d8dd6d78ca56e4c514de46dc9cfa0a593cce050d241bd6`|
+
+No Windows diagnostic or historical WebKit comparison batch was repeated.
+Windows's original residual-directory cause remains unconfirmed. PR #2 stays
+Draft; no component replacement, release or licensing decision was made.
