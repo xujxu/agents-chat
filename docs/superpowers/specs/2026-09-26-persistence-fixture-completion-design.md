@@ -132,3 +132,92 @@ from overall persistence integration status.
 Record exact revisions, runs, failure/skip counts and artifact locations.
 Keep PR #2 Draft. No voice cleanup ownership change, product persistence edit,
 licensing work, release or merge is included.
+
+## Execution evidence
+
+Written specification8da51e0 and inline plan5409d15 were approved. Implementation
+changed only tests and their workflow, with no product source changes.
+
+| Revision/run | Outcome |
+| --- | --- |
+| Tests15be8f4 /36237914612 | Intended missing-helper import red; persistence job skipped |
+| Helpera9b7770 /36237963315 |7/8passed; out-of-order test exposed delayed outcome publication |
+| Correctionaa9aec9 /36238009699 |8/8passed; no assertions relaxed; persistence job skipped |
+| Actual fixture13c98eb /36238088471 | Contracts and full persistence jobs passed |
+
+The helper originally used a second Promise reaction to publish its outcome.
+That allowed a caller awaiting the original operation to resume before the
+completion counter reflected it. The correction publishes outcome in the first
+observer; original rejection propagation is retained. The deterministic test
+caught this helper defect before actual fixture integration.
+
+Fixture revision `13c98eb202e8de8b5fea5b2a307bb5debdd9c747` tracks read,
+synthetic write and fulfillment together. Positive send consumers explicitly
+await completion, including both large-message/attachment sends and the
+lost-acknowledgement case. Negative dispatch assertions and intentional
+in-flight-save releases/reloads retain their original meaning. Final disposal
+stops page traffic, drains existing sends and checks fixture-chat deletion;
+late sends and operation/deletion failures are surfaced.
+
+Full persistence run36238088471 used generated PR integration revision
+`bede9aef0f1639e6220e2a6d6e7f0a649f0dbfa8`, parents main638c553 and13c98eb.
+This is a CI integration checkout, not a merge of PR #2.
+
+| Acceptance step | Result |
+| --- | --- |
+| Dependency-free completion contracts |8passed|
+| Existing persistence logic runner |13passed|
+| Build and typecheck |Passed|
+| Desktop history/API/failure/selection cases |50passed|
+| Existing send behavior |8passed|
+| Android and iPhone persistence |40passed|
+| Existing repeated WebKit network/reload selection |12passed|
+
+The new blocked-reply-write case passed on desktop Chromium, Android Chromium
+and iPhone WebKit. It observes arrival with zero completed sends while the write
+is held, then verifies completion after release and safe fixture disposal.
+The helper contracts independently hold all three stages, preserve rejection
+identity, reject extra/late sends and verify drain-before-delete ordering.
+No fixed sleeps, request retries, ignored route errors or increased timeouts
+were introduced. The12repeated cases are the preexisting workflow step,
+not a new diagnostic cohort.
+
+Artifact `chat-persistence-evidence`, ID10905595520,13938bytes, GitHub archive
+SHA256 `c9b6d5937d57b625cde515f395c41dfd66952e2c7351ae4a9b1f6d42c48e4fe4`,
+expires2026-10-03. Retained in session files `fixture-completion-36238088471/`.
+
+The approved fixture completion gap is addressed and this persistence run
+passes. The original36233497979 ECONNRESET remains unexplained; non-recurrence
+does not establish that the lifecycle change repaired its transport cause.
+Original Windows voice residual ownership/cause also remains unresolved.
+
+## Remaining overall PR checks
+
+At the same fixture revision, ordinary voice36238088478 passed both jobs and
+typography36238088453 passed all3jobs. Full E2E36238088445 did **not** pass:
+4jobs succeeded and2jobs failed with different assertions outside this fixture.
+
+| Job | Failure | Counts |
+| --- | --- | --- |
+| Android Chromium | `tests/voice-input.spec.ts:78` cannot find exact recording label `Recording 0:01 / 0:30` within existing5second assertion; cancellation case at line161 |119passed,3skipped,1failed|
+| Desktop shard3 | `tests/test-ui.spec.ts:3984` streaming-thinking case expects unchanged save count1 but observes2 |76passed,2skipped,1failed|
+
+Neither file imports `fixtureCompletion` or `installPersistenceFixture`.
+This is a scope distinction, not proof of a root cause or proof that they are
+harmless flakes. No change to those assertions, production behavior or retries
+was made, and the workflow was not rerun to obtain a green status.
+
+Retained GitHub artifacts, expiring2026-12-25:
+
+- Desktop3: ID10905266151, `playwright-artifacts-desktop-3`,6214665bytes,
+  archive SHA256
+  `89a50f9e7daca34009f89fb72bcfa899923758395870dbc41d63992191d3a1a2`.
+- Android: ID10904906609, `playwright-artifacts-android-chromium`,28358433bytes,
+  archive SHA256
+  `4fe26ceb7e1111702124d91471a38b52be12018b2505d3dad2df6440acc44c84`.
+
+Only failure logs and artifact metadata were inspected for these two new
+signatures; detailed trace attribution is not part of the approved fixture
+repair. Overall PR acceptance remains blocked pending separately scoped
+analysis. Keep the successful fixture acceptance and failed broader checks
+distinct; PR #2 remains Draft.

@@ -26,7 +26,7 @@ No product edits. All validation runs in Actions, never locally.
 
 ## Task 1: Deterministic red contracts
 
-- [ ] Create the following dependency-free test file before the helper:
+- [x] Create the following dependency-free test file before the helper:
 
 ```ts
 import assert from 'node:assert/strict';
@@ -162,7 +162,7 @@ test('shutdown preserves stop, operation and deletion failures', async () => {
 });
 ```
 
-- [ ] Add `tests/helpers/fixtureCompletion.ts` to workflow PR path selectors.
+- [x] Add `tests/helpers/fixtureCompletion.ts` to workflow PR path selectors.
   Add manual input and contracts job; set persistence job dependency/gate:
 
 ```yaml
@@ -191,7 +191,7 @@ test('shutdown preserves stop, operation and deletion failures', async () => {
 
   Keep remaining persistence job steps unchanged. TypeScript imports include
   `.ts` for direct Node execution; no package installation is needed in contracts.
-- [ ] Commit tests/workflow/plan, push and dispatch the red contracts:
+- [x] Commit tests/workflow/plan, push and dispatch the red contracts:
 
 ```bash
 gh workflow run chat-persistence.yml -R xujxu/agents-chat --ref experiment/voice-natural-long -f contracts_only=true
@@ -202,7 +202,7 @@ gh workflow run chat-persistence.yml -R xujxu/agents-chat --ref experiment/voice
 
 ## Task 2: Completion helper
 
-- [ ] Implement the helper with ordered settlement records and retained failures:
+- [x] Implement the helper with ordered settlement records and retained failures:
 
 ```ts
 type Outcome = { ok: true } | { ok: false; error: unknown };
@@ -242,14 +242,16 @@ export function createFixtureCompletion() {
       const running = Promise.resolve().then(work);
       const operation: Operation = {
         done: running.then(
-          (): Outcome => ({ ok: true }),
-          (error: unknown): Outcome => ({ ok: false, error }),
+          (): Outcome => {
+            operation.outcome = { ok: true };
+            return operation.outcome;
+          },
+          (error: unknown): Outcome => {
+            operation.outcome = { ok: false, error };
+            return operation.outcome;
+          },
         ),
       };
-      operation.done = operation.done.then(outcome => {
-        operation.outcome = outcome;
-        return outcome;
-      });
       operations.push(operation);
       return running;
     },
@@ -277,13 +279,13 @@ export function createFixtureCompletion() {
   for route callers. Registration happens synchronously before work's first
   microtask. No network retries, timer abstraction or product dependency.
 
-- [ ] Commit/push helper; dispatch contracts-only and expect8passed.
+- [x] Commit/push helper; dispatch contracts-only and expect8passed.
   Inspect any failures before proceeding. Counts:1stage-gate +3rejections
   +1count +1out-of-order +1drain +1aggregation.
 
 ## Task 3: Wire actual fixture and browser regression
 
-- [ ] Import the helper in `tests/chat-persistence.spec.ts`. Beside existing
+- [x] Import the helper in `tests/chat-persistence.spec.ts`. Beside existing
   `sent` state add:
 
 ```ts
@@ -308,7 +310,7 @@ if (replyWriteGate) {
   `await route.fulfill(...)` within the tracked operation, so its Promise<void>
   resolves only after fulfillment. Preserve all existing message/route data.
 
-- [ ] Add these fixture methods:
+- [x] Add these fixture methods:
 
 ```ts
 get completedSends() { return completion.completedCount; },
@@ -352,20 +354,20 @@ async dispose(extraChatIds: string[] = []) {
   timeout. Preserve the one existing15second arrival wait, adding completion
   immediately after it rather than reducing that scenario's allowed interval.
 
-- [ ] For each successful-send assertion, retain the assertion and add
+- [x] For each successful-send assertion, retain the assertion and add
   `await fixture.waitForSends(expectedCount)` immediately after it. In cases
   relying solely on visible reply, also wait before reading/reloading/cleanup.
   Both large-message sends wait separately (counts1and2). Add completion after
   the durable-save case's positive count, before using savedBeforeSend.
   Negative sent assertions and intentional in-flight reloads remain unchanged.
-- [ ] Replace fixture-owning finally navigation/deletion pairs with
+- [x] Replace fixture-owning finally navigation/deletion pairs with
   `await fixture.dispose()`, after existing releases. For recovered-chat cleanup,
   use `await fixture.dispose(recoveredId ? [recoveredId] : [])`. Do not replace
   setup navigation, tests without this fixture, or intentional mid-test deletion.
   Check DELETE response semantics before expecting success for already-deleted
   fixture chats; preserve API idempotency rather than modifying product code.
 
-- [ ] Add actual-fixture browser coverage:
+- [x] Add actual-fixture browser coverage:
 
 ```ts
 test('fixture completion waits for the synthetic reply write', async ({ page }) => {
@@ -392,30 +394,30 @@ test('fixture completion waits for the synthetic reply write', async ({ page }) 
   this browser case proves the real fixture uses that boundary. No forced
   unhandled Playwright route failure is added.
 
-- [ ] Commit/push fixture changes. Use the automatically triggered persistence
+- [x] Commit/push fixture changes. Use the automatically triggered persistence
   run if present; otherwise dispatch full workflow once with
   `-f contracts_only=false`. Expect8helper checks and all original persistence
   coverage plus the new browser case across configured projects.
 
 ## Task 4: Acceptance and evidence
 
-- [ ] Read workflow build/typecheck and browser results. New work is test-only;
+- [x] Read workflow build/typecheck and browser results. New work is test-only;
   ordinary production typecheck excludes tests, so rely on executed TypeScript
   contracts/browser compilation as well, not a misleading product-only check.
-- [ ] If transport failure reappears, retain artifacts and stop attribution:
+- [x] If transport failure reappears, retain artifacts and stop attribution:
   fixing fixture completion is not evidence of solving ECONNRESET. Do not add
   retries, ignored errors, payload reductions or new diagnostic cohorts.
-- [ ] Inspect other automatically triggered checks without duplicate dispatch.
+- [x] Inspect other automatically triggered checks without duplicate dispatch.
   Repair only directly caused regressions; unrelated issues require approval.
-- [ ] Update spec/plan and refreshed Draft PR #2 with exact revisions/run IDs,
+- [x] Update spec/plan and refreshed Draft PR #2 with exact revisions/run IDs,
   counts, skips, artifact locations and unresolved original incidents.
-- [ ] Commit and push with trailer:
+- [x] Commit and push with trailer:
 
 ```text
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ```
 
-- [ ] Verify clean pushed state and stop progress reminder when scope completes
+- [x] Verify clean pushed state and stop progress reminder when scope completes
   or awaits user approval. No merge, release or product changes.
 
 ## Self-review
@@ -425,3 +427,30 @@ out-of-order completion and deletion sequencing. Browser gate covers actual
 fixture wiring. Arrival semantics, interrupted-save behavior and assertion
 thresholds remain intact. The only required workflow expansion is a small
 contracts prerequisite with a manual contracts-only selector.
+
+## Execution checkpoint
+
+Inline execution was approved. Tests15be8f4 produced the intended missing-helper
+red in36237914612; application job skipped. Helpera9b7770 run36237963315 passed
+7/8: the out-of-order test exposed a redundant Promise reaction that published
+the completed outcome after the original caller resumed. Correctionaa9aec9
+publishes the outcome in the first observer, preserving the original rejection
+and all assertions;36238009699 passed8/8, application job skipped.
+
+Fixture wiring13c98eb registers whole send callbacks, keeps received-text
+observations, adds explicit waits at positive consumers, and centralizes final
+draining/deletion. Existing interrupted-save releases and negative dispatch
+assertions remain intact. DELETE is idempotent in the current API/store, so
+cleanup now checks the response without changing already-deleted-chat cases.
+Persistence36238088471 passed8completion contracts,13existing logic checks,
+build/typecheck,50desktop cases,8existing-send cases,40mobile cases and12existing
+repeated WebKit network/reload cases. New gate regression passed all3projects.
+Artifact10905595520 is retained and specified in the design evidence.
+No transport failure recurred in this run; its historical cause remains unknown.
+
+Voice36238088478 and typography36238088453 passed. Full E2E36238088445 had4jobs
+pass and2fail: Android voice exact1second recording label absent, desktop3
+streaming save count2rather than1. These tests do not import the changed fixture.
+Their logs/artifact identities are recorded in the spec; no unrelated code
+change, error suppression or rerun was performed. Fixture acceptance is complete,
+but overall PR acceptance remains blocked on separately scoped investigation.
