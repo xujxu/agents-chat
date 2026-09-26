@@ -1,0 +1,176 @@
+name: SenseVoice native CPU resource profiles
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - .github/workflows/voice-sense-native-profile.yml
+      - scripts/voice_sense_native_patch.py
+  workflow_dispatch:
+    inputs:
+      sample_set:
+        description: Resource probes or frozen full quality set
+        type: choice
+        options: [probes, fixed100]
+        default: probes
+permissions:
+  contents: read
+  actions: read
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - name: Resource and regression contracts
+        run: |
+          python -m unittest discover -s scripts -p test_voice_server_profiles.py -v
+          python -m unittest discover -s scripts -p test_voice_corpus_baseline.py -v
+          python -m unittest discover -s scripts -p test_voice_choice.py -v
+  sense:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      SAMPLE_SET: ${{ inputs.sample_set }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10748244312
+          merge-multiple: true
+          path: short
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35863991538
+          artifact-ids: 10752270787
+          merge-multiple: true
+          path: meeting
+      - run: python scripts/voice_chain_report.py prepare short meeting corpus
+      - uses: actions/download-artifact@v4
+        if: inputs.sample_set == 'fixed100'
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10751002303
+          merge-multiple: true
+          path: baseline
+      - uses: actions/download-artifact@v4
+        if: inputs.sample_set == 'fixed100'
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35870441019
+          artifact-ids: 10755950119
+          merge-multiple: true
+          path: long-baseline
+      - name: Fetch pinned source, model and license evidence
+        run: |
+          mkdir -p source llama sense-model provenance/licenses
+          curl -fL --retry 3 --max-time 600 https://github.com/modelscope/FunASR/archive/3ff9259aade4f7e4360645df28cad8f81959ee91.tar.gz -o source.tar.gz
+          tar -xzf source.tar.gz --strip-components=1 -C source
+          curl -fL --retry 3 --max-time 600 https://github.com/ggml-org/llama.cpp/archive/803b7fcae893e9caaee3921779628fef83ac0965.tar.gz -o llama.tar.gz
+          tar -xzf llama.tar.gz --strip-components=1 -C llama
+          curl -fL --retry 3 --max-time 600 https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF/resolve/90c1c61912018b70ada0fcc024ea24aca62f2e63/sensevoice-small-q8.gguf -o sense-model/sensevoice-small-q8.gguf
+          echo '4ae45c94422de949b387e2e0fb10d7e14e4c42c69db30c3444ecc7d4b844b7c5  sense-model/sensevoice-small-q8.gguf' | sha256sum --check
+          curl -fL --retry 3 https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF/raw/90c1c61912018b70ada0fcc024ea24aca62f2e63/README.md -o provenance/sense-gguf-model-card.txt
+          cp source/LICENSE provenance/licenses/FunASR-MIT.txt
+          cp source/README.md provenance/FunASR-README.txt
+          cp llama/LICENSE provenance/licenses/llama-MIT.txt
+          cp -r llama/licenses provenance/licenses/llama-dependencies
+          cp source/runtime/llama.cpp/funasr-common/miniaudio.h provenance/licenses/miniaudio-with-notices.h
+          sha256sum source.tar.gz llama.tar.gz sense-model/* > provenance/source-model.sha256
+          python scripts/voice_sense_native_patch.py \
+            source/runtime/llama.cpp/sensevoice/funasr-sensevoice/funasr-sensevoice.cpp \
+            provenance/native-thread-error.patch
+          lscpu > provenance/cpu.txt
+          cp scripts/VOICE-DEPLOYMENT.txt provenance/
+      - name: Build bounded CPU-only native engine and profiling image
+        run: |
+          docker build -t voice-sense-profile - <<'DOCKER'
+          FROM python:3.12-bookworm
+          RUN apt-get update -qq && apt-get install -y -qq time cmake g++ make && \
+              pip install --quiet opencc-python-reimplemented==0.1.7
+          DOCKER
+          docker run --rm --network=none --memory=4g --memory-swap=4g --cpus=2 \
+            -v "$PWD:/work" -w /work voice-sense-profile bash -euc '
+              cmake -S source/runtime/llama.cpp -B sense-runtime \
+                -DFETCHCONTENT_SOURCE_DIR_LLAMA=/work/llama \
+                -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
+                -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DGGML_BLAS=OFF
+              cmake --build sense-runtime --target llama-funasr-sensevoice --parallel 2
+              set +e
+              sense-runtime/bin/llama-funasr-sensevoice --threads 8 >/work/provenance/invalid-thread.log 2>&1
+              code=$?
+              set -e
+              test "$code" = 2
+              grep -q "threads must be 1, 2 or 4" /work/provenance/invalid-thread.log
+              cp /usr/share/doc/gcc-12-base/copyright provenance/licenses/gcc-runtime.txt
+            '
+          sha256sum sense-runtime/bin/llama-funasr-sensevoice > provenance/native.sha256
+          docker image inspect voice-sense-profile > provenance/container-image.json
+      - name: Both voice budgets sequentially on this same host
+        run: |
+          failed=0
+          for profile in cpu2-ram4 cpu4-ram8; do
+            case "$profile" in
+              cpu2-ram4) threads=2; memory=4g ;;
+              cpu4-ram8) threads=4; memory=8g ;;
+            esac
+            mkdir -p "$profile/case-sense-gguf-q8"
+            ln -s ../corpus "$profile/corpus"
+            ln -s ../../corpus/audio "$profile/case-sense-gguf-q8/accuracy-samples"
+            ln -s ../../scripts "$profile/case-sense-gguf-q8/scripts"
+            ln -s ../../sense-model "$profile/case-sense-gguf-q8/model"
+            ln -s ../../sense-runtime "$profile/case-sense-gguf-q8/sense-runtime"
+            if ! docker run --rm --network=none --memory="$memory" --memory-swap="$memory" \
+              --cpus="$threads" --pids-limit=128 -e GITHUB_SHA -e GITHUB_RUN_ID \
+              -e OPENBLAS_NUM_THREADS="$threads" -e OMP_NUM_THREADS="$threads" \
+              -v "$PWD:/work" -w "/work/$profile/case-sense-gguf-q8" \
+              voice-sense-profile python scripts/voice_server_profiles.py run sense-gguf-q8 "$profile" "$SAMPLE_SET"; then
+              echo "::error::Incomplete $profile; preserving partial evidence"
+              failed=1
+            fi
+          done
+          exit "$failed"
+      - name: Verify thread evidence and report original outputs
+        run: |
+          for profile in cpu2-ram4 cpu4-ram8; do
+            case "$profile" in cpu2-ram4) threads=2 ;; cpu4-ram8) threads=4 ;; esac
+            PROFILE="$profile" THREADS="$threads" python - <<'PY'
+          import os
+          from pathlib import Path
+          root = Path(os.environ['PROFILE']) / 'case-sense-gguf-q8/artifacts'
+          logs = list(root.glob('*.log'))
+          count = 100 if os.environ['SAMPLE_SET'] == 'fixed100' else 24
+          if len(logs) != count or any(f"VOICE_THREADS={os.environ['THREADS']}\n" not in file.read_text() for file in logs):
+              raise ValueError('Missing explicit per-request native thread evidence')
+          PY
+            (cd "$profile" && python ../scripts/voice_server_profiles.py report "$profile" report sense "$SAMPLE_SET")
+            if [ "$SAMPLE_SET" = fixed100 ]; then
+              python scripts/voice_server_profiles.py gates "$profile"
+            fi
+            cat "$profile/report/REPORT.md" >> "$GITHUB_STEP_SUMMARY"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-sense-native-profiles
+          path: |
+            cpu2-ram4/case-*/artifacts/
+            cpu4-ram8/case-*/artifacts/
+            cpu2-ram4/report/
+            cpu4-ram8/report/
+            provenance/
+            corpus/*ATTRIBUTION.txt
+          if-no-files-found: error
+          retention-days: 30

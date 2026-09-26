@@ -1,0 +1,149 @@
+name: Installed Sense consistency diagnostics
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - scripts/voice_consistency_report.py
+      - scripts/test_voice_consistency_report.py
+      - scripts/voice/consistency-run.mjs
+      - tests/helpers/voiceConsistency.ts
+      - tests/voice-consistency.spec.ts
+      - .github/workflows/voice-consistency.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s scripts -p test_voice_consistency_report.py -v
+  collector-types:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: npm ci --no-audit --no-fund
+      - name: Typecheck diagnostic collector excluded by application tsconfig
+        run: npx tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2017 --lib dom,dom.iterable,esnext --module esnext --moduleResolution bundler --jsx react-jsx tests/voice-consistency.spec.ts
+  diagnose:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [contracts, collector-types]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+            package_run: '35968099304'
+            artifact: '10794617845'
+          - os: windows-2022
+            platform: win32
+            package_run: '35987278609'
+            artifact: '10802394350'
+    env:
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-consistency-ci-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10748244312
+          merge-multiple: true
+          path: short
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35863991538
+          artifact-ids: 10752270787
+          merge-multiple: true
+          path: meeting
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ matrix.package_run }}
+          artifact-ids: ${{ matrix.artifact }}
+          merge-multiple: true
+          path: package
+      - run: python scripts/voice_chain_report.py prepare short meeting corpus
+      - run: python scripts/voice_consistency_report.py select corpus diagnostics
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npx tsc --noEmit --incremental false
+      - name: Repeated installed native, transcriber and API
+        run: node scripts/voice/consistency-run.mjs package
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sense-consistency-${{ matrix.platform }}
+          path: |
+            diagnostics/samples.json
+            diagnostics/package-manifest.json
+            diagnostics/environment.json
+            diagnostics/attempts-*.jsonl
+            diagnostics/complete-*.json
+            diagnostics/*-ATTRIBUTION.txt
+          if-no-files-found: error
+          retention-days: 30
+  report:
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
+    needs: [contracts, diagnose]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: sense-consistency-linux
+          path: evidence/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: sense-consistency-win32
+          path: evidence/win32
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35991326454
+          artifact-ids: 10804222694
+          merge-multiple: true
+          path: prior/linux
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35991326454
+          artifact-ids: 10803903893
+          merge-multiple: true
+          path: prior/win32
+      - run: python scripts/voice_consistency_report.py aggregate evidence/linux evidence/win32 prior/linux prior/win32 consistency-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sense-consistency-report
+          path: consistency-report/
+          if-no-files-found: error
+          retention-days: 30

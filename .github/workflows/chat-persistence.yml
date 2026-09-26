@@ -16,8 +16,14 @@ on:
       - 'lib/chatTransferStore.ts'
       - 'lib/acp/preparedPrompt.ts'
       - 'tests/chat-*'
+      - 'tests/helpers/fixtureCompletion.ts'
       - '.github/workflows/chat-persistence.yml'
   workflow_dispatch:
+    inputs:
+      contracts_only:
+        description: Run fixture completion contracts without application/browser jobs
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,7 +33,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: node --test tests/chat-fixture-completion.test.ts
   persistence:
+    needs: contracts
+    if: ${{ !inputs.contracts_only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:

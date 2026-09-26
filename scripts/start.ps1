@@ -16,6 +16,7 @@ $ErrorActionPreference = "Stop"
 $ProjectDir = Split-Path -Parent $PSScriptRoot
 $EnvFile = Join-Path $ProjectDir ".env.local"
 $AppPort = 3000
+. (Join-Path $PSScriptRoot 'voice\windows\configure.ps1')
 
 function Read-DotEnvFile {
     param([Parameter(Mandatory=$true)][string]$Path)
@@ -25,7 +26,7 @@ function Read-DotEnvFile {
         throw "Environment file not found: $Path"
     }
 
-    Get-Content $Path | ForEach-Object {
+    [System.IO.File]::ReadAllLines($Path, [System.Text.UTF8Encoding]::new($false, $true)) | ForEach-Object {
         $line = $_.Trim()
         if (-not $line -or $line.StartsWith("#")) { return }
         $parts = $line -split "=", 2
@@ -103,13 +104,7 @@ if ($NoTunnel) {
     # Update .env.local
     $envFile = Join-Path $ProjectDir ".env.local"
     if (Test-Path $envFile) {
-        $lines = Get-Content $envFile
-        $hasNextAuthUrl = [bool]($lines | Where-Object { $_ -match "^\s*#?\s*NEXTAUTH_URL\b" } | Select-Object -First 1)
-        $lines = $lines | ForEach-Object {
-            if ($_ -match "^\s*#?\s*NEXTAUTH_URL\b") { "NEXTAUTH_URL=$tunnelUrl" } else { $_ }
-        }
-        if (-not $hasNextAuthUrl) { $lines += "NEXTAUTH_URL=$tunnelUrl" }
-        $lines | Set-Content $envFile
+        Set-VoiceSafeEnvironmentUrl -ProjectDir $ProjectDir -Url $tunnelUrl
     }
 
     # Update Azure AD redirect URIs (publicClient platform)
@@ -133,13 +128,7 @@ if ($NoTunnel) {
     # Ensure .env.local has the permanent URL
     $envFile = Join-Path $ProjectDir ".env.local"
     if (Test-Path $envFile) {
-        $lines = Get-Content $envFile
-        $hasNextAuthUrl = [bool]($lines | Where-Object { $_ -match "^\s*#?\s*NEXTAUTH_URL\b" } | Select-Object -First 1)
-        $lines = $lines | ForEach-Object {
-            if ($_ -match "^\s*#?\s*NEXTAUTH_URL\b") { "NEXTAUTH_URL=$tunnelUrl" } else { $_ }
-        }
-        if (-not $hasNextAuthUrl) { $lines += "NEXTAUTH_URL=$tunnelUrl" }
-        $lines | Set-Content $envFile
+        Set-VoiceSafeEnvironmentUrl -ProjectDir $ProjectDir -Url $tunnelUrl
     }
 }
 

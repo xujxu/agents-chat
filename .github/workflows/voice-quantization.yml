@@ -1,0 +1,111 @@
+name: FunASR CPU quantization compatibility
+on:
+  push:
+    branches: [experiment/voice-quantization]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  conversion-tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy==2.2.6 onnx==1.19.0 onnxruntime==1.23.2
+      - run: python -m unittest discover -s scripts -p test_voice_funasr_quantize.py -v
+  compare:
+    needs: conversion-tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare pinned sources
+        run: |
+          mkdir sherpa original float artifacts
+          curl -fL --retry 3 --max-time 240 https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared-no-tts.tar.bz2 -o runtime.tar.bz2
+          echo 'd0f96c8b65c6cd0974fada22737e337de81bc8cd2abbec2e39caf358b1eec5fc  runtime.tar.bz2' | sha256sum --check
+          tar -xjf runtime.tar.bz2 --strip-components=1 -C sherpa
+          curl -fL --retry 3 --max-time 600 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-funasr-nano-int8-2025-12-30.tar.bz2 -o original.tar.bz2
+          echo 'eb43d7ccc2e86b243f6a03b7df361033dda66db9523d1a92bf6aca2b50c9476b  original.tar.bz2' | sha256sum --check
+          tar -xjf original.tar.bz2 --strip-components=1 -C original
+          curl -fL --retry 3 --max-time 600 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-funasr-nano-2025-12-30.tar.bz2 -o float.tar.bz2
+          echo '92ac72f74ce5e621564f7693de5d383fa11b1ad836fc0bbfc14ed7cb4cc68509  float.tar.bz2' | sha256sum --check
+          tar -xjf float.tar.bz2 --strip-components=1 -C float
+          sha256sum runtime.tar.bz2 original.tar.bz2 float.tar.bz2 > artifacts/source-archives.sha256
+          find original float -maxdepth 2 -type f -iname '*license*' -exec cp '{}' artifacts/ \;
+          find float -maxdepth 1 -type f -printf '%f %s\n' > artifacts/float-files.txt
+          pip install --quiet numpy==2.2.6 onnx==1.19.0 onnxruntime==1.23.2 pyarrow==20.0.0 soundfile==0.13.1 opencc-python-reimplemented==0.1.7
+          pip freeze > artifacts/conversion-packages.txt
+          python scripts/voice_accuracy_samples.py
+      - name: Convert LLM and encoder independently using CPU-safe quantization
+        run: |
+          for mode in u8u8; do
+            mkdir -p "quantized/$mode"
+            /usr/bin/time -v timeout 900 python scripts/voice_funasr_quantize.py \
+              float/llm.fp32.onnx "quantized/$mode/llm.int8.onnx" "$mode" \
+              > "artifacts/conversion-$mode.log" 2>&1
+            cp "quantized/$mode/llm.int8.json" "artifacts/conversion-$mode.json"
+          done
+          mkdir -p quantized/encoder
+          /usr/bin/time -v timeout 900 python scripts/voice_funasr_quantize.py \
+            float/encoder_adaptor.onnx quantized/encoder/encoder_adaptor.int8.onnx u8u8 encoder \
+            > artifacts/conversion-encoder.log 2>&1
+          cp quantized/encoder/encoder_adaptor.int8.json artifacts/conversion-encoder.json
+          find quantized -type f -exec sha256sum '{}' \; > artifacts/converted-models.sha256
+      - name: Same-host encoder ablation with unchanged embedding and runtime limits
+        run: |
+          failed=0
+          for mode in original u8u8 float-encoder safe-encoder; do
+            mkdir -p "case-$mode/model" "case-$mode/artifacts"
+            case "$mode" in
+              float-encoder) encoder=float/encoder_adaptor.onnx ;;
+              safe-encoder) encoder=quantized/encoder/encoder_adaptor.int8.onnx ;;
+              *) encoder=original/encoder_adaptor.int8.onnx ;;
+            esac
+            ln -s "../../$encoder" "case-$mode/model/encoder_adaptor.int8.onnx"
+            ln -s ../../original/embedding.int8.onnx "case-$mode/model/embedding.int8.onnx"
+            ln -s ../../original/Qwen3-0.6B "case-$mode/model/Qwen3-0.6B"
+            if [ "$mode" = original ]; then
+              ln -s ../../original/llm.int8.onnx "case-$mode/model/llm.int8.onnx"
+            else
+              ln -s ../../quantized/u8u8/llm.int8.onnx "case-$mode/model/llm.int8.onnx"
+            fi
+            ln -s ../accuracy-samples "case-$mode/accuracy-samples"
+            ln -s ../sherpa "case-$mode/sherpa"
+            ln -s ../scripts "case-$mode/scripts"
+            if ! docker run --rm --memory=4g --memory-swap=4g --cpus=2 --pids-limit=128 \
+              -e GITHUB_SHA -e MODE="$mode" -e OPENBLAS_NUM_THREADS=2 -e OMP_NUM_THREADS=2 \
+              -v "$PWD:/work" -w "/work/case-$mode" python:3.12-bookworm bash -euc '
+                apt-get update -qq
+                apt-get install -y -qq time libsndfile1
+                pip install --quiet numpy==2.2.6 pyarrow==20.0.0 soundfile==0.13.1 opencc-python-reimplemented==0.1.7
+                export LD_LIBRARY_PATH=/work/sherpa/lib
+                ulimit -c 0
+                python scripts/voice_quantization_benchmark.py "$MODE"
+              '; then
+              echo "::warning::Variant $mode failed its execution or quality gate; see artifacts"
+              failed=1
+            fi
+          done
+          echo "$failed" > artifacts/any-variant-failed.txt
+          # A broken control is an expected experimental outcome, not a passing candidate.
+          test -f case-safe-encoder/artifacts/completed.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-quantization-${{ github.sha }}
+          path: |
+            artifacts/
+            case-*/artifacts/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: voice-quantized-models-${{ github.sha }}
+          path: quantized/
+          retention-days: 7

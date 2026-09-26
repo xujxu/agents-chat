@@ -1,0 +1,79 @@
+name: Voice error audit and natural meeting inventory
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - scripts/voice_error_audit.py
+      - scripts/voice_meeting_samples.py
+      - scripts/test_voice_acceptance.py
+      - .github/workflows/voice-acceptance-evidence.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - run: python -m unittest discover -s scripts -p test_voice_acceptance.py -v
+  audit:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install opencc-python-reimplemented==0.1.7
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35858271102
+          artifact-ids: 10751002303
+          merge-multiple: true
+          path: baseline
+      - run: python scripts/voice_error_audit.py baseline audit
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-baseline-error-audit
+          path: audit/
+          if-no-files-found: error
+          retention-days: 30
+  meeting:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy==2.2.6 soundfile==0.13.1 textgrid==1.6.1 opencc-python-reimplemented==0.1.7
+      - name: Acquire licensed original test recordings in CI only
+        run: |
+          mkdir source
+          curl -fL --retry 3 --max-time 2400 https://openslr.trmal.net/resources/111/test.tar.gz -o source/test.tar.gz
+          sha256sum source/test.tar.gz > source/test.sha256
+          curl -fL --retry 3 --max-time 120 https://openslr.org/111/ -o source/source-license-page.html
+      - run: python scripts/voice_meeting_samples.py source/test.tar.gz meeting
+      - name: Preserve source acquisition evidence
+        if: always()
+        run: |
+          mkdir -p meeting
+          cp source/test.sha256 source/source-license-page.html meeting/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-natural-meeting-corpus
+          path: meeting/
+          if-no-files-found: error
+          retention-days: 30

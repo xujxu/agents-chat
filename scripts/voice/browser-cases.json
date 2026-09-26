@@ -1,0 +1,16 @@
+{
+  "win32-edge": {
+    "platform": "win32",
+    "project": "installed-edge",
+    "browserName": "chromium",
+    "channel": "msedge",
+    "device": "Desktop Edge"
+  },
+  "linux-webkit-mobile": {
+    "platform": "linux",
+    "project": "installed-webkit-mobile",
+    "browserName": "webkit",
+    "channel": null,
+    "device": "iPhone 14 Pro Max"
+  }
+}

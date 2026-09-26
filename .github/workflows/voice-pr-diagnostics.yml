@@ -1,0 +1,202 @@
+name: Bounded voice PR diagnostics
+on:
+  workflow_dispatch:
+    inputs:
+      run_cohorts:
+        description: Run an explicitly approved bounded Windows comparison batch
+        type: boolean
+        default: false
+      run_webkit:
+        description: Run approved WebKit-only controller-state comparison (max3 per arm)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      DIAGNOSTIC_CONTROLLER_SOURCE: diagnostic-baseline/app/features/chat/runtime/chatScrollController.ts
+      VOICE_FAULT_REPORT: voice-cleanup-faults.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 20f5f0e3e55569a4ac7f0878f314f1d8c7b2e009
+          path: diagnostic-baseline
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: node --experimental-vm-modules --test tests/voice-pr-diagnostics.test.mjs tests/reading-controller-diagnostics.test.mjs tests/chat-scroll-geometry.test.mjs tests/chat-scroll-controller.test.mjs tests/voice-cleanup-faults.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-cleanup-faults-${{ github.run_id }}
+          path: voice-cleanup-faults.json
+          if-no-files-found: warn
+          retention-days: 14
+  windows:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_cohorts
+    needs: contracts
+    runs-on: windows-2022
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        sampling: ['0', '1']
+    defaults:
+      run:
+        working-directory: product
+        shell: pwsh
+    env:
+      DIAGNOSTIC_PRODUCT_SHA: 20f5f0e3e55569a4ac7f0878f314f1d8c7b2e009
+      VOICE_DIAGNOSTIC_ROUNDS: '3'
+      VOICE_CLEANUP_DIAGNOSTICS: ${{ matrix.sampling }}
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-voice-windows-ci-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: harness
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DIAGNOSTIC_PRODUCT_SHA }}
+          path: product
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - name: Overlay diagnostic tests only
+        run: |
+          if ((git rev-parse HEAD) -ne $env:DIAGNOSTIC_PRODUCT_SHA) { throw 'Product revision mismatch' }
+          if ((git -C ../harness rev-parse HEAD) -ne $env:GITHUB_SHA) { throw 'Harness revision mismatch' }
+          $files = @('tests/voice-windows-application.mjs', 'tests/helpers/voiceLifecycleDiagnostics.mjs')
+          foreach ($file in $files) { Copy-Item "../harness/$file" $file }
+          New-Item -ItemType Directory -Force .data/voice-windows-build | Out-Null
+          @{
+            productSha = $env:DIAGNOSTIC_PRODUCT_SHA
+            harnessSha = $env:GITHUB_SHA
+            overlay = $files
+            sampling = $env:VOICE_CLEANUP_DIAGNOSTICS
+            requestedRounds = 3
+            runnerImage = $env:ImageVersion
+            node = (node --version)
+          } | ConvertTo-Json -Depth 4 | Set-Content .data/voice-windows-build/diagnostic-provenance.json
+      - name: Compile existing native fixtures
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs) { throw 'MSVC x64 build tools missing' }
+          $devcmd = Join-Path $vs 'Common7\Tools\VsDevCmd.bat'
+          $job = 'cl /nologo /Bv /W4 /WX /EHsc /std:c++17 /MT /DUNICODE /D_UNICODE scripts\voice\windows\voice-job.cpp scripts\voice\windows\voice-files.cpp /Fo.data\voice-windows-build\ /Fe.data\voice-windows-build\voice-job.exe /link Advapi32.lib'
+          $provider = 'cl /nologo /W4 /WX /EHsc /std:c++17 /MT /DUNICODE /D_UNICODE tests\fixtures\voice-windows-provider.cpp /Fo.data\voice-windows-build\voice-provider.obj /Fe.data\voice-windows-build\voice-provider.exe'
+          cmd /d /s /c "`"$devcmd`" -arch=x64 -host_arch=x64 && $job && $provider"
+          if ($LASTEXITCODE -ne 0) { throw 'Native compilation failed' }
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install chromium
+      - run: npm run build
+      - run: npx tsc --noEmit --incremental false
+      - name: Bounded application rounds
+        run: node tests/voice-windows-application.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-cleanup-sampling-${{ matrix.sampling }}-${{ github.run_id }}
+          path: |
+            product/.data/voice-windows-build/diagnostic-provenance.json
+            product/.data/voice-windows-build/round-*/*.json
+            product/.data/voice-windows-build/round-*/*-server.log
+            product/.data/voice-windows-build/round-*/*-tests/
+          if-no-files-found: error
+          retention-days: 14
+  webkit:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_webkit
+    needs: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: main
+            sha: 638c553c62406dbb7e6b5aeb41cdddf4cd6de179
+          - label: voice
+            sha: 20f5f0e3e55569a4ac7f0878f314f1d8c7b2e009
+    defaults:
+      run:
+        working-directory: product
+    env:
+      DIAGNOSTIC_PRODUCT_SHA: ${{ matrix.sha }}
+      READING_GEOMETRY_DIAGNOSTICS: '1'
+      READING_CONTROLLER_DIAGNOSTICS: '1'
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      NEXTAUTH_SECRET: isolated-mobile-ux-test-secret
+      NEXTAUTH_URL: http://localhost:3011
+      PLAYWRIGHT_BASE_URL: http://localhost:3011
+      NEXT_TELEMETRY_DISABLED: '1'
+      PLAYWRIGHT_JSON_OUTPUT_FILE: artifacts/results.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: harness
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.sha }}
+          path: product
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - name: Overlay identical diagnostic tests
+        run: |
+          test "$(git rev-parse HEAD)" = "$DIAGNOSTIC_PRODUCT_SHA"
+          test "$(git -C ../harness rev-parse HEAD)" = "$GITHUB_SHA"
+          cp ../harness/tests/chat-reading-anchor.spec.ts tests/chat-reading-anchor.spec.ts
+          cp ../harness/tests/helpers/readingGeometryDiagnostics.ts tests/helpers/readingGeometryDiagnostics.ts
+          cp ../harness/tests/helpers/readingControllerDiagnostics.ts tests/helpers/readingControllerDiagnostics.ts
+          cp ../harness/tests/helpers/controllerStateRecorder.ts tests/helpers/controllerStateRecorder.ts
+          mkdir -p artifacts
+          node --input-type=module -e 'import {writeFileSync} from "node:fs"; writeFileSync("artifacts/provenance.json", JSON.stringify({productSha:process.env.DIAGNOSTIC_PRODUCT_SHA,harnessSha:process.env.GITHUB_SHA,overlay:["tests/chat-reading-anchor.spec.ts","tests/helpers/readingGeometryDiagnostics.ts","tests/helpers/readingControllerDiagnostics.ts","tests/helpers/controllerStateRecorder.ts","app/features/chat/runtime/chatScrollController.ts"],requestedRepetitions:3,node:process.version,runnerImage:process.env.ImageVersion},null,2))'
+          node ../harness/tests/helpers/instrumentScrollController.mjs .
+          git diff -- app/features/chat/runtime/chatScrollController.ts > artifacts/controller-instrumentation.diff
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps webkit
+      - run: npm run build
+      - run: npx tsc --noEmit --incremental false
+      - name: Start pinned product
+        run: |
+          node_modules/.bin/next start --hostname 127.0.0.1 --port 3011 >artifacts/server.log 2>&1 &
+          echo "$!" > artifacts/server.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --max-time 2 http://localhost:3011/login >/dev/null; then exit 0; fi
+            if ! kill -0 "$(cat artifacts/server.pid)" 2>/dev/null; then cat artifacts/server.log; exit 1; fi
+            sleep 1
+          done
+          cat artifacts/server.log
+          exit 1
+      - name: Three repetitions, no retries or changed thresholds
+        run: >-
+          npx playwright test --config tests/playwright.config.ts tests/chat-reading-anchor.spec.ts
+          --project=iphone-webkit
+          --grep='keeps latest messages at the bottom through orientation round trips'
+          --repeat-each=3 --retries=0 --workers=1 --max-failures=1
+          --reporter=line,json --trace=retain-on-failure --output=artifacts/reading
+          --global-timeout=600000
+      - name: Stop owned app
+        if: always()
+        run: |
+          if [ -f artifacts/server.pid ]; then
+            pid="$(cat artifacts/server.pid)"
+            if kill -0 "$pid" 2>/dev/null; then kill "$pid"; fi
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webkit-orientation-${{ matrix.label }}-${{ github.run_id }}
+          path: product/artifacts/
+          if-no-files-found: error
+          retention-days: 14

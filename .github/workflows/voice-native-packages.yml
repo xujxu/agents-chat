@@ -1,0 +1,129 @@
+name: Voice native installation packages
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths: [.github/workflows/voice-native-packages.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: node --test tests/voice-setup.test.mjs
+  package:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [sensevoice-small-q8, whisper-base-q5_1]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Fetch pinned sources, model and license evidence
+        env:
+          MODEL: ${{ matrix.model }}
+        run: |
+          mkdir -p source llama package/bin package/models package/licenses package/provenance
+          if [ "$MODEL" = sensevoice-small-q8 ]; then
+            curl -fL --retry 3 --max-time 600 https://github.com/modelscope/FunASR/archive/3ff9259aade4f7e4360645df28cad8f81959ee91.tar.gz -o source.tar.gz
+            tar -xzf source.tar.gz --strip-components=1 -C source
+            curl -fL --retry 3 --max-time 600 https://github.com/ggml-org/llama.cpp/archive/803b7fcae893e9caaee3921779628fef83ac0965.tar.gz -o llama.tar.gz
+            tar -xzf llama.tar.gz --strip-components=1 -C llama
+            curl -fL --retry 3 --max-time 600 https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF/resolve/90c1c61912018b70ada0fcc024ea24aca62f2e63/sensevoice-small-q8.gguf -o package/models/sensevoice-small-q8.gguf
+            echo '4ae45c94422de949b387e2e0fb10d7e14e4c42c69db30c3444ecc7d4b844b7c5  package/models/sensevoice-small-q8.gguf' | sha256sum --check
+            cp source/LICENSE package/licenses/FunASR-MIT.txt
+            cp llama/LICENSE package/licenses/llama-MIT.txt
+            cp -r llama/licenses package/licenses/llama-dependencies
+            cp source/runtime/llama.cpp/funasr-common/miniaudio.h package/licenses/
+            curl -fL --retry 3 https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF/raw/90c1c61912018b70ada0fcc024ea24aca62f2e63/README.md -o package/licenses/model-card.txt
+            curl -fL --retry 3 https://www.apache.org/licenses/LICENSE-2.0.txt -o package/licenses/Apache-2.0.txt
+            python3 scripts/voice_sense_native_patch.py \
+              source/runtime/llama.cpp/sensevoice/funasr-sensevoice/funasr-sensevoice.cpp \
+              package/provenance/native-thread-error.patch
+            sha256sum source.tar.gz llama.tar.gz > package/provenance/source-sha256.txt
+          else
+            curl -fL --retry 3 --max-time 600 https://github.com/ggml-org/whisper.cpp/archive/5670d5c0bbcb148feabef84400a07cfca9aa3b30.tar.gz -o source.tar.gz
+            tar -xzf source.tar.gz --strip-components=1 -C source
+            curl -fL --retry 3 --max-time 600 https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin -o package/models/ggml-base-q5_1.bin
+            echo '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898  package/models/ggml-base-q5_1.bin' | sha256sum --check
+            cp source/LICENSE package/licenses/whisper-MIT.txt
+            curl -fL --retry 3 https://raw.githubusercontent.com/openai/whisper/main/LICENSE -o package/licenses/whisper-weights-MIT.txt
+            sha256sum source.tar.gz > package/provenance/source-sha256.txt
+          fi
+          printf '%s\n' "$GITHUB_SHA" > package/provenance/application-revision.txt
+          printf '%s\n' 'CI installation candidate; no full release approval. Preserve all license/provenance files.' > package/provenance/SCOPE.txt
+      - name: Build static C++ dependencies against glibc 2.35
+        env:
+          MODEL: ${{ matrix.model }}
+        run: |
+          docker run --rm --cpus=2 --memory=4g -e MODEL -v "$PWD:/work" -w /work ubuntu:22.04 bash -euc '
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq cmake g++-12 make
+            if [ "$MODEL" = sensevoice-small-q8 ]; then
+              cmake -S source/runtime/llama.cpp -B native-build \
+                -DFETCHCONTENT_SOURCE_DIR_LLAMA=/work/llama \
+                -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 \
+                -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+                -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_CUDA=OFF \
+                -DGGML_VULKAN=OFF -DGGML_BLAS=OFF -DGGML_BACKEND_DL=OFF \
+                -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+              cmake --build native-build --target llama-funasr-sensevoice --parallel 2
+              cp native-build/bin/llama-funasr-sensevoice package/bin/
+            else
+              cmake -S source -B native-build \
+                -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 \
+                -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+                -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_CUDA=OFF \
+                -DGGML_BLAS=OFF -DWHISPER_BUILD_TESTS=OFF \
+                -DWHISPER_BUILD_SERVER=OFF -DWHISPER_CURL=OFF \
+                -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+              cmake --build native-build --target whisper-cli --parallel 2
+              cp native-build/bin/whisper-cli package/bin/
+            fi
+            cp /usr/share/doc/gcc-12-base/copyright package/licenses/gcc-runtime.txt
+            cp /usr/share/common-licenses/GPL-3 package/licenses/GPL-3.txt
+            cp /usr/share/common-licenses/LGPL-2.1 package/licenses/LGPL-2.1.txt
+            cp /usr/share/doc/libc6/copyright package/licenses/glibc.txt
+            ldd package/bin/* > package/provenance/linked-libraries.txt
+            if grep -E "not found|libggml|libstdc\\+\\+|libgcc_s" package/provenance/linked-libraries.txt; then
+              echo "Unexpected non-system runtime dependency"; exit 1
+            fi
+            cp native-build/CMakeCache.txt package/provenance/CMakeCache.txt
+            chmod -R a+rX package
+          '
+      - name: Generate manifest and install package using the actual configuration command
+        env:
+          MODEL: ${{ matrix.model }}
+        run: |
+          node scripts/voice/package-manifest.mjs package "$MODEL"
+          mkdir installed-project
+          manifest_sha="$(cut -d ' ' -f 1 package/voice-package.sha256)"
+          node scripts/configure-voice.mjs --project-dir "$PWD/installed-project" \
+            --model "$MODEL" --package-dir "$PWD/package" --manifest-sha256 "$manifest_sha" \
+            --receipt "$PWD/installed-project/receipt.json"
+          curl -fL --retry 3 https://raw.githubusercontent.com/ggml-org/whisper.cpp/5670d5c0bbcb148feabef84400a07cfca9aa3b30/samples/jfk.wav -o jfk.wav
+          VOICE_INSTALLED_PROJECT="$PWD/installed-project" VOICE_INSTALL_AUDIO="$PWD/jfk.wav" \
+            npx --yes --package=tsx@4.20.6 tsx --test tests/voice-setup-native.test.ts
+          node scripts/configure-voice.mjs --project-dir "$PWD/installed-project" \
+            --rollback-receipt "$PWD/installed-project/receipt.json"
+          test ! -f installed-project/.env.local
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-install-${{ matrix.model }}
+          path: package/
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,52 @@
+ASCEND engine baseline
+======================
+
+Dispatch "Human-transcribed voice corpus baseline" on
+experiment/voice-natural-long. All tests, corpus downloads and inference run in
+GitHub Actions, never on the production host.
+
+Inputs: the pinned ASCEND official test partition (1,315 rows), SenseVoice INT8
+and FunASR-Nano with the previously built U8U8 encoder and LLM. Model, runtime
+and source checksums are frozen in the workflow. No parameter search, training,
+reference hotwords or language forcing is performed.
+
+Every source row is recorded in inventory.json. Select all utterances with
+usable Chinese/English references and duration >0 to <=30 seconds. Exclude
+bracket-marked unknown/special annotations and references with no Chinese or
+English units, recording explicit reasons. Do not fill gaps with training data.
+The earlier ASCEND inventory found no eligible 15-30s mixed test/validation
+utterances. This test measures short conversational utterances, not long audio.
+
+Eight disjoint ID-sorted shards run at most four at once. Within each shard,
+both engines see the same checksum-verified WAVs on the same CPU, sequentially.
+Each attempt starts a new CLI process, using two threads and a 120-second
+timeout, within a 2-CPU/4-GiB CI container. These are CI experimental limits:
+the host's cpg 1.5-GiB cap and PROD remain unchanged. No deployment memory or
+latency acceptance is implied. Different shards may run on different CPUs.
+
+Metrics: micro CER for Chinese, WER for English, MER for mixed utterances.
+Shared normalization: NFKC, traditional-to-simplified, lowercase, punctuation
+ignored. Digits are not rewritten into spoken words. Chinese CER uses character
+units (including remaining digits); English uses word units; mixed uses Han
+characters plus English words. Metrics are edit rates, not bounded accuracies.
+
+An execution failure is treated as no delivered transcript: all reference
+units are deletions. Raw partial output and its score are kept for diagnosis,
+as are successful-only conditional rates, failure reasons and empty outputs.
+All expected attempts must exist exactly once for both engines. Missing shard
+results or a corpus identity mismatch prevents a final report, rather than
+silently comparing incomplete groups. A completed Actions run means accounting
+finished, not that accuracy or every inference succeeded.
+
+Download ascend-engine-baseline-report for REPORT.md, summary.json,
+comparison.csv and scored-results.jsonl plus corpus inventory and provenance.
+comparison.csv contains reference and model text for reviewing disagreements;
+use a text editor, or import columns explicitly as text in a spreadsheet.
+Audio and derived corpus references are attributed under CC-BY-SA-4.0.
+
+Limitations: ASCEND's official card describes expert-generated annotations,
+not infallible ground truth. Prior exploratory subsets already used this test
+split. Model pretraining overlap is unknown. This is not a new untouched test,
+personal microphone evaluation, natural long-audio proof, or full API/VAD/browser
+pipeline acceptance. Those are separate follow-up stages; no synthetic joining
+of short clips may be presented as natural long speech.
