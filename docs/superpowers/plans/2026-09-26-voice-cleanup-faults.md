@@ -20,7 +20,7 @@ Files:
 - Create `tests/voice-cleanup-faults.test.mjs`.
 - Modify `.github/workflows/voice-pr-diagnostics.yml`.
 
-- [ ] Import `createVoiceFaultFixture` and `faultModes` from
+- [x] Import `createVoiceFaultFixture` and `faultModes` from
   `tests/helpers/voiceFaultFixture.mjs`. Define the exact scenario oracle:
 
 ```js
@@ -34,21 +34,21 @@ const cases = [
 ];
 ```
 
-- [ ] Each case creates a fresh fixture, calls `request(mode)`, checks exact
+- [x] Each case creates a fresh fixture, calls `request(mode)`, checks exact
   status/error code and number/order of create/infer/remove events, logged codes,
   outstanding directories and released timer/job. Then call `request('normal')`
   and assert200, no busy response, and unchanged prior residual count.
   Assert source hashes cover actual route/transcriber/windowsNative/jobs/audio.
-- [ ] Guard unknown mode and mocked boundary violations; verify byte content,
+- [x] Guard unknown mode and mocked boundary violations; verify byte content,
   transcript, UUID/path and raw failure messages are absent from the report.
-- [ ] In an `after` hook write the bounded report only if
+- [x] In an `after` hook write the bounded report only if
   `VOICE_FAULT_REPORT` is supplied. Each case starts `incomplete`, becomes
   `passed` only after all assertions, and on failure retains a sanitized error
   name and rethrows. Include run/harness identity and source SHA256.
-- [ ] Add the test selector to the existing contracts command and set
+- [x] Add the test selector to the existing contracts command and set
   `VOICE_FAULT_REPORT: voice-cleanup-faults.json`. Add always-upload for that
   file,14day retention, missing-file warning (the intended red has no helper).
-- [ ] Commit/push and dispatch existing workflow with both default-false gates.
+- [x] Commit/push and dispatch existing workflow with both default-false gates.
   Expect missing-helper red, not product or native failure:
 
 ```bash
@@ -59,7 +59,7 @@ gh workflow run voice-pr-diagnostics.yml -R xujxu/agents-chat --ref experiment/v
 
 File: Create `tests/helpers/voiceFaultFixture.mjs`.
 
-- [ ] Import standard-library readFile, SHA256, path.win32, promisify and VM.
+- [x] Import standard-library readFile, SHA256, path.win32, promisify and VM.
   Maintain a per-fixture VM context, module cache, source hashes, in-memory
   directory set, event list, log-code list, violation list and fake timer map.
   Only five source IDs are eligible for actual-file reads; aliases resolve
@@ -76,11 +76,11 @@ return module;
   Use transform mode because VoiceError has parameter properties. VM shares
   host Error/Buffer/AbortController/text encoders and web request primitives,
   but receives only synthetic process.env/platform and fake timers.
-- [ ] Actual linker resolves route aliases and relative imports to the same
+- [x] Actual linker resolves route aliases and relative imports to the same
   cached audio/jobs/transcriber/windowsNative modules, preserving VoiceError
   identity. Configuration, providers, process, memory, auth, logger and Next
   receive explicit SyntheticModules, not copied product flow.
-- [ ] Inject callback-style execFile with a validated absolute synthetic path,
+- [x] Inject callback-style execFile with a validated absolute synthetic path,
   sole supported command `--create-directory`, and event order:
 
 ```js
@@ -95,35 +95,35 @@ callback(null, Buffer.alloc(0), Buffer.alloc(0));
   Pass real promisify to the real windowsNative implementation. Creation is the
   only execute call expected for the chosen SenseVoice configuration; all
   others record a fixture violation and fail.
-- [ ] Simulated writeFile verifies its parent belongs to the set and signal
+- [x] Simulated writeFile verifies its parent belongs to the set and signal
   is not aborted; never writes real files. rm records attempt, throws injected
   EPERM-like error in either cleanup-failure mode, otherwise removes only the
   exact owned directory and records completion. No cleanup retries.
-- [ ] Mock inference validates input/output ownership and actual AbortSignal,
+- [x] Mock inference validates input/output ownership and actual AbortSignal,
   records entry, and for cancellation cases invokes actual cancelVoiceJob with
   the active synthetic user/request ID then throws signal.reason. Other cases
   return a fixed synthetic Buffer. Decoder returns synthetic text only to the
   in-memory response; reports contain no text.
-- [ ] `request(mode)` rejects unknown modes, assigns a unique valid synthetic
+- [x] `request(mode)` rejects unknown modes, assigns a unique valid synthetic
   request UUID, constructs a valid non-silent WAV using actual encodeVoiceWav,
   makes a Request with matching ownership/content type and sets nextUrl.
   Call actual POST. Return status/code, sanitized events/log codes, remove count,
   directory count and timer count. Boundary errors are surfaced from the
   violation list after POST even if production catches them.
-- [ ] `dispose()` clears only in-memory state/timers. No cleanup of real
+- [x] `dispose()` clears only in-memory state/timers. No cleanup of real
   directories and no child processes. Expose source hashes and supported modes
   for contracts, not internal production control-flow copies.
 
 ## Task 3: Green characterization and evidence
 
-- [ ] Commit/push helper and dispatch contracts only. Expect25existing contracts
+- [x] Commit/push helper and dispatch contracts only. Expect25existing contracts
   plus all new cases/fixture guards to pass, with native/browser cohorts skipped.
   A green characterization documents current faults; it is not a product fix.
-- [ ] Inspect the small artifact and exact source hashes, compare each injected
+- [x] Inspect the small artifact and exact source hashes, compare each injected
   case to its positive control, and confirm the report contains no private
   content. Unexpected outcomes require fixture/source investigation, not
   weakening assertions or editing product logic.
-- [ ] Record run/artifact identity and limits in the spec and PR #2.
+- [x] Record run/artifact identity and limits in the spec and PR #2.
   Keep old Windows incident cause unconfirmed; propose logging and ownership
   changes for separate approval only. Stop reminder. No release or merge.
 
@@ -134,3 +134,16 @@ than native/browser fan-out. Fixed scenario count and isolated state avoid
 timing assumptions. Production sources are unchanged; typed errors come from
 the same actual module graph. Filesystem and process semantics remain mocked.
 Inline execution was already selected; executing-plans is unavailable.
+
+## Execution checkpoint
+
+Tasks1-3completed. Red36230690946 atab5c8a2: intended missing helper,25existing
+checks passed. First implementation0e3b481 had a fixture-only missing NextRequest
+export in36230875481; no causal result inferred. Corrected c78952c passed32/32
+in36230917732, both native/browser cohorts skipped.
+
+All6scenarios and their subsequent recovery requests matched the fixed oracle.
+The retained report distinguishes clean cancellation from cancellation masking
+cleanup failure, and creation failure before versus after simulated ownership.
+Spec contains exact source/artifact hashes and limitations. Product source
+remains unchanged; logging and safe creation-failure cleanup are proposals only.
