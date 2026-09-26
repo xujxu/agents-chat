@@ -39,7 +39,7 @@ closeout. No change to product code, workflow configuration, native diagnostics,
 - Create: `tests/helpers/voiceRecordingReadiness.ts`
 - Modify/test: `tests/voice-input.spec.ts:1-78`
 
-- [ ] **Step 1: Extract the exact-one-second prerequisite into the test helper.**
+- [x] **Step 1: Extract the exact-one-second prerequisite into the test helper.**
 
 Create the following file. Its initial predicate deliberately retains the old
 exact-one-second requirement. The status/control checks enforce the approved
@@ -123,7 +123,7 @@ Replace only the final assertion in `record(page)`:
   await waitForVoiceRecordingReady(page);
 ```
 
-- [ ] **Step 2: Add regressions before the existing native-provider test.**
+- [x] **Step 2: Add regressions before the existing native-provider test.**
 
 The first test invokes the actual shared wait with the first observation
 already at two seconds. It must not catch the expected old timeout or change
@@ -205,7 +205,7 @@ These tests are already selected by both existing voice and ordinary E2E
 workflows on all three projects. No workflow selector or timeout change is
 needed. The actual audio cases still use `prepare(page)` and `record(page)`.
 
-- [ ] **Step 3: Commit and push the red revision.**
+- [x] **Step 3: Commit and push the red revision.**
 
 ```bash
 git add tests/helpers/voiceRecordingReadiness.ts tests/voice-input.spec.ts
@@ -214,7 +214,7 @@ git commit -m "test: expose transient voice readiness prerequisite" \
 git push origin experiment/voice-natural-long
 ```
 
-- [ ] **Step 4: Inspect the automatically triggered Actions red result.**
+- [x] **Step 4: Inspect the automatically triggered Actions red result.**
 
 ```bash
 revision=$(git rev-parse HEAD)
@@ -248,7 +248,7 @@ trace resources if failure logs do not establish the observation.
 - Modify: `tests/helpers/voiceRecordingReadiness.ts`
 - Test unchanged: `tests/voice-input.spec.ts`
 
-- [ ] **Step 1: Replace only `isVoiceRecordingReady`.**
+- [x] **Step 1: Replace `isVoiceRecordingReady` and preserve failure observations.**
 
 ```ts
 export function isVoiceRecordingReady(observation: VoiceRecordingObservation): boolean {
@@ -265,7 +265,7 @@ The final negative lookahead requires the actual end of the string, unlike
 `$`, which can also match before a final newline. Do not alter the tests to
 get green.
 
-- [ ] **Step 2: Commit and push the minimal repair.**
+- [x] **Step 2: Commit and push the minimal repair.**
 
 ```bash
 git add tests/helpers/voiceRecordingReadiness.ts
@@ -274,7 +274,7 @@ git commit -m "test: accept active voice recording after one second" \
 git push origin experiment/voice-natural-long
 ```
 
-- [ ] **Step 3: Inspect both automatically triggered acceptance workflows.**
+- [x] **Step 3: Inspect both automatically triggered acceptance workflows.**
 
 ```bash
 revision=$(git rev-parse HEAD)
@@ -302,7 +302,7 @@ the concrete failure; do not rerun merely to obtain a pass.
 **Files:**
 - Update: this plan and the approved specification.
 
-- [ ] **Step 1: Record observed acceptance evidence.**
+- [x] **Step 1: Record observed acceptance evidence.**
 
 Append an evidence section containing the actual red and green source SHAs,
 Actions links/job outcomes, the two-second regression's red diagnostic and
@@ -310,7 +310,7 @@ green result, three-project voice results, and retained unrelated failures.
 Include artifact IDs/digests only for artifacts actually inspected. Mark these
 checkboxes according to actual execution, not intended outcomes.
 
-- [ ] **Step 2: Commit and push the evidence update.**
+- [x] **Step 2: Commit and push the evidence update.**
 
 ```bash
 git add docs/superpowers/specs/2026-09-26-voice-recording-readiness-design.md \
@@ -320,7 +320,7 @@ git commit -m "docs: retain recording readiness acceptance evidence" \
 git push origin experiment/voice-natural-long
 ```
 
-- [ ] **Step 3: Close only this scoped repair.**
+- [x] **Step 3: Close only this scoped repair.**
 
 Keep PR #2 Draft. Update its existing status without overwriting unrelated
 sections after refreshing the current body. Stop the progress reminder at
@@ -364,6 +364,28 @@ export async function waitForVoiceRecordingReady(page: Page): Promise<void> {
 
 The local shell has no `rg` binary; the evidence inspection command above uses
 available `grep`. This is log inspection, not local validation.
+
+## Acceptance
+
+Green source e3046ed59b8acb860e5e589fb154727233f6ba7d passed ordinary
+[voice36251380385](https://github.com/xujxu/agents-chat/actions/runs/36251380385):
+27 logic checks,14 WebKit cases,34 API/Chromium cases with1 existing skip,
+1 authenticated real-model case,17 existing disabled-voice/composer/mobile
+cases, build/typecheck, native smoke and temporary cleanup.
+All new readiness cases and existing cancellation/automatic-stop cases passed
+in desktop Chromium, Android Chromium and iPhone WebKit.
+
+[Full E2E36251380383](https://github.com/xujxu/agents-chat/actions/runs/36251380383)
+passed all6 jobs. Desktop shards passed80,80,78,45 cases with2 and35 existing
+skips in the latter two; Android passed123/3 skipped; iPhone passed122/4 skipped.
+[Persistence36251380378](https://github.com/xujxu/agents-chat/actions/runs/36251380378)
+and all3 [typography36251380380](https://github.com/xujxu/agents-chat/actions/runs/36251380380)
+jobs passed. No reruns or local validation were used.
+
+Only this recording-readiness repair is accepted. The independently diagnosed
+streaming-save baseline race remains outstanding even though its test passed
+in this run. Historical ECONNRESET and Windows residual causes are unchanged.
+PR #2 stays Draft; no native diagnostic or release work was added.
 
 ## Plan self-review
 

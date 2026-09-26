@@ -128,3 +128,51 @@ ECONNRESET and Windows cleanup-residual causes remain unresolved.
 Completion requires a causal red/green regression for the skipped one-second
 display and preserved existing voice behavior across all three browser
 projects, with persistent Actions evidence. Draft PR #2 remains Draft.
+
+## Execution evidence
+
+Red source c687254e7fbc8e860db85003e19e7f8fd20b9416:
+[voice36251145916](https://github.com/xujxu/agents-chat/actions/runs/36251145916)
+failed the controlled two-second wait at5000ms and the predicate's02 boundary.
+Build/typecheck and the native prerequisite passed. The existing failure limit
+stopped12 remaining WebKit cases; later integration steps were skipped.
+Eight evaluations in the retained trace returned a visible
+`Recording 0:02 / 0:30` status with a visible enabled stop button.
+Artifact10908739863 (44634 bytes) has archive SHA256
+`73b539685ed32fe3b4b8057dd5cce37762c7e088b997f11e56d308da2a5dfe32`.
+
+The original red full E2E
+[36251145951](https://github.com/xujxu/agents-chat/actions/runs/36251145951)
+also failed both new regressions in all three browser projects. Desktop
+additionally hit the exact-second readiness timeout in three existing recording
+cases. These failures preceded their substantive upload/cancellation checks;
+they are not evidence of product cancellation defects.
+
+Green source e3046ed59b8acb860e5e589fb154727233f6ba7d:
+[voice36251380385](https://github.com/xujxu/agents-chat/actions/runs/36251380385)
+passed. The regression expectations were unchanged. WebKit passed14 cases;
+desktop/Android plus voice API passed34 with1 existing skip. All three new
+readiness cases, all three pending-transcription cancellation variants, and
+automatic30-second stopping passed in each browser project.
+The workflow also passed27 logic checks, build/typecheck, native smoke,
+temporary-audio cleanup,1 authenticated real-model case, and17 existing
+disabled-voice/composer/mobile cases.
+
+The green helper also fixes the red failure diagnostic: partial-object
+comparison had hidden observation fields in the terminal diff. The waiter now
+returns the full observation on failure and a ready marker only when the shared
+predicate succeeds, without changing polling or timeout.
+
+Full [E2E36251380383](https://github.com/xujxu/agents-chat/actions/runs/36251380383)
+passed all6 jobs: desktop shards80,80,78,45 passed (2 and35 existing skips
+in the latter two); Android123 passed/3 skipped; iPhone122 passed/4 skipped.
+All three new readiness cases passed in all three projects.
+[Persistence36251380378](https://github.com/xujxu/agents-chat/actions/runs/36251380378)
+also passed.
+[Typography36251380380](https://github.com/xujxu/agents-chat/actions/runs/36251380380)
+passed all3 jobs. This closes the recording-readiness scope at e3046ed.
+No run was manually retried and no local validation was executed.
+
+The streaming-save test also passed in this full E2E run, but its previously
+observed baseline race has not been repaired. That independent test design
+remains outstanding; green on this revision does not establish its resolution.
