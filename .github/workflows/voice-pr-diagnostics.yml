@@ -1,0 +1,20 @@
+name: Bounded voice PR diagnostics
+on:
+  workflow_dispatch:
+    inputs:
+      run_cohorts:
+        description: Run the single approved bounded Windows/WebKit comparison batch
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: node --test tests/voice-pr-diagnostics.test.mjs
