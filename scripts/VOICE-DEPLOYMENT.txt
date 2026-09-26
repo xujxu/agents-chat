@@ -201,9 +201,10 @@ Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/lib/x64.
 Do not apply the SDK grant to libvcruntime.lib/libcmt.lib from that directory.
 Likewise the public STL license/exception is not a blanket VC runtime grant.
 The candidate still lacks retained local VC/SDK license files and a full linker
-input record. Hosted-build/distributor entitlement and the applicable VC static
-runtime grant remain unclosed; no statement that a paid subscription is required
-or that redistribution is prohibited follows from this evidence gap.
+input record. The hosted build-use question is addressed by the runner team's
+confirmation below. The applicable VC static-runtime redistribution grant remains
+unclosed; no statement that a paid subscription is required or that
+redistribution is prohibited follows from this evidence gap.
 
 Concrete question prepared for official clarification (NOT sent):
 For a Windows x64 application built on the GitHub-hosted windows-2022 runner
@@ -217,6 +218,63 @@ at no charge, without shipping any compiler, SDK, debug runtime or standalone
 .lib files? Request authoritative terms, not only technical linking guidance.
 Sending a support request or disclosing additional project details requires a
 separate authorization; none has been sent.
+
+Hosted build-use clarification and remaining question (2026-09-26)
+-----------------------------------------------------------------
+The runner-images team's closing response on2025-09-29 states that it uses an
+Enterprise license key by agreement with Microsoft for public and private use
+on GitHub Actions and Azure DevOps hosted runners, and that users do not need
+to maintain a separate personal copy of the license:
+https://github.com/actions/runner-images/issues/12945#issuecomment-3348002951
+The issue was closed as completed with that response. This is direct operational
+confirmation from the runner project, not a copy of its Microsoft agreement.
+It addresses use of the hosted toolchain; do not require a separate Enterprise
+purchase or switch to Community merely because Enterprise is preinstalled.
+It does not expressly identify the grant for distributing embedded VC runtime
+code, and does not license a separate local/self-hosted VS installation.
+
+This response supersedes uncertainty in the original issue author's report.
+Search summaries that repeat only the opening complaint or the older discussion
+7233 miss that resolution. The older discussion has no accepted answer; its
+generic license advice is not stronger evidence than the later project response.
+https://github.com/actions/runner-images/discussions/7233
+
+GitHub's Additional Products and Features terms, effective2026-08-27, permit
+development/testing use of Actions but do not supply a specific MSVC static
+runtime redistribution clause in the Actions section. Its "Authorized Developer"
+paragraph concerns Apple software, not a blanket Microsoft runtime grant.
+https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features#actions
+
+The public Microsoft Q&A question below asks the exact release static-CRT
+distribution question. Its Microsoft representative directs the requester to
+licensing support and reports a documentation escalation. The visible suggested
+answer explicitly is not a formal Microsoft response. It establishes neither a
+prohibition nor an affirmative grant for this package. Do not present search
+summaries asserting "no redistribution rights" as Microsoft's legal conclusion.
+https://learn.microsoft.com/en-us/answers/questions/949795/distributing-application-statically-linked-to-vc-r
+The Q&A links to Developer Community ticket10111550:
+https://developercommunity.visualstudio.com/t/Distributing-application-statically-link/10111550
+Direct retrieval returned an application shell rather than the ticket response;
+the current resolution was not verified. Do not claim it is unresolved today
+solely because the older Q&A discussion lacks a resolution.
+
+Revised support question, superseding the build-use uncertainty above (NOT sent):
+The runner-images team confirms hosted Enterprise build use without a separate
+personal VS license in issue12945's closing response. For Release /MT executables
+produced with that hosted MSVC14.44 toolchain, please identify the applicable
+clause/REDIST scope permitting no-charge distribution of linked libvcruntime.lib
+and libcmt.lib code. The Windows SDK REDIST already covers the SDK ucrt/um
+libraries; this question is specifically about VC/Tools/MSVC/<version>/lib/x64,
+not standalone .lib distribution or debug runtimes. Does the hosted arrangement
+also meet any distributor qualification in that grant, and which notices or
+downstream terms must accompany the executables? Please cite applicable terms
+or route to the team authorized to clarify them.
+
+Research stop condition: the published sources inspected do not settle that
+narrow distribution question. Do not repeat generic searches, infer payment
+requirements, or treat a toolchain replacement as approved. Preserve the current
+candidate and review-required notice pending authoritative clarification or an
+explicitly approved alternative approach.
 
 Component decision:
 - Keep Sense model, FunASR/ggml, yauzl/pend and Linux package unchanged:
