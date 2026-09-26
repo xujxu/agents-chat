@@ -19,12 +19,14 @@ export async function createVoiceFaultFixture() {
   const timers = new Map();
   const modules = new Map();
   const sourceHashes = {};
+  const cleanupError = Object.assign(new Error('fixture-private cleanup failure'), { code: 'EPERM' });
   let mode = 'normal';
   let requestId = '';
   let serial = 0;
   let timerId = 0;
   let events = [];
   let logCodes = [];
+  let warnings = [];
   let violations = [];
   const uuid = () => `00000000-0000-4000-8000-${String(++serial).padStart(12, '0')}`;
   const root = 'C:\\fixture-private';
@@ -88,7 +90,7 @@ export async function createVoiceFaultFixture() {
         events.push('cleanup:attempt');
         if (mode === 'cleanup-failure' || mode === 'cancel-cleanup-failure') {
           events.push('cleanup:injected-EPERM');
-          throw Object.assign(new Error('fixture-private cleanup failure'), { code: 'EPERM' });
+          throw cleanupError;
         }
         directories.delete(directory);
         events.push('cleanup:complete');
@@ -100,9 +102,25 @@ export async function createVoiceFaultFixture() {
     },
     'lib/auth.ts': { getAuthToken: async () => ({ email: 'fixture-user' }) },
     'lib/logger.ts': {
-      createLogger: () => ({
-        warn(fields) {
-          guard(fields && typeof fields.code === 'string', 'unexpected-warning-shape');
+      createLogger: name => ({
+        warn(...args) {
+          guard(args.length === 2, 'unexpected-warning-arguments');
+          const [fields, message] = args;
+          guard(fields !== null && typeof fields === 'object', 'invalid-warning-fields');
+          const cleanup = name === 'voice.transcriber';
+          guard(cleanup || name === 'api.voice', 'unexpected-warning-logger');
+          const keys = cleanup ? ['aborted', 'code'] : ['code'];
+          guard(Reflect.ownKeys(fields).length === keys.length
+            && keys.every(key => Object.hasOwn(fields, key)), 'unexpected-warning-fields');
+          if (cleanup) {
+            guard(fields.code === 'voice_cleanup_failed'
+              && typeof fields.aborted === 'boolean'
+              && message === 'Voice temporary directory cleanup failed', 'invalid-cleanup-warning');
+          } else {
+            guard(['voice_cancelled', 'voice_failed', 'voice_process_failed'].includes(fields.code)
+              && message === 'Voice request failed', 'invalid-route-warning');
+          }
+          warnings.push({ name, fields: { ...fields }, message });
           logCodes.push(fields.code);
         },
         info: () => {},
@@ -158,14 +176,31 @@ export async function createVoiceFaultFixture() {
     return modules.get(id);
   });
   await route.evaluate();
+  function prepare(nextMode) {
+    if (!faultModes.includes(nextMode)) throw new Error('Unknown fault mode');
+    mode = nextMode;
+    events = []; logCodes = []; warnings = []; violations = [];
+    requestId = uuid();
+    return modules.get('lib/voice/audio.ts').namespace.encodeVoiceWav(new Float32Array(16000).fill(0.2));
+  }
   return {
     sourceHashes,
+    cleanupError,
+    async transcribe(nextMode) {
+      const audio = prepare(nextMode);
+      const job = modules.get('lib/voice/jobs.ts').namespace.reserveVoiceJob(
+        'fixture-user', requestId, new AbortController().signal,
+      );
+      try {
+        return await modules.get('lib/voice/transcriber.ts').namespace
+          .transcribeVoice(audio, config, job.signal);
+      } finally {
+        job.release();
+        guard(violations.length === 0, 'caught-boundary-violation');
+      }
+    },
     async request(nextMode) {
-      if (!faultModes.includes(nextMode)) throw new Error('Unknown fault mode');
-      mode = nextMode;
-      events = []; logCodes = []; violations = [];
-      requestId = uuid();
-      const audio = modules.get('lib/voice/audio.ts').namespace.encodeVoiceWav(new Float32Array(16000).fill(0.2));
+      const audio = prepare(nextMode);
       const request = new Request('http://fixture.local/api/voice', {
         method: 'POST', body: audio,
         headers: { 'content-type': 'audio/wav', 'x-voice-user-id': 'fixture-user', 'x-voice-request-id': requestId },
@@ -176,6 +211,7 @@ export async function createVoiceFaultFixture() {
       return {
         status: response.status, code: response.body.error ?? null,
         events: [...events], logCodes: [...logCodes],
+        warnings: warnings.map(warning => ({ ...warning, fields: { ...warning.fields } })),
         cleanupAttempts: events.filter(event => event === 'cleanup:attempt').length,
         remainingDirectories: directories.size, pendingTimers: timers.size,
       };
