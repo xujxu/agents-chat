@@ -4,6 +4,9 @@ import { chatSaveAcknowledgement } from './helpers/chatSaveFixture';
 import { installTypographyFixture } from './helpers/typographyFixture';
 import type { ChatMessage } from '../app/features/chat/chatTypes';
 import { settleChatLayout as settleLayout } from './helpers/chatLayout';
+import { registerReadingGeometryDiagnostics } from './helpers/readingGeometryDiagnostics';
+
+registerReadingGeometryDiagnostics();
 
 const portrait = { width: 390, height: 844 };
 const landscape = { width: 844, height: 390 };
