@@ -1,6 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { encode } from 'next-auth/jwt';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
+import { registerVoiceCleanupDiagnostics } from './helpers/voiceCleanupDiagnostics';
+
+registerVoiceCleanupDiagnostics();
 
 async function prepare(page: Page, enabled = true, nativeBackend = false) {
   const fixture = await installMobileChatFixture(page);

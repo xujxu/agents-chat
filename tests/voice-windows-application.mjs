@@ -16,6 +16,7 @@ const environment = {
   VOICE_BINARY_PATH: path.join(artifacts, 'voice-provider.exe'),
   VOICE_MODEL_PATH: model, VOICE_RESOURCE_POLICY: 'standard',
   VOICE_EXPECT_POLICY: 'standard', VOICE_API_FIXTURE: '1',
+  VOICE_CLEANUP_DIAGNOSTICS: '1',
 };
 
 function closed(child) {

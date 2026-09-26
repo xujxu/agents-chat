@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
 import { encodeVoiceWav, MAX_VOICE_BYTES } from '../lib/voice/audio';
+import { registerVoiceCleanupDiagnostics } from './helpers/voiceCleanupDiagnostics';
+
+registerVoiceCleanupDiagnostics();
 
 test.beforeEach(() => {
   test.skip(process.env.VOICE_API_FIXTURE !== '1', 'Runs in the voice-enabled native fixture phase');
