@@ -109,3 +109,71 @@ remains unconfirmed and stop; do not launch another batch automatically.
 Keep PR #2 Draft while these findings await a decision. Do not reopen licensing
 or accuracy research, change models/toolchains, relax thresholds, publish native
 packages, merge the PR, or describe non-reproduction as a fix.
+
+## Execution record: first bounded batch (2026-09-26)
+
+Written design approved; plan/red tests `6ea6897`. New manual-only workflow
+initially returned404 because it was not registered on the default branch.
+The user approved a temporary contracts-only push trigger (`b40cdfc`), removed
+in harness `6162582a249241adac2518fd80d89a43c2cf53c8`.
+Red run `36225811502` failed on the missing helper module. Green run
+`36225903942` passed4metadata contracts without running cohorts.
+
+The single approved batch is
+[36225934786](https://github.com/xujxu/agents-chat/actions/runs/36225934786).
+Both product SHAs match the pinned baselines above; Node24.20.0 and the identical
+test overlay were used. Both Ubuntu image versions were20260920.314.1.
+No application/native implementation changed.
+
+| Cohort | Actual result |
+| --- | --- |
+| Windows per-case sampling off | Harness process aborted before completing any round |
+| Windows per-case sampling on | Same harness abort, before completing any round |
+| WebKit main | 5/5 passed, zero retries |
+| WebKit voice | First repetition failed; remaining4not run, zero retries |
+
+Windows failed with Node/libuv's native assertion
+`!_wcsnicmp(filename, dir, dirlen)` in `src\win\fs-event.c:72` after adding the
+temporary-directory watcher. Only provenance survived; no lifecycle report
+was produced. JavaScript finally/error handlers cannot guarantee reporting after
+a native abort. These jobs provide **no valid cleanup-cohort result** and do not
+reproduce or clear the original product directory leak. This is a new diagnostic
+harness blocker, not evidence that the voice runtime or toolchain must change.
+The exact filesystem/path condition causing the native assertion is unconfirmed.
+
+WebKit voice failed cycle1 at width844 with5px distance from bottom (limit4px).
+The retained history has14samples, zero dropped samples and zero capture errors.
+At the last observed scroll, scrollTop was7877, content height8061, client
+height184, bottom distance0, and chat top54.28125. Final geometry shows the same
+scrollTop/content height but client height179, giving5px bottom distance.
+Thus the record shows the viewport shortened after a bottom-position sample
+without sufficient final scroll compensation. It does not record the internal
+controller's following/intent state, so it does not yet establish why correction
+was missed. The composer/textarea changed height during orientation (124->121
+and37->34); this is observation, not a component replacement recommendation.
+
+All5main repetitions finished with0px bottom distance. Their histories contain
+26/27samples, zero dropped samples and zero capture errors. Passing this bounded
+main cohort does not prove main can never encounter the race, nor that voice
+code alone caused it; the scroll controller is shared.
+
+The ordinary PR typography workflow `36225906723` at the same harness commit
+also failed this orientation test, cycle2/width844 at16px versus4px, with
+geometry sampling not enabled. Android/desktop typography jobs passed.
+This is additional reproduction outside the instrumented cohort, not a new
+approved diagnostic batch or a reason to relax the tolerance.
+
+Retained artifacts (expiry2026-10-10):
+- Windows off `10900956564`,783bytes,
+  SHA256`45bdf553c0ff27cbe94f155bbbe5152883bb39d43f4067ec13cf12a3f5147a88`.
+- Windows on `10901171067`,782bytes,
+  SHA256`93ac4c21f5edab1cf10ef0dc2300a965795baedb40385bd6e56f0f277df1b406`.
+- WebKit main `10900602561`,5901bytes,
+  SHA256`f9d6c383c08a079c8449f22601a1895582132418394c687bf0c0787285fff348`.
+- WebKit voice `10900931830`,1260270bytes,
+  SHA256`f770bb3fa859e0e38cdc1bef7479cc309c287d490add878bb8426f4231eb40a5`.
+
+The batch is stopped. Do not rerun either cohort automatically. A further
+Windows attempt requires repairing/replacing the diagnostic watcher and explicit
+approval for the revised collection method/budget. No product fix is justified
+as completed by these results. PR #2 remains Draft.

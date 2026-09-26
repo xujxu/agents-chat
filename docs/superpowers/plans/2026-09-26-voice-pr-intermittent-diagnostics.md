@@ -106,3 +106,15 @@ Files:
 - [ ] Add an execution record to the spec and PR #2 with run/artifact IDs and
   measured findings. No automatic second batch, product fix, threshold change,
   component replacement, merge or release. If cause is unconfirmed, say so.
+
+## Execution checkpoint
+
+Tasks1-3implemented in `6162582`; red `36225811502`, green contracts
+`36225903942` (4passed). The user separately approved the temporary
+contracts-only workflow registration trigger; it was removed before cohorts.
+Task4's one batch `36225934786` completed with failures and is not repeated.
+Windows completed0rounds because the new filesystem watcher triggered a native
+Node/libuv assertion, leaving provenance only. WebKit main passed5/5; voice
+failed its first repetition at5px vs4px. Findings/artifact identities are in the
+spec's execution record. Further diagnostic repair/collection needs approval;
+no product changes or fixes have been claimed.
