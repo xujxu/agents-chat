@@ -171,3 +171,17 @@ manifest coverage, legal-text inventory, provenance privacy, explicit unknowns,
 CI-only tests, both real candidates and persistent results. No task changes
 runtime behavior, resolves legal ambiguity by assumption, or expands to old
 application components. Written-spec approval preceded this plan.
+
+## Execution record
+
+- [x] Red contracts: `4cdb05b`, Actions `36211147069`, expected missing-module failure.
+- [x] Collector and retrieval/report implementation: `5bc020f`.
+- [x] Ten fixture tests passed in Actions `36211292014`.
+- [x] Real candidates inspected in Actions `36211314051`; both jobs passed,
+  all 18 declared payload files per platform verified, no payload executed.
+- [x] Report artifact `10895826318` retrieved; actual license texts and selected
+  provenance read. No checklist entries missing. Linux exception text explicitly
+  covers libgcc/libstdc++; Windows static-runtime authorization remains unconfirmed.
+- [x] Results persisted in `scripts/VOICE-DEPLOYMENT.txt`; no candidate replacement,
+  runtime change or publication. Earlier task checkboxes describe the planned
+  sequence; this execution record records its completion and residual legal scope.

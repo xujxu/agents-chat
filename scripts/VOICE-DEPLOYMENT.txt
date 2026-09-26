@@ -48,8 +48,9 @@ Voice-only source-level findings:
   combinations with independent modules under their own terms; static linking
   does not by itself require relicensing the application under GPL.
   The recipe uses GCC12 without an indicated non-eligible optimizer/plugin and
-  copies GCC copyright/GPL text. The exact packaged exception/covered inputs
-  remain to be matched to the candidate; retain those notices.
+  copies GCC copyright/GPL text. The retained-candidate inspection below now
+  confirms the exception text and explicit libgcc/libstdc++ coverage declaration
+  in that package; retain those notices. This is not a per-object link audit.
 - Windows native runtime: the new engine/helper embeds /MT runtime code.
   This is within scope even though unrelated old Windows components are not.
   Free redistribution of the MIT/Apache model/engine does not establish the
@@ -86,6 +87,75 @@ No paid ASR service is required. This is not yet unconditional clearance of
 both finished platform packages: only the voice package notice/runtime closure
 (especially Windows /MT) remains relevant, not the old project-wide checklist.
 No runtime, dependency, default, license grant or publication was changed.
+
+Retained Sense candidate inspection completed (2026-09-26)
+---------------------------------------------------------
+Approved spec0535372; plan/red contracts4cdb05b; implementation5bc020f.
+Spec: docs/superpowers/specs/2026-09-26-voice-candidate-license-evidence-design.md
+Plan: docs/superpowers/plans/2026-09-26-voice-candidate-license-evidence.md
+Red Actions36211147069 failed as intended on the absent inspection module.
+Fixture Actions36211292014 passed all10standard-library tests.
+Real inspection:
+https://github.com/xujxu/agents-chat/actions/runs/36211314051
+Measured commit5bc020f503537dc135f32cc19bb10bd76700cb81.
+Both fixture and candidate jobs passed. All retrieval, ZIP/hash verification
+and tests ran in GitHub Actions; no application server, model, native executable,
+package installation, rebuild, accuracy run or browser E2E was invoked.
+
+Observed original package identities:
+- Linux artifact10794617845, build run35968099304,18declared payload files.
+  Archive SHA256e2be50235ba3f584833750c444c313dd3aa4231c65a6eb1c222e18c06e0e7295.
+  Manifest SHA256ccf50b7ddaef5f9a0cddd58f87c4f08421902c630b2ca2a485bfebaae727f40c.
+- Windows artifact10802394350, build run35987278609,18declared payload files.
+  Archive SHA2562796a7666cf36f1f9597af1978af1df1feeec648bbca1036a226cb99ddebe3ab.
+  Manifest SHA256ed605fe13aacaf21d0aceb18127d6bccb0a1099f561aa0ecef95952975cae905.
+Both archives matched the fixed catalog, and every declared payload matched
+its size/hash. The inspector rejected undeclared payloads and unsafe archive
+members; models and executables were streamed for hashing, never executed or
+copied into the report. Existing candidate archives/catalog were not changed.
+
+Observed license materials:
+- Both actual packages contain the Apache-2.0 model declaration and text,
+  FunASR/llama MIT notices, jsonhpp notice and full miniaudio header. All expected
+  text checks were present; no missing notice in that defined checklist was
+  found. This does not assert that the checklist identifies every legal duty.
+- Linux additionally contains GPL3, LGPL2.1, glibc copyright and the complete
+  GCC Runtime Library Exception3.1. The retained gcc-runtime.txt lines100-113
+  explicitly place libgcc and libstdc++-v3 under GPLv3-or-later with that
+  exception; lines241-310 contain the exception, including eligible-compilation
+  and independent-module conditions. Retained CMake evidence records GCC12,
+  Release and -static-libstdc++ -static-libgcc. This closes the uncertainty
+  about whether the exception text and library coverage declaration ship.
+  No separate paid runtime grant is indicated by these GNU terms; retain their
+  conditions. The inspection is not a complete per-object link-input analysis.
+- Windows retains RELEASE-REVIEW-REQUIRED.txt and records MultiThreaded static
+  MSVC runtime, Visual Studio17/2022, compiler19.44.35228.0. This confirms the
+  unresolved runtime condition, not the right to distribute it. No authoritative
+  grant matching all actual static MSVC/SDK inputs and the distributor's
+  entitlement was established. Do not remove the notice or label this package
+  unconditionally cleared. Absence of that evidence is not a finding that use
+  requires payment or that redistribution is prohibited.
+
+Evidence artifact10895826318: voice-candidate-license-evidence,
+1342052bytes, expires2026-10-26T02:19:54Z.
+GitHub artifact digest:
+SHA2562db5a08ea59b2430d4a6298c7ae7fb40754a7573712504a38abe42e3855f228c.
+It contains REPORT.md, summary.json, retained license texts and selected
+provenance excerpts with source hashes; no model, native binary or test audio.
+Report distribution_clearance remains "not-assessed" on purpose. The checked-in
+findings above persist beyond artifact expiry; the detailed evidence is retained
+only for the stated retention period.
+
+Result and remaining scope:
+The approved archive-evidence task is complete; no packaging repair was justified
+by a missing entry in the inspected notice checklist. Core voice models/engines
+and the new npm libraries have the free-use grants described above. Linux's
+packaged GCC exception is now confirmed. Windows static-runtime distribution
+basis remains the main unclosed third-party permission question. Do not repeat
+generic web searches or replace the toolchain without a separate decision.
+Public publication/self-code permission is not granted by this technical report.
+Whisper archives, application-bundled yauzl/pend files, old application components
+and Dev Tunnels were not inspected by this two-candidate run.
 
 Additional pinned sources for the narrowed review:
 https://raw.githubusercontent.com/thejoshwolfe/yauzl/3.4.0/LICENSE
