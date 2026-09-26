@@ -2,6 +2,12 @@ import { expect, test, type Page } from '@playwright/test';
 import { encode } from 'next-auth/jwt';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
 import { registerVoiceCleanupDiagnostics } from './helpers/voiceCleanupDiagnostics';
+import {
+  isVoiceRecordingReady,
+  observeVoiceRecording,
+  waitForVoiceRecordingReady,
+  type VoiceRecordingObservation,
+} from './helpers/voiceRecordingReadiness';
 
 registerVoiceCleanupDiagnostics();
 
@@ -58,6 +64,76 @@ async function prepare(page: Page, enabled = true, nativeBackend = false) {
   return fixture;
 }
 
+test('recording readiness accepts a first observation after the one-second display', async ({ page }) => {
+  await page.setContent(`
+    <div class="voiceStatus" role="status">Recording 0:02 / 0:30</div>
+    <button aria-label="Stop recording">Stop</button>
+  `);
+  await waitForVoiceRecordingReady(page);
+});
+
+test('recording readiness enforces elapsed and active-control boundaries', () => {
+  const active: VoiceRecordingObservation = {
+    statusText: 'Recording 0:01 / 0:30',
+    statusVisible: true,
+    stopVisible: true,
+    stopEnabled: true,
+  };
+  for (const seconds of ['01', '02', '29']) {
+    expect(isVoiceRecordingReady({
+      ...active,
+      statusText: `Recording 0:${seconds} / 0:30`,
+    }), `elapsed ${seconds}`).toBe(true);
+  }
+  for (const statusText of [
+    null,
+    '',
+    'Recording 0:00 / 0:30',
+    'Recording 0:30 / 0:30',
+    'Recording 0:31 / 0:30',
+    'Recording 0:99 / 0:30',
+    'Recording 1:01 / 0:30',
+    'Recording 0:01 / 0:31',
+    'Recording 0:1 / 0:30',
+    'Recording 0:001 / 0:30',
+    'Recording 0:aa / 0:30',
+    'Recording 0:-1 / 0:30',
+    'Recording 0:01 / 0:30 trailing',
+    'Recording 0:01 / 0:30\n',
+    'Opening microphone…',
+    'Transcribing…',
+  ]) {
+    expect(isVoiceRecordingReady({ ...active, statusText }), String(statusText)).toBe(false);
+  }
+  for (const field of ['statusVisible', 'stopVisible', 'stopEnabled'] as const) {
+    expect(isVoiceRecordingReady({ ...active, [field]: false }), field).toBe(false);
+  }
+});
+
+test('recording readiness observes missing, hidden, and disabled controls', async ({ page }) => {
+  const cases = [
+    { status: '', button: '', visible: false, enabled: false, text: null, statusVisible: false },
+    { status: 'style="display:none"', button: '', visible: true, enabled: true, text: 'Recording 0:01 / 0:30', statusVisible: false },
+    { status: '', button: 'hidden', visible: false, enabled: true, text: 'Recording 0:01 / 0:30', statusVisible: true },
+    { status: '', button: 'disabled', visible: true, enabled: false, text: 'Recording 0:01 / 0:30', statusVisible: true },
+    { status: '', button: 'style="visibility:hidden"', visible: false, enabled: true, text: 'Recording 0:01 / 0:30', statusVisible: true },
+  ];
+  for (const item of cases) {
+    await page.setContent(item.text === null ? '' : `
+      <div class="voiceStatus" role="status" ${item.status}>${item.text}</div>
+      <button aria-label="Stop recording" ${item.button}>Stop</button>
+    `);
+    const observation = await observeVoiceRecording(page);
+    expect(observation).toEqual({
+      statusText: item.text,
+      statusVisible: item.statusVisible,
+      stopVisible: item.visible,
+      stopEnabled: item.enabled,
+    });
+    expect(isVoiceRecordingReady(observation)).toBe(false);
+  }
+});
+
 test('selected native provider delivers through recording and the real voice API', async ({ page }) => {
   test.skip(process.env.VOICE_API_FIXTURE !== '1', 'Requires the Actions native fixture server');
   const fixture = await prepare(page, true, true);
@@ -75,7 +151,7 @@ async function record(page: Page) {
   await page.getByRole('button', { name: 'Start voice input', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Stop recording', exact: true })).toBeVisible();
   expect(await page.evaluate(() => (window as typeof window & { __voiceFixtureCalls?: number }).__voiceFixtureCalls)).toBeGreaterThan(0);
-  await expect(page.getByText('Recording 0:01 / 0:30', { exact: true })).toBeVisible();
+  await waitForVoiceRecordingReady(page);
 }
 
 test('voice is absent when runtime capability is disabled', async ({ page }) => {
