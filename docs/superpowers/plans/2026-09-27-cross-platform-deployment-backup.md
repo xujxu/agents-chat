@@ -3172,7 +3172,7 @@ provenance. Recovery advice offers retry, not database restore or update success
 - [x] Write causal transaction/state and real Linux failure-closeout contracts.
 - [x] Implement phase validation/status/advice and verified recovery ordering.
 - [x] Wire service and worker retirement, saved recovery and no-op semantics.
-- [ ] Validate actual backup failure -> old npm service restart -> verify ->
+- [x] Validate actual backup failure -> old npm service restart -> verify ->
   failed terminal state -> evidence cleanup/unlock, plus restart/verify/state
   write failures and post-source refusal in Actions.
 
@@ -3184,3 +3184,31 @@ error with the backup failure as its cause, rather than requiring cancellation
 to be erased. Non-cancelled failures still preserve original error identity.
 Shared live/cold worker cleanup contracts retain the failed-update state and
 backup; ordinary worker enrollment stays closed by that terminal outcome.
+
+#### Prior-runtime failure closeout checkpoint (2026-09-27)
+
+Executable `c9a840287aed7a7dec3e10b913e5946ad0da4a74`, Actions
+`36329338667`, passed all four jobs: 69 Linux native contracts, 221 Linux
+shared contracts, 217 Windows shared contracts with four platform skips, and
+19 Windows coordinator contracts plus the native Job primitive step.
+All execution was in Actions; no local validation or live service changes.
+
+Real installed npm fixtures exercise the failed snapshot transaction with
+no worker artifacts, with an actual settled/sealed native worker, and with
+failed verification after the original service was restarted. The first two
+persist the explicit failure code, retire exact service/worker evidence and
+unlock without accepting the target deployment. The third retains
+recovery-required state, service evidence and the lock; ordinary status
+remains blocked. Successful recovery does not erase the original exception.
+Cold saved worker cleanup also preserves the terminal failed-update state
+and backup bytes after the retirement controller is killed.
+
+This completes only the **live pre-source failure closeout**. The verification
+adapter in the native fixture checks the actual service generation/account,
+not real application HTTP or database continuity. A new controller still
+cannot adopt interrupted service maintenance, partial service retirement or
+the final marker/unlock gap. Recovery after source mutation or failed new
+activation, inactive/changed-unit installations, Windows installed task/account
+integration, complete backup metadata/rotation, thin public scripts and actual
+dual-platform historical application lifecycle acceptance remain outstanding.
+No PR, main change or physical deployment is authorized by this checkpoint.
