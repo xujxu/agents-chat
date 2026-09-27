@@ -3212,3 +3212,57 @@ activation, inactive/changed-unit installations, Windows installed task/account
 integration, complete backup metadata/rotation, thin public scripts and actual
 dual-platform historical application lifecycle acceptance remain outstanding.
 No PR, main change or physical deployment is authorized by this checkpoint.
+
+### Cold Linux service retirement: exact completed-operation handoff
+
+Continue the approved independent recovery architecture, initially only when
+there are no outstanding worker artifacts. This is not generic stale-lock
+adoption, service restart, backup restoration or reboot recovery. Existing
+service-retirement v1 markers without durable command/policy identity are
+not adopted. A missing retirement marker or preexisting recovery guard also
+remains blocked. Worker-bearing service recovery needs a later explicit
+combined service/worker handoff; never discard those journals to unlock.
+
+Files and responsibilities:
+- `linux-service-inspection.mjs`: include inspected executable identities and
+  effective configuration in its serializable runtime evidence.
+- `linux-service-retirement.mjs`: persist v2 intent with the richer runtime
+  evidence before any deletion, preserving live cleanup semantics.
+- New `linux-service-recovery.mjs`: validate the exact v2 intent, matching
+  completed state and old lock, original service generation/boot/source/
+  account/policy, original directories, retained files and deletion prefix.
+  Claim exclusive `recovery-lock`, delete only the remaining allowlisted
+  held-inhibitor/activation/stop files, record cleanup completion, then retire
+  the original lock and recovery guard. Preserve state, backup and service.
+- `saved-recovery-engine.mjs` and `retirement-recovery-entry.mjs`: include the
+  new helper and its Linux dependencies in the fixed verified bundle; explicit
+  `kind: 'service'` invocation, retaining default worker recovery semantics.
+- New `tests/deployment-linux-service-fixture.mjs`: shared actual npm service
+  fixture extracted unchanged from the existing service suite.
+- New `tests/deployment-linux-service-recovery.test.mjs`: kill the real original
+  controller before deletion and after each deletion; run the independent saved
+  recovery after moving the source scripts. Assert unchanged service invocation,
+  state/backup bytes, removed maintenance/lock artifacts and new lock admission.
+
+- [ ] Push causal contracts and observe missing service recovery in Actions.
+- [ ] Implement exact intent validation and saved recovery dispatch.
+- [ ] Exercise invalid path/gap/state/boot/source/generation/file replacement,
+  live owner, worker evidence and competing/stale recovery guards before deletion.
+- [ ] Add deletion/close/controller-death faults during recovery; retain guard
+  and diagnostics, never automatic retries or force-unlock.
+- [ ] Push and await all Actions jobs, inspect bounded failures and checkpoint.
+
+Native success assertion:
+```javascript
+const command = retirementRecoveryInvocation(saved, {
+  control, project, operationId, kind: 'service',
+});
+const result = JSON.parse((await execute(command.file, command.args, {
+  env: command.env, timeout: 90000, maxBuffer: 8192,
+})).stdout);
+assert.deepEqual(result, { status: 'service-retired', operationId, restored: false });
+```
+
+Validation uses the existing `Deployment lifecycle` workflow only. The Linux
+job includes the new native suite; both shared contract jobs and Windows native
+ownership remain required. No local test/server/package execution.

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { acquireLock, loadState, writeState } from '../scripts/deployment/state.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 
-const [control, project, unit, npm, node, phase] = process.argv.slice(2);
+const [control, project, unit, npm, node, phase, outcome = 'accepted'] = process.argv.slice(2);
 const activation = phase.startsWith('activation-');
 const receiptPhase = activation ? phase.slice('activation-'.length) : phase;
 const lock = await acquireLock(control, { project, operationId: randomUUID() });
@@ -20,6 +20,15 @@ await writeState(control, { ...state, phase: 'stopped', previousPhase: 'prefligh
 const nativeOpen = fs.open;
 fs.open = async function (file, ...args) {
   const handle = await nativeOpen(file, ...args);
+  if (phase === 'retirement-intent' && file === path.join(control, 'service-retirement.json')) {
+    const sync = handle.sync.bind(handle);
+    handle.sync = async () => {
+      await sync();
+      process.send({ phase, lock });
+      setInterval(() => {}, 1000);
+      await new Promise(() => {});
+    };
+  }
   if (file === path.join(control, activation ? 'service-activation.ndjson' : 'service-stop.ndjson')) {
     const sync = handle.sync.bind(handle);
     handle.sync = async () => {
@@ -37,19 +46,24 @@ fs.open = async function (file, ...args) {
 syncBuiltinESMExports();
 const stopped = await stopLinuxService({ control, lock, unit, project, npm, node });
 if (activation) await stopped.activate({ purpose: 'prior-runtime' });
-if (phase === 'retirement-unlink') {
-  for (const next of ['copying', 'rotating', 'backup-ready', 'source-selected',
+if (phase.startsWith('retirement-')) {
+  const prior = outcome === 'prior-runtime-restored';
+  for (const next of prior ? ['copying'] : ['copying', 'rotating', 'backup-ready', 'source-selected',
     'dependencies', 'building', 'configuring', 'activating']) {
     const current = await loadState(control);
     await writeState(control, { ...current, phase: next, previousPhase: current.phase });
   }
-  await stopped.activate({ purpose: 'deployment' });
+  await stopped.activate({ purpose: prior ? 'prior-runtime' : 'deployment' });
   const current = await loadState(control);
-  await writeState(control, { ...current, phase: 'accepted', previousPhase: 'activating' });
+  await writeState(control, { ...current, phase: outcome, previousPhase: current.phase,
+    errorCode: prior ? 'BACKUP_FAILED' : null });
   const nativeUnlink = fs.unlink;
+  let deleted = 0;
+  const pauseAfter = phase === 'retirement-unlink' ? 0 : Number(phase.slice('retirement-unlink-'.length));
   fs.unlink = async function (file) {
     await nativeUnlink(file);
-    if (String(file).endsWith('.held')) {
+    if ((String(file).endsWith('.held') || ['service-activation.ndjson', 'service-stop.ndjson'].includes(path.basename(file)))
+      && deleted++ === pauseAfter) {
       process.send({ phase, lock });
       setInterval(() => {}, 1000);
       await new Promise(() => {});
