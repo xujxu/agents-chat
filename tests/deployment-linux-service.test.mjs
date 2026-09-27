@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmod, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { chmod, chown, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -16,10 +16,15 @@ const node = process.execPath;
 const npm = path.join(path.dirname(node), 'npm');
 const quote = value => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%')}"`;
 
-async function fixture(t, { command = `${quote(npm)} start`, settings = '', dropIn = '' } = {}) {
+async function fixture(t, { command = `${quote(npm)} start`, settings = '', dropIn = '', nonroot = false } = {}) {
   const root = await temporaryDeployment(t);
   const project = path.join(root, 'app with spaces');
   await mkdir(project);
+  if (nonroot) {
+    await chmod(root, 0o711);
+    await chmod(project, 0o755);
+    await chown(project, 65534, 65534);
+  }
   const unit = `agents-service-test-${randomUUID()}.service`;
   const fragment = `/etc/systemd/system/${unit}`;
   const dropDirectory = `${fragment}.d`;
@@ -38,9 +43,9 @@ setInterval(()=>{},1000);
 Description=Isolated deployment service fixture
 [Service]
 Type=simple
-User=root
-Group=root
-WorkingDirectory=${quote(project)}
+User=${nonroot ? 'nobody' : 'root'}
+Group=${nonroot ? 'nogroup' : 'root'}
+WorkingDirectory=${project.replaceAll('%', '%%')}
 Environment=PATH=${path.dirname(node)}:/usr/bin:/bin
 ExecStart=${command}
 Restart=on-failure
@@ -64,7 +69,11 @@ ${settings}
     await writeFile(dropFile, `[Service]\n${dropIn}\n`, { mode: 0o644 });
   }
   await systemctl('daemon-reload');
-  await systemctl('start', unit);
+  try { await systemctl('start', unit); }
+  catch (error) {
+    const { stdout } = await native('/usr/bin/journalctl', ['-b', '--no-pager', '-n', '8', `--grep=${unit}`]);
+    throw new Error(`Installed service fixture could not start: ${stdout}`, { cause: error });
+  }
   return { unit, project, npm, node, fragment, dropFile, bytes };
 }
 
@@ -99,6 +108,18 @@ test('does not mistake a Node service in the same directory for the expected npm
   await ready(f);
   await assert.rejects(inspectLinuxService(f), /command|ExecStart/i);
   assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+});
+
+test('retains non-root installed npm identity and rejects a different expected Node executable', async t => {
+  const f = await fixture(t, { nonroot: true });
+  await ready(f);
+  const service = await inspectLinuxService(f);
+  try {
+    assert.equal(service.identity.runtime.uid, 65534);
+    assert.equal(service.identity.runtime.gid, 65534);
+    assert.equal((await service.check()).populated, true);
+  } finally { await service.close(); }
+  await assert.rejects(inspectLinuxService({ ...f, node: '/usr/bin/true' }), /executable|identity/i);
 });
 
 test('rejects extra npm arguments and privileged command prefixes', async t => {
