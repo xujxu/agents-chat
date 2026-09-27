@@ -260,10 +260,37 @@ namespace Deployment
         public static IDisposable WatchOwner(int pid, string identity)
         {
             if (WindowsWorkerJob.ProcessIdentity(pid) != identity) throw new InvalidOperationException("Owner identity changed.");
+            Stopwatch lifetime = Stopwatch.StartNew();
             return new Timer(state => {
-                try { if (WindowsWorkerJob.ProcessIdentity(pid) != identity) Environment.Exit(1); }
+                try {
+                    if (lifetime.Elapsed.TotalMinutes >= 30 || WindowsWorkerJob.ProcessIdentity(pid) != identity)
+                        Environment.Exit(1);
+                }
                 catch { Environment.Exit(1); }
             }, null, 250, 250);
+        }
+        public static Task<string> ReadFrameAsync(TextReader reader, int maximumBytes)
+        {
+            if (maximumBytes < 1 || maximumBytes > 131072) throw new ArgumentOutOfRangeException("maximumBytes");
+            // Console.In may implement ReadAsync synchronously; never block the owner control loop.
+            return Task.Run(async () => {
+                StringBuilder frame = new StringBuilder();
+                char[] character = new char[1];
+                int bytes = 0;
+                bool highSurrogate = false;
+                while (true)
+                {
+                    if (await reader.ReadAsync(character, 0, 1).ConfigureAwait(false) == 0)
+                        throw new EndOfStreamException("Native control pipe closed.");
+                    char next = character[0];
+                    if (next == '\n') return frame.ToString();
+                    bytes += Char.IsLowSurrogate(next) && highSurrogate ? 1
+                        : next < 0x80 ? 1 : next < 0x800 ? 2 : 3;
+                    highSurrogate = Char.IsHighSurrogate(next);
+                    if (bytes > maximumBytes) throw new InvalidDataException("Native frame exceeds limit.");
+                    frame.Append(next);
+                }
+            });
         }
         public static string ReadFrame()
         {

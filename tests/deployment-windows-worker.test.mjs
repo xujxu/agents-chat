@@ -17,8 +17,9 @@ import { prepareWindowsWorker } from '../scripts/deployment/windows-worker.mjs';
 const execute = promisify(execFile);
 const pwsh = process.env.DEPLOYMENT_TEST_PWSH;
 const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
-const ps = (script, args = []) => execute(pwsh, ['-NoProfile', '-NonInteractive', '-Command', script, ...args],
-  { timeout: 30000, maxBuffer: 8192 });
+const ps = (script, args = []) => execute(pwsh, ['-NoProfile', '-NonInteractive', '-EncodedCommand',
+  Buffer.from(`$args=@(${args.map(arg => `'${arg.replaceAll("'", "''")}'`).join(',')})\n${script}`,
+    'utf16le').toString('base64')], { timeout: 30000, maxBuffer: 8192 });
 
 async function fixture(t, code, args = []) {
   const root = await temporaryDeployment(t);
@@ -171,7 +172,8 @@ test('Node controller death terminates native handle owner and writers without a
     child.once('error', reject);
     child.once('exit', code => reject(new Error(`Controller exit ${code}: ${stderr}`)));
   });
-  child.send({ ...f, operations: undefined, run: undefined, owner: childOwner, pwsh });
+  child.send({ owner: childOwner, saved: f.saved, command: f.command,
+    control: f.control, runtime: f.runtime, pwsh });
   const { owner } = await ready;
   await waitFile(path.join(f.project, 'started'));
   child.kill('SIGKILL');

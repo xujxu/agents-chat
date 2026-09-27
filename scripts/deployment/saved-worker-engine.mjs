@@ -12,6 +12,7 @@ const files = [
   'saved-worker-engine.mjs', 'saved-worker-inspect.mjs',
   'stage-runner.mjs', 'worker-errors.mjs', 'worker-files.mjs',
   'worker-identity.mjs', 'worker-journal.mjs', 'worker-wire.mjs',
+  'WindowsWorkerJob.cs', 'windows-worker-launcher.ps1', 'windows-worker-owner.ps1', 'windows-worker.mjs',
 ];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const validDigest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
