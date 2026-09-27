@@ -15,6 +15,7 @@ export const workerEngineFiles = Object.freeze([
   'WindowsWorkerJob.cs', 'windows-worker-launcher.ps1', 'windows-worker-owner.ps1', 'windows-worker.mjs',
   'evidence-journal.mjs', 'worker-operation.mjs', 'state.mjs',
   'worker-retirement.mjs',
+  'linux-systemd.mjs', 'linux-runtime.mjs',
 ]);
 const files = workerEngineFiles;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');

@@ -1,20 +1,14 @@
-import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { open, readFile, readlink, statfs } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { promisify } from 'node:util';
 import { captureOwner, captureWorkerFields, captureLinuxAccount } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { verifyWorkerEngine } from './saved-worker-engine.mjs';
 import { captureWorkerCommand, workerWire } from './worker-wire.mjs';
+import { linuxNative as native, linuxSystemdProperties } from './linux-systemd.mjs';
 
-const execute = promisify(execFile);
-const nativeEnv = { PATH: '/usr/sbin:/usr/bin:/sbin:/bin', LANG: 'C', LC_ALL: 'C' };
-const native = (file, args) => execute(file, args, {
-  env: nativeEnv, timeout: 30000, maxBuffer: 16384,
-});
 const bootId = async () => (await readFile('/proc/sys/kernel/random/boot_id', 'utf8')).trim();
 function diagnosticTail(base64) {
   const bytes = Buffer.from(Buffer.from(base64, 'base64').toString('utf8'));
@@ -24,14 +18,8 @@ function diagnosticTail(base64) {
   return bytes.subarray(start).toString('utf8');
 }
 
-const properties = async unit => {
-  const { stdout } = await native('/usr/bin/systemctl', ['--system', 'show', unit,
-    '--property=InvocationID,ControlGroup,ActiveState,SubState,Result,MainPID,LoadState']);
-  return Object.fromEntries(stdout.trim().split('\n').map(line => {
-    const end = line.indexOf('=');
-    return [line.slice(0, end), line.slice(end + 1)];
-  }));
-};
+const properties = unit => linuxSystemdProperties(unit,
+  ['InvocationID', 'ControlGroup', 'ActiveState', 'SubState', 'Result', 'MainPID', 'LoadState']);
 
 export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command: suppliedCommand, uid, gid, signal }) {
   const owner = captureOwner(suppliedOwner);

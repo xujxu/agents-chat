@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmod, chown, mkdir, realpath } from 'node:fs/promises';
+import { chmod, chown, mkdir, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectLinuxRuntimeAccount } from '../scripts/deployment/linux-runtime.mjs';
 
 const execute = promisify(execFile);
-async function fixture(t, extra = []) {
+async function fixture(t, extra = [], code = 'setInterval(()=>{},1000)') {
   const root = await temporaryDeployment(t);
   await chmod(root, 0o711);
   const project = path.join(root, 'app');
@@ -21,7 +22,7 @@ async function fixture(t, extra = []) {
     '--property=RuntimeMaxSec=120s', '--property=TimeoutStopSec=5s',
     '--property=KillMode=control-group', '--property=SendSIGKILL=yes',
     `--property=WorkingDirectory=${project}`, ...extra, '--',
-    process.execPath, '-e', 'setInterval(()=>{},1000)'], { timeout: 15000, maxBuffer: 8192 });
+    process.execPath, '-e', code], { timeout: 15000, maxBuffer: 8192 });
   t.after(async () => {
     await execute('/usr/bin/systemctl', ['stop', unit], { timeout: 15000 });
     const { stdout } = await execute('/usr/bin/systemctl', ['show', unit, '--property=LoadState', '--value']);
@@ -76,4 +77,15 @@ test('missing units and untrusted unit names are explicit preflight errors', asy
   for (const unit of ['missing-runtime-test.service', '../other.service', '--system', 'x.service\nother.service']) {
     await assert.rejects(inspectLinuxRuntimeAccount({ unit, project }));
   }
+});
+
+test('running process account mismatch is refused even when systemd configuration looks valid', async t => {
+  const f = await fixture(t, [], 'process.setgid(65534);process.setuid(65534);require("node:fs").writeFileSync("ready","yes");setInterval(()=>{},1000)');
+  for (let index = 0; index < 200; index++) {
+    try { await readFile(path.join(f.project, 'ready')); break; }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (index === 199) throw new Error('Mismatched runtime fixture did not start.');
+    await delay(25);
+  }
+  await assert.rejects(inspectLinuxRuntimeAccount(f), /account|groups/i);
 });
