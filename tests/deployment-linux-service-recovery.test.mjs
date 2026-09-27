@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFile, fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { cp, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import fs, { cp, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,7 @@ import test from 'node:test';
 import { fixture, ready, systemctl } from './deployment-linux-service-fixture.mjs';
 import { saveRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
 import { acquireLock, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
+import { recoverLinuxServiceRetirement } from '../scripts/deployment/linux-service-recovery.mjs';
 
 const execute = promisify(execFile);
 
@@ -86,7 +88,7 @@ test('cold service cleanup refuses live owner and preserves evidence without cre
   assert.ok(!(await readdir(f.control)).includes('recovery-lock'));
 });
 
-for (const change of ['restart', 'source', 'state', 'path', 'gap', 'worker', 'guard', 'journal-replacement', 'boot']) {
+for (const change of ['restart', 'source', 'state', 'path', 'gap', 'worker', 'guard', 'journal-replacement', 'boot', 'legacy']) {
   test(`cold service cleanup refuses changed or unowned evidence before deletion: ${change}`, async t => {
     const f = await interrupted(t);
     await f.kill();
@@ -101,6 +103,10 @@ for (const change of ['restart', 'source', 'state', 'path', 'gap', 'worker', 'gu
     }
     if (change === 'boot') {
       marker.runtime.bootId = randomUUID();
+      await writeFile(markerPath, JSON.stringify(marker), { mode: 0o600 });
+    }
+    if (change === 'legacy') {
+      marker.version = 1;
       await writeFile(markerPath, JSON.stringify(marker), { mode: 0o600 });
     }
     if (change === 'gap') await unlink(path.join(f.control, 'service-stop.ndjson'));
@@ -118,3 +124,79 @@ for (const change of ['restart', 'source', 'state', 'path', 'gap', 'worker', 'gu
     assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
   });
 }
+
+for (const fault of ['delete', 'state-drift', 'close', 'lock-delete']) {
+  test(`cold service cleanup retains blocking authority on recovery fault: ${fault}`, async t => {
+    const f = await interrupted(t);
+    await f.kill();
+    let injected = false;
+    const originalUnlink = fs.unlink;
+    const originalOpen = fs.open;
+    t.mock.method(fs, 'unlink', async file => {
+      if (fault === 'delete' && file === path.join(f.control, 'service-stop.ndjson')
+        || fault === 'lock-delete' && file === path.join(f.control, 'lock', 'owner.json')) {
+        injected = true;
+        throw new Error('injected exact recovery deletion failure');
+      }
+      await originalUnlink(file);
+      if (fault === 'state-drift' && file === path.join(f.control, 'service-activation.ndjson')) {
+        injected = true;
+        await writeFile(path.join(f.control, 'state.json'), '{}');
+      }
+    });
+    t.mock.method(fs, 'open', async (file, ...args) => {
+      const handle = await originalOpen(file, ...args);
+      if (fault === 'close' && file === path.join(f.control, 'service-retirement.json')) {
+        const close = handle.close.bind(handle);
+        handle.close = async () => {
+          if (!injected && (await readdir(f.control)).includes('recovery-lock')
+            && (await readdir(path.join(f.control, 'recovery-lock'))).includes('complete.json')) {
+            injected = true;
+            throw new Error('injected recovery retained descriptor close failure');
+          }
+          return close();
+        };
+      }
+      return handle;
+    });
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(recoverLinuxServiceRetirement({
+        control: f.control, project: f.project, operationId: f.lock.operationId,
+      }), { recoveryAllowed: false });
+    } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+    assert.equal(injected, true);
+    assert.ok((await readdir(f.control)).includes('lock'));
+    assert.ok((await readdir(f.control)).includes('recovery-lock'));
+    await assert.rejects(f.recover());
+    await assert.rejects(acquireLock(f.control, { project: f.project, operationId: randomUUID() }));
+    assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
+  });
+}
+
+test('killed recovery controller keeps exclusive guard and blocks a second recovery', async t => {
+  const f = await interrupted(t);
+  await f.kill();
+  const child = fork(new URL('./deployment-service-recovery-child.mjs', import.meta.url),
+    [f.control, f.project, f.lock.operationId, f.saved.manifestSha256],
+    { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let diagnostic = '';
+  child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-4096); });
+  const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
+  });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Recovery did not pause: ${diagnostic}`)), 60000);
+    child.once('message', value => { clearTimeout(timer); resolve(value); });
+    child.once('exit', code => { clearTimeout(timer); reject(new Error(`Recovery exited ${code}: ${diagnostic}`)); });
+  });
+  await assert.rejects(f.recover());
+  child.kill('SIGKILL');
+  await exited;
+  assert.ok((await readdir(f.control)).includes('service-retirement.json'));
+  assert.ok((await readdir(f.control)).includes('recovery-lock'));
+  assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+  await assert.rejects(f.recover());
+});

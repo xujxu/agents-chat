@@ -78,7 +78,19 @@ jobs:
       - name: Characterize retained cgroup observation
         run: sudo "$(command -v node)" tests/deployment-linux-domain-probe.mjs
       - name: Exercise actual saved-engine systemd workers
-        run: sudo "$(command -v node)" --test tests/deployment-linux-worker.test.mjs tests/deployment-native-operation.test.mjs tests/deployment-linux-runtime.test.mjs tests/deployment-linux-service.test.mjs tests/deployment-linux-service-recovery.test.mjs
+        run: sudo "$(command -v node)" --test tests/deployment-linux-worker.test.mjs tests/deployment-native-operation.test.mjs tests/deployment-linux-runtime.test.mjs tests/deployment-linux-service.test.mjs
+
+  linux-service-recovery:
+    name: Native Linux service recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Recover interrupted actual service retirement
+        run: sudo "$(command -v node)" --test tests/deployment-linux-service-recovery.test.mjs
 
   windows-native:
     name: Native Windows Job ownership

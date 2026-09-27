@@ -7,6 +7,7 @@ import { captureWorkerFields } from './worker-identity.mjs';
 const files = Object.freeze([
   'saved-recovery-engine.mjs', 'retirement-recovery-entry.mjs', 'retirement-recovery.mjs',
   'saved-worker-engine.mjs', 'worker-files.mjs', 'worker-identity.mjs', 'process-identity.mjs', 'state.mjs',
+  'linux-service-recovery.mjs', 'linux-service-inspection.mjs', 'linux-runtime.mjs', 'linux-systemd.mjs',
 ]);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const descriptor = (directory, manifestSha256) => Object.freeze({
@@ -72,9 +73,9 @@ export async function saveRecoveryEngine({ source, control }) {
   return verifyRecoveryEngine({ control: root, manifestSha256: digest(manifest) });
 }
 
-export function retirementRecoveryInvocation(saved, { control, project, operationId }) {
+export function retirementRecoveryInvocation(saved, { control, project, operationId, kind = 'worker' }) {
   const fields = captureWorkerFields(saved, ['directory', 'entrypoint', 'manifestSha256'], 'saved recovery engine');
-  if (!path.isAbsolute(control) || path.resolve(control) !== control
+  if (!['worker', 'service'].includes(kind) || !path.isAbsolute(control) || path.resolve(control) !== control
     || !path.isAbsolute(project) || path.resolve(project) !== project
     || typeof operationId !== 'string' || !operationId || operationId.length > 4096 || /[\0\r\n]/.test(operationId)
     || fields.directory !== path.join(control, 'recovery-engine')
@@ -82,7 +83,7 @@ export function retirementRecoveryInvocation(saved, { control, project, operatio
     || !/^[a-f0-9]{64}$/.test(fields.manifestSha256)) throw new Error('Invalid saved recovery invocation.');
   return {
     file: process.execPath,
-    args: [fields.entrypoint, control, fields.manifestSha256, project, operationId],
+    args: [fields.entrypoint, control, fields.manifestSha256, project, operationId, ...(kind === 'service' ? [kind] : [])],
     env: Object.fromEntries(Object.entries(process.env)
       .filter(([key]) => !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase()))),
   };

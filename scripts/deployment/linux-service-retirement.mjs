@@ -82,7 +82,7 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
     await check();
     const serialize = ({ handle, ...entry }) => entry;
     await writeWorkerFile(markerPath, Buffer.from(`${JSON.stringify({
-      version: 1, lock, runtime, state, stateFile: serialize(stateFile), lockFile: serialize(lockFile),
+      version: 2, lock, runtime, state, stateFile: serialize(stateFile), lockFile: serialize(lockFile),
       controlIdentity: identity(root.info), lockIdentity: identity(lockDirectory.info),
       heldParentIdentity: identity(parentInfo), files: entries.map(serialize),
     })}\n`));

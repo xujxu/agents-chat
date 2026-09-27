@@ -3244,8 +3244,8 @@ Files and responsibilities:
   recovery after moving the source scripts. Assert unchanged service invocation,
   state/backup bytes, removed maintenance/lock artifacts and new lock admission.
 
-- [ ] Push causal contracts and observe missing service recovery in Actions.
-- [ ] Implement exact intent validation and saved recovery dispatch.
+- [x] Push causal contracts and observe missing service recovery in Actions.
+- [x] Implement exact intent validation and saved recovery dispatch.
 - [ ] Exercise invalid path/gap/state/boot/source/generation/file replacement,
   live owner, worker evidence and competing/stale recovery guards before deletion.
 - [ ] Add deletion/close/controller-death faults during recovery; retain guard
@@ -3266,3 +3266,9 @@ assert.deepEqual(result, { status: 'service-retired', operationId, restored: fal
 Validation uses the existing `Deployment lifecycle` workflow only. The Linux
 job includes the new native suite; both shared contract jobs and Windows native
 ownership remain required. No local test/server/package execution.
+
+Causal test-only `b9e53b7` / Actions `36330081492`: exactly the five new
+service recovery success paths failed at the old worker-only entrypoint.
+Both shared jobs and Windows native passed. The new recovery suite now has
+its own Linux runner/job so its real persistent-service faults do not share
+systemd daemon reloads with the existing lifecycle suite.

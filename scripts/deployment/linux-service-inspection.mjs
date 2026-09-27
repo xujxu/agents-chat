@@ -279,7 +279,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
     };
     await check();
     const identity = Object.freeze({
-      runtime, bootId: boot, controlGroup: group,
+      runtime, bootId: boot, controlGroup: group, configuration: config, executables,
       sources: Object.freeze(sources.map(source => Object.freeze({
         path: source.file, ...source.original, sha256: source.sha256,
       }))),
