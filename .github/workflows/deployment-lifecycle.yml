@@ -56,3 +56,4 @@ jobs:
           tests/deployment-transaction.test.mjs
           tests/deployment-source.test.mjs
           tests/deployment-update-policy.test.mjs
+          tests/deployment-stage-runner.test.mjs

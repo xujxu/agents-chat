@@ -192,3 +192,29 @@ test('accepted identity skips update without replacing journal or rotating backu
   assert.equal((await runDeployment({ operation: 'deploy' }, operations)).status, 'accepted');
   assert.ok(calls.includes('build'));
 });
+
+test('transaction passes a stage cancellation signal and rejects invalid deadlines before inspection', async () => {
+  const { calls, operations } = fixture();
+  operations.build = async context => {
+    assert.ok(context.signal instanceof AbortSignal);
+    assert.equal(context.signal.aborted, false);
+  };
+  await runDeployment({ operation: 'update', timeoutSeconds: 2 }, operations);
+  calls.length = 0;
+  await assert.rejects(runDeployment({ operation: 'update', timeoutSeconds: 0 }, operations), /timeout/i);
+  assert.deepEqual(calls, []);
+});
+
+test('unsafe worker failure forbids restarting runtime or beginning cleanup', async () => {
+  for (const stage of ['snapshot', 'build']) {
+    const { calls, phases, operations } = fixture();
+    const failure = Object.assign(new Error('worker may still write'), {
+      code: 'DEPLOYMENT_WORKER_UNSETTLED', recoveryAllowed: false,
+    });
+    operations[stage] = async () => { calls.push(stage); throw failure; };
+    await assert.rejects(runDeployment({ operation: 'update' }, operations), error => error === failure);
+    assert.equal(calls.at(-1), stage);
+    assert.equal(phases.at(-1), 'recovery-required');
+    assert.equal(calls.includes('start'), false);
+  }
+});
