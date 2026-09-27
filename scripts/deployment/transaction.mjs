@@ -1,5 +1,6 @@
 import { alreadyCurrent, previewUpdate } from './update-policy.mjs';
 import { runStage } from './stage-runner.mjs';
+import { hasUnsettledWorker } from './worker-errors.mjs';
 
 const operationNames = [
   'record', 'inspect', 'resolveTarget', 'admit', 'capacity', 'stop', 'snapshot', 'verifySnapshot',
@@ -94,10 +95,10 @@ export async function runDeployment(options, operations) {
     await record('accepted');
     return { status: 'accepted', backupCreated: inspected.exists };
   } catch (error) {
-    if (!preflightComplete && error?.recoveryAllowed !== false) throw error;
+    if (!preflightComplete && !hasUnsettledWorker(error)) throw error;
     const errors = [error];
     try {
-      if (error?.recoveryAllowed !== false) {
+      if (!hasUnsettledWorker(error)) {
         if (sourceMutationAttempted) {
           await invoke('stop', true);
         } else if (stopAttempted && inspected.running) {
@@ -107,14 +108,14 @@ export async function runDeployment(options, operations) {
     } catch (recoveryError) {
       errors.push(recoveryError);
     }
-    const blocked = errors.some(failure => failure?.recoveryAllowed === false);
+    const blocked = errors.some(hasUnsettledWorker);
     context.errorCode = blocked ? 'DEPLOYMENT_WORKER_UNSETTLED' : error?.code ?? 'DEPLOYMENT_FAILED';
     try { await record(blocked ? 'blocked' : 'recovery-required'); }
     catch (stateError) { errors.push(stateError); }
     if (errors.length > 1) {
       throw Object.assign(new AggregateError(errors,
         'Deployment failed and runtime cleanup/restart or recovery-state recording also failed; inspect before recovery.'), {
-        recoveryAllowed: errors.every(failure => failure?.recoveryAllowed !== false),
+        recoveryAllowed: !errors.some(hasUnsettledWorker),
       });
     }
     throw error;

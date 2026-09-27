@@ -1,4 +1,5 @@
 import { performance } from 'node:perf_hooks';
+import { hasUnsettledWorker } from './worker-errors.mjs';
 
 function deadline(milliseconds, callback) {
   const started = performance.now();
@@ -68,7 +69,7 @@ export async function runStage(stage, worker, {
         clearSettlement = deadline(settlementMs, () => resolve({ unsettled: true }));
       }),
     ]);
-    if (settled.unsettled || settled.error?.recoveryAllowed === false) {
+    if (settled.unsettled || hasUnsettledWorker(settled.error)) {
       throw stageError(stage, 'DEPLOYMENT_WORKER_UNSETTLED', started, false,
         settled.error ?? interrupted);
     }
