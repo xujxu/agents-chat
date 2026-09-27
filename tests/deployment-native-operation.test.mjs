@@ -206,7 +206,8 @@ test('two accepted native operations reuse one helper slot without deleting back
   t.after(() => operation.close());
   const result = await operation.run({
     workerId: randomUUID(), runtime: f.runtime,
-    command: { file: process.execPath, args: ['-e', 'process.stdout.write("second operation")'], cwd: f.project, env: {} },
+    command: { file: process.execPath, args: ['-e', 'process.stdout.write("second operation")'], cwd: f.project,
+      env: Object.fromEntries(Object.entries(process.env).filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))) },
   });
   assert.equal(result.stdout, 'second operation');
   await operation.seal();
