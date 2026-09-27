@@ -43,6 +43,15 @@ async function fixture(t, code, args = []) {
   const owner = { project, operationId: randomUUID(), workerId: randomUUID(),
     controllerIdentity: await processIdentity(process.pid) };
   const saved = await saveWorkerEngine({ source, control, project, operationId: owner.operationId });
+  await ps(`
+    $ErrorActionPreference='Stop'
+    $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User
+    foreach($entry in @((Get-Item -LiteralPath $args[0])) + @(Get-ChildItem -LiteralPath $args[0] -Recurse)){
+      $acl=Get-Acl -LiteralPath $entry.FullName
+      $acl.SetOwner($sid)
+      Set-Acl -LiteralPath $entry.FullName -AclObject $acl
+    }
+  `, [saved.directory]);
   const journal = await createWorkerJournal(control, owner);
   t.after(() => journal.close());
   const controller = new AbortController();
@@ -244,4 +253,18 @@ test('native owner death kills writers but remains blocked rather than claiming 
   const before = await readFile(path.join(f.project, 'writer'), 'utf8');
   await delay(300);
   assert.equal(await readFile(path.join(f.project, 'writer'), 'utf8'), before);
+});
+
+test('a verified saved bundle with broad read ACLs is still refused before native admission', async t => {
+  const f = await fixture(t, writing);
+  await ps(`
+    $ErrorActionPreference='Stop'
+    $acl=Get-Acl -LiteralPath $args[0]
+    $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+      [Security.Principal.SecurityIdentifier]::new('S-1-1-0'),'Read','Allow'))
+    Set-Acl -LiteralPath $args[0] -AclObject $acl
+  `, [path.join(f.saved.directory, 'WindowsWorkerJob.cs')]);
+  await assert.rejects(f.run(), { recoveryAllowed: false });
+  assert.deepEqual(f.receipts.map(receipt => receipt.phase), ['intent', 'blocked']);
+  await assert.rejects(readFile(path.join(f.project, 'started')), { code: 'ENOENT' });
 });
