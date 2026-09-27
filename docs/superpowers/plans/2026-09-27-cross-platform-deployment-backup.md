@@ -2723,3 +2723,20 @@ prepareLinuxWorker({ owner, saved, command, uid: 65534, gid: 65534, signal });
 - [ ] Validate on Actions with all existing worker/operation/recovery cases.
 - [ ] Record limits: no supplemental-group policy, account-name/service
   resolution or public service-account migration supplied by this helper.
+
+The next part of the same gate adds read-only systemd account inspection in
+`linux-runtime.mjs`, with real transient-service tests. Read the configured
+User/Group, WorkingDirectory, DynamicUser, SupplementaryGroups and MainPID
+from the system manager. Resolve numeric credentials and HOME through bounded
+NSS commands, not SUDO_USER, project ownership or executing target code.
+Reject missing/unloaded units, mismatched canonical project, DynamicUser,
+nonempty extra groups, unsupported chroot/root-image configuration and an
+observed running process whose real/effective/saved IDs differ from the
+resolved account. Default empty systemd User/Group according to systemd's
+root/primary-group semantics, not the invoking interactive user.
+
+Factor bounded native manager execution/properties parsing into
+`linux-systemd.mjs` and reuse it from `linux-worker.mjs` and the runtime
+inspector. Include both new modules in the closed saved-worker bundle.
+No service mutation or account migration is introduced. Actual service stop,
+restart suppression and watchdog/ACP ownership remain separate work.
