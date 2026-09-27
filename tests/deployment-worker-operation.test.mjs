@@ -108,6 +108,13 @@ test('unregistered worker evidence prevents zero-worker sealing', async t => {
   await assert.rejects(operation.seal(), unsafe);
 });
 
+test('unregistered worker evidence prevents opening a new native admission authority', async t => {
+  const f = await fixture(t);
+  await writeFile(path.join(f.control, `worker-${randomUUID()}.ndjson`), '');
+  await assert.rejects(f.create(), unsafe);
+  await assert.rejects(readFile(path.join(f.control, 'worker-operation.ndjson')), { code: 'ENOENT' });
+});
+
 test('truncated authority cannot be read, rewritten or used to release a lock', async t => {
   const f = await fixture(t);
   const operation = await f.create();

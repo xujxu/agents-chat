@@ -116,6 +116,18 @@ export async function createEvidenceJournal(suppliedOptions) {
   let poisoned = false;
   let closing;
   return Object.freeze({
+    async check() {
+      if (busy || poisoned || closing) throw journalUncertain(new Error('Worker journal writer is not available.'));
+      busy = true;
+      try {
+        if (await contents(location, handle, options) !== prefix) {
+          throw new Error('Worker journal prefix changed outside its writer.');
+        }
+      } catch (error) {
+        poisoned = true;
+        throw journalUncertain(error);
+      } finally { busy = false; }
+    },
     async record(value) {
       if (busy || poisoned || closing) throw journalUncertain(new Error('Worker journal writer is not available.'));
       let receipt;

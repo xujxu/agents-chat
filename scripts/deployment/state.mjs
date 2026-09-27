@@ -226,7 +226,7 @@ export async function acquireLock(root, { project, operationId }) {
 export function captureLockOwner(value) {
   const owner = captureWorkerFields(value,
     ['version', 'token', 'project', 'operationId', 'pid', 'processIdentity', 'createdAt'], 'lock owner');
-  if (owner.version !== 1 || !/^[a-f0-9-]{36}$/.test(owner.token)
+  if (owner.version !== 1 || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(owner.token)
     || ![owner.project, owner.operationId, owner.processIdentity, owner.createdAt]
       .every(field => nonempty(field) && field.length <= 4096)
     || !path.isAbsolute(owner.project) || path.resolve(owner.project) !== owner.project

@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises';
+import { lstat, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { createEvidenceJournal, readEvidenceJournal, journalUncertain } from './evidence-journal.mjs';
 import { captureOwner, captureWorkerFields } from './worker-identity.mjs';
@@ -66,9 +66,28 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
     const lock = captureLockOwner(suppliedLock);
     const supplied = captureWorkerFields(suppliedSaved,
       ['directory', 'entrypoint', 'manifestSha256'], 'saved engine');
+    const workers = [];
+    const checkInventory = async () => {
+      const actual = (await readdir(control))
+        .filter(file => file.startsWith('worker-') && file.endsWith('.ndjson') && file !== name).sort();
+      const expected = workers.map(owner => `worker-${owner.workerId}.ndjson`).sort();
+      if (!same(actual, expected)) throw new Error('Worker evidence inventory is incomplete or foreign.');
+    };
+    const lockFiles = [path.join(control, 'lock'), path.join(control, 'lock', 'owner.json')];
+    const lockIdentity = async () => Promise.all(lockFiles.map(async file => {
+      const info = await lstat(file);
+      return { dev: info.dev, ino: info.ino };
+    }));
+    let originalLock;
     const verify = async () => {
       try {
+        const before = await lockIdentity();
         await assertLockOwner(control, lock);
+        const after = await lockIdentity();
+        if (!same(before, after) || originalLock && !same(originalLock, after)) {
+          throw new Error('Original deployment lock evidence was replaced.');
+        }
+        originalLock ??= after;
         const state = await loadState(control);
         if (state && (state.operationId !== lock.operationId || state.project !== lock.project
           || ['blocked', 'accepted', 'restored', 'recovery-required'].includes(state.phase))) {
@@ -79,6 +98,8 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
           manifestSha256: supplied.manifestSha256,
         });
         if (!same(saved, supplied)) throw new Error('Saved engine descriptor changed.');
+        if (journal) await journal.check();
+        await checkInventory();
         return saved;
       } catch (error) { throw journalUncertain(error); }
     };
@@ -88,7 +109,6 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
       version: 1, phase, lock, manifestSha256: saved.manifestSha256, workerId,
     });
     await journal.record(receipt('opened'));
-    const workers = [];
     let busy = false;
     let sealed = false;
     let poisoned = false;
@@ -151,10 +171,6 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
         begin();
         try {
           await verify();
-          const actual = (await readdir(control))
-            .filter(file => file.startsWith('worker-') && file.endsWith('.ndjson') && file !== name).sort();
-          const expected = workers.map(owner => `worker-${owner.workerId}.ndjson`).sort();
-          if (!same(actual, expected)) throw new Error('Worker evidence inventory is incomplete or foreign.');
           for (const owner of workers) {
             if ((await readWorkerJournal(control, owner)).at(-1).phase !== 'settled') {
               throw new Error('Enrolled worker has no verified settlement.');
