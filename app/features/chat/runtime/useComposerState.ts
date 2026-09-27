@@ -5,6 +5,7 @@ import type { ClipboardEvent, DragEvent } from 'react';
 import type { ChatAttachment } from '../../composer/attachmentTypes';
 import { filesToAttachments } from '../../composer/attachmentHelpers';
 import { STORAGE_CHAT_INPUT } from './sessionPersistence';
+import { appendVoiceTranscript } from '../../composer/voice/voiceHelpers';
 
 export function useComposerState() {
   const [input, setInput] = useState('');
@@ -63,6 +64,10 @@ export function useComposerState() {
       startTransition(() => setInput(composerRef.current?.value || ''));
     }, 300);
   }, [resizeComposer]);
+
+  const appendTranscription = useCallback((text: string) => {
+    setInputProgrammatic(appendVoiceTranscript(inputRef.current, text));
+  }, [setInputProgrammatic]);
 
   async function addFilesToComposer(fileList: FileList | File[]) {
     const files = Array.from(fileList).filter(Boolean);
@@ -169,7 +174,7 @@ export function useComposerState() {
 
   return {
     input, inputRef, composerRef, fileInputRef, inputHistoryIndexRef, inputDraftRef, pastedLinksRef,
-    attachments, attachmentError, isDraggingAttachment, mounted, setInputProgrammatic,
+    attachments, attachmentError, isDraggingAttachment, mounted, setInputProgrammatic, appendTranscription,
     composerInputHandler, resizeComposer, addFilesToComposer, removeAttachment, clearAttachments, prepareSubmission,
     handleAttachmentPaste, handleComposerDragOver, handleComposerDragLeave, handleComposerDrop,
   };

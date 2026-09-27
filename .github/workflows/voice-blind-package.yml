@@ -1,0 +1,58 @@
+name: Voice blind listening package
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - scripts/voice_blind_package.py
+      - scripts/test_voice_blind_package.py
+      - .github/workflows/voice-blind-package.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s scripts -p test_voice_blind_package.py -v
+  package:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35731913423
+          artifact-ids: 10695264903
+          merge-multiple: true
+          path: source-audio
+      - run: python scripts/voice_blind_package.py source-audio package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-blind-listening-40
+          path: package/blind/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-blind-blank-csv
+          path: package/csv/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-blind-key-do-not-open-before-transcribing
+          path: package/key/
+          if-no-files-found: error
+          retention-days: 30

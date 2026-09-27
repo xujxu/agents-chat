@@ -1,5 +1,6 @@
 # Agents-Chat Windows Service Watchdog
-# Runs under Windows Service Control Manager and keeps start.ps1 alive.
+# Runs under the registered Scheduled Task and keeps start.ps1 alive.
+param([switch]$NoTunnel)
 
 $ErrorActionPreference = 'Continue'
 
@@ -34,14 +35,14 @@ function Stop-Port3000Processes {
 }
 
 function Stop-ProcessTree {
-    param([int]$Pid)
-    if (-not $Pid) { return }
+    param([int]$ProcessId)
+    if (-not $ProcessId) { return }
     try {
-        $children = Get-CimInstance Win32_Process -Filter "ParentProcessId=$Pid" -ErrorAction SilentlyContinue
-        foreach ($child in $children) { Stop-ProcessTree -Pid ([int]$child.ProcessId) }
-        Stop-Process -Id $Pid -Force -ErrorAction SilentlyContinue
+        $children = Get-CimInstance Win32_Process -Filter "ParentProcessId=$ProcessId" -ErrorAction SilentlyContinue
+        foreach ($child in $children) { Stop-ProcessTree -ProcessId ([int]$child.ProcessId) }
+        Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
     } catch {
-        Write-ServiceLog "Failed to stop process tree at PID $Pid`: $($_.Exception.Message)"
+        Write-ServiceLog "Failed to stop process tree at PID $ProcessId`: $($_.Exception.Message)"
     }
 }
 
@@ -51,6 +52,10 @@ Write-ServiceLog "ProjectDir: $ProjectDir"
 
 $env:PATH = "C:\Program Files\nodejs;C:\Users\wulei\AppData\Local\Microsoft\WinGet\Links;$env:PATH"
 $env:AGENTS_CHAT_SERVICE = '1'
+foreach ($name in @('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN')) {
+    [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+}
+Write-ServiceLog 'Acquisition token variables removed from application launch environment.'
 
 $restartDelay = $RestartDelaySeconds
 while (-not (Test-Path $StopFile)) {
@@ -74,6 +79,7 @@ while (-not (Test-Path $StopFile)) {
     $childLog = Join-Path $LogDir 'start-service-child.log'
     $childErr = Join-Path $LogDir 'start-service-child.err.log'
     $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $StartScript)
+    if ($NoTunnel) { $args += '-NoTunnel' }
     $proc = Start-Process -FilePath 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
         -ArgumentList $args `
         -WorkingDirectory $ProjectDir `
@@ -87,7 +93,7 @@ while (-not (Test-Path $StopFile)) {
     while (-not $proc.HasExited) {
         if (Test-Path $StopFile) {
             Write-ServiceLog 'Stop file detected; stopping child process tree.'
-            Stop-ProcessTree -Pid $proc.Id
+            Stop-ProcessTree -ProcessId $proc.Id
             break
         }
         Start-Sleep -Seconds 5

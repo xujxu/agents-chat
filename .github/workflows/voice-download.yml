@@ -1,0 +1,38 @@
+name: Experimental voice acquisition contracts
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - 'scripts/voice/download-*'
+      - 'scripts/configure-voice.mjs'
+      - 'scripts/voice/windows/configure.ps1'
+      - 'scripts/deploy*'
+      - 'scripts/setup.ps1'
+      - 'scripts/package-release.mjs'
+      - 'tests/voice-download*'
+      - 'package*.json'
+      - '.github/workflows/voice-download.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node --test --test-concurrency=1 tests/voice-download.test.mjs tests/voice-setup-files.test.mjs tests/voice-setup-activation.test.mjs
+      - if: runner.os == 'Linux'
+        run: node --test tests/voice-setup.test.mjs
+      - if: runner.os == 'Linux'
+        run: bash -n scripts/deploy.sh scripts/upgrade.sh
+      - if: runner.os == 'Windows'
+        shell: powershell
+        run: ./tests/voice-setup-scripts.ps1

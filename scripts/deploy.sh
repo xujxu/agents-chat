@@ -13,8 +13,13 @@
 #   sudo ./scripts/deploy.sh --no-pull      # skip git pull
 #   sudo ./scripts/deploy.sh --no-install   # skip npm ci
 #   sudo ./scripts/deploy.sh --wait 0       # don't wait for health check (default 120s)
+#   sudo ./scripts/deploy.sh --voice keep  # unattended/preserve voice configuration
+#   sudo ./scripts/deploy.sh --voice disabled
+#   sudo ./scripts/deploy.sh --voice sensevoice-small-q8 --voice-package DIR --voice-manifest-sha256 SHA
+#   sudo ./scripts/deploy.sh --voice sensevoice-small-q8 --voice-experimental-download
 
 set -euo pipefail
+original_args=("$@")
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd "$script_dir/.." && pwd)"
@@ -27,11 +32,18 @@ unit_dest="/etc/systemd/system/agents-chat.service"
 pull=1
 install=1
 wait_secs=120
+voice_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-pull)    pull=0;       shift ;;
     --no-install) install=0;    shift ;;
     --wait)       wait_secs=$2; shift 2 ;;
+    --voice) voice_args+=(--model "${2:?Missing voice selection}"); shift 2 ;;
+    --voice-package) voice_args+=(--package-dir "${2:?Missing package directory}"); shift 2 ;;
+    --voice-experimental-download) voice_args+=(--experimental-download); shift ;;
+    --voice-manifest-sha256) voice_args+=(--manifest-sha256 "${2:?Missing manifest checksum}"); shift 2 ;;
+    --voice-threads) voice_args+=(--threads "${2:?Missing thread count}"); shift 2 ;;
+    --non-interactive) voice_args+=(--non-interactive); shift ;;
     -h|--help)    grep -E '^# ' "$0" | sed -E 's/^# ?//'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -106,6 +118,13 @@ group="$(id -gn)"
 npm_bin="$(command -v npm)"
 node_bin_dir="$(dirname "$(command -v node)")"
 
+# Re-exec the updated entry point, not shell code loaded before git pull.
+if [[ -f "$unit_dest" ]] && (( pull )); then
+  echo "→ git pull"
+  git pull --ff-only
+  exec bash "$script_dir/deploy.sh" "${original_args[@]}" --no-pull
+fi
+
 # ── Render unit (always — picks up template changes on every deploy) ──────────
 first_install=0
 [[ -f "$unit_dest" ]] || first_install=1
@@ -139,10 +158,33 @@ fi
 # ── Update steps ──────────────────────────────────────────────────────────────
 # On first install, skip git pull (you presumably just cloned) but always
 # install + build so the service has something to run.
-(( !first_install && pull )) && { echo "→ git pull";   git pull --ff-only; }
 (( install ))                && { echo "→ npm ci";     npm ci --no-audit --no-fund; }
                                  echo "→ npm run build"; npm run build
 
+# Keep a private receipt until activation succeeds; failed activation restores
+# only voice configuration, not application code or unrelated deployment work.
+voice_receipt="$(mktemp "$project_dir/.voice-setup-receipt.XXXXXX")"
+voice_activation=0
+finish_voice_setup() {
+  result=$?
+  trap - EXIT
+  if (( result != 0 )) && [[ -s "$voice_receipt" ]]; then
+    if node "$script_dir/configure-voice.mjs" --rollback-receipt "$voice_receipt" --non-interactive; then
+      if (( voice_activation )); then
+        systemctl restart "$service" || echo "ERROR: Could not restart service after voice rollback." >&2
+      fi
+    else
+      echo "ERROR: Voice rollback failed; private recovery receipt retained at $voice_receipt" >&2
+      exit "$result"
+    fi
+  fi
+  rm -f "$voice_receipt"
+  exit "$result"
+}
+trap finish_voice_setup EXIT
+node "$script_dir/configure-voice.mjs" "${voice_args[@]}" --receipt "$voice_receipt"
+
+voice_activation=1
 if (( first_install )); then
   echo "→ systemctl start $service"
   systemctl start "$service"

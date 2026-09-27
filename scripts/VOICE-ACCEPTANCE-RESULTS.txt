@@ -1,0 +1,140 @@
+Voice acceptance evidence - 2026-09-23
+======================================
+
+Decision: neither candidate is deployment-ready under the unchanged service
+budget. SenseVoice remains the stronger low-resource candidate to investigate,
+not an accepted production replacement. No PROD deployment or limit change.
+
+Reproducible evidence
+--------------------
+ASCEND baseline: run 35858271102, report artifact 10751002303.
+Paired error audit: run 35863991538, artifact 10751194242.
+Natural meeting corpus: run 35863991538, artifact 10752270787.
+Long engine comparison: long-engines job in run 35870441019,
+  artifact 10755950119. The run as a whole failed because its separate browser
+  fixture referenced Node's performance import; the long-engines job succeeded.
+Corrected complete chain: run 35871737075 at b04c89d,
+  artifact 10755983366. This run succeeded as an experiment/accounting job,
+  NOT as product acceptance: all failed inferences are included in the report.
+
+Both corpora provide publisher human/expert annotations, not automatic captions.
+They remain fallible references. Both are attributed under CC-BY-SA-4.0.
+No reference edits, hotwords, test-set parameter search or private audio used.
+
+1. Paired ASCEND error diagnostics
+--------------------------------
+1279 paired utterances: FunASR fewer edits on 317, SenseVoice on 143, tie on819.
+Overlapping diagnostic flags: English-span S+D434, boundary S+D273,
+deletion269, both models wrong523, possible acronym4.
+Traditional-to-simplified normalization changes edit counts in 0 SenseVoice
+and 5 FunASR cases. These flags do not prove proper-name/reference errors.
+The fixed review list (up to45 rows) is not independently listened to and its labels
+remain unverified. Original scores and references are preserved.
+
+2. Natural long engine-only comparison
+-------------------------------------
+AISHELL-4: 40 continuous 15-30s windows from original meeting recordings,
+29 Mandarin and 11 annotation-mixed. Pauses retained, no audio splicing.
+The 11 mixed windows do not establish fluent sentence-level switching coverage.
+CPU-only 2-thread/4GiB CI containers, fresh process per utterance:
+
+Metric                            SenseVoice INT8     FunASR-Nano U8U8
+Mandarin CER (29)                  10.76%              27.75%
+Mixed MER (11)                     14.70%              17.71%
+Mixed median process seconds       2.37               11.20
+Maximum process RSS MiB           498.1              2172.6
+Execution failures/empty outputs    0/0                 0/0
+
+Mandarin edit counts: SenseVoice283 including90 deletions; FunASR730
+including609 deletions. This is evidence of missing reference units, NOT proof
+that the end of the audio was truncated. Word timing/manual listening would be
+needed to establish the location and cause. No context warning was recorded.
+
+Short ASCEND baseline favors FunASR (mixed MER11.62% vs15.13%, Mandarin
+CER8.30% vs10.71%); this does not carry over to this meeting-domain long set.
+
+3. Unchanged product-chain and resource guard comparison
+-------------------------------------------------------
+Real Chromium recorder/worklet/resampler/WAV encoder, controlled 48kHz public
+audio MediaStream, real authentication and /api/voice route. Only the executable
+is replaced in CI by a SenseVoice C adapter. No VAD/segmentation: none exists in
+the current product path. Chat endpoints use UI fixtures; voice requests do not.
+
+Service constraints, unchanged:
+  single active job, single model thread, 120s timeout;
+  1GiB virtual address limit and monitored 384MiB RSS rejection;
+  existing host available-memory checks;
+  ONNX CPU memory arena and memory pattern disabled in the CI adapter.
+This service budget is NOT the CLI cpg cap of1.5GiB.
+
+Delivered transcripts          Direct WAV/API     Browser-recorded/API
+ASCEND short probes (60)       46/60              39/60
+Natural long probes (40)        0/40               0/40
+All attempts (100 per path)    46/100             39/100
+
+All200 attempts accounted for. Across both paths,115 failed:
+  92 voice_memory_limit;23 voice_memory_unknown.
+Long probes: direct37 memory_limit +3 memory_unknown; browser40 memory_limit.
+Short probes: direct8 memory_limit +6 memory_unknown;
+              browser7 memory_limit +14 memory_unknown.
+
+Native telemetry sometimes cannot be written before the service kills the
+process; missing measurements remain null. Observed process HWM can exceed384MiB
+before the100ms monitor detects and rejects it: this is not a hard cgroup cap.
+No limit was weakened to obtain a successful result.
+
+The long-path report's100% failure-inclusive edit rate means no transcript was
+delivered, NOT that the recognizer's raw linguistic error rate is100%.
+Fast rejection times are not successful transcription latency measurements.
+The memory_unknown failure mechanism has not been established by this run;
+do not silently recategorize those failures as genuine budget exceedances.
+Subsequent investigation reproduced an exit-race cause and verified a fix in
+Actions35881791120 (see VOICE-MEMORY-DIAGNOSTICS.txt). The historical numbers
+above remain unchanged; the full browser corpus has not been rerun with the fix.
+
+4. Remaining gates and recommended direction
+-------------------------------------------
+The completed experiment does not support shipping either candidate unchanged.
+To continue without raising limits, evaluate an explicitly approved bounded
+segmentation/VAD candidate with the corrected memory monitor.
+Measure boundary omissions/repetitions on the same natural audio; never join
+source clips to pretend they were a natural long input.
+
+Do not infer pure resampling accuracy loss from the current paired failure-
+inclusive totals: changing success sets confounds that comparison. The reviewed
+report separately compares paired successful cases in paired-success.json while
+retaining all failures as primary delivery evidence. This reanalysis uses the
+same saved inferences, without rerunning models or changing configurations.
+
+Actual microphone/AEC, other devices, WebKit corpus accuracy, broader natural
+mixed speech and speaker/domain generalization remain unproven. Product quality
+and latency acceptance thresholds still required agreement at this checkpoint. No passed workflow
+or small corpus score is permission to deploy or increase service/CLI limits.
+
+5. Approved constrained model selection follow-up (2026-09-24)
+------------------------------------------------------------
+The user subsequently approved concrete delivery/quality/latency gates.
+Actions35944684486 compared actual guarded whole-Sense and Whisper base-q5_1
+on the fixed100 samples after development-only2/3/5s segment selection.
+No segment configuration achieved full delivery on its24 validation examples;
+none was promoted. Whole-Sense delivered46/100 (zero long), Whisper100/100
+but failed both latency bands and the quality gate. None is accepted.
+Reviewed decision Actions35946323331 uses the same outputs, no reinference.
+See VOICE-MODEL-CHOICE.txt for exact gates, metrics, provenance and artifact links.
+This screening does not replace or claim a new browser acceptance result.
+
+6. Expanded CPU/native-runtime follow-up (2026-09-24)
+---------------------------------------------------
+After the user expanded scope to shared high-resource CPU servers and required
+license-qualified install-time model selection, Actions35948880080 screened
+Whisper small/turbo, FunASR-Nano and Qwen under explicit2CPU/4GiB and4CPU/8GiB
+budgets. All192 attempts delivered, but cold latency failed prior gates.
+Separate runners expose different ISA flags; do not infer thread scaling.
+
+Official SenseVoiceSmall-GGUF q8 with a pinned native runtime and explicit
+thread setting subsequently passed ENGINE-ONLY frozen100-sample gates in
+Actions35953083215 (two same-host profiles,200/200 delivery).
+2thread short/long P95=.615/2.971s; peak process RSS357.234MiB.
+This does not invalidate old ONNX failures or constitute product acceptance.
+The actual API/installer integration and browser gates are still pending.
+See VOICE-DEPLOYMENT.txt for exact versions, license scope, scores and caveats.

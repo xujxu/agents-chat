@@ -1,0 +1,2065 @@
+Install-selected voice providers: approved direction and evidence plan
+===================================================================
+
+Formal product specification (supersedes historical scope below):
+docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md
+Windows11 Intel/AMD x64 native support is required. Windows runtime, verified
+real-model activation and configuration/upgrade integration now pass Server CI;
+actual Win11 and final release acceptance remain pending.
+Linux-only statements below describe earlier implementation,
+not an exclusion from the final feature. This file remains the
+experiment and implementation evidence log; the formal spec owns product design.
+
+Current license review scope (2026-09-26; supersedes broad audit scope below)
+----------------------------------------------------------------------------
+User narrowed the task to components newly added to support voice input:
+confirm free use and upstream-compliant, no-license-fee redistribution.
+Ignore Dev Tunnel and preexisting application components. The historical
+project-wide audit below is retained as evidence, not a prerequisite for this
+voice-only decision. Do not reopen Next/sharp/SQLite/relay licensing here.
+Free redistribution still requires compliance with upstream conditions;
+giving binaries away does not waive notices or runtime redistribution terms.
+
+User disposition (2026-09-26):
+Stop this licensing review and do not pursue public distribution of the Windows
+voice package for now. Retain the Windows static-runtime permission question as
+unconfirmed, not cleared or prohibited. No support inquiry or toolchain
+replacement is authorized by this decision. Existing implementation, candidate
+archives and review-required notices remain unchanged; this is not authorization
+to publish them or a new conclusion about non-public distribution rights.
+
+Voice-only source-level findings:
+- Recommended SenseVoiceSmall q8 GGUF: pinned official model card declares
+  Apache-2.0. This permits no-charge use and distribution subject to license,
+  applicable notices and modification requirements. No hosted speech API or
+  per-transcription license charge is required by the implemented local path.
+- FunASR native runtime and ggml from the pinned llama.cpp source: MIT, allowing
+  free use and redistribution with copyright/permission notices. The selected
+  Sense target links ggml and Threads, not the llama language-model target.
+  Preserve the bundled jsonhpp MIT notice where applicable; carrying extra
+  upstream notices does not imply every component is actually linked.
+- miniaudio v0.11.25 in the pinned FunASR header: offers Unlicense OR MIT-0.
+  The MIT-0 alternative expressly allows free use/copy/distribution. Both
+  builders retain the full header, including its license declarations.
+- ZIP acquisition: yauzl3.4.0 and its pend1.2.0 dependency are MIT. Commit
+  ab5bb42 added yauzl to package.json for voice acquisition. Preserve both
+  copyright/permission texts. package-release.mjs copies their package trees
+  recursively for the CLI path; this is source-level preservation evidence,
+  not a fresh inspection of an archived release.
+- Optional compatibility model: pinned whisper.cpp is MIT; the pinned OpenAI
+  Whisper README expressly covers both code and weights under MIT. Preserve
+  both upstream notices. The converted GGML model hash remains pinned.
+  This licensing finding does not change its failed quality/latency gates;
+  automatic acquisition still selects only Sense, not Whisper.
+- Linux native runtime: GCC libstdc++/libgcc use GPLv3 with Runtime Library
+  Exception3.1 for covered files. That exception permits qualifying compiled
+  combinations with independent modules under their own terms; static linking
+  does not by itself require relicensing the application under GPL.
+  The recipe uses GCC12 without an indicated non-eligible optimizer/plugin and
+  copies GCC copyright/GPL text. The retained-candidate inspection below now
+  confirms the exception text and explicit libgcc/libstdc++ coverage declaration
+  in that package; retain those notices. This is not a per-object link audit.
+- Windows native runtime: the new engine/helper embeds /MT runtime code.
+  This is within scope even though unrelated old Windows components are not.
+  Free redistribution of the MIT/Apache model/engine does not establish the
+  Microsoft runtime grant. Exact applicable runtime/distributor terms remain
+  unclosed; do not state that the complete Windows candidate is cleared.
+
+Distribution handling already present:
+The native recipes collect upstream license/model-card files; package-manifest
+records their hashes and role; install-package copies and hash-checks every
+manifest member, retaining notices instead of discarding them at installation.
+The schema only requires at least one license member, not a complete legal
+notice checklist. No complete-archive clearance is inferred from that check.
+
+Boundaries for this narrowed decision:
+- Voice capture uses browser APIs and project code; backend inference invokes
+  the locally selected native binary. No added paid recording/ASR SDK was
+  found in that path. Existing React/Node/OS rights are not re-audited.
+- Linux invokes existing system nice/prlimit; the voice recipe does not bundle
+  those utilities or system glibc. Do not add their entire source distributions
+  to the voice package merely because they are used on the host.
+- Python research tools, FFmpeg, alternative experimental ASR engines and
+  ASCEND/JFK test audio are not required by this selected native installation.
+  They are not part of this end-user voice-runtime clearance; any future
+  redistribution of those test assets/tools needs its own applicable notices.
+- Repository-owned helper/patch licensing is separate from the third-party
+  component question. No whole-repository license decision is required merely
+  to establish the above upstream grants, and none is made by this review.
+  A public package must still be distributed by a party entitled to distribute
+  its own code; no copyright ownership is invented here.
+
+Conclusion: the reviewed voice-specific models, engines and new npm libraries
+have free-use and redistribution grants with ordinary upstream conditions.
+No paid ASR service is required. This is not yet unconditional clearance of
+both finished platform packages: only the voice package notice/runtime closure
+(especially Windows /MT) remains relevant, not the old project-wide checklist.
+No runtime, dependency, default, license grant or publication was changed.
+
+Retained Sense candidate inspection completed (2026-09-26)
+---------------------------------------------------------
+Approved spec0535372; plan/red contracts4cdb05b; implementation5bc020f.
+Spec: docs/superpowers/specs/2026-09-26-voice-candidate-license-evidence-design.md
+Plan: docs/superpowers/plans/2026-09-26-voice-candidate-license-evidence.md
+Red Actions36211147069 failed as intended on the absent inspection module.
+Fixture Actions36211292014 passed all10standard-library tests.
+Real inspection:
+https://github.com/xujxu/agents-chat/actions/runs/36211314051
+Measured commit5bc020f503537dc135f32cc19bb10bd76700cb81.
+Both fixture and candidate jobs passed. All retrieval, ZIP/hash verification
+and tests ran in GitHub Actions; no application server, model, native executable,
+package installation, rebuild, accuracy run or browser E2E was invoked.
+
+Observed original package identities:
+- Linux artifact10794617845, build run35968099304,18declared payload files.
+  Archive SHA256e2be50235ba3f584833750c444c313dd3aa4231c65a6eb1c222e18c06e0e7295.
+  Manifest SHA256ccf50b7ddaef5f9a0cddd58f87c4f08421902c630b2ca2a485bfebaae727f40c.
+- Windows artifact10802394350, build run35987278609,18declared payload files.
+  Archive SHA2562796a7666cf36f1f9597af1978af1df1feeec648bbca1036a226cb99ddebe3ab.
+  Manifest SHA256ed605fe13aacaf21d0aceb18127d6bccb0a1099f561aa0ecef95952975cae905.
+Both archives matched the fixed catalog, and every declared payload matched
+its size/hash. The inspector rejected undeclared payloads and unsafe archive
+members; models and executables were streamed for hashing, never executed or
+copied into the report. Existing candidate archives/catalog were not changed.
+
+Observed license materials:
+- Both actual packages contain the Apache-2.0 model declaration and text,
+  FunASR/llama MIT notices, jsonhpp notice and full miniaudio header. All expected
+  text checks were present; no missing notice in that defined checklist was
+  found. This does not assert that the checklist identifies every legal duty.
+- Linux additionally contains GPL3, LGPL2.1, glibc copyright and the complete
+  GCC Runtime Library Exception3.1. The retained gcc-runtime.txt lines100-113
+  explicitly place libgcc and libstdc++-v3 under GPLv3-or-later with that
+  exception; lines241-310 contain the exception, including eligible-compilation
+  and independent-module conditions. Retained CMake evidence records GCC12,
+  Release and -static-libstdc++ -static-libgcc. This closes the uncertainty
+  about whether the exception text and library coverage declaration ship.
+  No separate paid runtime grant is indicated by these GNU terms; retain their
+  conditions. The inspection is not a complete per-object link-input analysis.
+- Windows retains RELEASE-REVIEW-REQUIRED.txt and records MultiThreaded static
+  MSVC runtime, Visual Studio17/2022, compiler19.44.35228.0. This confirms the
+  unresolved runtime condition, not the right to distribute it. No authoritative
+  grant matching all actual static MSVC/SDK inputs and the distributor's
+  entitlement was established. Do not remove the notice or label this package
+  unconditionally cleared. Absence of that evidence is not a finding that use
+  requires payment or that redistribution is prohibited.
+
+Evidence artifact10895826318: voice-candidate-license-evidence,
+1342052bytes, expires2026-10-26T02:19:54Z.
+GitHub artifact digest:
+SHA2562db5a08ea59b2430d4a6298c7ae7fb40754a7573712504a38abe42e3855f228c.
+It contains REPORT.md, summary.json, retained license texts and selected
+provenance excerpts with source hashes; no model, native binary or test audio.
+Report distribution_clearance remains "not-assessed" on purpose. The checked-in
+findings above persist beyond artifact expiry; the detailed evidence is retained
+only for the stated retention period.
+
+Result and remaining scope:
+The approved archive-evidence task is complete; no packaging repair was justified
+by a missing entry in the inspected notice checklist. Core voice models/engines
+and the new npm libraries have the free-use grants described above. Linux's
+packaged GCC exception is now confirmed. Windows static-runtime distribution
+basis remains the main unclosed third-party permission question. Do not repeat
+generic web searches or replace the toolchain without a separate decision.
+Public publication/self-code permission is not granted by this technical report.
+Whisper archives, application-bundled yauzl/pend files, old application components
+and Dev Tunnels were not inspected by this two-candidate run.
+
+Targeted Windows terms follow-up (2026-09-26; no component change)
+----------------------------------------------------------------
+User requires reasons and explicit approval before changing any component.
+This applies to proposed toolchain/runtime/model replacements; continued
+investigation is not approval to implement them. No such change is proposed
+as necessary on the evidence currently available.
+
+Original Sense build35987278609, job107592809692 records:
+- Runner image reference win22/20260913.307.
+- Visual Studio2022 Enterprise, tools directory14.44.35207,
+  Developer Command Prompt17.14.40, compiler19.44.35228.0.
+- CMake selected Windows SDK10.0.26100.0 targeting Windows10.0.20348.
+The historical image recipe installs SDK via linkid2349110, which Microsoft's
+SDK download page identifies as10.0.26100.7705. This is an installation-recipe
+lead, not proof of the exact patched SDK files read by the linker. The image's
+toolset configuration selects the Visual Studio release channel.
+
+New primary-source evidence for SDK static libraries:
+Both Microsoft.Windows.SDK.CPP NuGet pages10.0.26100.0 and10.0.26100.7705 link
+their license to https://aka.ms/WinSDKLicenseURL. That official redirect returns
+sdk_license.rtf, titled Microsoft Windows Software Development Kit for Windows10.
+Section2(a)(i) grants object-code distribution for code on its REDIST lists.
+Section2(a)(ii) specifically requires that, for Distributable Code with a .lib
+extension, only the results of linking it with the program be distributed.
+Other conditions include significant primary functionality, protective downstream
+terms, valid program copyright notice and indemnity. A title mentioning Windows10
+is not used to substitute for applicability evidence: the version-specific
+package pages above supply the link; the old runner's local EULA was not retained.
+
+The referenced REDIST link resolves to:
+https://learn.microsoft.com/en-us/legal/windows-sdk/redist
+Its "Static LIB files" section expressly permits unmodified .lib files under
+Windows Kits/10/Lib/<version>/um/x64 and ucrt/x64 (and other named architectures)
+when built as part of a program, subject to the SDK license. <version> is a
+publicly released SDK version. This supplies a concrete conditional distribution
+basis for SDK UCRT/UM static-library inputs, rather than an inference from a DLL
+download page. No per-copy royalty requirement was identified in these clauses;
+free distribution still requires meeting their other conditions.
+
+Limit: SDK directory scope does not include
+Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/lib/x64.
+Do not apply the SDK grant to libvcruntime.lib/libcmt.lib from that directory.
+Likewise the public STL license/exception is not a blanket VC runtime grant.
+The candidate still lacks retained local VC/SDK license files and a full linker
+input record. The hosted build-use question is addressed by the runner team's
+confirmation below. The applicable VC static-runtime redistribution grant remains
+unclosed; no statement that a paid subscription is required or that
+redistribution is prohibited follows from this evidence gap.
+
+Concrete question prepared for official clarification (NOT sent):
+For a Windows x64 application built on the GitHub-hosted windows-2022 runner
+win22/20260913.307 with Visual Studio2022 Enterprise17.14, MSVC14.44 /MT Release
+and Windows SDK26100, which applicable license clause/REDIST entry covers
+libvcruntime.lib and libcmt.lib embedded by the linker in the application's
+executables? Does the hosted runner arrangement provide the relevant build
+and redistribution entitlement, or must the distributor separately establish it?
+Which notices/downstream terms are required when distributing those executables
+at no charge, without shipping any compiler, SDK, debug runtime or standalone
+.lib files? Request authoritative terms, not only technical linking guidance.
+Sending a support request or disclosing additional project details requires a
+separate authorization; none has been sent.
+
+Hosted build-use clarification and remaining question (2026-09-26)
+-----------------------------------------------------------------
+The runner-images team's closing response on2025-09-29 states that it uses an
+Enterprise license key by agreement with Microsoft for public and private use
+on GitHub Actions and Azure DevOps hosted runners, and that users do not need
+to maintain a separate personal copy of the license:
+https://github.com/actions/runner-images/issues/12945#issuecomment-3348002951
+The issue was closed as completed with that response. This is direct operational
+confirmation from the runner project, not a copy of its Microsoft agreement.
+It addresses use of the hosted toolchain; do not require a separate Enterprise
+purchase or switch to Community merely because Enterprise is preinstalled.
+It does not expressly identify the grant for distributing embedded VC runtime
+code, and does not license a separate local/self-hosted VS installation.
+
+This response supersedes uncertainty in the original issue author's report.
+Search summaries that repeat only the opening complaint or the older discussion
+7233 miss that resolution. The older discussion has no accepted answer; its
+generic license advice is not stronger evidence than the later project response.
+https://github.com/actions/runner-images/discussions/7233
+
+GitHub's Additional Products and Features terms, effective2026-08-27, permit
+development/testing use of Actions but do not supply a specific MSVC static
+runtime redistribution clause in the Actions section. Its "Authorized Developer"
+paragraph concerns Apple software, not a blanket Microsoft runtime grant.
+https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features#actions
+
+The public Microsoft Q&A question below asks the exact release static-CRT
+distribution question. Its Microsoft representative directs the requester to
+licensing support and reports a documentation escalation. The visible suggested
+answer explicitly is not a formal Microsoft response. It establishes neither a
+prohibition nor an affirmative grant for this package. Do not present search
+summaries asserting "no redistribution rights" as Microsoft's legal conclusion.
+https://learn.microsoft.com/en-us/answers/questions/949795/distributing-application-statically-linked-to-vc-r
+The Q&A links to Developer Community ticket10111550:
+https://developercommunity.visualstudio.com/t/Distributing-application-statically-link/10111550
+Direct retrieval returned an application shell rather than the ticket response;
+the current resolution was not verified. Do not claim it is unresolved today
+solely because the older Q&A discussion lacks a resolution.
+
+Revised support question, superseding the build-use uncertainty above (NOT sent):
+The runner-images team confirms hosted Enterprise build use without a separate
+personal VS license in issue12945's closing response. For Release /MT executables
+produced with that hosted MSVC14.44 toolchain, please identify the applicable
+clause/REDIST scope permitting no-charge distribution of linked libvcruntime.lib
+and libcmt.lib code. The Windows SDK REDIST already covers the SDK ucrt/um
+libraries; this question is specifically about VC/Tools/MSVC/<version>/lib/x64,
+not standalone .lib distribution or debug runtimes. Does the hosted arrangement
+also meet any distributor qualification in that grant, and which notices or
+downstream terms must accompany the executables? Please cite applicable terms
+or route to the team authorized to clarify them.
+
+Research stop condition: the published sources inspected do not settle that
+narrow distribution question. Do not repeat generic searches, infer payment
+requirements, or treat a toolchain replacement as approved. Preserve the current
+candidate and review-required notice pending authoritative clarification or an
+explicitly approved alternative approach.
+
+Component decision:
+- Keep Sense model, FunASR/ggml, yauzl/pend and Linux package unchanged:
+  the review found no reason to replace them.
+- Keep the current Windows MSVC build unchanged while its narrow remaining
+  permission question is unresolved. Unknown evidence alone is not a reason
+  to invalidate working code or incur a full toolchain requalification.
+- MinGW/LLVM-MinGW is only a possible contingency, not an approved plan.
+  If later proposed, explain the permission problem it addresses, its own
+  runtime terms, compatibility risks, helper/engine rebuild and Windows
+  cancellation/Unicode/install/service E2E requalification before requesting
+  approval. A switch to clang-cl or /MD alone does not eliminate this review.
+
+Sources for this follow-up:
+https://github.com/xujxu/agents-chat/actions/runs/35987278609/job/107592809692
+https://github.com/actions/runner-images/blob/win22/20260913.307/images/windows/Windows2022-Readme.md
+https://github.com/actions/runner-images/blob/win22/20260913.307/images/windows/scripts/build/Install-VisualStudio.ps1
+https://github.com/actions/runner-images/blob/win22/20260913.307/images/windows/toolsets/toolset-2022.json
+https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads
+https://www.nuget.org/packages/Microsoft.Windows.SDK.CPP/10.0.26100.0
+https://www.nuget.org/packages/Microsoft.Windows.SDK.CPP/10.0.26100.7705
+https://aka.ms/WinSDKLicenseURL
+https://download.microsoft.com/download/0/F/F/0FF2B061-47DD-4F55-89B6-FD1D8C44F14D/sdk_license.rtf
+https://learn.microsoft.com/en-us/legal/windows-sdk/redist
+
+Additional pinned sources for the narrowed review:
+https://raw.githubusercontent.com/thejoshwolfe/yauzl/3.4.0/LICENSE
+https://raw.githubusercontent.com/andrewrk/node-pend/1.2.0/LICENSE
+https://raw.githubusercontent.com/modelscope/FunASR/3ff9259aade4f7e4360645df28cad8f81959ee91/runtime/llama.cpp/CMakeLists.txt
+https://raw.githubusercontent.com/modelscope/FunASR/3ff9259aade4f7e4360645df28cad8f81959ee91/runtime/llama.cpp/funasr-common/miniaudio.h
+https://raw.githubusercontent.com/ggml-org/llama.cpp/803b7fcae893e9caaee3921779628fef83ac0965/licenses/LICENSE-jsonhpp
+https://raw.githubusercontent.com/ggml-org/whisper.cpp/5670d5c0bbcb148feabef84400a07cfca9aa3b30/LICENSE
+https://raw.githubusercontent.com/openai/whisper/6e3be77e1a105e59086e3e21ff5f609fd6fa89a5/README.md
+https://raw.githubusercontent.com/openai/whisper/6e3be77e1a105e59086e3e21ff5f609fd6fa89a5/LICENSE
+https://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
+
+Historical pre-publication audit (2026-09-25; NOT release clearance)
+----------------------------------------------------------------------
+User acceptance requirement clarified2026-09-25:
+Components used by this project must be free to use; any redistribution must
+comply with each upstream component's applicable license. Open-source-only is
+NOT a requirement. A proprietary component is not rejected solely because it
+is proprietary, nor accepted solely because a download is free.
+Review fees, permitted uses and redistribution conditions separately for the
+exact component/version and intended use. Distinguish build-tool entitlement
+from the end user's runtime rights; document platform/hosting costs separately.
+The clarification does not authorize relicensing repository-owned code or
+publishing packages. Unknown terms remain unverified, not compliant by default.
+This project-wide criterion extends beyond the two voice packages: application
+runtime dependencies, shipped transitive dependencies and build/package tooling
+still need an inventory. The voice source audit below is not that full audit.
+
+External-service boundary subsequently confirmed by the user:
+Optional paid service integrations may remain. Software components supplied
+with the project must meet the free-use and compliant-redistribution criterion;
+external account, subscription and usage charges must be distinguished clearly.
+This does not certify any particular external client's license or entitlement.
+Azure Relay is optional for remote nodes, not required for local voice inference.
+Its official FAQ describes billable relay usage and outbound data transfer.
+Separately installed ACP agents/models may also have account or usage conditions.
+Do not describe the complete application plus arbitrary agents as cost-free.
+
+Project-wide source inventory (partial; actual shipped contents unverified):
+- package-lock.json pins next16.2.3 (MIT), with optional sharp0.34.5
+  (Apache-2.0). Linux x64 sharp-libvips1.2.4 declares LGPL-3.0-or-later;
+  sharp-win32-x64 declares Apache-2.0 AND LGPL-3.0-or-later.
+  LGPL is not grounds for automatic replacement. If those libraries ship,
+  review the actual link arrangement, notices, GPL/LGPL text, corresponding
+  source provision and applicable replacement/relinking conditions. A shared
+  library arrangement alone does not discharge obligations for a distributed
+  copy of the library. Do not infer all platform variants ship from a lockfile.
+- caniuse-lite1.0.30001788 declares CC-BY-4.0. Track attribution for any
+  distributed copy; its lockfile entry alone does not establish bundle presence.
+  Other declarations include BSD-2-Clause for @mixmark-io/domino2.2.0,
+  MIT OR WTFPL for expand-template2.0.3, and BSD-2-Clause OR MIT OR Apache-2.0
+  for rc1.2.8. Preserve expression semantics; alternatives are not cumulative.
+- hyco-ws1.0.5 declares MIT and depends on http via a "latest" range, resolved
+  in the root lockfile to http0.0.1-security. The registry calls this a
+  "security holding package" and supplies no license field. This is not the
+  Node.js built-in HTTP module's license evidence and is not proof of a
+  violation. Actual installed files, license basis and shipment remain unknown.
+- scripts/package-release.mjs copies Next standalone output, static/public
+  assets and the voice scripts, plus the CLI-only yauzl dependency closure.
+  It has no explicit consolidated third-party notice assembly or license gate.
+  That observation does not prove individual license files are absent: the
+  copied output and bundled/compiled dependency notices still need inspection.
+  Native payloads such as better-sqlite3, Next/SWC and sharp require more than
+  their top-level npm license labels. Build-only and shipped code must be
+  distinguished, including compiled JavaScript and client assets.
+- app/api/nodes/setup/route.ts builds a ZIP containing setup-node.ps1 and
+  relay-listener.js, not an installed npm tree. The PowerShell script separately
+  obtains Node.js, Azure CLI and the selected Copilot/Agency launcher, and runs
+  an unversioned npm install hyco-ws. The root lockfile therefore does not pin
+  this downstream installation. Downloaded tools and their dependencies need
+  a separate inventory; do not run the remote Agency installer merely to audit
+  it or treat the launcher as license-cleared. No external agent/service has
+  been installed or invoked for this audit.
+
+The user selected continued read-only source/license review instead of the
+proposed Actions inventory collector. No new scanner/workflow is approved.
+No automated dependency scan, package replacement or publishing has been
+performed. The findings above are source/metadata observations, not an
+exhaustive bill of materials or a distribution approval.
+
+Read-only upstream follow-up:
+- sharp0.34.5 LICENSE explicitly grants no-charge copyright/patent permissions
+  subject to its terms. Redistribution requires the license, applicable
+  upstream attribution/NOTICE preservation, and notices of modified files.
+  This does not relicense libvips or its embedded dependencies as Apache-only.
+- sharp-libvips v1.2.4 THIRD-PARTY-NOTICES lists cairo under MPL-2.0;
+  libvips, glib, pango and several others under LGPLv3; aom under BSD-2-Clause
+  plus an AOM patent license; and additional MIT/BSD-like/font/image licenses.
+  This is an upstream notice inventory, not proof that every listed component
+  is present in both application packages. The MPL-2.0 sections2.1/3.1-3.4
+  grant royalty-free use and require covered source availability and notice
+  preservation on distribution; they do not require an unrelated larger work
+  to adopt MPL. Applicable LGPL source/linking obligations remain separate.
+- The v1.2.4 Windows packaging recipe fetches a libvips "static" web archive
+  but copies DLLs into its output. An archive name does not establish the
+  final link arrangement. It also downloads THIRD-PARTY-NOTICES.md from main,
+  not the tag: the tagged notice file is a useful lead, not proof of the exact
+  notice bytes present in a previously built package.
+- better-sqlite3 v12.9.0 LICENSE is MIT and requires retention of its copyright
+  and permission notice. Its binding.gyp links the SQLite target defined in
+  deps/sqlite3.gyp, which is a static library; that target's Windows Release
+  configuration sets RuntimeLibrary0 (static release). The source recipe
+  therefore makes MSVC runtime review relevant beyond the voice helper.
+  It does not prove which prebuilt binary npm actually installed, or that the
+  whole binding uses identical compiler settings. Inspect actual build/binary
+  provenance before closing that runtime obligation.
+  SQLite's own official copyright page dedicates deliverable SQLite code to
+  the public domain and permits commercial/noncommercial use/distribution.
+  Its optional paid Warranty of Title is not a general runtime license fee.
+  This SQLite statement does not cover better-sqlite3 or compiler runtimes.
+- caniuse-lite's exact1.0.30001788 LICENSE confirms CC-BY-4.0. Sections2/3
+  grant royalty-free rights subject to retaining supplied creator/copyright,
+  license/disclaimer and source-link information, and indicating modifications
+  when shared. It is not CC-BY-SA and does not itself impose ShareAlike on the
+  application. Whether the data ships still needs output evidence.
+- http0.0.1-security registry gitHead points to security-holder commit
+  ac50be87aafecba67fcacca3b32bf36a1f8f7a71. Its source tree contains only
+  README.md and package.json; neither states a license. The README describes
+  reserving the package name against malicious reuse. This explains the
+  placeholder but does not supply a redistribution grant; retain it as an
+  unresolved declaration, not "MIT", not a vulnerability finding.
+
+These texts substantiate free-use grants for the specific covered code above,
+not a project-wide clearance. Open items include actual shipped notices/source
+delivery, exact native link inputs, unlicensed declarations, repository-owned
+code authorization, build-tool entitlements and separately downloaded tools.
+No component was removed or relicensed on the basis of this partial review.
+
+Runtime/tooling and service-boundary follow-up (2026-09-25):
+- Microsoft CRT documentation distinguishes /MT inputs libucrt.lib (Windows
+  SDK), libvcruntime.lib and libcmt.lib, plus C++ libcpmt.lib when applicable.
+  Debug variants are expressly marked not redistributable. These are the
+  documented inputs to investigate, not a measured link map of our binaries.
+  /MD still statically includes startup code; changing /MT to /MD would not
+  by itself eliminate runtime licensing review.
+- The public Microsoft STL source at tag vs-2022-17.14 has Apache-2.0 WITH
+  LLVM-exception terms. The exception permits qualifying compiled embedded
+  portions without Apache sections4(a),4(b),4(d). Do not extend that exception
+  to UCRT/VCRuntime, all Visual Studio files, or unidentified linked inputs.
+  It also means "MSVC runtime is entirely proprietary" is too broad a label.
+- Re-read the official VS2022 Enterprise/Professional license: section5
+  references the Distributable List, requires significant application
+  functionality, downstream protective terms and indemnity, and restricts
+  Microsoft components marked Preview/Pre-release/Beta. That section defines
+  distribution to include application deployment for third parties to access
+  over the Internet. Existing experimental artifacts are not automatically
+  exempt from upstream obligations merely because no public Release exists.
+  The Build Devices clause permits specified build uses subject to the
+  agreement. Neither clause on its own closes our exact /MT input coverage
+  or identifies the applicable hosted-build/distributor entitlement.
+- Official REDIST documentation conditions redistribution on licensed use
+  and the applicable terms; its listed VC redist directories are not a
+  blanket, verified grant for every .lib under VC/Tools or the Windows SDK.
+  Official GitHub runner docs confirm preinstalled tools and per-run image
+  references, not a complete runtime redistribution grant. No conclusion
+  that every builder must buy a personal Enterprise subscription is drawn.
+  A search summary claimed hosted-build entitlement and personal-license
+  redistribution rules but cited a third-party guide; it was not accepted as
+  proof of either claim. An authoritative applicable entitlement basis is
+  still needed; installation on the image is not the missing evidence.
+- Next16.2.3 contains a large packages/next/src/compiled tree beyond the
+  dependencies visible in our root lockfile. Representative pinned notices:
+  ua-parser-js is MIT, terser has BSD-2-Clause terms, and web-vitals is
+  Apache-2.0. Do not assign an unrelated latest release's license to an older
+  embedded copy. These checks are not an exhaustive review of that tree or
+  proof that every embedded component reaches the application bundle.
+- TypeScript5.8.3 and Playwright1.59.1 root licenses are Apache-2.0.
+  Playwright's license does not replace licenses of downloaded browsers,
+  codecs or OS packages. CI installs Chromium/WebKit/Edge depending on the
+  workflow; browser and native build inputs remain a separate tooling scope.
+  tsx4.20.6 is also acquired through npx outside the root package manifest;
+  voice CI uses Python packages and apt-installed compilers/libraries.
+  These must not silently disappear from an "all project components" inventory.
+- Node24.20.0, pinned in the service workflow, has an MIT-style project license
+  and a consolidated LICENSE with separately maintained dependencies.
+  Do not describe the complete Node binary as MIT-only or transfer this
+  version's evidence to the unpinned OpenJS.NodeJS.LTS winget installation.
+  The release packager writes launchers that call an external node executable;
+  it does not explicitly acquire/bundle Node.js itself.
+- Azure CLI source commit7bf31a4fd49c252209732a8b0cf874ecaccdf06a and
+  GitHub CLI commit9b031151a825bda919203c5202876a725d637368 have MIT licenses.
+  These are reviewed upstream snapshots, not pins for our users' installations.
+  Their licenses neither make Azure/GitHub hosted services free nor cover
+  GitHub Copilot CLI, Agency, or those tools' separately downloaded payloads.
+- scripts/setup.ps1 provisions Dev Tunnels; scripts/start.ps1 defaults to it.
+  Microsoft's overview explicitly describes Dev Tunnels as adhoc testing and
+  development, not production workloads; it is preview with no SLA.
+  The MIT license in microsoft/dev-tunnels covers that source repository,
+  not automatically the separately downloaded CLI and hosted service. The
+  official FAQ directs CLI users to https://aka.ms/devtunnels/tos.
+  That link resolves to a PDF; the full EULA was not text-reviewed here because
+  no PDF reader was available. No packages were installed to work around this.
+  The production-use caveat above is supported by official documentation;
+  this audit does not claim to have determined an EULA violation.
+- scripts/start.ps1 -Cloudflare starts a TryCloudflare Quick Tunnel, not a
+  configured production tunnel. Cloudflare's official docs also limit its
+  intended use to testing/development, offer no SLA, and explicitly say Quick
+  Tunnels do not support SSE. This is an upstream service limitation, not a
+  newly reproduced failure of our chat UI. The source repository's Apache-2.0
+  license is separate from hosted-service terms. Do not automatically replace
+  Dev Tunnels with this existing quick-tunnel mode for production.
+- The existing Windows deploy.ps1 -NoTunnel path bypasses Dev Tunnels and was
+  used in the completed service E2E. A real remote deployment still needs an
+  appropriate HTTPS endpoint/reverse proxy and its own service/OS entitlements.
+  This source review changes no deployment defaults and approves no proxy or
+  tunnel provider; public-server suitability is not inferred from CI success.
+
+Actionable obligation checklist (not a release approval):
+1. SHIPPED CONTENT EVIDENCE REQUIRED: Identify actual application/native
+   payloads, versions and embedded code before assembling distribution notices.
+   Preserve MIT/BSD notices and Apache texts/NOTICE/modified-file notices where
+   applicable; account for Next's compiled dependencies and browser assets.
+2. SOURCE/RELINKING EVIDENCE REQUIRED: For shipped LGPL/MPL code, identify the
+   exact source, modifications and applicable source-delivery/linking route.
+   A project homepage or license label alone does not implement that route.
+3. ATTRIBUTION REQUIRED IF SHIPPED: Preserve CC-BY caniuse data attribution;
+   keep ASCEND audio's distinct CC-BY-SA obligations separate. Do not ship
+   test speech merely to satisfy a runtime application's dependency list.
+4. RIGHTS/ENTITLEMENT UNRESOLVED: Match actual MSVC/SDK runtime inputs and
+   hosted-build/distribution rights to authoritative terms. Keep the explicit
+   candidate review notice. Establish authorized licensing of our helper,
+   patches and application code without inventing copyright ownership.
+5. DECLARATION UNRESOLVED: http's placeholder has no grant in the inspected
+   source. Determine actual shipment and applicable permission before deciding
+   whether an approved dependency/packaging change is necessary.
+6. SERVICE BOUNDARY REQUIRED: Document optional fees, accounts and supported
+   deployment purposes. Do not market Dev Tunnels or TryCloudflare Quick
+   Tunnels as a qualified free production-hosting solution. External launcher
+   and CLI licenses remain separate from service subscriptions.
+7. SCOPE STILL INCOMPLETE: Exact unpinned external installations, full compiled
+   trees and browser/build-tool payloads have not all been reviewed. A green
+   source-declaration check cannot certify an uninspected installation/archive.
+
+Additional primary sources:
+https://sharp.pixelplumbing.com/install/
+https://www.gnu.org/licenses/lgpl-3.0.en.html
+https://registry.npmjs.org/http/0.0.1-security
+https://learn.microsoft.com/en-us/azure/azure-relay/relay-faq
+https://raw.githubusercontent.com/lovell/sharp/v0.34.5/LICENSE
+https://raw.githubusercontent.com/lovell/sharp/v0.34.5/npm/win32-x64/package.json
+https://raw.githubusercontent.com/lovell/sharp-libvips/v1.2.4/THIRD-PARTY-NOTICES.md
+https://raw.githubusercontent.com/lovell/sharp-libvips/v1.2.4/build/win.sh
+https://www.mozilla.org/en-US/MPL/2.0/
+https://raw.githubusercontent.com/WiseLibs/better-sqlite3/v12.9.0/LICENSE
+https://raw.githubusercontent.com/WiseLibs/better-sqlite3/v12.9.0/binding.gyp
+https://raw.githubusercontent.com/WiseLibs/better-sqlite3/v12.9.0/deps/sqlite3.gyp
+https://www.sqlite.org/copyright.html
+https://raw.githubusercontent.com/browserslist/caniuse-lite/1.0.30001788/LICENSE
+https://github.com/npm/security-holder/tree/ac50be87aafecba67fcacca3b32bf36a1f8f7a71
+https://learn.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features?view=msvc-170
+https://raw.githubusercontent.com/microsoft/STL/vs-2022-17.14/LICENSE.txt
+https://docs.github.com/en/actions/concepts/runners/github-hosted-runners
+https://github.com/vercel/next.js/tree/v16.2.3/packages/next/src/compiled
+https://raw.githubusercontent.com/vercel/next.js/v16.2.3/packages/next/src/compiled/ua-parser-js/LICENSE
+https://raw.githubusercontent.com/vercel/next.js/v16.2.3/packages/next/src/compiled/terser/LICENSE
+https://raw.githubusercontent.com/vercel/next.js/v16.2.3/packages/next/src/compiled/web-vitals/LICENSE
+https://raw.githubusercontent.com/microsoft/TypeScript/v5.8.3/LICENSE.txt
+https://raw.githubusercontent.com/microsoft/playwright/v1.59.1/LICENSE
+https://raw.githubusercontent.com/nodejs/node/v24.20.0/LICENSE
+https://raw.githubusercontent.com/Azure/azure-cli/7bf31a4fd49c252209732a8b0cf874ecaccdf06a/LICENSE
+https://raw.githubusercontent.com/cli/cli/9b031151a825bda919203c5202876a725d637368/LICENSE
+https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/overview
+https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/faq
+https://raw.githubusercontent.com/microsoft/dev-tunnels/main/LICENSE
+https://aka.ms/devtunnels/tos
+https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/
+https://raw.githubusercontent.com/cloudflare/cloudflared/master/LICENSE
+
+Scope: the two pinned Sense candidates in scripts/voice/download-catalog.mjs.
+This is a technical inventory of source declarations and build evidence, not
+a legal opinion, an assignment of rights or permission to publish. No Release,
+tag, model mirror or new licensing declaration was created by this audit.
+Original builds: Linux35968099304/a2f15bff;Windows35987278609/86fa6716.
+The audit read pinned upstream texts, local recipes and original build logs;
+it did not extract/re-audit every file of the binary artifacts. A complete
+artifact notice/link-input inventory remains a release gate.
+
+Verified declarations:
+- Official SenseVoiceSmall-GGUF revision90c1c61912018b70ada0fcc024ea24aca62f2e63
+  declares Apache-2.0 in its model card. The pinned repository listing contains
+  the card and weights, with no separate LICENSE or NOTICE member.
+  Existing recipes include model-card.txt and Apache-2.0.txt; preserve upstream
+  attribution and any applicable NOTICE/modified-file obligations.
+- FunASR3ff9259aade4f7e4360645df28cad8f81959ee91 and
+  llama.cpp803b7fcae893e9caaee3921779628fef83ac0965 root licenses are MIT.
+  Both builders retain those licenses; llama/licenses contains LICENSE-jsonhpp.
+  Do not infer a complete binary bill of materials from root licenses alone.
+- The pinned bundled miniaudio.h offers Unlicense or MIT No Attribution.
+  Builders include the full header; embedded codec notices still belong in
+  the artifact-level inventory, not a blanket "everything is MIT" statement.
+- Linux statically links libstdc++/libgcc and dynamically uses system libraries.
+  The GCC Runtime Library Exception3.1 grants conditional target-code permission;
+  applicability depends on the actual runtime files and eligible compilation.
+  Recipe includes GCC/glibc copyright and GPL/LGPL texts. Confirm the shipped
+  exception text and runtime scope from actual package evidence before release.
+- Windows engine and voice-job helper use static /MT runtime. Retained Sense
+  build logs identify VS2022 Enterprise, Developer Prompt17.14.40,
+  compiler19.44.35228.0. System-DLL-only dumpbin output is dependency evidence,
+  NOT proof that Microsoft redistribution obligations are absent.
+  Microsoft directs distributors to applicable license terms/REDIST scope.
+  The official linked Enterprise/Professional2022 terms include distribution
+  requirements and restrictions. Exact static-runtime scope, downstream terms
+  and the relevant build/distribution entitlement remain unclosed here.
+  Do not treat an unverified search summary about .lib files as a license grant.
+
+Rights-holder decision required:
+The only tracked LICENSE file is for the frontend-design skill, not application
+code. GitHub repository metadata also reports license:null. Candidate build
+already explicitly flags helper permission in RELEASE-REVIEW-REQUIRED.txt.
+The Windows helper source/headers and repository-owned native patch changes
+need an explicit authorized licensing/distribution decision. Public repository
+visibility and upstream MIT licenses do not establish permission for these
+separate contributions. A narrowly scoped license is an option; do not apply
+MIT to the whole repository, or choose copyright ownership, without authority.
+This audit does not determine that redistribution is prohibited, only that the
+recorded permission/compliance basis is incomplete.
+
+Reproducibility and expiration:
+- ASCEND is pinned to737e9800ae31be9932ba8464c80366559bd28424 with test parquet
+  SHA256a4c81d2b5ed6124f052089a695972808c16e0ce0c365ec9773c5d1a8fcf043a7.
+  Its pinned card declares CC-BY-SA-4.0. Retain attribution, change notices and
+  the applicable ShareAlike terms separately from executable/model licenses.
+  Recommend rebuilding only the existing two speech fixtures in Actions from
+  that source, requiring their current WAV hashes to match. Do not mirror the
+  speech corpus into runtime installation packages or assume software licensing
+  covers it. This audit did not run the regeneration or prove byte identity.
+- Existing voice-corpus-baseline.yml dispatch also runs full engine comparisons.
+  A separate source-only path is needed to avoid restarting paused accuracy work.
+- Native source commits/model checksum are pinned, but compiler, apt packages,
+  runner images and archives are not a bit-reproducible toolchain. Rebuilding
+  produces a new candidate requiring new hashes and admission; never silently
+  replace existing catalogue hashes or fall back to a latest artifact.
+- Source artifact expires2026-10-07;native candidates2026-10-24.
+  Artifact retention alone is not a permanent distribution solution.
+- Existing release.yml builds application bundles on v* tags and uploads with
+  --clobber. It is not an immutable, reviewed native-candidate promotion flow.
+  Do not tag/publish via that workflow to work around this review.
+
+Primary sources checked2026-09-25:
+https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF/raw/90c1c61912018b70ada0fcc024ea24aca62f2e63/README.md
+https://raw.githubusercontent.com/modelscope/FunASR/3ff9259aade4f7e4360645df28cad8f81959ee91/LICENSE
+https://raw.githubusercontent.com/ggml-org/llama.cpp/803b7fcae893e9caaee3921779628fef83ac0965/LICENSE
+https://www.apache.org/licenses/LICENSE-2.0.txt
+https://www.gnu.org/licenses/gcc-exception-3.1.html
+https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files?view=msvc-170
+https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution
+https://visualstudio.microsoft.com/license-terms/vs2022-ga-proenterprise/
+https://visualstudio.microsoft.com/wp-content/uploads/2021/11/Visual-Studio-2022-Enterprise-Professional-License-EN.docx
+https://huggingface.co/datasets/CAiRE/ASCEND/raw/737e9800ae31be9932ba8464c80366559bd28424/README.md
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Real service deployment (2026-09-25, hosted functional flow passed)
+---------------------------------------------------------
+Spec24f28fa; plan/red5e90931;red Actions36139526145 confirmed missing contracts.
+Windows scheduled deployment now accepts -NoTunnel, forwards it through the task
+and watchdog, and preserves that mode on upgrades when the switch is omitted.
+Explicit -NoTunnel:$false switches back to existing tunnel behavior.
+Fresh deployments without -NoTunnel retain their prior tunnel-enabled default.
+Use -NoTunnel only behind your own HTTPS reverse proxy or for loopback access;
+remote microphone capture still requires HTTPS. No tunnel account is configured.
+scripts/setup.ps1 remains the tunnel-provisioning helper; service E2E uses deploy.
+Acquisition token variables are stripped from service app launch environments.
+Measured8f4edba2ddd6df786c3874f3f1a4c470a08206ba:
+https://github.com/xujxu/agents-chat/actions/runs/36141303634
+Actual systemd on ubuntu-24.04 and S4U/AtStartup Scheduled Task on windows-2022.
+Four jobs: each OS fresh-selected and upgrade-enable. All14deployment milestones,
+44browser records and32real ASR attempts passed, including keep and disable.
+Both hosts verified service-owned listener/restart identity and installed hashes;
+all four primary cleanup paths removed owned resources and closed app ports.
+Browser versions: Chromium147.0.7727.15, iPhone-descriptor WebKit26.4,
+actual Edge154.0.4258.37. No physical-device or accuracy qualification.
+Real Git pull/re-entry used synthetic marker commits, not historical releases.
+Linux inspects actual process environment; Windows verifies no persisted tokens,
+watchdog stripping and executable sentinel contract, not remote PEB inspection.
+Full evidence and fixture commits:
+docs/superpowers/specs/2026-09-25-voice-service-deployment-design.md
+
+Report10867621949 SHA25667c41f475ec49df00775ec9c78688bc689d7050d17c00a05f37928e00a59b74e.
+Linux fresh10867376159 SHA25648dad8094d077d0f2ce68c9199860758f20e1b95f9dc4646f54fe446729fb491.
+Linux upgrade10867511171 SHA2569c395bbefb4e845f5f492d3f78708e616e0996057f8a3d30dcec4189e7823a09.
+Windows fresh10867326594 SHA25632fd9a4095bdb9c54c812bb2af18236d2b7657879ead26c272ee1047b274797b.
+Windows upgrade10867581432 SHA256eac831cd2e0b5bfb89f2b2728e6050b0e544c68997061fee4ac80e45fb3e0aa9.
+Result artifacts expire2026-10-25;source2026-10-07;candidate packages2026-10-24.
+Earlier36140169698 passed deployment/browser milestones but failed initial
+Windows cleanup;fallback succeeded. Final fix adds graceful stop/exit waiting
+and bounded driver diagnostics;exact prior exception was not retained.
+Setup36141303617,Windows foundation36141303577,service contracts36141303814 pass.
+No historical failed quality gate was changed. Public permanent releases,
+redistribution approval, tunnel provisioning and physical devices remain outside
+this completed functional scope.
+
+Explicit experimental voice acquisition (passed functional lifecycle, 2026-09-25)
+----------------------------------------------------------------------------
+Design e7b3ccd; plan/red ab5bb42. No public Release is published by this work.
+Only SenseVoiceSmall q8 on Linux/Windows x64 is available for automatic selection.
+Install GitHub CLI (gh), authenticate with access to this repository's Actions
+artifacts, then explicitly opt in:
+
+  node scripts/configure-voice.mjs --model sensevoice-small-q8 --experimental-download
+  sudo ./scripts/deploy.sh --voice sensevoice-small-q8 --voice-experimental-download
+  sudo ./scripts/upgrade.sh --voice sensevoice-small-q8 --voice-experimental-download
+  .\scripts\setup.ps1 -VoiceModel sensevoice-small-q8 -VoiceExperimentalDownload
+  .\scripts\deploy.ps1 -VoiceModel sensevoice-small-q8 -VoiceExperimentalDownload
+
+Use --non-interactive / -NonInteractive for unattended deployment.
+Running with sudo requires gh authentication accessible to the installing
+identity. Do not put tokens in command arguments, .env.local or service units.
+Prefer the installing user's gh credential store or a narrowly scoped temporary
+environment; never persist credentials in configuration or service environments.
+
+This downloads fixed candidate artifacts, checks source/repository, archive and
+manifest hashes, then uses the existing verified importer. Candidates currently
+expire 2026-10-24. Expired or inaccessible artifacts fail explicitly; there is no
+fallback, auto-build, automatic latest upgrade or permanent-download promise.
+Do not mix the download switch with local package arguments. Offline setup
+continues to use --package-dir/--manifest-sha256 or corresponding wrapper flags.
+Keep/default and disable do not download or require gh. Restart/reload applies
+configuration; remote browser microphones require HTTPS (loopback is exempt).
+Real system-service new-install/upgrade E2E is now covered by the result above.
+
+Measured02d572042dee8df4b6a607fae731014c4701b4a8:
+https://github.com/xujxu/agents-chat/actions/runs/36106345674
+Both platforms fetched candidates through real CLI, not preparation fixtures.
+16/16 browser records;8/8 real ASR attempts;all install/enable/disable phases pass.
+Report10851163250 SHA256573d4162cc667670750506c277cb2c50130c711f27478fc3c9e9c98963a04ef6.
+Linux10851173108 SHA256d0d67bcaae1450f330e6a03864150329c75e71e18ab06beb94ce5d7e77bfe16a.
+Windows10852145601 SHA25618ddf8c07a26c9221ce0b0dbaa80b3211dea0838a3cd7e680f3c17ec509c5a86.
+Result artifacts expire2026-10-25;package/source expiry is unchanged.
+Contracts36106345364,setup36106345458,Windows foundation36106345412,
+lifecycle preflight36106345362 passed. Red36106050780 retained missing-module
+failures;Linux-only legacy setup tests are no longer invoked on Windows.
+No historical quality gate was changed or declared passing by these results.
+
+Installed voice lifecycle E2E (2026-09-25)
+----------------------------------------
+Accuracy investigation paused by user. Scope:voice-component install/enable,
+real speech through authenticated API/model to existing draft,then disable.
+Spec8e7b3f1;plan/redfd1af66;implementation6c822f3;CI sequencing2e1b640.
+docs/superpowers/specs/2026-09-25-voice-lifecycle-e2e-design.md
+docs/superpowers/plans/2026-09-25-voice-lifecycle-e2e.md
+https://github.com/xujxu/agents-chat/actions/runs/36103664749
+Measured2e1b640cee48f75ba350cb84b29139953f05e21d.
+
+Both Linux and Windows passed initial-disabled/install/enabled/disable/disabled.
+16/16browser records;8/8real ASR attempts,two fixed ASCEND samples per project:
+Linux desktopChromium147.0.7727.15,AndroidChromium147.0.7727.15,
+iPhoneWebKit26.4;WindowsServer2022 actualEdge154.0.4258.37.
+Real CLI and pinned manifests/install role hashes;SenseGGUF standard2threads.
+Real login/capability/native POST;no voice response mock or URL rewriting.
+Every result nonempty HTTP200;exact API-text append to original draft;
+one POST,zero automatic sends,source completion,tracks/context cleanup,idle UI.
+Native temporary-directory baselines restored. Disabled UI hidden after restart.
+No CER/MER/reference equality/P95 computed;all old failed gates remain unchanged.
+
+Red36103108141 missing module. First manual36103364885 blocked before real
+attempts by existing Windows helper10s timeout under concurrent setup tests;
+2e1b640 serializes test files without changing product deadline or retries.
+Final5new contracts/OS;Windows10setup passes,Linux6passes+4Windows-only skips;
+preflight33Linux+15Edge passes,6+2native-fixture-only skips;build/typechecks pass.
+Separate mock-provider API negative suite not rerun;actual API covered above.
+
+Artifacts expire2026-10-25:
+10850192539 voice-lifecycle-linux
+  ca88963f6cc927d6dfb4e38ff40ecaaafe25ff823a602e403223c6a398309dfc
+10850890933 voice-lifecycle-win32
+  0103b833530ff764fb4c0dfa8e3ca7d9f40e7611bbc6b728f07b480bd4c50440
+10850722426 voice-lifecycle-report
+  f0c302e20ccb0ea84d30812a051e7009666dd6123fa89d6c8a83cf8c83a97a93
+Small report includes all8actual API/composer outcomes;host artifacts include
+milestone screenshots,verified input provenance and attribution,no model/config.
+Source expiry2026-10-07;candidate package expiry2026-10-24 remains.
+No system-service/public-package/physical-microphone/real-phone/Win11 acceptance.
+Agent send/reply/persistence outside requested scope.
+
+Controlled passive audio-graph probe (2026-09-25)
+------------------------------------------------
+Spec770b45a;plan/red3f2e15d;code8e15b60841b757ad2ca0f88171ddb91f08cd6358.
+docs/superpowers/specs/2026-09-25-voice-audio-graph-probe-design.md
+docs/superpowers/plans/2026-09-25-voice-audio-graph-probe.md
+https://github.com/xujxu/agents-chat/actions/runs/36100708842
+36/36 synthetic recordings,18 minimal/full pairs,zero retries/measurement skips.
+11 graph+9 inherited signal contracts;build/typechecks;36 browser preflight
+passes,4 existing native-fixture-server-only skips. No ASR/models/corpus.
+
+All18full C-Dfloat32 exact;all18E-Findependent PCM quantization exact;
+offline lengths correct;all36Blob/receiver bytes match;source/cleanup complete.
+Larger WebKit fitted-tone/residual differences first observed B-C:
+decoded source -> MediaStream/implicit conversion/channel handling/worklet.
+WebKit mono250Hz Cfits .025355/.017220/.040003 vs B~.040004;
+Cresidual .030944/.036117/.000013. Reduced fitted coefficient is NOT proof
+of gain loss:phase/time variation or unmatched content can also reduce fits.
+Chromium stereo repeat2 has Cresidual .002908;retain counterexample.
+Both browsers source48k/recorder44.1k/offline16k;rate alone proves no defect.
+
+Marker interval differences(ms),first/second:
+Chromium full(+10,0),(+10,0),(0,0);minimal all(0,0).
+WebKit full(+16,0),(+13,0),(+5,+5);minimal(+6,unknown),(+8,+13),(+8,+3).
+One minimal WebKit final marker weak;null retained. C/D/E/Fpositions agree
+at1ms resolution. Paired tone/timing variation means no non-interference claim.
+No lost-block/clock-drift/channel-gain/browser-bug or ASR causal verdict.
+
+Preflight36099685493 failed before measurements:WebKit Blob272926bytes,
+URL-rewritten receiver0bytes. Inspection36100233494 verified retained hashes.
+Fixture-only8e15b60 sends original Blob natively to loopback without Playwright
+POST URL rewriting;real API POST blocked;receiver rejects empty bodies.
+Historical helper and product recorder/worklet/encoder unchanged.
+
+Artifacts expire2026-10-25:
+10849108554 graph-report
+  84a1aa1d7d6b33fac810cdb5dfadb0da9cfb9725bbce25e9ef4ef78850b8a7e3
+10848599202 graph-evidence
+  b0e65d6f93bf6e1584ddfc60dbad282373adeb610908580ec7f351c9b3126142
+10848584232 graph-contract-evidence
+  1dead84afc42fa8bd7487682f7a5b8f50ac3179f996b9649ffe12c94c9d08b0e
+Failed-preflight10848817152 digest
+  498f3e12d7fd0ded5dc289aebede2220e69ed072dd6fdc4c628d751505da13a3
+Inspection10849043143 digest
+  3185b7df9fd2ea401d6d3d8151cc2a9d98227f465a3460767b34d9dcf9bbdc5a
+LinuxEPYC7763/4logical/~16GiB;Chromium147.0.7727.15/WebKit26.4/PW1.59.1.
+Browser executable hashes not retained;versions/settings are retained.
+All historical quality/delivery failures and real-device blockers unchanged.
+
+Retained WebKit waveform diagnostics (2026-09-25)
+------------------------------------------------
+Approved spec0bc59dd;plan/red36097fa:
+docs/superpowers/specs/2026-09-25-voice-webkit-signal-design.md
+docs/superpowers/plans/2026-09-25-voice-webkit-signal.md
+Red36093953092:missing helper. Implementation9c62b34 passes36094169057.
+
+https://github.com/xujxu/agents-chat/actions/runs/36094215228
+Code9c62b34914e350c0b171e0d0f6e23233dd1f3fb6.
+9signal/evidence+7error-analysis+14browser contracts pass.
+Source10748244312/WebKit10844047138/decomposition10845901259 archive digests,
+all8source/upload hashes/durations and historical identities verified.
+NumPy2.2.6/Python3.12.14. All computation in Actions,one pair at a time.
+No new recording,inference,resampling,warping or modified-audio output.
+
+ID          Prior error delta  Best lag samples  Correlation  Global status
+test-00332  +1                 1586              0.927421     reliable
+test-00364  +2                 1714              0.417434     weak
+test-00554  -1                 1553              0.235666     weak+ambiguous
+test-00949  +5                 1633              0.494327     weak
+test-01049   0                 1795              0.473650     weak
+test-01050   0                 1796              0.663284     weak
+test-01056  -1                 1846              0.747826     weak
+test-01058   0                 1679              0.515582     weak
+
+Only1/8global matches reliable;no search-boundary cases. All8last-minus-first
+offsets null because required global/local controls are not jointly reliable.
+Local peaks remain conditional where global matching is weak;no clock-drift
+or lost-buffer conclusion. test-00332 early/late correlation~0.996but middle
+0.455weak;test-01056 local peaks>0.997but global0.748weak.
+
+Uploads longer0.231250..0.3606875s;this is not proof of lost/duplicated speech.
+test-00949 original/upload whole-fileRMS -29.6415/-35.4113dBFS,
+peak-12.1200/-19.6183dBFS,no rail hits;all matching weak.
+Improved test-00554 RMS -24.8905/-32.9525dBFS and weak/ambiguous matching:
+signal differences do not map monotonically to MER.
+Four other clips have existing source rails and fewer uploaded rails;not proof
+of browser clipping or waveform fidelity. Original bytes/failed gates unchanged.
+
+Bounded diagnostic complete with explicit uncertainty,not a root-cause fix.
+Next proposed separate experiment:no-ASR deterministic audio-graph probes with
+intermediate rate/channel/timing observations to localize level/piecewise-offset
+differences. Not executed or approved here;do not gain-correct,time-warp or
+repeat corpus ASR to obtain a pass. Windows transport issue remains separate.
+
+Artifact10847180649 webkit-signal-report expires2026-10-25.
+Digest:sha256:9a0bc4ecb15b7943398ecf2ee8ee518255c5a6f3103b0cf585a3041da07cd532.
+Small derived metrics/provenance/attribution only,no audio or transcripts.
+Original source10748244312 expires2026-10-07.
+
+Retained WebKit error decomposition (2026-09-25)
+-----------------------------------------------
+Approved spece4e1fea;plan/red9b67975:
+docs/superpowers/specs/2026-09-25-voice-webkit-error-analysis-design.md
+docs/superpowers/plans/2026-09-25-voice-webkit-error-analysis.md
+Red36090714673 confirms missing analysis module;implementation9655742 passes
+36090937196. OOM interruption did not lose the pushed plan/contracts.
+
+https://github.com/xujxu/agents-chat/actions/runs/36090984994
+Analysis code965574245761448173414b83ef454f4042442b5a.
+7new contracts+14existing browser contracts pass.
+Historical evidence36085430283/code7b680ac remains separate from analysis.
+Four fixed archives verified against artifact metadata/digests; existing
+package/implementation/case/source/upload/baseline checks pass.
+No new capture,inference,model download,product change or acceptance rerun.
+
+8mixed/medium ASCEND samples,225reference units:
+Path               Errors  S/D/I       MER
+Original ONNX      33      20/11/2     14.666667%
+Original native    37      19/14/4     16.444444%
+Captured ONNX      37      19/14/4     16.444444%
+Captured native    39      21/16/2     17.333333%
+All four paths deliver8/8. Counts/unrounded rates match saved report.
+Primary+6errors=+2.666667pp;ceiling16.666667% unchanged;FAIL preserved.
+Primary per-sample error changes:
+test-00332 +1;test-00364 +2;test-00554 -1;test-00949 +5;
+test-01049 0;test-01050 0;test-01056 -1;test-01058 0.
+
+test-00949 is the dominant positive contributor. Original-to-captured errors
+increase10->14for ONNX and12->15for native. Both input paths and backend
+differences matter observationally;no proof of a particular acoustic/numerical
+defect. Native aggregate already37vs originalONNX33before browser recording.
+Original-native and capturedONNX equal totals do not imply equal transcripts.
+All8manual stops/source completion/track/context cleanup recorded;source48kHz,
+recorder44.1kHz. This is context,not proof of fidelity or a resampler defect.
+
+Next proposed bounded step:in Actions,align/inspect retained source/uploadWAVs
+for all8samples,including improvements/unchanged controls;quantify offsets,
+duration/silence,levels/clipping and aligned differences. No transformed-input
+inference or tuning on one inspected sample;requires separate approval.
+Windows transport diagnosis remains separate. No causal claim or model promotion.
+
+Artifact10845901259 webkit-error-analysis expires2026-10-25.
+Digest:sha256:52e23b1399a98828f7a409a713a6009cc1f9f8022f69cdc1f5541d5214a475de.
+Contains summary/samples/report and ASCEND attribution;raw text/audio not committed.
+Original baseline10751002303 digest:
+sha256:7f02f1a934411dcc01c869bab78c829d13de5311f886cc8525462b26aae12c01.
+Original scored-results.jsonl SHA256:
+e1885a092e759fa33c6640d9101929fae46c04e291ae9b7c07b5e38ecede64f2.
+That source expires2026-10-23;analysis does not extend upstream retention.
+
+Installed Sense Edge/WebKit checkpoint (2026-09-25)
+--------------------------------------------------
+Approved revised spec6d64296; plan/test-first4c1ae62:
+docs/superpowers/specs/2026-09-25-voice-browser-matrix-design.md
+docs/superpowers/plans/2026-09-25-voice-browser-matrix.md
+Existing AndroidChromium/iPhoneWebKit E2E already existed and passed; this phase
+reused mobile settings/voice regressions and added installed-Sense corpus data.
+No replacement mobile test suite, Android corpus expansion or Chromium rerun.
+
+Red36083976647:missing case module,8legacy contracts pass.
+Implementationb340f99,artifact contractsc1f2d7c.
+Compatibility36084214690/36084280859:Edge passes;WebKit capture fixtures expose
+missing Playwright Blob-body observation and exact30s source-completion assumption.
+3852b67 uses an actual loopback HTTP byte receiver and32s test stimulus for the
+unchanged30s recording cap. 36084652722 exposes fixture CORS/track-wrapper issues.
+7b680ac supplies CORS and stable-ID prototype observation for owned track cleanup.
+Native stop always forwarded; production recorder/API/model unchanged.
+Both target jobs and14Python contracts pass36085061136;legacy Chromium
+regression36085061185 passes without repeating completed corpus collection.
+
+https://github.com/xujxu/agents-chat/actions/runs/36085430283
+Code7b680acb264b466868cff05a6f8dd9b40d856dcc.
+14Python contracts,explicit test/config types,app builds/typechecks pass.
+15voice/observer fixtures pass per compatibility/installed job;2intentional
+native-fixture-server-only skips. Both collectors complete200attempts each.
+400attempts,399deliveries;all200browser capture/UI deliveries valid.
+200/200same-upload ONNX diagnostics complete;0unavailable.
+Report exits1 for measured failures,not incomplete evidence/infrastructure.
+
+Case/path                 Primary P95 short/long    Original-stimulus gates
+WindowsServer direct-WAV   0.760137s /3.580441s       FAIL delivery+mixed/medium
+WindowsServer Edge        0.680000s /3.404000s       PASS
+Linux direct-WAV API       0.469157s /1.820615s       PASS
+Linux WebKit mobile        0.497000s /1.705000s       FAIL mixed/medium quality
+
+Mixed/medium baseline14.6667%,ceiling16.6667%.
+Edge browser14.6667%;WebKit browser17.3333%;Linux direct16.4444%.
+Windows direct26.6667%,including test-01049 transport_error as full deletions:
+null HTTPstatus,0.0055659s;paired browser succeeded. No retry/exclusion.
+Underlying transport root cause not retained by this outcome category;
+do not label it a native model defect or erase earlier Windows quality failures.
+Same-upload diagnostics cannot rescue WebKit's original-stimulus quality gate.
+
+ActualEdge154.0.4258.37(executable version matches);descriptorUA says147.
+ExecutableSHA256:f530bafcdb7e529bd21dd8be46e20c82b5c70fa0ffd770fe4c45a5c2c054c211.
+WebKit26.4,Playwright1.59.1,iPhone14ProMax descriptor430x740/scale3/mobile/touch.
+LinuxAMD EPYC9V45;WindowsServer2022AMD EPYC9V74;4logicalCPUs,~16GiB each.
+48k source;standard2threads;unchanged package/model/helper identities.
+No cross-host/browser speed causality or real-device qualification claim.
+
+Artifacts expire2026-10-25:
+10843349224 compatibility-win32-edge
+10843254794 compatibility-linux-webkit-mobile
+10844652395 installed-browser-win32-edge
+10844047138 installed-browser-linux-webkit-mobile
+10844915649 installed-matrix-baseline
+10845090269 installed-matrix-report
+Report digest:
+sha256:5dc240fda7861a20ce471c7746bf9cf22337cbc220222af0c83070b6b945acea
+Case-bound source/upload manifests,captured WAVs,outcomes,milestones,
+implementation/package/browser/host identities retained.
+Bounded measurement complete;overall product acceptance still fails.
+Still open:Windows direct quality/reliability,WebKit captured-input quality,
+actualWin11,physical microphones/AEC,real Safari/iOS/Android,redistribution
+permissions/permanent trusted downloads. No PROD/cpg/sampler modification.
+
+Installed Sense browser recording checkpoint (2026-09-24)
+--------------------------------------------------------
+Approved spec4e80528, plan/test-first24034ce:
+docs/superpowers/specs/2026-09-24-voice-installed-browser-design.md
+docs/superpowers/plans/2026-09-24-voice-installed-browser.md
+Red36003951932 confirmed missing report module; implementatione40bd7b passed
+36004124645. Capture contracts6968c5a failed36004316002 for missing helper.
+Implementationfb80f5d passed report/type/build and14fixtures in36004719332;
+one UI-failure fixture did not block React defaultValue writes. Fix97977de
+intercepts both setters before React mounts only in that failure-injection test.
+
+https://github.com/xujxu/agents-chat/actions/runs/36007108166
+Code97977de37eb7eda0675a893eed516d90b11515fa.
+8Python contracts and15recorder/observer fixtures passed;2native-fixture-only
+skips. Explicit collector types/app builds/typechecks and both actual installed
+jobs passed. Each platform200/200paired deliveries,400/400total.
+All200browser capture/UI controls passed;200/200same-upload ONNX baseline
+diagnostics available,0unavailable. Report exits1 for a measured gate failure,
+not infrastructure or incomplete evidence.
+
+Host/path                 Primary P95 short/long    Original-stimulus gates
+Linux direct-WAV API       0.471947s /1.898069s       PASS
+Linux browser             0.346200s /1.728000s       PASS
+WindowsServer direct-WAV   0.806010s /4.253320s       FAIL mixed/medium quality
+WindowsServer browser     0.844300s /4.344300s       PASS
+
+Browser primary time is stop intent to observed composer text, including
+recording flush/resample/encode/upload/auth/inference/UI, excluding speaking.
+Browser HTTP short/longP95:Linux0.3242/1.6782s;Windows0.8026/4.2962s.
+Browser API-only short/longP95:Linux0.301/1.612s;Windows0.783/3.896s.
+Different timing surfaces and ordered trials are not pure overhead/speed proofs.
+Windows direct mixed/medium16.8889% exceeds baseline14.6667%+2pp=16.6667%.
+Browser mixed/mediumLinux14.2222%,Windows15.1111%; all browser buckets pass.
+Recorded input changes recognition; this cannot erase Windows's direct gate
+failure or justify tuning capture parameters/builds on inspected samples.
+Same-upload baseline scores remain diagnostic and never replace primary gates.
+
+Chromium147.0.7727.15 on both hosts;48k source context and real product recorder,
+resampler,WAV,authenticatedAPI and composer. LinuxAMD EPYC9V45;
+WindowsServer2022AMD EPYC7763;4logicalCPUs,~16GiB each. No new app quotas.
+Physical cores/effective quotas/native peakRSS unknown. Playwright DesktopChrome
+sets a Windows user-agent even on Linux; host metadata, not UA, identifies OS.
+Existing Sense engine/model/helper package hashes unchanged;2threads standard.
+
+Artifacts expire2026-10-24:
+10812231887 installed-browser-linux
+10812321924 installed-browser-win32
+10813275162 installed-browser-baseline
+10812857567 installed-browser-report
+Report digest:
+sha256:4cf58f0d12793589b38779586d4ef6950938973165edaa8bf1ef698c40b0467c
+Platform evidence includes actual capturedWAVs,source/upload hashes,milestones,
+all outcomes,attribution,package/browser/host and implementation identities.
+
+Bounded Chromium slice complete. Still open:Windows direct quality gate,
+actualWin11/ScheduledTask/physicalmicrophone,AEC,other-browser full-corpus,
+redistribution permissions and permanent trusted downloads. No model promotion,
+output-conditioned reruns,threshold changes or PROD/cpg/sampler modification.
+All validation/audio/models/servers ran in Actions.
+
+Sense feature-boundary exchange checkpoint (2026-09-24)
+------------------------------------------------------
+Approved spec375b989; plan/red6546cd6:
+docs/superpowers/specs/2026-09-24-voice-feature-exchange-design.md
+docs/superpowers/plans/2026-09-24-voice-feature-exchange.md
+The new session preserved prior uncommitted data/report implementations.
+Red36000009792 confirmed missing data module;914af74/run36000736020 confirmed
+missing process runner with data/report contracts passing. Implementation
+ba9cd71/run36001140133 passed; expanded aggregation/raw-stdout contractse8f10c7
+passed36001243394. First real run36001303004 stopped before replay because
+Windows Git Bash tar could not create unrelated upstream symlinks. Fixa07d091
+extracts only the required four source/license members, without changing bytes.
+
+https://github.com/xujxu/agents-chat/actions/runs/36001871106
+Codea07d091d1e755081e4e1d0433090823a5132455b; all six jobs passed.
+Nine contracts; three lifecycle contracts per consumer before real inference.
+Both unchanged installed Sense engines delivered108/108,216/216 total.
+12fixed samples x3repetitions x3inputs(WAV/Linux-features/Windows-features)
+x2consumers,2threads,standard policy. No model/engine/helper replacement.
+All72repeatability groups stable; all24own-replay and24historical controls
+agree. Both consumers produce identical text on each fixed feature source.
+PCM bytes match on all12 samples; features differ on all12. Ten texts unchanged.
+test-00949 and test-01056 follow the feature producer on either consumer.
+No failed controls or exclusions. Classification:10unchanged,2frontend-sufficient.
+
+test-00949:148x560,6245changed values,maxAbs8.392333984375e-05,
+RMS8.336426125497626e-07.
+test-01056:113x560,6290changed values,maxAbs9.775161743164062e-05,
+RMS9.124661140040466e-07.
+No tolerance pass criterion, reference scoring, ranking or latency approval.
+Conclusion: after identical decoded PCM, frontend feature values suffice to
+explain these two observed transcript differences. No downstream TEXT difference
+on these identical inputs; not proof of identical internal graph values.
+Specific math function/compiler/OS/CPU cause remains unidentified.
+
+Extractor toolchains: GNU12.3.0/Ubuntu22.04; MSVC19.44.35228.0/WindowsServer2022.
+Original pinned source/header/block and generated translation unit match between
+producers. Generated sourceSHA256:
+31ca0b44453ca9692c096bd19bf252d792a2823b247c5580fb2c1307cd470de4
+Original blockSHA256:
+9b9d0d10eaf24467c2baa30ae73dd197d001ac34d4560b7230cd14cf7064d597
+Compiler commands/logs/cache, PCM/features and their hashes retained in artifacts.
+
+Artifacts expire2026-10-24:
+10807514811 feature-producer-linux
+10808691728 feature-producer-win32
+10808388857 feature-consumer-linux
+10808457656 feature-consumer-win32
+10808697424 feature-exchange-report
+Report archive digest:
+sha256:392c161cf4b8c152bc86ba2efbf15cfde8992799a2a69a802e38aca27f5bdbda
+
+This diagnostic slice is complete, not product qualification. Windows original
+mixed/medium gate failure remains; browser corpus, actual Win11, redistribution
+permissions and permanent distribution remain open. No tuned replacement or
+new build selected. Further numerical localization requires a separate design.
+All builds/tests/audio/inference ran in Actions; PROD/cpg/sampler untouched.
+
+Installed Sense consistency checkpoint (2026-09-24)
+--------------------------------------------------
+Approved specf30443f and plan/test-firstf0e8e0f:
+docs/superpowers/specs/2026-09-24-voice-sense-consistency-design.md
+docs/superpowers/plans/2026-09-24-voice-sense-consistency.md
+Red35993962964 confirmed missing report module. Implementationaf2d012 passed
+report contracts; matrix35996206590 failed BEFORE inference: Playwright compiled
+installer ESM imports as CommonJS (exports undefined). Fix6f55377 reads persisted
+voice values with bounded native Node ESM, leaving production modules unchanged.
+
+https://github.com/xujxu/agents-chat/actions/runs/35996836383
+Code6f5537744d862618d16d4d38c167b4b82c06d796; all jobs passed.
+12fixed samples:8mixed/medium plus4SHA-ranked controls. Same original WAVs and
+existing installed Sense packages; 3thread settings x3repetitions x3surfaces.
+Linux324/324 and Windows324/324 successful attempts, no unavailable comparisons.
+Per platform:108repeatability groups,324layer pairs,324thread pairs all equal.
+Each platform's36default-thread API comparisons with prior35991326454 all equal.
+Cross-platform:270equal/54different tuples. All54differences belong to exactly
+test-00949 and test-01056 (27settings/surfaces/repeats each).
+Differences already occur at supervised native stdout, not only API results.
+No observed thread sensitivity, repeat instability or application-layer mismatch.
+
+Diagnostic host CPUs: Linux AMD EPYC7763; Windows AMD EPYC9V74;4logical CPUs
+each. Windows reproduces prior Intel Xeon8573C outputs, weakening a simple
+Intel-vs-AMD explanation without proving CPU independence.
+Conclusion: stable native-path cross-platform differences; compiler/OS/CPU/
+numerical cause not isolated. No thread/default/build selected from test errors.
+Windows quality gate remains failed. No browser/Win11/release claim.
+
+Artifacts expire2026-10-24:
+10806103628 sense-consistency-linux
+10806823293 sense-consistency-win32
+10807156055 sense-consistency-report
+Aggregate artifact digest:
+sha256:714580d83ed0efb6f53d509f0ef02c487a8f46b1c7e9688896db8ba9316c2eb6
+Packages/weights unchanged; all builds/inference/validation remained in Actions.
+No PROD/cpg/sampler or product runtime modification.
+
+Additional isolated collector strict-typecheck:
+Application tsconfig excludes tests, so6d7d08f added explicit spec/helper checking.
+Initial35998096167 lacked the app's ESNext libraries; command-only fix1529212
+restores them. Actions35998236233 passes collector types and5report contracts.
+No inference code or measured package changed; no redundant model run required.
+
+Installed-package authenticated API checkpoint (2026-09-24)
+----------------------------------------------------------
+Plan: docs/superpowers/plans/2026-09-24-voice-installed-api-acceptance.md
+Test-first0533b1b / Actions35990247734 failed for the expected missing
+voice_installed_report module. Implementation7d81928; explicit API500 failure
+accounting/separate processing timing0af98a3; timing contracts0cd5ae2.
+Final contracts pass, including invalid timing and failure-inclusive scoring.
+
+https://github.com/xujxu/agents-chat/actions/runs/35991326454
+Code0cd5ae21377d3e7845f93f6b4a56c3709ff3eb98.
+All four build/typecheck/install/collection stages passed; each delivered100/100.
+Workflow is deliberately red for measured qualification failures, not an
+infrastructure error. Original corpus, baseline, normalization and gates unchanged.
+Frozen corpus:60ASCEND/40AISHELL-4; duration bands50short/10medium/40long.
+
+Platform/model       HTTP P95 short/long     Qualification
+Linux Sense          0.400s / 2.284s         PASS
+Windows Server Sense 0.875s / 4.287s         FAIL mixed/medium quality
+Linux Whisper        6.949s / 9.826s         FAIL quality and short/long latency
+Windows Server Whisper7.366s /13.384s        FAIL quality and short/long latency
+
+Windows Sense mixed/medium MER16.89%, historical baseline14.67%; allowed ceiling
+16.67%. Linux16.44%. Do not round away failure or change the+2pp gate.
+Whisper fails7quality buckets (all except en/medium); remains compatibility-only.
+Prior run35990621467 at7d81928 had identical qualification outcomes:
+Linux Sense short/long0.289/1.487s; Windows Sense0.895/4.358s;
+Linux Whisper6.990/9.863s; Windows Whisper7.719/13.549s.
+Cross-platform transcript differences observed; numerical/build/CPU cause is
+not established. Do not tune on the already explored frozen test corpus.
+
+Final report artifacts, expire2026-10-24:
+10804222694 installed-api-ubuntu-24.04-sensevoice-small-q8
+10803903893 installed-api-windows-2022-sensevoice-small-q8
+10804772932 installed-api-ubuntu-24.04-whisper-base-q5_1
+10804813131 installed-api-windows-2022-whisper-base-q5_1
+These are report/attempt/host/package-manifest artifacts, not model downloads.
+Pinned source packages remain Linux35968099304/10794617845,10795017559 and
+Windows35987278609/10802394350,10803120161.
+
+All final hosts report4logical CPUs and approximately16GiB physical RAM.
+Linux Sense: AMD EPYC9V74; Linux Whisper: EPYC7763; Windows: Xeon Platinum8573C.
+Fresh native process each request, potentially warm filesystem cache; not a
+matched-hardware OS benchmark. Effective quotas/physical cores/native peak RSS
+unknown, not zero. Sense2threads/Whisper1thread, no new application hard quotas.
+API elapsedMs recorded separately; HTTP wall time remains the gate metric.
+
+This closes measurement/reporting, not overall feature acceptance. Windows
+Sense quality qualification, controlled browser-corpus capture/resampling,
+actual Win11/task/microphone behavior, helper/MSVC redistribution clearance and
+permanent trusted downloads remain open. Repository runners API returned0
+self-hosted runners; no runner installation authorized or performed.
+No local validation/inference/audio build, PROD/cpg/sampler changes or release.
+
+Windows activation and upgrade checkpoint (2026-09-24)
+-----------------------------------------------------
+Plan/test-firstb1d30a7:
+docs/superpowers/plans/2026-09-24-voice-windows-activation.md
+Actions35985323383 failed for expected missing setup-context module.
+Activation54e76b4; deployment test-first34d8a7b/35985686642 failed missing
+integration; implementation7deb566; startup ACL preservationccdc8b6;
+PowerShell5.1 setup compatibility4d69789.
+
+Installation/upgrade:
+https://github.com/xujxu/agents-chat/actions/runs/35986352588
+Code4d69789; Windows10contracts passed, including8isolated PowerShell scenarios:
+keep, disable, failed activation recovery, admin-edit refusal, NoWait rejection,
+fresh-code re-entry, repeated menu/default keep, and fresh setup.
+Syntax/no-startup-prompt checks passed. Linux14passed/4Windows-only skips,
+PTY/deploy regressions and both real-package integrity jobs passed.
+Task/network/npm/tunnel operations are mocked; configurator and files are real.
+No production Scheduled Task was created or changed by these tests.
+
+Real persisted-model activation:
+https://github.com/xujxu/agents-chat/actions/runs/35985984916
+Codeccdc8b6c81820810c262963bc853dc8813464323. Both candidates passed existing
+1/2/4thread smoke, CLI verified import, persisted configuration/transcription,
+keep/disable/exact-byte rollback and typecheck. Unicode/spaced paths included.
+Sense artifact10802620814:
+sha256:98808db3c1271c0a3b8947ef8e2b900a11dfb3d7e3686a48af450552668f3ce7
+Whisper artifact10801364336:
+sha256:1a6dd6fe7d25977e7d5ffa4cafc6f00865002283d430c9f7804bb7e92ad5a23a
+Both expire2026-10-24; candidate assets, not permanent public downloads.
+
+Final additional CLI-integrity run:
+https://github.com/xujxu/agents-chat/actions/runs/35987278609
+Code86fa6716eceaf4254fb020664338fcadcce37868; both candidate jobs passed.
+Adds explicit wrong-manifest CLI rejection with unchanged config and no receipt;
+retains real installed transcription and all prior candidate/import checks.
+Final Sense artifact10802394350:
+voice-windows-candidate-sensevoice-small-q8-86fa6716eceaf4254fb020664338fcadcce37868
+sha256:2796a7666cf36f1f9597af1978af1df1feeec648bbca1036a226cb99ddebe3ab
+Final Whisper artifact10803120161:
+voice-windows-candidate-whisper-base-q5_1-86fa6716eceaf4254fb020664338fcadcce37868
+sha256:35192e3ba9193527d19dd1043780ba0435410e8408db8e8a6fec7f82a1b7a1c5
+Both expire2026-10-24. GitHub artifact digests above are not manifest SHA values.
+
+Full Windows runtime/API/browser:
+https://github.com/xujxu/agents-chat/actions/runs/35985987964
+Codeccdc8b6;13lifecycle results,1multi-case runtime contract, build/typecheck,
+36API/browser passes/2intentional legacy-policy skips. Artifact10802337585.
+API/browser providers are native fixtures, distinct from real-model smoke.
+
+Windows CLI now accepts trusted version2 packages. Setup/deploy prompt on every
+interactive upgrade, default keep; explicit flags allow unattended change.
+Background startup/watchdog never configures voice. Existing task principal is
+preserved, fresh task defaults to installer. Account registry hive must be loaded;
+machine/user/volatile and process voice overrides checked case-insensitively.
+Target account gets environment read access, not receipt access. Startup URL
+updates retain existing DACL. Parent/model-directory access remains an operator
+responsibility; no claim to validate every custom deployment or stale logon env.
+
+Initial real CLI test35985456006 failed inherited CI VOICE harness variables;
+test-only child environment isolation fixed this without weakening overrides.
+Parser check35985981311 exposed existing setup.ps1 UTF8 em-dash parsing on PS5.1.
+ASCII messages and removal of obsolete start.ps1 source rewriting resolved it.
+
+Actual Win11 task/browser acceptance, final installed-service full-corpus gates,
+public helper/MSVC redistribution approval and permanent downloads remain open.
+No local validation, model execution, PROD/cpg/sampler changes or public release.
+
+Private Windows configuration checkpoint (2026-09-24)
+----------------------------------------------------
+Plan/test-first59b299f:
+docs/superpowers/plans/2026-09-24-voice-windows-private-configuration.md
+Actions35983021333 failed missing configuration-files module on both platforms.
+Implementation23dfb21; snapshot/path guard3bd6b28; .NET helper fix15f4ce0;
+final contractsfd80b9a.
+
+Final run:
+https://github.com/xujxu/agents-chat/actions/runs/35984193290
+Windows5contracts passed. Linux12passed/1Windows-only skip, terminal interaction,
+isolated deploy preservation/re-entry/activation rollback and both real-package
+integrity jobs passed. No model rebuild, local validation or service changes.
+
+Keep and rollback preserve UTF8/BOM/UTF16LE raw bytes. Explicit writes emit
+Windows UTF8 BOM; version2 receipts carry base64 previous bytes and exact-byte
+installed checksum. Old UTF8 receipts remain supported. Malformed receipts,
+stale configuration, symlink/hardlink files and receipt/config collisions fail.
+Launcher key is managed; Windows paths use forward slashes, including apostrophes.
+
+Windows NTFS staging directory has private inherited grants from creation for
+installer identity/SYSTEM/Administrators. Tests inspect final env/receipt ACLs,
+not only the staging directory. Same-volume rename replaces without deleting
+the original first. Junction components/existing directories are refused.
+No secret data is passed to PowerShell arguments/environment/output.
+
+Initial helper timed out; bounded diagnostics35983725074 isolated Test-Path
+under the sanitized environment. Direct .NET filesystem/ACL APIs avoid that
+module-dependent operation. Earlier stdin fix alone did not solve the issue.
+Temporary diagnostic script removed; ACL and rollback assertions retained.
+
+Still pending: Windows CLI model enablement, task-account/environment override
+checks, startup-script encoding preservation, setup/deploy upgrade prompts and
+activation recovery. This checkpoint does not claim those are implemented.
+Actual Win11/full-corpus/public redistribution gates remain. PROD/cpg unchanged.
+
+Verified Windows import checkpoint (2026-09-24)
+----------------------------------------------
+Plan/test-firste2096bb:
+docs/superpowers/plans/2026-09-24-voice-windows-package-import.md
+Actions35981279455 failed for unsupported Windows schema and missing importer.
+Implementation0637dbc; pre-copy size guard and same-size corruption coverage
+1bc1299756ff84d81637cc114e53b095739fb4ab.
+
+Final Windows real-package run:
+https://github.com/xujxu/agents-chat/actions/runs/35981880883
+Both Sense/Whisper passed existing real1/2/4thread smoke, verified import and
+installed-engine transcription plus typecheck. Corrupt manifest/truncated and
+same-size-corrupted helper/symlink input refused; stages cleaned and config
+unchanged. Repeated import is idempotent; modified installed executable refused.
+All files hash-verified before running the helper host probe. Version2 manifests
+require the matching helper and pinned model bytes. CPU/OS instructions checked;
+physical memory/CPU/current-group affinity/Job observations are guidance only.
+Nested effective Job limits remain unknown. No CPU/RAM hard quota added.
+
+Sense artifact10800701498,244720036compressed bytes:
+voice-windows-candidate-sensevoice-small-q8-1bc1299756ff84d81637cc114e53b095739fb4ab
+sha256:d09beef5323d20386b15bc42bed2c8f882fa5026bd50faf28fe0fabe36b0c14e
+Whisper artifact10800204124,57919539compressed bytes:
+voice-windows-candidate-whisper-base-q5_1-1bc1299756ff84d81637cc114e53b095739fb4ab
+sha256:644a4044e630a3e133aacaf6f5091a34139fd49c27df4067630b5be65baa36aa
+Expire2026-10-24; Windows Server2022 evidence, NOT Win11 acceptance.
+Artifacts now contain voice-package.json/voice-package.sha256 in addition to
+candidate inventory. These are import candidates, not public release approval.
+
+Windows lifecycle/runtime regression35981880643 at1bc1299 passed.
+Linux setup35981511559 at0637dbc passed8contracts and both model integrity jobs;
+shared Linux manifest/import behavior preserved. Initial real import35981508119
+also passed before the additional pre-copy guard.
+
+The importer returns checked paths only, never writes environment/receipts.
+Windows CLI enablement remains gated pending private config transactions,
+rollback and setup/deploy upgrade integration. Startup/watchdog must not prompt.
+Public redistribution permission, permanent downloads, actual Win11 and
+full-corpus quality/latency remain open. PROD/cpg/sampler unchanged.
+
+Real Windows candidate checkpoint (2026-09-24)
+---------------------------------------------
+Plan20a893c:
+docs/superpowers/plans/2026-09-24-voice-windows-native-candidates.md
+Test-firsta3c4fbc/3b953a8, Actions35977443809 failed missing candidate.json.
+Buildera51fe14, first real run35977603961: Whisper passed; Sense failed BEFORE
+compilation/inference because Python used Windows cp1252 to read UTF8 source.
+Fix37f6612 makes patch-tool read/write encoding explicitUTF8 and retains LF.
+The six pinned thread/error source replacements and model bytes are unchanged.
+
+Final run:
+https://github.com/xujxu/agents-chat/actions/runs/35977946646
+Commit37f6612a03a43505b624c7c64d3e585fce63fe99, both matrix jobs successful.
+Windows Server2022 10.0.20348 x64; MSVC19.44.35228.0; SDK10.0.26100.0.
+CPU-only AVX2/FMA/F16C/BMI2, native tuning/OpenMP/GPU/backendDL off,
+static ggml and MSVC runtime. Both real engines embed activeCodePage UTF8.
+dumpbin checks found only approved Windows system DLL dependencies; full
+dependency listings, embedded manifest, CMakeCache and archive hashes retained.
+
+Each real model transcribed pinned JFK via voiceConfiguration/transcribeVoice,
+not a separate benchmark adapter. Both engine/helper/model paths included
+spaces and Chinese characters; threads1,2,4 all delivered nonempty output
+containing the expected reference word. All request temp directories cleaned.
+These6requests are a native/path/delivery smoke, NOT full100 corpus accuracy,
+latency gate evidence, microphone/API acceptance or Windows11 qualification.
+No claim that Windows inherited Linux quality scores; no Whisper recommendation.
+
+Sense artifact10799057231,244717394compressed bytes:
+voice-windows-candidate-sensevoice-small-q8-37f6612a03a43505b624c7c64d3e585fce63fe99
+GitHub artifact digest:
+sha256:dea76be6930947fcd9dc64189153f80abc9cf28278373825b3baa5ceccfb910d
+Whisper artifact10799410956,57917200compressed bytes:
+voice-windows-candidate-whisper-base-q5_1-37f6612a03a43505b624c7c64d3e585fce63fe99
+GitHub artifact digest:
+sha256:28a5bf6182c24048a0a49acb471cd97a75972dc45e285d43b13f909c0086adeb
+Retention expires2026-10-24; not a permanent production download channel.
+Each contains candidate.json/candidate.sha256 with per-file hashes and exact
+pinned model identity. These are NOT voice-package.json installer manifests.
+Existing installVoicePackage still rejects Windows; do not bypass it.
+
+Upstream model/runtime notices retained. Complete executables are not MIT-only:
+MSVC static runtime terms and application-helper redistribution require review.
+No root application LICENSE exists in this checkout; resolve helper permission
+before public release. This is an explicit release blocker, not license clearance.
+The artifacts include RELEASE-REVIEW-REQUIRED.txt and Microsoft terms reference.
+
+Next: Windows-compatible installer manifest/import of exact candidate assets,
+CPU/resource checks, protected config/receipts, encoding and path round trips,
+rollback, setup/deploy/standalone integration and every-interactive-upgrade menu.
+Actual Win11/full-corpus acceptance and permanent distribution remain separate.
+All builds/inference ran in Actions; no local model download, PROD/cpg/sampler
+changes or release publication.
+
+Windows runtime integration checkpoint (2026-09-24)
+--------------------------------------------------
+Plan9653e6d:
+docs/superpowers/plans/2026-09-24-voice-windows-runtime-integration.md
+Test-firstb8de002 failed as intended on Windows35974222190 and Linux35974222219
+with voice_not_configured. Runtime implementation30ef70b, API/browser wiring
+e38bdd5, ACL probe fixd545208, final ACL-volume guard/docs852fcc1.
+
+Final Windows validation:
+https://github.com/xujxu/agents-chat/actions/runs/35975644625
+Commit852fcc18a6b8213edbfec6e8c2e57737822cc24f.
+Windows Server2022 Datacenter10.0.20348 x64, Node24.20.0, MSVC C++17 /MT.
+13 lifecycle node:test results and1 runtime test containing both providers'
+success/failure, Unicode paths, environment-secret exclusion,400MiB standard
+mode, ACL inspection, cancellation/descendant cleanup and early-abort cases.
+Whisper rejects missing/directory/reparse/hardlink/oversized/invalidUTF8/NUL
+outputs. Actual engine exit124 is not mistaken for launcher timeout.
+Existing directories are never adopted by the private-directory helper.
+Temporary volumes without FILE_PERSISTENT_ACLS are explicitly rejected.
+Build/typecheck passed. Browser/API:36passed,2intentional legacy-watchdog skips
+(17each Sense/Whisper fixture +1invalid +1disabled).
+Artifact10797918486,888627compressed bytes:
+voice-windows-process-852fcc18a6b8213edbfec6e8c2e57737822cc24f
+Includes helper, synthetic provider/policy executables, provenance and CI logs.
+Not an installable model or release-approved package.
+
+Earlier Windows runs35974484493/35974701879 failed in the TEST ACL inspector:
+PowerShell5 could not load Microsoft.PowerShell.Security in the inherited
+PowerShell7 runner environment. Switching the inspector to pwsh preserved the
+ACL assertions;35974871913 then passed the full Windows application phase.
+No permission checks were removed or silently ignored.
+
+Linux regression of shared runtimee38bdd5:
+https://github.com/xujxu/agents-chat/actions/runs/35974609962
+37contracts passed; build/typecheck passed;76Playwright passed with3intentional
+policy skips, including mobile capture, invalid/disabled capabilities and real
+pinned Sense authenticated API smoke. Artifact10797423324.
+Subsequent runtime code changes were Windows-native ACL-volume guard only;
+other changes were Windows-test fixes or documentation.
+
+Windows configuration requires explicit model, standard policy, readable local
+model and.exe engine/helper paths, and VOICE_LAUNCHER_PATH pointing at this
+matching helper build. Helpers now include private-directory and bounded-file
+operations; earlier lifecycle-only artifacts are insufficient.
+No new application CPU/RAM hard quota. Linux legacy memory guards unchanged.
+No API/UX behavior weakened; actual route exercised with compiled native fixtures.
+
+Pending: real Windows engines/models and DLL licensing; verified package
+manifest/import and installer/repeated-upgrade support; exact-package corpus
+quality/latency; actual Win11 Actions runner; permanent trusted distribution.
+All validation ran in Actions. No local model/test servers, PROD/cpg/sampler
+changes, native model downloads on this host, or release publication.
+
+Windows process foundation checkpoint (2026-09-24)
+-------------------------------------------------
+Approved implementation plan:
+docs/superpowers/plans/2026-09-24-voice-windows-process-foundation.md
+
+Test-first commit0beee04, Actions35972124200 failed as intended: missing
+voice-job.exe / ENOENT. Native implementation0fb5cf9 passed Actions35972356566.
+Final implementation/tests/workflow684cc30dc3c4e51bd68d8f31246f26f28a3eae4a:
+https://github.com/xujxu/agents-chat/actions/runs/35972552477
+13 node:test results passed (12 subtests plus parent); no skips or failures.
+Artifact10796434034,167534 compressed bytes:
+voice-windows-process-684cc30dc3c4e51bd68d8f31246f26f28a3eae4a
+Includes launcher, test-only policy probe and provenance.json.
+voice-job.exe181760bytes, SHA256:
+9c426babaa01de3ae94d8d6fc9f454fa42aa2131a05d4f9dec8cb19bf1c747eb
+
+Runner: Windows Server2022 Datacenter10.0.20348 x64, NOT Windows11.
+Compiler: MSVC19.44.35228.0 x64, C++17 /MT /W4 /WX; Node24.20.0.
+Verified atomic suspended-engine Job assignment, exact Unicode/space/quote/
+backslash arguments, suppressed native stderr, sanitized failures, invalid
+deadline/path/control rejection, nested Jobs and actual installed Job flags.
+Inner Job flags exactly0x2000(KILL_ON_JOB_CLOSE), CPU-control flags0:
+no application CPU or memory hard quota. External OS/runner limits still apply.
+Real descendants were removed for control EOF, cancellation, deadline,
+launcher death, engine completion and actual Node-parent death.
+Early cancellation repeated12times. Control pipe is not inherited by engine.
+
+Only a standalone lifecycle foundation: lib/voice still rejects Windows.
+No model weights were downloaded, no model inference/quality measured, no app
+integration, no public runtime package, no model license-release closure.
+Win11-specific acceptance, engine/DLL packaging, private request directories,
+Windows-safe transcript files, API/UI integration and setup/upgrade remain.
+The launcher artifact is not yet an installable or release-approved model.
+PROD, cpg and sampler unchanged. All compilation/tests ran in Actions.
+
+Scope agreed 2026-09-24
+---------------------
+One active local model per deployment, chosen by the administrator at install.
+The browser continues to use authenticated /api/voice, independent of engine.
+No per-chat model switching, public model server, silent fallback, automatic
+resource expansion or changes to current PROD/cpg/service defaults.
+
+Most target deployments are CPU-only shared servers, e.g.8cores/16GB or
+16cores/32GB. Total host capacity is NOT the voice budget. Installation must
+show compatible CPU architecture/instructions, allocated threads/CPU quota,
+measured process/container memory, recommended reserved capacity, model size,
+license, quality/latency status and evidence source for each exact combination.
+Do not report GPU VRAM, model download size or parameter-derived estimates as
+measured CPU RAM requirements. Unknown measurements block recommended status.
+
+The deployable identity is model + weight revision/quantization + engine build
++ resource profile. Resource compatibility and quality acceptance are separate.
+Keep the current1thread/384MiB monitoredRSS/1GiBAS profile unchanged. Any larger
+profile requires an explicit administrator choice and must not consume all host
+resources. Admission, cancellation and timeout must apply to the entire backend.
+Large or persistent workers need independent process-tree memory enforcement,
+idle-memory accounting and crash/cancellation recovery before installation.
+
+License admission
+-----------------
+Verify weights, runtime and redistributed dependencies independently. Prefer
+MIT/Apache-2.0/BSD-style permissions permitting use, commercial use and
+redistribution; retain notices. No custom/unclear license is automatically
+admitted. No claim of zero legal risk.
+Whisper weights/code are MIT. Existing static binaries additionally include
+GCC runtime libraries under GPL with the standard GCC Runtime Library Exception;
+never label the complete distribution "MIT only".
+
+The exact official Fun-ASR-Nano-2512 and Nano-GGUF model cards declare Apache-2.0;
+these are candidates, not a blanket approval of every FunASR model/package.
+Original SenseVoiceSmall points to a custom license, while official
+SenseVoiceSmall-GGUF declares Apache-2.0. Resolve that exact artifact's applicable
+permission before distribution; don't infer relicensing from a format change.
+Qwen3-ASR0.6B/1.7B official cards and official inference code declare Apache-2.0;
+converted weights, tokenizer and full runtime dependency tree require review.
+Historical internal experiments do not grant redistributable-install status.
+
+Evidence-first implementation sequence
+--------------------------------------
+1. Add failing tests for fixed profiling sample coverage, voice budget/thread
+   propagation, failure-inclusive scoring, and incomplete/mismatched evidence.
+   Run tests in GitHub Actions; no local test/build/model workloads.
+2. Profile larger CPU candidates with explicit isolated budgets:
+   cpu2-ram4 =2 model threads,2CPU quota,4GiB container memory;
+   cpu4-ram8 =4 model threads,4CPU quota,8GiB container memory.
+   These are trial allocations, not universal minimums or host-size labels.
+3. Reuse pinned native runtimes and artifact checksums. Initial cold-process
+   screen: Whisper small-q5_1, large-v3-turbo-q5_0, FunASR-Nano safe U8U8 ONNX,
+   Qwen3-ASR0.6B INT8 ONNX. Compare sequentially on the same runner within a
+   profile; record CPU identity and quota instead of claiming to simulate an
+   entire8/16-core deployment. Do not silently substitute native/FP32/GGUF paths.
+4. Use24 predetermined probes from the existing frozen100-sample chain corpus:
+   6 each zh/en/mixed at<=5s,3 each zh/mixed at15-30s; hash ordering with a fixed
+   seed. No concatenation or transcript-based sample choice. This is a resource
+   screen with indicative scores, not a new untouched holdout or finalP95 claim.
+   Every timeout, OOM, empty and invalid output stays in delivered scoring.
+5. Measure cold request latency including process/model loading, peak RSS and
+   cgroup memory/OOM events. Missing measurements stay unknown. Native model
+   workers and whole-container memory are separate quantities. Filesystem cache
+   may be warm. This stage does not measure a resident model's idle/warm latency.
+6. Inspect runtime/model notices in downloaded packages before installer
+   admission. Deferred/rejected variants remain visible in experiment reports,
+   not selectable as approved installs.
+7. After resource/permission review, define the first installable catalogue and
+   implement focused model/config/engine boundaries, atomic verified downloads,
+   explicit resource selection and a disabled option. Unknown models/configs
+   fail explicitly. Preserve legacy Whisper configuration with truthful API
+   metadata, and document precedence/migration.
+8. Exercise installer corruption/rollback/disabled/missing-resource cases and
+   actual API delivery/model metadata/cancellation/memory recovery in Actions.
+   Run build/typecheck and relevant existing E2E; do not deploy this work.
+
+The installer is not implemented yet. Do not publish unmeasured resource minima
+or mark the experimental candidates as approved installation choices.
+
+Completed CPU screen, 2026-09-24
+------------------------------
+Commit b7bcd7d, Actions35948880080. All192 attempts delivered nonempty text:
+4 variants x24 original probes x2 resource profiles. No timeout/OOM failures.
+
+                                2CPU/4GiB                 4CPU/8GiB
+                            RSSMiB short/long P95s    RSSMiB short/long P95s
+Whisper small-q5_1             345.6  12.19/13.95       345.6  14.50/16.01
+Whisper large-v3-turbo-q5_0     724.1  68.37/69.47       723.7  79.82/81.90
+Fun-ASR-Nano U8U8 ONNX        2188.8   4.98/10.04      2090.4   6.14/12.97
+Qwen3-ASR0.6B INT8 ONNX       2337.4   4.52/10.14      2397.7   5.79/13.57
+
+RSS is process peak, not reserved RAM or total application/host requirement.
+P95 is nearest-rank over18 short and6 long probes; includes fresh process/model
+load but excludes HTTP/browser. Small sample counts do not establish production
+tail latency. None meets both previously agreed3s/5s latency gates in this mode.
+Model persistence, faster kernels and alternate runtimes remain separate tests.
+
+Important hardware limitation:
+Each profile used its own runner. Both report AMD EPYC9V74, but cpu2 exposes
+AVX512/VNNI while cpu4 does not.4CPU quota also does not prove4 dedicated physical
+cores. Do NOT infer CPU/thread scaling from the cross-runner timing difference.
+Within each profile the candidates ran sequentially on the same host.
+
+Qwen English outputs differ on2 of6 clips: WER52.17% in cpu2 versus0% in cpu4.
+The total reference has only23 English words. One cpu2 output was Spanish for
+an English reference. This is a hardware/thread/run-correlated observation, NOT
+a proven quantization or SIMD cause. Preserve both outputs and don't promote
+Qwen using only the favorable profile. Both profiles were recorded with seed42.
+Long Mandarin CER: Qwen8.45%/7.43%, Nano25%/25%, Whisper turbo11.15%/11.15%;
+only3 long Mandarin samples, so these do not replace the previous larger tests.
+
+Evidence:
+https://github.com/xujxu/agents-chat/actions/runs/35948880080/artifacts/10788977130
+https://github.com/xujxu/agents-chat/actions/runs/35948880080/artifacts/10788838715
+
+SenseVoice follow-up boundary:
+FunASR README at3ff9259aade4f7e4360645df28cad8f81959ee91 explicitly delegates
+weight permission to each model card (custom MODEL_LICENSE applies when linked).
+Official SenseVoiceSmall-GGUF at90c1c61912018b70ada0fcc024ea24aca62f2e63 declares
+Apache-2.0 and does not link the custom agreement. This supports evaluating that
+exact official artifact separately from original custom-licensed ONNX weights.
+Runtime at the above FunASR pin uses MIT; llama.cpp pin is
+803b7fcae893e9caaee3921779628fef83ac0965 (MIT). Retain transitive notices too.
+Stock Sense GGUF hardcodes8 ggml threads. The experimental build will add an
+explicit bounded thread argument and log its value. Never mislabel stock8thread
+behavior as2/4threads. No VAD model, silence removal or source concatenation.
+Both resource profiles will run sequentially on ONE runner with the same binary,
+exact24 frozen samples and input hashes; retain native/container memory evidence.
+This follow-up is not an installer approval or a production deployment.
+
+Sense GGUF full-set follow-up, 2026-09-24
+---------------------------------------
+Resource probes: Actions35952708488 at823de93, artifact10789591311.
+48/48 delivered, same-host2/4thread profiles, approximately357.1MiB native RSS.
+Full frozen set: Actions35953083215 at768ed14, artifact10789128636.
+The preceding35953034495 failed a duration-classifier regression test BEFORE
+model inference.768ed14 fixed the shadowed function; no inference was reused
+from that failed test run.
+
+Official q8 model SHA256:
+4ae45c94422de949b387e2e0fb10d7e14e4c42c69db30c3444ecc7d4b844b7c5
+Explicit thread/error-exit patch and original upstream/model/dependency notices
+are preserved in each artifact's provenance directory.
+
+Same frozen60ASCEND +40AISHELL-4 utterances on one host, sequential budgets:
+                                   cpu2-ram4       cpu4-ram8
+Delivered                             100/100          100/100
+<=5s P95 seconds                         0.615            0.619
+5-15s P95 seconds                        1.166            1.126
+15-30s P95 seconds                       2.971            2.876
+Native process peak RSS MiB            357.234          357.109
+Container peak memory MiB              367.453          366.965
+Long Mandarin CER                      10.718%          10.718%
+Long mixed MER                         14.573%          14.573%
+Short mixed MER                        17.687%          17.687%
+Mixed5-15s MER                         16.444%          16.444%
+All mixed MER                          15.325%          15.325%
+
+Both profiles pass the original ENGINE-ONLY gates:100%delivery, short3s/long5s
+P95, every language/duration error rate within2percentage points of the original
+unconstrained whole-Sense baseline on identical samples. The mixed5-15s bucket
+is1.778points worse than baseline (16.444% vs14.667%); retain this regression,
+which is within the approved margin, rather than hiding it in aggregate scores.
+The timing still excludes HTTP/browser recording/encoding/upload overhead.
+Cold native process/model loading is included; disk cache can be warm.
+These already explored corpora are not a new generalization holdout.
+
+This is the first passing candidate in the expanded native-engine screen, not
+an accepted production model or proof all SenseVoice implementations pass.
+The previous ONNX budget failures and no-winner decisions remain historically
+correct for those implementations. Do not overwrite their reports.
+
+Suggested next integration target: exact Sense GGUF build with2model threads,
+retaining the tested4GiB voice budget as an explicit experimental allocation.
+4GiB is NOT a measured minimum;357MiB is NOT whole-host RAM or a safety margin.
+There is no material quality gain from4threads in this run, and the longP95
+reduction is small. No reason yet to recommend consuming4threads by default.
+
+Important installation blockers:
+- Actual /api/voice still uses Whisper arguments/output files and the unchanged
+  default1thread/384MiB RSS/1GiB address-space guard. It cannot simply be pointed
+  at the new Sense executable. ggml also uses virtual allocations, so an RSS
+  number below384MiB does not prove compatibility with1GiB address space.
+- Implement and validate model-specific arguments/output parsing, explicit
+  administrator resource profiles, bounded output, cancellation and failure
+  handling behind the common transcriber boundary before exposing this model.
+- Repeat actual authenticated browser/API gates; do not promote engine-only
+  timing to end-to-end latency. Verify source/build/dependency license notices
+  accompany the install bundle and atomic verified configuration.
+- FunASR-Nano and Qwen remain larger-CPU candidates, not rejected merely for
+  memory. Their current cold CLI latency/quality caveats remain visible; no
+  experimental option should be labelled as passing recommendation criteria.
+
+Full-set evidence:
+https://github.com/xujxu/agents-chat/actions/runs/35953083215/artifacts/10789128636
+
+No PROD, cpg, sampler or current service limit changed. Installer work remains
+pending; the completed result is model/runtime/resource qualification evidence.
+
+Nano/Qwen completion plan approved2026-09-24
+------------------------------------------
+Finish model qualification BEFORE implementation of the installation interface.
+Do not infer that a successful experiment means the entire package is cleared.
+
+1. Add scripts/test_voice_model_stability.py; require complete samples x2profiles
+   x3repetitions, unchanged input identity, explicit failure scoring, and separate
+   within-profile/cross-profile differences. Run in Actions before implementing
+   scripts/voice_model_stability.py. Incomplete evidence must raise ValueError.
+2. Extend voice_server_profiles.py with candidate set nano-qwen, generic full100
+   quality gates and english6 sample selection from the existing fixed24 probes.
+   Keep original Sense and four-candidate reports reproducible.
+3. Add voice-nano-qwen-qualification.yml. Same runner, sequential two candidates
+   in each2CPU/4GiB and4CPU/8GiB profile, frozen100 audio, current decoder settings.
+   Then repeat all6 preselected English probes twice per profile for Qwen.
+   Count400 full-set +24 additional stability attempts. Never tune prompts,
+   normalization, languages, quantization or test-set selection against results.
+4. Persist every attempt, native/cgroup memory, hardware flags, pinned model
+   hashes, baseline identity, quality violations and output stability. The
+   six base English observations come from the full100 run, not a favorable rerun.
+5. Trace official model cards, converter provenance, tokenizer and linked
+   runtime/dependency license notices. Missing license metadata remains an
+   unresolved scope, not automatic proof of illegality or permission.
+6. Summarize exact install-candidate statuses with quality/resource/license/
+   stability columns. Do not change existing latency thresholds to produce
+   more passing models. Installer and actual browser acceptance stay deferred.
+
+Completed Nano/Qwen qualification, 2026-09-24
+-------------------------------------------
+Inference: Actions35955970940, commit34476f7, artifact10791243313.
+All424 planned attempts completed:400 full-set attempts plus24 extra English
+repeats.422 delivered valid nonempty text; Qwen failed on the same long Mandarin
+sample once in each profile. A green workflow means complete evidence, NOT that
+either candidate passed the frozen gates.
+
+Both budgets ran sequentially on one AMD EPYC7763 runner exposing4 logical CPUs,
+2cores/2threads per core and AVX2, without AVX512. CPU quotas are not dedicated
+physical cores. This removes the earlier between-profile host difference, but
+does not establish behavior across CPU instruction sets or deployment hosts.
+
+                           cpu2-ram4                  cpu4-ram8
+                       Nano U8U8   Qwen INT8      Nano U8U8   Qwen INT8
+Full-set delivered      100/100      99/100        100/100      99/100
+<=5s P95 seconds          6.180       5.227          6.140       5.383
+5-15s P95 seconds         8.240       7.383          8.192       7.643
+15-30s P95 seconds       11.694      12.149         11.558      12.112
+Process peak RSS MiB   2188.965    2392.918       2114.859    2376.840
+Container peak MiB     2190.004    2393.914       2115.633    2377.766
+Long Mandarin CER      27.746%     12.201%        27.746%     12.201%
+Long mixed MER         17.714%      8.291%        17.714%      8.291%
+Medium mixed MER       11.556%     17.333%        11.556%     17.333%
+All mixed MER          16.267%     11.130%        16.267%     11.130%
+Frozen gates             FAIL        FAIL           FAIL        FAIL
+
+P95 uses aggregate duration bands, not the maximum language-specific P95.
+Failures remain in primary error scores as reference deletions. Cold process
+and model loading are included; HTTP/browser latency is not. The report's
+generic summary.scope still says "Small CPU resource screen"; these full-set
+counts and quality-gates.json identify this run as frozen100, not the24 probes.
+No evidence was altered or favorable subset selected to improve the verdict.
+
+Nano: full delivery and sufficient allocated memory do not offset quality and
+latency failures. Long Mandarin is+16.990percentage points versus10.756% baseline;
+long mixed is+3.015points versus14.698%. Both exceed the unchanged+2point margin.
+Its improvements on short/medium mixed speech do not erase long-speech failures.
+
+Qwen: long mixed improves substantially, but medium mixed is+2.667points versus
+14.667% baseline, exceeding the margin. Both duration latency gates also fail.
+Both profiles record missing_json_text for
+aishell4-S_R004S02C01-21783148-22229072 (27.87025seconds). Raw stdout contains
+Cyrillic text with literal unescaped newlines inside JSON strings, despite exit0.
+Thus this is invalid structured output and wrong-script content, not a timeout,
+an empty stdout or a demonstrated memory failure. Do not silently repair JSON
+or count exit0 as successful delivery. Cause within model/runtime is unresolved.
+
+Qwen repeatability: all6 predetermined English probes x3observations x2profiles
+=36 observations (12 from full100,24 extra), no failure or exact-text changes,
+0%WER in every repeat on this host. This does not erase the earlier cross-host
+English disagreement or the current long-Mandarin wrong-script output. Across
+the full short-English group of19 samples, Qwen WER is15.625%, not0%.
+
+Scoped license evidence: Actions35959837337 atc940524, artifact10791527676.
+This was an evidence-only run, with no model download or reinference.
+Both ModelScope converted-weight repositories explicitly declare Apache-2.0.
+All10 named file hashes match the actual inference provenance:
+- Nano: original embedding and3 tokenizer files (4matches).
+- Qwen: frontend/encoder/decoder and3 tokenizer files (6matches).
+Nano's locally transformed encoder/LLM remain separately traced to quantization
+Actions35619891005 and the pinned FP32 source archive; they are NOT among those
+4 byte-identity matches. A model-level declaration is not a blanket approval of
+every conversion script, derivative or binary dependency.
+
+Saved source notices cover Sherpa Apache-2.0, ONNX Runtime MIT and its omnibus
+third-party notices, Qwen tokenizer Apache-2.0 and simple-sentencepiece Apache-2.0.
+Linked-library evidence includes ONNX Runtime, glibc, libstdc++ and libgcc_s;
+retain applicable system-library and build obligations when defining a bundle.
+An omnibus ORT notice mentioning an optional library does not prove it is linked.
+Converter repositories lack independent LICENSE files; do not distribute their
+code on the assumption that separately licensed output weights license the code.
+The evidence deliberately leaves installation_approved=false. Exact packaging
+and transitive-notice closure remain release work, not a zero-risk legal promise.
+
+Candidate-list decision after the approved experiments
+-----------------------------------------------------
+Identity                               Status for first installer implementation
+SenseVoiceSmall official GGUF q8       Sole passing ENGINE integration candidate;
+  pinned FunASR/llama.cpp build        prefer tested2thread/4GiB explicit profile.
+Whisper base-q5_1                      Preserve existing compatibility only;
+                                      failed prior quality/latency gates.
+Whisper small-q5_1                     Not in recommended list; failed CPU screen.
+Whisper large-v3-turbo-q5_0             Not in recommended list; high cold latency.
+Fun-ASR-Nano U8U8 / Sherpa1.13.8        Deferred; full quality and latency failures.
+Qwen3-ASR0.6B INT8 / Sherpa1.13.8       Deferred; delivery, quality, latency failures.
+Original SenseVoiceSmall ONNX          Not admitted under the selected permissive
+                                      license policy; prior low-budget failures.
+Other Nano/Qwen runtimes or sizes      Unqualified, not implicitly approved.
+
+Only Sense GGUF advances toward the recommended catalogue; this is NOT a claim
+that an installable, end-to-end-qualified package already exists. Keep disabled
+voice as an installation choice. Failed candidates stay in experiment reports,
+not silently selectable as approved alternatives. A future explicitly approved
+experimental catalogue or resident-worker/alternate-runtime study is separate
+scope and must not reuse this result as acceptance.
+
+No evidence supports requiring4threads/8GiB for Nano or Qwen: both ran within
+the tested2CPU/4GiB allocation, but neither met interaction gates. Likewise,
+4GiB is an evaluated speech allocation, not a measured minimum or total host RAM.
+Do not infer that more host memory fixes quality, serialization or cold latency.
+
+Installation implementation remains deferred at this qualification checkpoint.
+Next integration still needs provider-specific parsing/arguments, explicit
+resource enforcement, complete distributable notices and authenticated API/
+browser acceptance. No PROD, cpg, sampler or existing service defaults changed.
+
+Full evidence:
+https://github.com/xujxu/agents-chat/actions/runs/35955970940/artifacts/10791243313
+https://github.com/xujxu/agents-chat/actions/runs/35959837337/artifacts/10791527676
+
+Implementation design revision approved2026-09-24
+------------------------------------------------
+This section supersedes any earlier implication that every new installation
+must use a fixed2CPU/4GiB allocation or separate systemd/Docker voice service.
+The local cpg workaround is only for this machine's Copilot CLI, not a product
+dependency, installer prerequisite or policy for other deployments.
+
+Default to native per-request model processes with configurable computation
+threads, one active job,120second deadline, cancellation and bounded output.
+Do not impose experiment CPU/RAM hard limits on explicit new-model configuration.
+Respect externally configured OS/container limits; hard quotas are an optional
+operator deployment policy, not implied by a thread setting or advertised as an
+application guarantee. Preserve old Whisper environment behavior through an
+explicitly named legacy-low-memory policy; do not silently change old deployments.
+
+First implementation slice:
+1. tests/voice-providers.test.ts specifies model whitelist, disabled/invalid
+   configuration, standard versus legacy policy, command arguments and output.
+   voice-providers.yml runs it in Actions before implementation (expected red).
+2. lib/voice/configuration.ts owns typed model/configuration/capability metadata.
+   Explicit VOICE_MODEL selects sensevoice-small-q8 or whisper-base-q5_1.
+   VOICE_BINARY_PATH and VOICE_MODEL_PATH are absolute native artifact paths.
+   VOICE_THREADS accepts1/2/4 to match the pinned Sense CLI; defaults2 for Sense,
+   1 for Whisper. VOICE_RESOURCE_POLICY defaults standard for explicit models.
+   Old VOICE_WHISPER_PATH without VOICE_MODEL preserves legacy-low-memory.
+   That policy remains one-thread Whisper only, with the unchanged old guards.
+3. lib/voice/providers.ts owns model-specific arguments and strict bounded UTF-8
+   output. transcriber.ts owns subprocess/temp-file lifecycle and kills process
+   groups on cancellation/failure. Existing {binary,model} benchmark callers
+   retain legacy behavior. No transcript, raw output or audio is logged.
+4. app/api/voice/route.ts reports the real provider/model/threads/policy, null
+   model when disabled, and applies legacy admission only to legacy policy.
+   Authentication, account/origin checks, WAV limits and global admission stay.
+5. Fixture subprocess/API/browser tests plus real pinned Sense smoke run only
+   in Actions. Include nonzero exit, empty/oversized/invalid output, cancellation,
+   missing files and cleanup; build/typecheck and old Whisper API regressions.
+
+This slice does not implement installation selection or publish an approved
+package. Next slices add verified atomic downloads/rollback, dependency notices,
+resource guidance/compatibility checks and real full-corpus API/browser gates.
+No runtime artifacts or services are installed on this development machine.
+
+Completed provider-adapter slice, 2026-09-24
+------------------------------------------
+Test-first80bd387 / Actions35964276127 failed for the expected missing provider
+configuration module;27 existing logic tests passed. Implementationc56500d /
+Actions35964480726 passed configuration/process contracts and TypeScript.
+Application testsdfbe605 initially failed35964853722 because the new standard
+policy test was accidentally nested in another test.3481d74 fixed registration.
+
+Final application run35965252088 at3481d74 passed:
+-36 logic/process tests, including real fixture subprocess output/errors,
+  cleanup, process-group cancellation and standard-mode400MiB allocation.
+-Build and TypeScript including generated routes.
+-17 desktop API/browser cases for each legacy Whisper, explicit standard Sense,
+  and explicit standard Whisper. One incompatible policy case skipped per phase.
+-22 mobile browser cases across Chromium Android and WebKit iPhone emulation.
+-Invalid configuration and disabled capability cases (one each).
+-One real pinned Sense GGUF q8 authenticated HTTP API smoke using JFK audio.
+Total76 passed Playwright cases,3 intentional policy-specific skips.
+Real API smoke proves wiring, not multilingual quality or tail-latency gates.
+Browser tests synthesize microphone audio and use a native fixture executable;
+do not describe them as real Sense microphone/recognition acceptance.
+
+Explicit standard configuration has no application CPU/RAM hard quota and no
+historical host-headroom watchdog. It still has thread selection, one active
+job,120second timeout,32KiB valid-UTF8 transcript bounds, niceness10, core dumps
+disabled and process-group cancellation. OS/container limits continue to apply.
+Old configurations retain the old one-thread Whisper memory/admission policy.
+No automatic migration or PROD settings change occurred.
+
+Evidence artifact10794510539 contains app/test logs, native source/model/build
+hashes and scoped license provenance. This runner-built Sense binary is only
+integration evidence, not a portable redistributable installation artifact.
+Installer selection/download verification/rollback and complete package notices
+remain next, followed by full actual-service quality/latency acceptance.
+
+https://github.com/xujxu/agents-chat/actions/runs/35965252088/artifacts/10794510539
+
+Installation and upgrade flow design, 2026-09-24
+-----------------------------------------------
+The user explicitly selected: prompt on EVERY interactive upgrade, with keep
+current configuration as the default. Voice setup is not first-install-only.
+This design extends the approved catalogue, native execution and resource policy;
+it does not change model qualification gates or introduce a compulsory service.
+
+Entry points and interaction:
+- A reusable configuration command serves fresh installation, upgrades and
+  later reconfiguration. Linux deploy.sh invokes it after obtaining the new
+  application version and before activating/restarting the service.
+- Interactive first install with no configuration defaults to voice disabled.
+  Interactive upgrade displays effective current state and defaults to KEEP,
+  including preservation of an old Whisper/legacy-low-memory configuration.
+- The menu permits keep, configure Sense GGUF q8, configure Whisper compatibility,
+  or disable. Model entries show qualification status, weight/runtime license,
+  download size, tested CPU/thread/memory observations and platform requirements.
+  Sense is not advertised as release-approved before remaining package gates.
+- Noninteractive installs/upgrades never read stdin or wait for a choice. With no
+  explicit selection they preserve current configuration (disabled if absent),
+  print current state and the exact reconfiguration command, and continue.
+  Explicit command-line selections use the same validation/install transaction.
+- Closing input or cancelling the menu preserves the current configuration.
+  An explicitly requested setup that fails exits nonzero; it is not reported
+  as successful configuration or silently replaced with another model.
+- Merely starting/restarting the app never opens an installation prompt.
+- Choosing not to install voice on a fresh installation, or explicitly disabling
+  voice during upgrade/reconfiguration, persists disabled capability. After the
+  configuration takes effect and the page reloads, the composer must omit the
+  voice button entirely, not show a greyed-out button or an installation warning.
+  No model download, inference process or microphone permission request occurs
+  for disabled voice. Keeping an already-enabled configuration is distinct from
+  explicitly disabling it; the menu must make that distinction clear.
+
+Upgrade and configuration preservation:
+- Read only voice-related keys for display. Never print authentication values
+  or rewrite unrelated environment settings.
+- Keep means no voice configuration migration, model download, policy change or
+  automatic enablement. An explicit switch to a new model uses standard policy.
+- Report higher-priority service environment overrides, including
+  /etc/agents-chat.env, rather than claiming a project setting will take effect
+  when it is overridden. Do not silently modify machine-level overrides.
+- Preserve prior model/configuration until the new selection is fully prepared
+  and verified. Stage downloads and configuration separately; commit configuration
+  atomically only after all required checks succeed. Retain a recoverable prior
+  configuration for a failed activation. Do not delete old model assets on switch.
+- The first upgrade from an OLD deploy script must also reach the new setup
+  logic: do not rely solely on code parsed by the shell before git pull.
+  An already-running historical script cannot be retroactively changed. The
+  documented bootstrap is git pull --ff-only followed by the NEW deploy.sh
+  --no-pull. The new upgrade.sh entry point and deploy.sh re-exec after pull
+  handle subsequent upgrades. This first-migration command is required, not an
+  automatic capability of old releases.
+
+Supported distribution surfaces:
+- Initial native packages are Linux x86_64 only. Windows/macOS install/upgrade
+  documentation must clearly report unsupported local speech packages, not
+  offer a Linux binary as a working native option.
+- Standalone release bundles include the configuration command and instructions,
+  rather than assuming users have the source checkout or development dependencies.
+  Replacing app files must preserve external configuration/model data.
+- Pin portable runtime build identity and each downloaded model/runtime checksum.
+  Retain weight declarations, source revisions, the native patch, engine licenses
+  and relevant transitive/system-library notices alongside installed assets.
+- Current Actions-built smoke binaries are not release packages. Build/qualify
+  portable bundles in Actions before enabling their installer catalogue entries.
+  Tests use controlled download fixtures and Actions artifacts. Public release
+  publication is a separate explicit step, not an implicit production deployment.
+
+Compatibility and resource guidance:
+- Reject incompatible architecture/instruction set/runtime dependencies, corrupt
+  downloads, invalid paths and insufficient disk for staging/installation.
+- Present actual available CPU/memory and existing deployment constraints, with
+  measured model use and uncertainty. Low-resource warnings do not manufacture
+  a minimum4GiB requirement from the experimental allocation.
+- No mandatory new cgroup, Docker or systemd voice unit. Thread configuration is
+  not a CPU quota; standard mode has no added CPU/RAM cap. Explain that operators
+  may set deployment limits, and insufficient memory can still cause failure.
+
+Actions-only acceptance:
+- Test fresh interactive selection, every-upgrade prompting, default keep,
+  explicit disable/model switch, cancelled input and noninteractive preservation.
+- Verify fresh-install opt-out and enabled-to-disabled upgrade produce
+  /api/voice enabled=false and no microphone button or voice-error banner after
+  reload. Preserve the current frontend's disabled-capability rendering.
+- Test old Whisper compatibility and old versions without ANY voice keys.
+- Test old deploy-script upgrade reaching the new configurator, environment
+  override detection, portable bundle inclusion and unsupported-platform errors.
+  Distinguish the documented first-migration bootstrap from the tested new-script
+  re-exec path; never claim an unmodified old running shell gains new behavior.
+- Test corrupt/truncated downloads, interruption, concurrent setup protection,
+  staging cleanup, unchanged previous settings on failure and activation recovery.
+- Run real pinned native artifacts through the installed configuration and
+  authenticated API, plus browser capture/cancellation and frozen quality/latency
+  gates. No production enablement follows merely from passing fixture tests.
+
+Installer execution checkpoint, 2026-09-24
+-----------------------------------------
+Implemented files:
+- scripts/voice/setup-config.mjs: menu/whitelist and voice-only environment edits.
+- scripts/voice/install-package.mjs: trusted-manifest local package import,
+  compatibility/disk/resource guidance, full-file checksums and staged assets.
+- scripts/configure-voice.mjs: standalone CLI, terminal interaction, override
+  checks, exclusive setup lock, atomic environment update and guarded rollback.
+- scripts/deploy.sh / upgrade.sh: every-interactive-upgrade setup, unattended
+  preservation, fresh code after pull and voice activation rollback.
+- scripts/package-release.mjs: include dependency-free configurator/modules;
+  Windows setup/deploy only report unsupported native-package platform.
+- voice-native-packages.yml: portable pinned Sense/Whisper candidate builds with
+  dependency notices, manifest, actual import/transcribe/rollback in Actions.
+
+Test-first52a6fd6 / Actions35967551424 failed expected missing module.
+Implementation8fa044c /35967784681 passed initial4 contracts.
+a2f15bf /35968098977 passed6 contracts,2 actual terminal scenarios including
+repeat upgrades/EOF/Ctrl-C, shell syntax and isolated mocked-systemd deploy
+preservation/re-exec/disable/failed-health rollback.
+Native run35968099304 at a2f15bf passed both candidate package builds and real
+installed-provider transcriptions. No builds or test servers ran locally.
+Sense artifact10794617845; Whisper artifact10795017559.
+
+Scope not yet complete:
+The CLI currently imports trusted extracted packages; it DOES NOT fetch a
+publicly released package automatically. Model selection without package-dir
+and trusted manifestSHA fails explicitly, leaving configuration intact.
+This is a tested installation foundation, not the final one-command public
+installer experience. A public download catalogue needs approved permanent
+runtime distribution and independent trusted checksums; never invent URLs or
+promote short-retention Actions artifacts as a permanent update channel.
+New portable runtime builds need full actual-service quality/latency gates
+before release approval; a JFK smoke alone is insufficient.
+
+Evidence:
+https://github.com/xujxu/agents-chat/actions/runs/35968099304
+https://github.com/xujxu/agents-chat/actions/runs/35968098977
+
+Verified installer/upgrade foundation at5eaeeda:
+Actions35968626725 passed configuration/release contracts, actual terminal
+prompts and isolated deploy tests, plus integrity cases against BOTH previously
+built packages. Invalid manifest hashes, truncated binaries, symlink inputs and
+modified installed binaries were rejected without replacing prior configuration;
+staging/locks were cleaned. No native rebuild was needed for these checks.
+Actions35968629945 passed build/typecheck, provider/API/browser regressions,
+real Sense API smoke and the actual enabled-legacy -> configure disabled ->
+restart path. Disabled capabilities hide the voice button and show no voice
+error banner. Artifact10795830896 preserves application integration evidence.
+
+This completes the verified-package import/configuration/upgrade foundation,
+not automatic public model downloads or final full-corpus package acceptance.
+All changes are on the experiment branch; PROD/cpg/service settings unchanged.
+https://github.com/xujxu/agents-chat/actions/runs/35968626725
+https://github.com/xujxu/agents-chat/actions/runs/35968629945/artifacts/10795830896

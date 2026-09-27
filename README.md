@@ -54,6 +54,290 @@ case, not a guarantee across every browser or OS version.
 
 For persistent deployment, use one of the platform-specific scripts below. Both handle build + restart + health check in one command.
 
+### Optional self-hosted voice input (experimental)
+
+Voice input is **disabled by default**; installation and upgrades preserve that
+state unless an administrator explicitly enables it. The selected local model
+transcribes into the existing draft without sending a message or invoking an
+agent. No paid speech API is required.
+
+**Current status:** optional installation, upgrade/keep/disable, and real
+browser-to-model-to-draft flows passed GitHub Actions using Linux systemd and
+Windows Server 2022 Scheduled Tasks ([service evidence](https://github.com/xujxu/agents-chat/actions/runs/36141303634)).
+This is functional coverage, not real Windows 11, physical-microphone or
+real-phone qualification. Accuracy research is paused; previous failed quality
+gates remain failed. Windows voice package public distribution is deferred and
+its static-runtime redistribution permission remains unconfirmed. No native
+voice package is approved as a permanent public release.
+
+Start with the [installation and upgrade instructions](#voice-setup-on-installation-and-upgrade)
+below. SenseVoiceSmall q8 is the current experimental acquisition option;
+Whisper remains an explicitly configured compatibility option, not an automatic
+fallback. Model/native binaries are acquired separately, not shipped inside the
+application's standalone bundle.
+
+For historical/manual Whisper configuration, the **Voice input PoC** Actions workflow
+builds and verifies an AVX2/FMA/F16C/BMI2 x86_64 Linux CPU-only `whisper-cli` compatible with glibc
+2.31+, together with the multilingual `ggml-base-q5_1.bin` model and licenses.
+Configure `VOICE_ENABLED=1`, `VOICE_WHISPER_PATH`, and `VOICE_MODEL_PATH` using
+absolute paths to those verified artifacts, then restart the app. The host needs
+`/usr/bin/nice`, `/usr/bin/prlimit`, and (for the legacy policy) `/proc/meminfo`.
+Do not expose a separate model server port. Set `VOICE_ENABLED=0` and restart to
+disable the capability.
+
+The unified native adapter also supports the pinned **official SenseVoiceSmall
+GGUF q8** build with the pinned thread/error patch. For explicit configuration,
+set `VOICE_MODEL=sensevoice-small-q8`, `VOICE_BINARY_PATH` and `VOICE_MODEL_PATH`
+to absolute paths to that executable and model. `VOICE_THREADS` accepts `1`, `2`
+or `4` (Sense defaults to `2`). Do not point this adapter at an unpatched upstream
+binary or an ONNX model. Adapter/API/browser fixture regressions and a real Sense
+authenticated-API smoke passed Actions35965252088. A transactional installer for
+verified Actions packages is available below. Installed Linux Sense passed the
+frozen100 authenticated direct-WAV API gates in Actions `35991326454`.
+Controlled Chromium browser measurements subsequently passed on Linux and
+Windows Server; Edge passed its browser path, while mobile-emulated WebKit
+failed a mixed-language quality gate. Overall quality acceptance and public
+runtime release publication remain pending. These are installation candidates,
+not release-approved models.
+See `scripts/VOICE-DEPLOYMENT.txt` for exact versions and qualification evidence.
+The formal cross-platform design is
+[`docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md`](docs/superpowers/specs/2026-09-24-install-selected-voice-input-design.md).
+Native Windows 11 Intel/AMD x64 support is required by that design. A Windows
+development runtime path now requires explicit `VOICE_MODEL`, `standard` policy,
+absolute local `.exe` paths for `VOICE_BINARY_PATH` and `VOICE_LAUNCHER_PATH`,
+and `VOICE_MODEL_PATH`. The launcher must be the matching `voice-job.exe` with
+private-directory and bounded-file operations, not the earlier lifecycle-only
+build. Both real Windows model candidates now have version 2 import manifests
+and pass verified staging plus installed-engine transcription from Unicode
+paths (Actions `35981880883`). Import checks CPU/OS compatibility and reports
+available resources without adding CPU/RAM quotas. The separate `candidate.json`
+inventory is not an import manifest. Private Windows configuration files and
+byte-preserving rollback now pass Actions `35984193290`, including old UTF-16LE
+configuration. The configurator and Windows setup/upgrade entry points now
+support these explicitly supplied candidate packages; they do not download a
+public runtime automatically.
+Actual Windows 11 qualification remains pending (CI uses Windows Server 2022).
+Installed Windows Server Sense delivered 100/100 frozen samples and passed latency
+gates, but failed the mixed-language medium-duration accuracy gate (16.89% error
+versus a 16.67% ceiling). Whisper failed quality and latency gates on both
+platforms. Windows full acceptance and public redistribution approval remain
+pending; successful installation does not imply qualified recognition quality.
+
+Explicit `VOICE_MODEL=whisper-base-q5_1` selects the compatibility model (default
+one thread) using `VOICE_BINARY_PATH`, or `VOICE_WHISPER_PATH` if the generic path
+is unset. Explicit models default to `VOICE_RESOURCE_POLICY=standard`: normal
+per-request subprocesses, **no application CPU/RAM hard quota**, and no additional
+systemd or Docker requirement. Thread count is not a CPU quota. External
+OS/container limits still apply. Administrators on shared hosts should provision
+adequate memory or configure deployment-level limits; standard mode does not
+promise protection against host-wide memory pressure. The experimental 2CPU/4GiB
+allocation is not a minimum installation requirement.
+
+Existing configurations with no `VOICE_MODEL` retain `legacy-low-memory`.
+Switching an existing deployment to standard mode must be an explicit
+administrator change; no production settings are modified automatically.
+The legacy policy can also be explicitly selected for one-thread Whisper only.
+Unknown model IDs, unsupported policies/threads, and missing native files fail
+with `voice_not_configured`, never an automatic model fallback. `/api/voice`
+reports the selected model, provider, threads and resource policy; disabled
+capabilities have a null model.
+
+The microphone appears beside the attachment button when configured. HTTPS (or
+localhost), microphone permission, AudioWorklet, and OfflineAudioContext are
+required. Click once to record, again to transcribe, or cancel to discard.
+Recording automatically stops after 30 seconds. Results append to the current
+draft without overwriting edits or automatically sending. Changing chats/accounts,
+opening the file editor, leaving the page, or backgrounding the tab cancels work.
+Actual iPhone microphone behavior and Chinese recognition quality still require
+real-device evaluation; Playwright WebKit is not a physical-iPhone benchmark.
+
+The browser uploads at most 960,044 bytes of 16 kHz mono 16-bit WAV, below nginx's
+default 1 MiB limit, without FFmpeg or third-party transcription calls. Only
+authenticated, same-origin clients with the matching account may submit/cancel.
+One inference runs at a time per app process; excess requests are rejected
+instead of queued. The PoC assumes a single Next.js process. All providers use
+a 120-second deadline; Linux additionally uses niceness 10.
+Only `legacy-low-memory` (Linux only) uses one
+thread, a 1 GiB **address-space** ceiling, and
+requires at least 768 MiB `MemAvailable` before starting. While running, a
+100 ms watchdog terminates inference if sampled peak RSS exceeds 384 MiB or host
+available memory falls below 256 MiB. The address-space limit includes virtual
+reservations and is not an RSS limit; the watchdog is sampled, not an atomic OS
+memory quota. These protections reduce contention but cannot guarantee against
+host-wide memory/CPU pressure. The proxy must allow at least the 120-second
+inference deadline (`proxy_read_timeout 150s` for nginx); its upload-size limit
+does not need changing.
+Each request loads the model anew; there is no permanently resident model.
+Transcripts are bounded to 32 KiB of valid UTF-8. Cancellation and timeout
+terminate the native process group on Linux or the owned Windows Job, including
+descendants. Windows Job configuration controls lifecycle, not CPU/RAM quotas.
+
+Temporary audio/results are deleted after success, failure, or cancellation and
+are not saved in chat history. Linux native core dumps are disabled. Windows
+request directories are created with a protected ACL for the service identity,
+SYSTEM and administrators; the temporary volume must support persistent ACLs
+(for example NTFS, not FAT/exFAT). Whisper results are opened without following reparse
+points and reject directories, hard links and oversized files. Logs contain durations, sizes, exit status, and
+error codes, never audio/transcript contents. A host crash or forced application
+kill can bypass cleanup: `agents-chat-voice-*` directories in the OS temporary
+directory may require removal after confirming no transcription is running.
+Do not enable this PoC on multiple workers without a shared admission controller.
+
+#### Voice setup on installation and upgrade
+
+Every **interactive Linux or Windows deployment/upgrade** offers voice configuration, with
+**keep current settings** selected by pressing Enter. This preserves old Whisper
+paths and their resource policy. Fresh installs stay disabled unless explicitly
+configured. Noninteractive upgrades do not wait for input, do not download models,
+and preserve existing settings. Explicitly disabling voice hides the microphone
+button after service restart and page reload; it is not a greyed-out control.
+
+The configurator can also be run separately, including from a standalone release
+bundle. It needs Node.js, but no npm install or development dependencies:
+
+```bash
+node scripts/configure-voice.mjs                      # interactive menu
+node scripts/configure-voice.mjs --non-interactive    # preserve, no prompt
+node scripts/configure-voice.mjs --model disabled     # persist opt-out
+sudo bash scripts/deploy.sh --voice disabled         # configure + build/restart
+sudo bash scripts/deploy.sh --voice keep --non-interactive
+```
+
+**First upgrade from a version predating voice setup:** the old deployment script
+cannot be made to execute new code it has already read. Pull the new version
+first, then invoke its installer, so voice setup is offered on that upgrade:
+
+```bash
+git pull --ff-only
+sudo bash scripts/deploy.sh --no-pull
+```
+
+Once updated, `sudo bash scripts/upgrade.sh` provides the pull-then-new-installer
+entry point. The new `deploy.sh` also re-executes itself after pulling updates.
+Starting the application is never an installation prompt.
+
+For Windows source installations, `scripts/setup.ps1` and `scripts/deploy.ps1`
+offer keep/Sense/Whisper/disabled on every interactive invocation. Their
+`-NonInteractive` option preserves voice settings unless `-VoiceModel` is given
+(it does not automate unrelated tunnel/account setup prompts). Run deploy from
+an elevated PowerShell session:
+
+```powershell
+# First migration from an old release: pull before invoking the new script.
+git pull --ff-only
+.\scripts\deploy.ps1 -SkipGitPull
+
+.\scripts\deploy.ps1 -VoiceModel disabled -NonInteractive
+.\scripts\deploy.ps1 -VoiceModel sensevoice-small-q8 `
+  -VoicePackageDir 'C:\voice packages\sense' `
+  -VoiceManifestSha256 '<trusted-64-character-sha256>'
+```
+
+The new Windows deploy script re-enters the pulled version before configuration,
+preserves an existing Scheduled Task's account, and defaults new tasks to the
+installing account. `-NoWait` cannot be combined with a changed voice setting:
+activation must wait for app readiness. Failed activation attempts guarded
+configuration rollback and a normal task restart; incomplete recovery retains
+the private receipt and reports an error.
+
+Windows packages come from a successful **Voice Windows native candidates**
+Actions run and have a version 2 `voice-package.json` plus the matching helper.
+Use native Intel/AMD x64 Windows with the required CPU instructions and an NTFS
+configuration volume. For standalone/manual configuration targeting another
+service account, pass `--service-user ACCOUNT-OR-SID` (`setup.ps1`:
+`-VoiceServiceUser`). Its user registry hive must be loaded, normally by signing
+in as that account, so overrides can be inspected. The configurator does not
+load hives, change accounts or grant Everyone access. It gives the target account
+read access to the environment, but not to recovery receipts.
+
+**Candidate packages, not public releases:** the **Voice native installation
+packages** Actions workflow builds Sense GGUF q8 and Whisper base-q5_1 separately,
+targeting glibc 2.35+ with AVX2/FMA/F16C/BMI2. Download and extract the appropriate
+`voice-install-*` artifact from a trusted successful run. Obtain the SHA-256 of
+`voice-package.json` through that trusted artifact/evidence; a checksum supplied
+by an untrusted download alone does not establish authenticity.
+
+```bash
+node scripts/configure-voice.mjs --model sensevoice-small-q8 \
+  --package-dir /absolute/path/to/extracted-package \
+  --manifest-sha256 <trusted-64-character-sha256>
+# Or combine verified package import with deployment:
+sudo bash scripts/deploy.sh --voice sensevoice-small-q8 \
+  --voice-package /absolute/path/to/extracted-package \
+  --voice-manifest-sha256 <trusted-64-character-sha256>
+```
+
+**Explicit experimental acquisition:** authenticated GitHub CLI (`gh`) with
+access to this repository's Actions artifacts can retrieve the fixed Sense
+candidate instead of requiring a manually extracted package:
+
+```bash
+node scripts/configure-voice.mjs --model sensevoice-small-q8 --experimental-download
+sudo bash scripts/deploy.sh --voice sensevoice-small-q8 --voice-experimental-download
+# Later upgrades can opt in explicitly too:
+sudo bash scripts/upgrade.sh --voice sensevoice-small-q8 --voice-experimental-download
+```
+
+The implemented Windows equivalents are `-VoiceModel sensevoice-small-q8
+-VoiceExperimentalDownload` on `setup.ps1` / `deploy.ps1`; their existence does
+not clear or authorize public distribution of the Windows candidate.
+When deploying without Dev Tunnels, `deploy.ps1 -NoTunnel` uses the existing
+loopback/own-HTTPS-proxy mode; `setup.ps1` still includes tunnel provisioning.
+
+The catalog pins repository/run/artifact identities, archive and manifest hashes;
+it does not select the latest build. **Current candidates expire on 2026-10-24.**
+Expired, inaccessible or mismatched artifacts fail explicitly, without fallback
+or changing the voice configuration. There is no permanent-download promise.
+Do not combine experimental acquisition with local package arguments. Keep and
+disable do not download or require GitHub authentication.
+
+With `sudo`, the installing identity must have access to the GitHub credentials.
+Do not put tokens in command arguments, `.env.local`, service units or issue
+reports. The configurator imports ZIP files using bundled CLI dependencies; the
+offline import path does not require `gh`. Standalone configuration does not
+restart a service: restart the app and reload the page afterward.
+
+Without `--experimental-download`, enabling requires the verified local package
+arguments above and otherwise fails explicitly. Do not substitute a profiler's binary.
+Sense defaults to two threads; `--threads 1|2|4` (deploy: `--voice-threads`) changes
+the computation setting, not a hard CPU quota. Whisper defaults to one thread.
+
+Setup checks platform, instruction set, Linux glibc or Windows OS compatibility,
+staging disk space, the manifest and every declared file's SHA-256. Linux shows
+available host memory, visible cgroup values and model measurements; Windows
+reports physical memory, logical CPUs/current-group affinity and Job membership
+with effective nested Job limits explicitly unknown. Neither invents a 4GiB
+minimum. Installer resource
+observations may differ from a separately configured service. Lower resources
+can reduce performance or cause failure; no memory reservation is made.
+
+Assets and license/provenance files are staged under `.data/voice`, then installed
+by manifest hash. `.env.local` changes atomically after successful verification;
+unrelated keys are retained, and old packages are not automatically deleted.
+Conflicting inherited voice settings, `.env.production.local` or
+`/etc/agents-chat.env` block changes with an explicit error instead of silently
+overriding higher-priority configuration. Windows also checks the target
+account's user/volatile and machine registry voice settings, case-insensitively.
+Custom service-unit/task environment overrides or stale logon environments must
+also be reviewed by the administrator. Keep never probes a different account.
+
+Standalone configuration saves a private recovery receipt at
+`.data/voice/last-setup.json`. It contains the prior environment file: **do not
+publish it or attach it to issue reports**. To undo that change:
+
+```bash
+node scripts/configure-voice.mjs --rollback-receipt .data/voice/last-setup.json
+```
+
+Rollback refuses to overwrite configuration changed since setup. Restart the app
+after standalone setup/rollback. `deploy.sh` uses a private temporary receipt and
+restores voice configuration if activation/health checking fails; it does not
+roll back application code or unrelated deployment changes. `--wait 0` skips the
+health check and therefore cannot detect subsequent activation failure.
+An interrupted installer can leave `.data/voice/setup.lock`; check that no setup
+is running before removing that specific lock. Preserve `.env.local` and
+`.data/voice` when replacing standalone release files.
+
 ### Chat persistence and proxy limits
 
 The browser saves only new or changed messages. Small updates are batched below

@@ -133,7 +133,13 @@ export function createChatScrollController(
     const current = measure();
     if (geometryChanged(geometry, current)) {
       if (isIndependentScroll(geometry, current, lastTop, container.scrollTop)) captureUserPosition();
-      else scheduleCorrection();
+      else {
+        // A later resize must compare against this accepted intermediate layout clamp.
+        geometry = current;
+        lastTop = container.scrollTop;
+        expectedTop = null;
+        scheduleCorrection();
+      }
       return;
     }
     if (jumping) {

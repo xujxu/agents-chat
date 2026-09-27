@@ -19,6 +19,7 @@ EnvironmentFile=-__PROJECT_DIR__/.env.local
 EnvironmentFile=-/etc/agents-chat.env
 
 Environment=NODE_ENV=production
+UnsetEnvironment=GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN
 Environment=PATH=__NODE_BIN_DIR__:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Absolute path required — systemd's PATH doesn't include nvm.

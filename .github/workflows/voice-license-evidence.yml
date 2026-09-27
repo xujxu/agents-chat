@@ -1,0 +1,57 @@
+name: Retained voice candidate license evidence
+on:
+  push:
+    branches: [experiment/voice-natural-long]
+    paths:
+      - 'scripts/voice/license_*.py'
+      - 'tests/test_voice_license_evidence.py'
+      - '.github/workflows/voice-license-evidence.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -p 'test_voice_license_evidence.py' -v
+  candidates:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+      - name: Export existing catalog without installing dependencies
+        run: |
+          node --input-type=module - <<'JS'
+          import { catalogue } from './scripts/voice/download-catalog.mjs';
+          import { models } from './scripts/voice/setup-config.mjs';
+          import { writeFileSync } from 'node:fs';
+          writeFileSync('voice-catalog.json', JSON.stringify({ catalogue, models }));
+          JS
+      - name: Retrieve exact retained candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/voice/license_evidence.py download voice-catalog.json voice-downloads
+      - name: Inspect archives without executing their contents
+        if: ${{ !cancelled() }}
+        run: python scripts/voice/license_evidence.py inspect voice-catalog.json voice-downloads voice-license-report
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: voice-candidate-license-evidence
+          path: voice-license-report/
+          if-no-files-found: error
+          retention-days: 30

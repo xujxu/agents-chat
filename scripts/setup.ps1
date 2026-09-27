@@ -3,11 +3,19 @@
 # Prerequisites: Node.js 18+, Dev Tunnel CLI (winget install Microsoft.devtunnel), agency CLI
 param(
     [string]$TunnelName = "acp-chat",
-    [string]$AppId = "144243eb-8775-41e5-a57d-9bae004dbc7b"
+    [string]$AppId = "144243eb-8775-41e5-a57d-9bae004dbc7b",
+    [ValidateSet('keep', 'disabled', 'sensevoice-small-q8', 'whisper-base-q5_1')]
+    [string]$VoiceModel,
+    [string]$VoicePackageDir, [string]$VoiceManifestSha256,
+    [switch]$VoiceExperimentalDownload,
+    [string]$VoiceServiceUser,
+    [ValidateSet('1', '2', '4')][string]$VoiceThreads,
+    [switch]$NonInteractive
 )
 
 $ErrorActionPreference = "Stop"
 $ProjectDir = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'voice\windows\configure.ps1')
 
 Write-Host "=== ACP Chat Setup ===" -ForegroundColor Cyan
 Write-Host ""
@@ -58,7 +66,7 @@ if (Test-Path $agentsFile) {
         Write-Host "  agents.json updated" -ForegroundColor Green
     }
 } else {
-    Write-Host "  agents.json not found — create one manually" -ForegroundColor Yellow
+    Write-Host "  agents.json not found - create one manually" -ForegroundColor Yellow
 }
 
 # ─── 4. Set up Dev Tunnel ───
@@ -94,31 +102,16 @@ if ($tunnelUrlMatch.Success) {
 }
 Write-Host "  Tunnel URL: $tunnelUrl" -ForegroundColor Green
 
-# ─── 5. Update .env.local and start.ps1 ───
+# ─── 5. Update .env.local ───
 Write-Host "[5/6] Updating configuration..." -ForegroundColor Cyan
 
 # Update .env.local
 $envFile = Join-Path $ProjectDir ".env.local"
 if (Test-Path $envFile) {
-    $lines = Get-Content $envFile
-    $found = $false
-    $lines = $lines | ForEach-Object {
-        if ($_ -match "^\s*#?\s*NEXTAUTH_URL\b") { $found = $true; "NEXTAUTH_URL=$tunnelUrl" } else { $_ }
-    }
-    if (-not $found) { $lines += "NEXTAUTH_URL=$tunnelUrl" }
-    $lines | Set-Content $envFile
-    Write-Host "  .env.local → NEXTAUTH_URL=$tunnelUrl" -ForegroundColor Green
+    Set-VoiceSafeEnvironmentUrl -ProjectDir $ProjectDir -Url $tunnelUrl
+    Write-Host "  .env.local -> NEXTAUTH_URL=$tunnelUrl" -ForegroundColor Green
 } else {
-    Write-Host "  WARNING: .env.local not found — create one with NEXTAUTH_SECRET, etc." -ForegroundColor Yellow
-}
-
-# Update start.ps1
-$startFile = Join-Path $PSScriptRoot "start.ps1"
-if (Test-Path $startFile) {
-    $content = Get-Content $startFile -Raw
-    $content = $content -replace '(\$DevTunnelUrl\s*=\s*")[^"]*(")', "`$1$tunnelUrl`$2"
-    $content | Set-Content $startFile
-    Write-Host "  start.ps1 → DevTunnelUrl=$tunnelUrl" -ForegroundColor Green
+    Write-Host "  WARNING: .env.local not found - create one with NEXTAUTH_SECRET, etc." -ForegroundColor Yellow
 }
 
 # ─── 6. Update Azure AD redirect (optional) ───
@@ -138,7 +131,7 @@ if (Get-Command az -ErrorAction SilentlyContinue) {
             else { Write-Host "  Warning: Failed to update Azure AD app" -ForegroundColor Yellow }
             Remove-Item $bodyFile -Force -ErrorAction SilentlyContinue
         } else {
-            Write-Host "  Skipped (app not found — run 'az login' first?)" -ForegroundColor Yellow
+            Write-Host "  Skipped (app not found - run 'az login' first?)" -ForegroundColor Yellow
         }
     } else {
         Write-Host "  Skipped (not logged in to Azure CLI)" -ForegroundColor Yellow
@@ -146,6 +139,10 @@ if (Get-Command az -ErrorAction SilentlyContinue) {
 } else {
     Write-Host "  Skipped (Azure CLI not installed)" -ForegroundColor Yellow
 }
+
+Invoke-VoiceConfiguration -ProjectDir $ProjectDir -Model $VoiceModel -PackageDir $VoicePackageDir `
+    -ManifestSha256 $VoiceManifestSha256 -Threads $VoiceThreads -ServiceUser $VoiceServiceUser `
+    -ExperimentalDownload:$VoiceExperimentalDownload -NonInteractive:$NonInteractive
 
 # ─── Done ───
 Write-Host ""

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
+import { createFixtureCompletion } from './helpers/fixtureCompletion';
 import type { ChatMessage } from '../app/features/chat/chatTypes';
 
 type TestChat = {
@@ -37,6 +38,8 @@ async function installPersistenceFixture(page: Page, interruptGitContext = false
 
   const saveSizes: number[] = [];
   const sent: string[] = [];
+  const completion = createFixtureCompletion();
+  let replyWriteGate: { promise: Promise<void>; entered: () => void } | null = null;
   const savedBeforeSend: boolean[] = [];
   const pageErrors: string[] = [];
   let reloading = false;
@@ -121,23 +124,30 @@ async function installPersistenceFixture(page: Page, interruptGitContext = false
       body = JSON.parse(Buffer.concat([...chunks.entries()].sort(([a], [b]) => a - b).map(([, buffer]) => buffer)).toString());
     }
     if (body?.action === 'send') {
-      sent.push(body.text);
-      const stored = await loadStored();
-      savedBeforeSend.push(stored.messages.some(message => message.type === 'user' && message.content === body.text));
-      activeReply = `Saved reply ${sent.length}`;
-      const message: ChatMessage = {
-        id: body.messageId, agentId: 'alpha', type: 'agent', ts: Date.now(),
-        content: activeReply, pending: false,
-        parts: [
-          { kind: 'tool', toolName: 'read', result: toolOutput, done: true },
-          { kind: 'text', text: activeReply },
-        ],
-      };
-      // Simulate the backend's direct snapshot write, outside the browser proxy.
-      expect((await request.post('/api/chats', {
-        data: { action: 'save-delta', chat: { ...chat, messages: [message] } },
-      })).ok()).toBeTruthy();
-      return route.fulfill({ json: { ok: true, sessionId: 'fixture-session', turn: { id: 'turn' } } });
+      return completion.run(async () => {
+        sent.push(body.text);
+        const stored = await loadStored();
+        savedBeforeSend.push(stored.messages.some(message => message.type === 'user' && message.content === body.text));
+        activeReply = `Saved reply ${sent.length}`;
+        const message: ChatMessage = {
+          id: body.messageId, agentId: 'alpha', type: 'agent', ts: Date.now(),
+          content: activeReply, pending: false,
+          parts: [
+            { kind: 'tool', toolName: 'read', result: toolOutput, done: true },
+            { kind: 'text', text: activeReply },
+          ],
+        };
+        if (replyWriteGate) {
+          const gate = replyWriteGate;
+          gate.entered();
+          await gate.promise;
+        }
+        // Simulate the backend's direct snapshot write, outside the browser proxy.
+        expect((await request.post('/api/chats', {
+          data: { action: 'save-delta', chat: { ...chat, messages: [message] } },
+        })).ok()).toBeTruthy();
+        await route.fulfill({ json: { ok: true, sessionId: 'fixture-session', turn: { id: 'turn' } } });
+      });
     }
     if (body?.action === 'poll') {
       return route.fulfill({ json: {
@@ -158,6 +168,40 @@ async function installPersistenceFixture(page: Page, interruptGitContext = false
   await expect(page.getByText('Historical question', { exact: true })).toBeVisible();
   return {
     chat, saveSizes, sent, savedBeforeSend, pageErrors, loadStored,
+    get completedSends() { return completion.completedCount; },
+    async waitForSends(expected: number) {
+      await expect.poll(() => {
+        completion.assertHealthy();
+        return completion.count;
+      }).toBe(expected);
+      await completion.waitForCount(expected);
+    },
+    holdReplyWrite() {
+      if (replyWriteGate) throw new Error('Reply write is already held');
+      let release!: () => void;
+      let entered!: () => void;
+      const promise = new Promise<void>(resolve => { release = resolve; });
+      const reached = new Promise<void>(resolve => { entered = resolve; });
+      replyWriteGate = { promise, entered };
+      return {
+        entered: reached,
+        release() { replyWriteGate = null; release(); },
+      };
+    },
+    async dispose(extraChatIds: string[] = []) {
+      await completion.close(
+        () => page.goto('about:blank'),
+        async () => {
+          const results = await Promise.allSettled(
+            [chat.id, ...extraChatIds].map(async id => {
+              expect((await request.delete(`/api/chats?id=${id}`)).ok()).toBeTruthy();
+            }),
+          );
+          const errors = results.flatMap(result => result.status === 'rejected' ? [result.reason] : []);
+          if (errors.length) throw new AggregateError(errors, 'Fixture chat deletion failed');
+        },
+      );
+    },
     async reload() {
       reloading = true;
       try { await page.reload({ waitUntil: 'domcontentloaded' }); }
@@ -205,6 +249,7 @@ test('saves and reloads user messages with over 5 MB of history and large ACP to
   try {
     await send(page, 'New question after a large history');
     await expect.poll(() => fixture.sent.length).toBe(1);
+    await fixture.waitForSends(1);
     await expect(page.getByText('Saved reply 1', { exact: true })).toBeVisible();
     await expect.poll(async () => (await fixture.loadStored()).messages.length).toBe(4);
     const stored = await fixture.loadStored();
@@ -218,8 +263,7 @@ test('saves and reloads user messages with over 5 MB of history and large ACP to
     expect(Math.max(...fixture.saveSizes)).toBeLessThan(1024 * 1024);
     expect(fixture.pageErrors).toEqual([]);
   } finally {
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -237,6 +281,7 @@ for (const failure of ['413', 'network'] as const) {
       fixture.fail(null);
       await page.getByRole('button', { name: 'Retry', exact: true }).click();
       await expect.poll(() => fixture.sent.length, { timeout: 15_000 }).toBe(1);
+      await fixture.waitForSends(1);
       await expect(page.getByText('Saved reply 1', { exact: true })).toBeVisible();
       await expect(page.locator('.userSendFailureCard')).toHaveCount(0);
       await fixture.reload();
@@ -245,8 +290,7 @@ for (const failure of ['413', 'network'] as const) {
       expect(fixture.savedBeforeSend).toEqual([true]);
       expect(fixture.pageErrors).toEqual([]);
     } finally {
-      await page.goto('about:blank');
-      await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+      await fixture.dispose();
     }
   });
 }
@@ -260,11 +304,11 @@ test('waits for a confirmed save before sending to the agent', async ({ page }) 
     expect(fixture.sent).toEqual([]);
     release();
     await expect.poll(() => fixture.sent.length).toBe(1);
+    await fixture.waitForSends(1);
     await expect.poll(() => fixture.savedBeforeSend).toEqual([true]);
   } finally {
     release();
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -274,12 +318,12 @@ test('reports a failed auxiliary chat read without an unhandled rejection', asyn
     await expect(page.locator('.composerGitContextStatus')).toContainText('Failed to load git context');
     await send(page, 'Continue after a failed context read');
     await expect(page.getByText('Saved reply 1', { exact: true })).toBeVisible();
+    await fixture.waitForSends(1);
     await fixture.reload();
     await expect(page.getByText('Continue after a failed context read', { exact: true })).toBeVisible();
     expect(fixture.pageErrors).toEqual([]);
   } finally {
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -313,6 +357,7 @@ test('saves an individual oversized Unicode message and attachments, then sends 
     const text = '文'.repeat(360_000);
     await send(page, text);
     await expect.poll(() => fixture.sent.length).toBe(1);
+    await fixture.waitForSends(1);
     expect(fixture.sent[0]).toBe(text);
     await expect(page.getByText('Saved reply 1', { exact: true })).toBeVisible();
     await page.locator('input[type="file"]').setInputFiles({
@@ -320,6 +365,7 @@ test('saves an individual oversized Unicode message and attachments, then sends 
     });
     await send(page, 'Review the large attachment');
     await expect.poll(() => fixture.sent.length).toBe(2);
+    await fixture.waitForSends(2);
     const stored = await fixture.loadStored();
     expect(stored.messages.find(message => message.content === text)?.type).toBe('user');
     const attachment = stored.messages.find(message => message.content === 'Review the large attachment')?.attachments?.[0];
@@ -328,8 +374,7 @@ test('saves an individual oversized Unicode message and attachments, then sends 
     expect(Math.max(...fixture.saveSizes)).toBeLessThan(1024 * 1024);
     await expect.poll(() => fixture.savedBeforeSend).toEqual([true, true]);
   } finally {
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -346,8 +391,7 @@ test('recovers an offline draft after reload without automatically executing it'
     expect(fixture.sent).toEqual([]);
     await expect(page.getByText('Recover this draft after reload', { exact: true })).toBeVisible();
   } finally {
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -360,10 +404,10 @@ test('lost commit acknowledgement can be retried without duplicating or automati
     expect(fixture.sent).toEqual([]);
     await page.getByRole('button', { name: 'Retry', exact: true }).click();
     await expect.poll(() => fixture.sent.length).toBe(1);
+    await fixture.waitForSends(1);
     expect((await fixture.loadStored()).messages.filter(message => message.content === 'Saved once despite a lost response')).toHaveLength(1);
   } finally {
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -387,8 +431,7 @@ test('conflicting drafts preserve both versions and can be saved as a new messag
       message.content === 'Keep my local version' || message.content === 'Version saved by another device');
     expect(new Set(versions.map(message => message.id)).size).toBe(2);
   } finally {
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -420,11 +463,11 @@ for (const workflowReply of [false, true]) test(`refresh during an in-flight sav
     expect(fixture.pageErrors).toEqual([]);
     await page.getByRole('button', { name: 'Retry', exact: true }).click();
     await expect.poll(() => fixture.sent).toEqual(['Keep the in-flight draft']);
+    await fixture.waitForSends(1);
     await expect(page.getByText('Saved reply 1', { exact: true })).toBeVisible();
   } finally {
     release();
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -458,9 +501,7 @@ test('a deleted conversation cannot be resurrected and its draft can be copied t
     expect(fixture.sent).toEqual([]);
     expect((await request.get(`/api/chats?id=${fixture.chat.id}`)).status()).toBe(404);
   } finally {
-    await page.goto('about:blank');
-    await request.delete(`/api/chats?id=${fixture.chat.id}`);
-    if (recoveredId) await request.delete(`/api/chats?id=${recoveredId}`);
+    await fixture.dispose(recoveredId ? [recoveredId] : []);
   }
 });
 
@@ -479,6 +520,7 @@ test('local staging only clears the submitted revision and attachments', async (
     });
     await release();
     await expect.poll(() => fixture.sent.length).toBe(1);
+    await fixture.waitForSends(1);
     await expect(page.getByText('Saved reply 1', { exact: true })).toBeVisible();
     await expect(page.locator('textarea.composerTextarea')).toHaveValue('Next unsent revision');
     await expect(page.getByText('next.txt', { exact: true })).toBeVisible();
@@ -488,8 +530,7 @@ test('local staging only clears the submitted revision and attachments', async (
     expect(submitted?.attachments?.map(attachment => attachment.name)).toEqual(['submitted.txt']);
   } finally {
     await release();
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -509,8 +550,7 @@ test('IndexedDB write failure retains the composer text and attachment and never
     expect(fixture.sent).toEqual([]);
     expect((await fixture.loadStored()).messages.some(message => message.content === 'Keep the unsaved composer')).toBe(false);
   } finally {
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -530,13 +570,13 @@ test('an attachment-only conflict copy can be explicitly sent with its fallback 
     const copy = page.locator('.message.user').filter({ hasText: 'Recovered draft saved' });
     await copy.getByRole('button', { name: 'Retry', exact: true }).click();
     await expect.poll(() => fixture.sent).toEqual(['Please review the attached file(s).']);
+    await fixture.waitForSends(1);
     await expect(page.getByRole('main').getByText('Saved reply 1', { exact: true })).toBeVisible();
     const stored = await fixture.loadStored();
     expect(stored.messages.filter(message => message.type === 'user' && message.content === '').at(-1)?.attachments?.[0].name)
       .toBe('attachment-only.txt');
   } finally {
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -557,8 +597,7 @@ test('retrying a recovery copy after its acknowledgement is lost creates only on
     expect((await fixture.loadStored()).messages.filter(message => message.content === 'One recovered copy')).toHaveLength(1);
     expect(fixture.sent).toEqual([]);
   } finally {
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -591,8 +630,7 @@ test('resumes a partially uploaded draft after reload without reuploading confir
     for (const id of confirmedFirstChunks) expect(firstChunks.get(id)).toBe(1);
     expect(fixture.sent).toEqual([]);
   } finally {
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
   }
 });
 
@@ -626,7 +664,25 @@ test('downloads a complete conflict draft and discards it without changing the s
     expect((await fixture.loadStored()).messages).toEqual(storedBefore.messages);
     expect(fixture.sent).toEqual([]);
   } finally {
-    await page.goto('about:blank');
-    await page.context().request.delete(`/api/chats?id=${fixture.chat.id}`);
+    await fixture.dispose();
+  }
+});
+
+test('fixture completion waits for the synthetic reply write', async ({ page }) => {
+  const fixture = await installPersistenceFixture(page);
+  const held = fixture.holdReplyWrite();
+  try {
+    await send(page, 'Wait for fixture completion');
+    await held.entered;
+    expect(fixture.sent).toEqual(['Wait for fixture completion']);
+    expect(fixture.completedSends).toBe(0);
+    held.release();
+    await fixture.waitForSends(1);
+    expect(fixture.completedSends).toBe(1);
+    await expect(page.getByText('Saved reply 1', { exact: true })).toBeVisible();
+    expect(fixture.savedBeforeSend).toEqual([true]);
+  } finally {
+    held.release();
+    await fixture.dispose();
   }
 });

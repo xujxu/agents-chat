@@ -1,0 +1,46 @@
+name: Voice latency experiment
+on:
+  push:
+    branches: [experiment/voice-latency]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: voice-latency-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35591663846
+          name: voice-native-e4ca3a6ac7b1e663051a369413b940cacdfc1b86
+          path: native
+      - name: Prepare exact production native runtime
+        run: |
+          cd native
+          sha256sum --check voice-runtime.sha256
+          tar -xzf voice-runtime.tar.gz
+          cd runtime
+          sha256sum --check SHA256SUMS
+      - name: Download small comparison model
+        run: |
+          curl -fL --retry 3 --max-time 180 \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin \
+            -o native/runtime/ggml-tiny-q5_1.bin
+          echo '818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7  native/runtime/ggml-tiny-q5_1.bin' | sha256sum --check
+      - name: Install audio conversion tool
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Run bounded single-thread comparisons
+        run: python3 scripts/voice-latency-benchmark.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-latency-${{ github.sha }}
+          path: artifacts/
+          retention-days: 14

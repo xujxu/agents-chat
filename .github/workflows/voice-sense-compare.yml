@@ -1,0 +1,84 @@
+name: Bilingual voice model comparison
+on:
+  push:
+    branches: [experiment/voice-sense-compare]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35591663846
+          name: voice-native-e4ca3a6ac7b1e663051a369413b940cacdfc1b86
+          path: native
+      - name: Prepare pinned runtimes and models
+        run: |
+          (cd native && sha256sum --check voice-runtime.sha256 && tar -xzf voice-runtime.tar.gz)
+          (cd native/runtime && sha256sum --check SHA256SUMS)
+          curl -fL --retry 3 --max-time 180 https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared-no-tts.tar.bz2 -o sherpa.tar.bz2
+          echo 'd0f96c8b65c6cd0974fada22737e337de81bc8cd2abbec2e39caf358b1eec5fc  sherpa.tar.bz2' | sha256sum --check
+          mkdir sherpa
+          tar -xjf sherpa.tar.bz2 --strip-components=1 -C sherpa
+          curl -fL --retry 3 --max-time 180 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2 -o sense.tar.bz2
+          echo '7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e  sense.tar.bz2' | sha256sum --check
+          mkdir sense
+          tar -xjf sense.tar.bz2 --strip-components=1 -C sense
+          curl -fL --retry 3 --max-time 60 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx -o silero_vad.onnx
+          echo '9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6  silero_vad.onnx' | sha256sum --check
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          gcc -std=c11 -Wall -Wextra -Werror -Isherpa/include scripts/voice-vad-probe.c \
+            -Lsherpa/lib -lsherpa-onnx-c-api -o voice-vad-probe
+      - name: Compare within unchanged production limits
+        env:
+          VOICE_BENCH_SENSE: '1'
+          VOICE_BENCH_VAD: '1'
+        run: |
+          export LD_LIBRARY_PATH="$PWD/sherpa/lib"
+          python3 scripts/voice-latency-benchmark.py
+      - name: Check Ubuntu 20.04 runtime compatibility under hard caps
+        if: ${{ !cancelled() }}
+        run: |
+          docker run --rm --memory=384m --memory-swap=384m --cpus=1 --pids-limit=64 \
+            -v "$PWD/sherpa:/runtime:ro" -v "$PWD/sense:/model:ro" \
+            -v "$PWD/benchmark-samples:/samples:ro" \
+            -v "$PWD:/work:ro" -w /work \
+            ubuntu:20.04 bash -euc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y -qq libstdc++6 gcc
+              export LD_LIBRARY_PATH=/runtime/lib
+              ulimit -v 1048576
+              ulimit -t 120
+              ulimit -c 0
+              /runtime/bin/sherpa-onnx-offline --tokens=/model/tokens.txt \
+                --sense-voice-model=/model/model.int8.onnx \
+                --sense-voice-language=auto --sense-voice-use-itn=1 \
+                --num-threads=1 --provider=cpu --debug=0 /samples/mixed-30.wav
+              gcc -std=c11 -Wall -Wextra -Werror -I/runtime/include scripts/voice-vad-probe.c \
+                -L/runtime/lib -lsherpa-onnx-c-api -o /tmp/voice-vad-probe
+              for sample in mixed-30 mixed-no-gap silence; do
+                echo "VAD_LOW_MEMORY_SAMPLE=$sample"
+                /tmp/voice-vad-probe "/samples/$sample.wav" pad-lowmem
+              done
+            ' > artifacts/ubuntu20-compatibility.log 2>&1
+      - name: Preserve model provenance
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cp sense/LICENSE artifacts/sense-model-LICENSE
+          sha256sum sense/model.int8.onnx sherpa/bin/sherpa-onnx-offline \
+            silero_vad.onnx voice-vad-probe scripts/voice-cpu-lowmem.config > artifacts/sense-runtime.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-sense-${{ github.sha }}
+          path: artifacts/
+          retention-days: 14

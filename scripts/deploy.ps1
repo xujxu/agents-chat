@@ -6,16 +6,25 @@ param(
     [string]$TaskName = 'Agents-Chat-Startup',
     [string]$ProjectDir = (Split-Path -Parent $PSScriptRoot),
     [switch]$SkipGitPull,
+    [switch]$NoTunnel,
     [switch]$RemoveTask,
     [ValidateSet('Interactive', 'S4U')]
     [string]$TaskLogonType = 'Interactive',
     [ValidateSet('AtLogOn', 'AtStartup')]
     [string]$TaskTriggerType = 'AtLogOn',
     [switch]$NoWait,
-    [int]$WaitSeconds = 180
+    [int]$WaitSeconds = 180,
+    [ValidateSet('keep', 'disabled', 'sensevoice-small-q8', 'whisper-base-q5_1')]
+    [string]$VoiceModel,
+    [string]$VoicePackageDir, [string]$VoiceManifestSha256,
+    [switch]$VoiceExperimentalDownload,
+    [ValidateSet('1', '2', '4')][string]$VoiceThreads,
+    [switch]$NonInteractive
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'voice\windows\configure.ps1')
+. (Join-Path $PSScriptRoot 'voice\windows\task-mode.ps1')
 
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -80,7 +89,8 @@ function Test-TaskMatchesExpectedConfiguration {
         $Task.Triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' }
     }
 
-    return $hasExpectedLogon -and $hasExpectedAction -and [bool]$hasExpectedTrigger
+    $hasExpectedMode = (Get-TaskNoTunnelMode -Task $Task) -eq $EffectiveNoTunnel
+    return $hasExpectedLogon -and $hasExpectedAction -and [bool]$hasExpectedTrigger -and $hasExpectedMode
 }
 
 function Install-AgentsChatTask {
@@ -89,7 +99,7 @@ function Install-AgentsChatTask {
         throw "Install script not found: $InstallScript"
     }
 
-    & $InstallScript -TaskName $TaskName -ProjectDir $ProjectDir -LogonType $TaskLogonType -TriggerType $TaskTriggerType
+    & $InstallScript -TaskName $TaskName -ProjectDir $ProjectDir -UserId $DeploymentUser -LogonType $TaskLogonType -TriggerType $TaskTriggerType -NoTunnel:$EffectiveNoTunnel
     if ($LASTEXITCODE -ne 0) { throw "Failed to install Scheduled Task via $InstallScript" }
 }
 
@@ -125,32 +135,43 @@ if (-not (Test-Path $ProjectDir)) {
     throw "Project directory not found: $ProjectDir"
 }
 
-$task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-if (-not $task) {
-    Write-Step "Scheduled Task '$TaskName' not found; installing it first..."
-    Install-AgentsChatTask
-    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if (-not $task) { throw "Scheduled Task still not found after running install-scheduled-task.ps1" }
-} elseif (-not (Test-TaskMatchesExpectedConfiguration -Task $task)) {
-    Write-Step "Scheduled Task '$TaskName' uses older action/logon/trigger settings; reinstalling as $TaskLogonType/$TaskTriggerType with $ExpectedWatchdogScript..."
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
-    Install-AgentsChatTask
-    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if (-not $task) { throw "Scheduled Task still not found after reinstalling" }
-}
-
 Set-Location $ProjectDir
 
 if (-not $SkipGitPull -and (Test-Path (Join-Path $ProjectDir '.git'))) {
     Write-Step 'Pulling latest code...'
-    git pull
+    git pull --ff-only
     if ($LASTEXITCODE -ne 0) { throw 'git pull failed' }
+    $resume = @{}
+    foreach ($key in $PSBoundParameters.Keys) { $resume[$key] = $PSBoundParameters[$key] }
+    $resume['SkipGitPull'] = $true
+    & (Join-Path $ProjectDir 'scripts\deploy.ps1') @resume
+    exit $LASTEXITCODE
 }
 
 Write-Step 'Installing npm dependencies...'
 npm install --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
 
+$task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+$EffectiveNoTunnel = Get-TaskNoTunnelMode -Task $task -Explicit $PSBoundParameters.ContainsKey('NoTunnel') -Requested ([bool]$NoTunnel)
+$DeploymentUser = if ($task) { $task.Principal.UserId } else { [Security.Principal.WindowsIdentity]::GetCurrent().Name }
+if (-not $DeploymentUser) { throw 'Scheduled Task identity is unavailable; refusing voice configuration.' }
+$VoiceReceipt = Join-Path $ProjectDir ('.voice-setup-receipt.' + [guid]::NewGuid().ToString() + '.json')
+$voiceChanged = Invoke-VoiceConfiguration -ProjectDir $ProjectDir -Model $VoiceModel -PackageDir $VoicePackageDir `
+    -ManifestSha256 $VoiceManifestSha256 -Threads $VoiceThreads -ServiceUser $DeploymentUser `
+    -Receipt $VoiceReceipt -ExperimentalDownload:$VoiceExperimentalDownload -NonInteractive:$NonInteractive
+$activationStarted = $false
+try {
+if ($voiceChanged -and $NoWait) { throw 'Voice changes require readiness confirmation; omit -NoWait.' }
+if (-not $task) {
+    Write-Step "Scheduled Task '$TaskName' not found; installing it first..."
+    Install-AgentsChatTask
+} elseif (-not (Test-TaskMatchesExpectedConfiguration -Task $task)) {
+    Write-Step "Refreshing Scheduled Task '$TaskName' while preserving its account..."
+    Install-AgentsChatTask
+}
+
+$activationStarted = $true
 Write-Step "Stopping Scheduled Task '$TaskName'..."
 Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 3
@@ -202,6 +223,7 @@ if (-not $taskStarted) {
 }
 
 if ($NoWait) {
+    Remove-Item -LiteralPath $VoiceReceipt -Force
     Write-Host "Deploy triggered. Logs:" -ForegroundColor Green
     Write-Host "  $WatchdogLog"
     Write-Host "  $ChildLog"
@@ -216,7 +238,7 @@ while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 3
     try {
         $response = Invoke-WebRequest -Uri 'http://localhost:3000/api/auth/providers' -UseBasicParsing -TimeoutSec 5
-        if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+        if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) {
             $ready = $true
             break
         }
@@ -226,6 +248,7 @@ while ((Get-Date) -lt $deadline) {
 }
 
 if ($ready) {
+    Remove-Item -LiteralPath $VoiceReceipt -Force
     Write-Host "`nDeploy complete: http://localhost:3000/login is responding." -ForegroundColor Green
     Show-RecentLogs
     exit 0
@@ -233,4 +256,35 @@ if ($ready) {
 
 Write-Host "`nDeploy was triggered, but localhost:3000/login did not respond within $WaitSeconds seconds." -ForegroundColor Yellow
 Show-RecentLogs
-exit 1
+throw "Application did not become ready within $WaitSeconds seconds."
+} catch {
+    $failure = $_
+    if ($voiceChanged) {
+        try {
+            Restore-VoiceConfiguration -ProjectDir $ProjectDir -Receipt $VoiceReceipt
+            if ($activationStarted) {
+                Stop-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+                Start-Sleep -Seconds 3
+                Stop-Port3000Processes
+                Start-ScheduledTask -TaskName $TaskName
+                $recovered = $false
+                $recoveryDeadline = (Get-Date).AddSeconds($WaitSeconds)
+                while ((Get-Date) -lt $recoveryDeadline) {
+                    Start-Sleep -Seconds 3
+                    try {
+                        $response = Invoke-WebRequest -Uri 'http://localhost:3000/api/auth/providers' -UseBasicParsing -TimeoutSec 5
+                        if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) { $recovered = $true; break }
+                    } catch { }
+                }
+                if (-not $recovered) { throw 'Previous configuration restored, but application recovery was not confirmed.' }
+            }
+            Remove-Item -LiteralPath $VoiceReceipt -Force
+            Write-Host 'Previous voice configuration restored.' -ForegroundColor Yellow
+        } catch {
+            Write-Warning "Voice recovery incomplete: $($_.Exception.Message) Private receipt retained at $VoiceReceipt"
+        }
+    } else {
+        Remove-Item -LiteralPath $VoiceReceipt -Force
+    }
+    throw $failure
+}
