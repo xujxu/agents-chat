@@ -89,7 +89,7 @@ async function contents(location, handle, owner) {
   if ((await namedFile(location, handle, owner)).size !== info.size) {
     throw new Error('Worker journal changed during inspection.');
   }
-  return buffer.toString('utf8');
+  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(buffer);
 }
 
 function history(content, owner) {
