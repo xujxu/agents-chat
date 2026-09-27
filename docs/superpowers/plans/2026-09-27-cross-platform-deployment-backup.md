@@ -2818,12 +2818,49 @@ try {
 }
 ```
 
-- [ ] Add `tests/deployment-linux-service.test.mjs` to the Linux Actions job;
+- [x] Add `tests/deployment-linux-service.test.mjs` to the Linux Actions job;
   prove missing-module red before implementation.
-- [ ] Implement retained source/configuration/native-domain checks and add
+- [x] Implement retained source/configuration/native-domain checks and add
   the module to the closed saved-worker bundle and its contract.
-- [ ] Exercise actual npm services, wrong executable/argv/privilege flags,
+- [x] Exercise actual npm services, wrong executable/argv/privilege flags,
   same-content file replacement, drop-in drift, generation replacement and
   detached descendant placement, while keeping a foreign sentinel untouched.
-- [ ] Record exact Actions evidence and remaining limitations. This inspection
+- [x] Record exact Actions evidence and remaining limitations. This inspection
   is not itself downtime, restart inhibition or full deploy acceptance.
+
+Accepted implementation `5b120871cb77659396edb616e65af6893c460f7c`,
+Actions `36324005421`: all four jobs successful. Exact counts: 46 Linux
+native (38 previous plus eight installed-service tests); 19 Windows coordinator
+plus 13 Job primitives; 212 Linux shared; 208 Windows shared plus four
+Linux-only skips. Includes actual non-root npm service and wrong expected
+Node executable, root-owned sources in a project with spaces, unsafe kill
+policy/delegation/stop hooks, and writable source rejection. Inspection closes
+its own descriptors only and leaves service MainPID/InvocationID unchanged.
+
+Evidence progression:
+
+- `94f4c37` / `36323349252`: causal missing-module red.
+- `0ecc70e` / `36323522713`: persistent test units failed to load before the
+  inspector ran. Corrected fixture WorkingDirectory serialization (raw path,
+  not ExecStart-style quoted argv) in `364a3cd`.
+- `364a3cd` / `36323683195`: actual services ran; strict human-readable
+  property parsing rejected missing empty hook properties. Changed hook and
+  activation arrays to typed D-Bus reads rather than treating missing as empty.
+- `9a4b0cd` / `36323853825`: exposed busctl property-value versus method-reply
+  tuple shape difference. `5b12087` decodes each documented shape explicitly;
+  no alternate-shape guessing or success-shaped fallback.
+
+The retained inspection currently requires a stable active/running service.
+It is not cold recovery, proof that arbitrary external writers are absent,
+or permission to stop an inactive/failed service with unknown remnants.
+It deliberately refuses transient/aliased/noncanonical services, custom
+launchers, additional npm args/command flags, execution hooks, alternate
+activation units, delegated cgroups and unsupported account policies. It
+captures unit/drop-in identity, not a complete backup of environment files.
+
+Next: use this live authority in the locked service adapter, persist restart
+inhibition before stopping, retain/observe the original domain until empty,
+and refuse backup/restart on uncertain outcomes. Original source ownership
+and application acceptance must also authorize eventual removal of inhibition.
+These mutation/recovery paths are not supplied by `inspectLinuxService`.
+Public entry scripts, main and the live deployment remain unchanged.
