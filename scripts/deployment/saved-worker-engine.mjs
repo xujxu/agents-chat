@@ -7,7 +7,7 @@ import {
   writeWorkerFile, syncWorkerDirectory,
 } from './worker-files.mjs';
 
-const files = [
+export const workerEngineFiles = Object.freeze([
   'linux-worker-bootstrap.mjs', 'linux-worker.mjs', 'owned-worker.mjs', 'process-identity.mjs',
   'saved-worker-engine.mjs', 'saved-worker-inspect.mjs',
   'stage-runner.mjs', 'worker-errors.mjs', 'worker-files.mjs',
@@ -15,7 +15,8 @@ const files = [
   'WindowsWorkerJob.cs', 'windows-worker-launcher.ps1', 'windows-worker-owner.ps1', 'windows-worker.mjs',
   'evidence-journal.mjs', 'worker-operation.mjs', 'state.mjs',
   'worker-retirement.mjs',
-];
+]);
+const files = workerEngineFiles;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const validDigest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 

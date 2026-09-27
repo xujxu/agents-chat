@@ -192,9 +192,19 @@ export async function writeState(root, state) {
   }
 }
 
+async function requireNoRecovery(directory) {
+  try { await lstat(path.join(directory, 'recovery-lock')); }
+  catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  throw new Error('Recovery authority exists; retain evidence and inspect before lock operations.');
+}
+
 export async function acquireLock(root, { project, operationId }) {
   if (!nonempty(project) || !nonempty(operationId)) throw new Error('Invalid lock owner.');
   const directory = await ownedDirectory(root);
+  await requireNoRecovery(directory);
   const canonicalProject = await realpath(project);
   const identity = await processIdentity(process.pid);
   if (!identity) throw new Error('Cannot establish deployment lock owner identity.');
@@ -206,6 +216,7 @@ export async function acquireLock(root, { project, operationId }) {
     }
     throw error;
   }
+  await requireNoRecovery(directory);
   const owner = {
     version: 1, token: randomUUID(), project: canonicalProject, operationId,
     pid: process.pid, processIdentity: identity, createdAt: new Date().toISOString(),
@@ -251,6 +262,7 @@ export async function assertLockOwner(root, suppliedOwner) {
 
 export async function releaseLock(root, owner) {
   const directory = await ownedDirectory(root);
+  await requireNoRecovery(directory);
   if ((await loadState(directory))?.phase === 'blocked') {
     throw new Error('Blocked deployment workers require retaining the lock.');
   }

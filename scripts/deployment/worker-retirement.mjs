@@ -108,7 +108,9 @@ export async function retireWorkerEvidence({ control, lock, saved, workers, clos
     };
     await checkInventory();
     await writeWorkerFile(path.join(root, markerName), Buffer.from(`${JSON.stringify({
-      version: 1, lock, manifestSha256: saved.manifestSha256, state: stateFile, files: entries,
+      version: 2, lock, manifestSha256: saved.manifestSha256, state: stateFile, files: entries,
+      lockFile, controlIdentity: fileIdentity(controlInfo), lockIdentity: fileIdentity(lockInfo),
+      engineIdentity: fileIdentity(engineInfo),
     })}\n`));
     await syncWorkerDirectory(root);
     marker = await capture(markerName);
