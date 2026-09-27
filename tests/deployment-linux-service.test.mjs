@@ -10,7 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
-import { acquireLock, writeState, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
+import { acquireLock, loadState, writeState, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
 
 const execute = promisify(execFile);
 const native = (file, args) => execute(file, args, { timeout: 20000, maxBuffer: 8192 });
@@ -375,5 +375,59 @@ test('receipt flush failure never crosses the next manager mutation and retains 
       await assert.rejects(systemctl('start', f.unit), /manual|refus/i);
     }
     assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+  }
+});
+
+async function advanceState(f, phases) {
+  for (const phase of phases) {
+    const state = await loadState(f.control);
+    await writeState(f.control, { ...state, phase, previousPhase: state.phase });
+  }
+}
+
+test('prior runtime activation restores only the original service policy without installing or building', async t => {
+  const f = await stopFixture(t);
+  const stopped = await stopLinuxService(f);
+  try {
+    const manifest = JSON.parse(await readFile(path.join(f.project, 'package.json'), 'utf8'));
+    manifest.scripts.preinstall = manifest.scripts.build = 'exit 71';
+    await writeFile(path.join(f.project, 'package.json'), JSON.stringify(manifest));
+    const active = await stopped.activate({ purpose: 'prior-runtime' });
+    assert.equal(active.status, 'active-unverified');
+    assert.equal(active.identity.runtime.project, f.project);
+    assert.equal((await systemctl('show', f.unit, '--property=Restart', '--value')).stdout.trim(), 'on-failure');
+    await assert.rejects(readFile(f.inhibition), { code: 'ENOENT' });
+    await assert.rejects(stopped.activate({ purpose: 'prior-runtime' }));
+    await assert.rejects(releaseLock(f.control, f.lock), /service/i);
+    assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+  } finally { await stopped.close(); }
+});
+
+test('deployment activation requires explicit activating state and returns a new verified service generation', async t => {
+  const f = await stopFixture(t);
+  const stopped = await stopLinuxService(f);
+  const initial = JSON.parse((await readFile(path.join(f.control, 'service-stop.ndjson'), 'utf8')).split('\n')[0]);
+  try {
+    await advanceState(f, ['copying', 'rotating', 'backup-ready', 'source-selected',
+      'dependencies', 'building', 'configuring', 'activating']);
+    const active = await stopped.activate({ purpose: 'deployment' });
+    assert.equal(active.status, 'active-unverified');
+    assert.notEqual(active.identity.runtime.invocationId, initial.service.runtime.invocationId);
+    assert.equal((await loadState(f.control)).phase, 'activating');
+  } finally { await stopped.close(); }
+});
+
+test('invalid activation purpose, wrong state and unresolved worker evidence retain inhibition', async t => {
+  for (const mode of ['purpose', 'state', 'workers', 'late-prior']) {
+    const f = await stopFixture(t);
+    const stopped = await stopLinuxService(f);
+    try {
+      if (mode === 'workers') await writeFile(path.join(f.control, 'worker-foreign.ndjson'), '{}');
+      if (mode === 'late-prior') await advanceState(f, ['copying', 'rotating', 'backup-ready', 'source-selected']);
+      await assert.rejects(stopped.activate({ purpose: mode === 'purpose' ? 'anything'
+        : mode === 'state' ? 'deployment' : 'prior-runtime' }));
+      assert.match(await readFile(f.inhibition, 'utf8'), /Restart=no/);
+      assert.equal((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim(), '0');
+    } finally { await stopped.close(); }
   }
 });

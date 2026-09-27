@@ -2976,3 +2976,43 @@ Remaining boundaries and next work:
   independent cold worker cleanup must refuse remaining service evidence.
 - No full historical app deploy/update/restore lifecycle, main PR, live service
   change or Windows installed-service/task-control completion is claimed.
+
+### Controlled live Linux activation
+
+Extend the original stop handle with one-use `activate({purpose})`, implemented
+in `linux-service-activation.mjs`, not a standalone unmask CLI. `deployment`
+requires matching `activating` state; `prior-runtime` is restricted to
+stopped/copying/rotating/backup-ready before source mutation. Preserve the
+original service configuration; changed unit/drop-ins are not silently adopted.
+Require no worker evidence, or one matching sealed operation whose complete
+registered worker set is settled. Pin that evidence throughout admission.
+
+Use a separate exclusive `service-activation.ndjson`, retaining the existing
+stop journal. Before removing the inhibitor, record intent and create an
+exclusive same-directory held hard link to its original inode. Record staging,
+unlink only the verified original name, flush, reload and verify restored
+original policy, then record a start request before starting. This retains
+exact inhibition contents outside the checkout if startup fails.
+
+On startup failure, restore only the original held inode with no-clobber link
+creation, reload the verified service configuration and preserve both journals
+and lock. A running but uncertain generation is blocked, never certified empty
+or permission for backup. Return `active-unverified` only after inspecting the
+new actual service identity. This is not HTTP/application acceptance and does
+not retire maintenance evidence or release the lock.
+
+```js
+const stopped = await stopLinuxService(options);
+const active = await stopped.activate({ purpose: 'prior-runtime' });
+assert.equal(active.status, 'active-unverified');
+await stopped.close(); // closes retained handles, never unlocks or deletes evidence
+```
+
+- [ ] Add real prior-runtime/deployment activation and invalid-admission tests;
+  observe missing-method red in Actions.
+- [ ] Implement original-policy inactive observation, exclusive activation
+  journal and held inode, sealed worker admission, actual startup verification.
+- [ ] Exercise start failure, receipt flush faults and controller interruption;
+  verify no install/build is performed and unsafe evidence remains blocked.
+- [ ] Record Actions evidence and remaining accepted-service retirement,
+  cold recovery, changed-unit configuration and public-wiring boundaries.
