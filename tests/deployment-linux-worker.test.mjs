@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,14 +13,15 @@ import { runOwnedWorker } from '../scripts/deployment/owned-worker.mjs';
 import { createWorkerJournal, readWorkerJournal } from '../scripts/deployment/worker-journal.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { prepareLinuxWorker } from '../scripts/deployment/linux-worker.mjs';
+import { runStage } from '../scripts/deployment/stage-runner.mjs';
 
 const execute = promisify(execFile);
 const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
 
-async function fixture(t, code, args = []) {
+async function fixture(t, code, args = [], controlName = 'ctl') {
   const root = await temporaryDeployment(t);
   const project = path.join(root, 'app');
-  const control = path.join(root, 'ctl');
+  const control = path.join(root, controlName);
   await mkdir(project);
   await mkdir(control, { mode: 0o700 });
   const owner = {
@@ -83,6 +84,7 @@ test('cancellation of a running target stops ignored signals and redirected desc
   const f = await fixture(t, `
     const fs=require('node:fs');
     process.on('SIGTERM',()=>{});
+    fs.writeFileSync('writer','x');
     fs.writeFileSync('started','yes');
     setInterval(()=>fs.appendFileSync('writer','x'),10);
   `);
@@ -136,6 +138,11 @@ test('target arguments are not shell-expanded or interpreted by systemd', async 
   assert.deepEqual(JSON.parse((await f.run()).stdout), args);
 });
 
+test('saved bootstrap and socket paths preserve literal systemd and environment metacharacters', async t => {
+  const f = await fixture(t, `process.stdout.write('literal-path');`, [], 'ctl-%n-$HOME');
+  assert.equal((await f.run()).stdout, 'literal-path');
+});
+
 test('mutable command input is captured before native preparation awaits', async t => {
   const f = await fixture(t, `process.stdout.write('original');`);
   const prepare = f.operations.prepare;
@@ -161,4 +168,113 @@ test('foreign controller identity and implicit runtime account are refused befor
     'show', `agents-deploy-${f.owner.workerId}.service`, '--property=LoadState', '--value',
   ]);
   assert.equal(stdout.trim(), 'not-found');
+});
+
+async function waitForFile(file) {
+  for (let index = 0; index < 200; index++) {
+    try { return await readFile(file, 'utf8'); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    await delay(50);
+  }
+  throw new Error(`Target did not create ${path.basename(file)}.`);
+}
+
+test('a real stage deadline settles the worker before any recovery is allowed', async t => {
+  const f = await fixture(t, `
+    const fs=require('node:fs'); fs.writeFileSync('writer','x');
+    fs.writeFileSync('started','yes'); process.on('SIGTERM',()=>{});
+    setInterval(()=>fs.appendFileSync('writer','x'),10);
+  `);
+  const prepare = f.operations.prepare;
+  f.operations.prepare = async context => {
+    const handle = await prepare(context);
+    const run = handle.run;
+    handle.run = async ({ signal }) => {
+      const result = run({ signal });
+      result.catch(() => {});
+      await waitForFile(path.join(f.project, 'started'));
+      return runStage('native-command', innerSignal => {
+        innerSignal.addEventListener('abort', () => f.controller.abort(innerSignal.reason), { once: true });
+        return result;
+      }, { timeoutMs: 200, settlementMs: 10000 });
+    };
+    return handle;
+  };
+  await assert.rejects(f.run(), error => {
+    assert.equal(error.code, 'DEPLOYMENT_STAGE_TIMEOUT');
+    assert.equal(error.recoveryAllowed, true);
+    return true;
+  });
+  assert.equal(f.receipts.at(-1).phase, 'settled');
+  const content = await readFile(path.join(f.project, 'writer'), 'utf8');
+  await delay(250);
+  assert.equal(await readFile(path.join(f.project, 'writer'), 'utf8'), content);
+});
+
+test('killing the native bootstrap terminates its target writers without losing cleanup authority', async t => {
+  const f = await fixture(t, `
+    const fs=require('node:fs'); fs.writeFileSync('writer','x'); fs.writeFileSync('started','yes');
+    setInterval(()=>fs.appendFileSync('writer','x'),10);
+  `);
+  const outcome = f.run().then(value => ({ value }), error => ({ error }));
+  await waitForFile(path.join(f.project, 'started'));
+  const unit = `agents-deploy-${f.owner.workerId}.service`;
+  const { stdout } = await execute('systemctl', ['show', unit, '--property=MainPID', '--value']);
+  const pid = Number(stdout.trim());
+  assert.ok(Number.isSafeInteger(pid) && pid > 1);
+  process.kill(pid, 'SIGKILL');
+  const result = await outcome;
+  assert.match(result.error.message, /transport closed/i);
+  assert.equal(f.receipts.at(-1).phase, 'settled');
+  const content = await readFile(path.join(f.project, 'writer'), 'utf8');
+  await delay(250);
+  assert.equal(await readFile(path.join(f.project, 'writer'), 'utf8'), content);
+});
+
+test('killing the CLI controller stops native writers but retains admitted journal evidence', {
+  timeout: 30000,
+}, async t => {
+  const f = await fixture(t, `
+    const fs=require('node:fs'); fs.writeFileSync('writer','x'); fs.writeFileSync('started','yes');
+    setInterval(()=>fs.appendFileSync('writer','x'),10);
+  `);
+  const owner = { ...f.owner, workerId: randomUUID() };
+  const unit = `agents-deploy-${owner.workerId}.service`;
+  const child = fork(new URL('./deployment-linux-controller-child.mjs', import.meta.url),
+    [], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let stderr = '';
+  child.stderr.on('data', bytes => { stderr = (stderr + bytes.toString()).slice(-4096); });
+  const exit = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exit;
+    const state = await execute('systemctl', ['show', unit, '--property=LoadState', '--value']);
+    if (state.stdout.trim() !== 'not-found') {
+      await execute('systemctl', ['stop', unit], { timeout: 15000 });
+      const remaining = await execute('systemctl', ['show', unit, '--property=LoadState', '--value']);
+      if (remaining.stdout.trim() !== 'not-found') await execute('systemctl', ['reset-failed', unit]);
+    }
+  });
+  const ready = new Promise((resolve, reject) => {
+    child.once('message', resolve);
+    child.once('error', reject);
+    child.once('exit', code => reject(new Error(`Controller failed ${code}: ${stderr}`)));
+  });
+  child.send({ owner, saved: f.saved, command: f.command, control: f.control });
+  const announced = await ready;
+  await waitForFile(path.join(f.project, 'started'));
+  child.kill('SIGKILL');
+  await exit;
+  let state;
+  for (let index = 0; index < 200; index++) {
+    state = await execute('systemctl', ['show', unit, '--property=ActiveState', '--value']);
+    if (state.stdout.trim() === 'failed') break;
+    await delay(50);
+  }
+  assert.equal(state.stdout.trim(), 'failed');
+  const content = await readFile(path.join(f.project, 'writer'), 'utf8');
+  await delay(250);
+  assert.equal(await readFile(path.join(f.project, 'writer'), 'utf8'), content);
+  assert.equal((await readWorkerJournal(f.control, announced.owner)).at(-1).phase, 'admitted');
+  await assert.rejects(createWorkerJournal(f.control, announced.owner));
 });
