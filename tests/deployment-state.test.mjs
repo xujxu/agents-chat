@@ -170,3 +170,27 @@ test('blocked recovery advice offers inspection, never a restore command', () =>
   assert.match(advice.message, /worker|inspect/i);
   assert.throws(() => nextPhase('blocked', 'restore-preflight'), /transition/i);
 });
+
+test('preflight blocking can be persisted before any normal phase write, but never erases incomplete work', async t => {
+  const root = await temporaryDeployment(t);
+  const record = {
+    version: 1, operationId: 'preflight-worker', project: root, operation: 'update',
+    phase: 'blocked', previousPhase: null, sourceCommit: null, targetCommit: null,
+    backupId: null, priorRuntime: 'unknown', runtimeIdentity: 'unverified',
+    startedAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z',
+    errorCode: 'DEPLOYMENT_WORKER_UNSETTLED',
+  };
+  await writeState(root, record);
+  assert.deepEqual(await loadState(root), record);
+  await writeFile(path.join(root, 'state.json'), JSON.stringify({
+    ...record, operationId: 'previous', phase: 'accepted', errorCode: null,
+    priorRuntime: 'running',
+  }));
+  await writeState(root, record);
+  assert.deepEqual(await loadState(root), record);
+  await writeFile(path.join(root, 'state.json'), JSON.stringify({
+    ...record, operationId: 'previous', phase: 'building', errorCode: null,
+    priorRuntime: 'running',
+  }));
+  await assert.rejects(writeState(root, record), /unfinished|recovery/i);
+});
