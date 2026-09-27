@@ -97,3 +97,14 @@ test('invalid budgets fail before worker invocation; huge budgets do not overflo
     return 'completed';
   }, { timeoutMs: Number.MAX_SAFE_INTEGER }), 'completed');
 });
+
+test('late synchronous completion cannot outrun the deadline timer', async () => {
+  await assert.rejects(runStage('build', () => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 40);
+    return 'too late';
+  }, { timeoutMs: 10, settlementMs: 100 }), error => {
+    assert.equal(error.code, 'DEPLOYMENT_STAGE_TIMEOUT');
+    assert.equal(error.recoveryAllowed, true);
+    return true;
+  });
+});
