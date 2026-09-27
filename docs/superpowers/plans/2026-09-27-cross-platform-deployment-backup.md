@@ -2602,14 +2602,14 @@ const invocation = retirementRecoveryInvocation(engine, {
 // Only successful checked cleanup reports status='retired'; it does not restore.
 ```
 
-- [ ] Actions-red: saved entry survives renamed checkout and a partly deleted
+- [x] Actions-red: saved entry survives renamed checkout and a partly deleted
   worker bundle; refuses live owner, malformed intent, altered state/foreign
   paths, concurrent recovery and preexisting recovery guard.
-- [ ] Implement fixed recovery bundle and strict cleanup protocol; no recursive
+- [x] Implement fixed recovery bundle and strict cleanup protocol; no recursive
   deletion or user-supplied removal path.
-- [ ] Actual child-process kill after first deletion, independent saved recovery,
+- [x] Actual child-process kill after first deletion, independent saved recovery,
   next-lock acquisition and backup/state preservation on both Actions OSes.
-- [ ] Record accepted evidence and cold-recovery limits.
+- [x] Record accepted evidence and cold-recovery limits.
 
 The recovery bundle is a single retained tooling slot, not a second backup.
 Its own trusted entry/verifier/private directory are the trust base, as with
@@ -2618,3 +2618,73 @@ existing Node filesystem helpers do not provide Windows ACL hardening.
 The bundle update protocol, stale recovery-lease takeover, crash after an N9
 marker was already removed, and unresolved native workers remain separate
 gates. Do not claim this narrow cleanup path supplies those authorizations.
+
+### N10 execution evidence
+
+- Missing independent-recovery module red: `7ccf165`, Actions `36321012466`.
+- Initial implementation: `acaf933`, Actions `36321167339`, all four jobs
+  green. An actual cleanup controller is killed after its first helper
+  deletion; the verified separate saved entry finishes cleanup after the
+  fixture checkout is renamed away and permits a new deployment lock.
+- Expanded fault/guard tests: `c6615dd`, Actions `36321314255`. Deletion
+  failure, old-lock removal failure, missing-file sequence gaps, recovery
+  implementation tampering and actual recovery-controller death behave
+  conservatively. Two status regressions fail on both OSes: a leftover
+  recovery guard was reported idle without an old lock, or merely interrupted
+  after recovery-controller death.
+- Status correction plus actual native-worker cold-cleanup integration:
+  accepted revision `44e56ff0eaf0814019884d300635b4a8eda07e44`, Actions
+  `36321462991`, all four jobs green: **212 Linux shared contracts**,
+  **208 Windows shared contracts with four Linux-only skips**, **20 Linux
+  native cases**, **19 Windows native cases**, plus **13 Windows Job
+  primitive cases**. The additional
+  native case runs a real systemd/Job-contained command before sealing and
+  entering retirement, kills that retirement controller, then uses the
+  independent saved recovery entry to clean up and acquire the next lock.
+
+`recovery-engine` is a fixed closed dependency set with a bounded SHA-256
+manifest. It excludes application dependencies and native worker scripts;
+the worker allowlist is present only as verification metadata. Saving identical
+code reuses this slot; different/incomplete source cannot silently overwrite
+it. The absolute Node invocation removes case-insensitive Node preloads.
+The trusted saved entry verifies the bundle before importing the cleanup
+implementation, and emits only a bounded fixed failure message on stderr.
+
+N9 now emits v2 retirement intent containing original lock-file, control,
+lock-directory and helper-directory identities as well as state/file hashes.
+Cold cleanup accepts only that exact format and the exact helper allowlist,
+up to 32 uniquely named worker journals, and operation journal last. Already
+missing files must be a prefix of the recorded deletion sequence; arbitrary
+gaps or foreign files do not count as completed cleanup. Remaining files are
+retained and validated before mutation. The matching old controller must
+have ended; a live PID/start identity prevents even recovery-guard creation.
+
+`recovery-lock` uses exclusive directory creation and a pinned intent digest
+in its owner receipt. Concurrent recoveries cannot both succeed. State, old
+lock, marker, guard and remaining inventory are checked throughout deletion.
+The original accepted/restored state and backup are never rewritten.
+Completion is recorded inside the guard before removal of the marker and
+old lock; the recovery guard is removed last. Ordinary acquisition/release
+and status now recognize this guard independently of the old deployment lock.
+
+### Remaining gates after N10
+
+This restores only an already accepted operation whose workers had settled
+and whose complete v2 deletion intent exists. It does not reconstruct or
+settle an interrupted native domain, recover incomplete worker enrollment,
+adopt a stale recovery guard, or recover the window after normal retirement
+removed its marker but before its controller released the old lock.
+If the recovery controller itself dies, its exclusive guard remains blocked.
+Completion receipts preserve diagnostics but are not a general takeover API.
+
+The fixed saved recovery bundle still needs production permission provisioning
+and a verified code-update protocol; it must not be silently overwritten on
+the next source version. Linux directory fsync behavior is not claimed for
+Windows. Private bootstrap/verifier code remains part of the trust base.
+These tests do not model privileged malicious filesystem writers or establish
+physical Windows/ARM64 acceptance.
+
+Continue toward the public deployment flow with intended runtime identities,
+application/service/watchdog shutdown and real npm/Next execution, while
+retaining the explicit unresolved recovery gates above. Real historical
+deploy/update/restore acceptance, documentation and main PR remain outstanding.
