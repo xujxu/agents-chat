@@ -312,6 +312,34 @@ test('a later original operation can recover without replaying the previous comp
   assert.equal(JSON.parse(JSON.parse(current).intent).lock.operationId, next.lock.operationId);
 });
 
+for (const [phase, mode] of [
+  ['retirement-live-published', 'none'],
+  ['retirement-live-published', 'settled'],
+  ['retirement-live-workers-done', 'settled'],
+  ['retirement-live-lock-owner', 'settled'],
+  ['retirement-live-lock-directory', 'none'],
+]) {
+  test(`normal live retirement interruption preserves authority through unlock: ${phase}/${mode}`, async t => {
+    const f = await interrupted(t, phase, 'accepted', mode);
+    const state = await readFile(path.join(f.control, 'state.json'));
+    const receipt = JSON.parse(await readFile(path.join(f.control, 'live-retirement.json')));
+    await assert.rejects(f.recover());
+    await f.kill();
+    assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+    await assert.rejects(acquireLock(f.control, { project: f.project, operationId: randomUUID() }));
+    assert.equal(JSON.parse((await f.recover()).stdout).status, 'service-retired');
+    assert.deepEqual(await readFile(path.join(f.control, 'state.json')), state);
+    assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
+    assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(),
+      receipt.runtime.runtime.invocationId);
+    assert.ok(!(await readdir(f.control)).includes('live-retirement.json'));
+    assert.equal(JSON.parse((await f.recover()).stdout).status, 'service-retired');
+    const next = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+    await assert.rejects(f.recover());
+    await releaseLock(f.control, next);
+  });
+}
+
 test('recovery may die twice without replacing its immutable lease or losing the cleanup inventory', async t => {
   const f = await interrupted(t, 'retirement-unlink-0', 'accepted', 'settled');
   await f.kill();

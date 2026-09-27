@@ -3492,3 +3492,31 @@ activation interruption, reboot, post-source/health failure, inactive/changed
 units, Windows installed tasks/accounts, complete backups, public script
 wiring and real dual-platform historical application acceptance remain.
 No main/PR/live-deployment changes.
+
+### Normal live retirement through unlock
+
+Keep the original service-retirement intent after successful live cleanup by
+atomically renaming it to `live-retirement.json`, rather than deleting the last
+authority before worker retirement/unlock. It has identical v3 contents and
+retains the service/state/worker bindings. Ordinary worker retirement may still
+proceed, but new lock admission and idle reporting must refuse this receipt.
+Original live lock release shares native admission, verifies the receipt
+against the exact original lock/state/directories, and deletes old lock owner,
+old lock directory, then receipt. Failure retains the receipt.
+
+Saved service recovery accepts the live receipt as an alternative original
+intent. It requires the exact old lock when any worker evidence remains.
+If the old lock is already partly removed, all service/worker cleanup must
+be complete before continuation. Final completion proof uses the live order
+old lock owner/directory -> live receipt -> recovery owner/directory; normal
+service-retirement recovery keeps its existing order. Replay cannot touch a
+new operation's lock. Existing incomplete worker-retirement intents continue
+to require the independent worker recovery path; no inferred worker ownership.
+
+- [ ] Push native controller-death contracts at live receipt publication,
+  settled-worker cleanup completion, old lock owner deletion and lock directory
+  deletion, with original service/state/backup preservation and new-lock refusal.
+- [ ] Implement no-clobber live intent handoff and exact live unlock validation.
+- [ ] Wire alternative-intent recovery and its ordered completion proof.
+- [ ] Validate existing live repeated cycles, fault barriers, all new crash
+  boundaries and both platform contract matrices in Actions, then checkpoint.

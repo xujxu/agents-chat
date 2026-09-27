@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { acquireLock, loadState, writeState } from '../scripts/deployment/state.mjs';
+import { acquireLock, loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
@@ -48,10 +48,11 @@ fs.open = async function (file, ...args) {
 };
 syncBuiltinESMExports();
 const stopped = await stopLinuxService({ control, lock, unit, project, npm, node });
+let workers;
 if (workerMode !== 'none') {
   const saved = await saveWorkerEngine({ control, project, operationId: lock.operationId,
     source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)) });
-  const workers = await createWorkerOperation({ control, lock, saved });
+  workers = await createWorkerOperation({ control, lock, saved });
   if (workerMode === 'settled') {
     await workers.run({ workerId: randomUUID(), command: {
       file: node, args: ['-e', 'require("node:fs").writeFileSync("worker-finished","yes")'],
@@ -73,10 +74,26 @@ if (phase.startsWith('retirement-')) {
   await writeState(control, { ...current, phase: outcome, previousPhase: current.phase,
     errorCode: prior ? 'BACKUP_FAILED' : null });
   const nativeUnlink = fs.unlink;
+  const pause = async () => {
+    process.send({ phase, lock });
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  };
+  const nativeRename = fs.rename;
+  fs.rename = async (from, to) => {
+    await nativeRename(from, to);
+    if (phase === 'retirement-live-published' && to === path.join(control, 'live-retirement.json')) await pause();
+  };
+  const nativeRmdir = fs.rmdir;
+  fs.rmdir = async file => {
+    await nativeRmdir(file);
+    if (phase === 'retirement-live-lock-directory' && file === path.join(control, 'lock')) await pause();
+  };
   let deleted = 0;
   const pauseAfter = phase === 'retirement-unlink' ? 0 : Number(phase.slice('retirement-unlink-'.length));
   fs.unlink = async function (file) {
     await nativeUnlink(file);
+    if (phase === 'retirement-live-lock-owner' && file === path.join(control, 'lock', 'owner.json')) await pause();
     if ((String(file).endsWith('.held') || ['service-activation.ndjson', 'service-stop.ndjson'].includes(path.basename(file)))
       && deleted++ === pauseAfter) {
       process.send({ phase, lock });
@@ -86,5 +103,10 @@ if (phase.startsWith('retirement-')) {
   };
   syncBuiltinESMExports();
   await stopped.retire();
+  if (phase.startsWith('retirement-live-')) {
+    await workers?.retire();
+    if (phase === 'retirement-live-workers-done') await pause();
+    await releaseLock(control, lock);
+  }
 }
 throw new Error('Fixture did not pause at the requested durable stop receipt.');
