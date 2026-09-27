@@ -137,7 +137,7 @@ test('failed state write prevents the associated source mutation', async () => {
 test('failed activation retains recovery-required state', async () => {
   const { phases, operations } = fixture('verify');
   await assert.rejects(runDeployment({ operation: 'update' }, operations), /verify/);
-  assert.equal(phases.at(-1), 'recovery-required');
+  assert.equal(phases.at(-1), 'blocked');
 });
 
 test('dry-run dispatch never calls transaction mutators or normal target resolver', async () => {
@@ -165,6 +165,23 @@ test('admission refusal stops before capacity, downtime, state or source changes
     assert.deepEqual(calls, ['inspect', 'resolveTarget', 'admit']);
     assert.deepEqual(phases, []);
   }
+});
+
+test('blocked cleanup remains blocked when state recording also fails', async () => {
+  const { operations } = fixture('build');
+  let stops = 0;
+  operations.stop = async () => {
+    if (++stops === 2) throw Object.assign(new Error('owned writer remains'), { recoveryAllowed: false });
+  };
+  operations.record = async phase => {
+    if (phase === 'blocked') throw new Error('journal unavailable');
+  };
+  await assert.rejects(runDeployment({ operation: 'update' }, operations), error => {
+    assert.equal(error.recoveryAllowed, false);
+    assert.equal(error.errors.length, 3);
+    assert.match(error.errors[2].message, /journal unavailable/);
+    return true;
+  });
 });
 
 test('accepted identity skips update without replacing journal or rotating backup; deploy rebuilds', async () => {

@@ -131,3 +131,42 @@ test('deployment interruption reports the live owner or required inspection', as
   await writeFile(ownerPath, JSON.stringify(lock));
   await releaseLock(root, lock);
 });
+
+test('unsettled worker state survives reentry and forbids releasing its lock or starting restore', async t => {
+  const root = await temporaryDeployment(t);
+  const lock = await acquireLock(root, { project: root, operationId: 'blocked-worker' });
+  const initial = {
+    version: 1, operationId: 'blocked-worker', project: root, operation: 'update',
+    phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40),
+    targetCommit: 'b'.repeat(40), backupId: null,
+    priorRuntime: 'running', runtimeIdentity: 'fixture',
+    startedAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z',
+    errorCode: null,
+  };
+  await writeState(root, initial);
+  await writeState(root, {
+    ...initial, phase: 'blocked', previousPhase: 'preflight',
+    errorCode: 'DEPLOYMENT_WORKER_UNSETTLED',
+  });
+  const { reconcileInterruptedOperation } = await import('../scripts/deployment/state.mjs');
+  assert.equal((await reconcileInterruptedOperation(root)).status, 'blocked');
+  await assert.rejects(releaseLock(root, lock), /blocked|worker/i);
+  await assert.rejects(writeState(root, {
+    ...initial, operationId: 'restore-attempt', operation: 'restore', phase: 'restore-preflight',
+  }), /blocked|worker/i);
+  const retained = JSON.parse(await readFile(path.join(root, 'lock', 'owner.json'), 'utf8'));
+  assert.equal(retained.token, lock.token);
+  assert.equal((await loadState(root)).phase, 'blocked');
+});
+
+test('blocked recovery advice offers inspection, never a restore command', () => {
+  const advice = recoveryAdvice({
+    phase: 'blocked', backupComplete: true, restored: false,
+    restoreCommand: 'must not execute',
+    diagnosticCommand: 'node saved-tool.mjs --status --json',
+  });
+  assert.equal(advice.status, 'blocked');
+  assert.equal(advice.command, 'node saved-tool.mjs --status --json');
+  assert.match(advice.message, /worker|inspect/i);
+  assert.throws(() => nextPhase('blocked', 'restore-preflight'), /transition/i);
+});
