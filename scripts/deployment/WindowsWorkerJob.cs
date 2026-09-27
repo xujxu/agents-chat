@@ -72,6 +72,9 @@ namespace Deployment
         static extern bool GetHandleInformation(IntPtr value, out uint flags);
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern bool CloseHandle(IntPtr value);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        static extern bool GetKernelObjectSecurity(IntPtr value, uint information,
+            [Out] byte[] descriptor, uint length, out uint needed);
         [DllImport("kernel32.dll")]
         static extern IntPtr GetCurrentProcess();
         [DllImport("kernel32.dll")]
@@ -122,6 +125,22 @@ namespace Deployment
                 uint flags;
                 Check(GetHandleInformation(Retained(), out flags), "Query Job handle inheritance");
                 return (flags & 1) != 0;
+            }
+            public byte[] SecurityDescriptor
+            {
+                get
+                {
+                    uint needed;
+                    bool success = GetKernelObjectSecurity(Retained(), 4, null, 0, out needed);
+                    int error = Marshal.GetLastWin32Error();
+                    if (success || error != 122 || needed < 20 || needed > 16384)
+                        throw new Win32Exception(error, "Invalid Job DACL size query");
+                    byte[] descriptor = new byte[needed];
+                    uint returned;
+                    Check(GetKernelObjectSecurity(Retained(), 4, descriptor, needed, out returned), "Read original Job DACL");
+                    if (returned != needed) throw new InvalidDataException("Job DACL changed during query.");
+                    return descriptor;
+                }
             }
         }
         public static string ProcessIdentity(int pid)
