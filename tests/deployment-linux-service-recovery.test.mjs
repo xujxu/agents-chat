@@ -256,10 +256,7 @@ for (const fault of ['delete', 'state-drift', 'close', 'lock-delete', 'worker-de
   });
 }
 
-for (const pause of ['service', 'worker', 'completion', 'marker', 'lock-owner', 'lock-directory', 'guard-owner', 'guard-directory']) {
-test(`killed recovery resumes safely through cleanup and unlock: ${pause}`, async t => {
-  const f = await interrupted(t, 'retirement-unlink-0', 'accepted', pause === 'worker' ? 'settled' : 'none');
-  await f.kill();
+async function pausedRecovery(t, f, pause) {
   const child = fork(new URL('./deployment-service-recovery-child.mjs', import.meta.url),
     [f.control, f.project, f.lock.operationId, f.saved.manifestSha256, pause],
     { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
@@ -275,9 +272,16 @@ test(`killed recovery resumes safely through cleanup and unlock: ${pause}`, asyn
     child.once('message', value => { clearTimeout(timer); resolve(value); });
     child.once('exit', code => { clearTimeout(timer); reject(new Error(`Recovery exited ${code}: ${diagnostic}`)); });
   });
+  return async () => { child.kill('SIGKILL'); await exited; };
+}
+
+for (const pause of ['lease', 'service', 'worker', 'pending', 'completion', 'marker', 'lock-owner', 'lock-directory', 'guard-owner', 'guard-directory']) {
+test(`killed recovery resumes safely through cleanup and unlock: ${pause}`, async t => {
+  const f = await interrupted(t, 'retirement-unlink-0', 'accepted', pause === 'worker' ? 'settled' : 'none');
+  await f.kill();
+  const kill = await pausedRecovery(t, f, pause);
   await assert.rejects(f.recover());
-  child.kill('SIGKILL');
-  await exited;
+  await kill();
   if (pause === 'worker') {
     assert.ok((await readdir(f.control)).includes('worker-engine'));
     assert.ok(!(await readdir(f.control)).includes('service-stop.ndjson'));
@@ -307,3 +311,53 @@ test('a later original operation can recover without replaying the previous comp
   assert.notDeepEqual(current, previous);
   assert.equal(JSON.parse(JSON.parse(current).intent).lock.operationId, next.lock.operationId);
 });
+
+test('recovery may die twice without replacing its immutable lease or losing the cleanup inventory', async t => {
+  const f = await interrupted(t, 'retirement-unlink-0', 'accepted', 'settled');
+  await f.kill();
+  const first = await pausedRecovery(t, f, 'service');
+  const lease = await readFile(path.join(f.control, 'recovery-lock', 'owner.json'));
+  await first();
+  const second = await pausedRecovery(t, f, 'worker');
+  assert.deepEqual(await readFile(path.join(f.control, 'recovery-lock', 'owner.json')), lease);
+  await assert.rejects(f.recover());
+  await second();
+  assert.equal(JSON.parse((await f.recover()).stdout).status, 'service-retired');
+  assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
+});
+
+for (const fault of ['lease', 'guard-replacement', 'completion-digest', 'completion-gap', 'restart']) {
+  test(`resumed recovery refuses altered authority without further deletion: ${fault}`, async t => {
+    const f = await interrupted(t);
+    await f.kill();
+    const kill = await pausedRecovery(t, f, fault === 'lease' || fault === 'guard-replacement' ? 'service' : 'completion');
+    await kill();
+    const guard = path.join(f.control, 'recovery-lock');
+    if (fault === 'lease') {
+      const file = path.join(guard, 'owner.json');
+      const lease = JSON.parse(await readFile(file));
+      lease.intentSha256 = '0'.repeat(64);
+      await writeFile(file, JSON.stringify(lease), { mode: 0o600 });
+    }
+    if (fault === 'guard-replacement') {
+      await rename(guard, `${guard}.old`);
+      await mkdir(guard, { mode: 0o700 });
+      await rename(path.join(`${guard}.old`, 'owner.json'), path.join(guard, 'owner.json'));
+      await fs.rmdir(`${guard}.old`);
+    }
+    if (fault === 'completion-digest') {
+      const file = path.join(f.control, 'recovery-complete.json');
+      const receipt = JSON.parse(await readFile(file));
+      receipt.intentSha256 = '0'.repeat(64);
+      await writeFile(file, JSON.stringify(receipt), { mode: 0o600 });
+    }
+    if (fault === 'completion-gap') await unlink(path.join(guard, 'owner.json'));
+    if (fault === 'restart') await systemctl('restart', f.unit);
+    const before = (await readdir(f.control)).sort();
+    await assert.rejects(f.recover());
+    assert.deepEqual((await readdir(f.control)).sort(), before);
+    assert.ok(before.includes('lock'));
+    assert.ok(before.includes('recovery-lock'));
+    assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
+  });
+}

@@ -12,6 +12,17 @@ try {
     setInterval(() => {}, 1000);
     await new Promise(() => {});
   };
+  const open = fs.open;
+  fs.open = async (file, ...args) => {
+    const handle = await open(file, ...args);
+    const target = pause === 'lease' ? path.join(control, 'recovery-lock', 'owner.json')
+      : pause === 'pending' ? path.join(control, 'recovery-complete.pending') : null;
+    if (file === target && args[0] === 'wx') {
+      const sync = handle.sync.bind(handle);
+      handle.sync = async () => { await sync(); await stop(file); };
+    }
+    return handle;
+  };
   const unlink = fs.unlink;
   fs.unlink = async file => {
     await unlink(file);

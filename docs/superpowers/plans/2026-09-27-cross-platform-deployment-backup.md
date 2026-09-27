@@ -3428,7 +3428,7 @@ original lock token.
 - [x] Implement `linux-recovery-admission.mjs` and include it in the saved bundle.
 - [x] Resume only exact dead-owner leases under native admission.
 - [x] Persist full completion proof and finish only its missing deletion prefix.
-- [ ] Kill the real recovery at service/worker deletion, completion publication,
+- [x] Kill the real recovery at service/worker deletion, completion publication,
   service marker unlink, old lock owner/directory removal and guard owner/
   directory removal; retry and verify byte-identical state/backup, same service,
   exclusive admission and refusal to touch the next operation's lock.
@@ -3442,3 +3442,13 @@ refusals rather than guessed ownership. Ordinary Linux lock acquisition
 shares directory admission, preventing a new operation racing final cleanup.
 The persistent completion receipt is intentionally retained after success;
 tests expect it and prove it cannot unlock a newly acquired operation.
+
+Initial `a052d71` / Actions `36332873227` passed all five jobs: 44 Linux
+recovery/admission contracts, 69 existing Linux native, 221 Linux shared,
+217 Windows shared with four skips, 19 Windows coordinator plus native Job.
+The kernel admission probe proves the flock subprocess can exit while the
+parent retains exclusion; actual SIGKILL releases it without unlinking any
+lock pathname. All eight final-cleanup death boundaries resume successfully.
+Follow-up acceptance adds unchanged-lease recovery dying twice, guard/lease/
+completion tamper, completion deletion gaps, runtime replacement and ordinary
+deployment admission while native recovery admission is held.

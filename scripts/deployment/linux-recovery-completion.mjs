@@ -43,6 +43,10 @@ export async function readServiceCompletion({ control, project, operationId, par
   }
   const original = parseIntent(Buffer.from(receipt.intent), control, project,
     operationId ?? parse(Buffer.from(receipt.intent))?.lock?.operationId);
+  if (!original.state || !['accepted', 'prior-runtime-restored'].includes(original.state.phase)
+    || original.state.project !== project || original.state.operationId !== original.lock.operationId) {
+    throw new Error('Completion proof does not describe a verified terminal operation.');
+  }
   const leaseOwner = validateRecoveryLease(parse(Buffer.from(receipt.leaseBytes)), original, receipt.intentSha256, receipt.guard);
   const markerPath = path.join(control, 'service-retirement.json');
   const lockDirectory = path.join(control, 'lock');
@@ -102,6 +106,10 @@ export async function finishServiceRecovery({ control, project, operationId, par
       if (observed === leaseOwner.controllerIdentity
         && !(ownLease && leaseOwner.pid === process.pid)) throw new Error('Recovery lease owner still alive.');
       await service.check();
+      const parent = await canonicalWorkerDirectory(path.dirname(original.inhibition));
+      if (!same(identity(parent.info), original.heldParentIdentity) || parent.info.uid !== 0 || parent.info.mode & 0o022) {
+        throw new Error('Completed service maintenance directory changed.');
+      }
       await checkFile(original.stateFile);
       if (!same(await loadState(control), original.state)) throw new Error('Completed application state changed.');
       for (const entry of [...original.files, ...(original.workers?.files ?? [])]) {

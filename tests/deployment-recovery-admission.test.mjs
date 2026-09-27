@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
-import { mkdir, rename } from 'node:fs/promises';
+import { mkdir, readdir, rename } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { acquireRecoveryAdmission } from '../scripts/deployment/linux-recovery-admission.mjs';
+import { acquireLock } from '../scripts/deployment/state.mjs';
 
 test('directory admission remains exclusive after flock child exits and releases on close', async t => {
   const root = await temporaryDeployment(t);
@@ -12,6 +13,8 @@ test('directory admission remains exclusive after flock child exits and releases
   try {
     await first.check();
     await assert.rejects(acquireRecoveryAdmission(root));
+    await assert.rejects(acquireLock(root, { project: root, operationId: 'must-not-race-recovery' }));
+    assert.deepEqual(await readdir(root), []);
   } finally { await first.close(); }
   const next = await acquireRecoveryAdmission(root);
   await next.close();
