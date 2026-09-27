@@ -176,14 +176,13 @@ export async function installStreamSaveFixture(page: Page, turn: StreamTurn) {
   const confirmationGate = new Promise<void>(resolve => { releaseConfirmation = resolve; });
   await page.route('**/api/chats', route => {
     if (route.request().method() !== 'POST') return route.continue();
+    const body: unknown = route.request().postDataJSON();
+    if (isRecord(body) && body.action === 'set-last-chat') {
+      assert.ok(!body.chat && !body.operation, 'Save disguised as metadata action');
+      return route.continue();
+    }
     return completion.run(async () => {
-      const body: unknown = route.request().postDataJSON();
       assert.ok(isRecord(body), 'Invalid chat request');
-      if (body.action === 'set-last-chat') {
-        assert.ok(!body.chat && !body.operation, 'Save disguised as metadata action');
-        await route.continue();
-        return;
-      }
       const save = parseStreamSave(body, completionReleased);
       (started ? saves : setupSaves).push(save);
       if (started) validateStreamSaves(saves, turn);
@@ -541,3 +540,33 @@ turn sequence. Late callbacks/errors are retained by the existing completion
 tracker. Final-save identity and acknowledgement remain separate from baseline
 readiness. No production exports, new runners, timeout increases or retries
 are introduced.
+
+## Initial red evidence and fixture correction
+
+Source c38382e7f7c7abca9e3054af0870c2cfb25d3c38, full E2E
+[36287256431](https://github.com/xujxu/agents-chat/actions/runs/36287256431):
+four jobs passed; desktop2 failed precisely the two baseline contracts
+(initial-only returned1; duplicate-operation evaluator did not throw).
+Desktop3 reached the intended held-response assertion: trace `expect@176`
+at194041.672 reports "Confirmation response is held; the baseline must remain
+pending", received2. However, teardown then reported "Send arrived during
+fixture teardown", masking the primary assertion in the job log.
+
+The retained desktop3 trace identifies the late request as `set-last-chat`
+at194059.986, after releasing the confirmation response. This is metadata,
+not a chat save. The initial fixture incorrectly enrolled every POST in the
+save-completion tracker. Correct the fixture by distinguishing that explicit
+metadata action before registering save lifecycle work, retaining its existing
+shape assertion and normal `route.continue` rejection behavior. Unknown or
+disguised saves still fail; actual save callbacks remain tracked and drained.
+No error is caught or ignored and the baseline evaluator remains unchanged.
+
+Artifact10920812695, `playwright-artifacts-desktop-3`, is2835256 bytes;
+archive SHA256
+`6f5c37b7879222ba0246a04d4456ac6327c4a89e66c86d32c71f95cbc93c6fdb`.
+The trace contains both the browser request and its `route.fetch` request;
+those paired network records are not duplicate frontend save arrivals.
+
+Push this metadata-classification correction as a new red revision and confirm
+the intended UI failure appears without the teardown violation before applying
+Task2. This is a fixture repair with new source, not a retry of the same revision.

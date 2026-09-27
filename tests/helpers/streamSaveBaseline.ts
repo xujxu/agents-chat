@@ -131,14 +131,13 @@ export async function installStreamSaveFixture(page: Page, turn: StreamTurn) {
   const confirmationGate = new Promise<void>(resolve => { releaseConfirmation = resolve; });
   await page.route('**/api/chats', route => {
     if (route.request().method() !== 'POST') return route.continue();
+    const body: unknown = route.request().postDataJSON();
+    if (isRecord(body) && body.action === 'set-last-chat') {
+      assert.ok(!body.chat && !body.operation, 'Save disguised as metadata action');
+      return route.continue();
+    }
     return completion.run(async () => {
-      const body: unknown = route.request().postDataJSON();
       assert.ok(isRecord(body), 'Invalid chat request');
-      if (body.action === 'set-last-chat') {
-        assert.ok(!body.chat && !body.operation, 'Save disguised as metadata action');
-        await route.continue();
-        return;
-      }
       const save = parseStreamSave(body, completionReleased);
       (started ? saves : setupSaves).push(save);
       if (started) validateStreamSaves(saves, turn);
