@@ -136,8 +136,12 @@ export async function createWorkerJournal(root, suppliedOwner) {
     await handle.sync();
     if (process.platform === 'linux') {
       const parent = await open(location.root, constants.O_RDONLY | constants.O_DIRECTORY);
+      const errors = [];
       try { await parent.sync(); }
-      finally { await parent.close(); }
+      catch (error) { errors.push(error); }
+      try { await parent.close(); }
+      catch (error) { errors.push(error); }
+      if (errors.length) throw errors.length === 1 ? errors[0] : new AggregateError(errors);
     }
     await namedFile(location, handle, owner);
   } catch (error) {
