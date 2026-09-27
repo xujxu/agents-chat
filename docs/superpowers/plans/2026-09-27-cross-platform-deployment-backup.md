@@ -1986,3 +1986,95 @@ Only the feature branch changed, with all validation in GitHub Actions.
 Main, existing public deployment scripts and live installation are unchanged.
 Full historical deployment/update/restore acceptance, user README and the
 main-targeted PR remain blocked on completing the preceding native work.
+
+## N6: Explicit Windows Job primitive and gated native launcher
+
+Continue inline. Use Windows PowerShell 7 (`pwsh`) and the installed .NET
+runtime's `Add-Type` for a small checked C# Win32 boundary, avoiding an npm
+native binding that `npm ci` could remove. The compiler/platform requirement
+must become pre-downtime admission before public integration. No fallback to
+taskkill or an uncontained target is permitted.
+
+**Files**
+
+- `scripts/deployment/WindowsWorkerJob.cs`: checked 64-bit Win32 Job interop,
+  current-account private security descriptor, original retained handle,
+  identity metadata, bounded enumeration and termination.
+- `scripts/deployment/windows-worker-launcher.ps1`: trusted bootstrap which
+  compiles the sibling interop source, validates its live original owner,
+  joins the configured named Job, closes its temporary Job handle, reports
+  readiness and only then reads a single bounded target grant from stdin.
+- `tests/deployment-windows-job.ps1`: actual native tests in windows-2022.
+- `tests/deployment-windows-job-owner.ps1`: isolated owner process used to
+  exercise automatic kill-on-close after owner termination.
+- `.github/workflows/deployment-lifecycle.yml`: separate Windows native job.
+
+The primitive is not yet the Node coordinator adapter. Test helpers copy the
+interop/launcher into private temporary directories to avoid reliance on the
+checkout after launch. Production saved-engine allowlist/manifest wiring and
+Node transport follow only after this native boundary is verified.
+
+### Native API
+
+`WindowsWorkerJob.Create(Guid generation)` uses
+`Local\\agents-deploy-<generation>`; reject `ERROR_ALREADY_EXISTS` immediately
+without changing the existing Job. Explicit protected DACL permits current
+account SID and LocalSystem only. SECURITY_ATTRIBUTES disables inheritance.
+Set KILL_ON_JOB_CLOSE before any launcher can join, with no breakaway flags;
+query the flags and handle inheritance back before acknowledging creation.
+Expose Name, AccountSid, SessionId, Generation and OwnerIdentity (PID/start
+ticks) as captured identity, never use just the name as recovery authority.
+
+Use `CreateJobObjectW`, `SetInformationJobObject`,
+`QueryInformationJobObject`, `AssignProcessToJobObject`,
+`OpenJobObjectW`, `TerminateJobObject`, `IsProcessInJob`,
+`GetHandleInformation`, `CloseHandle`, SDDL conversion and LocalFree.
+Validate x64/arm64 structure size/offsets at initialization (144-byte extended
+limits, 64-byte basic limits); unsupported pointer size rejects.
+
+`JoinCurrent(name)` opens only an existing Job with assignment/query rights,
+verifies required limits, assigns the bootstrap itself, checks membership,
+and explicitly closes the temporary handle before returning. No actual target
+code or inherited Node preload executes before this point.
+
+`Members()` queries only the original retained handle with a maximum 4096
+process-ID buffer. Reject native errors, ERROR_MORE_DATA, assigned/list count
+mismatch, invalid/duplicate IDs or impossible lengths. Never query a newly
+created same-name object. `Terminate()` requests termination; callers must
+still poll `Members()` until zero and join the launcher. `Dispose()` explicitly
+closes the original non-inherited handle; OS last-handle cleanup is the owner
+death safety net, not a substitute for the ordinary settlement receipt.
+
+### Gated launcher
+
+Launch `pwsh -NoProfile -NonInteractive -File <private-launcher>` through
+ProcessStartInfo.ArgumentList with UseShellExecute=false. No command target in
+argv. The launcher verifies parent PID/start identity, joins the exact Job and
+closes its temporary handle before emitting one JSON ready frame. Target grant
+is read only after readiness and contains exact executable, argv, cwd and env.
+Use .NET ProcessStartInfo.ArgumentList and an explicitly replaced environment,
+not cmd.exe, PowerShell evaluation or argument concatenation. Reject duplicate
+or oversized input, NULs and malformed command shapes. Owner/control-pipe loss
+must not leave a pre-admission launcher able to spawn later.
+
+Native tests use controlled long-lived writing Node targets and their detached
+descendants. Test assignment precedes target creation, cancellation before
+grant, nested Job compatibility, explicit termination/query, root exits while
+descendant survives, killed launcher, killed original owner, same-name collision
+noninterference, and independent sentinel preservation. Poll boundedly; no
+process-name/port killing and no broad OOM experiment. The native owner handle
+must remain outside the Job, and the launcher must not keep an extra handle.
+
+### N6 execution
+
+- [ ] Write and push actual Windows tests; collect missing-interop/launcher red.
+- [ ] Implement checked C# boundary and gated launcher.
+- [ ] Run native Windows acceptance and all existing Linux/Windows jobs.
+- [ ] Record accepted revision, actual results and the remaining Node adapter,
+  saved manifest, durable receipt, account/session, ACL and recovery gates.
+
+The implementation itself belongs in the files above, with exact executable
+test fixtures. Run only in Actions:
+`pwsh -NoProfile -File tests/deployment-windows-job.ps1`.
+Native Windows success does not imply physical Windows installation acceptance
+or complete deployment/restore support.

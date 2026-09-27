@@ -76,3 +76,16 @@ jobs:
         run: sudo "$(command -v node)" tests/deployment-linux-domain-probe.mjs
       - name: Exercise actual saved-engine systemd workers
         run: sudo "$(command -v node)" --test tests/deployment-linux-worker.test.mjs
+
+  windows-native:
+    name: Native Windows Job ownership
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Exercise explicit Job and gated launcher
+        shell: pwsh
+        run: ./tests/deployment-windows-job.ps1
