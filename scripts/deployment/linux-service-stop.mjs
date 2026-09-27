@@ -3,6 +3,7 @@ import { lstat, mkdir, open } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { inspectLinuxService } from './linux-service-inspection.mjs';
+import { activateLinuxService } from './linux-service-activation.mjs';
 import { linuxNative } from './linux-systemd.mjs';
 import { assertLockOwner, captureLockOwner, loadState, requireNoServiceMaintenance } from './state.mjs';
 import { createEvidenceJournal, journalUncertain } from './evidence-journal.mjs';
@@ -20,12 +21,14 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
   let closed = false;
   let poisoned = false;
   let busy = false;
+  let activationAttempted = false;
+  let activated;
   const close = async () => {
     if (busy) throw journalUncertain(new Error('Cannot close service stop authority while checking it.'));
     if (closed) return;
     closed = true;
     const results = await Promise.allSettled([
-      service?.close(), journal?.close(), inhibitHandle?.close(), lockHandle?.close(),
+      service?.close(), journal?.close(), inhibitHandle?.close(), lockHandle?.close(), activated?.close(),
     ]);
     const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
     if (errors.length) throw journalUncertain(new AggregateError(errors, 'Service stop handle cleanup failed.'));
@@ -58,10 +61,11 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
       const state = await loadState(root);
       if (!state || state.project !== project || state.operationId !== lock.operationId
         || !['stopped', 'copying', 'rotating', 'backup-ready', 'source-selected',
-          'dependencies', 'building', 'configuring'].includes(state.phase)) {
+          'dependencies', 'building', 'configuring', 'activating'].includes(state.phase)) {
         throw new Error('Service maintenance transaction state no longer authorizes stopped work.');
       }
       if (journal) await journal.check();
+      return state;
     };
     await checkAuthority();
     service = await inspectLinuxService({ unit, project, npm, node });
@@ -129,7 +133,7 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
     await record('stopped');
     return Object.freeze({
       async checkStopped() {
-        if (busy) throw journalUncertain(new Error('Service stop authority is busy.'));
+        if (busy || activationAttempted) throw journalUncertain(new Error('Service stop authority is busy or activation was attempted.'));
         busy = true;
         try {
           await checkInhibition();
@@ -139,6 +143,22 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
         } catch (error) {
           poisoned = true;
           throw journalUncertain(error);
+        } finally { busy = false; }
+      },
+      async activate({ purpose }) {
+        if (busy || activationAttempted || closed || poisoned) {
+          throw journalUncertain(new Error('Service activation authority is unavailable or already used.'));
+        }
+        busy = true;
+        activationAttempted = true;
+        try {
+          activated = await activateLinuxService({
+            control: root, lock, unit, project, npm, node, service, inhibition, checkAuthority, checkInhibition,
+          }, purpose);
+          return Object.freeze({ status: activated.status, identity: activated.identity });
+        } catch (error) {
+          poisoned = true;
+          throw error;
         } finally { busy = false; }
       },
       close,

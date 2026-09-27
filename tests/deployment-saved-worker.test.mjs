@@ -23,6 +23,7 @@ const files = [
   'linux-systemd.mjs', 'linux-runtime.mjs',
   'linux-service-inspection.mjs',
   'linux-service-stop.mjs',
+  'linux-service-activation.mjs', 'service-activation-workers.mjs',
 ];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 

@@ -259,6 +259,24 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
       }
       return { stopped: true };
     };
+    const checkPolicy = async ({ inhibited = false, stopped = false } = {}) => {
+      if (closed) throw new Error('Service inspection is closed.');
+      const current = await configuration(unit, npm);
+      const runtimeKeys = ['MainPID', 'ActiveState', 'SubState', 'ControlGroup', 'InvocationID'];
+      if (await bootId() !== boot
+        || properties.some(key => !runtimeKeys.includes(key) && current.state[key] !== (
+          inhibited && key === 'RefuseManualStart' ? 'yes'
+            : inhibited && key === 'Restart' ? 'no' : state[key]))
+        || !same([...current.drops].sort(), [...config.drops, ...(inhibited ? [inhibition] : [])].sort())
+        || !same(current.conditions, inhibited ? [['ConditionPathExists', false, true, inhibition]] : [])) {
+        throw new Error('Original service policy or source configuration changed.');
+      }
+      await checkSources();
+      if (stopped && (current.state.MainPID !== '0' || !['inactive', 'failed'].includes(current.state.ActiveState)
+        || current.state.InvocationID && current.state.InvocationID !== runtime.invocationId
+        || current.state.ControlGroup && current.state.ControlGroup !== group
+        || await population(true))) throw new Error('Original service is not stopped.');
+    };
     await check();
     const identity = Object.freeze({
       runtime, bootId: boot, controlGroup: group,
@@ -266,7 +284,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
         path: source.file, ...source.original, sha256: source.sha256,
       }))),
     });
-    return Object.freeze({ identity, check, checkInhibited, close });
+    return Object.freeze({ identity, check, checkInhibited, checkPolicy, close });
   } catch (error) {
     try { await close(); }
     catch (cleanup) { throw new AggregateError([error, cleanup], 'Service inspection and handle cleanup failed.'); }
