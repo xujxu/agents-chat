@@ -23,6 +23,7 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
   let busy = false;
   let activationAttempted = false;
   let activated;
+  let retirementAttempted = false;
   const close = async () => {
     if (busy) throw journalUncertain(new Error('Cannot close service stop authority while checking it.'));
     if (closed) return;
@@ -49,7 +50,7 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
       || initial.operationId !== lock.operationId || initial.priorRuntime !== 'running') {
       throw new Error('Service stop requires matching stopped-phase transaction admission.');
     }
-    const checkAuthority = async () => {
+    const checkAuthority = async ({ retiring = false } = {}) => {
       if (closed || poisoned) throw new Error('Service stop authority is closed or poisoned.');
       await assertLockOwner(root, lock);
       const current = await canonicalWorkerDirectory(root, { privateMode: true });
@@ -61,10 +62,10 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
       const state = await loadState(root);
       if (!state || state.project !== project || state.operationId !== lock.operationId
         || !['stopped', 'copying', 'rotating', 'backup-ready', 'source-selected',
-          'dependencies', 'building', 'configuring', 'activating'].includes(state.phase)) {
+          'dependencies', 'building', 'configuring', 'activating', ...(retiring ? ['accepted'] : [])].includes(state.phase)) {
         throw new Error('Service maintenance transaction state no longer authorizes stopped work.');
       }
-      if (journal) await journal.check();
+      if (journal && !retiring) await journal.check();
       return state;
     };
     await checkAuthority();
@@ -154,12 +155,27 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
         try {
           activated = await activateLinuxService({
             control: root, lock, unit, project, npm, node, service, inhibition, checkAuthority, checkInhibition,
+            checkStopJournal: () => journal.check(),
           }, purpose);
           return Object.freeze({ status: activated.status, identity: activated.identity });
         } catch (error) {
           poisoned = true;
           throw error;
         } finally { busy = false; }
+      },
+      async retire() {
+        if (busy || retirementAttempted || closed || poisoned || !activated) {
+          throw journalUncertain(new Error('Service retirement requires the original live activated authority.'));
+        }
+        busy = true;
+        retirementAttempted = true;
+        try {
+          await activated.retire();
+        } catch (error) {
+          poisoned = true;
+          throw error;
+        } finally { busy = false; }
+        await close();
       },
       close,
     });

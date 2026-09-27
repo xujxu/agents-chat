@@ -7,6 +7,7 @@ import { linuxNative, linuxSystemdProperties } from './linux-systemd.mjs';
 import { inspectLinuxService } from './linux-service-inspection.mjs';
 import { retainActivationWorkers } from './service-activation-workers.mjs';
 import { readWorkerFile, syncWorkerDirectory } from './worker-files.mjs';
+import { retireLinuxService } from './linux-service-retirement.mjs';
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const allowed = {
@@ -120,7 +121,40 @@ export async function activateLinuxService(context, purpose) {
         await service.checkPolicy();
         await active.check();
         await record('started', active.identity);
-        return Object.freeze({ status: 'active-unverified', identity: active.identity, close });
+        return Object.freeze({
+          status: 'active-unverified', identity: active.identity, close,
+          async retire() {
+            if (closed || purpose !== 'deployment') {
+              throw journalUncertain(new Error('Service retirement requires an accepted deployment activation, not prior-runtime restart.'));
+            }
+            const verify = async () => {
+              const accepted = await checkAuthority({ retiring: true });
+              if (accepted.phase !== 'accepted' || !['activating', 'activation-unverified'].includes(accepted.previousPhase)
+                || Object.keys(state).filter(key => !['phase', 'previousPhase', 'updatedAt'].includes(key))
+                  .some(key => accepted[key] !== state[key])) {
+                throw new Error('Matching application acceptance is required for service retirement.');
+              }
+              await workers.check();
+              await service.checkPolicy();
+              await active.check();
+              return accepted;
+            };
+            const verifyEvidence = async () => {
+              await context.checkStopJournal();
+              await journal.check();
+              const current = await lstat(held);
+              if (current.dev !== initial.dev || current.ino !== initial.ino || current.nlink !== 1
+                || !bytes.equals(await readWorkerFile(held, 8192, { privateMode: true }))) {
+                throw new Error('Original held service inhibitor changed before retirement.');
+              }
+            };
+            try {
+              await verify();
+              await verifyEvidence();
+              await retireLinuxService({ control, lock, held, runtime: active.identity, verify, verifyEvidence });
+            } catch (error) { throw journalUncertain(error); }
+          },
+        });
       }
       if (observed.ActiveState === 'failed' || observed.SubState === 'auto-restart') {
         throw new Error('Service activation failed.');

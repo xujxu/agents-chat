@@ -19,6 +19,7 @@ export const workerEngineFiles = Object.freeze([
   'linux-service-inspection.mjs',
   'linux-service-stop.mjs',
   'linux-service-activation.mjs', 'service-activation-workers.mjs',
+  'linux-service-retirement.mjs',
 ]);
 const files = workerEngineFiles;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
