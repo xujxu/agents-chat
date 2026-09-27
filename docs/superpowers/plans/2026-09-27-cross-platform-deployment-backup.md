@@ -3250,7 +3250,7 @@ Files and responsibilities:
   live owner, worker evidence and competing/stale recovery guards before deletion.
 - [x] Add deletion/close/controller-death faults during recovery; retain guard
   and diagnostics, never automatic retries or force-unlock.
-- [ ] Push and await all Actions jobs, inspect bounded failures and checkpoint.
+- [x] Push and await all Actions jobs, inspect bounded failures and checkpoint.
 
 Native success assertion:
 ```javascript
@@ -3279,3 +3279,37 @@ shared, 217 Windows shared plus four skips, and 19 Windows coordinator contracts
 plus the native Job step. Closing review freezes the newly exposed nested
 configuration/executable evidence so a caller cannot mutate the live inspector's
 comparison baseline. Final acceptance of that guard is recorded below.
+
+#### Cold service retirement checkpoint (2026-09-27)
+
+Final executable `60544d4aba8a4de0a647e7a819f6c50ba4bf422c`, Actions
+`36330782872`, passed all five jobs. It includes the unchanged 21 cold-service
+contracts, 69 existing Linux native contracts, both shared contract matrices
+and Windows native ownership. Both the initial and final implementations ran
+exclusively in Actions.
+
+The saved independent recovery bundle can now finish exact v2 service
+retirement after controller SIGKILL before the first deletion or after any
+of the three allowlisted deletions. It verifies the same boot, systemd
+InvocationID, process/account, effective configuration, executable/source
+identities, original completed state and old lock. Only a missing prefix is
+accepted; a gap, replacement, legacy intent, active owner, changed service,
+unknown evidence or existing recovery guard is refused. The source scripts
+can be moved away: the recovery uses only the pinned external bundle and
+observes the still-running original service.
+
+Recovery preserves accepted or prior-runtime-restored state and backup bytes,
+does not stop/restart the app, and permits a fresh lock only after exact
+cleanup. Deletion failure, state drift, descriptor-close failure, old-lock
+deletion failure and actual recovery-controller death leave blocking evidence.
+The latter does not silently grant a second recovery controller.
+
+Remaining limitations are intentional and not hidden by this checkpoint:
+worker-bearing service retirement still needs an explicit combined cleanup
+handoff; preexisting/interrupted recovery guards are not adopted; service
+retirement with its marker already removed but old lock retained has no
+generic unlock path. Pre-acceptance stop/activation interruption, reboot,
+post-source/health failure, inactive or changed-unit installations remain
+separate recovery work. Windows installed task/account control, complete
+backup metadata and rotation, public scripts and real historical Next.js
+lifecycle acceptance are still outstanding. Main/PR/live deployment unchanged.
