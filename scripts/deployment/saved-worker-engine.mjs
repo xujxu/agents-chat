@@ -16,7 +16,8 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const validDigest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 
 function identity(project, operationId) {
-  if (typeof project !== 'string' || !path.isAbsolute(project) || project.length > 4096
+  if (typeof project !== 'string' || !path.isAbsolute(project) || path.resolve(project) !== project
+    || project.length > 4096
     || typeof operationId !== 'string' || !operationId || operationId.length > 4096
     || /[\0\r\n]/.test(project + operationId)) {
     throw new Error('Invalid saved worker engine identity.');
