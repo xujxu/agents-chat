@@ -21,6 +21,7 @@ const files = [
   'evidence-journal.mjs', 'worker-operation.mjs', 'state.mjs',
   'worker-retirement.mjs',
   'linux-systemd.mjs', 'linux-runtime.mjs',
+  'linux-service-inspection.mjs',
 ];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
