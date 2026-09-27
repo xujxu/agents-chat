@@ -543,3 +543,57 @@ test('activation receipt flush failure cannot grant startup or erase uncertain e
     assert.equal(records.some(record => record.phase === 'started'), false);
   }
 });
+
+async function activateDeployment(f, stopped) {
+  await advanceState(f, ['copying', 'rotating', 'backup-ready', 'source-selected',
+    'dependencies', 'building', 'configuring', 'activating']);
+  return stopped.activate({ purpose: 'deployment' });
+}
+
+test('accepted service maintenance retires exactly its files without touching the running app, state or backup', async t => {
+  const f = await stopFixture(t);
+  const stopped = await stopLinuxService(f);
+  try {
+    await mkdir(path.join(f.control, 'backup'));
+    await writeFile(path.join(f.control, 'backup', 'sentinel'), 'retained complete backup');
+    const active = await activateDeployment(f, stopped);
+    await advanceState(f, ['accepted']);
+    const state = await readFile(path.join(f.control, 'state.json'));
+    const activation = JSON.parse((await readFile(path.join(f.control, 'service-activation.ndjson'), 'utf8')).split('\n')[0]);
+    await stopped.retire();
+    assert.deepEqual((await fs.readdir(f.control)).sort(), ['backup', 'lock', 'state.json']);
+    await assert.rejects(readFile(activation.held), { code: 'ENOENT' });
+    assert.deepEqual(await readFile(path.join(f.control, 'state.json')), state);
+    assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
+    assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(), active.identity.runtime.invocationId);
+    await releaseLock(f.control, f.lock);
+    const next = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+    await releaseLock(f.control, next);
+    await assert.rejects(stopped.retire());
+  } finally { await stopped.close(); }
+});
+
+test('service retirement requires acceptance of this deployment, not just an active service or prior-runtime restart', async t => {
+  for (const mode of ['unaccepted', 'prior', 'restarted', 'replaced']) {
+    const f = await stopFixture(t);
+    const stopped = await stopLinuxService(f);
+    try {
+      if (mode === 'prior') await stopped.activate({ purpose: 'prior-runtime' });
+      else {
+        await activateDeployment(f, stopped);
+        if (mode !== 'unaccepted') await advanceState(f, ['accepted']);
+      }
+      if (mode === 'restarted') await systemctl('restart', f.unit);
+      if (mode === 'replaced') {
+        const file = path.join(f.control, 'service-activation.ndjson');
+        const bytes = await readFile(file);
+        await rename(file, `${file}.old`);
+        await writeFile(file, bytes, { mode: 0o600 });
+        await unlink(`${file}.old`);
+      }
+      await assert.rejects(stopped.retire(), error => error.recoveryAllowed === false);
+      assert.ok((await fs.readdir(f.control)).includes('service-stop.ndjson'));
+      await assert.rejects(releaseLock(f.control, f.lock), /service/i);
+    } finally { await stopped.close(); }
+  }
+});

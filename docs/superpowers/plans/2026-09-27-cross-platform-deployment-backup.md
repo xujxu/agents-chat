@@ -3070,3 +3070,33 @@ live controller. Changed-unit deployment, initially inactive installations,
 explicit restore/new-controller service recovery, reboot reentry and failure
 after successful activation still require their recovery integration.
 No public deploy/update/restore file, main branch or live deployment changed.
+
+### Accepted live service-evidence retirement
+
+Add one-use `retire()` to the original stop/activation handle, implemented in
+`linux-service-retirement.mjs`. Only a `deployment` activation followed by
+matching `accepted` application state qualifies; prior-runtime restart is not
+new deployment acceptance. Keep restore/new-controller cleanup unsupported
+until its own authority protocol is wired.
+
+Before deletion, verify the original lock, both live journals, held inhibitor,
+sealed worker inventory, unchanged deployment identity and the exact activated
+service generation. Retain independent handles/hashes for state, lock and the
+three exact deletion targets. Persist `service-retirement.json` intent first;
+delete held inhibitor, activation journal and stop journal in that order,
+checking remaining/removed inventory, original directories, acceptance and
+current service identity between mutations. Never recursively delete.
+
+On success remove the intent last and leave the application running, backup
+and state untouched, and transaction lock owned by its current controller.
+The caller may then retire workers and release the lock through the existing
+APIs. `close()` remains descriptor cleanup only. Failed/partial retirement
+retains the intent and lock for inspection; no generic retry or cold adoption.
+
+- [ ] Push native retirement contracts and confirm causal missing-method red.
+- [ ] Implement original live handoff, accepted-state gate and exact durable
+  deletion inventory; include helper in saved engine.
+- [ ] Exercise preserved backup/state/runtime, worker retirement/unlock,
+  rejection before acceptance/prior-runtime/changed generation, replacement
+  and partial deletion/controller-death cases in Actions.
+- [ ] Record evidence and remaining explicit service-recovery/public wiring.
