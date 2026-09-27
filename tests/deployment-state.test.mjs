@@ -20,6 +20,36 @@ test('service maintenance evidence blocks lock release, fresh admission and idle
   assert.equal((await reconcileInterruptedOperation(other)).status, 'blocked');
 });
 
+test('prior-runtime-restored is a failed pre-source outcome, never a new deployment acceptance', async t => {
+  for (const phase of ['stopped', 'copying', 'rotating', 'backup-ready']) {
+    assert.equal(nextPhase(phase, 'prior-runtime-restored'), 'prior-runtime-restored');
+  }
+  for (const phase of ['preflight', 'source-selected', 'building', 'activating', 'accepted', 'restored']) {
+    assert.throws(() => nextPhase(phase, 'prior-runtime-restored'));
+  }
+  const root = await temporaryDeployment(t);
+  const base = {
+    version: 1, operationId: 'failed-update', project: root, operation: 'update',
+    phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
+    backupId: null, priorRuntime: 'running', runtimeIdentity: 'fixture',
+    startedAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z', errorCode: null,
+  };
+  await writeState(root, base);
+  await writeState(root, { ...base, phase: 'stopped', previousPhase: 'preflight' });
+  const terminal = { ...base, phase: 'prior-runtime-restored', previousPhase: 'stopped', errorCode: 'BACKUP_FAILED' };
+  for (const change of [{ errorCode: null }, { priorRuntime: 'absent' }, { operation: 'restore' }, { previousPhase: 'building' }]) {
+    await assert.rejects(writeState(root, { ...terminal, ...change }));
+  }
+  await writeState(root, terminal);
+  assert.equal((await reconcileInterruptedOperation(root)).status, 'prior-runtime-restored');
+  const advice = recoveryAdvice({ phase: terminal.phase, backupComplete: true, restored: false,
+    retryCommand: 'retry-update', diagnosticCommand: 'inspect' });
+  assert.equal(advice.status, 'prior-runtime-restored');
+  assert.equal(advice.command, 'retry-update');
+  assert.match(advice.message, /failed/i);
+  await writeState(root, { ...base, operationId: 'retry-update' });
+});
+
 test('update cannot replace dependencies before a complete backup', () => {
   assert.throws(() => nextPhase('copying', 'dependencies'), /transition/i);
   assert.equal(nextPhase('backup-ready', 'source-selected'), 'source-selected');

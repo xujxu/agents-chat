@@ -37,10 +37,49 @@ test('capacity refusal leaves running application and source untouched', async (
 });
 
 test('backup failure restarts the unchanged previously running application', async () => {
-  const { calls, operations } = fixture('snapshot');
+  const { calls, phases, operations } = fixture('snapshot');
   await assert.rejects(runDeployment({ operation: 'update' }, operations), /snapshot/);
   assert.equal(calls.includes('selectSource'), false);
-  assert.equal(calls.at(-1), 'start');
+  assert.deepEqual(calls.slice(-2), ['start', 'verify']);
+  assert.equal(phases.at(-1), 'prior-runtime-restored');
+});
+
+test('verified prior-runtime restart remains a failed update even with no-wait or cancelled caller', async () => {
+  const f = fixture('snapshot');
+  const controller = new AbortController();
+  const failure = new Error('backup failed');
+  f.operations.snapshot = async () => { controller.abort(); throw failure; };
+  for (const stage of ['start', 'verify']) {
+    f.operations[stage] = async context => {
+      f.calls.push(stage);
+      assert.equal(context.activationPurpose, 'prior-runtime');
+      assert.equal(context.recovering, true);
+      assert.equal(context.signal.aborted, false);
+    };
+  }
+  await assert.rejects(runDeployment({ operation: 'update', waitSeconds: 0, signal: controller.signal }, f.operations),
+    error => error === failure);
+  assert.equal(f.phases.at(-1), 'prior-runtime-restored');
+  assert.equal(f.phases.includes('accepted'), false);
+});
+
+test('failed verification or recovered-state write retains original and recovery errors without success', async () => {
+  for (const stage of ['verify', 'record']) {
+    const f = fixture('snapshot');
+    if (stage === 'verify') f.operations.verify = async () => { throw new Error('old runtime health failed'); };
+    else {
+      const record = f.operations.record;
+      f.operations.record = async phase => {
+        if (phase === 'prior-runtime-restored') throw new Error('recovery state flush failed');
+        await record(phase);
+      };
+    }
+    await assert.rejects(runDeployment({ operation: 'update' }, f.operations), error =>
+      error instanceof AggregateError && /snapshot/.test(error.errors[0].message) && error.errors.length === 2);
+    assert.equal(f.phases.includes('prior-runtime-restored'), false);
+    assert.equal(f.phases.includes('accepted'), false);
+    if (stage === 'verify') assert.equal(f.phases.at(-1), 'recovery-required');
+  }
 });
 
 test('backup failure never starts an application that was already stopped', async () => {

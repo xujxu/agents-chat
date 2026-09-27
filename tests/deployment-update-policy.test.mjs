@@ -33,6 +33,7 @@ test('same source alone never skips deploy or unaccepted/stopped updates', () =>
   for (const change of [
     { operation: 'deploy' }, { target: 'b'.repeat(40) },
     { phase: 'activation-unverified' }, { phase: 'recovery-required' },
+    { phase: 'prior-runtime-restored' },
     { phase: 'building' }, { receipt: null }, { observed: null },
     { receipt: { ...facts().receipt, status: 'activation-unverified' } },
     { observed: { ...facts().observed, verified: false } },

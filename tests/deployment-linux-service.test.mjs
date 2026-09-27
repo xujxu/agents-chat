@@ -14,6 +14,7 @@ import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 import { acquireLock, loadState, writeState, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
+import { runDeployment } from '../scripts/deployment/transaction.mjs';
 
 const execute = promisify(execFile);
 const native = (file, args) => execute(file, args, { timeout: 20000, maxBuffer: 8192 });
@@ -705,4 +706,58 @@ test('actual retirement-controller death after first unlink preserves the runnin
   assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(), intent.runtime.runtime.invocationId);
   assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
   await assert.rejects(acquireLock(control, { project: f.project, operationId: randomUUID() }), /service/i);
+});
+
+test('real backup failure restarts the prior service and cleans maintenance without accepting the failed update', async t => {
+  const f = await fixture(t);
+  await ready(f);
+  const control = path.join(path.dirname(f.project), 'control');
+  await mkdir(control, { mode: 0o700 });
+  const lock = await acquireLock(control, { project: f.project, operationId: randomUUID() });
+  let stopped;
+  let active;
+  const failure = Object.assign(new Error('actual transaction backup fixture failed'), { code: 'BACKUP_FAILED' });
+  const forbidden = async () => { throw new Error('Post-backup mutations must not run.'); };
+  try {
+    await assert.rejects(runDeployment({ operation: 'update', waitSeconds: 0 }, {
+      inspect: async () => ({ exists: true, running: true, owned: true }),
+      resolveTarget: async () => ({ commit: 'b'.repeat(40) }),
+      admit: async () => ({ compatibility: 'passed', current: null }),
+      capacity: async () => {},
+      record: async (phase, context) => {
+        const previous = await loadState(control);
+        await writeState(control, {
+          version: 1, operationId: lock.operationId, project: f.project, operation: 'update', phase,
+          previousPhase: previous?.phase ?? null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
+          backupId: null, priorRuntime: 'running', runtimeIdentity: f.unit,
+          startedAt: lock.createdAt, updatedAt: new Date().toISOString(), errorCode: context.errorCode ?? null,
+        });
+      },
+      stop: async () => { stopped = await stopLinuxService({ ...f, control, lock }); },
+      snapshot: async () => { throw failure; },
+      verifySnapshot: forbidden, rotate: forbidden, selectSource: forbidden,
+      dependencies: forbidden, build: forbidden, configure: forbidden,
+      start: async context => {
+        assert.equal(context.activationPurpose, 'prior-runtime');
+        active = await stopped.activate({ purpose: context.activationPurpose });
+      },
+      verify: async context => {
+        assert.equal(context.activationPurpose, 'prior-runtime');
+        const inspection = await inspectLinuxService(f);
+        try {
+          assert.equal(inspection.identity.runtime.invocationId, active.identity.runtime.invocationId);
+          await inspection.check();
+        } finally { await inspection.close(); }
+      },
+    }), error => error === failure);
+    assert.equal((await loadState(control)).phase, 'prior-runtime-restored');
+    assert.equal((await loadState(control)).errorCode, 'BACKUP_FAILED');
+    await stopped.retire();
+    await releaseLock(control, lock);
+    assert.deepEqual(await fs.readdir(control), ['state.json']);
+    assert.equal((await reconcileInterruptedOperation(control)).status, 'prior-runtime-restored');
+    assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+    const next = await acquireLock(control, { project: f.project, operationId: randomUUID() });
+    await releaseLock(control, next);
+  } finally { await stopped?.close(); }
 });

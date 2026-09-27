@@ -3149,3 +3149,29 @@ on controller death; no generic stale-lock adoption is implied. Windows
 installed-service/task/account control, complete native snapshot inventory,
 public deploy/update/restore wiring and true historical app acceptance remain
 outstanding. Main, public entry scripts and the live deployment are unchanged.
+
+### Failed update with verified prior runtime restored
+
+Complete the pre-source failure outcome, not a new successful deployment.
+Introduce terminal `prior-runtime-restored` only from stopped/copying/rotating/
+backup-ready with priorRuntime=running, a non-null failure code and deploy/update
+operation. Never allow it from source-selected/building/activating or restore.
+After a safe pre-source failure, transaction start and verify use
+activationPurpose=prior-runtime with a fresh recovery signal; even --wait=0
+must verify this recovery. Re-throw the original update error after persisting
+the explicit recovered-runtime outcome. Restart/verify failures remain
+recovery-required or blocked; do not claim prior runtime recovery.
+
+Extend matching live service retirement for this purpose/phase without
+loosening deployment acceptance. Shared worker retirement and its saved cold
+cleanup may retire this completed failure outcome after exact state/lock
+verification. Ordinary new-operation state admission and status recognize
+the finished failure, while already-current must still require accepted target
+provenance. Recovery advice offers retry, not database restore or update success.
+
+- [ ] Write causal transaction/state and real Linux failure-closeout contracts.
+- [ ] Implement phase validation/status/advice and verified recovery ordering.
+- [ ] Wire service and worker retirement, saved recovery and no-op semantics.
+- [ ] Validate actual backup failure -> old npm service restart -> verify ->
+  failed terminal state -> evidence cleanup/unlock, plus restart/verify/state
+  write failures and post-source refusal in Actions.
