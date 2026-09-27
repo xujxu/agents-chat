@@ -1355,3 +1355,124 @@ The concrete native interop/transport plan is still outstanding. No new
 interop package or external native dependency has been selected. All eight
 real-process acceptance groups in the approved spec remain open, followed by
 the full application deployment/update/restore acceptance and main PR.
+
+## N3: External append-only worker receipt store
+
+This batch provides actual filesystem persistence for N2's `record` callback.
+It is not a recovery-authority implementation or a saved-engine installer.
+Continue inline, validate only in Actions, and keep public entrypoints gated.
+
+**Files**
+
+- Extract the existing `captureOwner` and `captureDomain` implementations into
+  `scripts/deployment/worker-identity.mjs` as named exports; the coordinator
+  imports them unchanged. Storage and execution must share one identity schema.
+- Create `scripts/deployment/worker-journal.mjs`: exclusive creation, validated
+  bounded receipt append/read, explicit close and retained incomplete files.
+- Create `tests/deployment-worker-journal.test.mjs`: real filesystem and
+  coordinator integration; add it to the existing two-platform workflow.
+
+**Contract and storage layout**
+
+`createWorkerJournal(root, owner)` returns `{ record, close }`.
+`readWorkerJournal(root, owner)` returns the validated receipt array.
+The caller provisions a private external control directory and holds the
+deployment lock. Both paths must be canonical; the directory must be disjoint
+from the project (not equal, inside it, or an ancestor). Linux additionally
+requires current-user ownership and no group/other access. Windows ACL
+provisioning/verification remains a required native preflight, not a guarantee
+of POSIX mode bits. Do not expose this module in public commands yet.
+
+Each worker uses exactly `worker-<workerId>.ndjson`, created with `wx+` and mode
+0600. Existing files, including empty or partial ones, are never opened for
+writing, replaced, truncated, deleted or automatically reclaimed. Exclusive
+creation arbitrates concurrent creators; the captured handle is the sole
+writer. No stale-writer reopen API exists. Worker IDs come from the caller's
+fresh UUID generation. One operation's records cannot be reused by another.
+
+The journal has at most five newline-terminated JSON receipts and 128 KiB.
+Validate exact `version`, `owner`, `phase`, `domain` keys, version 1, the shared
+identity schema, fixed owner, unchanged admitted domain and these transitions:
+
+```js
+const transitions = {
+  intent: ['owned', 'settled', 'blocked'],
+  owned: ['admitted', 'settled', 'blocked'],
+  admitted: ['settled', 'blocked'],
+  settled: ['blocked'],
+  blocked: [],
+};
+```
+
+Initial receipt must be intent with null domain. Owned/admitted require a
+domain; intent-to-settled/blocked may discover one after preparation. A known
+domain cannot disappear or change. Settled-to-blocked records a retirement
+failure. No record accepts arbitrary errors, environment or command fields.
+
+Serialize and snapshot receipts synchronously before awaiting I/O. Reject a
+second concurrent append rather than queueing stale requests. Validate the
+expected full prefix against the retained handle and named regular file
+(including inode/device and link count) before each append. Reject replaced
+root/file identity, missing file or externally changed bytes. Append then
+`FileHandle.sync`; Linux also synchronizes the new directory entry before
+returning a writer. On I/O failure poison the writer, retain the file, and
+surface `DEPLOYMENT_WORKER_UNSETTLED`/`recoveryAllowed=false`. Close never
+removes a journal or certifies process settlement.
+
+Read-only inspection opens and reads a bounded regular file, rejects links,
+empty/truncated/malformed/oversized histories and invalid transitions, and
+returns immutable validated snapshots. It does not return a recovery
+permission or clear deployment blocked state. Windows file flushing is tested;
+power-loss durability of Windows directory entries is not claimed without
+native support. Local-disk process-crash evidence is distinct from power-loss
+acceptance, which remains a native integration requirement.
+
+### Task N3
+
+- [ ] **Step 1: Write failing filesystem and coordinator contracts.**
+
+```js
+const journal = await createWorkerJournal(control, owner);
+await journal.record({ version: 1, owner, phase: 'intent', domain: null });
+await journal.close();
+assert.equal((await readWorkerJournal(control, owner))[0].phase, 'intent');
+await assert.rejects(createWorkerJournal(control, owner), /journal|exists/i);
+```
+
+Exercise full N2 execution with this real writer and both domain schemas;
+aborted intent/owned paths; ambiguous prepare; frozen returned data; duplicate
+creator races; simultaneous/stale appends; partial tail; external modification;
+schema/owner/domain substitution; invalid transitions; root inside checkout;
+symlinks and hardlinks; close before/after failure. Linux mode and owner checks
+are Linux-only, while creation/read/write/flush contracts run on both OSes.
+
+- [ ] **Step 2: Commit/push tests and capture missing-module red.**
+
+```bash
+git add tests/deployment-worker-journal.test.mjs .github/workflows/deployment-lifecycle.yml docs/superpowers/plans/2026-09-27-cross-platform-deployment-backup.md
+git commit -m "test: define persistent owned worker receipt contracts" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+git push origin feat/deployment-backup
+gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
+```
+
+- [ ] **Step 3: Extract shared identity validation and implement the journal.**
+
+Use the exact storage/transition contract above; keep native process calls and
+deployment state unlocking out of this module. Before committing, inspect the
+new code and all uses of the identity exports for accidental behavior changes.
+
+- [ ] **Step 4: Push and require all contract jobs green.**
+
+```bash
+git add scripts/deployment/worker-identity.mjs scripts/deployment/owned-worker.mjs scripts/deployment/worker-journal.mjs
+git commit -m "feat: persist exclusive owned worker receipt journals" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+git push origin feat/deployment-backup
+gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
+```
+
+- [ ] **Step 5: Record accepted revisions and native integration limitations.**
+
+Keep all journal evidence until separately verified operation-level retirement;
+this batch never deletes it. Bounded whole-operation metadata retirement,
+Windows private ACL/directory durability, saved-engine installation, actual
+cgroup/Job workers and verified reentry remain required before public release.

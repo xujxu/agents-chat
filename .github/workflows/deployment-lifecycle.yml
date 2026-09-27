@@ -59,3 +59,4 @@ jobs:
           tests/deployment-stage-runner.test.mjs
           tests/deployment-worker-errors.test.mjs
           tests/deployment-owned-worker.test.mjs
+          tests/deployment-worker-journal.test.mjs
