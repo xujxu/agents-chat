@@ -285,6 +285,12 @@ export async function releaseLock(root, owner) {
   await rmdir(lockPath);
 }
 
+export async function requireNoServiceMaintenance(directory) {
+  if ((await readdir(directory)).some(name => name.startsWith('service-'))) {
+    throw new Error('Service maintenance evidence requires explicit service recovery before this operation.');
+  }
+}
+
 export async function reconcileInterruptedOperation(root) {
   const directory = await ownedDirectory(root);
   const state = await loadState(directory);
@@ -301,11 +307,6 @@ export async function reconcileInterruptedOperation(root) {
     recoveryExists = false;
   }
 
-  export async function requireNoServiceMaintenance(directory) {
-    if ((await readdir(directory)).some(name => name.startsWith('service-'))) {
-      throw new Error('Service maintenance evidence requires explicit service recovery before this operation.');
-    }
-  }
   if (recoveryExists) {
     return {
       status: 'blocked', operationId: state?.operationId ?? null, phase: state?.phase ?? null,

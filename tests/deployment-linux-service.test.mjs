@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chmod, chown, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -254,5 +254,37 @@ test('inhibition or lock replacement poisons stopped-state authority without res
       await assert.rejects(stopped.checkStopped(), error => error.recoveryAllowed === false);
       assert.equal((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim(), '0');
     } finally { await stopped.close(); }
+  }
+});
+
+test('actual controller death retains inhibition and blocked status both before and after stop', async t => {
+  for (const phase of ['stop-requested', 'stopped']) {
+    const f = await fixture(t);
+    await ready(f);
+    const control = path.join(path.dirname(f.project), 'control');
+    await mkdir(control, { mode: 0o700 });
+    const child = fork(new URL('./deployment-service-stop-child.mjs', import.meta.url),
+      [control, f.project, f.unit, f.npm, f.node, phase], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    let diagnostic = '';
+    child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-4096); });
+    const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+    t.after(async () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await exited;
+    });
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Stop controller did not reach receipt: ${diagnostic}`)), 45000);
+      child.once('message', value => { clearTimeout(timer); resolve(value); });
+      child.once('exit', code => { clearTimeout(timer); reject(new Error(`Stop controller exited ${code}: ${diagnostic}`)); });
+      child.once('error', error => { clearTimeout(timer); reject(error); });
+    });
+    child.kill('SIGKILL');
+    await exited;
+    assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
+    await assert.rejects(acquireLock(control, { project: f.project, operationId: randomUUID() }), /service/i);
+    const active = (await systemctl('show', f.unit, '--property=ActiveState', '--value')).stdout.trim();
+    assert.equal(active, phase === 'stop-requested' ? 'active' : 'inactive');
+    await systemctl('daemon-reload');
+    await assert.rejects(systemctl('start', f.unit), /manual|refus/i);
   }
 });
