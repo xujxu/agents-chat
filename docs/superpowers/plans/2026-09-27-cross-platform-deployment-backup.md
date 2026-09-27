@@ -3335,10 +3335,10 @@ the old lock cannot be released while any listed worker files remain.
 - [x] Push real settled-worker and sealed-empty-operation causal contracts.
 - [x] Pin live worker deletion descriptors into the v3 service intent.
 - [x] Extend cold missing-prefix/inventory checks to the complete allowlist.
-- [ ] Cover worker/helper tampering, unknown files, missing journals and
+- [x] Cover worker/helper tampering, unknown files, missing journals and
   redirected deletion paths before service deletion; inject worker cleanup
   failure/controller death and retain both original lock and recovery guard.
-- [ ] Require all five Actions jobs, then save exact acceptance and limitations.
+- [x] Require all five Actions jobs, then save exact acceptance and limitations.
 
 Native contract:
 ```javascript
@@ -3362,3 +3362,39 @@ handles and checks exact helper contents/directories during live handoff and
 cold deletion. Added helper-delete/directory-delete failures and recovery
 controller SIGKILL after a real helper unlink, with the service journals already
 gone but original lock, combined marker and recovery guard retained.
+
+#### Combined retirement checkpoint (2026-09-27)
+
+Executable `11d16ff2fafe9e8d5cf4c3a550bdaf66907b6225`, Actions
+`36331613299`, passed all five jobs: **34 Linux service-recovery contracts,
+69 existing Linux native contracts, 221 Linux shared contracts, 217 Windows
+shared contracts with four platform skips, 19 Windows coordinator contracts
+plus the native Job primitive step**. Validation ran exclusively in Actions.
+
+Actual native owned commands finish before the service is activated and
+synthetically accepted (or the prior-runtime failure outcome is recorded).
+Controller SIGKILL at service-retirement intent, held-file deletion or final
+service-journal deletion now leaves a single v3 inventory that a fresh saved
+engine can finish, including settled-worker journals, all pinned helper files,
+the sealed operation journal and empty helper directory. State and backup
+remain byte-identical, service InvocationID is unchanged, and a fresh lock is
+admitted only after combined cleanup. Sealed operations with no enrolled
+commands are covered too.
+
+The live path still retires service evidence then worker evidence using the
+original live handles; repeated normal service/worker cycles remain covered.
+V2 no-worker service recovery remains supported, but downgrading a worker-
+bearing marker to v2 does not authorize those worker files. Unknown, modified
+or missing worker evidence and redirected paths are rejected before deleting
+the held service inhibitor. Helper deletion/rmdir failure and recovery SIGKILL
+after the first helper unlink retain the original lock, service-retirement
+marker and exclusive recovery guard, even after service journals are gone.
+
+This closes the combined service/settled-worker handoff, **not** restartable
+recovery itself. Next priority is explicit continuation after recovery-owner
+death and the durable completion/marker/unlock windows. Missing intent,
+unsettled workers, pre-acceptance stop/activation interruption, reboot,
+post-source/health failure and inactive/changed-unit support remain separate.
+Complete native backups, Windows installed task/account integration, public
+entrypoints and dual-platform historical Next.js acceptance remain outstanding.
+No PR, main or live-deployment changes.
