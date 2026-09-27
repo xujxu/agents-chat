@@ -753,3 +753,81 @@ Remaining required integration, not yet implemented:
 No existing deploy entry point, main branch or live service was changed.
 The next batch should wire native lifecycle and recovery support, expanding
 behavioral fault contracts before claiming end-to-end acceptance.
+
+## Update enhancement checkpoint (2026-09-27)
+
+Written enhancement approval was received after spec commit `c8e9be7`.
+Implementation remains inline on `feat/deployment-backup`, with all execution
+and validation in GitHub Actions. No public deploy script, main branch or live
+service has been changed.
+
+### Accepted foundation changes
+
+- Internal operations, source errors and workflow filters use `update`, without
+  an `upgrade` alias. The parser supports `--dry-run`, `--json` and positive
+  `--timeout` seconds (1800 default); public/native parameter wiring is not done.
+- `update-policy.mjs` supplies read-only planning and a strict accepted-identity
+  no-op predicate. `source.mjs` previews local objects without fetching or index
+  refresh, disables optional Git locks/lazy fetch, and reports unknown targets.
+  The transaction dispatches preview before normal callbacks and requires
+  compatibility admission before capacity, state changes or downtime.
+- `stage-runner.mjs` uses monotonic elapsed time and cancellable stage signals.
+  Deadline/cancellation waits for worker settlement with a 30-second allowance.
+  Unsettled workers fail with `recoveryAllowed=false`; late success, including
+  synchronous event-loop overruns, cannot become accepted success. Huge timeout
+  values are scheduled in bounded timer chunks rather than overflowing timers.
+- Transaction callbacks receive `context.signal`; readiness takes the shorter
+  of its wait budget and stage deadline. Cleanup receives a fresh cancellation
+  signal only after the failed worker has settled.
+- Unsettled workers persist `blocked`, including during preflight before the
+  first normal journal write. Blocked state retains the operation lock, refuses
+  normal state replacement/restore, and offers inspection rather than rollback.
+  It can explicitly record unknown runtime state instead of inventing absence.
+- Snapshot inventory checks cancellation between entries. Copy and checksum
+  pipelines accept the signal and settle their file streams before returning.
+  Incomplete staging is retained; no cancellation path deletes the good backup.
+
+### Causal Actions evidence
+
+| Scope | Red evidence | Green evidence |
+| --- | --- | --- |
+| Update naming/options and pure policy | `8131e03`, `36306973858` | `da5b9bd`, `36307060713` |
+| Local preview and transaction admission | `13a649e`, `36307103158` | `1fb9e93`, `36307161613` |
+| Deadlines and worker settlement | `9efcf56`, `36307434631` | `087c618`, `36307505489` attempt 2 |
+| Durable blocking and snapshot cancellation | `0dd8cf3`, `36307684146` | `c291c40`, `36307923573` |
+| Preflight blocking and event-loop overruns | `1202e32`, `36307871306` | `c291c40`, `36307923573` |
+
+Final code `c291c40` passed 91 Linux contracts and 90 Windows contracts with one
+explicitly Linux-only skip. Earlier `5c47705` tests accidentally nested snapshot
+cases and changed an ordinary recovery expectation; `0dd8cf3` repaired test
+registration and restored that expectation before collecting corrected red
+evidence. Those test mistakes did not relax production behavior.
+
+Two Windows runs (`36307505489` attempt 1 and `36307731083`) failed exclusively
+on the existing PowerShell process-identity query's 10-second cold-start bound.
+The first passed unchanged on retry; recurrence led to a bounded 30-second
+query allowance in `c291c40`. There is no missing-process fallback for timeout
+or failed identity queries.
+
+### Remaining integration gates
+
+These are primitive/callback-engine contracts, NOT real native lifecycle
+acceptance. In particular:
+
+1. Native workers must resolve/reject only after all owned descendants and
+   writers have stopped, or reject with `recoveryAllowed=false`. No real
+   process-tree cancellation adapter or descendant-killing acceptance test has
+   been implemented. Promise completion alone is not a native ownership proof.
+2. Blocked state deliberately has no generic unlock/reset escape. Implement a
+   separately verified ownership/settlement recovery path; never clear blocked
+   state simply because the CLI parent died.
+3. Target Node/protocol/config/SQLite compatibility and real accepted receipts
+   still need collectors/adapters. The `admit` callback is a strict integration
+   boundary, not an implemented database compatibility checker.
+4. Bounded JSON/status rendering and exact public recovery commands still need
+   dispatch wiring. Parser acceptance of `--json` is not that completed feature.
+5. Finish the native snapshot/retirement/source/permission/restore work listed
+   above, then real first deploy, historical update, rotation, failure and
+   no-build restore on both operating systems.
+
+Do not create the PR or deploy main until those native acceptance gates pass.
