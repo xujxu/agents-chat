@@ -235,3 +235,64 @@ test('unsafe worker failure forbids restarting runtime or beginning cleanup', as
     assert.equal(calls.includes('start'), false);
   }
 });
+
+test('unsettled preflight worker is durable blocked without authorizing runtime changes', async () => {
+  for (const stage of ['inspect', 'resolveTarget', 'admit', 'capacity']) {
+    const { calls, phases, operations } = fixture();
+    const failure = Object.assign(new Error('preflight child remains alive'), {
+      code: 'DEPLOYMENT_WORKER_UNSETTLED', recoveryAllowed: false,
+    });
+    operations[stage] = async () => { calls.push(stage); throw failure; };
+    operations.record = async (phase, context) => {
+      phases.push(phase);
+      assert.equal(context.errorCode, 'DEPLOYMENT_WORKER_UNSETTLED');
+    };
+    await assert.rejects(runDeployment({ operation: 'update' }, operations), error => error === failure);
+    assert.deepEqual(phases, ['blocked']);
+    assert.equal(calls.at(-1), stage);
+    assert.equal(calls.includes('start'), false);
+    assert.equal(calls.includes('stop'), false);
+  }
+});
+
+test('readiness uses the shorter wait budget and stops partial runtime only after settlement', async () => {
+  const { calls, operations } = fixture();
+  let settled = false;
+  let stops = 0;
+  operations.verify = context => new Promise(resolve => {
+    context.signal.addEventListener('abort', () => { settled = true; resolve(); }, { once: true });
+  });
+  operations.stop = async () => {
+    calls.push('stop');
+    if (++stops === 2) assert.equal(settled, true);
+  };
+  await assert.rejects(runDeployment({
+    operation: 'update', timeoutSeconds: 30, waitSeconds: 1,
+  }, operations), error => {
+    assert.equal(error.code, 'DEPLOYMENT_STAGE_TIMEOUT');
+    assert.equal(error.stage, 'verify');
+    assert.ok(error.elapsedMs >= 1000);
+    assert.ok(error.elapsedMs < 10000);
+    return true;
+  });
+  assert.equal(stops, 2);
+});
+
+test('cancelling a stopped pre-source operation can restart untouched app using a fresh signal', async () => {
+  const { calls, operations } = fixture();
+  const controller = new AbortController();
+  operations.snapshot = context => new Promise(resolve => {
+    calls.push('snapshot');
+    context.signal.addEventListener('abort', resolve, { once: true });
+    controller.abort();
+  });
+  operations.start = async context => {
+    assert.equal(context.signal.aborted, false);
+    calls.push('start');
+  };
+  await assert.rejects(runDeployment({
+    operation: 'update', signal: controller.signal,
+  }, operations), { code: 'DEPLOYMENT_STAGE_CANCELLED' });
+  assert.equal(calls.at(-1), 'start');
+  assert.equal(calls.includes('selectSource'), false);
+});
