@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readdir, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { captureLockOwner, loadState, requireNoServiceMaintenance } from './state.mjs';
+import { captureLockOwner, loadState, requireNoServiceMaintenance, completedDeploymentPhase } from './state.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { externalWorkerDirectory, canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
@@ -99,7 +99,7 @@ export async function recoverRetirement({ control, project, operationId }) {
       }
     };
     const state = await loadState(root);
-    if (!state || !['accepted', 'restored'].includes(state.phase)
+    if (!state || !completedDeploymentPhase(state.phase)
       || state.project !== project || state.operationId !== operationId) throw new Error('Recovery requires accepted application state.');
     await checkDirectory('', original.controlIdentity);
     await checkDirectory('lock', original.lockIdentity);

@@ -14,7 +14,7 @@ import { recoverRetirement } from '../scripts/deployment/retirement-recovery.mjs
 
 const sourceTree = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
 const execute = promisify(execFile);
-async function fixture(t) {
+async function fixture(t, outcome = 'accepted') {
   const root = await temporaryDeployment(t);
   const project = path.join(root, 'app');
   const control = path.join(root, 'ctl');
@@ -25,7 +25,7 @@ async function fixture(t) {
   await writeFile(path.join(control, 'backup', 'sentinel'), 'retained backup');
   const engine = await saveRecoveryEngine({ source, control });
   const child = fork(new URL('./deployment-retirement-child.mjs', import.meta.url),
-    [control, project, source], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    [control, project, source, '', outcome], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let diagnostic = '';
   child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-4096); });
   const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
@@ -68,6 +68,20 @@ test('live original owner cannot be adopted and failure creates no recovery guar
   await assert.rejects(f.recover());
   assert.deepEqual(await readFile(path.join(f.control, 'worker-retirement.json')), marker);
   assert.ok(!(await readdir(f.control)).includes('recovery-lock'));
+});
+
+test('cold worker retirement preserves failed-update evidence after verified prior-runtime recovery', async t => {
+  const f = await fixture(t, 'prior-runtime-restored');
+  await f.kill();
+  const state = await readFile(path.join(f.control, 'state.json'));
+  assert.equal(JSON.parse(state).errorCode, 'BACKUP_FAILED');
+  const result = JSON.parse((await f.recover()).stdout);
+  assert.deepEqual(result, { status: 'retired', operationId: f.lock.operationId, restored: false });
+  assert.deepEqual(await readFile(path.join(f.control, 'state.json')), state);
+  assert.equal((await reconcileInterruptedOperation(f.control)).status, 'prior-runtime-restored');
+  assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained backup');
+  const next = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+  await releaseLock(f.control, next);
 });
 
 test('saved cold worker cleanup refuses service maintenance evidence without deleting anything', async t => {

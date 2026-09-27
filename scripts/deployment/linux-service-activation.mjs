@@ -124,13 +124,16 @@ export async function activateLinuxService(context, purpose) {
         return Object.freeze({
           status: 'active-unverified', identity: active.identity, close,
           async retire() {
-            if (closed || purpose !== 'deployment') {
-              throw journalUncertain(new Error('Service retirement requires an accepted deployment activation, not prior-runtime restart.'));
+            if (closed) {
+              throw journalUncertain(new Error('Service retirement requires the original live activation authority.'));
             }
             const verify = async () => {
               const accepted = await checkAuthority({ retiring: true });
-              if (accepted.phase !== 'accepted' || !['activating', 'activation-unverified'].includes(accepted.previousPhase)
-                || Object.keys(state).filter(key => !['phase', 'previousPhase', 'updatedAt'].includes(key))
+              const prior = purpose === 'prior-runtime';
+              if ((prior
+                ? accepted.phase !== 'prior-runtime-restored' || accepted.previousPhase !== state.phase || !accepted.errorCode
+                : accepted.phase !== 'accepted' || !['activating', 'activation-unverified'].includes(accepted.previousPhase))
+                || Object.keys(state).filter(key => !['phase', 'previousPhase', 'updatedAt', ...(prior ? ['errorCode'] : [])].includes(key))
                   .some(key => accepted[key] !== state[key])) {
                 throw new Error('Matching application acceptance is required for service retirement.');
               }

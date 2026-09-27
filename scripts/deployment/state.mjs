@@ -7,10 +7,10 @@ import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 
 const transitions = {
   preflight: ['stopped', 'source-selected'],
-  stopped: ['copying'],
-  copying: ['rotating'],
-  rotating: ['backup-ready'],
-  'backup-ready': ['source-selected'],
+  stopped: ['copying', 'prior-runtime-restored'],
+  copying: ['rotating', 'prior-runtime-restored'],
+  rotating: ['backup-ready', 'prior-runtime-restored'],
+  'backup-ready': ['source-selected', 'prior-runtime-restored'],
   'source-selected': ['dependencies'],
   dependencies: ['building'],
   building: ['configuring'],
@@ -22,15 +22,20 @@ const transitions = {
   'restore-activating': ['restored'],
   accepted: [],
   restored: [],
+  'prior-runtime-restored': [],
   'recovery-required': [],
   blocked: [],
 };
+
+export function completedDeploymentPhase(phase) {
+  return ['accepted', 'restored', 'prior-runtime-restored'].includes(phase);
+}
 
 export function nextPhase(from, to, { firstInstall = false } = {}) {
   if (!Object.hasOwn(transitions, from) || !Object.hasOwn(transitions, to)) {
     throw new Error(`Unknown deployment phase: ${from} -> ${to}`);
   }
-  const terminal = ['accepted', 'restored', 'recovery-required', 'blocked'].includes(from);
+  const terminal = completedDeploymentPhase(from) || ['recovery-required', 'blocked'].includes(from);
   if (to === 'blocked' && !terminal) return to;
   if (to === 'recovery-required' && !terminal) return to;
   if (!transitions[from].includes(to)
@@ -57,6 +62,16 @@ export function recoveryAdvice(details) {
       status: 'blocked',
       message: 'Owned workers may still write. Retain lock and backup; inspect worker termination before restore or restart.',
       command: details.diagnosticCommand, diagnostics: details.diagnosticCommand,
+    };
+  }
+  if (details.phase === 'prior-runtime-restored') {
+    if (details.restored || !nonempty(details.retryCommand) || !nonempty(details.diagnosticCommand)) {
+      throw new Error('Prior runtime recovery requires retry/diagnostic commands, not backup restoration.');
+    }
+    return {
+      status: 'prior-runtime-restored',
+      message: 'The update failed before source mutation. The previous running application was restarted and verified; no new deployment was accepted.',
+      command: details.retryCommand, diagnostics: details.diagnosticCommand,
     };
   }
   const status = details.restored ? 'restored'
@@ -108,6 +123,11 @@ function validateState(state) {
     if (state[key] !== null && (!nonempty(state[key]) || !/^[a-zA-Z0-9_.:-]+$/.test(state[key]))) {
       throw new Error(`Invalid deployment state ${key}.`);
     }
+  }
+  if (state.phase === 'prior-runtime-restored'
+    && (state.operation === 'restore' || state.priorRuntime !== 'running' || state.errorCode === null
+      || !['stopped', 'copying', 'rotating', 'backup-ready'].includes(state.previousPhase))) {
+    throw new Error('Prior runtime recovery requires a failed pre-source operation and previously running service.');
   }
   return state;
 }
@@ -161,10 +181,10 @@ export async function writeState(root, state) {
       nextPhase(old.phase, state.phase, { firstInstall: old.priorRuntime === 'absent' });
     } else if (state.previousPhase !== null
       || (initialBlocked
-        ? !['accepted', 'restored'].includes(old.phase)
+        ? !completedDeploymentPhase(old.phase)
         : state.operation === 'restore'
         ? state.phase !== 'restore-preflight'
-        : state.phase !== 'preflight' || !['accepted', 'restored'].includes(old.phase))) {
+        : state.phase !== 'preflight' || !completedDeploymentPhase(old.phase))) {
       throw new Error('Unfinished deployment state requires recovery before a new operation.');
     }
   } else if (state.previousPhase !== null
@@ -343,7 +363,13 @@ export async function reconcileInterruptedOperation(root) {
       phase: state?.phase ?? null,
       message: 'Interrupted deployment lock retained. Inspect owned child processes and recovery state before continuing.' };
   }
-  if (state !== null && !['accepted', 'restored'].includes(state.phase)) {
+  if (state?.phase === 'prior-runtime-restored') {
+    return {
+      status: 'prior-runtime-restored', operationId: state.operationId, phase: state.phase,
+      message: 'The update failed, but the prior runtime was restarted and verified. No new deployment was accepted.',
+    };
+  }
+  if (state !== null && !completedDeploymentPhase(state.phase)) {
     return { status: state.phase === 'activation-unverified' ? 'unverified' : 'interrupted',
       operationId: state.operationId, phase: state.phase,
       message: 'Inspect the incomplete deployment and use its verification or recovery command before another update.' };

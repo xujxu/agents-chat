@@ -3,7 +3,7 @@ import { lstat, open, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { createEvidenceJournal, readEvidenceJournal, journalUncertain } from './evidence-journal.mjs';
 import { captureOwner, captureWorkerFields } from './worker-identity.mjs';
-import { captureLockOwner, assertLockOwner, loadState } from './state.mjs';
+import { captureLockOwner, assertLockOwner, loadState, completedDeploymentPhase } from './state.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 import { verifyWorkerEngine } from './saved-worker-engine.mjs';
 import { createWorkerJournal, readWorkerJournal } from './worker-journal.mjs';
@@ -99,9 +99,9 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
         originalLock ??= after;
         const state = await loadState(control);
         if (completed ? !state || state.operationId !== lock.operationId || state.project !== lock.project
-          || !['accepted', 'restored'].includes(state.phase)
+          || !completedDeploymentPhase(state.phase)
           : state && (state.operationId !== lock.operationId || state.project !== lock.project
-            || ['blocked', 'accepted', 'restored', 'recovery-required'].includes(state.phase))) {
+            || completedDeploymentPhase(state.phase) || ['blocked', 'recovery-required'].includes(state.phase))) {
           throw new Error('Deployment state does not admit workers for this operation.');
         }
         const saved = await verifyWorkerEngine({

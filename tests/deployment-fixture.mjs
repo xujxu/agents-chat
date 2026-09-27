@@ -24,3 +24,16 @@ export async function acceptOperation(control, lock, operation = 'deploy') {
     previousPhase = phase;
   }
 }
+
+export async function recoverPriorRuntime(control, lock) {
+  let previousPhase = null;
+  for (const phase of ['preflight', 'stopped', 'copying', 'prior-runtime-restored']) {
+    await writeState(control, {
+      version: 1, operationId: lock.operationId, project: lock.project, operation: 'update', phase, previousPhase,
+      sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40), backupId: null, priorRuntime: 'running',
+      runtimeIdentity: 'retirement-fixture', startedAt: lock.createdAt,
+      updatedAt: new Date().toISOString(), errorCode: phase === 'prior-runtime-restored' ? 'BACKUP_FAILED' : null,
+    });
+    previousPhase = phase;
+  }
+}

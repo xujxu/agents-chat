@@ -708,7 +708,8 @@ test('actual retirement-controller death after first unlink preserves the runnin
   await assert.rejects(acquireLock(control, { project: f.project, operationId: randomUUID() }), /service/i);
 });
 
-test('real backup failure restarts the prior service and cleans maintenance without accepting the failed update', async t => {
+for (const recoveryMode of ['no-workers', 'workers', 'verify-failure']) {
+test(`real backup failure recovers the prior service without accepting the update: ${recoveryMode}`, async t => {
   const f = await fixture(t);
   await ready(f);
   const control = path.join(path.dirname(f.project), 'control');
@@ -716,7 +717,9 @@ test('real backup failure restarts the prior service and cleans maintenance with
   const lock = await acquireLock(control, { project: f.project, operationId: randomUUID() });
   let stopped;
   let active;
+  let workers;
   const failure = Object.assign(new Error('actual transaction backup fixture failed'), { code: 'BACKUP_FAILED' });
+  const healthFailure = new Error('prior-runtime verification failed');
   const forbidden = async () => { throw new Error('Post-backup mutations must not run.'); };
   try {
     await assert.rejects(runDeployment({ operation: 'update', waitSeconds: 0 }, {
@@ -734,7 +737,18 @@ test('real backup failure restarts the prior service and cleans maintenance with
         });
       },
       stop: async () => { stopped = await stopLinuxService({ ...f, control, lock }); },
-      snapshot: async () => { throw failure; },
+      snapshot: async () => {
+        if (recoveryMode === 'workers') {
+          const saved = await saveWorkerEngine({ control, project: f.project, operationId: lock.operationId,
+            source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)) });
+          workers = await createWorkerOperation({ control, lock, saved });
+          await workers.run({ workerId: randomUUID(), command: {
+            file: node, args: ['-e', 'process.exit(0)'], cwd: f.project, env: { PATH: '/usr/bin:/bin', HOME: '/root' },
+          }, runtime: { uid: 0, gid: 0 } });
+          await workers.seal();
+        }
+        throw failure;
+      },
       verifySnapshot: forbidden, rotate: forbidden, selectSource: forbidden,
       dependencies: forbidden, build: forbidden, configure: forbidden,
       start: async context => {
@@ -748,16 +762,29 @@ test('real backup failure restarts the prior service and cleans maintenance with
           assert.equal(inspection.identity.runtime.invocationId, active.identity.runtime.invocationId);
           await inspection.check();
         } finally { await inspection.close(); }
+        if (recoveryMode === 'verify-failure') throw healthFailure;
       },
-    }), error => error === failure);
+    }), error => recoveryMode === 'verify-failure'
+      ? error instanceof AggregateError && error.errors[0] === failure && error.errors[1] === healthFailure
+      : error === failure);
+    if (recoveryMode === 'verify-failure') {
+      assert.equal((await loadState(control)).phase, 'recovery-required');
+      await assert.rejects(stopped.retire(), error => error.recoveryAllowed === false);
+      await assert.rejects(releaseLock(control, lock), /service/i);
+      assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
+      assert.ok((await fs.readdir(control)).includes('service-activation.ndjson'));
+      return;
+    }
     assert.equal((await loadState(control)).phase, 'prior-runtime-restored');
     assert.equal((await loadState(control)).errorCode, 'BACKUP_FAILED');
     await stopped.retire();
+    await workers?.retire();
     await releaseLock(control, lock);
     assert.deepEqual(await fs.readdir(control), ['state.json']);
     assert.equal((await reconcileInterruptedOperation(control)).status, 'prior-runtime-restored');
     assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
     const next = await acquireLock(control, { project: f.project, operationId: randomUUID() });
     await releaseLock(control, next);
-  } finally { await stopped?.close(); }
+  } finally { await workers?.close(); await stopped?.close(); }
 });
+}

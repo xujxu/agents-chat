@@ -26,8 +26,10 @@ export async function runDeployment(options, operations) {
   const context = { options, inspection: null, target: null, snapshot: null, phase: 'preflight' };
   const invoke = async (name, recovering = false) => {
     const seconds = name === 'verify'
-      ? Math.min(timeoutSeconds, options.waitSeconds ?? 120) : timeoutSeconds;
-    return runStage(name, signal => operations[name]({ ...context, signal }), {
+      ? Math.min(timeoutSeconds, recovering ? options.waitSeconds || 120 : options.waitSeconds ?? 120) : timeoutSeconds;
+    return runStage(name, signal => operations[name]({
+      ...context, signal, recovering, activationPurpose: recovering && !sourceMutationAttempted ? 'prior-runtime' : 'deployment',
+    }), {
       timeoutMs: Math.min(seconds * 1000, Number.MAX_SAFE_INTEGER),
       signal: recovering ? undefined : options.signal,
     });
@@ -97,12 +99,15 @@ export async function runDeployment(options, operations) {
   } catch (error) {
     if (!preflightComplete && !hasUnsettledWorker(error)) throw error;
     const errors = [error];
+    let priorRuntimeRestored = false;
     try {
       if (!hasUnsettledWorker(error)) {
         if (sourceMutationAttempted) {
           await invoke('stop', true);
         } else if (stopAttempted && inspected.running) {
           await invoke('start', true);
+          await invoke('verify', true);
+          priorRuntimeRestored = true;
         }
       }
     } catch (recoveryError) {
@@ -110,7 +115,7 @@ export async function runDeployment(options, operations) {
     }
     const blocked = errors.some(hasUnsettledWorker);
     context.errorCode = blocked ? 'DEPLOYMENT_WORKER_UNSETTLED' : error?.code ?? 'DEPLOYMENT_FAILED';
-    try { await record(blocked ? 'blocked' : 'recovery-required'); }
+    try { await record(blocked ? 'blocked' : priorRuntimeRestored ? 'prior-runtime-restored' : 'recovery-required'); }
     catch (stateError) { errors.push(stateError); }
     if (errors.length > 1) {
       throw Object.assign(new AggregateError(errors,

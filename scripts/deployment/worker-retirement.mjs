@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, open, readdir, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { assertLockOwner, loadState, requireNoServiceMaintenance } from './state.mjs';
+import { assertLockOwner, loadState, requireNoServiceMaintenance, completedDeploymentPhase } from './state.mjs';
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
 import { verifyWorkerEngine } from './saved-worker-engine.mjs';
 import { readWorkerJournal } from './worker-journal.mjs';
@@ -32,7 +32,7 @@ export async function retireWorkerEvidence({ control, lock, saved, workers, clos
     await assertLockOwner(root, lock);
     const state = await loadState(root);
     if (!state || state.operationId !== lock.operationId || state.project !== lock.project
-      || !['accepted', 'restored'].includes(state.phase)) {
+      || !completedDeploymentPhase(state.phase)) {
       throw new Error('Worker retirement requires matching application acceptance.');
     }
     const verified = await verifyWorkerEngine({

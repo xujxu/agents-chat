@@ -4,12 +4,12 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
-import { acceptOperation } from './deployment-fixture.mjs';
+import { acceptOperation, recoverPriorRuntime } from './deployment-fixture.mjs';
 import { acquireLock } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 
-const [control, project, source, runtimeJson] = process.argv.slice(2);
+const [control, project, source, runtimeJson, outcome] = process.argv.slice(2);
 try {
   const lock = await acquireLock(control, { project, operationId: randomUUID() });
   const saved = await saveWorkerEngine({ source, control, project, operationId: lock.operationId });
@@ -47,7 +47,8 @@ try {
     });
   }
   await operation.seal();
-  await acceptOperation(control, lock);
+  if (outcome === 'prior-runtime-restored') await recoverPriorRuntime(control, lock);
+  else await acceptOperation(control, lock);
   const unlink = fs.unlink;
   fs.unlink = async file => {
     await unlink(file);

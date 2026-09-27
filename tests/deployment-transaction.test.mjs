@@ -58,7 +58,7 @@ test('verified prior-runtime restart remains a failed update even with no-wait o
     };
   }
   await assert.rejects(runDeployment({ operation: 'update', waitSeconds: 0, signal: controller.signal }, f.operations),
-    error => error === failure);
+    error => error.code === 'DEPLOYMENT_STAGE_CANCELLED' && error.cause === failure);
   assert.equal(f.phases.at(-1), 'prior-runtime-restored');
   assert.equal(f.phases.includes('accepted'), false);
 });
@@ -332,7 +332,7 @@ test('cancelling a stopped pre-source operation can restart untouched app using 
   await assert.rejects(runDeployment({
     operation: 'update', signal: controller.signal,
   }, operations), { code: 'DEPLOYMENT_STAGE_CANCELLED' });
-  assert.equal(calls.at(-1), 'start');
+  assert.deepEqual(calls.slice(-2), ['start', 'verify']);
   assert.equal(calls.includes('selectSource'), false);
 });
 

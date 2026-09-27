@@ -3169,9 +3169,18 @@ verification. Ordinary new-operation state admission and status recognize
 the finished failure, while already-current must still require accepted target
 provenance. Recovery advice offers retry, not database restore or update success.
 
-- [ ] Write causal transaction/state and real Linux failure-closeout contracts.
-- [ ] Implement phase validation/status/advice and verified recovery ordering.
-- [ ] Wire service and worker retirement, saved recovery and no-op semantics.
+- [x] Write causal transaction/state and real Linux failure-closeout contracts.
+- [x] Implement phase validation/status/advice and verified recovery ordering.
+- [x] Wire service and worker retirement, saved recovery and no-op semantics.
 - [ ] Validate actual backup failure -> old npm service restart -> verify ->
   failed terminal state -> evidence cleanup/unlock, plus restart/verify/state
   write failures and post-source refusal in Actions.
+
+Causal Actions `36328912391` at test-only `3ca8d4d` failed both shared contract
+jobs and the real Linux backup-failure closeout while the Windows native job
+passed. Evidence includes missing recovery verification and activation purpose.
+The cancelled-caller contract now preserves the existing stage cancellation
+error with the backup failure as its cause, rather than requiring cancellation
+to be erased. Non-cancelled failures still preserve original error identity.
+Shared live/cold worker cleanup contracts retain the failed-update state and
+backup; ordinary worker enrollment stays closed by that terminal outcome.

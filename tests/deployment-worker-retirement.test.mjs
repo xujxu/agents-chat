@@ -6,7 +6,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { temporaryDeployment, acceptOperation } from './deployment-fixture.mjs';
+import { temporaryDeployment, acceptOperation, recoverPriorRuntime } from './deployment-fixture.mjs';
 import { acquireLock, releaseLock } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
@@ -39,13 +39,14 @@ test('retirement requires both sealed workers and matching application acceptanc
   }
 });
 
-test('accepted or restored live operation retires only worker artifacts and permits next fixed slot', async t => {
-  for (const phase of ['deploy', 'restore']) {
+test('completed live operation retires only worker artifacts and permits next fixed slot', async t => {
+  for (const phase of ['deploy', 'restore', 'prior-runtime-restored']) {
     const f = await fixture(t);
     await mkdir(path.join(f.control, 'backup'));
     await writeFile(path.join(f.control, 'backup', 'sentinel'), 'retained full backup');
     await f.operation.seal();
-    await acceptOperation(f.control, f.lock, phase);
+    if (phase === 'prior-runtime-restored') await recoverPriorRuntime(f.control, f.lock);
+    else await acceptOperation(f.control, f.lock, phase);
     const state = await readFile(path.join(f.control, 'state.json'));
     await f.operation.retire();
     assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'lock', 'state.json']);
@@ -57,6 +58,20 @@ test('accepted or restored live operation retires only worker artifacts and perm
     await saveWorkerEngine({ source, control: f.control, project: f.project, operationId: lock.operationId });
     assert.ok((await readdir(f.control)).includes('worker-engine'));
   }
+});
+
+test('verified prior-runtime failure permits cleanup but never new worker admission', async t => {
+  const f = await fixture(t);
+  await recoverPriorRuntime(f.control, f.lock);
+  const before = await readFile(path.join(f.control, 'worker-operation.ndjson'));
+  await assert.rejects(f.operation.run({
+    workerId: randomUUID(),
+    command: { file: process.execPath, args: ['-e', 'process.exit(0)'], cwd: f.project, env: {} },
+    runtime: process.platform === 'linux' ? { uid: 0, gid: 0 }
+      : { pwsh: 'C:\\not-admitted\\pwsh.exe', accountSid: 'S-1-5-18', sessionId: 0 },
+  }), unsafe);
+  assert.deepEqual(await readFile(path.join(f.control, 'worker-operation.ndjson')), before);
+  await assert.rejects(releaseLock(f.control, f.lock), /worker|evidence/);
 });
 
 test('retirement intent alone prevents lock release after partial deletion', async t => {

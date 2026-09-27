@@ -65,7 +65,8 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
       const state = await loadState(root);
       if (!state || state.project !== project || state.operationId !== lock.operationId
         || !['stopped', 'copying', 'rotating', 'backup-ready', 'source-selected',
-          'dependencies', 'building', 'configuring', 'activating', ...(retiring ? ['accepted'] : [])].includes(state.phase)) {
+          'dependencies', 'building', 'configuring', 'activating',
+          ...(retiring ? ['accepted', 'prior-runtime-restored'] : [])].includes(state.phase)) {
         throw new Error('Service maintenance transaction state no longer authorizes stopped work.');
       }
       if (journal && !retiring) await journal.check();
