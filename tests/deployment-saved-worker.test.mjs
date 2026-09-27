@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { cp, link, mkdir, readFile, readdir, rename, stat, symlink, writeFile } from 'node:fs/promises';
+import { cp, link, mkdir, open, readFile, readdir, rename, stat, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
@@ -263,4 +263,67 @@ test('Linux saved helpers and manifests are private and reject linked sources', 
   await rename(sourceFile, `${sourceFile}.original`);
   await symlink(`${sourceFile}.original`, sourceFile);
   await assert.rejects(second.save(), /link|file/i);
+});
+
+test('source mutation during copying leaves an incomplete engine without a completion manifest', async t => {
+  const { save, source, control } = await fixture(t);
+  const file = path.join(source, 'worker-errors.mjs');
+  const original = await readFile(file);
+  const probe = await open(file, 'r');
+  const prototype = Object.getPrototypeOf(probe);
+  await probe.close();
+  const write = prototype.writeFile;
+  let changed = false;
+  t.mock.method(prototype, 'writeFile', async function (bytes) {
+    await write.call(this, bytes);
+    if (Buffer.isBuffer(bytes) && bytes.equals(original)) {
+      changed = true;
+      await writeFile(file, 'export const replaced = true;');
+    }
+  });
+  await assert.rejects(save(), /source changed/i);
+  t.mock.restoreAll();
+  assert.equal(changed, true);
+  assert.equal((await readdir(path.join(control, 'worker-engine'))).includes('manifest.json'), false);
+  await assert.rejects(save(), /exist/i);
+});
+
+test('copy flush failure retains an incomplete engine and never retries into another directory', async t => {
+  const { save, control, source } = await fixture(t);
+  const probe = await open(path.join(source, 'owned-worker.mjs'), 'r');
+  const prototype = Object.getPrototypeOf(probe);
+  await probe.close();
+  const sync = prototype.sync;
+  const failure = new Error('copy flush failed');
+  t.mock.method(prototype, 'sync', async function () {
+    if ((await this.stat()).isFile()) throw failure;
+    return sync.call(this);
+  });
+  await assert.rejects(save(), error => error === failure);
+  t.mock.restoreAll();
+  assert.equal((await readdir(path.join(control, 'worker-engine'))).includes('manifest.json'), false);
+  await assert.rejects(save(), /exist/i);
+  assert.deepEqual(await readdir(control), ['worker-engine']);
+});
+
+test('noncanonical project identity cannot be persisted into a saved engine', async t => {
+  const { options, project, control } = await fixture(t);
+  await assert.rejects(saveWorkerEngine({ ...options, project: `${project}${path.sep}.` }), /canonical|identity/i);
+  assert.deepEqual(await readdir(control), []);
+});
+
+test('large source files are rejected before allocating their contents as a saved helper', async t => {
+  const { save, source, control } = await fixture(t);
+  await writeFile(path.join(source, 'owned-worker.mjs'), Buffer.alloc(1024 * 1024 + 1));
+  await assert.rejects(save(), /size/i);
+  assert.equal((await readdir(path.join(control, 'worker-engine'))).includes('manifest.json'), false);
+});
+
+test('inspection invocation rejects a substituted entrypoint instead of running an arbitrary file', async t => {
+  const { save, owner } = await fixture(t);
+  const saved = await save();
+  for (const mutation of [
+    { entrypoint: process.execPath }, { directory: 'relative/worker-engine' },
+    { manifestSha256: 'invalid' }, { command: 'unexpected' },
+  ]) assert.throws(() => workerInspectionInvocation({ ...saved, ...mutation }, owner));
 });
