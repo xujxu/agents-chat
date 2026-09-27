@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, open, readdir, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { assertLockOwner, loadState } from './state.mjs';
+import { assertLockOwner, loadState, requireNoServiceMaintenance } from './state.mjs';
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
 import { verifyWorkerEngine } from './saved-worker-engine.mjs';
 import { readWorkerJournal } from './worker-journal.mjs';
@@ -27,6 +27,7 @@ export async function retireWorkerEvidence({ control, lock, saved, workers, clos
   let checkAuthority;
   try {
     ({ root, info: controlInfo } = await canonicalWorkerDirectory(control, { privateMode: true }));
+    await requireNoServiceMaintenance(root);
     ({ info: lockInfo } = await canonicalWorkerDirectory(path.join(root, 'lock'), { privateMode: true }));
     await assertLockOwner(root, lock);
     const state = await loadState(root);
@@ -90,6 +91,7 @@ export async function retireWorkerEvidence({ control, lock, saved, workers, clos
       if (marker) await checkFile(marker);
     };
     const checkInventory = async () => {
+      await requireNoServiceMaintenance(root);
       await checkAuthority();
       const expected = [...remaining.keys()].filter(file => !file.startsWith(`worker-engine${path.sep}`));
       if (!engineRemoved) expected.push('worker-engine');

@@ -70,6 +70,17 @@ test('live original owner cannot be adopted and failure creates no recovery guar
   assert.ok(!(await readdir(f.control)).includes('recovery-lock'));
 });
 
+test('saved cold worker cleanup refuses service maintenance evidence without deleting anything', async t => {
+  const f = await fixture(t);
+  await f.kill();
+  await writeFile(path.join(f.control, 'service-stop.ndjson'), '{"partial":');
+  const before = (await readdir(f.saved.directory)).sort();
+  await assert.rejects(f.recover());
+  assert.deepEqual((await readdir(f.saved.directory)).sort(), before);
+  assert.ok((await readdir(f.control)).includes('lock'));
+  assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+});
+
 test('malformed or foreign deletion evidence is rejected before any additional deletion', async t => {
   for (const mode of ['truncated', 'path', 'state', 'foreign']) {
     const f = await fixture(t);

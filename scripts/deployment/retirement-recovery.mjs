@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readdir, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { captureLockOwner, loadState } from './state.mjs';
+import { captureLockOwner, loadState, requireNoServiceMaintenance } from './state.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { externalWorkerDirectory, canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
@@ -67,6 +67,7 @@ export async function recoverRetirement({ control, project, operationId }) {
   let result;
   try {
     const { root } = await externalWorkerDirectory(control, project);
+    await requireNoServiceMaintenance(root);
     const markerPath = path.join(root, markerName);
     const markerBytes = await readWorkerFile(markerPath, maximum, { privateMode: true });
     const original = intent(markerBytes, project, operationId);
@@ -138,6 +139,7 @@ export async function recoverRetirement({ control, project, operationId }) {
       await checkFile(guardFile);
     };
     const checkAuthority = async () => {
+      await requireNoServiceMaintenance(root);
       await checkDirectory('', original.controlIdentity);
       await checkDirectory('lock', original.lockIdentity);
       await checkFile(original.lockFile);

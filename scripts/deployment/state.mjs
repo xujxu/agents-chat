@@ -205,6 +205,7 @@ export async function acquireLock(root, { project, operationId }) {
   if (!nonempty(project) || !nonempty(operationId)) throw new Error('Invalid lock owner.');
   const directory = await ownedDirectory(root);
   await requireNoRecovery(directory);
+  await requireNoServiceMaintenance(directory);
   const canonicalProject = await realpath(project);
   const identity = await processIdentity(process.pid);
   if (!identity) throw new Error('Cannot establish deployment lock owner identity.');
@@ -263,6 +264,7 @@ export async function assertLockOwner(root, suppliedOwner) {
 export async function releaseLock(root, owner) {
   const directory = await ownedDirectory(root);
   await requireNoRecovery(directory);
+  await requireNoServiceMaintenance(directory);
   if ((await loadState(directory))?.phase === 'blocked') {
     throw new Error('Blocked deployment workers require retaining the lock.');
   }
@@ -286,11 +288,23 @@ export async function releaseLock(root, owner) {
 export async function reconcileInterruptedOperation(root) {
   const directory = await ownedDirectory(root);
   const state = await loadState(directory);
+  if ((await readdir(directory)).some(name => name.startsWith('service-'))) {
+    return {
+      status: 'blocked', operationId: state?.operationId ?? null, phase: state?.phase ?? null,
+      message: 'Service maintenance evidence exists. Retain lock and inhibition; inspect before restart or recovery.',
+    };
+  }
   let recoveryExists = true;
   try { await lstat(path.join(directory, 'recovery-lock')); }
   catch (error) {
     if (error.code !== 'ENOENT') throw error;
     recoveryExists = false;
+  }
+
+  export async function requireNoServiceMaintenance(directory) {
+    if ((await readdir(directory)).some(name => name.startsWith('service-'))) {
+      throw new Error('Service maintenance evidence requires explicit service recovery before this operation.');
+    }
   }
   if (recoveryExists) {
     return {

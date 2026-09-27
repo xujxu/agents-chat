@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { lstat, open, readFile, realpath, statfs } from 'node:fs/promises';
+import { lstat, open, readFile, readlink, realpath, statfs } from 'node:fs/promises';
 import path from 'node:path';
 import { linuxNative, linuxSystemdProperties } from './linux-systemd.mjs';
 import { inspectLinuxRuntimeAccount } from './linux-runtime.mjs';
@@ -9,7 +9,8 @@ import { processIdentity } from './process-identity.mjs';
 const properties = [
   'Id', 'LoadState', 'Transient', 'NeedDaemonReload', 'FragmentPath', 'Type',
   'Slice', 'Delegate', 'KillMode', 'SendSIGKILL', 'ControlGroup', 'InvocationID',
-  'MainPID', 'ActiveState', 'SubState',
+  'MainPID', 'ActiveState', 'SubState', 'RefuseManualStart',
+  'User', 'Group', 'DynamicUser', 'SupplementaryGroups', 'WorkingDirectory', 'RootDirectory', 'RootImage',
 ];
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const fileIdentity = info => ({
@@ -43,11 +44,13 @@ async function configuration(unit, npm) {
   if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
     throw new Error('Invalid systemd unit object identity.');
   }
-  const [starts, drops] = await Promise.all([
+  const [starts, drops, conditions] = await Promise.all([
     bus(['get-property', 'org.freedesktop.systemd1', object,
       'org.freedesktop.systemd1.Service', 'ExecStartEx'], 'a(sasasttttuii)'),
     bus(['get-property', 'org.freedesktop.systemd1', object,
       'org.freedesktop.systemd1.Unit', 'DropInPaths'], 'as'),
+    bus(['get-property', 'org.freedesktop.systemd1', object,
+      'org.freedesktop.systemd1.Unit', 'Conditions'], 'a(sbbsi)'),
   ]);
   if (!Array.isArray(starts) || starts.length !== 1 || !Array.isArray(starts[0])
     || starts[0].length !== 10 || starts[0][0] !== npm
@@ -67,7 +70,11 @@ async function configuration(unit, npm) {
   if (emptyProperties.some(value => !Array.isArray(value) || value.length !== 0)) {
     throw new Error('Service hooks or alternate activation policy require explicit support.');
   }
-  return { state, drops, command: { file: npm, args: ['start'] } };
+  if (!Array.isArray(conditions) || conditions.some(value => !Array.isArray(value) || value.length !== 5)) {
+    throw new Error('Unsupported systemd condition response.');
+  }
+  return { state, drops, conditions: conditions.map(value => value.slice(0, 4)),
+    command: { file: npm, args: ['start'] } };
 }
 
 async function sourceDirectory(directory) {
@@ -116,6 +123,9 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
   try {
     const runtime = await inspectLinuxRuntimeAccount({ unit, project });
     const config = await configuration(unit, npm);
+    if (config.conditions.length || config.state.RefuseManualStart !== 'no') {
+      throw new Error('Service already has unsupported start conditions or inhibition.');
+    }
     const executables = await Promise.all([executable(npm), executable(node)]);
     const boot = await bootId();
     const { state } = config;
@@ -151,13 +161,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
     events = await open(`${groupPath}/cgroup.events`, constants.O_RDONLY | constants.O_NOFOLLOW);
     const groupIdentity = fileIdentity(await directory.stat());
     const eventIdentity = fileIdentity(await events.stat());
-    const check = async () => {
-      if (closed) throw new Error('Service inspection is closed.');
-      if (await bootId() !== boot || !same(await configuration(unit, npm), config)
-        || !same(await inspectLinuxRuntimeAccount({ unit, project }), runtime)
-        || !same(await Promise.all([executable(npm), executable(node)]), executables)) {
-        throw new Error('Service configuration or runtime identity changed.');
-      }
+    const checkSources = async () => {
       for (const source of sources) {
         const bytes = Buffer.alloc(source.original.size);
         const { bytesRead } = await source.handle.read(bytes, 0, bytes.length, 0);
@@ -167,6 +171,8 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
           throw new Error('Retained service source file was changed or replaced.');
         }
       }
+    };
+    const checkDomain = async () => {
       for (const [file, handle, original] of [[groupPath, directory, groupIdentity],
         [`${groupPath}/cgroup.events`, events, eventIdentity]]) {
         const named = await lstat(file);
@@ -176,16 +182,74 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
           throw new Error('Retained service domain identity was replaced.');
         }
       }
+    };
+    const population = async (allowDeleted = false) => {
+      const buffer = Buffer.alloc(4096);
+      let bytesRead;
+      try { ({ bytesRead } = await events.read(buffer, 0, buffer.length, 0)); }
+      catch (error) {
+        if (!allowDeleted || error.code !== 'ENODEV'
+          || await readlink(`/proc/self/fd/${directory.fd}`) !== `${groupPath} (deleted)`
+          || await bootId() !== boot) throw error;
+        return false;
+      }
+      const value = buffer.subarray(0, bytesRead).toString('utf8').match(/^populated ([01])$/m);
+      if (!value) throw new Error('Original service domain population is unavailable.');
+      return value[1] === '1';
+    };
+    const check = async () => {
+      if (closed) throw new Error('Service inspection is closed.');
+      if (await bootId() !== boot || !same(await configuration(unit, npm), config)
+        || !same(await inspectLinuxRuntimeAccount({ unit, project }), runtime)
+        || !same(await Promise.all([executable(npm), executable(node)]), executables)) {
+        throw new Error('Service configuration or runtime identity changed.');
+      }
+      await checkSources();
+      await checkDomain();
       if (await realpath(`/proc/${runtime.mainPid}/exe`) !== executables[1].target
         || (await readFile(`/proc/${runtime.mainPid}/cgroup`, 'utf8')).trim() !== `0::${group}`
         || await processIdentity(runtime.mainPid) !== runtime.processIdentity) {
         throw new Error('Service main process executable or cgroup identity does not match.');
       }
-      const buffer = Buffer.alloc(4096);
-      const { bytesRead } = await events.read(buffer, 0, buffer.length, 0);
-      const population = buffer.subarray(0, bytesRead).toString('utf8').match(/^populated ([01])$/m);
-      if (!population || population[1] !== '1') throw new Error('Running service domain population is unavailable.');
+      if (!await population()) throw new Error('Running service domain unexpectedly empty.');
       return Object.freeze({ populated: true });
+    };
+    const inhibition = `/etc/systemd/system/${unit}.d/90-agents-chat-deployment.conf`;
+    const checkInhibited = async ({ stopped = false } = {}) => {
+      if (closed) throw new Error('Service inspection is closed.');
+      const current = await configuration(unit, npm);
+      const ignored = stopped ? ['MainPID', 'ActiveState', 'SubState', 'ControlGroup', 'InvocationID'] : [];
+      if (await bootId() !== boot
+        || properties.some(key => !ignored.includes(key)
+          && current.state[key] !== (key === 'RefuseManualStart' ? 'yes' : state[key]))
+        || !same([...current.drops].sort(), [...config.drops, inhibition].sort())
+        || !same(current.conditions, [['ConditionPathExists', false, true, inhibition]])) {
+        throw new Error('Service inhibition or original configuration changed.');
+      }
+      await checkSources();
+      if (!stopped) {
+        if (!same(await inspectLinuxRuntimeAccount({ unit, project }), runtime)
+          || await realpath(`/proc/${runtime.mainPid}/exe`) !== executables[1].target
+          || (await readFile(`/proc/${runtime.mainPid}/cgroup`, 'utf8')).trim() !== `0::${group}`) {
+          throw new Error('Inhibited service runtime identity changed before stop.');
+        }
+        await checkDomain();
+        if (!await population()) throw new Error('Original service domain unexpectedly empty before stop.');
+        return { stopped: false };
+      }
+      if (current.state.InvocationID && current.state.InvocationID !== runtime.invocationId
+        || current.state.ControlGroup && current.state.ControlGroup !== group) {
+        throw new Error('Stopped service generation/domain was replaced.');
+      }
+      if (!['inactive', 'failed'].includes(current.state.ActiveState) || current.state.MainPID !== '0') {
+        return { stopped: false };
+      }
+      if (await population(true)) return { stopped: false };
+      const after = await linuxSystemdProperties(unit, ['MainPID', 'ActiveState', 'InvocationID', 'ControlGroup']);
+      if (Object.keys(after).some(key => after[key] !== current.state[key])) {
+        throw new Error('Service identity changed while proving the original domain empty.');
+      }
+      return { stopped: true };
     };
     await check();
     const identity = Object.freeze({
@@ -194,7 +258,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
         path: source.file, ...source.original, sha256: source.sha256,
       }))),
     });
-    return Object.freeze({ identity, check, close });
+    return Object.freeze({ identity, check, checkInhibited, close });
   } catch (error) {
     try { await close(); }
     catch (cleanup) { throw new AggregateError([error, cleanup], 'Service inspection and handle cleanup failed.'); }

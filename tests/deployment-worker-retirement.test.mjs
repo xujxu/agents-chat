@@ -66,6 +66,17 @@ test('retirement intent alone prevents lock release after partial deletion', asy
   await assert.rejects(releaseLock(root, lock), /worker|evidence/);
 });
 
+test('accepted worker cleanup cannot discard service maintenance authority', async t => {
+  const f = await fixture(t);
+  await f.operation.seal();
+  await acceptOperation(f.control, f.lock);
+  await writeFile(path.join(f.control, 'service-stop.ndjson'), '{"partial":');
+  const before = (await readdir(f.saved.directory)).sort();
+  await assert.rejects(f.operation.retire(), unsafe);
+  assert.deepEqual((await readdir(f.saved.directory)).sort(), before);
+  await assert.rejects(releaseLock(f.control, f.lock), /service/i);
+});
+
 test('unexpected helper file is retained rather than recursively removed', async t => {
   const f = await fixture(t);
   await f.operation.seal();
