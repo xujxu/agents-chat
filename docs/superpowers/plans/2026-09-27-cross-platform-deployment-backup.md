@@ -831,3 +831,144 @@ acceptance. In particular:
    no-build restore on both operating systems.
 
 Do not create the PR or deploy main until those native acceptance gates pass.
+
+## Native ownership prerequisite: nested cleanup failures
+
+The user reviewed and approved the native containment amendment `731d9b7`.
+Continue inline, using the established fallback; do not repeat execution-mode
+selection. This first bounded batch addresses a concrete existing recovery
+gate defect before introducing platform workers. It does not implement native
+containment or discharge the eight real-process acceptance groups in the spec.
+
+**Files and responsibilities**
+
+- Create `scripts/deployment/worker-errors.mjs`: a single bounded error-graph
+  classifier; no OS calls and no dependency on native adapter implementation.
+- Create `tests/deployment-worker-errors.test.mjs`: nested, cyclic, oversized
+  and inaccessible error graph contracts.
+- Modify `scripts/deployment/stage-runner.mjs`: classify the settled error
+  using the shared helper, preserving its original object as cause.
+- Modify `scripts/deployment/transaction.mjs`: use the helper at preflight,
+  cleanup admission, blocked recording and aggregate result boundaries.
+- Modify `tests/deployment-stage-runner.test.mjs` and
+  `tests/deployment-transaction.test.mjs`: causal regression coverage for those
+  real engine boundaries, not just a standalone helper test.
+- Modify `.github/workflows/deployment-lifecycle.yml`: include the new Node
+  test file in the existing two-platform contract invocation.
+
+### Task N1: Make cleanup uncertainty survive error wrapping
+
+- [ ] **Step 1: Add failing tests with these concrete fixtures.**
+
+```js
+const unsafe = Object.assign(new Error('writer still alive'), {
+  recoveryAllowed: false,
+});
+const wrapped = new Error('adapter failed', { cause: unsafe });
+const aggregate = new AggregateError([new Error('ordinary failure'), wrapped]);
+assert.equal(hasUnsettledWorker(wrapped), true);
+assert.equal(hasUnsettledWorker(aggregate), true);
+assert.equal(hasUnsettledWorker(new Error('ordinary failure')), false);
+const cyclic = new Error('cycle');
+cyclic.cause = cyclic;
+assert.equal(hasUnsettledWorker(cyclic), false);
+cyclic.errors = [unsafe];
+assert.equal(hasUnsettledWorker(cyclic), true);
+```
+
+Also test 300 chained causes, 300 aggregate entries, accessor fields without
+invoking getters, a proxy with a throwing descriptor trap, primitive causes,
+and an outer `recoveryAllowed=true` wrapping an unsafe inner failure.
+Uninspectable/over-budget graphs are conservatively unsafe; they cannot be
+silently treated as normal failures.
+
+For transaction integration inject `wrapped` and `aggregate` from inspect,
+snapshot, build, and recovery stop. Assert no subsequent mutation and durable
+blocked phase; cleanup/state errors retain all original causes. For the stage
+runner reject the wrapped error after its abort event and assert
+`DEPLOYMENT_WORKER_UNSETTLED`, `recoveryAllowed=false`, and original cause.
+
+- [ ] **Step 2: Commit/push only tests and workflow.**
+
+```bash
+git add tests/deployment-worker-errors.test.mjs tests/deployment-stage-runner.test.mjs tests/deployment-transaction.test.mjs .github/workflows/deployment-lifecycle.yml
+git commit -m "test: retain worker uncertainty through nested errors" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+git push origin feat/deployment-backup
+gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
+```
+
+Run only in Actions:
+`node --test tests/deployment-worker-errors.test.mjs tests/deployment-stage-runner.test.mjs tests/deployment-transaction.test.mjs`
+(the workflow includes existing contracts as well). Expected red: missing
+worker-errors export/module and wrapped failures incorrectly permitting cleanup.
+Inspect the actual returned run ID with `gh run view`; do not run tests locally.
+
+- [ ] **Step 3: Implement the bounded classifier and replace every gate.**
+
+```js
+export function hasUnsettledWorker(error) {
+  const pending = [error];
+  const seen = new Set();
+  while (pending.length) {
+    const current = pending.pop();
+    if (current === null || typeof current !== 'object' || seen.has(current)) continue;
+    if (seen.size >= 256) return true;
+    seen.add(current);
+    try {
+      const fields = ['recoveryAllowed', 'cause', 'errors'].map(key =>
+        Object.getOwnPropertyDescriptor(current, key));
+      if (fields.some(field => field && !Object.hasOwn(field, 'value'))) return true;
+      if (fields[0]?.value === false) return true;
+      if (fields[1]) pending.push(fields[1].value);
+      const errors = fields[2]?.value;
+      if (errors !== undefined) {
+        if (!Array.isArray(errors)) return true;
+        const length = Object.getOwnPropertyDescriptor(errors, 'length')?.value;
+        if (!Number.isSafeInteger(length) || length < 0 || length > 256) return true;
+        for (let index = 0; index < length; index++) {
+          const entry = Object.getOwnPropertyDescriptor(errors, String(index));
+          if (!entry || !Object.hasOwn(entry, 'value')) return true;
+          pending.push(entry.value);
+        }
+      }
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+```
+
+Descriptor inspection must not invoke arbitrary getters. The catch returns
+unsafe classification, which is surfaced as blocked by callers; it is not a
+success fallback. The classifier uses the owned error fields emitted by these
+deployment adapters; arbitrary third-party failures must be wrapped in this
+contract at the boundary. Do not serialize raw causes into public output.
+
+In both engines import the named helper from `./worker-errors.mjs`.
+Replace `settled.error?.recoveryAllowed === false` with
+`hasUnsettledWorker(settled.error)` and every transaction direct field check
+with the same predicate. For arrays of failures use
+`errors.some(hasUnsettledWorker)` and `!errors.some(hasUnsettledWorker)`.
+Preserve original thrown errors and causes; do not reconstruct their messages.
+
+- [ ] **Step 4: Commit/push implementation and await both OS jobs.**
+
+```bash
+git add scripts/deployment/worker-errors.mjs scripts/deployment/stage-runner.mjs scripts/deployment/transaction.mjs
+git commit -m "fix: preserve nested worker uncertainty across recovery gates" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+git push origin feat/deployment-backup
+gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
+```
+
+Expected green: all existing and new contracts pass on both OSes, retaining the
+one explicitly Linux-only skip on Windows. Record actual IDs/results below.
+If tests fail, inspect bounded Actions logs, fix the cause and push again.
+
+- [ ] **Step 5: Persist evidence and carry forward native gates.**
+
+Record the accepted commit/run in this plan and session tasks. The next native
+batch must specify its private bootstrap transport, OS interop and durable
+admission/settlement receipts before writing platform code. Preserve the
+approved spec's requirements; do not substitute process groups/taskkill or
+claim that this error-classification fix delivers native process containment.
