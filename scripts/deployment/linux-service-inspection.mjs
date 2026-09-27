@@ -246,7 +246,10 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
       }
       if (await population(true)) return { stopped: false };
       const after = await linuxSystemdProperties(unit, ['MainPID', 'ActiveState', 'InvocationID', 'ControlGroup']);
-      if (Object.keys(after).some(key => after[key] !== current.state[key])) {
+      // systemd may clear the retired cgroup/InvocationID after entering a terminal state.
+      if (after.MainPID !== '0' || !['inactive', 'failed'].includes(after.ActiveState)
+        || after.InvocationID && after.InvocationID !== runtime.invocationId
+        || after.ControlGroup && after.ControlGroup !== group) {
         throw new Error('Service identity changed while proving the original domain empty.');
       }
       return { stopped: true };

@@ -119,7 +119,8 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
     await service.checkInhibited();
     await linuxNative('/usr/bin/systemctl', ['--system', 'stop', '--no-block', unit]);
     let stopped = false;
-    for (let attempt = 0; attempt < 400; attempt++) {
+    const deadline = performance.now() + 60000;
+    while (performance.now() < deadline) {
       await checkInhibition();
       if ((await service.checkInhibited({ stopped: true })).stopped) { stopped = true; break; }
       await delay(50);

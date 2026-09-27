@@ -59,7 +59,7 @@ ${settings}
 `;
   t.after(async () => {
     await rm(dropDirectory, { recursive: true, force: true });
-    await writeFile(fragment, `${bytes}\n[Service]\nKillMode=control-group\nRestart=no\nExecStop=\n`);
+    await writeFile(fragment, `${bytes}\n[Unit]\nRefuseManualStop=no\n[Service]\nKillMode=control-group\nRestart=no\nExecStop=\n`);
     await systemctl('daemon-reload');
     await systemctl('stop', unit);
     await unlink(fragment);
@@ -179,8 +179,8 @@ test('unsafe stop policy and writable unit sources are rejected before service m
   await assert.rejects(inspectLinuxService(f), /source|permission|writable/i);
 });
 
-async function stopFixture(t) {
-  const f = await fixture(t);
+async function stopFixture(t, options) {
+  const f = await fixture(t, options);
   await ready(f);
   const control = path.join(path.dirname(f.project), 'control');
   await mkdir(control, { mode: 0o700 });
@@ -272,6 +272,31 @@ test('actual controller death retains inhibition and blocked status both before 
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
       await exited;
     });
+
+    test('failed stop retains durable inhibition and never claims a stopped service', async t => {
+      const f = await stopFixture(t, { settings: '[Unit]\nRefuseManualStop=yes' });
+      await assert.rejects(stopLinuxService(f), error => error.recoveryAllowed === false);
+      assert.match(await readFile(f.inhibition, 'utf8'), /RefuseManualStart=yes/);
+      assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+      const receipts = (await readFile(path.join(f.control, 'service-stop.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+      assert.deepEqual(receipts.map(record => record.phase), ['intent', 'inhibited', 'stop-requested']);
+      assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+    });
+
+    test('restoring the original inhibitor cannot authorize a replacement service generation', async t => {
+      const f = await stopFixture(t);
+      const stopped = await stopLinuxService(f);
+      try {
+        const original = `${f.inhibition}.held`;
+        await rename(f.inhibition, original);
+        await systemctl('daemon-reload');
+        await systemctl('start', f.unit);
+        await rename(original, f.inhibition);
+        await systemctl('daemon-reload');
+        await assert.rejects(stopped.checkStopped(), error => error.recoveryAllowed === false);
+        assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+      } finally { await stopped.close(); }
+    });
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`Stop controller did not reach receipt: ${diagnostic}`)), 45000);
       child.once('message', value => { clearTimeout(timer); resolve(value); });
@@ -283,7 +308,8 @@ test('actual controller death retains inhibition and blocked status both before 
     assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
     await assert.rejects(acquireLock(control, { project: f.project, operationId: randomUUID() }), /service/i);
     const active = (await systemctl('show', f.unit, '--property=ActiveState', '--value')).stdout.trim();
-    assert.equal(active, phase === 'stop-requested' ? 'active' : 'inactive');
+    if (phase === 'stop-requested') assert.equal(active, 'active');
+    else assert.ok(['inactive', 'failed'].includes(active));
     await systemctl('daemon-reload');
     await assert.rejects(systemctl('start', f.unit), /manual|refus/i);
   }
