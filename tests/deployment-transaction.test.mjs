@@ -4,7 +4,8 @@ import { runDeployment } from '../scripts/deployment/transaction.mjs';
 
 function fixture(failAt) {
   const calls = [];
-  const operations = {};
+  const phases = [];
+  const operations = { record: async phase => { phases.push(phase); } };
   for (const name of [
     'inspect', 'resolveTarget', 'capacity', 'stop', 'snapshot', 'verifySnapshot',
     'rotate', 'selectSource', 'dependencies', 'build', 'configure', 'start', 'verify',
@@ -15,7 +16,7 @@ function fixture(failAt) {
       if (name === 'inspect') return { exists: true, running: true, owned: true };
     };
   }
-  return { calls, operations };
+  return { calls, phases, operations };
 }
 
 test('existing deployment backs up before any source or build mutation', async () => {
@@ -104,5 +105,35 @@ test('cleanup failure retains both errors rather than masking the original failu
     assert.match(error.errors[0].message, /snapshot/);
     assert.match(error.errors[1].message, /restart/);
     return true;
+  });
+
+  test('phase is durable before source, dependency and build mutations', async () => {
+    const { phases, operations } = fixture();
+    for (const [name, phase] of [
+      ['selectSource', 'source-selected'], ['dependencies', 'dependencies'],
+      ['build', 'building'], ['configure', 'configuring'], ['start', 'activating'],
+    ]) {
+      operations[name] = async () => { assert.equal(phases.at(-1), phase); };
+    }
+    await runDeployment({ operation: 'upgrade' }, operations);
+    assert.deepEqual(phases, [
+      'preflight', 'stopped', 'copying', 'rotating', 'backup-ready',
+      'source-selected', 'dependencies', 'building', 'configuring', 'activating', 'accepted',
+    ]);
+  });
+
+  test('failed state write prevents the associated source mutation', async () => {
+    const { calls, operations } = fixture();
+    operations.record = async phase => {
+      if (phase === 'source-selected') throw new Error('journal write failed');
+    };
+    await assert.rejects(runDeployment({ operation: 'upgrade' }, operations), /journal write/);
+    assert.equal(calls.includes('selectSource'), false);
+  });
+
+  test('failed activation retains recovery-required state', async () => {
+    const { phases, operations } = fixture('verify');
+    await assert.rejects(runDeployment({ operation: 'upgrade' }, operations), /verify/);
+    assert.equal(phases.at(-1), 'recovery-required');
   });
 });
