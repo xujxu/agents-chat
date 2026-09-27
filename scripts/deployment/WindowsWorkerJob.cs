@@ -126,21 +126,21 @@ namespace Deployment
                 Check(GetHandleInformation(Retained(), out flags), "Query Job handle inheritance");
                 return (flags & 1) != 0;
             }
-            public byte[] SecurityDescriptor
+        }
+        public byte[] SecurityDescriptor
+        {
+            get
             {
-                get
-                {
-                    uint needed;
-                    bool success = GetKernelObjectSecurity(Retained(), 4, null, 0, out needed);
-                    int error = Marshal.GetLastWin32Error();
-                    if (success || error != 122 || needed < 20 || needed > 16384)
-                        throw new Win32Exception(error, "Invalid Job DACL size query");
-                    byte[] descriptor = new byte[needed];
-                    uint returned;
-                    Check(GetKernelObjectSecurity(Retained(), 4, descriptor, needed, out returned), "Read original Job DACL");
-                    if (returned != needed) throw new InvalidDataException("Job DACL changed during query.");
-                    return descriptor;
-                }
+                uint needed;
+                bool success = GetKernelObjectSecurity(Retained(), 4, null, 0, out needed);
+                int error = Marshal.GetLastWin32Error();
+                if (success || error != 122 || needed < 20 || needed > 16384)
+                    throw new Win32Exception(error, "Invalid Job DACL size query");
+                byte[] descriptor = new byte[needed];
+                uint returned;
+                Check(GetKernelObjectSecurity(Retained(), 4, descriptor, needed, out returned), "Read original Job DACL");
+                if (returned != needed) throw new InvalidDataException("Job DACL changed during query.");
+                return descriptor;
             }
         }
         public static string ProcessIdentity(int pid)
