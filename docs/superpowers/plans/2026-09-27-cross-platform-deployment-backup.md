@@ -2352,15 +2352,15 @@ Files:
   cases to the existing Actions jobs.
 
 Execution order:
-- [ ] Push causal missing-module tests for lock/digest binding, immutable
+- [x] Push causal missing-module tests for lock/digest binding, immutable
   capture, competing creators, malformed evidence, no implicit unlock and
   zero-worker sealing.
-- [ ] Extract storage without changing existing receipt validation; implement
+- [x] Extract storage without changing existing receipt validation; implement
   the operation writer and native dispatch. One in-flight operation method,
   permanent close/seal, enrollment before worker journal/native creation.
-- [ ] Add real native command success, nonzero exit, repeated worker rejection,
+- [x] Add real native command success, nonzero exit, repeated worker rejection,
   and operation seal checks on both platforms.
-- [ ] Require all Actions jobs green; record exact evidence and limitations.
+- [x] Require all Actions jobs green; record exact evidence and limitations.
 
 ```js
 const operation = await createWorkerOperation({ control, lock, saved });
@@ -2382,3 +2382,78 @@ terminal `sealed` with null workerId. Lock and digest cannot change between
 records. Read-only inspection never treats process death or a missing worker
 journal as settlement. Empty, truncated, replaced and poisoned evidence fails
 closed without rewriting any record.
+
+### N8 execution evidence
+
+- Missing-authority-module red: `d05b3a8`, Actions `36318066728`.
+- Initial implementation: `fdbdbe6`, Actions `36318217765`, all four jobs green.
+  Reused the existing durable journal storage rather than introducing another
+  append/flush implementation. Existing worker-journal write, partial-tail,
+  directory-sync and nested-close fault contracts remain in the suite.
+- Native pre-grant replacement red: `591a5a3`, Actions `36318362622`.
+  Both actual native platforms showed that a byte-identical replacement of
+  the operation journal after native readiness still allowed the target.
+  Added retained-prefix/inode checks at every operation authority gate,
+  including immediately before the target grant.
+- Same-content lock replacement red: `c69fcf3`, Actions `36318493690`,
+  reproduced on both platforms. Operation authority now pins the original
+  lock file with a retained read handle and compares file and lock-directory
+  identities, not only serialized token equality.
+- First correction: `5da71c5`, Actions `36318623012`. Both shared jobs and
+  Linux native passed; Windows assertions passed but the job hit its
+  ten-minute limit because the intentionally blocked case retained its
+  original owner/helper. This was not a successful overall acceptance.
+- Retained lock handle, aggregated close-error coverage, and explicit
+  blocked-fixture cleanup: accepted revision
+  `fa4e05792fe5ede7d91f65089062c41af7a5f465`, Actions `36319283090`,
+  all four jobs green: **190 Linux shared contracts**, **186 Windows shared
+  contracts with four Linux-only skips**, **18 Linux native integration
+  tests**, **17 Windows native integration tests**, plus the existing
+  **13 Windows Job primitive cases**. Test cleanup captures the actual Windows owner
+  PID/start identity before injecting the fault and terminates only that
+  process afterward. Linux cleanup matches the recorded InvocationID before
+  resetting the test unit. No production fallback or premature retirement
+  was added to make the test finish.
+
+`worker-operation.mjs` is the internal admission entry point. It binds the
+current exclusive lock to a verified saved-engine digest, persists each unique
+worker enrollment before creating its worker journal or native domain, and
+dispatches directly to the real platform adapter. A caller cannot inject a
+mock prepare callback as production authority. Immutable command/runtime
+inputs and the lock descriptor are captured before asynchronous work.
+
+Only one run/seal is active at a time, with at most 32 enrolled workers.
+Unregistered or missing worker files, another operation's state, changed
+lock identity, changed helper content, missing/truncated authority, or unsafe
+worker outcomes close admission. Ordinary nonzero exit remains an ordinary
+command failure when the actual worker settled; it need not prevent later
+enrolled work. Seal rechecks the exact inventory and all settlement receipts.
+Seal is not deployment acceptance and does not release the lock.
+
+`releaseLock` now refuses while worker evidence or the saved-engine slot
+exists, including the partial setup case before operation-journal creation.
+Neither seal nor close deletes evidence. Read-only inspection can read the
+durable operation header after the original controller is killed; it does
+not adopt that lock or authorize new work.
+
+### Remaining gates after N8
+
+Native blocked evidence is still deliberately retained. In particular a
+Windows blocked owner can keep the controller's pipes/event loop alive until
+explicit shutdown or the independent native deadline; public CLI lifetime
+and recovery supervision must resolve this without inventing settlement.
+The test's identity-checked fixture termination is NOT a production recovery
+implementation.
+
+Next implement the separate exclusive recovery/retirement authority:
+reconcile incomplete enrollment and original native domains, persist verified
+settlement, then retire exact saved-engine/journal slots without accumulating
+history or releasing another owner's lock. Do not treat the sealed record,
+dead controller, absent same-name Job, or elapsed deadline as sufficient
+unblock authority. Helper setup before the pinned header and partial
+retirement still require their own crash-boundary matrix.
+
+Linux non-root intended-account support, Windows production control ACL
+provisioning, remaining native fault injection, actual application shutdown,
+backup metadata and historical deploy/update/restore acceptance remain open.
+No public wrapper, main PR, merge or live installation was changed.
