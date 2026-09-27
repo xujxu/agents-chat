@@ -3432,7 +3432,7 @@ original lock token.
   service marker unlink, old lock owner/directory removal and guard owner/
   directory removal; retry and verify byte-identical state/backup, same service,
   exclusive admission and refusal to touch the next operation's lock.
-- [ ] Require all Actions jobs and record final evidence and scope boundaries.
+- [x] Require all Actions jobs and record final evidence and scope boundaries.
 
 Causal `b2051d5` / Actions `36332487070`: the recovery job failed for the
 missing native admission module and eight unrecoverable controller-death
@@ -3452,3 +3452,43 @@ lock pathname. All eight final-cleanup death boundaries resume successfully.
 Follow-up acceptance adds unchanged-lease recovery dying twice, guard/lease/
 completion tamper, completion deletion gaps, runtime replacement and ordinary
 deployment admission while native recovery admission is held.
+
+#### Restartable recovery checkpoint (2026-09-27)
+
+Final executable `1694d43b63ada8515b2caae4c9651f82bb8589e5`, Actions
+`36333329618`, passed all five jobs: **52 Linux recovery/admission tests,
+69 existing Linux native tests, 221 Linux shared, 217 Windows shared with
+four platform skips, 19 Windows coordinator tests plus the native Job step**.
+No local tests, servers or package installation were used.
+
+This batch completes continuation of an existing validated v2 recovery lease,
+including ten actual recovery-controller SIGKILL boundaries: durable lease,
+service deletion, worker helper deletion, durable pending completion, atomic
+completion publication, service marker unlink, old lock owner unlink, old
+lock directory removal, recovery owner unlink and recovery directory removal.
+The kernel-held control-directory lock excludes live competing recovery and
+ordinary deployment admission without unlinking a lock file. Repeated recovery
+death preserves the immutable first lease; its owner is not rewritten or
+misrepresented as the new controller.
+
+The independent saved recovery validates the full external completion proof,
+same original terminal state, service boot/generation/account/configuration,
+source and maintenance-directory identity, exact file identities/hashes and
+final missing deletion prefix. It leaves `recovery-complete.json` for
+idempotent explicit retry after guard/old-lock removal. A newly acquired
+deployment lock is never removed by replay. A later distinct operation can
+retire the prior validated receipt under native admission, and replace it
+with its own completion proof after exact combined cleanup. State/backup bytes
+and service InvocationID remain unchanged.
+
+Tampered lease/digest, replaced guard, final deletion gap, changed runtime,
+unknown/partial evidence and live owners remain blocked without further
+deletion. Legacy recovery leases are not retroactively adopted; incomplete
+initial owner creation or a partially written pending completion still needs
+inspection. The original **live** service-retirement path's marker-deleted/
+old-lock-retained window is separate from this now-covered **recovery**
+completion window and is not claimed solved here. Earlier service-stop/
+activation interruption, reboot, post-source/health failure, inactive/changed
+units, Windows installed tasks/accounts, complete backups, public script
+wiring and real dual-platform historical application acceptance remain.
+No main/PR/live-deployment changes.
