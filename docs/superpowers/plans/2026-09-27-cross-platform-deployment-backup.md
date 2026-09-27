@@ -2783,3 +2783,47 @@ Accounts needing supplementary groups are explicitly unsupported for now;
 they are not silently migrated to fewer groups or to root. Windows installed
 account/ACL/task handling remains unfinished. Public deploy/update/restore
 files, main and the live deployment remain unchanged.
+
+### Installed Linux service ownership, before stop admission
+
+Continue the approved native-service task with a read-only retained inspection
+in `scripts/deployment/linux-service-inspection.mjs`. Do not give stop authority
+to the preceding account-only snapshot. Accept a loaded, non-transient,
+canonical service in system.slice with Type=simple/exec, control-group kill,
+SIGKILL enabled and no delegation, hooks or alternate activation units.
+Read ExecStartEx as typed busctl JSON, not a shell or a delimiter-based parser:
+require exactly the explicitly supplied absolute npm executable and literal
+`start` argument, with no privilege/ignore-failure/expansion flags.
+
+Retain root-owned non-writable original fragment/drop-in file descriptors,
+their inode and bounded digest, and the original cgroup directory/events.
+Check the current main process's Node executable, cgroup and start identity;
+re-read configuration and account before returning. `check()` must reject
+changed source files (including byte-identical replacement), stale manager
+configuration, replaced service generations or changed account/placement.
+Return fingerprints, not file contents or environment values. `close()` closes
+only inspection handles; it never stops, reloads or modifies the service.
+
+API used by actual persistent service tests:
+
+```js
+const service = await inspectLinuxService({
+  unit, project, npm: absoluteNpm, node: absoluteNode,
+});
+try {
+  assert.equal(service.identity.runtime.project, project);
+  assert.equal((await service.check()).populated, true);
+} finally {
+  await service.close();
+}
+```
+
+- [ ] Add `tests/deployment-linux-service.test.mjs` to the Linux Actions job;
+  prove missing-module red before implementation.
+- [ ] Implement retained source/configuration/native-domain checks and add
+  the module to the closed saved-worker bundle and its contract.
+- [ ] Exercise actual npm services, wrong executable/argv/privilege flags,
+  same-content file replacement, drop-in drift, generation replacement and
+  detached descendant placement, while keeping a foreign sentinel untouched.
+- [ ] Record exact Actions evidence and remaining limitations. This inspection
+  is not itself downtime, restart inhibition or full deploy acceptance.
