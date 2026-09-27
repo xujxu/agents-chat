@@ -61,3 +61,15 @@ jobs:
           tests/deployment-owned-worker.test.mjs
           tests/deployment-worker-journal.test.mjs
           tests/deployment-saved-worker.test.mjs
+
+  linux-native:
+    name: Native Linux worker domain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Characterize retained cgroup observation
+        run: sudo "$(command -v node)" tests/deployment-linux-domain-probe.mjs

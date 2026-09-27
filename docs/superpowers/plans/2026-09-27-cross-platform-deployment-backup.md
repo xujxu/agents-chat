@@ -1775,3 +1775,24 @@ ACL provisioning and directory-entry power-loss durability remain open.
 All eight native process acceptance groups, full historical deploy/update/
 restore acceptance, README/public wrappers and the main-targeted PR remain
 outstanding.
+
+## N5 native Linux boundary: first establish actual retirement semantics
+
+Before selecting the Linux retirement proof, run the bounded
+`tests/deployment-linux-domain-probe.mjs` in an explicit Ubuntu Actions job as
+root. It creates one UUID-named transient system service running only the
+trusted `/usr/bin/sleep`, with Type=exec, RemainAfterExit, no restart,
+control-group kill and finite start/stop/runtime limits. It retains the exact
+`cgroup.events` descriptor, observes populated=1, kills the owned service group
+and records subsequent descriptor/manager observations. It targets no existing
+service and always attempts cleanup of only its generated unit name.
+
+This characterization is needed to avoid an invented successful fallback:
+if a retained descriptor becomes unreadable when the group disappears, that
+alone is not an empty-domain certificate. The production adapter and its exact
+native acceptance contracts must reflect the observed semantics. The probe
+is a test fixture, not a production implementation or zero-risk claim.
+
+Run exclusively via the `linux-native` job in deployment-lifecycle.yml.
+Capture its bounded JSON and Actions revision; do not run systemd experiments
+on the user's host. Shared Linux/Windows contracts still run independently.
