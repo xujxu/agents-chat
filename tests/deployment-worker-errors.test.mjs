@@ -64,3 +64,19 @@ test('proxy inspection failure is unsafe and custom array iterators are not invo
   errors[Symbol.iterator] = () => assert.fail('custom iterator must not run');
   assert.equal(hasUnsettledWorker({ errors }), true);
 });
+
+test('inherited worker markers and callable error objects retain the prior safety behavior', () => {
+  class NativeFailure extends Error {}
+  NativeFailure.prototype.recoveryAllowed = false;
+  assert.equal(hasUnsettledWorker(new NativeFailure('native failure')), true);
+  const callable = Object.assign(() => {}, { recoveryAllowed: false });
+  assert.equal(hasUnsettledWorker(callable), true);
+  const inheritedCause = Object.create({ cause: unsafe() });
+  assert.equal(hasUnsettledWorker(inheritedCause), true);
+  let invoked = false;
+  const prototype = Object.defineProperty({}, 'recoveryAllowed', {
+    get() { invoked = true; return false; },
+  });
+  assert.equal(hasUnsettledWorker(Object.create(prototype)), true);
+  assert.equal(invoked, false);
+});
