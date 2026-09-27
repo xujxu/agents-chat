@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
-import { temporaryDeployment } from './deployment-fixture.mjs';
-import { acquireLock, releaseLock } from '../scripts/deployment/state.mjs';
+import { temporaryDeployment, acceptOperation } from './deployment-fixture.mjs';
+import { acquireLock, releaseLock, writeState } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation, readWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { readWorkerJournal } from '../scripts/deployment/worker-journal.mjs';
@@ -56,7 +56,7 @@ async function fixture(t) {
     command: { file: process.execPath, args: ['-e', code], cwd: project,
       env: Object.fromEntries(Object.entries(process.env).filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))) },
   });
-  return { project, control, lock, saved, operation, run };
+  return { project, control, lock, saved, operation, run, runtime };
 }
 
 test('real native workers require enrolled lock-bound authority and seal exact settled inventory', async t => {
@@ -170,4 +170,54 @@ test('replaced operation authority after native readiness never grants the actua
   assert.equal(replaced, true);
   await assert.rejects(readFile(path.join(f.project, 'forbidden')), { code: 'ENOENT' });
   await assert.rejects(f.operation.seal(), { recoveryAllowed: false });
+});
+
+test('two accepted native operations reuse one helper slot without deleting backup or app state', async t => {
+  const f = await fixture(t);
+  await mkdir(path.join(f.control, 'backup'));
+  await writeFile(path.join(f.control, 'backup', 'retained'), 'original backup');
+  await f.run('process.stdout.write("first operation")');
+  await f.operation.seal();
+  await acceptOperation(f.control, f.lock);
+  await f.operation.retire();
+  await releaseLock(f.control, f.lock);
+  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'state.json']);
+  const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+  const accepted = JSON.parse(await readFile(path.join(f.control, 'state.json'), 'utf8'));
+  await writeState(f.control, { ...accepted, operationId: lock.operationId, phase: 'preflight',
+    previousPhase: null, startedAt: lock.createdAt });
+  const saved = await saveWorkerEngine({ source, control: f.control, project: f.project, operationId: lock.operationId });
+  if (process.platform === 'win32') {
+    const script = `
+      $ErrorActionPreference='Stop'
+      $root='${saved.directory.replaceAll("'", "''")}'
+      $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User
+      foreach($entry in @((Get-Item -LiteralPath $root)) + @(Get-ChildItem -LiteralPath $root -Recurse)){
+        $acl=Get-Acl -LiteralPath $entry.FullName
+        $acl.SetOwner($sid)
+        Set-Acl -LiteralPath $entry.FullName -AclObject $acl
+      }
+    `;
+    await execute(f.runtime.pwsh,
+      ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+      { timeout: 30000, maxBuffer: 4096 });
+  }
+  const operation = await createWorkerOperation({ control: f.control, lock, saved });
+  t.after(() => operation.close());
+  const result = await operation.run({
+    workerId: randomUUID(), runtime: f.runtime,
+    command: { file: process.execPath, args: ['-e', 'process.stdout.write("second operation")'], cwd: f.project, env: {} },
+  });
+  assert.equal(result.stdout, 'second operation');
+  await operation.seal();
+  let previousPhase = 'preflight';
+  for (const phase of ['source-selected', 'dependencies', 'building', 'configuring', 'activating', 'accepted']) {
+    await writeState(f.control, { ...accepted, operationId: lock.operationId, phase,
+      previousPhase, startedAt: lock.createdAt });
+    previousPhase = phase;
+  }
+  await operation.retire();
+  await releaseLock(f.control, lock);
+  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'state.json']);
+  assert.equal(await readFile(path.join(f.control, 'backup', 'retained'), 'utf8'), 'original backup');
 });

@@ -19,6 +19,7 @@ const files = [
   'worker-identity.mjs', 'worker-journal.mjs', 'worker-wire.mjs',
   'WindowsWorkerJob.cs', 'windows-worker-launcher.ps1', 'windows-worker-owner.ps1', 'windows-worker.mjs',
   'evidence-journal.mjs', 'worker-operation.mjs', 'state.mjs',
+  'worker-retirement.mjs',
 ];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 

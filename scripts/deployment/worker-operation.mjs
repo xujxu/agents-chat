@@ -12,6 +12,7 @@ import { captureWorkerCommand } from './worker-wire.mjs';
 import { hasUnsettledWorker } from './worker-errors.mjs';
 import { prepareLinuxWorker } from './linux-worker.mjs';
 import { prepareWindowsWorker } from './windows-worker.mjs';
+import { retireWorkerEvidence } from './worker-retirement.mjs';
 
 const name = 'worker-operation.ndjson';
 const maximumWorkers = 32;
@@ -71,7 +72,7 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
     const workers = [];
     const checkInventory = async () => {
       const actual = (await readdir(control))
-        .filter(file => file.startsWith('worker-') && file.endsWith('.ndjson') && file !== name).sort();
+        .filter(file => file.startsWith('worker-') && ![name, 'worker-engine'].includes(file)).sort();
       const expected = workers.map(owner => `worker-${owner.workerId}.ndjson`).sort();
       if (!same(actual, expected)) throw new Error('Worker evidence inventory is incomplete or foreign.');
     };
@@ -81,7 +82,7 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
       return { dev: info.dev, ino: info.ino };
     }));
     let originalLock;
-    const verify = async () => {
+    const verify = async (completed = false) => {
       try {
         const before = await lockIdentity();
         await assertLockOwner(control, lock);
@@ -94,8 +95,10 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
         }
         originalLock ??= after;
         const state = await loadState(control);
-        if (state && (state.operationId !== lock.operationId || state.project !== lock.project
-          || ['blocked', 'accepted', 'restored', 'recovery-required'].includes(state.phase))) {
+        if (completed ? !state || state.operationId !== lock.operationId || state.project !== lock.project
+          || !['accepted', 'restored'].includes(state.phase)
+          : state && (state.operationId !== lock.operationId || state.project !== lock.project
+            || ['blocked', 'accepted', 'restored', 'recovery-required'].includes(state.phase))) {
           throw new Error('Deployment state does not admit workers for this operation.');
         }
         const saved = await verifyWorkerEngine({
@@ -118,6 +121,17 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
     let sealed = false;
     let poisoned = false;
     let closing;
+    const close = () => {
+      closing ??= (async () => {
+        const errors = [];
+        try { await journal.close(); }
+        catch (error) { errors.push(error); }
+        try { await lockHandle.close(); }
+        catch (error) { errors.push(error); }
+        if (errors.length) throw journalUncertain(errors.length === 1 ? errors[0] : new AggregateError(errors));
+      })();
+      return closing;
+    };
     const begin = () => {
       if (busy || sealed || poisoned || closing) throw journalUncertain(new Error('Operation admission is closed or busy.'));
       busy = true;
@@ -190,15 +204,20 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
       },
       async close() {
         if (busy) throw journalUncertain(new Error('Cannot close an active worker operation.'));
-        closing ??= (async () => {
-          const errors = [];
-          try { await journal.close(); }
-          catch (error) { errors.push(error); }
-          try { await lockHandle.close(); }
-          catch (error) { errors.push(error); }
-          if (errors.length) throw journalUncertain(errors.length === 1 ? errors[0] : new AggregateError(errors));
-        })();
-        await closing;
+        await close();
+      },
+      async retire() {
+        if (busy || !sealed || poisoned || closing) {
+          throw journalUncertain(new Error('Retirement requires the original sealed live operation.'));
+        }
+        busy = true;
+        try {
+          await verify(true);
+          await retireWorkerEvidence({ control, lock, saved, workers, closeAuthority: close });
+        } catch (error) {
+          poisoned = true;
+          throw journalUncertain(error);
+        } finally { busy = false; }
       },
     });
   } catch (error) {

@@ -264,8 +264,7 @@ export async function releaseLock(root, owner) {
     || actual.processIdentity !== await processIdentity(process.pid)) {
     throw new Error('Only the current lock owner can release a deployment lock.');
   }
-  if ((await readdir(directory)).some(name => name === 'worker-engine'
-    || name.startsWith('worker-') && name.endsWith('.ndjson'))) {
+  if ((await readdir(directory)).some(name => name.startsWith('worker-'))) {
     throw new Error('Native worker evidence requires verified retirement before lock release.');
   }
   await unlink(ownerPath);

@@ -4,28 +4,13 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { temporaryDeployment } from './deployment-fixture.mjs';
-import { acquireLock, releaseLock, writeState } from '../scripts/deployment/state.mjs';
+import { temporaryDeployment, acceptOperation } from './deployment-fixture.mjs';
+import { acquireLock, releaseLock } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 
 const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
 const unsafe = error => error.recoveryAllowed === false;
-
-export async function acceptOperation(control, lock, operation = 'deploy') {
-  const phases = operation === 'restore' ? ['restore-preflight', 'restoring', 'restore-activating', 'restored']
-    : ['preflight', 'source-selected', 'dependencies', 'building', 'configuring', 'activating', 'accepted'];
-  let previousPhase = null;
-  for (const phase of phases) {
-    await writeState(control, {
-      version: 1, operationId: lock.operationId, project: lock.project, operation, phase, previousPhase,
-      sourceCommit: null, targetCommit: 'a'.repeat(40), backupId: null, priorRuntime: 'absent',
-      runtimeIdentity: 'retirement-fixture', startedAt: lock.createdAt,
-      updatedAt: new Date().toISOString(), errorCode: null,
-    });
-    previousPhase = phase;
-  }
-}
 
 async function fixture(t) {
   const root = await temporaryDeployment(t);
