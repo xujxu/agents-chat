@@ -103,7 +103,7 @@ export async function runDeployment(options, operations) {
     } catch (recoveryError) {
       errors.push(recoveryError);
     }
-    try { await record('recovery-required'); }
+    try { await record(errors.some(failure => failure?.recoveryAllowed === false) ? 'blocked' : 'recovery-required'); }
     catch (stateError) { errors.push(stateError); }
     if (errors.length > 1) {
       throw Object.assign(new AggregateError(errors,

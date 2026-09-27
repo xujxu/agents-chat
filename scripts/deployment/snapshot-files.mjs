@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
+import { Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import {
   lstat, open, readFile, readdir, readlink, realpath,
 } from 'node:fs/promises';
@@ -26,9 +28,12 @@ export async function realDirectory(directory) {
   return resolved;
 }
 
-export async function fileDigest(file) {
+export async function fileDigest(file, { signal } = {}) {
+  signal?.throwIfAborted();
   const hash = createHash('sha256');
-  for await (const chunk of createReadStream(file)) hash.update(chunk);
+  await pipeline(createReadStream(file), new Writable({
+    write(chunk, encoding, callback) { hash.update(chunk); callback(); },
+  }), { signal });
   return hash.digest('hex');
 }
 
@@ -49,13 +54,15 @@ export async function readSnapshotJson(file) {
   catch (cause) { throw new Error('Invalid snapshot manifest JSON.', { cause }); }
 }
 
-export async function inventorySnapshot(project, files) {
+export async function inventorySnapshot(project, files, { signal } = {}) {
+  signal?.throwIfAborted();
   const root = await realDirectory(project);
   if (!Array.isArray(files) || !files.length) throw new Error('Snapshot requires explicit paths.');
   const entries = [];
   const seen = new Set();
   const rootDevice = (await lstat(root)).dev;
   async function visit(relative) {
+    signal?.throwIfAborted();
     relativeSnapshotPath(relative);
     const identity = process.platform === 'win32' ? relative.toLowerCase() : relative;
     if (seen.has(identity)) throw new Error(`Duplicate snapshot path: ${relative}`);
@@ -83,15 +90,18 @@ export async function inventorySnapshot(project, files) {
     }
   }
   for (const name of files) {
+    signal?.throwIfAborted();
     relativeSnapshotPath(name);
     // Resolve every parent before lstat so a selected file cannot bypass link checks.
     await realDirectory(path.dirname(path.join(root, name)));
     await visit(name);
   }
   for (const entry of entries.filter(item => item.kind === 'link')) {
+    signal?.throwIfAborted();
     const target = path.relative(root, await realpath(path.join(root, entry.path))).split(path.sep).join('/');
     const identity = process.platform === 'win32' ? target.toLowerCase() : target;
     if (!seen.has(identity)) throw new Error(`Snapshot link target not captured: ${entry.path}`);
   }
+  signal?.throwIfAborted();
   return entries;
 }

@@ -21,13 +21,15 @@ const transitions = {
   accepted: [],
   restored: [],
   'recovery-required': [],
+  blocked: [],
 };
 
 export function nextPhase(from, to, { firstInstall = false } = {}) {
   if (!Object.hasOwn(transitions, from) || !Object.hasOwn(transitions, to)) {
     throw new Error(`Unknown deployment phase: ${from} -> ${to}`);
   }
-  const terminal = ['accepted', 'restored', 'recovery-required'].includes(from);
+  const terminal = ['accepted', 'restored', 'recovery-required', 'blocked'].includes(from);
+  if (to === 'blocked' && !terminal) return to;
   if (to === 'recovery-required' && !terminal) return to;
   if (!transitions[from].includes(to)
     || (from === 'preflight' && to === 'source-selected' && !firstInstall)) {
@@ -44,6 +46,16 @@ export function recoveryAdvice(details) {
   if (!details || !Object.hasOwn(transitions, details.phase)
     || typeof details.backupComplete !== 'boolean' || typeof details.restored !== 'boolean') {
     throw new Error('Invalid deployment recovery state.');
+  }
+  if (details.phase === 'blocked') {
+    if (details.restored || !nonempty(details.diagnosticCommand)) {
+      throw new Error('Blocked workers require an explicit inspection command, not restoration.');
+    }
+    return {
+      status: 'blocked',
+      message: 'Owned workers may still write. Retain lock and backup; inspect worker termination before restore or restart.',
+      command: details.diagnosticCommand, diagnostics: details.diagnosticCommand,
+    };
   }
   const status = details.restored ? 'restored'
     : details.backupComplete ? 'recovery-required' : 'no-backup';
@@ -133,6 +145,9 @@ export async function writeState(root, state) {
   const old = await readRegularJson(destination, 'deployment state');
   if (old !== null) {
     validateState(old);
+    if (old.phase === 'blocked') {
+      throw new Error('Deployment is blocked by unsettled workers; establish termination before changing state.');
+    }
     if (old.project !== state.project) throw new Error('Deployment state project changed.');
     if (old.operationId === state.operationId) {
       if (old.operation !== state.operation || state.previousPhase !== old.phase) {
@@ -203,6 +218,9 @@ export async function acquireLock(root, { project, operationId }) {
 
 export async function releaseLock(root, owner) {
   const directory = await ownedDirectory(root);
+  if ((await loadState(directory))?.phase === 'blocked') {
+    throw new Error('Blocked deployment workers require retaining the lock.');
+  }
   const lockPath = path.join(directory, 'lock');
   await ownedDirectory(lockPath);
   const ownerPath = path.join(lockPath, 'owner.json');
@@ -220,6 +238,12 @@ export async function releaseLock(root, owner) {
 export async function reconcileInterruptedOperation(root) {
   const directory = await ownedDirectory(root);
   const state = await loadState(directory);
+  if (state?.phase === 'blocked') {
+    return {
+      status: 'blocked', operationId: state.operationId, phase: state.phase,
+      message: 'Worker settlement was not confirmed. Retain lock and backup; inspect owned workers before recovery.',
+    };
+  }
   const lockPath = path.join(directory, 'lock');
   let lockExists = true;
   try { await ownedDirectory(lockPath); }
