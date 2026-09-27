@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerCommand, workerWire } from './worker-wire.mjs';
-import { captureWorkerFields } from './worker-identity.mjs';
+import { captureWorkerFields, captureLinuxAccount } from './worker-identity.mjs';
 
 const [socketPath, token, controllerPid, controllerIdentity] = process.argv.slice(2);
 let socket;
@@ -33,14 +33,19 @@ try {
     type: 'ready', token, pid: process.pid, processIdentity: await processIdentity(process.pid),
     controlGroup: membership.slice(3),
   });
-  const grant = captureWorkerFields(await wire.receive(), ['type', 'command'], 'grant');
+  const grant = captureWorkerFields(await wire.receive(), ['type', 'command', 'account'], 'grant');
   if (grant.type !== 'run') throw new Error('Invalid grant.');
   const command = captureWorkerCommand(grant.command);
+  const account = captureLinuxAccount(grant.account);
   if (await processIdentity(Number(controllerPid)) !== controllerIdentity || socket.destroyed) {
     throw new Error('Lost grant authority.');
   }
+  // Only this isolated trusted bootstrap changes groups; the deployment CLI does not.
+  process.setgroups([]);
+  if (process.getgroups().some(group => group !== process.getgid())) throw new Error('Cannot clear supplementary groups.');
   const child = spawn(command.file, command.args, {
-    cwd: command.cwd, env: command.env, shell: false, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: command.cwd, env: command.env, uid: account.uid, gid: account.gid,
+    shell: false, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = Buffer.alloc(0);
   let stderr = Buffer.alloc(0);

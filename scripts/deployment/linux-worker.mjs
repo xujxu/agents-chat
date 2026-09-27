@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import { captureOwner, captureWorkerFields } from './worker-identity.mjs';
+import { captureOwner, captureWorkerFields, captureLinuxAccount } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { verifyWorkerEngine } from './saved-worker-engine.mjs';
 import { captureWorkerCommand, workerWire } from './worker-wire.mjs';
@@ -36,8 +36,9 @@ const properties = async unit => {
 export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command: suppliedCommand, uid, gid, signal }) {
   const owner = captureOwner(suppliedOwner);
   const command = captureWorkerCommand(suppliedCommand);
-  if (process.platform !== 'linux' || process.getuid() !== 0 || uid !== 0 || gid !== 0) {
-    throw new Error('Native Linux worker requires an explicit supported uid/gid account (root).');
+  const account = captureLinuxAccount({ uid, gid });
+  if (process.platform !== 'linux' || process.getuid() !== 0) {
+    throw new Error('Native Linux worker manager requires a root controller and explicit target uid/gid.');
   }
   signal?.throwIfAborted();
   if (await processIdentity(process.pid) !== owner.controllerIdentity) throw new Error('Controller identity changed.');
@@ -115,6 +116,7 @@ export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command:
       '--property=KillMode=control-group', '--property=SendSIGKILL=yes',
       '--property=TimeoutStartSec=15s', '--property=TimeoutStopSec=10s', '--property=RuntimeMaxSec=1800s',
       '--property=User=0', '--property=Group=0', '--property=UnsetEnvironment=NODE_OPTIONS NODE_PATH',
+      '--property=NoNewPrivileges=yes',
       '--', process.execPath, path.join(saved.directory, 'linux-worker-bootstrap.mjs'),
       socketPath, token, String(process.pid), owner.controllerIdentity,
     ]);
@@ -151,7 +153,7 @@ export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command:
         runSignal.throwIfAborted();
         if (closed || granted) throw new Error('Native command admission is closed.');
         granted = true;
-        await wire.send({ type: 'run', command });
+        await wire.send({ type: 'run', command, account });
         const result = captureWorkerFields(await wire.receive({ signal: runSignal, timeoutMs: 1800000 }),
           ['type', 'exitCode', 'signal', 'stdout', 'stderr'], 'native result');
         if (result.type !== 'result' || (result.exitCode !== null && !Number.isInteger(result.exitCode))

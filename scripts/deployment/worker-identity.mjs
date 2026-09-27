@@ -21,6 +21,14 @@ export function captureOwner(value) {
   return owner;
 }
 
+export function captureLinuxAccount(value) {
+  const account = captureWorkerFields(value, ['uid', 'gid'], 'Linux account');
+  if (![account.uid, account.gid].every(id => Number.isSafeInteger(id) && id >= 0 && id <= 2147483647)) {
+    throw new Error('Explicit supported numeric uid/gid account is required.');
+  }
+  return account;
+}
+
 export function captureDomain(value, owner) {
   let identity;
   if (value?.kind === 'systemd') {

@@ -129,6 +129,31 @@ test('invalid explicit Linux IDs never create a native domain', async t => {
   assert.equal(stdout.trim(), 'not-found');
 });
 
+test('real npm script executes at the requested non-root account and HOME', async t => {
+  const f = await fixture(t, '', [], 'ctl', { uid: 65534, gid: 65534 });
+  await writeFile(path.join(f.project, 'package.json'), JSON.stringify({
+    name: 'deployment-identity-fixture', version: '1.0.0', private: true,
+    scripts: { identity: `node -e "require('node:fs').writeFileSync('npm-identity',JSON.stringify({uid:process.getuid(),gid:process.getgid(),home:process.env.HOME}))"` },
+  }));
+  f.command.file = path.join(path.dirname(process.execPath), 'npm');
+  f.command.args = ['run', '--silent', 'identity'];
+  f.command.env.HOME = f.project;
+  assert.equal((await f.run()).exitCode, 0);
+  assert.deepEqual(JSON.parse(await readFile(path.join(f.project, 'npm-identity'), 'utf8')),
+    { uid: 65534, gid: 65534, home: f.project });
+  assert.equal((await stat(path.join(f.project, 'npm-identity'))).uid, 65534);
+});
+
+test('non-root command cannot silently fall back to root when project permissions deny access', async t => {
+  const f = await fixture(t, 'require("node:fs").writeFileSync("forbidden","bad")',
+    [], 'ctl', { uid: 65534, gid: 65534 });
+  await chown(f.project, 0, 0);
+  await chmod(f.project, 0o700);
+  await assert.rejects(f.run());
+  await assert.rejects(readFile(path.join(f.project, 'forbidden')), { code: 'ENOENT' });
+  assert.equal(f.receipts.at(-1).phase, 'settled');
+});
+
 test('root exit cannot leave detached descendants writing after settlement', async t => {
   const code = `
     const { spawn } = require('node:child_process');
