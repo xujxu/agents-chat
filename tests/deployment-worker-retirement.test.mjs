@@ -190,3 +190,27 @@ test('actual controller death during deletion retains precise intent and does no
   await assert.rejects(releaseLock(control, lock), /owner/);
   assert.deepEqual(await readFile(path.join(control, 'worker-retirement.json')), marker);
 });
+
+test('acceptance changing while the retirement snapshot is captured cannot authorize deletion', async t => {
+  const f = await fixture(t);
+  await f.operation.seal();
+  await acceptOperation(f.control, f.lock);
+  const statePath = path.join(f.control, 'state.json');
+  const accepted = JSON.parse(await readFile(statePath, 'utf8'));
+  const originalOpen = fs.open;
+  let changed = false;
+  t.mock.method(fs, 'open', async (file, ...args) => {
+    if (!changed && file === statePath) {
+      changed = true;
+      await writeFile(statePath, `${JSON.stringify({ ...accepted, phase: 'activation-unverified' })}\n`);
+    }
+    return originalOpen(file, ...args);
+  });
+  syncBuiltinESMExports();
+  try { await assert.rejects(f.operation.retire(), unsafe); }
+  finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+  assert.equal(changed, true);
+  assert.ok((await readdir(f.control)).includes('worker-engine'));
+  assert.ok((await readdir(f.control)).includes('worker-operation.ndjson'));
+  await assert.rejects(releaseLock(f.control, f.lock), /evidence/);
+});
