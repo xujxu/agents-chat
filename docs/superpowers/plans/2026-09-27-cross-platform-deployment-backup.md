@@ -2566,3 +2566,55 @@ Blocked Windows owner shutdown/supervision, Linux non-root runtime, production
 Windows ownership/ACL setup, remaining native faults, application/watchdog/ACP
 shutdown, full backup metadata and historical deploy/update/restore lifecycle
 acceptance remain. These tests do not justify a main PR or live deployment.
+
+## N10: Cold recovery of interrupted accepted cleanup
+
+Continue inline under the approved recovery design. This narrowly permits
+resuming N9 deletion, not recovering an unsettled native domain.
+
+- Add `saved-recovery-engine.mjs` and `retirement-recovery-entry.mjs`. Save a
+  closed dependency set in a fixed private `recovery-engine` directory,
+  independent of `worker-engine`, project and node_modules. The code bundle
+  contains no operation history and may be reused only when all source hashes
+  match. Never silently replace a different or incomplete installed bundle.
+- Add `retirement-recovery.mjs`: strict v2 retirement-intent validation with
+  exact lock-file/control/lock-directory/helper-directory identities, fixed
+  allowlisted deletion paths and content hashes. All remaining files must
+  match before deletion. Missing files are authorized only by this completed
+  deletion intent; an absent Job/cgroup does not enter this path.
+- Extend the N9 intent to record those identity fields before any unlink.
+  Reject older/unrecognized formats rather than guessing missing authority.
+- Acquire `recovery-lock` with exclusive mkdir only after validating the
+  original owner is absent or its PID has a different start identity.
+  Retain the original lock and an immutable cleanup lease. Every mutation
+  rechecks state, lock, lease and remaining inventory.
+- After exact deletion, write a completion receipt inside `recovery-lock`,
+  remove the intent and then the exact old lock. Remove the recovery guard
+  last. `acquireLock` and `releaseLock` refuse a recovery guard; a crashed
+  recovery itself remains blocked pending a later verified takeover design.
+
+```js
+const engine = await saveRecoveryEngine({ source, control });
+const invocation = retirementRecoveryInvocation(engine, {
+  control, project, operationId,
+});
+// Run independently from the saved absolute entry, with no Node preloads.
+// Only successful checked cleanup reports status='retired'; it does not restore.
+```
+
+- [ ] Actions-red: saved entry survives renamed checkout and a partly deleted
+  worker bundle; refuses live owner, malformed intent, altered state/foreign
+  paths, concurrent recovery and preexisting recovery guard.
+- [ ] Implement fixed recovery bundle and strict cleanup protocol; no recursive
+  deletion or user-supplied removal path.
+- [ ] Actual child-process kill after first deletion, independent saved recovery,
+  next-lock acquisition and backup/state preservation on both Actions OSes.
+- [ ] Record accepted evidence and cold-recovery limits.
+
+The recovery bundle is a single retained tooling slot, not a second backup.
+Its own trusted entry/verifier/private directory are the trust base, as with
+the saved worker engine. Windows setup must provision ACLs explicitly; the
+existing Node filesystem helpers do not provide Windows ACL hardening.
+The bundle update protocol, stale recovery-lease takeover, crash after an N9
+marker was already removed, and unresolved native workers remain separate
+gates. Do not claim this narrow cleanup path supplies those authorizations.
