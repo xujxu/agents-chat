@@ -14,15 +14,17 @@ import { recoverLinuxServiceRetirement } from '../scripts/deployment/linux-servi
 
 const execute = promisify(execFile);
 
-async function interrupted(t, phase = 'retirement-unlink-0', outcome = 'accepted', workerMode = 'none') {
-  const f = await fixture(t);
+async function interrupted(t, phase = 'retirement-unlink-0', outcome = 'accepted', workerMode = 'none', existing = null) {
+  const f = existing ?? await fixture(t);
   await ready(f);
   const control = path.join(path.dirname(f.project), 'control');
   const source = path.join(f.project, 'scripts', 'deployment');
-  await mkdir(control, { mode: 0o700 });
-  await mkdir(path.join(control, 'backup'));
-  await writeFile(path.join(control, 'backup', 'sentinel'), 'retained complete backup');
-  await cp(fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), source, { recursive: true });
+  if (!existing) {
+    await mkdir(control, { mode: 0o700 });
+    await mkdir(path.join(control, 'backup'));
+    await writeFile(path.join(control, 'backup', 'sentinel'), 'retained complete backup');
+    await cp(fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), source, { recursive: true });
+  }
   const saved = await saveRecoveryEngine({ source, control });
   const child = fork(new URL('./deployment-service-stop-child.mjs', import.meta.url),
     [control, f.project, f.unit, f.npm, f.node, phase, outcome, workerMode],
@@ -60,7 +62,7 @@ for (const phase of ['retirement-intent', 'retirement-unlink-0', 'retirement-unl
     assert.deepEqual(JSON.parse((await f.recover()).stdout), {
       status: 'service-retired', operationId: f.lock.operationId, restored: false,
     });
-    assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-engine', 'state.json']);
+    assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-complete.json', 'recovery-engine', 'state.json']);
     assert.deepEqual(await readFile(path.join(f.control, 'state.json')), state);
     assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
     assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(),
@@ -98,7 +100,7 @@ for (const [phase, outcome, workerMode] of [
     assert.deepEqual(JSON.parse((await f.recover()).stdout), {
       status: 'service-retired', operationId: f.lock.operationId, restored: false,
     });
-    assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-engine', 'state.json']);
+    assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-complete.json', 'recovery-engine', 'state.json']);
     assert.deepEqual(await readFile(path.join(f.control, 'state.json')), state);
     assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
     assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(),
@@ -147,7 +149,7 @@ test('v2 service-only retirement remains recoverable without adopting worker fil
   delete marker.workers;
   await writeFile(file, JSON.stringify(marker), { mode: 0o600 });
   assert.equal(JSON.parse((await f.recover()).stdout).status, 'service-retired');
-  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-engine', 'state.json']);
+  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-complete.json', 'recovery-engine', 'state.json']);
 });
 
 test('cold service cleanup refuses live owner and preserves evidence without creating a guard', async t => {
@@ -230,7 +232,7 @@ for (const fault of ['delete', 'state-drift', 'close', 'lock-delete', 'worker-de
         const close = handle.close.bind(handle);
         handle.close = async () => {
           if (!injected && (await readdir(f.control)).includes('recovery-lock')
-            && (await readdir(path.join(f.control, 'recovery-lock'))).includes('complete.json')) {
+            && (await readdir(f.control)).includes('recovery-complete.json')) {
             injected = true;
             throw new Error('injected recovery retained descriptor close failure');
           }
@@ -280,6 +282,7 @@ test(`killed recovery resumes safely through cleanup and unlock: ${pause}`, asyn
     assert.ok((await readdir(f.control)).includes('worker-engine'));
     assert.ok(!(await readdir(f.control)).includes('service-stop.ndjson'));
   }
+
   if (pause !== 'guard-directory') assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
   assert.equal(JSON.parse((await f.recover()).stdout).status, 'service-retired');
   assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-complete.json', 'recovery-engine', 'state.json']);
@@ -290,3 +293,17 @@ test(`killed recovery resumes safely through cleanup and unlock: ${pause}`, asyn
   await releaseLock(f.control, next);
 });
 }
+
+test('a later original operation can recover without replaying the previous completion receipt', async t => {
+  const first = await interrupted(t);
+  await first.kill();
+  await first.recover();
+  const previous = await readFile(path.join(first.control, 'recovery-complete.json'));
+  const next = await interrupted(t, 'retirement-unlink-0', 'accepted', 'none', first);
+  await next.kill();
+  await assert.rejects(first.recover());
+  assert.equal(JSON.parse((await next.recover()).stdout).status, 'service-retired');
+  const current = await readFile(path.join(first.control, 'recovery-complete.json'));
+  assert.notDeepEqual(current, previous);
+  assert.equal(JSON.parse(JSON.parse(current).intent).lock.operationId, next.lock.operationId);
+});

@@ -221,7 +221,14 @@ async function requireNoRecovery(directory) {
   throw new Error('Recovery authority exists; retain evidence and inspect before lock operations.');
 }
 
-export async function acquireLock(root, { project, operationId }) {
+export async function acquireLock(root, options) {
+  const admission = process.platform === 'linux'
+    ? await (await import('./linux-recovery-admission.mjs')).acquireRecoveryAdmission(root) : null;
+  try { return await acquireLockAdmitted(root, options); }
+  finally { await admission?.close(); }
+}
+
+async function acquireLockAdmitted(root, { project, operationId }) {
   if (!nonempty(project) || !nonempty(operationId)) throw new Error('Invalid lock owner.');
   const directory = await ownedDirectory(root);
   await requireNoRecovery(directory);

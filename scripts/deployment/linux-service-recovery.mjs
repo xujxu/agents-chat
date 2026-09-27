@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, open, readdir, rmdir, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, rename, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
 import { captureLockOwner, loadState } from './state.mjs';
@@ -8,6 +8,8 @@ import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { inspectLinuxService } from './linux-service-inspection.mjs';
 import { workerEngineFiles } from './saved-worker-engine.mjs';
+import { acquireRecoveryAdmission } from './linux-recovery-admission.mjs';
+import { finishServiceRecovery, readServiceCompletion, recoveryPathExists, validateRecoveryLease } from './linux-recovery-completion.mjs';
 import { canonicalWorkerDirectory, externalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
 
 const maximum = 1024 * 1024;
@@ -81,6 +83,16 @@ function intent(bytes, control, project, operationId) {
 }
 
 export async function recoverLinuxServiceRetirement({ control, project, operationId }) {
+  const admission = await acquireRecoveryAdmission(control);
+  try { return await recoverAdmitted({ control, project, operationId, admission }); }
+  catch (cause) {
+    if (cause.recoveryAllowed === false) throw cause;
+    throw Object.assign(new Error('Service recovery remains blocked; retain evidence.', { cause }),
+      { code: 'DEPLOYMENT_RECOVERY_UNSETTLED', recoveryAllowed: false });
+  } finally { await admission.close(); }
+}
+
+async function recoverAdmitted({ control, project, operationId, admission }) {
   const handles = [];
   const errors = [];
   let service;
@@ -89,6 +101,19 @@ export async function recoverLinuxServiceRetirement({ control, project, operatio
     if (process.platform !== 'linux' || process.getuid() !== 0) throw new Error('Service recovery requires a Linux root controller.');
     const { root } = await externalWorkerDirectory(control, project);
     const markerPath = path.join(root, markerName);
+    const receiptPath = path.join(root, 'recovery-complete.json');
+    let superseded;
+    if (await recoveryPathExists(receiptPath)) {
+      const proof = await readServiceCompletion({ control: root, project, parseIntent: intent });
+      if (proof.original.lock.operationId === operationId) {
+        return await finishServiceRecovery({ control: root, project, operationId, parseIntent: intent, admission });
+      }
+      if (await recoveryPathExists(path.join(root, 'recovery-lock'))
+        || await processIdentity(proof.leaseOwner.pid) === proof.leaseOwner.controllerIdentity) {
+        throw new Error('Prior recovery is incomplete or still owned.');
+      }
+      superseded = proof;
+    }
     const markerBytes = await readWorkerFile(markerPath, maximum, { privateMode: true });
     const original = intent(markerBytes, root, project, operationId);
     const marker = { file: markerPath, ...identity(await lstat(markerPath)),
@@ -128,7 +153,6 @@ export async function recoverLinuxServiceRetirement({ control, project, operatio
       }
     };
     const guardPath = path.join(root, 'recovery-lock');
-    await absent(guardPath);
     await deadOwner();
     const state = await loadState(root);
     if (!state || !['accepted', 'prior-runtime-restored'].includes(state.phase)
@@ -166,17 +190,32 @@ export async function recoverLinuxServiceRetirement({ control, project, operatio
     if (!same(service.identity, original.runtime)) throw new Error('Original verified service generation or policy changed.');
     let guard;
     let lease;
-    let completion;
+    let leaseOwner;
+    let ownLease = false;
+    const leasePath = path.join(guardPath, 'owner.json');
+    if (await recoveryPathExists(guardPath)) {
+      guard = identity((await canonicalWorkerDirectory(guardPath, { privateMode: true })).info);
+      const bytes = await readWorkerFile(leasePath, 65536, { privateMode: true });
+      leaseOwner = validateRecoveryLease(parse(bytes), original, marker.sha256, guard);
+      if (await processIdentity(leaseOwner.pid) === leaseOwner.controllerIdentity) {
+        throw new Error('Recovery lease controller is still alive.');
+      }
+      lease = { file: leasePath, ...identity(await lstat(leasePath)), bytes: bytes.length, sha256: digest(bytes) };
+      await retain(lease);
+    }
     const checkGuard = async () => {
       if (!guard) return absent(guardPath);
       await checkDirectory(guardPath, guard);
       await checkFile(lease);
-      if (completion) await checkFile(completion);
-      if (!same((await readdir(guardPath)).sort(), completion ? ['complete.json', 'owner.json'] : ['owner.json'])) {
+      if (!ownLease && await processIdentity(leaseOwner.pid) === leaseOwner.controllerIdentity) {
+        throw new Error('Recovery lease controller is still alive.');
+      }
+      if (!same((await readdir(guardPath)).sort(), ['owner.json'])) {
         throw new Error('Unexpected service recovery guard inventory.');
       }
     };
     const check = async () => {
+      await admission.check();
       await deadOwner();
       await service.check();
       await checkDirectory(root, original.controlIdentity);
@@ -209,18 +248,31 @@ export async function recoverLinuxServiceRetirement({ control, project, operatio
       if (!same(names.filter(name => name.startsWith('service-')).sort(), expected)) throw new Error('Unexpected service evidence inventory.');
     };
     await check();
-    await mkdir(guardPath, { mode: 0o700 });
-    await syncWorkerDirectory(root);
-    guard = identity(await lstat(guardPath));
-    const controllerIdentity = await processIdentity(process.pid);
-    if (!controllerIdentity) throw new Error('Recovery controller identity unavailable.');
-    const leasePath = path.join(guardPath, 'owner.json');
-    const bytes = Buffer.from(`${JSON.stringify({ version: 1, token: randomUUID(), pid: process.pid,
-      controllerIdentity, lock: original.lock, intentSha256: marker.sha256, kind: 'service' })}\n`);
-    await writeWorkerFile(leasePath, bytes);
-    await syncWorkerDirectory(guardPath);
-    lease = { file: leasePath, ...identity(await lstat(leasePath)), bytes: bytes.length, sha256: digest(bytes) };
-    await retain(lease);
+    if (superseded) {
+      if (superseded.original.lock.token === original.lock.token
+        || !same(superseded.original.controlIdentity, original.controlIdentity)
+        || !same(identity(await lstat(receiptPath)), superseded.receiptIdentity)
+        || !(await readWorkerFile(receiptPath, 2 * maximum, { privateMode: true })).equals(superseded.receiptBytes)) {
+        throw new Error('Superseded recovery receipt no longer matches the prior operation.');
+      }
+      await unlink(receiptPath);
+      await syncWorkerDirectory(root);
+    }
+    if (!guard) {
+      await mkdir(guardPath, { mode: 0o700 });
+      await syncWorkerDirectory(root);
+      guard = identity(await lstat(guardPath));
+      const controllerIdentity = await processIdentity(process.pid);
+      if (!controllerIdentity) throw new Error('Recovery controller identity unavailable.');
+      leaseOwner = { version: 2, token: randomUUID(), pid: process.pid,
+        controllerIdentity, lock: original.lock, intentSha256: marker.sha256, kind: 'service', guard };
+      const bytes = Buffer.from(`${JSON.stringify(leaseOwner)}\n`);
+      await writeWorkerFile(leasePath, bytes);
+      await syncWorkerDirectory(guardPath);
+      lease = { file: leasePath, ...identity(await lstat(leasePath)), bytes: bytes.length, sha256: digest(bytes) };
+      ownLease = true;
+      await retain(lease);
+    }
     for (const entry of entries) {
       if (!remaining.has(entry.file)) continue;
       await check();
@@ -235,14 +287,20 @@ export async function recoverLinuxServiceRetirement({ control, project, operatio
       await syncWorkerDirectory(root);
     }
     await check();
-    result = { status: 'service-retired', operationId, restored: false };
-    const completePath = path.join(guardPath, 'complete.json');
-    const complete = Buffer.from(`${JSON.stringify({ ...result, intentSha256: marker.sha256 })}\n`);
-    await writeWorkerFile(completePath, complete);
-    await syncWorkerDirectory(guardPath);
-    completion = { file: completePath, ...identity(await lstat(completePath)), bytes: complete.length, sha256: digest(complete) };
-    await retain(completion);
+    const completePath = path.join(root, 'recovery-complete.pending');
+    const complete = Buffer.from(`${JSON.stringify({
+      version: 1, intent: markerBytes.toString('utf8'), intentSha256: marker.sha256,
+      marker, guard, lease, leaseBytes: (await checkFile(lease)).toString('utf8'),
+    })}\n`);
+    if (await recoveryPathExists(completePath)) {
+      if (!(await readWorkerFile(completePath, maximum, { privateMode: true })).equals(complete)) {
+        throw new Error('Incomplete or changed pending recovery completion.');
+      }
+    } else await writeWorkerFile(completePath, complete);
     await check();
+    await absent(receiptPath);
+    await rename(completePath, receiptPath);
+    await syncWorkerDirectory(root);
     await service.close();
     service = null;
     while (handles.length) {
@@ -250,34 +308,7 @@ export async function recoverLinuxServiceRetirement({ control, project, operatio
       handles.shift();
     }
     retained.clear();
-    await checkFile(marker);
-    await checkFile(original.stateFile);
-    await checkFile(original.lockFile);
-    await checkDirectory(root, original.controlIdentity);
-    await checkDirectory(path.join(root, 'lock'), original.lockIdentity);
-    await checkGuard();
-    await deadOwner();
-    await unlink(markerPath);
-    await syncWorkerDirectory(root);
-    await checkDirectory(path.join(root, 'lock'), original.lockIdentity);
-    await checkFile(original.lockFile);
-    await checkFile(original.stateFile);
-    await checkGuard();
-    await deadOwner();
-    await unlink(original.lockFile.file);
-    await syncWorkerDirectory(path.join(root, 'lock'));
-    await rmdir(path.join(root, 'lock'));
-    await syncWorkerDirectory(root);
-    if (!(await readWorkerFile(completePath, 4096, { privateMode: true })).equals(complete)) {
-      throw new Error('Service recovery completion changed.');
-    }
-    await checkDirectory(guardPath, guard);
-    await checkFile(lease);
-    await unlink(completePath);
-    await unlink(leasePath);
-    await syncWorkerDirectory(guardPath);
-    await rmdir(guardPath);
-    await syncWorkerDirectory(root);
+    result = await finishServiceRecovery({ control: root, project, operationId, parseIntent: intent, admission, ownLease });
   } catch (error) { errors.push(error); }
   const closed = await Promise.allSettled([...handles.map(handle => handle.close()), service?.close()]);
   errors.push(...closed.filter(value => value.status === 'rejected').map(value => value.reason));
