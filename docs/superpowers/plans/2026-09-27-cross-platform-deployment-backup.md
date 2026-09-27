@@ -1778,6 +1778,24 @@ outstanding.
 
 ### N5 Linux gated adapter implementation batch
 
+**Retirement correction from actual adapter execution:** the initial probe saw
+only the short populated=0 interval. Adapter run `36314966368` correctly blocked
+on later ENODEV rather than silently treating it as empty. Extended probe
+`c88cbae`, run `36315065300`, retains the original directory as well as events
+descriptor and demonstrates `/proc/self/fd/<original-dir>` ending with the exact
+original group path plus ` (deleted)`, with unchanged boot/unit InvocationID.
+
+Linux v6.8 `kernel/cgroup/cgroup.c:cgroup_destroy_locked` refuses populated
+groups or online children, then marks the group dead to prevent migration and
+child creation before kernfs removal. Therefore accept ENODEV only with the
+original retained directory's exact deleted link and matching original manager/
+boot identity, on a verified cgroup-v2 filesystem. Missing paths, unexpected
+read errors and arbitrary deleted descriptors remain errors. This does not
+claim to contain privileged target migration out of the group (already excluded).
+Source: https://github.com/torvalds/linux/blob/v6.8/kernel/cgroup/cgroup.c .
+Directory nlink is not a reliable deletion certificate for kernfs; do not use
+it. `fs/kernfs/inode.c` recomputes directory nlink from subdirectory count.
+
 Characterization `5406228`, Actions `36314620935`, succeeded. A retained
 cgroup.events descriptor still returned `populated 0` after SIGKILL, while
 systemd's failed unit retained its original InvocationID but exposed an empty

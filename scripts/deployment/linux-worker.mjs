@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { open, readFile } from 'node:fs/promises';
+import { open, readFile, readlink, statfs } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -48,6 +48,7 @@ export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command:
   const boot = await bootId();
   let socket;
   let events;
+  let groupDirectory;
   let identity;
   let closed = false;
   let granted = false;
@@ -81,7 +82,17 @@ export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command:
   };
   const populated = async () => {
     const buffer = Buffer.alloc(4096);
-    const { bytesRead } = await events.read(buffer, 0, buffer.length, 0);
+    let bytesRead;
+    try { ({ bytesRead } = await events.read(buffer, 0, buffer.length, 0)); }
+    catch (error) {
+      // Kernel cgroup_destroy_locked forbids removal of populated/live-child groups.
+      // Only the retained original directory's deletion, not a missing path, proves retirement.
+      if (error.code !== 'ENODEV'
+        || await readlink(`/proc/self/fd/${groupDirectory.fd}`)
+          !== `/sys/fs/cgroup${identity.controlGroup} (deleted)`) throw error;
+      await matching();
+      return false;
+    }
     const values = buffer.subarray(0, bytesRead).toString('utf8').match(/^populated ([01])$/m);
     if (!values) throw new Error('Original cgroup population cannot be read.');
     return values[1] === '1';
@@ -120,6 +131,10 @@ export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command:
       kind: 'systemd', bootId: boot, manager: 'system', unit,
       invocationId: state.InvocationID, controlGroup: state.ControlGroup,
     });
+    if ((await statfs(`/sys/fs/cgroup${identity.controlGroup}`)).type !== 0x63677270) {
+      throw new Error('Worker domain is not a cgroup-v2 filesystem.');
+    }
+    groupDirectory = await open(`/sys/fs/cgroup${identity.controlGroup}`, 'r');
     events = await open(`/sys/fs/cgroup${identity.controlGroup}/cgroup.events`, 'r');
     if (!await populated()) throw new Error('Native bootstrap domain unexpectedly empty.');
     return {
@@ -173,6 +188,8 @@ export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command:
         if (await populated()) throw new Error('Cannot retire a populated worker.');
         await events.close();
         events = undefined;
+        await groupDirectory.close();
+        groupDirectory = undefined;
         if (state.ActiveState === 'failed') await native('/usr/bin/systemctl', ['--system', 'reset-failed', unit]);
         else await native('/usr/bin/systemctl', ['--system', 'stop', unit]);
       },
@@ -183,6 +200,10 @@ export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command:
     catch (failure) { errors.push(failure); }
     if (events) {
       try { await events.close(); }
+      catch (failure) { errors.push(failure); }
+    }
+    if (groupDirectory) {
+      try { await groupDirectory.close(); }
       catch (failure) { errors.push(failure); }
     }
     if (creationAttempted) {
