@@ -2,10 +2,13 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { acquireLock, loadState, writeState } from '../scripts/deployment/state.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
+import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
+import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 
-const [control, project, unit, npm, node, phase, outcome = 'accepted'] = process.argv.slice(2);
+const [control, project, unit, npm, node, phase, outcome = 'accepted', workerMode = 'none'] = process.argv.slice(2);
 const activation = phase.startsWith('activation-');
 const receiptPhase = activation ? phase.slice('activation-'.length) : phase;
 const lock = await acquireLock(control, { project, operationId: randomUUID() });
@@ -45,6 +48,18 @@ fs.open = async function (file, ...args) {
 };
 syncBuiltinESMExports();
 const stopped = await stopLinuxService({ control, lock, unit, project, npm, node });
+if (workerMode !== 'none') {
+  const saved = await saveWorkerEngine({ control, project, operationId: lock.operationId,
+    source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)) });
+  const workers = await createWorkerOperation({ control, lock, saved });
+  if (workerMode === 'settled') {
+    await workers.run({ workerId: randomUUID(), command: {
+      file: node, args: ['-e', 'require("node:fs").writeFileSync("worker-finished","yes")'],
+      cwd: project, env: { PATH: '/usr/bin:/bin', HOME: '/root' },
+    }, runtime: { uid: 0, gid: 0 } });
+  }
+  await workers.seal();
+}
 if (activation) await stopped.activate({ purpose: 'prior-runtime' });
 if (phase.startsWith('retirement-')) {
   const prior = outcome === 'prior-runtime-restored';

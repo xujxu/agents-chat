@@ -14,7 +14,7 @@ import { recoverLinuxServiceRetirement } from '../scripts/deployment/linux-servi
 
 const execute = promisify(execFile);
 
-async function interrupted(t, phase = 'retirement-unlink-0', outcome = 'accepted') {
+async function interrupted(t, phase = 'retirement-unlink-0', outcome = 'accepted', workerMode = 'none') {
   const f = await fixture(t);
   await ready(f);
   const control = path.join(path.dirname(f.project), 'control');
@@ -25,7 +25,7 @@ async function interrupted(t, phase = 'retirement-unlink-0', outcome = 'accepted
   await cp(fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), source, { recursive: true });
   const saved = await saveRecoveryEngine({ source, control });
   const child = fork(new URL('./deployment-service-stop-child.mjs', import.meta.url),
-    [control, f.project, f.unit, f.npm, f.node, phase, outcome],
+    [control, f.project, f.unit, f.npm, f.node, phase, outcome, workerMode],
     { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let diagnostic = '';
   child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-4096); });
@@ -79,6 +79,59 @@ test('cold service cleanup preserves the failed-update outcome after verified pr
   assert.deepEqual(await readFile(path.join(f.control, 'state.json')), state);
   assert.equal((await reconcileInterruptedOperation(f.control)).status, 'prior-runtime-restored');
 });
+
+for (const [phase, outcome, workerMode] of [
+  ['retirement-intent', 'accepted', 'settled'],
+  ['retirement-unlink-0', 'accepted', 'empty'],
+  ['retirement-unlink-2', 'prior-runtime-restored', 'settled'],
+]) {
+  test(`cold combined service/worker cleanup uses one pinned inventory: ${phase}/${workerMode}`, async t => {
+    const f = await interrupted(t, phase, outcome, workerMode);
+    await f.kill();
+    const state = await readFile(path.join(f.control, 'state.json'));
+    const intent = JSON.parse(await readFile(path.join(f.control, 'service-retirement.json'), 'utf8'));
+    assert.equal(intent.version, 3);
+    assert.ok(intent.workers.files.some(entry => path.basename(entry.file) === 'worker-operation.ndjson'));
+    assert.match(intent.workers.manifestSha256, /^[a-f0-9]{64}$/);
+    if (workerMode === 'settled') assert.equal(await readFile(path.join(f.project, 'worker-finished'), 'utf8'), 'yes');
+    await rename(f.source, `${f.source}.displaced`);
+    assert.deepEqual(JSON.parse((await f.recover()).stdout), {
+      status: 'service-retired', operationId: f.lock.operationId, restored: false,
+    });
+    assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-engine', 'state.json']);
+    assert.deepEqual(await readFile(path.join(f.control, 'state.json')), state);
+    assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
+    assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(),
+      intent.runtime.runtime.invocationId);
+    const next = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+    await releaseLock(f.control, next);
+  });
+}
+
+for (const change of ['worker-file', 'helper', 'foreign', 'missing-worker', 'worker-path']) {
+  test(`combined recovery rejects worker inventory drift before service deletion: ${change}`, async t => {
+    const f = await interrupted(t, 'retirement-intent', 'accepted', 'settled');
+    await f.kill();
+    const markerPath = path.join(f.control, 'service-retirement.json');
+    const marker = JSON.parse(await readFile(markerPath, 'utf8'));
+    const journal = (await readdir(f.control)).find(name => /^worker-[a-f0-9-]{36}\.ndjson$/.test(name));
+    if (change === 'worker-file') await writeFile(path.join(f.control, journal), '{"partial":');
+    if (change === 'helper') await writeFile(path.join(f.control, 'worker-engine', 'state.mjs'), 'changed');
+    if (change === 'foreign') await writeFile(path.join(f.control, 'worker-foreign'), 'unowned');
+    if (change === 'missing-worker') await unlink(path.join(f.control, journal));
+    if (change === 'worker-path') {
+      assert.ok(marker.workers);
+      marker.workers.files[0].file = path.join(f.control, 'backup', 'sentinel');
+      await writeFile(markerPath, JSON.stringify(marker), { mode: 0o600 });
+    }
+    const before = (await readdir(f.control)).sort();
+    const held = await readFile(marker.files[0].file);
+    await assert.rejects(f.recover());
+    assert.deepEqual((await readdir(f.control)).sort(), before);
+    assert.deepEqual(await readFile(marker.files[0].file), held);
+    assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
+  });
+}
 
 test('cold service cleanup refuses live owner and preserves evidence without creating a guard', async t => {
   const f = await interrupted(t);

@@ -3313,3 +3313,43 @@ post-source/health failure, inactive or changed-unit installations remain
 separate recovery work. Windows installed task/account control, complete
 backup metadata and rotation, public scripts and real historical Next.js
 lifecycle acceptance are still outstanding. Main/PR/live deployment unchanged.
+
+### Combined service and settled-worker retirement handoff
+
+Extend the approved cold recovery, without adopting active/unsettled workers.
+The live service retirement v3 intent pins the matching sealed operation,
+settled journals, saved engine manifest/files and original engine directory.
+`service-activation-workers.mjs` supplies the verified enrollment list;
+`linux-service-retirement.mjs` retains/hashes the complete worker inventory
+and rechecks live activation authority before writing that intent.
+Ordinary live cleanup remains service retirement then worker retirement.
+
+Cold `linux-service-recovery.mjs` validates the v3 allowlist and exact combined
+deletion order: held inhibitor, service activation journal, stop journal,
+worker journals, saved helper files, operation journal, then empty helper
+directory. It checks state/service/lock and the remaining exact inventory
+between mutations. Version2 remains no-workers-only. The service marker and
+exclusive recovery guard remain until all combined evidence is retired;
+the old lock cannot be released while any listed worker files remain.
+
+- [ ] Push real settled-worker and sealed-empty-operation causal contracts.
+- [ ] Pin live worker deletion descriptors into the v3 service intent.
+- [ ] Extend cold missing-prefix/inventory checks to the complete allowlist.
+- [ ] Cover worker/helper tampering, unknown files, missing journals and
+  redirected deletion paths before service deletion; inject worker cleanup
+  failure/controller death and retain both original lock and recovery guard.
+- [ ] Require all five Actions jobs, then save exact acceptance and limitations.
+
+Native contract:
+```javascript
+assert.equal(intent.version, 3);
+assert.ok(intent.workers.files.some(entry =>
+  path.basename(entry.file) === 'worker-operation.ndjson'));
+assert.match(intent.workers.manifestSha256, /^[a-f0-9]{64}$/);
+assert.deepEqual(JSON.parse((await recover()).stdout), {
+  status: 'service-retired', operationId, restored: false,
+});
+```
+
+This does not yet adopt interrupted recovery guards or invent missing
+service-retirement intents. No public/main/live changes or local validation.
