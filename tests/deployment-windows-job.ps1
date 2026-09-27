@@ -316,6 +316,26 @@ child.unref();const timer=setInterval(()=>{if(fs.existsSync('pipe-writer')){clea
             if ($launcher) { $launcher.Process.WaitForExit(10000) | Out-Null; $launcher.Process.Dispose() }
         }
     }
+    Case 'control pipe loss before grant exits without target execution or explicit termination' {
+        $job = [Deployment.WindowsWorkerJob]::Create([guid]::NewGuid())
+        $launcher = $null
+        try {
+            $launcher = Start-Launcher $job
+            $launcher.Process.StandardInput.Close()
+            Assert ($launcher.Process.WaitForExit(15000)) 'Lost grant pipe left an admitted launcher.'
+            Assert ($launcher.Process.ExitCode -ne 0) 'Pipe loss produced successful execution.'
+            Assert (@($job.Members()).Count -eq 0) 'Pipe loss created surviving Job members.'
+        } finally {
+            $job.Dispose()
+            if ($launcher) { $launcher.Process.WaitForExit(10000) | Out-Null; $launcher.Process.Dispose() }
+        }
+    }
+    Case 'invalid generation missing original Job and reused owner identity fail closed' {
+        Expect-Failure { [Deployment.WindowsWorkerJob]::Create([guid]::Empty) }
+        Expect-Failure { [Deployment.WindowsWorkerJob]::JoinCurrent("Local\agents-deploy-$([guid]::NewGuid())") }
+        Expect-Failure { [Deployment.WindowsWorkerJob]::JoinCurrent('foreign-job') }
+        Expect-Failure { [Deployment.WindowsWorkerLauncher]::WatchOwner($PID, 'reused-owner') }
+    }
     Write-Output ("WINDOWS_JOB_TESTS_PASSED=" + $script:passed)
 } finally {
     Remove-Item -LiteralPath $root -Recurse -Force

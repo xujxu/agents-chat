@@ -158,6 +158,7 @@ namespace Deployment
             Check(ConvertStringSecurityDescriptorToSecurityDescriptorW(
                 "D:P(A;;GA;;;SY)(A;;GA;;;" + sid + ")", 1, out descriptor, out size), "Create private Job DACL");
             WindowsWorkerJob result = new WindowsWorkerJob();
+            List<Exception> errors = new List<Exception>();
             try
             {
                 result.Name = @"Local\agents-deploy-" + generation.ToString("D");
@@ -182,16 +183,14 @@ namespace Deployment
                 if (!result.KillOnClose || result.Inheritable)
                     throw new InvalidOperationException("Unsafe Job limit or handle inheritance.");
             }
-            catch (Exception original)
+            catch (Exception error) { errors.Add(error); }
+            if (LocalFree(descriptor) != IntPtr.Zero)
+                errors.Add(new InvalidOperationException("Freeing Job security descriptor failed."));
+            if (errors.Count > 0)
             {
                 try { result.Dispose(); }
-                catch (Exception cleanup) { throw new AggregateException(original, cleanup); }
-                throw;
-            }
-            finally
-            {
-                if (LocalFree(descriptor) != IntPtr.Zero)
-                    throw new InvalidOperationException("Freeing Job security descriptor failed.");
+                catch (Exception cleanup) { errors.Add(cleanup); }
+                throw errors.Count == 1 ? errors[0] : new AggregateException(errors);
             }
             return result;
         }
@@ -269,13 +268,19 @@ namespace Deployment
         public static string ReadFrame()
         {
             StringBuilder frame = new StringBuilder();
+            int bytes = 0;
+            bool highSurrogate = false;
             while (true)
             {
                 int next = Console.In.Read();
                 if (next == -1) throw new EndOfStreamException("Owner command pipe closed.");
                 if (next == '\n') return frame.ToString();
-                frame.Append((char)next);
-                if (frame.Length > 65536 || Encoding.UTF8.GetByteCount(frame.ToString()) > 65536)
+                char character = (char)next;
+                bytes += Char.IsLowSurrogate(character) && highSurrogate ? 1
+                    : character < 0x80 ? 1 : character < 0x800 ? 2 : 3;
+                highSurrogate = Char.IsHighSurrogate(character);
+                frame.Append(character);
+                if (bytes > 65536)
                     throw new InvalidDataException("Native command exceeds limit.");
             }
         }
