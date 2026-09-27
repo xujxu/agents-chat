@@ -2457,3 +2457,46 @@ Linux non-root intended-account support, Windows production control ACL
 provisioning, remaining native fault injection, actual application shutdown,
 backup metadata and historical deploy/update/restore acceptance remain open.
 No public wrapper, main PR, merge or live installation was changed.
+
+## N9: Successful-operation retirement and fixed-slot reuse
+
+This batch closes a concrete repeat-update blocker: successful workers leave
+the fixed helper slot and journals behind, so a second operation cannot begin.
+Only the original live operation object can request retirement. Require sealed
+worker admission, all exact enrolled journals settled, unchanged original
+lock/operation evidence, verified helper digest and matching `accepted` or
+`restored` application state. A sealed worker list alone is not sufficient.
+
+Files: add `scripts/deployment/worker-retirement.mjs`; extend
+`worker-operation.mjs`, `state.mjs`, saved-engine allowlist and corresponding
+shared/native tests. The retirement helper snapshots an explicit flat file
+inventory with SHA-256, dev/ino and lengths; writes an exclusive durable
+`worker-retirement.json` intent before deleting anything; deletes only those
+exact checked regular files, then the empty helper directory. Never recurse,
+follow a link, infer ownership from a name, or delete the backup/state/lock.
+Delete operation evidence and the retirement intent last, with directory
+flushes. Any failure permanently closes this object's admission and retains
+the lock; no reopen/retry/adoption API in this batch.
+
+```js
+await operation.seal();
+// The deployment coordinator persists matching accepted/restored state.
+await operation.retire();
+await releaseLock(control, lock);
+// A second operation can now use control/worker-engine without another slot.
+```
+
+- [ ] Add causal Actions-red contracts: missing app acceptance/unsealed/closed
+  authority refused, marker-only state still prevents unlock, successful
+  retirement preserves backup and app state.
+- [ ] Implement checked retirement and exact helper allowlist; preserve errors
+  from both retained-handle closes.
+- [ ] Exercise two actual native operations using the same fixed slot on both
+  OSes; inject marker flush and partial deletion failures with bounded fixtures.
+- [ ] Require all four Actions jobs green and persist evidence.
+
+Interrupted retirement is NOT automatically resumed. The fixed intent records
+the original lock, helper digest and exact deletion inventory for later
+exclusive recovery. Unknown files, partial intent, changed identity, missing
+evidence or dead owners remain blocked. Windows directory power-loss guarantees
+remain unchanged; do not claim Linux fsync semantics on Windows.
