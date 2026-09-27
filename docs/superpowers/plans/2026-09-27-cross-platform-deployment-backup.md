@@ -10,7 +10,104 @@
 
 ---
 
-## Execution boundary
+## Approved implementation delta: update enhancements
+
+The spec amendment at `c8e9be7` supersedes upgrade-named commands and internal
+operation strings in the original tasks below. Implement inline, as confirmed
+by the user; do not request another execution-mode choice.
+
+### A. Rename and public options
+
+- [ ] Replace the unpublished operation string `upgrade` with `update` in
+  `scripts/deployment/{cli,state,transaction}.mjs` and their tests.
+  Future entry points are `scripts/update.sh` and `scripts/update.ps1`;
+  workflow filters/help/README must use these names, without upgrade aliases.
+- [ ] Add CLI contract tests before implementation for `--dry-run`, `--json`,
+  `--timeout` (positive safe integer seconds, default 1800). Windows adapters
+  map `-DryRun`, `-Json`, `-TimeoutSeconds` to the same semantics. Keep readiness
+  wait separate (120 seconds Linux, existing Windows 180 seconds); explicit
+  stage timeout also bounds readiness if shorter.
+- [ ] Reject dry-run with status/verify/restore; reject timeout zero, duplicate
+  flags and invalid values before side effects. Help explains that dry-run does
+  not refresh remote refs or prove compatibility.
+- [ ] Run all existing contracts plus new CLI tests through the existing
+  `Deployment lifecycle` Actions workflow on both platforms.
+
+### B. Read-only planning and accurate skip
+
+- [ ] Create `scripts/deployment/update-policy.mjs` and
+  `tests/deployment-update-policy.test.mjs`.
+  Export `previewUpdate(options, readers)` where readers expose only
+  `inspect`, `localTarget`, `estimate`, `checks`; no mutation callbacks.
+  Missing local target yields `target: null` and a named pending check.
+  Invalid local data must throw rather than becoming an unknown success.
+- [ ] Add `alreadyCurrent(facts)`: require operation `update`, accepted receipt,
+  exact target/source/build/dependency/config/service identities, verified live
+  observation and no interrupted/unverified operation. Missing evidence returns
+  a non-skip reason, never defaults missing hashes to equal values.
+- [ ] Test each missing or mismatched fact, deploy-forced rebuild, and original
+  backup identity preserved on skip. Wire this before capacity/stop/copy in the
+  transaction after real target resolution and compatibility checks.
+- [ ] Preview adapters read local Git objects with no fetch; compare refs and
+  filesystem/service observations before/after preview in native acceptance.
+  Preview on a fresh control path must not create it.
+
+### C. Structured output and per-stage deadlines
+
+- [ ] Create `scripts/deployment/result.mjs` with versioned bounded JSON
+  outcomes: preview, already-current, accepted, activation-unverified, failed,
+  recovery-required and blocked. Fields include operationId, source/target,
+  phase, elapsedMs, errorCode, runtimeState, backup, pendingChecks, nextAction.
+  Never serialize raw errors, secrets or environment records.
+- [ ] Create `scripts/deployment/stage-runner.mjs` and its tests. Execute
+  cancellable operations using AbortSignal; on deadline abort and await the
+  owned worker's settled promise. Native adapters own process-tree settlement.
+  After a 30-second termination allowance, report blocked without authorizing
+  runtime restart, lock release or backup cleanup.
+- [ ] Durations use a monotonic clock. Persist operation phase before execution.
+  Emit progress at bounded intervals with elapsed/budget, not full command
+  output. Snapshot loops check cancellation between files and stream chunks.
+  Never use Promise.race alone as proof that a writer stopped.
+- [ ] Tests use short injected clocks/budgets without public fault switches:
+  completed operation, timeout then successful settlement, failed settlement,
+  cancellation, callback failure and preserved original error. Real native
+  tests spawn a fixture child with a descendant and prove both are stopped.
+
+### D. Read-only compatibility admission
+
+- [ ] Inventory actual databases through `lib/chatStore.ts`,
+  `lib/configStore.ts`, `lib/chatSyncStore.ts`, `lib/chatTransferStore.ts` and
+  `lib/scheduler/scheduleStore.ts` before implementing the checker. Record
+  database paths, required tables/columns and supported migration markers in
+  `scripts/deployment/compatibility.mjs`, with fixtures in
+  `tests/deployment-compatibility.test.mjs`.
+- [ ] Inspect target files via Git objects, not checkout or candidate execution.
+  Check `scripts/deployment/protocol.json`, declared Node engines and required
+  configuration schema. Require explicit bounded target compatibility metadata
+  for new versions; define the historical main638c553 shape from source.
+  Do not pretend the existing migration-marker table is a universal schema ID.
+- [ ] Use the installed SQLite binding in read-only, fileMustExist mode, with
+  a coherent read transaction and no call to application store initialization.
+  Account for WAL. Refuse if inspection cannot remain read-only or required
+  schemas are unknown; missing databases on fresh installation are distinct
+  from malformed existing files. Test no new database/WAL/SHM files are created.
+- [ ] Snapshot and inspect configuration bytes without rewriting; report names
+  of missing/invalid settings, never values. Admission failure precedes stop.
+  Target engine/protocol/schema incompatibility remains nonzero with a next
+  action; no automatic data migration or database rollback is added.
+
+### E. Integration, documentation and acceptance
+
+- [ ] Wire A-D into the native entry points in original Tasks 4-8. README
+  lists update-only commands and all new flags with preview/no-op limits.
+- [ ] Add Linux/Windows scenarios: fresh and existing read-only preview,
+  true no-op, altered artifact/receipt/config non-no-op, unsupported schema/
+  runtime rejection, worker timeout/cancellation, JSON output parseability.
+- [ ] Retain ALL real first-deploy, historical-update and no-build restore
+  gates. Primitive contract success does not authorize the PR. Run code only
+  in Actions, push fixes, and retain causal evidence in session tasks.
+
+## Original execution boundary and implementation tasks
 
 Worktree:
 `/home/xujx/.copilot/session-state/e73b95d5-ad21-48c7-9442-2b5766b797a1/files/deployment-backup`
