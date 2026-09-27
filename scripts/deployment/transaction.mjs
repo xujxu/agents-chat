@@ -1,4 +1,5 @@
 import { alreadyCurrent, previewUpdate } from './update-policy.mjs';
+import { runStage } from './stage-runner.mjs';
 
 const operationNames = [
   'record', 'inspect', 'resolveTarget', 'admit', 'capacity', 'stop', 'snapshot', 'verifySnapshot',
@@ -17,8 +18,19 @@ export async function runDeployment(options, operations) {
     && (!Number.isSafeInteger(options.waitSeconds) || options.waitSeconds < 0)) {
     throw new Error('Invalid deployment wait interval.');
   }
+  const timeoutSeconds = options.timeoutSeconds ?? 1800;
+  if (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds <= 0) {
+    throw new Error('Invalid deployment timeout interval.');
+  }
   const context = { options, inspection: null, target: null, snapshot: null, phase: 'preflight' };
-  const invoke = async name => operations[name](context);
+  const invoke = async (name, recovering = false) => {
+    const seconds = name === 'verify'
+      ? Math.min(timeoutSeconds, options.waitSeconds ?? 120) : timeoutSeconds;
+    return runStage(name, signal => operations[name]({ ...context, signal }), {
+      timeoutMs: Math.min(seconds * 1000, Number.MAX_SAFE_INTEGER),
+      signal: recovering ? undefined : options.signal,
+    });
+  };
   const record = async phase => {
     await operations.record(phase, context);
     context.phase = phase;
@@ -81,10 +93,12 @@ export async function runDeployment(options, operations) {
   } catch (error) {
     const errors = [error];
     try {
-      if (sourceMutationAttempted) {
-        await invoke('stop');
-      } else if (stopAttempted && inspected.running) {
-        await invoke('start');
+      if (error?.recoveryAllowed !== false) {
+        if (sourceMutationAttempted) {
+          await invoke('stop', true);
+        } else if (stopAttempted && inspected.running) {
+          await invoke('start', true);
+        }
       }
     } catch (recoveryError) {
       errors.push(recoveryError);
@@ -92,8 +106,10 @@ export async function runDeployment(options, operations) {
     try { await record('recovery-required'); }
     catch (stateError) { errors.push(stateError); }
     if (errors.length > 1) {
-      throw new AggregateError(errors,
-        'Deployment failed and runtime cleanup/restart or recovery-state recording also failed; inspect before recovery.');
+      throw Object.assign(new AggregateError(errors,
+        'Deployment failed and runtime cleanup/restart or recovery-state recording also failed; inspect before recovery.'), {
+        recoveryAllowed: errors.every(failure => failure?.recoveryAllowed !== false),
+      });
     }
     throw error;
   }
