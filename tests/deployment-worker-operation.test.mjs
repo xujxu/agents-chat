@@ -50,11 +50,14 @@ test('helper creation alone prevents legacy finally-based lock release', async t
   assert.equal(JSON.parse(await readFile(path.join(f.control, 'lock', 'owner.json'))).token, f.lock.token);
 });
 
-test('even partial service activation evidence closes new and existing worker admission', async t => {
-  for (const existing of [false, true]) {
+test('even partial service activation or retirement evidence closes worker admission', async t => {
+  for (const [marker, existing] of [
+    ['service-activation.ndjson', false], ['service-activation.ndjson', true],
+    ['service-retirement.json', false], ['service-retirement.json', true],
+  ]) {
     const f = await fixture(t);
     const operation = existing ? await f.create() : null;
-    await writeFile(path.join(f.control, 'service-activation.ndjson'), '{"partial":');
+    await writeFile(path.join(f.control, marker), '{"partial":');
     if (operation) {
       await assert.rejects(operation.seal(), unsafe);
       assert.equal((await readWorkerOperation(f.control)).at(-1).phase, 'opened');

@@ -24,8 +24,7 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
   let activationAttempted = false;
   let activated;
   let retirementAttempted = false;
-  const close = async () => {
-    if (busy) throw journalUncertain(new Error('Cannot close service stop authority while checking it.'));
+  const closeHandles = async () => {
     if (closed) return;
     closed = true;
     const results = await Promise.allSettled([
@@ -33,6 +32,10 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
     ]);
     const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
     if (errors.length) throw journalUncertain(new AggregateError(errors, 'Service stop handle cleanup failed.'));
+  };
+  const close = async () => {
+    if (busy) throw journalUncertain(new Error('Cannot close service stop authority while checking it.'));
+    await closeHandles();
   };
   try {
     const lock = captureLockOwner(suppliedLock);
@@ -156,6 +159,7 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
           activated = await activateLinuxService({
             control: root, lock, unit, project, npm, node, service, inhibition, checkAuthority, checkInhibition,
             checkStopJournal: () => journal.check(),
+            closeForRetirement: closeHandles,
           }, purpose);
           return Object.freeze({ status: activated.status, identity: activated.identity });
         } catch (error) {

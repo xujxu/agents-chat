@@ -11,7 +11,7 @@ const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // Only live activation authority may authorize this one-shot deletion inventory.
-export async function retireLinuxService({ control, lock, held, runtime, verify, verifyEvidence }) {
+export async function retireLinuxService({ control, lock, held, runtime, verify, verifyEvidence, closeAuthority }) {
   const handles = [];
   const errors = [];
   try {
@@ -95,6 +95,7 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
       await syncWorkerDirectory(path.dirname(entry.file));
     }
     await check();
+    await closeAuthority();
     while (handles.length) {
       await handles[0].close();
       handles.shift();

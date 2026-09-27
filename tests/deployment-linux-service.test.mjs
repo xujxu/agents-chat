@@ -629,7 +629,7 @@ test('service retirement permits worker retirement and the same fixed slots can 
 });
 
 test('partial service retirement retains durable intent and never unlocks or stops the accepted app', async t => {
-  for (const fault of ['intent-flush', 'second-unlink', 'marker-unlink', 'state-drift']) {
+  for (const fault of ['intent-flush', 'second-unlink', 'marker-unlink', 'state-drift', 'handle-close']) {
     const f = await stopFixture(t);
     const stopped = await stopLinuxService(f);
     const active = await activateDeployment(f, stopped);
@@ -638,8 +638,14 @@ test('partial service retirement retains durable intent and never unlocks or sto
     const nativeOpen = fs.open;
     const nativeUnlink = fs.unlink;
     let injected = false;
+    let closeArmed = false;
     fs.open = async function (file, ...args) {
       const handle = await nativeOpen(file, ...args);
+      if (fault === 'handle-close' && !closeArmed && file === marker && args[0] !== 'wx') {
+        closeArmed = true;
+        const close = handle.close.bind(handle);
+        handle.close = async () => { await close(); injected = true; throw new Error('Injected retirement handle close failure.'); };
+      }
       if (file === marker && fault === 'intent-flush' && args[0] === 'wx') {
         const sync = handle.sync.bind(handle);
         handle.sync = async () => { await sync(); injected = true; throw new Error('Injected intent flush failure.'); };
