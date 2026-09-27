@@ -240,6 +240,55 @@ c.unref();const t=setInterval(()=>{if(fs.existsSync('writer')){clearInterval(t);
             if ($launcher) { $launcher.Process.WaitForExit(10000) | Out-Null; $launcher.Process.Dispose() }
         }
     }
+    Case 'launcher death does not erase original descendant ownership or affect an unrelated sentinel' {
+        $job = [Deployment.WindowsWorkerJob]::Create([guid]::NewGuid())
+        $launcher = $null
+        $sentinelInfo = [Diagnostics.ProcessStartInfo]::new($node)
+        $sentinelInfo.UseShellExecute = $false
+        $sentinelInfo.ArgumentList.Add('-e')
+        $sentinelInfo.ArgumentList.Add('setInterval(()=>{},1000);')
+        $sentinel = [Diagnostics.Process]::Start($sentinelInfo)
+        try {
+            $launcher = Start-Launcher $job
+            Send-Target $launcher 'const fs=require("node:fs");fs.writeFileSync("launcher-writer","x");setInterval(()=>fs.appendFileSync("launcher-writer","x"),10);'
+            $marker = Join-Path $root 'launcher-writer'
+            $until = [DateTime]::UtcNow.AddSeconds(15)
+            while (-not (Test-Path $marker) -and [DateTime]::UtcNow -lt $until) { Start-Sleep -Milliseconds 25 }
+            Assert (Test-Path $marker) 'Target failed to start.'
+            $launcher.Process.Kill()
+            Assert ($launcher.Process.WaitForExit(15000)) 'Launcher did not exit.'
+            Assert (@($job.Members()).Count -ge 1) 'Launcher exit was incorrectly treated as descendant extinction.'
+            Assert (@($job.Members()) -notcontains $sentinel.Id) 'Unrelated sentinel was assigned to Job.'
+            $job.Terminate()
+            $until = [DateTime]::UtcNow.AddSeconds(15)
+            while (@($job.Members()).Count -ne 0 -and [DateTime]::UtcNow -lt $until) { Start-Sleep -Milliseconds 25 }
+            Assert (@($job.Members()).Count -eq 0) 'Descendant survived explicit termination.'
+            Assert (-not $sentinel.HasExited) 'Unrelated sentinel was terminated.'
+            $length = (Get-Item $marker).Length
+            Start-Sleep -Milliseconds 300
+            Assert ((Get-Item $marker).Length -eq $length) 'Target still writes after empty Job.'
+        } finally {
+            $job.Dispose()
+            if ($launcher) { $launcher.Process.WaitForExit(10000) | Out-Null; $launcher.Process.Dispose() }
+            if (-not $sentinel.HasExited) { $sentinel.Kill(); $sentinel.WaitForExit(10000) | Out-Null }
+            $sentinel.Dispose()
+        }
+    }
+    Case 'oversized command frames fail before target execution' {
+        $job = [Deployment.WindowsWorkerJob]::Create([guid]::NewGuid())
+        $launcher = $null
+        try {
+            $launcher = Start-Launcher $job
+            $launcher.Process.StandardInput.WriteLine(('x' * 65537))
+            $launcher.Process.StandardInput.Flush()
+            Assert ($launcher.Process.WaitForExit(15000)) 'Oversized input did not terminate the launcher boundedly.'
+            Assert ($launcher.Process.ExitCode -ne 0) 'Oversized input was accepted.'
+            Assert (@($job.Members()).Count -eq 0) 'Oversized input created a surviving Job member.'
+        } finally {
+            $job.Dispose()
+            if ($launcher) { $launcher.Process.WaitForExit(10000) | Out-Null; $launcher.Process.Dispose() }
+        }
+    }
     Write-Output ("WINDOWS_JOB_TESTS_PASSED=" + $script:passed)
 } finally {
     Remove-Item -LiteralPath $root -Recurse -Force
