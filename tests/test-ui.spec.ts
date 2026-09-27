@@ -8,6 +8,7 @@
 
 import { test, expect, Locator, Page } from '@playwright/test';
 import { selectFilesAgent, filesAgentTrigger } from './themed-picker-helpers';
+import { installStreamSaveFixture } from './helpers/streamSaveBaseline';
 
 const BASE = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3010';
 const ADMIN_USER = 'admin';
@@ -3910,13 +3911,8 @@ test.describe('Chat UI', () => {
     const finalText = 'Final answer after saved thinking.';
     let finishTurn = false;
     let pollCount = 0;
-    const chatPosts: any[] = [];
-
-    await page.route('**/api/chats', async (route) => {
-      if (route.request().method() === 'POST') {
-        chatPosts.push(route.request().postDataJSON());
-      }
-      await route.continue();
+    const persistence = await installStreamSaveFixture(page, {
+      userText, finalText, agentId: 'alpha',
     });
 
     await page.route('**/api/acp', async (route) => {
@@ -3969,30 +3965,45 @@ test.describe('Chat UI', () => {
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true }) });
     });
 
-    await page.reload();
-    await page.waitForSelector('.chatContainer', { timeout: 30000 });
+    try {
+      await page.reload();
+      await page.waitForSelector('.chatContainer', { timeout: 30000 });
+      await persistence.beginTurn();
+      await textarea.fill(userText);
+      await page.click('button[aria-label="Send message"]');
+      await expect(chatArea.locator(`.message.user:has-text("${userText}")`))
+        .toBeVisible({ timeout: 15000 });
+      await expect(chatArea.locator(`.thinkingPartText:has-text("${thinkingText}")`))
+        .toBeVisible({ timeout: 15000 });
+      await expect.poll(() => {
+        persistence.baseline();
+        return persistence.confirmationHeld;
+      }, { timeout: 10000 }).toBe(true);
 
-    await textarea.fill(userText);
-    await page.click('button[aria-label="Send message"]');
-    await expect(chatArea.locator(`.message.user:has-text("${userText}")`)).toBeVisible({ timeout: 15000 });
-    await expect(chatArea.locator(`.thinkingPartText:has-text("${thinkingText}")`)).toBeVisible({ timeout: 15000 });
+      expect(persistence.baseline(),
+        'Confirmation response is held; the baseline must remain pending').toBeUndefined();
+      persistence.releaseConfirmation();
+      await expect.poll(() => persistence.baseline(), { timeout: 10000 }).toBe(2);
+      const baseline = persistence.baseline();
+      if (baseline === undefined) throw new Error('Acknowledged baseline disappeared');
+      await page.waitForTimeout(2500);
+      persistence.assertStreaming(baseline);
+      expect(pollCount).toBeGreaterThan(0);
 
-    const chatSaves = () => chatPosts.map(body => body.operation?.chat || body.chat).filter(Boolean);
-    await expect.poll(() => chatSaves().some(chat => chat.messages?.some((message: any) => message.type === 'user' && message.content === userText)), { timeout: 10000 }).toBe(true);
-    const chatSaveCountAfterUserMessage = chatSaves().length;
-    await page.waitForTimeout(2500);
-    expect(chatSaves().length).toBe(chatSaveCountAfterUserMessage);
-
-    expect(pollCount).toBeGreaterThan(0);
-    finishTurn = true;
-    await expect(chatArea.locator(`.message.agent:has-text("${finalText}")`)).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('button[aria-label="Stop generation"]')).toBeHidden({ timeout: 15000 });
-    await expect.poll(() => chatSaves().length, { timeout: 10000 })
-      .toBe(chatSaveCountAfterUserMessage + 1);
-    const finalSave = chatSaves().at(-1);
-    expect(finalSave.messages.some((message: any) => message.type === 'agent' && message.content === finalText)).toBe(true);
-
-    console.log('PASS: streaming thinking parts render without frontend stream saves');
+      persistence.releaseTurn(baseline);
+      finishTurn = true;
+      await expect(chatArea.locator(`.message.agent:has-text("${finalText}")`))
+        .toBeVisible({ timeout: 15000 });
+      await expect(page.locator('button[aria-label="Stop generation"]'))
+        .toBeHidden({ timeout: 15000 });
+      await expect.poll(() => persistence.finalReady(baseline), { timeout: 10000 }).toBe(true);
+      expect(persistence.saves).toHaveLength(baseline + 1);
+      expect(persistence.saves.at(-1)?.messages.some(message =>
+        message.type === 'agent' && message.content === finalText)).toBe(true);
+      console.log('PASS: streaming thinking parts render without frontend stream saves');
+    } finally {
+      await persistence.dispose();
+    }
   });
 
   test('should not force-scroll to bottom after user scrolls up during streaming', async ({ page }) => {
