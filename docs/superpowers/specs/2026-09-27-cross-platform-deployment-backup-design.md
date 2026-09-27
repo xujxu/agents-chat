@@ -185,6 +185,162 @@ Persist intent before mutation as already specified. Abrupt OOM/power loss
 continues to rely on durable phase/ownership records and the next invocation's
 diagnosis, not a catch handler that may never run.
 
+### Native worker containment review (2026-09-27)
+
+The user approved Linux cgroup / explicit Windows Job ownership, then requested
+an edge-case review before implementation. This section records that review;
+it is not evidence that native worker support is implemented or validated.
+No finite source review establishes absence of all risks.
+
+#### OpenClaw evidence and limits
+
+All OpenClaw references below use commit
+[`8620e9097726a817be6bd8f9385a14a54e24f89d`](https://github.com/openclaw/openclaw/tree/8620e9097726a817be6bd8f9385a14a54e24f89d),
+not an unspecified release.
+
+- `src/infra/update-runner-command.ts` enables `killProcessTree` for its default
+  update command runner. `src/process/exec-termination.ts` uses POSIX process
+  groups with identity checks and Windows taskkill while the root is live.
+  Its Windows comments explicitly distinguish this from spawn-time Job
+  ownership; root exit is not permission to target a reusable PID.
+- This is NOT the complete update architecture. The command scopes in
+  `src/process/exec-spawn.ts`, executor/child ownership in
+  `src/cli/update-cli/update-command-executor{,-children}.ts`, and recovery
+  unwind in `update-command-unwind.ts` retain cleanup and live authority.
+  `src/infra/update-managed-service-handoff-scope.ts` additionally checks
+  systemd invocation identity, full cgroup placement, and native retirement
+  for managed handoff. Do not describe all updates as only taskkill/groups.
+- `scripts/lib/managed-windows-job{,-launcher}.mts` implements a separate
+  explicit Job path: a trusted launcher joins the configured Job, closes its
+  temporary Job handle, then acknowledges readiness before receiving target
+  input. This is gated admission, not a requirement that all Windows commands
+  use suspended CreateProcess. Its optional native-module fallback is NOT
+  acceptable for this deployment's strict recovery guarantee.
+- Its Job enumeration rejects incomplete process lists. Its cleanup observer
+  requires launcher exit AND an empty Job, not merely a root PID or closed
+  pipes. It removes case-insensitive NODE_OPTIONS from the pre-admission
+  launcher. The retained handle must not leak into descendants.
+- `src/process/exec-result.ts` detects cleanup uncertainty through nested
+  errors; `update-runner-git.ts` suppresses rollback and artifact cleanup on
+  that classification. `update-command-cleanup-recovery.test.ts` and
+  `update-command-executor-settlement.test.ts` assert cleanup precedes recovery
+  and lease release. These are primarily mocked protocol tests, not independent
+  proof of operating-system extinction.
+- `test/scripts/managed-child-process.windows.test.ts` includes real Windows
+  Job cases with detached descendants and independent output after abort or
+  normal root exit. The inspected source defines those tests; this review did
+  not run them or verify their upstream CI results.
+
+#### Required ownership and recovery invariants
+
+| Boundary / risk | Required behavior |
+| --- | --- |
+| Spawn before ownership | Persist a fresh per-operation/per-worker intent before OS creation. Launch only a trusted, non-mutating bootstrap until placement and identity are verified and durably acknowledged. Then release the command once. No target preload or npm lifecycle script may run before admission. |
+| Cancellation before readiness | Close admission irrevocably; reject late readiness, delayed replies, duplicate start messages and reuse of a cancelled worker. Empty-before-admission is not completed-work evidence. |
+| Empty now, spawn later | Join/stop every admitted launcher and controller capable of creating work before certifying extinction. An earlier empty query is not reusable authority. |
+| Parent exits or output closes | Retain containment and independently query descendants, including detached/session-changing children and children with redirected output. Normal root exit does not waive this requirement. |
+| Termination requested | A successful signal, taskkill, systemctl or TerminateJobObject call is not proof of exit. Observe the exact retained ownership domain until empty or until the bounded settlement deadline expires. |
+| Reused identity | Bind project, operation, worker generation, controller identity and OS domain. Linux includes boot ID, manager scope, InvocationID and complete ControlGroup path. Windows includes the original handle, creation generation, account and session. Names/PIDs alone cannot authorize mutation. |
+| CLI/owner OOM or kill | Never rely on catch/finally. Windows uses non-inherited kill-on-close ownership; Linux needs a manager-enforced finite deadline and an independently observed controller lifetime. Loss of either control transport or authority closes admission. Domain creation is not itself an OOM solution. |
+| Recovery reentry | Acquire exclusive recovery authority, reconcile pending creation and the original worker domain, then persist a verified settlement receipt before leaving blocked. No automatic lock removal because the parent is dead. Missing, inaccessible, replaced or ambiguous evidence remains blocked. |
+| Wrapped cleanup error | Preserve uncertainty through cause chains and AggregateError.errors, with cycle/size guards. Both stage runner and transaction must use one shared classifier. Never downgrade uncertainty because an adapter added error context. |
+| Journal/receipt failure | Preserve original and recording errors. Retain lock and files; failure to write blocked must not authorize finally-based unlock. A settlement receipt is evidence of stopped work, not acceptance of deployment contents. |
+| External application writers | Build containment does not stop the existing application, ACP children, watchdog or scheduled tasks. Independently establish owned runtime shutdown and suppress automatic restarts before copying databases. |
+| Privilege / escaped work | No process-name/port kills. No claim to contain malicious privileged scripts, WMI/service-mediated launches or root migration outside the domain. Run trusted commands at the intended identity; fail rather than silently broadening authority. |
+| Logs / memory / disk | Continuously drain bounded stdout/stderr independently of lifecycle. Protect/redact private logs and never retain unbounded output in RAM or on disk. Output truncation and pipe EOF cannot certify extinction. |
+| Replaced dependencies | Keep bootstrap, native interop and recovery code outside the mutable checkout and node_modules. npm ci/source replacement must not remove the code needed to stop workers or recover. |
+
+The nested-error classification requirement exposes a concrete gap in the
+current callback foundation: `stage-runner.mjs` and `transaction.mjs` inspect
+only the outer `recoveryAllowed` field. Before native integration, add causal
+regressions for wrapped/aggregate/cyclic failures and make that classification
+shared. Existing green contracts do not cover this case.
+
+#### Platform-specific guardrails
+
+Linux uses a uniquely named transient system service with explicit
+`KillMode=control-group`, `SendSIGKILL=yes`, no automatic restart and bounded
+start/stop/runtime limits. Do not accidentally use Type=oneshot with only
+RuntimeMaxSec: systemd documents that this runtime limit does not apply there.
+Do not use ActiveState or MainPID=0 alone as an emptiness test. Prefer recursive
+cgroup-v2 `cgroup.events: populated=0`, checked against the admitted identity.
+When the domain has retired, require reconciled creation/manager evidence, not
+an arbitrary missing filesystem path. Before deleting unit evidence, persist
+the settlement receipt. Older/hybrid hosts without an equivalent proven
+observation contract are explicitly unsupported until separately validated.
+
+Service-manager control must use the captured system/user manager identity,
+not a changed sudo environment. Keep the deployment worker domain separate
+from the application domain and recovery supervisor. Commands, working
+directory, UID/GID, PATH and environment need exact transport without shell or
+systemd variable reinterpretation; feature-detect required properties before
+any downtime. A manager watchdog bounds abandoned work; it does not prove
+immediate death after CLI failure. Uninterruptible I/O, permission errors or
+failed observations remain blocked. OOMPolicy is not a memory cap, and this
+feature does not promise that the host or old service cannot suffer OOM.
+
+Windows configures KILL_ON_JOB_CLOSE before admission and disables breakaway.
+Do not hand the target an inheritable Job handle. Check every native call,
+structure layout and nested-Job assignment; no portable/uncontained fallback.
+Use the trusted gated-launcher sequence from the reviewed tooling design,
+rather than start the target and assign it afterward. The trusted bootstrap
+waits without target code, joins the Job, closes its temporary Job handle and
+acknowledges placement; the owner durably records admission before sending the
+one-use command grant. Clear case-insensitive NODE_OPTIONS from bootstrap
+startup and do not resolve its code/native binding from the application's
+mutable dependency tree. Test all partial-creation paths. Failed assignment
+or disconnected bootstrap must not leave a runnable unowned target.
+Retain the exact Job handle until observation and cleanup are complete.
+
+Job creation can OPEN an existing named object: reject ERROR_ALREADY_EXISTS.
+Restrict the object's ACL. A `Local\\` Job name is session-specific, so
+cross-session recovery must not interpret failure to open it as extinction.
+Opening another handle also extends Job lifetime and can defeat last-handle
+kill assumptions; recovery/inspection handle ownership must be explicit.
+Retain blocked if the original domain cannot be unambiguously reconciled.
+Do not replace a lost Job with a new empty same-name Job to "verify" it.
+Completion-port notifications are hints, not guaranteed proof; query the
+retained Job, reject partial/truncated enumeration, and close admission first.
+
+#### Mandatory real Actions acceptance matrix
+
+Both supported OSes need real process tests in addition to mocked failures:
+
+1. Ordinary success/nonzero exit with parent, child and grandchild; independent
+   file-output descendants, and root exits before descendants.
+2. Cancellation before launch, between domain creation/admission/start, during
+   output, and after root exit. Late startup replies never admit work.
+3. Timeout with ignored cooperative termination; a delayed descendant and
+   POSIX setsid / Windows detached child remain owned and stop before recovery.
+4. Kill the CLI and native owner independently at each durable boundary;
+   reenter from saved state. No live writer may overlap backup/restore/restart.
+5. Inject failed stop/query, access denial, nested-Job rejection, truncated
+   enumeration, changed InvocationID/session/boot, and same-name replacement.
+   Never terminate an unrelated sentinel process or erase its state.
+6. Failed state writes, nested cleanup errors, control-pipe loss, missing
+   helpers after checkout/dependency replacement and huge output remain
+   explicit failures without unsafe cleanup or success-shaped results.
+7. Concurrent recovery/update attempts, repeated cancellation and repeated
+   status reads cannot reopen admission or release another operation's lock.
+8. Real Git/npm/Next lifecycle tests exercise the wrapper with actual command
+   arguments, identities and environment, not only synthetic Node workers.
+
+Fault injection stays in test fixtures. Dangerous host-wide OOM is not a test
+strategy: use controlled owner termination and bounded isolated resource
+fixtures in Actions. Do not infer global power-loss/disk-durability guarantees
+from SIGKILL tests. Report simulated failures separately from native evidence.
+
+Platform references:
+
+- [systemd termination](https://www.freedesktop.org/software/systemd/man/latest/systemd.kill.html)
+- [systemd service lifetime](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html)
+- [systemd-run transport/options](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html)
+- [Linux cgroup-v2 events and termination](https://docs.kernel.org/admin-guide/cgroup-v2.html)
+- [Windows Job inheritance and lifecycle](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
+- [CreateJobObject existing-object semantics](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createjobobjecta)
+- [TerminateJobObject](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-terminatejobobject)
+- [QueryInformationJobObject](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-queryinformationjobobject)
+
 ### Additional Actions gates
 
 Run these on Linux and Windows in addition to real first-deploy/update/restore:
