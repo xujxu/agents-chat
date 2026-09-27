@@ -3093,10 +3093,59 @@ The caller may then retire workers and release the lock through the existing
 APIs. `close()` remains descriptor cleanup only. Failed/partial retirement
 retains the intent and lock for inspection; no generic retry or cold adoption.
 
-- [ ] Push native retirement contracts and confirm causal missing-method red.
-- [ ] Implement original live handoff, accepted-state gate and exact durable
+- [x] Push native retirement contracts and confirm causal missing-method red.
+- [x] Implement original live handoff, accepted-state gate and exact durable
   deletion inventory; include helper in saved engine.
-- [ ] Exercise preserved backup/state/runtime, worker retirement/unlock,
+- [x] Exercise preserved backup/state/runtime, worker retirement/unlock,
   rejection before acceptance/prior-runtime/changed generation, replacement
   and partial deletion/controller-death cases in Actions.
-- [ ] Record evidence and remaining explicit service-recovery/public wiring.
+- [x] Record evidence and remaining explicit service-recovery/public wiring.
+
+Accepted executable revision `26cf423db79e4e8808c44396e4fcb1dcc63b617e`,
+Actions `36327943345`: all four jobs successful. Exact counts: 66 Linux native,
+19 Windows coordinator plus 13 Job primitives, 216 Linux shared, 212 Windows
+shared plus four Linux-only skips. The five new retirement tests include
+multiple rejection and deletion-fault cases. Linux native job budget is now
+ten minutes to cover the expanded real-service lifecycle suite.
+
+- Causal red `e6dd19c` / `36327393383`: missing live `retire()` method.
+- Initial implementation `a03245f` / `36327616728`: all four jobs passed.
+- Faults and repeated operation coverage `71222c9` / `36327856081`: all four
+  jobs passed, including actual controller death after the held-file unlink.
+- Final `26cf423` / `36327943345`: close original authority handles before
+  removing the last service-retirement marker; retain blocked evidence on
+  close failure. Worker admission remains closed by the retirement marker
+  after the activation journal has been deleted.
+
+The original live activation performs a handoff check after independently
+capturing the exact deletion files, so a replaced journal/held inode cannot
+become new authority merely by being captured. Checks retain original state
+and lock files/directories, source configuration and activated runtime
+generation. The accepted state must preserve the activation's transaction
+identity and metadata; prior-runtime restart and an unaccepted running
+service are rejected. The original activated service must still be running;
+a subsequent systemd restart is not adopted.
+
+Two real native cycles now execute stop -> owned command -> seal -> activate
+-> synthetic acceptance -> service retirement -> worker retirement -> unlock,
+then reuse the same control/helper slots. The runtime is an actual installed
+npm fixture with detached children; synthetic acceptance is **not** an HTTP
+health check or complete Next.js historical deployment acceptance.
+State and backup sentinels remain byte-identical, and retirement preserves
+the activated InvocationID rather than stopping/restarting the application.
+
+Fault coverage includes retirement-intent flush, second unlink, final marker
+unlink, acceptance drift after first unlink and descriptor close. Every fault
+retains service evidence and blocks ordinary lock release/reentry. Real
+controller SIGKILL after the held-file unlink leaves the accepted service
+running, durable exact intent, both journals and the original lock.
+No recursive production deletion or implicit retry is provided.
+
+Next delivery work remains: explicit service recovery/cleanup from a new
+controller, prior-runtime restart terminal-state handling, recovery after
+activation/health failure, and initially inactive or changed-unit installations.
+The final marker-removed-before-unlock window still leaves the original lock
+on controller death; no generic stale-lock adoption is implied. Windows
+installed-service/task/account control, complete native snapshot inventory,
+public deploy/update/restore wiring and true historical app acceptance remain
+outstanding. Main, public entry scripts and the live deployment are unchanged.
