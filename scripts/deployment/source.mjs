@@ -10,7 +10,10 @@ async function git(project, args, allowedExitCodes = []) {
   try {
     const { stdout } = await execute('git', ['-C', project, ...args], {
       maxBuffer: 8 * 1024 * 1024, timeout: 120000, windowsHide: true,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      env: {
+        ...process.env, GIT_TERMINAL_PROMPT: '0',
+        GIT_OPTIONAL_LOCKS: '0', GIT_NO_LAZY_FETCH: '1',
+      },
     });
     return { code: 0, output: stdout };
   } catch (error) {
@@ -46,10 +49,44 @@ export async function inspectSource(project) {
   return { project: root, commit, branch, modifiedRuntime: modifiedRuntime.sort() };
 }
 
-export async function resolveTarget(project, { revision, noPull = false } = {}) {
+function validateTargetOptions(revision, noPull) {
   if (revision !== undefined && (!fullCommit.test(revision) || noPull)) {
     throw new Error('Explicit revision requires a full commit ID and cannot be combined with no-pull.');
   }
+}
+
+export async function previewTarget(project, { revision, noPull = false } = {}) {
+  validateTargetOptions(revision, noPull);
+  const source = await inspectSource(project);
+  if (noPull) {
+    return { commit: source.commit, expectedSourceCommit: source.commit, mode: 'unchanged', freshness: 'local-only' };
+  }
+  let ref = revision;
+  if (!ref) {
+    if (!source.branch) return null;
+    ref = (await git(source.project, [
+      'for-each-ref', '--format=%(upstream)', '--', `refs/heads/${source.branch}`,
+    ])).output.trim();
+    if (!ref) return null;
+  }
+  const local = await git(source.project, [
+    'rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`,
+  ], [1]);
+  if (local.code === 1) return null;
+  const commit = local.output.trim();
+  if (!fullCommit.test(commit)) throw new Error('Cannot resolve local preview commit identity.');
+  if (!revision) {
+    const ancestor = await git(source.project, ['merge-base', '--is-ancestor', source.commit, commit], [1]);
+    if (ancestor.code === 1) throw new Error('Local source and upstream diverged; update requires fast-forward history.');
+  }
+  return {
+    commit, expectedSourceCommit: source.commit, branch: source.branch,
+    mode: revision ? 'explicit' : 'fast-forward', freshness: 'local-only',
+  };
+}
+
+export async function resolveTarget(project, { revision, noPull = false } = {}) {
+  validateTargetOptions(revision, noPull);
   const source = await inspectSource(project);
   if (revision) {
     return { commit: await commitAt(source.project, revision), expectedSourceCommit: source.commit, mode: 'explicit' };

@@ -1,5 +1,7 @@
+import { alreadyCurrent, previewUpdate } from './update-policy.mjs';
+
 const operationNames = [
-  'record', 'inspect', 'resolveTarget', 'capacity', 'stop', 'snapshot', 'verifySnapshot',
+  'record', 'inspect', 'resolveTarget', 'admit', 'capacity', 'stop', 'snapshot', 'verifySnapshot',
   'rotate', 'selectSource', 'dependencies', 'build', 'configure', 'start', 'verify',
 ];
 
@@ -7,6 +9,7 @@ export async function runDeployment(options, operations) {
   if (!options || !['deploy', 'update'].includes(options.operation)) {
     throw new Error('Deployment transaction requires deploy or update operation.');
   }
+  if (options.dryRun) return previewUpdate(options, operations?.previewReaders);
   if (!operations || operationNames.some(name => typeof operations[name] !== 'function')) {
     throw new Error('Deployment transaction requires every native operation.');
   }
@@ -30,6 +33,16 @@ export async function runDeployment(options, operations) {
     throw new Error('Update requires an existing deployment.');
   }
   context.target = await invoke('resolveTarget');
+  const admission = await invoke('admit');
+  if (admission?.compatibility !== 'passed') {
+    throw new Error('Deployment compatibility admission must pass before downtime.');
+  }
+  const current = alreadyCurrent({
+    ...admission.current, operation: options.operation, target: context.target?.commit,
+  });
+  if (current.skip && inspected.running) {
+    return { status: 'already-current', backupCreated: false };
+  }
   await invoke('capacity');
   await record('preflight');
   let stopAttempted = false;
