@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { fork } from 'node:child_process';
 import { chmod, link, mkdir, readFile, rename, stat, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
@@ -271,4 +272,81 @@ test('Linux storage enforces private modes and rejects linked roots and files', 
   await rename(file, `${file}.original`);
   await symlink(`${file}.original`, file);
   await assert.rejects(readWorkerJournal(control, owner), unsafe);
+});
+
+function journalProcess(t, control, owner) {
+  const child = fork(new URL('./deployment-worker-journal-child.mjs', import.meta.url),
+    [control, JSON.stringify(owner)], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let stderr = '';
+  child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-4096); });
+  const exited = new Promise((resolve, reject) => {
+    child.once('exit', (code, signal) => resolve({ code, signal }));
+    child.once('error', reject);
+  });
+  const ready = new Promise((resolve, reject) => {
+    child.once('message', resolve);
+    child.once('error', reject);
+    child.once('exit', code => reject(new Error(`Journal child exited before ready: ${code}; ${stderr}`)));
+  });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
+  });
+  return { child, exited, ready };
+}
+
+test('killed writer leaves flushed intent evidence that a new process cannot reclaim', {
+  timeout: 30000,
+}, async t => {
+  const { control, owner } = await fixture(t);
+  const first = journalProcess(t, control, owner);
+  assert.deepEqual(await first.ready, { status: 'recorded' });
+  first.child.kill('SIGKILL');
+  await first.exited;
+  assert.equal((await readWorkerJournal(control, owner)).at(-1).phase, 'intent');
+  const second = journalProcess(t, control, owner);
+  assert.deepEqual(await second.ready, { status: 'failed', code: 'DEPLOYMENT_WORKER_UNSETTLED' });
+  assert.equal((await second.exited).code, 1);
+  assert.equal((await readWorkerJournal(control, owner)).length, 1);
+});
+
+test('independent processes cannot both obtain the same journal writer', {
+  timeout: 30000,
+}, async t => {
+  const { control, owner } = await fixture(t);
+  const children = [journalProcess(t, control, owner), journalProcess(t, control, owner)];
+  const outcomes = await Promise.all(children.map(child => child.ready));
+  assert.equal(outcomes.filter(outcome => outcome.status === 'recorded').length, 1);
+  assert.equal(outcomes.filter(outcome => outcome.code === 'DEPLOYMENT_WORKER_UNSETTLED').length, 1);
+  for (let index = 0; index < children.length; index++) {
+    if (outcomes[index].status === 'recorded') children[index].child.send('close');
+  }
+  await Promise.all(children.map(child => child.exited));
+  assert.equal((await readWorkerJournal(control, owner)).length, 1);
+});
+
+test('recorded transition and domain corruption is rejected on reentry, not just append', async t => {
+  const { control, owner, receipt, file, domain } = await fixture(t);
+  const histories = [
+    [receipt('owned')],
+    [receipt('intent'), receipt('admitted')],
+    [receipt('intent'), receipt('owned'), receipt('settled', null)],
+    [receipt('intent'), receipt('blocked', null), receipt('settled', null)],
+    [receipt('intent'), receipt('owned'), receipt('admitted', { ...domain, invocationId: 'b'.repeat(32) })],
+    [receipt('intent'), { ...receipt('owned'), unknown: true }],
+  ];
+  for (const records of histories) {
+    await writeFile(file, records.map(record => `${JSON.stringify(record)}\n`).join(''), { mode: 0o600 });
+    await assert.rejects(readWorkerJournal(control, owner), unsafe);
+  }
+});
+
+test('journal inspection does not require the old checkout to remain present', async t => {
+  const { create, control, project, owner, receipt } = await fixture(t);
+  const journal = await create();
+  await journal.record(receipt('intent'));
+  await journal.close();
+  await rename(project, `${project}-replaced`);
+  assert.equal((await readWorkerJournal(control, owner)).at(-1).phase, 'intent');
+  await assert.rejects(createWorkerJournal(control, owner), unsafe);
 });
