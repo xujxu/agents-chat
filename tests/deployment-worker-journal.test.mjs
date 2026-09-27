@@ -421,3 +421,32 @@ test('invalid UTF-8 cannot silently substitute a different native domain identit
   await assert.rejects(readWorkerJournal(control, owner), unsafe);
   assert.deepEqual(await readFile(file), bytes);
 });
+
+test('Linux creation preserves both directory flush and close errors without deleting evidence', {
+  skip: process.platform !== 'linux',
+}, async t => {
+  const { control, owner, file } = await fixture(t);
+  const probe = await open(control, 'r');
+  const prototype = Object.getPrototypeOf(probe);
+  await probe.close();
+  const sync = prototype.sync;
+  const flushFailure = new Error('directory flush failed');
+  const closeFailure = new Error('directory close failed');
+  t.mock.method(prototype, 'sync', async function () {
+    if (!(await this.stat()).isDirectory()) return sync.call(this);
+    const close = this.close;
+    t.mock.method(this, 'close', async function () {
+      await close.call(this);
+      throw closeFailure;
+    });
+    throw flushFailure;
+  });
+  await assert.rejects(createWorkerJournal(control, owner), error => {
+    unsafe(error);
+    assert.deepEqual(error.cause.errors, [flushFailure, closeFailure]);
+    return true;
+  });
+  t.mock.restoreAll();
+  assert.equal(await readFile(file, 'utf8'), '');
+  await assert.rejects(createWorkerJournal(control, owner), unsafe);
+});
