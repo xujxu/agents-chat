@@ -276,65 +276,6 @@ test('actual controller death retains inhibition and blocked status both before 
       await exited;
     });
 
-    test('failed stop retains durable inhibition and never claims a stopped service', async t => {
-      const f = await stopFixture(t, { settings: '[Unit]\nRefuseManualStop=yes' });
-      await assert.rejects(stopLinuxService(f), error => error.recoveryAllowed === false);
-      assert.match(await readFile(f.inhibition, 'utf8'), /RefuseManualStart=yes/);
-      assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
-      const receipts = (await readFile(path.join(f.control, 'service-stop.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
-      assert.deepEqual(receipts.map(record => record.phase), ['intent', 'inhibited', 'stop-requested']);
-      assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
-    });
-
-    test('restoring the original inhibitor cannot authorize a replacement service generation', async t => {
-      const f = await stopFixture(t);
-      const stopped = await stopLinuxService(f);
-      try {
-        const original = `${f.inhibition}.held`;
-        await rename(f.inhibition, original);
-        await systemctl('daemon-reload');
-        await systemctl('start', f.unit);
-        await rename(original, f.inhibition);
-        await systemctl('daemon-reload');
-        await assert.rejects(stopped.checkStopped(), error => error.recoveryAllowed === false);
-        assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
-      } finally { await stopped.close(); }
-    });
-
-    test('receipt flush failure never crosses the next manager mutation and retains blocked evidence', async t => {
-      for (const phase of ['intent', 'inhibited']) {
-        const f = await stopFixture(t);
-        const journalPath = path.join(f.control, 'service-stop.ndjson');
-        const nativeOpen = fs.open;
-        let injected = false;
-        fs.open = async function (file, ...args) {
-          const handle = await nativeOpen(file, ...args);
-          if (file === journalPath) {
-            const sync = handle.sync.bind(handle);
-            handle.sync = async () => {
-              await sync();
-              const text = await readFile(file, 'utf8');
-              if (text.trim() && JSON.parse(text.trim().split('\n').at(-1)).phase === phase) {
-                injected = true;
-                throw new Error('Injected service receipt flush failure.');
-              }
-            };
-          }
-          return handle;
-        };
-        syncBuiltinESMExports();
-        try { await assert.rejects(stopLinuxService(f), error => error.recoveryAllowed === false); }
-        finally { fs.open = nativeOpen; syncBuiltinESMExports(); }
-        assert.equal(injected, true);
-        assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
-        if (phase === 'intent') await assert.rejects(readFile(f.inhibition), { code: 'ENOENT' });
-        else {
-          assert.match(await readFile(f.inhibition, 'utf8'), /RefuseManualStart=yes/);
-          await assert.rejects(systemctl('start', f.unit), /manual|refus/i);
-        }
-        assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
-      }
-    });
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`Stop controller did not reach receipt: ${diagnostic}`)), 45000);
       child.once('message', value => { clearTimeout(timer); resolve(value); });
@@ -351,10 +292,14 @@ test('actual controller death retains inhibition and blocked status both before 
     await systemctl('daemon-reload');
     await assert.rejects(systemctl('start', f.unit), /manual|refus/i);
     if (phase === 'stop-requested') {
-      await systemctl('kill', '--kill-whom=all', '--signal=SIGKILL', f.unit);
+      const mainPid = Number((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim());
+      assert.ok(Number.isSafeInteger(mainPid) && mainPid > 1);
+      process.kill(mainPid, 'SIGKILL');
       let restartDenied = false;
+      let observed = '';
       for (let attempt = 0; attempt < 200; attempt++) {
-        const { stdout } = await systemctl('show', f.unit, '--property=ConditionResult,MainPID,ActiveState');
+        const { stdout } = await systemctl('show', f.unit, '--property=ConditionResult,MainPID,ActiveState,NRestarts,Result');
+        observed = stdout;
         if (/^ConditionResult=no$/m.test(stdout) && /^MainPID=0$/m.test(stdout)
           && /^ActiveState=(inactive|failed)$/m.test(stdout)) {
           restartDenied = true;
@@ -362,7 +307,67 @@ test('actual controller death retains inhibition and blocked status both before 
         }
         await delay(25);
       }
-      assert.equal(restartDenied, true, 'Automatic on-failure restart must fail its persistent start condition.');
+      assert.equal(restartDenied, true, `Automatic on-failure restart must fail its persistent start condition: ${observed}`);
     }
+  }
+});
+
+test('failed stop retains durable inhibition and never claims a stopped service', async t => {
+  const f = await stopFixture(t, { settings: '[Unit]\nRefuseManualStop=yes' });
+  await assert.rejects(stopLinuxService(f), error => error.recoveryAllowed === false);
+  assert.match(await readFile(f.inhibition, 'utf8'), /RefuseManualStart=yes/);
+  assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+  const receipts = (await readFile(path.join(f.control, 'service-stop.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(receipts.map(record => record.phase), ['intent', 'inhibited', 'stop-requested']);
+  assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+});
+
+test('restoring the original inhibitor cannot authorize a replacement service generation', async t => {
+  const f = await stopFixture(t);
+  const stopped = await stopLinuxService(f);
+  try {
+    const original = `${f.inhibition}.held`;
+    await rename(f.inhibition, original);
+    await systemctl('daemon-reload');
+    await systemctl('start', f.unit);
+    await rename(original, f.inhibition);
+    await systemctl('daemon-reload');
+    await assert.rejects(stopped.checkStopped(), error => error.recoveryAllowed === false);
+    assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+  } finally { await stopped.close(); }
+});
+
+test('receipt flush failure never crosses the next manager mutation and retains blocked evidence', async t => {
+  for (const phase of ['intent', 'inhibited']) {
+    const f = await stopFixture(t);
+    const journalPath = path.join(f.control, 'service-stop.ndjson');
+    const nativeOpen = fs.open;
+    let injected = false;
+    fs.open = async function (file, ...args) {
+      const handle = await nativeOpen(file, ...args);
+      if (file === journalPath) {
+        const sync = handle.sync.bind(handle);
+        handle.sync = async () => {
+          await sync();
+          const text = await readFile(file, 'utf8');
+          if (text.trim() && JSON.parse(text.trim().split('\n').at(-1)).phase === phase) {
+            injected = true;
+            throw new Error('Injected service receipt flush failure.');
+          }
+        };
+      }
+      return handle;
+    };
+    syncBuiltinESMExports();
+    try { await assert.rejects(stopLinuxService(f), error => error.recoveryAllowed === false); }
+    finally { fs.open = nativeOpen; syncBuiltinESMExports(); }
+    assert.equal(injected, true);
+    assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+    if (phase === 'intent') await assert.rejects(readFile(f.inhibition), { code: 'ENOENT' });
+    else {
+      assert.match(await readFile(f.inhibition, 'utf8'), /RefuseManualStart=yes/);
+      await assert.rejects(systemctl('start', f.unit), /manual|refus/i);
+    }
+    assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
   }
 });
