@@ -1002,3 +1002,303 @@ claim that this error-classification fix delivers native process containment.
 - N1 is complete. Native cgroup/Job adapters, their concrete implementation
   plan, and real-process acceptance remain outstanding, followed by the
   previously recorded public deploy/update/restore lifecycle work.
+
+## Native worker coordinator: bounded implementation batch N2
+
+This batch implements the shared admission/settlement ordering, not an OS
+adapter. Continue inline under the existing approval. Platform interop and
+transport code must follow in separate batches; no public command is wired
+to these callbacks until real native acceptance succeeds.
+
+**File map**
+
+- `scripts/deployment/owned-worker.mjs`: `runOwnedWorker` controls one gated
+  domain, its durable records and final settlement.
+- `tests/deployment-owned-worker.test.mjs`: deterministic adapter fixtures
+  exercising the coordinator's production control flow.
+- `.github/workflows/deployment-lifecycle.yml`: run the new contracts on both
+  existing OS jobs without local validation.
+
+### Adapter boundary
+
+`runOwnedWorker({ owner, signal }, { record, prepare })` takes an owner with
+exact fields `project`, `operationId`, `workerId`, `controllerIdentity`.
+`project` is absolute; other fields are nonempty bounded strings. The caller
+must capture the canonical project and live controller identity under the
+deployment lock, and create a fresh UUID worker ID. Inputs are copied/frozen.
+
+`record(receipt)` durably writes a receipt before returning. Receipt fields
+are `version: 1`, the frozen `owner`, `phase`, and `domain` (null until
+identified). It must reject write/flush failures. No commands, environment
+variables or raw errors enter receipts.
+
+`prepare({ owner, signal })` creates only a trusted gated bootstrap and returns
+a handle with:
+
+```js
+{
+  identity, // captured, immutable platform identity described below
+  run: async ({ signal }) => { /* one-use native command grant and result */ },
+  closeAdmission: async () => { /* irrevocably revoke grants */ },
+  stop: async () => { /* request exact-domain termination, not exit proof */ },
+  join: async () => { /* join all launch-capable controllers */ },
+  observe: async () => ({ identity, empty: true }),
+}
+```
+
+The comments above define callback responsibilities, not production fallback
+implementations. N2's test fixtures implement these callbacks explicitly.
+`prepare`/`run` must honor the same monotonic abort signal, including a
+synchronous check at the native grant boundary. Preparation must not release
+target code, including preload hooks. On preparation failure the coordinator
+cannot prove domain absence: record blocked, reject with
+`DEPLOYMENT_WORKER_UNSETTLED`, and never retry creation.
+
+Linux identity has exact fields `kind: 'systemd'`, `bootId` (UUID),
+`manager: 'system'`, `unit` (unique `agents-deploy-<UUID>.service`),
+`invocationId` (32 lowercase hex), `controlGroup` (absolute, no dot segments).
+Windows identity has exact fields `kind: 'windows-job'`,
+`name: 'Local\\agents-deploy-<UUID>'`, `generation` (UUID),
+`accountSid`, `sessionId` (nonnegative integer), and `ownerIdentity`.
+The adapter retains the original Job handle; serialized identity alone never
+grants permission to recreate/query/terminate a Job. Observation returns the
+same captured identity, compared field-by-field, not object property order.
+
+Ordered flow:
+
+```text
+abort check -> record intent -> abort check -> prepare gated domain
+-> validate/copy identity -> abort check -> record owned
+-> abort check -> record admitted -> abort check -> run once
+-> abort local grant signal -> closeAdmission -> stop -> join -> observe
+-> check exact identity AND empty === true -> record settled -> return result
+```
+
+On any post-intent error, close local admission and attempt all three cleanup
+callbacks in order, even when one fails. Never call `observe` if closing,
+stopping or joining failed. An empty report before that sequence cannot be
+used. Successful ordinary command failure still gets a settlement receipt
+and rethrows the original error. A wrapped unsafe command failure, any cleanup
+failure, missing/mismatched observation or receipt failure remains unsafe;
+record blocked and preserve all original errors. `settled` means only no
+remaining worker, never application acceptance. Cancellation is checked again
+after result/receipt awaits so a late successful callback cannot return success.
+
+There is deliberately no internal Promise.race that abandons cleanup. The
+existing `runStage` supplies the deadline and settlement allowance. If a native
+callback never settles, runStage retains blocked state; a late continuation
+still sees closed admission and cannot grant a target command.
+
+### Task N2
+
+- [ ] **Step 1: Add causal contract tests.**
+
+Fixtures record each callback and return a synthetic validated identity. Test:
+
+```js
+assert.deepEqual(calls, [
+  'intent', 'prepare', 'owned', 'admitted', 'run',
+  'closeAdmission', 'stop', 'join', 'observe', 'settled',
+]);
+assert.equal(result, 23);
+```
+
+Cover abort before intent; abort during intent/prepare/owned/admitted; command
+error identity; detached-work cleanup ordering; each cleanup failure; identity
+replacement/nonempty/malformed observation; intent/owned/admitted/settled/
+blocked receipt failures; preparation ambiguity; nested unsafe errors; and
+cancellation during settlement. Assert no grant after abort and no observation
+after failed controller settlement. Both OS identity shapes get fixtures;
+these are explicitly mocked contracts, not native process evidence.
+
+- [ ] **Step 2: Push tests and collect causal red in Actions.**
+
+```bash
+git add tests/deployment-owned-worker.test.mjs .github/workflows/deployment-lifecycle.yml docs/superpowers/plans/2026-09-27-cross-platform-deployment-backup.md
+git commit -m "test: define native worker admission and settlement ordering" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+git push origin feat/deployment-backup
+gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
+```
+
+Expected red: missing `owned-worker.mjs`. Workflow runs the exact new test file
+alongside existing deployment contracts, on Linux and Windows.
+
+- [ ] **Step 3: Implement coordinator with the following core structure.**
+
+```js
+import path from 'node:path';
+import { hasUnsettledWorker } from './worker-errors.mjs';
+
+const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
+const methods = ['run', 'closeAdmission', 'stop', 'join', 'observe'];
+const text = value => typeof value === 'string' && value.length > 0
+  && value.length <= 4096 && !/[\0\r\n]/.test(value);
+
+function exact(value, fields, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).length !== fields.length
+    || fields.some(key => !Object.hasOwn(value, key))) {
+    throw new Error(`Invalid owned worker ${label}.`);
+  }
+  return Object.freeze(Object.fromEntries(fields.map(key => [key, value[key]])));
+}
+
+function captureOwner(value) {
+  const owner = exact(value,
+    ['project', 'operationId', 'workerId', 'controllerIdentity'], 'owner');
+  if (!Object.values(owner).every(text) || !path.isAbsolute(owner.project)
+    || !uuid.test(owner.workerId)) throw new Error('Invalid owned worker owner.');
+  return owner;
+}
+
+function captureDomain(value, owner) {
+  let identity;
+  if (value?.kind === 'systemd') {
+    identity = exact(value,
+      ['kind', 'bootId', 'manager', 'unit', 'invocationId', 'controlGroup'], 'domain');
+    const unit = `agents-deploy-${owner.workerId}.service`;
+    if (!Object.values(identity).every(text) || !uuid.test(identity.bootId)
+      || identity.manager !== 'system' || identity.unit !== unit
+      || !/^[a-f0-9]{32}$/.test(identity.invocationId)
+      || !identity.controlGroup.startsWith('/')
+      || !identity.controlGroup.endsWith(`/${unit}`)
+      || identity.controlGroup.slice(1).split('/').some(part => ['', '.', '..'].includes(part))) {
+      throw new Error('Invalid owned worker systemd identity.');
+    }
+  } else if (value?.kind === 'windows-job') {
+    identity = exact(value,
+      ['kind', 'name', 'generation', 'accountSid', 'sessionId', 'ownerIdentity'], 'domain');
+    if (identity.name !== `Local\\agents-deploy-${owner.workerId}`
+      || identity.generation !== owner.workerId || !text(identity.accountSid)
+      || !/^S-1-[0-9]+(?:-[0-9]+)+$/.test(identity.accountSid)
+      || !Number.isSafeInteger(identity.sessionId) || identity.sessionId < 0
+      || identity.ownerIdentity !== owner.controllerIdentity) {
+      throw new Error('Invalid owned worker Windows Job identity.');
+    }
+  } else {
+    throw new Error('Unsupported owned worker domain.');
+  }
+  return identity;
+}
+
+function failureCause(errors) {
+  return errors.length === 1 ? errors[0]
+    : new AggregateError(errors, 'Owned worker execution, cleanup or receipt recording failed.');
+}
+
+export async function runOwnedWorker({ owner: suppliedOwner, signal }, { record, prepare }) {
+  const owner = captureOwner(suppliedOwner);
+  if (typeof record !== 'function' || typeof prepare !== 'function') {
+    throw new Error('Invalid owned worker adapters.');
+  }
+  const controller = new AbortController();
+  const cancel = () => controller.abort(signal.reason);
+  signal?.throwIfAborted();
+  signal?.addEventListener('abort', cancel, { once: true });
+  let domain = null;
+  let handle;
+  let attempted = false;
+  let prepared = false;
+  let uncertain = false;
+  let result;
+  const errors = [];
+  const receipt = phase => Object.freeze({ version: 1, owner, phase, domain });
+  const write = async phase => {
+    try { await record(receipt(phase)); }
+    catch (error) { uncertain = true; throw error; }
+  };
+  try {
+    await record(receipt('intent'));
+    try {
+      controller.signal.throwIfAborted();
+      attempted = true;
+      handle = await prepare({ owner, signal: controller.signal });
+      if (!handle || methods.some(name => typeof handle[name] !== 'function')) {
+        throw new Error('Incomplete owned worker handle.');
+      }
+      domain = captureDomain(handle.identity, owner);
+      prepared = true;
+      controller.signal.throwIfAborted();
+      await write('owned');
+      controller.signal.throwIfAborted();
+      await write('admitted');
+      controller.signal.throwIfAborted();
+      result = await handle.run({ signal: controller.signal });
+      controller.signal.throwIfAborted();
+    } catch (error) {
+      errors.push(error);
+      if (attempted && !prepared) uncertain = true;
+    }
+
+    // Close the grant signal before awaiting any native controller cleanup.
+    controller.abort(new Error('Owned worker admission closed.'));
+    let cleanupFailed = false;
+    if (handle) {
+      for (const method of ['closeAdmission', 'stop', 'join']) {
+        try {
+          if (typeof handle[method] !== 'function') {
+            throw new Error(`Missing owned worker ${method} operation.`);
+          }
+          await handle[method]();
+        } catch (error) {
+          errors.push(error);
+          cleanupFailed = true;
+          uncertain = true;
+        }
+      }
+      if (prepared && !cleanupFailed) {
+        try {
+          const observation = exact(await handle.observe(), ['identity', 'empty'], 'observation');
+          const observed = captureDomain(observation.identity, owner);
+          if (observation.empty !== true
+            || Object.keys(domain).some(key => domain[key] !== observed[key])) {
+            throw new Error('Owned worker extinction was not confirmed for the original domain.');
+          }
+        } catch (error) {
+          errors.push(error);
+          uncertain = true;
+        }
+      }
+    }
+    uncertain ||= errors.some(hasUnsettledWorker);
+    if (!uncertain) {
+      try { await write('settled'); }
+      catch (error) { errors.push(error); }
+    }
+    if (uncertain) {
+      try { await write('blocked'); }
+      catch (error) { errors.push(error); }
+      throw Object.assign(new Error(
+        'Owned worker settlement is uncertain; retain lock and backup. Do not restore or restart.',
+        { cause: failureCause(errors) },
+      ), { code: 'DEPLOYMENT_WORKER_UNSETTLED', recoveryAllowed: false });
+    }
+    if (errors.length) throw failureCause(errors);
+    signal?.throwIfAborted();
+    return result;
+  } finally {
+    signal?.removeEventListener('abort', cancel);
+  }
+}
+```
+
+The detailed contracts, exact phases, identity schemas, cleanup order and
+return/error behavior above are authoritative; the implementation is kept in
+one focused file. Do not add service activation, command parsing, disk storage,
+timer policy or recovery lock reclamation here.
+
+- [ ] **Step 4: Push implementation and require green on both platforms.**
+
+```bash
+git add scripts/deployment/owned-worker.mjs
+git commit -m "feat: coordinate owned worker admission and settlement" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+git push origin feat/deployment-backup
+gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
+```
+
+- [ ] **Step 5: Record accepted code/run and carry native integration forward.**
+
+N2 cannot unblock existing deployment state, release a lock, or establish OS
+ownership itself. Durable storage/private engine, concrete platform transport,
+original-handle/cgroup observations, crash reentry and all eight real-process
+groups remain required before public script integration.

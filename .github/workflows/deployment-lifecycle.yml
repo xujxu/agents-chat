@@ -58,3 +58,4 @@ jobs:
           tests/deployment-update-policy.test.mjs
           tests/deployment-stage-runner.test.mjs
           tests/deployment-worker-errors.test.mjs
+          tests/deployment-owned-worker.test.mjs
