@@ -5,10 +5,11 @@ export function hasUnsettledWorker(error) {
   const seen = new Set();
   while (pending.length) {
     const current = pending.pop();
-    if (current === null || typeof current !== 'object' || seen.has(current)) continue;
+    if (current === null || !['object', 'function'].includes(typeof current) || seen.has(current)) continue;
     if (seen.size >= maximumNodes) return true;
     seen.add(current);
     try {
+      pending.push(Object.getPrototypeOf(current));
       const fields = ['recoveryAllowed', 'cause', 'errors'].map(key =>
         Object.getOwnPropertyDescriptor(current, key));
       if (fields.some(field => field && !Object.hasOwn(field, 'value'))) return true;

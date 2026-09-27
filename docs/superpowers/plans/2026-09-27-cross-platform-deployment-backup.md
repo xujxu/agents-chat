@@ -882,6 +882,13 @@ and an outer `recoveryAllowed=true` wrapping an unsafe inner failure.
 Uninspectable/over-budget graphs are conservatively unsafe; they cannot be
 silently treated as normal failures.
 
+Implementation refinement: include callable errors and inspect inherited
+descriptors under the same bounded graph budget. The old direct property
+checks recognized inherited `recoveryAllowed=false`; replacing those checks
+must not regress that behavior. Prototype accessors are unsafe without being
+invoked, and failed prototype inspection is unsafe like failed descriptor
+inspection.
+
 For transaction integration inject `wrapped` and `aggregate` from inspect,
 snapshot, build, and recovery stop. Assert no subsequent mutation and durable
 blocked phase; cleanup/state errors retain all original causes. For the stage
@@ -911,10 +918,11 @@ export function hasUnsettledWorker(error) {
   const seen = new Set();
   while (pending.length) {
     const current = pending.pop();
-    if (current === null || typeof current !== 'object' || seen.has(current)) continue;
+    if (current === null || !['object', 'function'].includes(typeof current) || seen.has(current)) continue;
     if (seen.size >= 256) return true;
     seen.add(current);
     try {
+      pending.push(Object.getPrototypeOf(current));
       const fields = ['recoveryAllowed', 'cause', 'errors'].map(key =>
         Object.getOwnPropertyDescriptor(current, key));
       if (fields.some(field => field && !Object.hasOwn(field, 'value'))) return true;
