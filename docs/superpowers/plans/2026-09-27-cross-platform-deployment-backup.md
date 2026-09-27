@@ -2748,3 +2748,38 @@ Factor bounded native manager execution/properties parsing into
 inspector. Include both new modules in the closed saved-worker bundle.
 No service mutation or account migration is introduced. Actual service stop,
 restart suppression and watchdog/ACP ownership remain separate work.
+
+### Installed Linux account inspection acceptance
+
+- [x] Causal missing-module red `52d16b3`, Actions `36322114084`.
+- [x] Implement read-only configured/running account inspection and shared
+  bounded systemd command/property reader in `f37823e`.
+- [x] Resolve named/numeric User/Group and implicit root/primary group from
+  NSS; capture NSS HOME without substituting SUDO_USER or project ownership.
+- [x] Refuse a different canonical project, dynamic accounts, explicit or
+  inherited supplementary groups, root namespaces and process UID/GID/group
+  disagreement. Compare the service snapshot and PID/start identity again
+  before returning; make no service mutation.
+- [x] Accept a failed service's configured identity without inventing a live
+  process. Real failed-unit and process-only group drift cases in `bc875a1`.
+- [x] Final full Actions acceptance:
+  `bc875a1d60b603b5c02368441a19646f791d4c1a`, run `36322656839`.
+  All four jobs succeeded: 38 Linux native (25 prior worker/operation cases
+  plus 13 account-inspection cases), 19 Windows coordinator cases plus 13
+  Job primitives, 212 Linux shared, 208 Windows shared plus four platform skips.
+
+Intermediate run `36322276541` failed only because the DynamicUser test unit
+did not start, before reaching inspection. Test provisioning now uses `/`
+for that fixture's working directory rather than its host temporary directory,
+registers cleanup before startup, and reports bounded systemd exit properties
+on startup failure. Production checks were not relaxed. `a0a7940` /
+`36322483913` passed all four jobs before the final additional boundary cases.
+
+This is a read-only account snapshot, not proof of service ownership and not
+authority for a future destructive action. The future locked service adapter
+must validate ExecStart/unit sources, retain the actual application domain,
+prevent restart/reentry, and revalidate identity before service mutation.
+Accounts needing supplementary groups are explicitly unsupported for now;
+they are not silently migrated to fewer groups or to root. Windows installed
+account/ACL/task handling remains unfinished. Public deploy/update/restore
+files, main and the live deployment remain unchanged.
