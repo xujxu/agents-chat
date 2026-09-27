@@ -86,8 +86,7 @@ test('normal upgrade fetches first, then fast-forwards only during source select
   const { root, project, next } = await repository(t);
   await git(project, ['switch', 'main']);
   const client = path.join(root, 'client');
-  await execute('git', ['clone', '--no-hardlinks', project, client]);
-  await git(client, ['config', 'core.autocrlf', 'false']);
+  await execute('git', ['clone', '--config', 'core.autocrlf=false', '--no-hardlinks', project, client]);
   await writeFile(path.join(project, 'app.txt'), 'third application\n');
   await git(project, ['commit', '-am', 'third']);
   const third = await git(project, ['rev-parse', 'HEAD']);
@@ -105,7 +104,7 @@ test('diverged branch is refused without resetting local commits', async t => {
   const { root, project } = await repository(t);
   await git(project, ['switch', 'main']);
   const client = path.join(root, 'client');
-  await execute('git', ['clone', '--no-hardlinks', project, client]);
+  await execute('git', ['clone', '--config', 'core.autocrlf=false', '--no-hardlinks', project, client]);
   await git(client, ['config', 'user.name', 'Deployment fixture']);
   await git(client, ['config', 'user.email', 'fixture@example.invalid']);
   await writeFile(path.join(client, 'local.txt'), 'keep local work\n');
