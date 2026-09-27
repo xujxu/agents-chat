@@ -286,6 +286,18 @@ export async function releaseLock(root, owner) {
 export async function reconcileInterruptedOperation(root) {
   const directory = await ownedDirectory(root);
   const state = await loadState(directory);
+  let recoveryExists = true;
+  try { await lstat(path.join(directory, 'recovery-lock')); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    recoveryExists = false;
+  }
+  if (recoveryExists) {
+    return {
+      status: 'blocked', operationId: state?.operationId ?? null, phase: state?.phase ?? null,
+      message: 'Exclusive recovery evidence exists. Retain it and inspect the recovery controller before continuing.',
+    };
+  }
   if (state?.phase === 'blocked') {
     return {
       status: 'blocked', operationId: state.operationId, phase: state.phase,

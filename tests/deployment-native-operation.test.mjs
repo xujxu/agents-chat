@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, open, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -12,6 +12,7 @@ import { acquireLock, releaseLock, writeState } from '../scripts/deployment/stat
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation, readWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { readWorkerJournal } from '../scripts/deployment/worker-journal.mjs';
+import { saveRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
 
 const execute = promisify(execFile);
 const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
@@ -221,4 +222,44 @@ test('two accepted native operations reuse one helper slot without deleting back
   await releaseLock(f.control, lock);
   assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'state.json']);
   assert.equal(await readFile(path.join(f.control, 'backup', 'retained'), 'utf8'), 'original backup');
+});
+
+test('independent recovery releases interrupted cleanup only after a real native worker settled', { timeout: 120000 }, async t => {
+  const root = await temporaryDeployment(t);
+  const project = path.join(root, 'app');
+  const control = path.join(root, 'ctl');
+  await mkdir(project);
+  await mkdir(control, { mode: 0o700 });
+  const recovery = await saveRecoveryEngine({ source, control });
+  let runtime = { uid: 0, gid: 0 };
+  if (process.platform === 'win32') {
+    const { stdout } = await execute(process.env.DEPLOYMENT_TEST_PWSH, ['-NoProfile', '-NonInteractive', '-Command',
+      '@{accountSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;sessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId}|ConvertTo-Json -Compress'],
+    { timeout: 30000, maxBuffer: 4096 });
+    runtime = { pwsh: process.env.DEPLOYMENT_TEST_PWSH, ...JSON.parse(stdout.trim()) };
+  }
+  const child = fork(new URL('./deployment-retirement-child.mjs', import.meta.url),
+    [control, project, source, JSON.stringify(runtime)], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let stderr = '';
+  child.stderr.on('data', bytes => { stderr = (stderr + bytes.toString()).slice(-4096); });
+  const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
+  });
+  const { lock } = await new Promise((resolve, reject) => {
+    child.once('message', resolve);
+    child.once('error', reject);
+    child.once('exit', code => reject(new Error(`Native cleanup fixture exited ${code}: ${stderr}`)));
+  });
+  assert.equal(await readFile(path.join(project, 'native-completed'), 'utf8'), 'yes');
+  child.kill('SIGKILL');
+  await exited;
+  const invocation = retirementRecoveryInvocation(recovery, { control, project, operationId: lock.operationId });
+  const { stdout } = await execute(invocation.file, invocation.args,
+    { env: invocation.env, timeout: 60000, maxBuffer: 8192 });
+  assert.equal(JSON.parse(stdout).status, 'retired');
+  const next = await acquireLock(control, { project, operationId: randomUUID() });
+  await releaseLock(control, next);
+  assert.deepEqual((await readdir(control)).sort(), ['recovery-engine', 'state.json']);
 });
