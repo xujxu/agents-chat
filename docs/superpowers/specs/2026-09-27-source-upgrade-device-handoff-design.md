@@ -22,6 +22,10 @@ Fresh installation is a separate, deferred physical acceptance task.
 
 These are fixed revisions, not promises about future branch tips. Use dedicated
 deployment branches without resetting or deleting the existing PoC branch.
+The voice revision remains a candidate: its voice workflow passed, but E2E
+run `36290112623` failed in the iPhone WebKit job. Classify that failure before
+authorizing the voice upgrade; do not treat it as fully accepted or assume it
+has the same cause as earlier repaired tests. This does not block main setup.
 Fetch and confirm the target objects before downtime. Use `--no-pull` during
 deployment so the installer cannot silently change the selected revision.
 Main predates `scripts/upgrade.sh`; its first upgrade requires fetching and
@@ -41,7 +45,11 @@ switching to the candidate before invoking the candidate's deploy script.
    whether that optional file originally existed.
 5. Complete and inspect the backup before switching source. If backup fails
    before source changes, restart the unchanged PoC and stop the procedure.
-6. Switch to a new branch at the pinned main revision. Run the existing main
+6. After backup, remove only `VOICE_*` assignments from the project's runtime
+   environment file to represent an ordinary installation without previous voice
+   configuration. Inspect other environment sources first and stop on
+   conflicting overrides. Preserve all unrelated settings and model files.
+   Switch to a new branch at the pinned main revision. Run the existing main
    deploy script with `--no-pull`, using the same Node installation as the
    running service. Do not replace or remove the existing runtime drop-in.
 7. Confirm the effective service identity and command, service health, and
@@ -50,7 +58,9 @@ switching to the candidate before invoking the candidate's deploy script.
 Baseline acceptance requires login, existing chat history, a working ordinary
 chat exchange, and no voice control after a fresh page load. A changed Git HEAD
 or a successful build alone does not establish a running nonvoice baseline.
-Retain old voice settings and model files; main does not use them.
+Retain old voice settings in the private backup, not the active baseline
+configuration. Existing model files may remain on disk but do not substitute
+for a verified installer package.
 
 ## Upgrade from the accepted baseline
 
@@ -59,15 +69,25 @@ immediate rollback point for the voice upgrade; the original PoC backup remains
 separate. Preserve any chat changes made while accepting main.
 
 Switch to the pinned voice candidate and invoke its existing deploy script with
-`--no-pull --voice keep --non-interactive`. Do not use main's absent upgrade
-entry point, rerun model selection, or download another model.
+`--no-pull` in an interactive terminal, without `--voice keep` or
+`--non-interactive`. Use the existing combined menu: keep, enable SenseVoice,
+enable Whisper, or disable. The operator approved using this menu rather than
+implementing a two-stage enable/model prompt. Selecting a model means enabling
+voice; the default keep choice leaves this clean baseline disabled.
 
 Before activation, inspect only allowlisted voice configuration keys and account
-for the optional machine-level environment override. Retaining a model file
-alone does not establish the effective resource policy. The intended outcome is
-Whisper `base-q5_1`, one thread, and `legacy-low-memory`; old configurations with
-no explicit model or policy retain that default. Stop and resolve conflicting
-overrides rather than silently rewriting them.
+for the optional machine-level environment override. The intended model is
+Whisper `base-q5_1`, one thread. Explicit model selection currently writes
+`standard`, not the old PoC's `legacy-low-memory`. Disclose this before the
+operator proceeds; do not claim identical safeguards or silently alter the
+installer result.
+
+Whisper selection requires a verified local package and a trusted manifest
+checksum, passed as package arguments without preselecting the model. Its
+automatic experimental download is not available. Confirm that package source
+before scheduling the voice upgrade. Do not bypass package verification or
+reuse raw PoC files as though they were an accepted package. This prerequisite
+does not prevent preparing and accepting the nonvoice main baseline.
 
 ## Recovery
 
@@ -91,7 +111,8 @@ transcription, cancellation, transcript insertion/editing, and sending a normal
 message. Check permission denial and one retry after cancellation. Voice
 inference runs on the server, not on the phone.
 
-Keep recordings sequential and retain the existing small model and policy.
+Keep recordings sequential and use the selected small model. Record the
+effective resource policy rather than assuming it matches the old PoC.
 Observe failures explicitly; successful occasional PoC usage is not a memory,
 latency, accuracy, or device-compatibility guarantee. Do not overlap deliberate
 voice inference with the source build.
