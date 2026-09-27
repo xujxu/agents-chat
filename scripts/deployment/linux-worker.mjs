@@ -16,6 +16,14 @@ const native = (file, args) => execute(file, args, {
   env: nativeEnv, timeout: 30000, maxBuffer: 16384,
 });
 const bootId = async () => (await readFile('/proc/sys/kernel/random/boot_id', 'utf8')).trim();
+function diagnosticTail(base64) {
+  const bytes = Buffer.from(Buffer.from(base64, 'base64').toString('utf8'));
+  let start = Math.max(0, bytes.length - 8192);
+  // Replacement decoding can expand binary input; trim again on a UTF-8 boundary.
+  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start++;
+  return bytes.subarray(start).toString('utf8');
+}
+
 const properties = async unit => {
   const { stdout } = await native('/usr/bin/systemctl', ['--system', 'show', unit,
     '--property=InvocationID,ControlGroup,ActiveState,SubState,Result,MainPID,LoadState']);
@@ -154,8 +162,8 @@ export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command:
         }
         const output = {
           exitCode: result.exitCode, signal: result.signal,
-          stdout: Buffer.from(result.stdout, 'base64').toString('utf8'),
-          stderr: Buffer.from(result.stderr, 'base64').toString('utf8'),
+          stdout: diagnosticTail(result.stdout),
+          stderr: diagnosticTail(result.stderr),
         };
         if (result.exitCode !== 0 || result.signal !== null) {
           throw Object.assign(new Error('Native deployment command failed.'), {
