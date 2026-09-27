@@ -3398,3 +3398,38 @@ post-source/health failure and inactive/changed-unit support remain separate.
 Complete native backups, Windows installed task/account integration, public
 entrypoints and dual-platform historical Next.js acceptance remain outstanding.
 No PR, main or live-deployment changes.
+
+### Restartable service recovery through final unlock
+
+One execution batch covers dead recovery-owner continuation and its final
+metadata/lock deletion windows. It does not infer missing original live-service
+retirement authority or accept malformed/incomplete initial recovery leases.
+
+Use a retained Linux control-directory descriptor with `flock` on its inherited
+open-file description. Every service recovery acquires this nonblocking native
+admission before examining/mutating recovery evidence. Admission survives the
+short flock subprocess and releases automatically on actual controller death;
+the directory inode is retained and rechecked. A dead immutable recovery lease
+may be continued without deleting/replacing the guard or rewriting its owner.
+Live original/recovery owners, changed directories and competing admissions
+remain refusals.
+
+Publish full completion authority atomically as root `recovery-complete.json`
+before removing the service marker: original intent bytes/digest, original
+guard identity and lease file descriptor/content. This final receipt is outside
+the guard and survives removal of marker, lock owner/directory and guard
+owner/directory. It is retained after success for explicit idempotent recovery,
+but cannot release a newly acquired lock or accept changed application state.
+A later fresh recovery may retire a validated superseded receipt only while
+holding native admission, with no existing recovery guard and a different
+original lock token.
+
+- [ ] Add Actions-only native directory-admission/competition/SIGKILL contracts.
+- [ ] Implement `linux-recovery-admission.mjs` and include it in the saved bundle.
+- [ ] Resume only exact dead-owner leases under native admission.
+- [ ] Persist full completion proof and finish only its missing deletion prefix.
+- [ ] Kill the real recovery at service/worker deletion, completion publication,
+  service marker unlink, old lock owner/directory removal and guard owner/
+  directory removal; retry and verify byte-identical state/backup, same service,
+  exclusive admission and refusal to touch the next operation's lock.
+- [ ] Require all Actions jobs and record final evidence and scope boundaries.

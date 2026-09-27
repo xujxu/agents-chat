@@ -7,15 +7,33 @@ import { verifyRecoveryEngine } from '../scripts/deployment/saved-recovery-engin
 const [control, project, operationId, manifestSha256, pause = 'service'] = process.argv.slice(2);
 try {
   const saved = await verifyRecoveryEngine({ control, manifestSha256 });
+  const stop = async deleted => {
+    process.send({ deleted });
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
+  };
   const unlink = fs.unlink;
   fs.unlink = async file => {
     await unlink(file);
+    const targets = {
+      service: path.join(control, 'service-activation.ndjson'),
+      marker: path.join(control, 'service-retirement.json'),
+      'lock-owner': path.join(control, 'lock', 'owner.json'),
+      'guard-owner': path.join(control, 'recovery-lock', 'owner.json'),
+    };
     if (pause === 'worker' ? path.dirname(file) === path.join(control, 'worker-engine')
-      : file === path.join(control, 'service-activation.ndjson')) {
-      process.send({ deleted: file });
-      setInterval(() => {}, 1000);
-      await new Promise(() => {});
-    }
+      : file === targets[pause]) await stop(file);
+  };
+  const rmdir = fs.rmdir;
+  fs.rmdir = async file => {
+    await rmdir(file);
+    if (pause === 'lock-directory' && file === path.join(control, 'lock')
+      || pause === 'guard-directory' && file === path.join(control, 'recovery-lock')) await stop(file);
+  };
+  const rename = fs.rename;
+  fs.rename = async (from, to) => {
+    await rename(from, to);
+    if (pause === 'completion' && to === path.join(control, 'recovery-complete.json')) await stop(to);
   };
   syncBuiltinESMExports();
   const { recoverLinuxServiceRetirement } = await import(pathToFileURL(path.join(saved.directory, 'linux-service-recovery.mjs')));

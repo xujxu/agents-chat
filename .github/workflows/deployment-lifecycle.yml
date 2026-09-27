@@ -90,7 +90,7 @@ jobs:
         with:
           node-version: 24
       - name: Recover interrupted actual service retirement
-        run: sudo "$(command -v node)" --test tests/deployment-linux-service-recovery.test.mjs
+        run: sudo "$(command -v node)" --test tests/deployment-recovery-admission.test.mjs tests/deployment-linux-service-recovery.test.mjs
 
   windows-native:
     name: Native Windows Job ownership

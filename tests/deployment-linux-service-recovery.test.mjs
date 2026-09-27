@@ -254,8 +254,8 @@ for (const fault of ['delete', 'state-drift', 'close', 'lock-delete', 'worker-de
   });
 }
 
-for (const pause of ['service', 'worker']) {
-test(`killed recovery controller keeps exclusive guard and blocks a second recovery: ${pause}`, async t => {
+for (const pause of ['service', 'worker', 'completion', 'marker', 'lock-owner', 'lock-directory', 'guard-owner', 'guard-directory']) {
+test(`killed recovery resumes safely through cleanup and unlock: ${pause}`, async t => {
   const f = await interrupted(t, 'retirement-unlink-0', 'accepted', pause === 'worker' ? 'settled' : 'none');
   await f.kill();
   const child = fork(new URL('./deployment-service-recovery-child.mjs', import.meta.url),
@@ -276,13 +276,17 @@ test(`killed recovery controller keeps exclusive guard and blocks a second recov
   await assert.rejects(f.recover());
   child.kill('SIGKILL');
   await exited;
-  assert.ok((await readdir(f.control)).includes('service-retirement.json'));
-  assert.ok((await readdir(f.control)).includes('recovery-lock'));
   if (pause === 'worker') {
     assert.ok((await readdir(f.control)).includes('worker-engine'));
     assert.ok(!(await readdir(f.control)).includes('service-stop.ndjson'));
   }
-  assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+  if (pause !== 'guard-directory') assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+  assert.equal(JSON.parse((await f.recover()).stdout).status, 'service-retired');
+  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-complete.json', 'recovery-engine', 'state.json']);
+  assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
+  assert.equal(JSON.parse((await f.recover()).stdout).status, 'service-retired');
+  const next = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
   await assert.rejects(f.recover());
+  await releaseLock(f.control, next);
 });
 }
