@@ -9,8 +9,7 @@ import { processIdentity } from './process-identity.mjs';
 const properties = [
   'Id', 'LoadState', 'Transient', 'NeedDaemonReload', 'FragmentPath', 'Type',
   'Slice', 'Delegate', 'KillMode', 'SendSIGKILL', 'ControlGroup', 'InvocationID',
-  'MainPID', 'ActiveState', 'SubState', 'ExecStartPre', 'ExecStartPost',
-  'ExecStop', 'ExecStopPost', 'ExecReload', 'TriggeredBy', 'OnFailure', 'OnSuccess',
+  'MainPID', 'ActiveState', 'SubState',
 ];
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const fileIdentity = info => ({
@@ -37,10 +36,6 @@ async function configuration(unit, npm) {
     || state.KillMode !== 'control-group' || state.SendSIGKILL !== 'yes') {
     throw new Error('Unsupported or stale installed service configuration/stop policy.');
   }
-  for (const name of ['ExecStartPre', 'ExecStartPost', 'ExecStop', 'ExecStopPost',
-    'ExecReload', 'TriggeredBy', 'OnFailure', 'OnSuccess']) {
-    if (state[name]) throw new Error('Service hooks or alternate activation policy require explicit support.');
-  }
   const object = await bus(['call', 'org.freedesktop.systemd1', '/org/freedesktop/systemd1',
     'org.freedesktop.systemd1.Manager', 'GetUnit', 's', unit], 'o');
   if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
@@ -59,6 +54,17 @@ async function configuration(unit, npm) {
   }
   if (!Array.isArray(drops) || drops.length > 32 || drops.some(value => typeof value !== 'string')
     || new Set(drops).size !== drops.length) throw new Error('Unsupported service drop-in inventory.');
+  const emptyProperties = await Promise.all([
+    ...['ExecStartPreEx', 'ExecStartPostEx', 'ExecStopEx', 'ExecStopPostEx', 'ExecReloadEx'].map(name =>
+      bus(['get-property', 'org.freedesktop.systemd1', object,
+        'org.freedesktop.systemd1.Service', name], 'a(sasasttttuii)')),
+    ...['TriggeredBy', 'OnFailure', 'OnSuccess'].map(name =>
+      bus(['get-property', 'org.freedesktop.systemd1', object,
+        'org.freedesktop.systemd1.Unit', name], 'as')),
+  ]);
+  if (emptyProperties.some(value => !Array.isArray(value) || value.length !== 0)) {
+    throw new Error('Service hooks or alternate activation policy require explicit support.');
+  }
   return { state, drops, command: { file: npm, args: ['start'] } };
 }
 

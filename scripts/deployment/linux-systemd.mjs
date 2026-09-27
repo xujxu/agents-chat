@@ -23,6 +23,7 @@ export async function linuxSystemdProperties(unit, names) {
     if (end < 1 || !names.includes(name) || Object.hasOwn(result, name)) throw new Error('Malformed systemd property response.');
     result[name] = line.slice(end + 1);
   }
-  if (Object.keys(result).length !== names.length) throw new Error('Missing required systemd properties.');
+  const missing = names.filter(name => !Object.hasOwn(result, name));
+  if (missing.length) throw new Error(`Missing required systemd properties: ${missing.join(', ')}.`);
   return Object.freeze(result);
 }
