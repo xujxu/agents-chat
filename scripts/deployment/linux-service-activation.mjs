@@ -122,7 +122,9 @@ export async function activateLinuxService(context, purpose) {
         await record('started', active.identity);
         return Object.freeze({ status: 'active-unverified', identity: active.identity, close });
       }
-      if (observed.ActiveState === 'failed') throw new Error('Service activation failed.');
+      if (observed.ActiveState === 'failed' || observed.SubState === 'auto-restart') {
+        throw new Error('Service activation failed.');
+      }
       await delay(50);
     }
     throw new Error('Service activation did not reach a verifiable running state.');

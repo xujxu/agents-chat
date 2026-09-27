@@ -511,3 +511,35 @@ test('controller death during staged, uninhibited and started activation retains
     await assert.rejects(acquireLock(control, { project: f.project, operationId: randomUUID() }), /service/i);
   }
 });
+
+test('activation receipt flush failure cannot grant startup or erase uncertain evidence', async t => {
+  for (const phase of ['intent', 'staged', 'start-requested']) {
+    const f = await stopFixture(t);
+    const stopped = await stopLinuxService(f);
+    const nativeOpen = fs.open;
+    let injected = false;
+    fs.open = async function (file, ...args) {
+      const handle = await nativeOpen(file, ...args);
+      if (file === path.join(f.control, 'service-activation.ndjson')) {
+        const sync = handle.sync.bind(handle);
+        handle.sync = async () => {
+          await sync();
+          const text = await readFile(file, 'utf8');
+          if (text.trim() && JSON.parse(text.trim().split('\n').at(-1)).phase === phase) {
+            injected = true;
+            throw new Error('Injected activation receipt flush failure.');
+          }
+        };
+      }
+      return handle;
+    };
+    syncBuiltinESMExports();
+    try { await assert.rejects(stopped.activate({ purpose: 'prior-runtime' }), error => error.recoveryAllowed === false); }
+    finally { fs.open = nativeOpen; syncBuiltinESMExports(); await stopped.close(); }
+    assert.equal(injected, true);
+    assert.equal((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim(), '0');
+    assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+    const records = (await readFile(path.join(f.control, 'service-activation.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+    assert.equal(records.some(record => record.phase === 'started'), false);
+  }
+});

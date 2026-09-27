@@ -84,6 +84,9 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
     let originalLock;
     const verify = async (completed = false) => {
       try {
+        if ((await readdir(control)).includes('service-activation.ndjson')) {
+          throw new Error('Service activation has closed deployment worker admission.');
+        }
         const before = await lockIdentity();
         await assertLockOwner(control, lock);
         lockHandle ??= await open(lockFiles[1], constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
