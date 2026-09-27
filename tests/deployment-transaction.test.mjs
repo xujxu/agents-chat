@@ -7,13 +7,15 @@ function fixture(failAt) {
   const phases = [];
   const operations = { record: async phase => { phases.push(phase); } };
   for (const name of [
-    'inspect', 'resolveTarget', 'capacity', 'stop', 'snapshot', 'verifySnapshot',
+    'inspect', 'resolveTarget', 'admit', 'capacity', 'stop', 'snapshot', 'verifySnapshot',
     'rotate', 'selectSource', 'dependencies', 'build', 'configure', 'start', 'verify',
   ]) {
     operations[name] = async () => {
       calls.push(name);
       if (name === failAt) throw new Error(`fixture failure: ${name}`);
       if (name === 'inspect') return { exists: true, running: true, owned: true };
+      if (name === 'resolveTarget') return { commit: 'a'.repeat(40) };
+      if (name === 'admit') return { compatibility: 'passed', current: null };
     };
   }
   return { calls, phases, operations };
@@ -23,7 +25,7 @@ test('existing deployment backs up before any source or build mutation', async (
   const { calls, operations } = fixture();
   await runDeployment({ operation: 'update' }, operations);
   assert.deepEqual(calls, [
-    'inspect', 'resolveTarget', 'capacity', 'stop', 'snapshot', 'verifySnapshot',
+    'inspect', 'resolveTarget', 'admit', 'capacity', 'stop', 'snapshot', 'verifySnapshot',
     'rotate', 'selectSource', 'dependencies', 'build', 'configure', 'start', 'verify',
   ]);
 });
@@ -31,7 +33,7 @@ test('existing deployment backs up before any source or build mutation', async (
 test('capacity refusal leaves running application and source untouched', async () => {
   const { calls, operations } = fixture('capacity');
   await assert.rejects(runDeployment({ operation: 'update' }, operations), /capacity/);
-  assert.deepEqual(calls, ['inspect', 'resolveTarget', 'capacity']);
+  assert.deepEqual(calls, ['inspect', 'resolveTarget', 'admit', 'capacity']);
 });
 
 test('backup failure restarts the unchanged previously running application', async () => {
@@ -136,4 +138,57 @@ test('failed activation retains recovery-required state', async () => {
   const { phases, operations } = fixture('verify');
   await assert.rejects(runDeployment({ operation: 'update' }, operations), /verify/);
   assert.equal(phases.at(-1), 'recovery-required');
+});
+
+test('dry-run dispatch never calls transaction mutators or normal target resolver', async () => {
+  const { calls, phases, operations } = fixture();
+  operations.previewReaders = {
+    inspect: async () => ({ exists: true }),
+    localTarget: async () => null,
+    estimate: async () => ({ bytes: 10 }),
+    checks: async () => [],
+  };
+  const result = await runDeployment({ operation: 'update', dryRun: true }, operations);
+  assert.equal(result.status, 'preview');
+  assert.deepEqual(calls, []);
+  assert.deepEqual(phases, []);
+  delete operations.previewReaders;
+  await assert.rejects(runDeployment({ operation: 'update', dryRun: true }, operations), /reader/i);
+  assert.deepEqual(calls, []);
+});
+
+test('admission refusal stops before capacity, downtime, state or source changes', async () => {
+  for (const admission of [undefined, {}, { compatibility: 'pending' }, { compatibility: 'failed' }]) {
+    const { calls, phases, operations } = fixture();
+    operations.admit = async () => { calls.push('admit'); return admission; };
+    await assert.rejects(runDeployment({ operation: 'update' }, operations), /compatibility|admission/i);
+    assert.deepEqual(calls, ['inspect', 'resolveTarget', 'admit']);
+    assert.deepEqual(phases, []);
+  }
+});
+
+test('accepted identity skips update without replacing journal or rotating backup; deploy rebuilds', async () => {
+  const { calls, phases, operations } = fixture();
+  const identity = {
+    source: 'a'.repeat(40), build: 'built', dependencies: 'installed',
+    config: 'configuration', service: 'service',
+  };
+  operations.admit = async () => {
+    calls.push('admit');
+    return {
+      compatibility: 'passed',
+      current: {
+        phase: 'accepted',
+        receipt: { status: 'accepted', identity },
+        observed: { running: true, verified: true, identity },
+      },
+    };
+  };
+  const result = await runDeployment({ operation: 'update' }, operations);
+  assert.deepEqual(result, { status: 'already-current', backupCreated: false });
+  assert.deepEqual(calls, ['inspect', 'resolveTarget', 'admit']);
+  assert.deepEqual(phases, []);
+  calls.length = 0;
+  assert.equal((await runDeployment({ operation: 'deploy' }, operations)).status, 'accepted');
+  assert.ok(calls.includes('build'));
 });

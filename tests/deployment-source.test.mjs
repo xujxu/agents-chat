@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { temporaryDeployment } from './deployment-fixture.mjs';
-import { inspectSource, resolveTarget, selectSource } from '../scripts/deployment/source.mjs';
+import { inspectSource, previewTarget, resolveTarget, selectSource } from '../scripts/deployment/source.mjs';
 
 const execute = promisify(execFile);
 async function git(project, args) {
@@ -117,4 +117,38 @@ test('diverged branch is refused without resetting local commits', async t => {
   await assert.rejects(resolveTarget(client), /diverged|fast-forward/i);
   assert.equal(await git(client, ['rev-parse', 'HEAD']), local);
   assert.equal(await readFile(path.join(client, 'local.txt'), 'utf8'), 'keep local work\n');
+});
+
+test('preview uses stale local upstream without fetching or refreshing index metadata', async t => {
+  const { root, project, next } = await repository(t);
+  await git(project, ['switch', 'main']);
+  const client = path.join(root, 'client');
+  await execute('git', ['clone', '--config', 'core.autocrlf=false', '--no-hardlinks', project, client]);
+  await writeFile(path.join(project, 'app.txt'), 'not fetched\n');
+  await git(project, ['commit', '-am', 'not fetched']);
+  // Change file metadata so an ordinary git status could refresh the index.
+  await writeFile(path.join(client, 'app.txt'), 'new application\n');
+  const index = path.join(client, '.git', 'index');
+  const before = await readFile(index);
+  const info = await stat(index);
+  const target = await previewTarget(client);
+  assert.equal(target.commit, next);
+  assert.equal(target.freshness, 'local-only');
+  assert.equal(await git(client, ['rev-parse', 'origin/main']), next);
+  assert.equal(await git(client, ['rev-parse', 'HEAD']), next);
+  assert.deepEqual(await readFile(index), before);
+  assert.equal((await stat(index)).mtimeMs, info.mtimeMs);
+  await assert.rejects(stat(path.join(client, '.git', 'FETCH_HEAD')), { code: 'ENOENT' });
+});
+
+test('preview explicitly reports unavailable targets and still rejects dirty source', async t => {
+  const { project, old, next } = await repository(t);
+  assert.equal(await previewTarget(project), null);
+  assert.equal((await previewTarget(project, { noPull: true })).commit, old);
+  assert.equal((await previewTarget(project, { revision: next })).commit, next);
+  assert.equal(await previewTarget(project, { revision: 'f'.repeat(40) }), null);
+  await assert.rejects(previewTarget(project, { revision: '--help' }), /revision/i);
+  await assert.rejects(previewTarget(project, { revision: next, noPull: true }), /revision/i);
+  await writeFile(path.join(project, 'app.txt'), 'local work\n');
+  await assert.rejects(previewTarget(project), /dirty|modified/i);
 });
