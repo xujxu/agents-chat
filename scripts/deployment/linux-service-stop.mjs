@@ -67,7 +67,7 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
     service = await inspectLinuxService({ unit, project, npm, node });
     const inhibition = `/etc/systemd/system/${unit}.d/90-agents-chat-deployment.conf`;
     const parent = path.dirname(inhibition);
-    const bytes = Buffer.from(`[Unit]\nRefuseManualStart=yes\nConditionPathExists=!${inhibition}\n`);
+    const bytes = Buffer.from(`[Unit]\nRefuseManualStart=yes\nConditionPathExists=!${inhibition}\n[Service]\nRestart=no\n`);
     const base = Object.freeze({ version: 1, lock, service: service.identity, inhibition });
     journal = await createEvidenceJournal({
       root, project, name: 'service-stop.ndjson', maximumBytes: 256 * 1024, maximumRecords: 4,

@@ -2879,12 +2879,16 @@ Use one exclusive root-owned persistent drop-in:
 [Unit]
 RefuseManualStart=yes
 ConditionPathExists=!/etc/systemd/system/<unit>.d/90-agents-chat-deployment.conf
+[Service]
+Restart=no
 ```
 
 The drop-in inhibits manual starts and dependency/automatic starts, including
 after controller death or reboot; its own existence is the false start
-condition. Verify its retained inode/content and effective manager condition
-before requesting stop. Do not overwrite an existing inhibition file.
+condition. Automatic restarts require the separate explicit `Restart=no`;
+they cannot be assumed to recheck start conditions. Verify its retained
+inode/content, effective manager condition and restart policy before requesting
+stop. Do not overwrite an existing inhibition file.
 Append inhibited -> stop-requested -> stopped receipts, pinning the lock and
 service identity. Use systemctl stop --no-block, then bounded observation;
 only the retained original cgroup's empty/deleted evidence plus matching

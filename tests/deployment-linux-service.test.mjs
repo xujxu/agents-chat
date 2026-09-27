@@ -170,7 +170,7 @@ test('a new service invocation cannot reuse the old inspection', async t => {
 });
 
 test('unsafe stop policy and writable unit sources are rejected before service mutation', async t => {
-  for (const settings of ['KillMode=process', 'Delegate=yes', 'ExecStop=/usr/bin/true']) {
+  for (const settings of ['KillMode=process', 'Delegate=yes', 'ExecStop=/usr/bin/true', 'RestartForceExitStatus=SIGKILL']) {
     const f = await fixture(t, { settings });
     await ready(f);
     await assert.rejects(inspectLinuxService(f), /policy|hook|delegat|configuration/i);
@@ -294,20 +294,26 @@ test('actual controller death retains inhibition and blocked status both before 
     if (phase === 'stop-requested') {
       const mainPid = Number((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim());
       assert.ok(Number.isSafeInteger(mainPid) && mainPid > 1);
+      assert.equal((await systemctl('show', f.unit, '--property=Restart', '--value')).stdout.trim(), 'no');
       process.kill(mainPid, 'SIGKILL');
       let restartDenied = false;
       let observed = '';
       for (let attempt = 0; attempt < 200; attempt++) {
-        const { stdout } = await systemctl('show', f.unit, '--property=ConditionResult,MainPID,ActiveState,NRestarts,Result');
+        const { stdout } = await systemctl('show', f.unit, '--property=Restart,MainPID,ActiveState,NRestarts,Result');
         observed = stdout;
-        if (/^ConditionResult=no$/m.test(stdout) && /^MainPID=0$/m.test(stdout)
+        if (/^Restart=no$/m.test(stdout) && /^NRestarts=0$/m.test(stdout) && /^MainPID=0$/m.test(stdout)
           && /^ActiveState=(inactive|failed)$/m.test(stdout)) {
           restartDenied = true;
           break;
         }
         await delay(25);
       }
-      assert.equal(restartDenied, true, `Automatic on-failure restart must fail its persistent start condition: ${observed}`);
+      assert.equal(restartDenied, true, `Automatic on-failure restart must remain disabled: ${observed}`);
+      await delay(1500);
+      const after = (await systemctl('show', f.unit, '--property=Restart,MainPID,ActiveState,NRestarts')).stdout;
+      assert.match(after, /^MainPID=0$/m);
+      assert.match(after, /^NRestarts=0$/m);
+      assert.match(after, /^ActiveState=(inactive|failed)$/m);
     }
   }
 });

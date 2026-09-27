@@ -9,7 +9,7 @@ import { processIdentity } from './process-identity.mjs';
 const properties = [
   'Id', 'LoadState', 'Transient', 'NeedDaemonReload', 'FragmentPath', 'Type',
   'Slice', 'Delegate', 'KillMode', 'SendSIGKILL', 'ControlGroup', 'InvocationID',
-  'MainPID', 'ActiveState', 'SubState', 'RefuseManualStart',
+  'MainPID', 'ActiveState', 'SubState', 'RefuseManualStart', 'Restart',
   'User', 'Group', 'DynamicUser', 'SupplementaryGroups', 'WorkingDirectory', 'RootDirectory', 'RootImage',
 ];
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
@@ -69,6 +69,11 @@ async function configuration(unit, npm) {
   ]);
   if (emptyProperties.some(value => !Array.isArray(value) || value.length !== 0)) {
     throw new Error('Service hooks or alternate activation policy require explicit support.');
+  }
+  const forcedRestarts = await bus(['get-property', 'org.freedesktop.systemd1', object,
+    'org.freedesktop.systemd1.Service', 'RestartForceExitStatus'], '(aiai)');
+  if (!same(forcedRestarts, [[], []])) {
+    throw new Error('Forced service restart policy requires explicit support.');
   }
   if (!Array.isArray(conditions) || conditions.some(value => !Array.isArray(value) || value.length !== 5)) {
     throw new Error('Unsupported systemd condition response.');
@@ -221,7 +226,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
       const ignored = stopped ? ['MainPID', 'ActiveState', 'SubState', 'ControlGroup', 'InvocationID'] : [];
       if (await bootId() !== boot
         || properties.some(key => !ignored.includes(key)
-          && current.state[key] !== (key === 'RefuseManualStart' ? 'yes' : state[key]))
+          && current.state[key] !== (key === 'RefuseManualStart' ? 'yes' : key === 'Restart' ? 'no' : state[key]))
         || !same([...current.drops].sort(), [...config.drops, inhibition].sort())
         || !same(current.conditions, [['ConditionPathExists', false, true, inhibition]])) {
         throw new Error('Service inhibition or original configuration changed.');
