@@ -5,7 +5,7 @@ on:
     branches: [feat/deployment-backup]
     paths:
       - 'scripts/deploy*'
-      - 'scripts/upgrade*'
+      - 'scripts/update*'
       - 'scripts/restore*'
       - 'scripts/deployment/**'
       - 'scripts/start.ps1'
@@ -16,7 +16,7 @@ on:
   pull_request:
     paths:
       - 'scripts/deploy*'
-      - 'scripts/upgrade*'
+      - 'scripts/update*'
       - 'scripts/restore*'
       - 'scripts/deployment/**'
       - 'scripts/start.ps1'
@@ -55,3 +55,4 @@ jobs:
           tests/deployment-snapshot.test.mjs
           tests/deployment-transaction.test.mjs
           tests/deployment-source.test.mjs
+          tests/deployment-update-policy.test.mjs

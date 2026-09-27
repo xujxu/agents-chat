@@ -38,10 +38,51 @@ test('status and verify are distinct operations', () => {
 test('revision and paths with spaces remain exact data', () => {
   const revision = 'a'.repeat(40);
   const project = 'C:\\Apps\\Chat project';
-  const options = parseArguments('upgrade', ['--project-dir', project, '--revision', revision]);
+  const options = parseArguments('update', ['--project-dir', project, '--revision', revision]);
   assert.equal(options.project, project);
   assert.equal(options.revision, revision);
-  assert.equal(options.operation, 'upgrade');
+  assert.equal(options.operation, 'update');
+});
+
+test('update replaces the unpublished upgrade operation without an alias', () => {
+  assert.equal(parseArguments('update', []).operation, 'update');
+  assert.throws(() => parseArguments('upgrade', []), /operation/i);
+});
+
+test('preview, JSON and stage deadline are explicit options', () => {
+  const defaults = parseArguments('update', []);
+  assert.equal(defaults.dryRun, false);
+  assert.equal(defaults.json, false);
+  assert.equal(defaults.timeoutSeconds, 1800);
+  const options = parseArguments('update', ['--dry-run', '--json', '--timeout', '90']);
+  assert.equal(options.dryRun, true);
+  assert.equal(options.json, true);
+  assert.equal(options.timeoutSeconds, 90);
+  assert.equal(options.waitSeconds, 120);
+  assert.equal(parseArguments('deploy', ['--dry-run']).dryRun, true);
+});
+
+test('JSON is supported for status, verification and restore', () => {
+  for (const [operation, args, expected] of [
+    ['update', ['--status', '--json'], 'status'],
+    ['update', ['--verify', '--json', '--timeout', '60'], 'verify'],
+    ['restore', ['--accept-data-loss', '--json', '--timeout', '60'], 'restore'],
+  ]) {
+    const options = parseArguments(operation, args);
+    assert.equal(options.json, true);
+    assert.equal(options.operation, expected);
+  }
+});
+
+test('deadlines and read-only mode conflicts reject before execution', () => {
+  for (const args of [
+    ['--timeout', '0'], ['--timeout', '-1'], ['--timeout', '1.5'],
+    ['--timeout', '9007199254740992'], ['--timeout', 'Infinity'],
+    ['--timeout'], ['--timeout', '1', '--timeout', '2'],
+    ['--dry-run', '--status'], ['--dry-run', '--verify'],
+    ['--json', '--json'], ['--status', '--timeout', '10'],
+  ]) assert.throws(() => parseArguments('update', args), /option|timeout|argument|duplicate|conflict/i);
+  assert.throws(() => parseArguments('restore', ['--dry-run']), /restore|option/i);
 });
 
 test('recovery argument quoting handles apostrophes in both shells', () => {
