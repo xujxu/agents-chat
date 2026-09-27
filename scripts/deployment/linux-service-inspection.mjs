@@ -22,10 +22,12 @@ const bootId = async () => (await readFile('/proc/sys/kernel/random/boot_id', 'u
 async function bus(args, signature) {
   const { stdout } = await linuxNative('/usr/bin/busctl', ['--system', '--json=short', ...args]);
   const result = JSON.parse(stdout);
-  if (result.type !== signature || !Array.isArray(result.data) || result.data.length !== 1) {
+  if (result.type !== signature || !Array.isArray(result.data)
+    || args[0] === 'call' && result.data.length !== 1) {
     throw new Error('Unsupported typed systemd property response.');
   }
-  return result.data[0];
+  // Method replies wrap their return arguments; get-property unwraps its variant.
+  return args[0] === 'call' ? result.data[0] : result.data;
 }
 
 async function configuration(unit, npm) {
