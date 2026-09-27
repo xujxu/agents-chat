@@ -3246,9 +3246,9 @@ Files and responsibilities:
 
 - [x] Push causal contracts and observe missing service recovery in Actions.
 - [x] Implement exact intent validation and saved recovery dispatch.
-- [ ] Exercise invalid path/gap/state/boot/source/generation/file replacement,
+- [x] Exercise invalid path/gap/state/boot/source/generation/file replacement,
   live owner, worker evidence and competing/stale recovery guards before deletion.
-- [ ] Add deletion/close/controller-death faults during recovery; retain guard
+- [x] Add deletion/close/controller-death faults during recovery; retain guard
   and diagnostics, never automatic retries or force-unlock.
 - [ ] Push and await all Actions jobs, inspect bounded failures and checkpoint.
 
@@ -3272,3 +3272,10 @@ service recovery success paths failed at the old worker-only entrypoint.
 Both shared jobs and Windows native passed. The new recovery suite now has
 its own Linux runner/job so its real persistent-service faults do not share
 systemd daemon reloads with the existing lifecycle suite.
+
+Initial implementation `eb8157f` / Actions `36330423169` passed all five jobs:
+21 new cold-service contracts, 69 existing Linux native contracts, 221 Linux
+shared, 217 Windows shared plus four skips, and 19 Windows coordinator contracts
+plus the native Job step. Closing review freezes the newly exposed nested
+configuration/executable evidence so a caller cannot mutate the live inspector's
+comparison baseline. Final acceptance of that guard is recorded below.

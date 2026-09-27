@@ -20,6 +20,14 @@ const fileIdentity = info => ({
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const bootId = async () => (await readFile('/proc/sys/kernel/random/boot_id', 'utf8')).trim();
 
+function freezeEvidence(value) {
+  if (value && typeof value === 'object') {
+    for (const child of Object.values(value)) freezeEvidence(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 async function bus(args, signature) {
   const { stdout } = await linuxNative('/usr/bin/busctl', ['--system', '--json=short', ...args]);
   const result = JSON.parse(stdout);
@@ -278,7 +286,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
         || await population(true))) throw new Error('Original service is not stopped.');
     };
     await check();
-    const identity = Object.freeze({
+    const identity = freezeEvidence({
       runtime, bootId: boot, controlGroup: group, configuration: config, executables,
       sources: Object.freeze(sources.map(source => Object.freeze({
         path: source.file, ...source.original, sha256: source.sha256,

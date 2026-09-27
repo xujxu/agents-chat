@@ -29,6 +29,9 @@ test('retains actual installed npm service sources and cgroup without stopping i
     assert.equal(service.identity.sources.length, 1);
     assert.equal(service.identity.sources[0].path, f.fragment);
     assert.match(service.identity.sources[0].sha256, /^[a-f0-9]{64}$/);
+    assert.throws(() => { service.identity.configuration.state.Restart = 'no'; }, TypeError);
+    assert.throws(() => { service.identity.configuration.command.args.push('--foreign'); }, TypeError);
+    assert.throws(() => { service.identity.executables[0].file = '/bin/false'; }, TypeError);
     assert.equal((await service.check()).populated, true);
     assert.equal((await readFile(`/proc/${child}/cgroup`, 'utf8')).trim(), `0::/system.slice/${f.unit}`);
     assert.equal((await systemctl('show', f.unit, '--property=MainPID,InvocationID')).stdout, before);
