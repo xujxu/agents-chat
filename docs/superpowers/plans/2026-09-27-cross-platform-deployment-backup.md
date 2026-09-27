@@ -602,3 +602,57 @@ completion.
 
 At plan creation no implementation or acceptance run has happened. The old
 PoC service and the earlier voice branch remain untouched.
+
+## Implementation checkpoint: 2026-09-27, foundation contracts
+
+The first implementation batch is saved through code commit
+`5bde1d92839e4a5b053af013f92edc86ad164989`.
+Actions run `36305762200` passed: Linux 59 contracts; Windows 58 contracts and
+one explicitly Linux-only symlink test skipped. This is NOT real deployment,
+upgrade or recovery acceptance, and does not authorize the implementation PR.
+
+Implemented foundation modules:
+
+- State/CLI contracts, journal transitions, exclusive process-identity locks
+  and conservative diagnosis of interrupted operations.
+- Streaming file snapshots with checksums and a fixed staging/retiring rotation.
+  Contracts cover incomplete/corrupt replacements, two interrupted rename states,
+  foreign snapshot rejection and one retained complete backup after rotation.
+- Callback-based deployment sequencing with durable phase recording before
+  source/dependency/build mutations and explicit failure cleanup behavior.
+- Git source inspection, target resolution without checkout mutation, explicit
+  selection, preserved runtime configuration, fast-forward upgrades and refusal
+  of dirty or diverged source.
+
+Relevant causal evidence:
+
+| Change | Red evidence | Green evidence |
+| --- | --- | --- |
+| Initial state/CLI | `5490981`, run `36294961739` | `e7babaa`, run `36295093270` |
+| Snapshot implementation | `6fea6e0`, run `36295117640` | `8a311d4`, run `36305379789` |
+| Phase recording before mutation | `4f0302a`, run `36305466780` | `2febb97`, run `36305546381` |
+| Source selection | `97f44eb`, run `36305634573` | `5bde1d9`, run `36305762200` |
+
+Two fixture corrections did not relax product guards: Windows temporary paths
+are canonicalized before snapshot tests; clone fixtures establish
+`core.autocrlf=false` before initial checkout rather than making an initially
+clean Windows checkout appear modified afterward. Transaction phase tests were
+also moved out of an accidentally nested test registration.
+
+Remaining required integration, not yet implemented:
+
+- Native systemd and Scheduled Task/ACL adapters; public deploy/upgrade/restore
+  entry wiring; external private control ownership and versioned engine handoff.
+- Complete source/runtime inventory and source archive, absent-file metadata,
+  native permission restoration, Windows reparse/link support and validated
+  no-build historical Windows launcher. Current Windows snapshots explicitly
+  reject links; do not treat this primitive as complete Windows deployment support.
+- Recoverable cleanup after interruption during retirement deletion (as opposed
+  to the already covered rename boundaries), native capacity preflight,
+  interrupted-child ownership and explicit restore/data-loss confirmation.
+- Real application first installation, historical upgrade, subsequent rotation,
+  failure and no-build restore on BOTH OSes; README/public parameter completion.
+
+No existing deploy entry point, main branch or live service was changed.
+The next batch should wire native lifecycle and recovery support, expanding
+behavioral fault contracts before claiming end-to-end acceptance.
