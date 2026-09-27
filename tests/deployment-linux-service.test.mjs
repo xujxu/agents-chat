@@ -350,5 +350,19 @@ test('actual controller death retains inhibition and blocked status both before 
     else assert.ok(['inactive', 'failed'].includes(active));
     await systemctl('daemon-reload');
     await assert.rejects(systemctl('start', f.unit), /manual|refus/i);
+    if (phase === 'stop-requested') {
+      await systemctl('kill', '--kill-whom=all', '--signal=SIGKILL', f.unit);
+      let restartDenied = false;
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const { stdout } = await systemctl('show', f.unit, '--property=ConditionResult,MainPID,ActiveState');
+        if (/^ConditionResult=no$/m.test(stdout) && /^MainPID=0$/m.test(stdout)
+          && /^ActiveState=(inactive|failed)$/m.test(stdout)) {
+          restartDenied = true;
+          break;
+        }
+        await delay(25);
+      }
+      assert.equal(restartDenied, true, 'Automatic on-failure restart must fail its persistent start condition.');
+    }
   }
 });
