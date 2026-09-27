@@ -81,3 +81,41 @@ test('untracked source and alternate tracked config changes do not bypass prefli
   await writeFile(path.join(project, 'new-source.js'), 'uncommitted\n');
   await assert.rejects(inspectSource(project), /dirty|untracked|modified/i);
 });
+
+test('normal upgrade fetches first, then fast-forwards only during source selection', async t => {
+  const { root, project, next } = await repository(t);
+  await git(project, ['switch', 'main']);
+  const client = path.join(root, 'client');
+  await execute('git', ['clone', '--no-hardlinks', project, client]);
+  await git(client, ['config', 'core.autocrlf', 'false']);
+  await writeFile(path.join(project, 'app.txt'), 'third application\n');
+  await git(project, ['commit', '-am', 'third']);
+  const third = await git(project, ['rev-parse', 'HEAD']);
+  const target = await resolveTarget(client);
+  assert.equal(target.commit, third);
+  assert.equal(target.mode, 'fast-forward');
+  assert.equal(await git(client, ['rev-parse', 'HEAD']), next);
+  await selectSource(client, target);
+  assert.equal(await git(client, ['rev-parse', 'HEAD']), third);
+  assert.equal(await git(client, ['branch', '--show-current']), 'main');
+  assert.equal((await resolveTarget(client)).commit, third);
+});
+
+test('diverged branch is refused without resetting local commits', async t => {
+  const { root, project } = await repository(t);
+  await git(project, ['switch', 'main']);
+  const client = path.join(root, 'client');
+  await execute('git', ['clone', '--no-hardlinks', project, client]);
+  await git(client, ['config', 'user.name', 'Deployment fixture']);
+  await git(client, ['config', 'user.email', 'fixture@example.invalid']);
+  await writeFile(path.join(client, 'local.txt'), 'keep local work\n');
+  await git(client, ['add', '.']);
+  await git(client, ['commit', '-m', 'local']);
+  const local = await git(client, ['rev-parse', 'HEAD']);
+  await writeFile(path.join(project, 'upstream.txt'), 'upstream work\n');
+  await git(project, ['add', '.']);
+  await git(project, ['commit', '-m', 'upstream']);
+  await assert.rejects(resolveTarget(client), /diverged|fast-forward/i);
+  assert.equal(await git(client, ['rev-parse', 'HEAD']), local);
+  assert.equal(await readFile(path.join(client, 'local.txt'), 'utf8'), 'keep local work\n');
+});
