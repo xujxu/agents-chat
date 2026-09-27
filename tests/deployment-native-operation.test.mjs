@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -110,4 +110,29 @@ test('operation cannot seal or admit another worker while a real writer is runni
   await rejected;
   await f.operation.seal();
   assert.equal((await readWorkerOperation(f.control)).at(-1).phase, 'sealed');
+});
+
+test('replaced operation authority after native readiness never grants the actual command', async t => {
+  const f = await fixture(t);
+  const file = path.join(f.control, 'worker-operation.ndjson');
+  const probe = await open(file, 'r');
+  const prototype = Object.getPrototypeOf(probe);
+  await probe.close();
+  const write = prototype.write;
+  let replaced = false;
+  t.mock.method(prototype, 'write', async function (buffer, offset, length, position) {
+    const result = await write.call(this, buffer, offset, length, position);
+    if (!replaced && buffer.toString('utf8').includes('"phase":"admitted"')) {
+      replaced = true;
+      await rename(file, `${file}.original`);
+      await writeFile(file, await readFile(`${file}.original`), { mode: 0o600 });
+    }
+    return result;
+  });
+  await assert.rejects(f.run('require("node:fs").writeFileSync("forbidden","bad")'),
+    { recoveryAllowed: false });
+  t.mock.restoreAll();
+  assert.equal(replaced, true);
+  await assert.rejects(readFile(path.join(f.project, 'forbidden')), { code: 'ENOENT' });
+  await assert.rejects(f.operation.seal(), { recoveryAllowed: false });
 });

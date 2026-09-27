@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { fork } from 'node:child_process';
+import { mkdir, open, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -116,4 +117,92 @@ test('original writer refuses a replaced operation file', async t => {
   await rename(file, `${file}.original`);
   await writeFile(file, await readFile(`${file}.original`), { mode: 0o600 });
   await assert.rejects(operation.seal(), unsafe);
+});
+
+test('failed enrollment flush closes operation admission before native preparation', async t => {
+  const f = await fixture(t);
+  const operation = await f.create();
+  const probe = await open(path.join(f.control, 'worker-operation.ndjson'), 'r');
+  const prototype = Object.getPrototypeOf(probe);
+  await probe.close();
+  t.mock.method(prototype, 'sync', async () => { throw new Error('injected enrollment flush failure'); });
+  const workerId = randomUUID();
+  await assert.rejects(operation.run({
+    workerId, command: { file: process.execPath, args: ['-e', 'process.exit(0)'], cwd: f.project, env: {} },
+    runtime: process.platform === 'linux' ? { uid: 0, gid: 0 }
+      : { pwsh: 'C:\\missing\\pwsh.exe', accountSid: 'S-1-5-18', sessionId: 0 },
+  }), unsafe);
+  t.mock.restoreAll();
+  await assert.rejects(readFile(path.join(f.control, `worker-${workerId}.ndjson`)), { code: 'ENOENT' });
+  await assert.rejects(operation.seal(), unsafe);
+  await assert.rejects(operation.run({}), unsafe);
+  await assert.rejects(releaseLock(f.control, f.lock), /evidence/);
+});
+
+test('missing helper after authority creation cannot enroll a worker', async t => {
+  const f = await fixture(t);
+  const operation = await f.create();
+  await rename(f.saved.directory, `${f.saved.directory}.displaced`);
+  await assert.rejects(operation.run({
+    workerId: randomUUID(), command: { file: process.execPath, args: [], cwd: f.project, env: {} },
+    runtime: process.platform === 'linux' ? { uid: 0, gid: 0 }
+      : { pwsh: 'C:\\missing\\pwsh.exe', accountSid: 'S-1-5-18', sessionId: 0 },
+  }), unsafe);
+  assert.equal((await readWorkerOperation(f.control)).length, 1);
+  await assert.rejects(releaseLock(f.control, f.lock), /evidence/);
+});
+
+test('invalid UTF-8, foreign digest and duplicate enrollment histories are never repaired', async t => {
+  const f = await fixture(t);
+  const operation = await f.create();
+  await operation.close();
+  const file = path.join(f.control, 'worker-operation.ndjson');
+  const original = await readFile(file);
+  const header = JSON.parse(original.toString('utf8'));
+  const entry = { ...header, phase: 'enrolled', workerId: randomUUID() };
+  const utf8 = Buffer.from(original);
+  utf8[utf8.indexOf(Buffer.from(f.lock.operationId))] = 0xff;
+  for (const bytes of [
+    utf8,
+    Buffer.from(`${JSON.stringify(header)}\n${JSON.stringify({ ...entry, manifestSha256: 'a'.repeat(64) })}\n`),
+    Buffer.from([header, entry, entry].map(record => JSON.stringify(record)).join('\n') + '\n'),
+    Buffer.from([header, { ...header, phase: 'sealed' }, entry].map(record => JSON.stringify(record)).join('\n') + '\n'),
+  ]) {
+    await writeFile(file, bytes);
+    await assert.rejects(readWorkerOperation(f.control), unsafe);
+    assert.deepEqual(await readFile(file), bytes);
+  }
+});
+
+test('actual authority owner death preserves its lock and cannot be adopted by another controller', {
+  timeout: 45000,
+}, async t => {
+  const root = await temporaryDeployment(t);
+  const project = path.join(root, 'app');
+  const control = path.join(root, 'ctl');
+  await mkdir(project);
+  await mkdir(control, { mode: 0o700 });
+  const child = fork(new URL('./deployment-operation-owner-child.mjs', import.meta.url),
+    [control, project, source], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let diagnostic = '';
+  child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-4096); });
+  const exited = new Promise((resolve, reject) => {
+    child.once('exit', resolve);
+    child.once('error', reject);
+  });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
+  });
+  const { lock, saved } = await new Promise((resolve, reject) => {
+    child.once('message', resolve);
+    child.once('error', reject);
+    child.once('exit', code => reject(new Error(`Authority child exited ${code}: ${diagnostic}`)));
+  });
+  child.kill('SIGKILL');
+  await exited;
+  assert.equal((await readWorkerOperation(control))[0].lock.pid, child.pid);
+  await assert.rejects(createWorkerOperation({ control, lock, saved }), unsafe);
+  await assert.rejects(releaseLock(control, lock), /owner/);
+  await assert.rejects(acquireLock(control, { project, operationId: 'another' }), /lock/);
 });
