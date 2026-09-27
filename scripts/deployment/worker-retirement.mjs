@@ -86,6 +86,7 @@ export async function retireWorkerEvidence({ control, lock, saved, workers, clos
       await assertLockOwner(root, lock);
       await checkFile(lockFile);
       await checkFile(stateFile);
+      if (!same(await loadState(root), state)) throw new Error('Application acceptance changed during retirement.');
       if (marker) await checkFile(marker);
     };
     const checkInventory = async () => {
