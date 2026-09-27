@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import { execFile, fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { cp, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import fs, { cp, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
-import { acquireLock, releaseLock } from '../scripts/deployment/state.mjs';
+import { acquireLock, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
 import { saveRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
+import { recoverRetirement } from '../scripts/deployment/retirement-recovery.mjs';
 
 const sourceTree = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
 const execute = promisify(execFile);
@@ -117,4 +119,102 @@ test('fixed recovery bundle is reusable only for identical verified source', asy
   await assert.rejects(saveRecoveryEngine({ source: f.source, control: f.control }));
   await f.kill();
   await f.recover();
+});
+
+test('a gap in the deletion sequence cannot be interpreted as completed earlier cleanup', async t => {
+  const f = await fixture(t);
+  await f.kill();
+  await unlink(path.join(f.control, 'worker-operation.ndjson'));
+  const before = (await readdir(f.saved.directory)).sort();
+  await assert.rejects(f.recover());
+  assert.deepEqual((await readdir(f.saved.directory)).sort(), before);
+  assert.ok(!(await readdir(f.control)).includes('recovery-lock'));
+});
+
+test('modified recovery code is refused before importing the cleanup implementation', async t => {
+  const f = await fixture(t);
+  await f.kill();
+  await writeFile(path.join(f.engine.directory, 'retirement-recovery.mjs'), `
+    import { writeFileSync } from 'node:fs';
+    writeFileSync(${JSON.stringify(path.join(f.control, 'executed'))},'bad');
+    export function recoverRetirement(){return {status:'retired'}}
+  `);
+  await assert.rejects(f.recover());
+  await assert.rejects(readFile(path.join(f.control, 'executed')), { code: 'ENOENT' });
+  assert.ok((await readdir(f.control)).includes('lock'));
+});
+
+test('recovery deletion failure retains both original lock and exclusive cleanup authority', async t => {
+  const f = await fixture(t);
+  await f.kill();
+  const unlink = fs.unlink;
+  let deletes = 0;
+  t.mock.method(fs, 'unlink', async file => {
+    if (path.dirname(file) === f.saved.directory && ++deletes === 2) throw new Error('injected cleanup delete failure');
+    return unlink(file);
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(recoverRetirement({
+      control: f.control, project: f.project, operationId: f.lock.operationId,
+    }), { recoveryAllowed: false });
+  } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+  assert.equal(deletes, 2);
+  assert.ok((await readdir(f.control)).includes('lock'));
+  assert.ok((await readdir(f.control)).includes('recovery-lock'));
+  await assert.rejects(f.recover());
+  await assert.rejects(acquireLock(f.control, { project: f.project, operationId: randomUUID() }), /recovery/i);
+});
+
+test('failed old-lock deletion leaves completion evidence and blocks ordinary deployment', async t => {
+  const f = await fixture(t);
+  await f.kill();
+  const originalUnlink = fs.unlink;
+  t.mock.method(fs, 'unlink', async file => {
+    if (file === path.join(f.control, 'lock', 'owner.json')) throw new Error('injected old lock delete failure');
+    return originalUnlink(file);
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(recoverRetirement({
+      control: f.control, project: f.project, operationId: f.lock.operationId,
+    }), { recoveryAllowed: false });
+  } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+  const complete = JSON.parse(await readFile(path.join(f.control, 'recovery-lock', 'complete.json')));
+  assert.equal(complete.status, 'retired');
+  assert.equal(complete.operationId, f.lock.operationId);
+  await assert.rejects(acquireLock(f.control, { project: f.project, operationId: randomUUID() }), /recovery/i);
+});
+
+test('recovery guard cannot be reported idle when the original deployment lock is already gone', async t => {
+  const root = await temporaryDeployment(t);
+  await mkdir(path.join(root, 'recovery-lock'), { mode: 0o700 });
+  assert.equal((await reconcileInterruptedOperation(root)).status, 'blocked');
+});
+
+test('killed recovery controller leaves exclusive guard rather than permitting a second recovery', async t => {
+  const f = await fixture(t);
+  await f.kill();
+  const child = fork(new URL('./deployment-recovery-child.mjs', import.meta.url),
+    [f.control, f.project, f.lock.operationId, f.engine.manifestSha256],
+    { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let stderr = '';
+  child.stderr.on('data', bytes => { stderr = (stderr + bytes.toString()).slice(-4096); });
+  const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
+  });
+  await new Promise((resolve, reject) => {
+    child.once('message', resolve);
+    child.once('error', reject);
+    child.once('exit', code => reject(new Error(`Recovery fixture exited ${code}: ${stderr}`)));
+  });
+  child.kill('SIGKILL');
+  await exited;
+  assert.ok((await readdir(f.control)).includes('recovery-lock'));
+  const remaining = (await readdir(f.saved.directory)).sort();
+  await assert.rejects(f.recover());
+  assert.deepEqual((await readdir(f.saved.directory)).sort(), remaining);
+  assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
 });
