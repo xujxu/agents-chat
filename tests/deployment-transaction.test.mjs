@@ -137,7 +137,7 @@ test('failed state write prevents the associated source mutation', async () => {
 test('failed activation retains recovery-required state', async () => {
   const { phases, operations } = fixture('verify');
   await assert.rejects(runDeployment({ operation: 'update' }, operations), /verify/);
-  assert.equal(phases.at(-1), 'blocked');
+  assert.equal(phases.at(-1), 'recovery-required');
 });
 
 test('dry-run dispatch never calls transaction mutators or normal target resolver', async () => {
@@ -231,7 +231,7 @@ test('unsafe worker failure forbids restarting runtime or beginning cleanup', as
     operations[stage] = async () => { calls.push(stage); throw failure; };
     await assert.rejects(runDeployment({ operation: 'update' }, operations), error => error === failure);
     assert.equal(calls.at(-1), stage);
-    assert.equal(phases.at(-1), 'recovery-required');
+    assert.equal(phases.at(-1), 'blocked');
     assert.equal(calls.includes('start'), false);
   }
 });

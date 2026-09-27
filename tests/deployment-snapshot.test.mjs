@@ -20,40 +20,41 @@ test('snapshot copies data without aliasing live files and detects corruption', 
     runtime: { platform: process.platform, state: 'stopped' },
   });
 
-  test('cancelled snapshot, inventory and verification do not create or mutate snapshot contents', async t => {
-    const root = await temporaryDeployment(t);
-    await snapshot(root, 'backup', 'retained', 'original');
-    const project = path.join(root, 'app');
-    const controller = new AbortController();
-    const reason = new Error('cancelled snapshot operation');
-    controller.abort(reason);
-    const signal = controller.signal;
-    await assert.rejects(createSnapshot({
-      project, destination: path.join(root, 'staging'), id: 'cancelled', files: ['fixture.db'],
-      source: { commit: 'a'.repeat(40), provenance: 'observed' },
-      runtime: { platform: process.platform, state: 'stopped' }, signal,
-    }), error => error === reason);
-    await assert.rejects(inventorySnapshot(project, ['fixture.db'], { signal }), error => error === reason);
-    await assert.rejects(verifySnapshot(path.join(root, 'backup'), { signal }), error => error === reason);
-    assert.deepEqual((await readdir(root)).sort(), ['app', 'backup']);
-    assert.equal((await verifySnapshot(path.join(root, 'backup'))).id, 'retained');
-  });
-
-  test('stream hashing observes in-flight cancellation and closes its file before settling', async t => {
-    const root = await temporaryDeployment(t);
-    const file = path.join(root, 'payload');
-    await writeFile(file, Buffer.alloc(1024 * 1024, 42));
-    const controller = new AbortController();
-    const hashing = fileDigest(file, { signal: controller.signal });
-    controller.abort(new Error('stop hashing'));
-    await assert.rejects(hashing, /abort|stop hashing/i);
-    await unlink(file);
-  });
   await writeFile(path.join(project, 'fixture.db'), 'new live data');
   assert.equal(await readFile(path.join(destination, 'files', 'fixture.db'), 'utf8'), 'original data');
   assert.equal((await verifySnapshot(destination)).id, 'snapshot-one');
   await writeFile(path.join(destination, 'files', 'fixture.db'), 'corruption');
   await assert.rejects(verifySnapshot(destination), /checksum|integrity|size/i);
+});
+
+test('cancelled snapshot, inventory and verification do not create or mutate snapshot contents', async t => {
+  const root = await temporaryDeployment(t);
+  await snapshot(root, 'backup', 'retained', 'original');
+  const project = path.join(root, 'app');
+  const controller = new AbortController();
+  const reason = new Error('cancelled snapshot operation');
+  controller.abort(reason);
+  const signal = controller.signal;
+  await assert.rejects(createSnapshot({
+    project, destination: path.join(root, 'staging'), id: 'cancelled', files: ['fixture.db'],
+    source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' }, signal,
+  }), error => error === reason);
+  await assert.rejects(inventorySnapshot(project, ['fixture.db'], { signal }), error => error === reason);
+  await assert.rejects(verifySnapshot(path.join(root, 'backup'), { signal }), error => error === reason);
+  assert.deepEqual((await readdir(root)).sort(), ['app', 'backup']);
+  assert.equal((await verifySnapshot(path.join(root, 'backup'))).id, 'retained');
+});
+
+test('stream hashing observes in-flight cancellation and closes its file before settling', async t => {
+  const root = await temporaryDeployment(t);
+  const file = path.join(root, 'payload');
+  await writeFile(file, Buffer.alloc(1024 * 1024, 42));
+  const controller = new AbortController();
+  const hashing = fileDigest(file, { signal: controller.signal });
+  controller.abort(new Error('stop hashing'));
+  await assert.rejects(hashing, /abort|stop hashing/i);
+  await unlink(file);
 });
 
 test('snapshot rejects external traversal without writing outside destination', async t => {
