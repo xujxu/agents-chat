@@ -38,7 +38,16 @@ async function fixture(t, extra = [], code = 'setInterval(()=>{},1000)', working
   return { project, unit };
 }
 
-test('reads actual non-root systemd identity and canonical home without changing the service', async t => {
+async function waitForReady(f) {
+  for (let index = 0; index < 200; index++) {
+    try { await readFile(path.join(f.project, 'ready')); return; }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    await delay(25);
+  }
+  throw new Error('Runtime fixture did not become ready.');
+}
+
+test('reads actual non-root systemd identity and NSS home without changing the service', async t => {
   const f = await fixture(t, ['--property=User=65534', '--property=Group=65534']);
   const before = await execute('/usr/bin/systemctl', ['show', f.unit, '--property=MainPID,InvocationID,ActiveState']);
   const result = await inspectLinuxRuntimeAccount(f);
@@ -76,7 +85,7 @@ test('resolves named systemd groups without guessing from project ownership', as
   assert.equal(result.gid, 0);
 });
 
-test('rejects foreign project ownership without stopping either service', async t => {
+test('rejects a service bound to another project without stopping it', async t => {
   const f = await fixture(t);
   await assert.rejects(inspectLinuxRuntimeAccount({ ...f, project: path.dirname(f.project) }), /project|directory/i);
   const { stdout } = await execute('/usr/bin/systemctl', ['show', f.unit, '--property=ActiveState', '--value']);
@@ -112,11 +121,28 @@ test('missing units and untrusted unit names are explicit preflight errors', asy
 
 test('running process account mismatch is refused even when systemd configuration looks valid', async t => {
   const f = await fixture(t, [], 'process.setgid(65534);process.setuid(65534);require("node:fs").writeFileSync("ready","yes");setInterval(()=>{},1000)');
+  await waitForReady(f);
+  await assert.rejects(inspectLinuxRuntimeAccount(f), /account|groups/i);
+});
+
+test('running process supplementary groups are inspected independently of configured NSS groups', async t => {
+  const f = await fixture(t, [], 'process.setgroups([65534]);require("node:fs").writeFileSync("ready","yes");setInterval(()=>{},1000)');
+  await waitForReady(f);
+  await assert.rejects(inspectLinuxRuntimeAccount(f), /supplementary groups/i);
+});
+
+test('a failed installed service retains its configured account without requiring a live process', async t => {
+  const f = await fixture(t, [], 'process.exitCode=9');
   for (let index = 0; index < 200; index++) {
-    try { await readFile(path.join(f.project, 'ready')); break; }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
-    if (index === 199) throw new Error('Mismatched runtime fixture did not start.');
+    const { stdout } = await execute('/usr/bin/systemctl', ['show', f.unit, '--property=ActiveState', '--value']);
+    if (stdout.trim() === 'failed') break;
+    if (index === 199) throw new Error('Runtime fixture did not reach failed state.');
     await delay(25);
   }
-  await assert.rejects(inspectLinuxRuntimeAccount(f), /account|groups/i);
+  const result = await inspectLinuxRuntimeAccount(f);
+  assert.equal(result.uid, 0);
+  assert.equal(result.gid, 0);
+  assert.equal(result.mainPid, 0);
+  assert.equal(result.processIdentity, null);
+  assert.equal(result.activeState, 'failed');
 });
