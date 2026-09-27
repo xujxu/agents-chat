@@ -268,3 +268,18 @@ test('a verified saved bundle with broad read ACLs is still refused before nativ
   assert.deepEqual(f.receipts.map(receipt => receipt.phase), ['intent', 'blocked']);
   await assert.rejects(readFile(path.join(f.project, 'started')), { code: 'ENOENT' });
 });
+
+test('a null helper DACL cannot pass as an empty set of foreign allow entries', async t => {
+  const f = await fixture(t, 'process.stdout.write("must not run");');
+  await ps(`
+    $ErrorActionPreference='Stop'
+    $acl=Get-Acl -LiteralPath $args[0]
+    $acl.SetSecurityDescriptorSddlForm('D:NO_ACCESS_CONTROL',[Security.AccessControl.AccessControlSections]::Access)
+    Set-Acl -LiteralPath $args[0] -AclObject $acl
+    $actual=Get-Acl -LiteralPath $args[0]
+    $raw=[Security.AccessControl.RawSecurityDescriptor]::new($actual.GetSecurityDescriptorBinaryForm(),0)
+    if($null -ne $raw.DiscretionaryAcl){throw 'Null DACL fixture was not applied.'}
+  `, [path.join(f.saved.directory, 'WindowsWorkerJob.cs')]);
+  await assert.rejects(f.run(), { recoveryAllowed: false });
+  assert.deepEqual(f.receipts.map(receipt => receipt.phase), ['intent', 'blocked']);
+});
