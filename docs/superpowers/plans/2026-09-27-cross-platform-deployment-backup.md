@@ -2486,17 +2486,83 @@ await releaseLock(control, lock);
 // A second operation can now use control/worker-engine without another slot.
 ```
 
-- [ ] Add causal Actions-red contracts: missing app acceptance/unsealed/closed
+- [x] Add causal Actions-red contracts: missing app acceptance/unsealed/closed
   authority refused, marker-only state still prevents unlock, successful
   retirement preserves backup and app state.
-- [ ] Implement checked retirement and exact helper allowlist; preserve errors
+- [x] Implement checked retirement and exact helper allowlist; preserve errors
   from both retained-handle closes.
-- [ ] Exercise two actual native operations using the same fixed slot on both
+- [x] Exercise two actual native operations using the same fixed slot on both
   OSes; inject marker flush and partial deletion failures with bounded fixtures.
-- [ ] Require all four Actions jobs green and persist evidence.
+- [x] Require all four Actions jobs green and persist evidence.
 
 Interrupted retirement is NOT automatically resumed. The fixed intent records
 the original lock, helper digest and exact deletion inventory for later
 exclusive recovery. Unknown files, partial intent, changed identity, missing
 evidence or dead owners remain blocked. Windows directory power-loss guarantees
 remain unchanged; do not claim Linux fsync semantics on Windows.
+
+### N9 execution evidence
+
+- Causal missing-retirement and marker-only unlock red: `e6dc6c8`, Actions
+  `36319932678`.
+- Initial checked retirement and repeat-operation integration: `f1ac345`,
+  Actions `36320054028`. Shared contracts and Linux native passed. Windows
+  reached the second operation but its test supplied an empty environment;
+  Node exited 134 at `ncrypto::CSPRNG` initialization. The fixture now supplies
+  an explicit runtime environment, consistent with the first command. No
+  production environment fallback was introduced.
+- Partial-delete, intent-flush, foreign-file, final-marker and actual controller
+  death cases: `355ff8b`, Actions `36320212872`, all four jobs green, including
+  two actual native operations reusing the same fixed slot on each platform.
+- Application acceptance capture-race red: `3ea2d94`, Actions `36320249730`,
+  reproduced on both platforms. A changed state could otherwise become the
+  captured deletion authority after the initial accepted-state check.
+- Accepted revision `6f0fb1c7b36d2b99926eae8b1009b75bd1208690`:
+  each retirement authority check also requires the
+  original parsed accepted/restored state, not just consistency with the
+  subsequently captured file. Actions `36320488301`, all four jobs green:
+  **200 Linux shared contracts**, **196 Windows shared contracts with four
+  Linux-only skips**, **19 Linux native integration cases**, **18 Windows
+  native integration cases**, plus the existing **13 Windows Job primitives**.
+
+`operation.retire()` is permitted only on the original live, sealed and
+unpoisoned object; closed handles or failed retirement cannot be retried.
+The helper manifest and every enrolled settled journal are reverified.
+Retirement captures original file handles plus exact dev/ino/length/SHA-256
+inventory and writes an exclusive flush-before-delete intent. The original
+state, lock, control directory, helper directory and deletion inventory are
+checked throughout. Only exact regular files are unlinked, then the empty
+helper directory. There is no recursive production deletion.
+
+Worker operation evidence is removed last among planned files. Original
+handles are closed with aggregated errors; only then can the matching intent
+be removed and the control directory flushed. No backup, application state
+or lock is part of the deletion inventory. `releaseLock` rejects every
+`worker-` artifact, including a lone malformed retirement intent.
+
+The native repeat-operation test runs real commands, seals workers, writes
+synthetic accepted application state, retires helpers/journals, releases the
+first lock, acquires a second lock and repeats native execution/retirement
+using the same control and helper paths. The backup sentinel survives both
+cycles and the final control directory contains only backup and state.
+This proves slot reuse and native sequencing, NOT a real npm/Next update or
+application-health acceptance.
+
+The real crash fixture kills its controller after the first helper unlink.
+The original intent and partial inventory remain, accepted state alone does
+not grant a second lock, and a new controller cannot release the old lock.
+Automatic resumed cleanup is deliberately absent.
+
+### Remaining gates after N9
+
+The successful live path can now release evidence and reuse fixed slots.
+The next recovery gate is still exclusive interrupted-operation authority,
+including partial retirement, pending enrollment and original native domain
+reconciliation. Do not reconstruct a same-name Job or assume absent paths
+mean stopped workers. Saved recovery code availability during partial helper
+deletion must be addressed explicitly before implementing cold reentry.
+
+Blocked Windows owner shutdown/supervision, Linux non-root runtime, production
+Windows ownership/ACL setup, remaining native faults, application/watchdog/ACP
+shutdown, full backup metadata and historical deploy/update/restore lifecycle
+acceptance remain. These tests do not justify a main PR or live deployment.
