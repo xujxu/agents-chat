@@ -129,6 +129,12 @@ test('nonzero targets fail after cleanup and huge output is bounded without dead
     assert.equal(Buffer.byteLength(error.result.stderr), 8192);
     return true;
   });
+
+  test('binary or partial UTF-8 output cannot exceed the public diagnostic tail limit', async t => {
+    const f = await fixture(t, `process.stdout.write(Buffer.alloc(20000,255));`);
+    const result = await f.run();
+    assert.ok(Buffer.byteLength(result.stdout) <= 8192);
+  });
   assert.equal(f.receipts.at(-1).phase, 'settled');
 });
 
