@@ -54,3 +54,4 @@ jobs:
           tests/deployment-cli.test.mjs
           tests/deployment-snapshot.test.mjs
           tests/deployment-transaction.test.mjs
+          tests/deployment-source.test.mjs
