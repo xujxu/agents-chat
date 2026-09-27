@@ -570,3 +570,11 @@ those paired network records are not duplicate frontend save arrivals.
 Push this metadata-classification correction as a new red revision and confirm
 the intended UI failure appears without the teardown violation before applying
 Task2. This is a fixture repair with new source, not a retry of the same revision.
+
+Corrected red source f38aa52b58e2e124018f6ef887b5834909b3d6d9,
+[36288035696](https://github.com/xujxu/agents-chat/actions/runs/36288035696),
+now reports only the intended held-confirmation failure in the browser scenario:
+received2 where pending was required. Desktop3 has78 passed,2 skipped,1 failed;
+desktop2 has79 passed and the2 expected contract failures. Other4 jobs passed.
+The teardown violation is absent. This is the required clean red checkpoint;
+Task2 changes only the baseline evaluator, leaving those assertions unchanged.

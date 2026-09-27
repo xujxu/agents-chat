@@ -115,9 +115,10 @@ export function validateStreamSaves(saves: readonly StreamSave[], turn: StreamTu
 export function streamSaveBaseline(
   saves: readonly StreamSave[], turn: StreamTurn,
 ): number | undefined {
-  return saves.some(save => save.messages.some(message =>
-    message.type === 'user' && message.content === turn.userText))
-    ? saves.length : undefined;
+  validateStreamSaves(saves, turn);
+  assert.ok(saves.length <= 2, 'Save arrived before baseline was frozen');
+  if (saves.length !== 2 || !saves.every(save => save.acknowledged)) return undefined;
+  return saves.length;
 }
 
 export async function installStreamSaveFixture(page: Page, turn: StreamTurn) {
