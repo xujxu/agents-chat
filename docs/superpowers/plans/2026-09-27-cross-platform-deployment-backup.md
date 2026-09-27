@@ -2905,12 +2905,74 @@ report blocked, and both live worker retirement and its independent cold
 cleanup must refuse it. Worker execution itself remains possible under the
 same live transaction lock for the future stopped-update sequence.
 
-- [ ] Write real installed-service stop contracts first and observe Actions red.
-- [ ] Add inhibited/stopped observations to the retained service inspector,
+- [x] Write real installed-service stop contracts first and observe Actions red.
+- [x] Add inhibited/stopped observations to the retained service inspector,
   preserving existing read-only checks.
-- [ ] Implement exclusive durable inhibition, lock/file authority, bounded
+- [x] Implement exclusive durable inhibition, lock/file authority, bounded
   stop and original-domain empty proof; include saved helper coverage.
-- [ ] Validate actual npm/detached writers, manual and dependency starts,
+- [x] Validate actual npm/detached writers, manual and dependency starts,
   controller death, evidence replacement and lock/recovery barriers in Actions.
-- [ ] Persist accepted evidence and the explicit not-yet-supplied activation
+- [x] Persist accepted evidence and the explicit not-yet-supplied activation
   and cold-service recovery paths.
+
+Accepted executable revision `464ef20704a29aac10ed480830042b8ed55b9bd4`,
+Actions `36325844750`: all four jobs successful. Counts: 54 Linux native,
+19 Windows coordinator plus 13 Job primitives, 215 Linux shared, 211 Windows
+shared plus four Linux-only skips. There are eight new top-level native stop
+tests (some contain multiple fault cases) and three shared service-evidence
+barrier tests. All execution was in Actions; no local service/test process.
+
+Key evidence:
+
+- `b414d6a` / `36324572157`: causal missing stop module and missing maintenance
+  lock-release barrier on both shared platforms.
+- `a513aa7` / `36324753827`: implementation initially failed parsing because
+  the new state export was nested; corrected in `99829a1`.
+- `99829a1` / `36324862348`: actual stop succeeded, but observation incorrectly
+  rejected systemd's terminal-state cgroup/InvocationID clearing. Now only
+  original-or-empty identities, terminal states and MainPID zero are allowed
+  after original-domain extinction; a new generation remains rejected.
+- `9ecf8d4` / `36325093600`: fixture teardown raced its real writer while
+  removing the project. `0decbc0` stops the fixture before removing files;
+  `36325274816` passed. This was not final automatic-restart acceptance.
+- `e265512` / `36325329245`: expanded restart test failed; subsequent
+  `d623fdf` also made fault tests top-level instead of unintentionally nested.
+- **Causal automatic-restart red** `d623fdf` / `36325618748`: after killing the
+  maintenance controller and then the actual npm MainPID, systemd started a
+  new MainPID with `NRestarts=1`, `ActiveState=active`, `ConditionResult=yes`.
+  A start condition plus RefuseManualStart is not automatic restart suppression.
+- **Fix** `464ef20` / `36325844750`: persist `[Service] Restart=no`, verify the
+  effective restart policy, and refuse nonempty `RestartForceExitStatus`.
+  The real crash test confirms terminal state, MainPID zero and NRestarts zero
+  beyond the fixture's original one-second restart interval. Manual and
+  dependency activation remain separately covered.
+
+Actual controller SIGKILL is exercised after the durable stop-requested
+receipt (application still running) and after the stopped receipt (original
+domain empty). Both preserve the inhibitor and blocked status. There is no
+claim that controller death before the stop request itself stops the app.
+Receipt flush faults before inhibition and before stop do not cross the next
+manager mutation. Existing inhibition is never overwritten; byte-identical
+replacement of the inhibitor, journal or lock poisons the live authority.
+A refused stop leaves intent/inhibited/stop-requested evidence, never stopped.
+Restoring the original inhibitor inode after starting a replacement generation
+does not make that new generation authoritative.
+
+Remaining boundaries and next work:
+
+- This helper is internal and intentionally leaves service inhibition/journal
+  and the transaction lock in place. It is not yet wired into public scripts.
+  `close()` only closes descriptors; it is not a recovery/unlock operation.
+- Implement state-authorized activation/uninhibition and verified prior-runtime
+  restart before exposing this path. Do not add a generic delete-marker or
+  unmask command. Explicit cold service recovery, controller takeover, initial
+  inactive/failed installations and reboot reentry remain unsupported.
+- The persistent drop-in is designed to survive reboot; this batch exercised
+  controller death and daemon-reload, not a real reboot.
+- Backup metadata must distinguish original service/drop-ins from the generated
+  maintenance inhibitor; do not restore the inhibitor as ordinary application
+  configuration or discard it as worker cleanup. Worker execution may continue
+  under the same live lock while the app is stopped; worker retirement and
+  independent cold worker cleanup must refuse remaining service evidence.
+- No full historical app deploy/update/restore lifecycle, main PR, live service
+  change or Windows installed-service/task-control completion is claimed.
