@@ -1429,7 +1429,7 @@ acceptance, which remains a native integration requirement.
 
 ### Task N3
 
-- [ ] **Step 1: Write failing filesystem and coordinator contracts.**
+- [x] **Step 1: Write failing filesystem and coordinator contracts.**
 
 ```js
 const journal = await createWorkerJournal(control, owner);
@@ -1446,7 +1446,7 @@ schema/owner/domain substitution; invalid transitions; root inside checkout;
 symlinks and hardlinks; close before/after failure. Linux mode and owner checks
 are Linux-only, while creation/read/write/flush contracts run on both OSes.
 
-- [ ] **Step 2: Commit/push tests and capture missing-module red.**
+- [x] **Step 2: Commit/push tests and capture missing-module red.**
 
 ```bash
 git add tests/deployment-worker-journal.test.mjs .github/workflows/deployment-lifecycle.yml docs/superpowers/plans/2026-09-27-cross-platform-deployment-backup.md
@@ -1455,13 +1455,41 @@ git push origin feat/deployment-backup
 gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
 ```
 
-- [ ] **Step 3: Extract shared identity validation and implement the journal.**
+- [x] **Step 3: Extract shared identity validation and implement the journal.**
 
 Use the exact storage/transition contract above; keep native process calls and
 deployment state unlocking out of this module. Before committing, inspect the
 new code and all uses of the identity exports for accidental behavior changes.
 
-- [ ] **Step 4: Push and require all contract jobs green.**
+The accepted implementation is `scripts/deployment/worker-journal.mjs` at
+`47bb0740528f6e3062619170a38eaa9e0c24215f`. The shared field/owner/domain
+validators are in `scripts/deployment/worker-identity.mjs`; the existing
+coordinator now imports them rather than defining a second schema.
+
+Concrete coordinator wiring, executed by the integration contracts:
+
+```js
+const journal = await createWorkerJournal(control, owner);
+const errors = [];
+try {
+  await runOwnedWorker({ owner }, {
+    record: journal.record,
+    async prepare() {
+      throw new Error('Lost native creation reply');
+    },
+  });
+} catch (error) { errors.push(error); }
+try { await journal.close(); }
+catch (error) { errors.push(error); }
+if (errors.length === 1) throw errors[0];
+if (errors.length > 1) throw new AggregateError(errors);
+```
+
+That example deliberately fails preparation and must leave an intent followed
+by blocked, never erase the file or convert it to settlement. Real native
+callbacks remain a separate implementation; the journal does not provide them.
+
+- [x] **Step 4: Push and require all contract jobs green.**
 
 ```bash
 git add scripts/deployment/worker-identity.mjs scripts/deployment/owned-worker.mjs scripts/deployment/worker-journal.mjs
@@ -1470,9 +1498,62 @@ git push origin feat/deployment-backup
 gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
 ```
 
-- [ ] **Step 5: Record accepted revisions and native integration limitations.**
+- [x] **Step 5: Record accepted revisions and native integration limitations.**
 
 Keep all journal evidence until separately verified operation-level retirement;
 this batch never deletes it. Bounded whole-operation metadata retirement,
 Windows private ACL/directory durability, saved-engine installation, actual
 cgroup/Job workers and verified reentry remain required before public release.
+
+### N3 acceptance checkpoint
+
+- Causal missing-module red: `8c511bf`, Actions `36311583099`, both platforms.
+- Initial storage implementation: `afe6673`, Actions `36311638405`:
+  Linux 140 pass; Windows 138 pass, two Linux-only skips.
+- Independent-process acceptance: `25cbf6e`, Actions `36311694638`:
+  Linux 144 pass; Windows 142 pass, two Linux-only skips. A real Node writer is
+  killed after flushing intent; another process cannot reopen/reclaim it.
+  Two independently spawned processes also race for the same journal, with
+  exactly one successful writer.
+- Physical write/flush faults: `da3d6d4`, Actions `36311741397` passed.
+  Injected partial writes leave a rejected partial tail. Injected flush
+  failure poisons the writer, prevents target admission through the actual
+  coordinator and retains native evidence instead of retiring it.
+- Encoding refinement red: `5aa668f`, Actions `36311768823`. Both platforms
+  exposed UTF-8 replacement decoding silently changing a stored cgroup path.
+  Strict fatal decoding now rejects those bytes without modifying them.
+- Encoding fix: `f186f62`, Actions `36311827665`: Linux 147 pass; Windows
+  145 pass, two Linux-only skips.
+- Directory error preservation red: `343ecdf`, Actions `36311911595`. Linux
+  exposed close failure replacing the earlier directory flush error. The
+  correction retains both errors and leaves the incomplete journal intact.
+- Final accepted code: `47bb0740528f6e3062619170a38eaa9e0c24215f`,
+  Actions `36311978735`: Linux 148 pass; Windows 145 pass, three explicitly
+  Linux-only skips; zero failures. N3 adds 25 tests to the prior 123.
+- Limits: five receipts / 128 KiB per journal; immutable validated reads;
+  captured-handle exclusive writer; no reopen/delete/reclaim path. Data
+  flushing runs on both OSes; Linux also flushes creation's directory entry.
+  Read-only inspection works even after the original checkout disappears.
+- This is actual journal I/O and writer-process interruption evidence, not
+  actual cgroup/Job containment or machine-power-loss evidence. Native private
+  Windows ACL setup and directory-entry durability remain open. Nothing here
+  grants recovery authority or changes deployment blocked state.
+- All execution was in GitHub Actions; no local validation/server, main
+  change, public deployment entrypoint change or live service mutation.
+
+### Next boundary after N3
+
+The storage writer is now implemented, but not yet invoked by public scripts.
+Next implement the private external saved-engine installation and concrete
+bootstrap/native transport plan; do not add an uncontained fallback to make
+native tests pass. Native callback wrappers must aggregate journal-close
+failure with any existing command/cleanup error, retain blocked authority and
+not leak an open writer. Every native launch still requires canonical project
+and live controller identity captured under the deployment lock.
+
+Journal storage never cleans itself up. Whole-operation metadata retirement
+must wait for separately verified worker settlement/operation completion and
+must prevent unbounded journal accumulation across repeated updates. This
+small metadata retention task is separate from the existing one-full-backup
+constraint. Saved-engine code, native adapters, verified reentry and all eight
+real-process/native lifecycle groups remain outstanding.
