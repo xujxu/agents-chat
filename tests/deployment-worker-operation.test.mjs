@@ -223,3 +223,38 @@ test('actual authority owner death preserves its lock and cannot be adopted by a
   await assert.rejects(releaseLock(control, lock), /owner/);
   await assert.rejects(acquireLock(control, { project, operationId: 'another' }), /lock/);
 });
+
+test('closing operation preserves both journal and retained-lock close failures', async t => {
+  const f = await fixture(t);
+  const probe = await open(path.join(f.control, 'lock', 'owner.json'), 'r');
+  const prototype = Object.getPrototypeOf(probe);
+  await probe.close();
+  const handles = new Set();
+  const stat = prototype.stat;
+  t.mock.method(prototype, 'stat', async function (...args) {
+    handles.add(this);
+    return stat.apply(this, args);
+  });
+  const operation = await createWorkerOperation({ control: f.control, lock: f.lock, saved: f.saved });
+  t.mock.restoreAll();
+  const retained = [...handles].filter(handle => handle.fd >= 0);
+  assert.equal(retained.length, 2);
+  let closed = 0;
+  for (const handle of retained) {
+    const close = handle.close;
+    t.mock.method(handle, 'close', async function () {
+      await close.call(this);
+      closed++;
+      throw new Error(`injected close failure ${closed}`);
+    });
+  }
+  await assert.rejects(operation.close(), error => {
+    assert.equal(error.recoveryAllowed, false);
+    assert.equal(error.cause.errors.length, 2);
+    return true;
+  });
+  t.mock.restoreAll();
+  assert.equal(closed, 2);
+  await assert.rejects(operation.seal(), unsafe);
+  await assert.rejects(releaseLock(f.control, f.lock), /evidence/);
+});

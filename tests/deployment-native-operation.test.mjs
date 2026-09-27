@@ -114,6 +114,28 @@ test('operation cannot seal or admit another worker while a real writer is runni
 
 test('replaced operation authority after native readiness never grants the actual command', async t => {
   const f = await fixture(t);
+  const workerId = randomUUID();
+  let original;
+  const powershell = async script => execute(process.env.DEPLOYMENT_TEST_PWSH,
+    ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+    { timeout: 30000, maxBuffer: 4096 });
+  t.after(async () => {
+    if (process.platform === 'win32' && original) {
+      await powershell(`
+        $ErrorActionPreference='Stop'
+        try{$p=[Diagnostics.Process]::GetProcessById(${original.pid})}
+        catch [ArgumentException]{return}
+        if($p.StartTime.ToUniversalTime().Ticks.ToString() -cne '${original.ticks}'){throw 'Owner identity changed.'}
+        $p.Kill()
+        if(-not $p.WaitForExit(15000)){throw 'Fixture owner cleanup timed out.'}
+      `);
+    } else if (process.platform === 'linux' && original) {
+      const { stdout } = await execute('/usr/bin/systemctl',
+        ['show', original.unit, '--property=InvocationID', '--value'], { timeout: 15000 });
+      assert.equal(stdout.trim(), original.invocationId);
+      await execute('/usr/bin/systemctl', ['reset-failed', original.unit], { timeout: 15000 });
+    }
+  });
   const file = path.join(f.control, 'worker-operation.ndjson');
   const probe = await open(file, 'r');
   const prototype = Object.getPrototypeOf(probe);
@@ -123,13 +145,26 @@ test('replaced operation authority after native readiness never grants the actua
   t.mock.method(prototype, 'write', async function (buffer, offset, length, position) {
     const result = await write.call(this, buffer, offset, length, position);
     if (!replaced && buffer.toString('utf8').includes('"phase":"admitted"')) {
+      if (process.platform === 'win32') {
+        const { stdout } = await powershell(`
+          $ErrorActionPreference='Stop'
+          $matches=@(Get-CimInstance Win32_Process -Filter "ParentProcessId=${process.pid}" |
+            Where-Object { $_.CommandLine -like '*${workerId}*' })
+          if($matches.Count -ne 1){throw 'Expected one native fixture owner.'}
+          $p=[Diagnostics.Process]::GetProcessById($matches[0].ProcessId)
+          @{pid=$p.Id;ticks=$p.StartTime.ToUniversalTime().Ticks.ToString()}|ConvertTo-Json -Compress
+        `);
+        original = JSON.parse(stdout.trim());
+      } else {
+        original = JSON.parse(buffer.toString('utf8')).domain;
+      }
       replaced = true;
       await rename(file, `${file}.original`);
       await writeFile(file, await readFile(`${file}.original`), { mode: 0o600 });
     }
     return result;
   });
-  await assert.rejects(f.run('require("node:fs").writeFileSync("forbidden","bad")'),
+  await assert.rejects(f.run('require("node:fs").writeFileSync("forbidden","bad")', workerId),
     { recoveryAllowed: false });
   t.mock.restoreAll();
   assert.equal(replaced, true);

@@ -1,4 +1,5 @@
-import { lstat, readdir } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, open, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { createEvidenceJournal, readEvidenceJournal, journalUncertain } from './evidence-journal.mjs';
 import { captureOwner, captureWorkerFields } from './worker-identity.mjs';
@@ -62,6 +63,7 @@ export async function readWorkerOperation(control) {
 
 export async function createWorkerOperation({ control, lock: suppliedLock, saved: suppliedSaved }) {
   let journal;
+  let lockHandle;
   try {
     const lock = captureLockOwner(suppliedLock);
     const supplied = captureWorkerFields(suppliedSaved,
@@ -83,8 +85,11 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
       try {
         const before = await lockIdentity();
         await assertLockOwner(control, lock);
+        lockHandle ??= await open(lockFiles[1], constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+        const retained = await lockHandle.stat();
         const after = await lockIdentity();
-        if (!same(before, after) || originalLock && !same(originalLock, after)) {
+        if (!same(before, after) || originalLock && !same(originalLock, after)
+          || retained.dev !== after[1].dev || retained.ino !== after[1].ino || retained.nlink !== 1) {
           throw new Error('Original deployment lock evidence was replaced.');
         }
         originalLock ??= after;
@@ -185,7 +190,14 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
       },
       async close() {
         if (busy) throw journalUncertain(new Error('Cannot close an active worker operation.'));
-        closing ??= journal.close();
+        closing ??= (async () => {
+          const errors = [];
+          try { await journal.close(); }
+          catch (error) { errors.push(error); }
+          try { await lockHandle.close(); }
+          catch (error) { errors.push(error); }
+          if (errors.length) throw journalUncertain(errors.length === 1 ? errors[0] : new AggregateError(errors));
+        })();
         await closing;
       },
     });
@@ -193,6 +205,10 @@ export async function createWorkerOperation({ control, lock: suppliedLock, saved
     const errors = [error];
     if (journal) {
       try { await journal.close(); }
+      catch (cleanup) { errors.push(cleanup); }
+    }
+    if (lockHandle) {
+      try { await lockHandle.close(); }
       catch (cleanup) { errors.push(cleanup); }
     }
     throw journalUncertain(errors.length === 1 ? error : new AggregateError(errors));
