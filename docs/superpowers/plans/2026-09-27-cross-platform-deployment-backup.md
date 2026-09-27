@@ -3008,11 +3008,65 @@ assert.equal(active.status, 'active-unverified');
 await stopped.close(); // closes retained handles, never unlocks or deletes evidence
 ```
 
-- [ ] Add real prior-runtime/deployment activation and invalid-admission tests;
+- [x] Add real prior-runtime/deployment activation and invalid-admission tests;
   observe missing-method red in Actions.
-- [ ] Implement original-policy inactive observation, exclusive activation
+- [x] Implement original-policy inactive observation, exclusive activation
   journal and held inode, sealed worker admission, actual startup verification.
-- [ ] Exercise start failure, receipt flush faults and controller interruption;
+- [x] Exercise start failure, receipt flush faults and controller interruption;
   verify no install/build is performed and unsafe evidence remains blocked.
-- [ ] Record Actions evidence and remaining accepted-service retirement,
+- [x] Record Actions evidence and remaining accepted-service retirement,
   cold recovery, changed-unit configuration and public-wiring boundaries.
+
+Accepted executable revision `f98f1412ebc63e6ff49bbd1cded3588d3af5bec6`,
+Actions `36326875767`, all four jobs successful: 61 Linux native, 19 Windows
+coordinator plus 13 Job primitives, 216 Linux shared, 212 Windows shared plus
+four Linux-only skips. Seven additional native activation tests include
+multiple rejection/fault/controller-death cases; one shared test covers the
+activation/worker admission barrier on both operating systems.
+
+Evidence sequence:
+
+- `b803423` / `36326304534`: actual services stopped, but activation calls
+  failed because the live stop handle had no activation method.
+- `7b1d956` / `36326458206`: initial purpose/phase-authorized startup and
+  no-install/no-build command path passed all four jobs.
+- `05d617c` / `36326654082`: actual sealed-worker, failed startup and
+  controller-death cases passed Linux native. Shared contracts on both OSes
+  exposed that a partial activation journal did not close worker admission.
+- `f98f141` / `36326875767`: every operation verification, including the
+  final pre-grant check, now refuses `service-activation.ndjson`. The
+  activation file is created exclusively before its first intent check:
+  an earlier racing worker changes the pinned inventory and blocks activation;
+  a later worker cannot pass admission. The original worker operation must
+  already be sealed and its exact registered journals settled.
+
+Activation uses `service-activation-workers.mjs` to retain and check the
+sealed operation/journal inventory while granting startup; it does not treat
+an empty cgroup or a missing worker journal as settled. It retains a
+same-directory hard link `<inhibition>.<lock-token>.held` to the original
+inhibitor. Staging temporarily has two names for that one inode; startup keeps
+only the held name. No overwrite/replace of a foreign held/inhibitor path is
+allowed. A native failed start (non-root working-directory denial) restores
+the exact original inode and `Restart=no`, records reinhibited and returns
+an unsafe failure without claiming runtime restoration.
+
+Controller SIGKILL after staged, uninhibited and started receipts retains
+the precise phase and held inode, locks out ordinary reentry and never
+reports application acceptance. After uninhibition/start admission, controller
+death does **not** promise that the app remains inhibited or stopped. Likewise
+a poisoned activation journal can prevent safe re-inhibition; the files and
+lock are retained as blocked, not silently discarded or automatically retried.
+Flush-fault tests verify no startup is granted at failed intent, staged or
+start-requested recording. The phase gate is the trusted transaction's
+source-mutation boundary, not an independent forensic assertion that nobody
+else has edited checkout files.
+
+Remaining integration: close accepted live service evidence only after
+matching application acceptance and current runtime verification, then permit
+worker retirement/unlock. Keep prior-runtime restart outcomes distinct from
+new application acceptance. The helper currently preserves original unit
+configuration and only handles an initially running service under its original
+live controller. Changed-unit deployment, initially inactive installations,
+explicit restore/new-controller service recovery, reboot reentry and failure
+after successful activation still require their recovery integration.
+No public deploy/update/restore file, main branch or live deployment changed.
