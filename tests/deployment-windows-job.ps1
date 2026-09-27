@@ -86,6 +86,13 @@ try {
             Assert ($job.KillOnClose -and -not $job.Inheritable) 'Unsafe native Job configuration.'
             Assert ($job.AccountSid -eq $sid.Value) 'Account identity changed.'
             Assert ($job.SessionId -eq [Diagnostics.Process]::GetCurrentProcess().SessionId) 'Session changed.'
+            $security = [Security.AccessControl.RawSecurityDescriptor]::new($job.SecurityDescriptor, 0)
+            Assert (($security.ControlFlags -band [Security.AccessControl.ControlFlags]::DiscretionaryAclProtected) -ne 0) 'Job DACL is not protected.'
+            Assert ($security.DiscretionaryAcl.Count -eq 2) 'Job DACL has unexpected entries.'
+            foreach ($ace in $security.DiscretionaryAcl) {
+                Assert (@($sid.Value, 'S-1-5-18') -contains $ace.SecurityIdentifier.Value) 'Job grants another account access.'
+                Assert ($ace.AceQualifier -eq [Security.AccessControl.AceQualifier]::AccessAllowed) 'Unexpected Job ACE type.'
+            }
             Assert (@($job.Members()).Count -eq 0) 'New Job is not empty.'
             Expect-Failure { [Deployment.WindowsWorkerJob]::Create($generation) }
             Assert (@($job.Members()).Count -eq 0) 'Collision modified the original Job.'
@@ -153,6 +160,79 @@ c.unref();const t=setInterval(()=>{if(fs.existsSync('writer')){clearInterval(t);
             Send-Target $launcher 'setInterval(()=>{},1000);'
             $job.Dispose()
             Assert ($launcher.Process.WaitForExit(15000)) 'Kill-on-close did not terminate launcher.'
+            $launcher.Process.Dispose()
+            $launcher = $null
+        } finally {
+            $job.Dispose()
+            if ($launcher) { $launcher.Process.WaitForExit(10000) | Out-Null; $launcher.Process.Dispose() }
+        }
+    }
+    Case 'abrupt native owner death kills the original Job without finally or taskkill' {
+        $info = [Diagnostics.ProcessStartInfo]::new($pwsh)
+        $info.UseShellExecute = $false
+        $info.RedirectStandardOutput = $true
+        $info.RedirectStandardError = $true
+        foreach ($arg in @('-NoProfile', '-NonInteractive', '-File',
+            (Join-Path $PSScriptRoot 'deployment-windows-job-owner.ps1'), '-HelperRoot', $root, '-Node', $node)) {
+            $info.ArgumentList.Add($arg)
+        }
+        $owner = [Diagnostics.Process]::Start($info)
+        $diagnostics = $owner.StandardError.ReadToEndAsync()
+        $members = @()
+        try {
+            $line = Await-Task ($owner.StandardOutput.ReadLineAsync())
+            if (-not $line) { throw ("Owner failed: " + (Await-Task $diagnostics)) }
+            $frame = $line | ConvertFrom-Json
+            $members = @($frame.members)
+            Assert ($frame.type -eq 'ready' -and $members.Count -ge 2) 'Owner did not start contained writers.'
+            $owner.Kill()
+            Assert ($owner.WaitForExit(15000)) 'Owner did not terminate.'
+            foreach ($member in $members) {
+                $process = $null
+                try { $process = [Diagnostics.Process]::GetProcessById([int]$member.pid) }
+                catch [ArgumentException] { continue }
+                try {
+                    if ([Deployment.WindowsWorkerJob]::ProcessIdentity($process.Id) -eq $member.identity) {
+                        Assert ($process.WaitForExit(15000)) 'Original Job member survived owner death.'
+                    }
+                } finally { $process.Dispose() }
+            }
+            $marker = Join-Path $root 'owner-writer'
+            $length = (Get-Item $marker).Length
+            Start-Sleep -Milliseconds 300
+            Assert ((Get-Item $marker).Length -eq $length) 'Writer survived original owner death.'
+        } finally {
+            if (-not $owner.HasExited) { $owner.Kill(); $owner.WaitForExit(15000) | Out-Null }
+            $owner.Dispose()
+        }
+    }
+    Case 'large independent stdout and stderr stay bounded while native members settle' {
+        $job = [Deployment.WindowsWorkerJob]::Create([guid]::NewGuid())
+        $launcher = $null
+        try {
+            $launcher = Start-Launcher $job
+            Send-Target $launcher 'process.stdout.write("o".repeat(2*1024*1024));process.stderr.write("e".repeat(2*1024*1024),()=>process.exit(7));'
+            $result = (Await-Task ($launcher.Process.StandardOutput.ReadLineAsync())) | ConvertFrom-Json
+            Assert ($result.exitCode -eq 7) 'Nonzero command status lost.'
+            Assert ([Convert]::FromBase64String($result.stdout).Length -eq 8192) 'stdout tail is not bounded.'
+            Assert ([Convert]::FromBase64String($result.stderr).Length -eq 8192) 'stderr tail is not bounded.'
+            Settle $job $launcher
+            $launcher = $null
+        } finally {
+            $job.Dispose()
+            if ($launcher) { $launcher.Process.WaitForExit(10000) | Out-Null; $launcher.Process.Dispose() }
+        }
+    }
+    Case 'malformed grant never starts an uncontained target' {
+        $job = [Deployment.WindowsWorkerJob]::Create([guid]::NewGuid())
+        $launcher = $null
+        try {
+            $launcher = Start-Launcher $job
+            $launcher.Process.StandardInput.WriteLine('{"type":"run","command":{"file":"cmd.exe"}}')
+            $launcher.Process.StandardInput.Flush()
+            Assert ($launcher.Process.WaitForExit(15000)) 'Malformed grant left a launcher running.'
+            Assert ($launcher.Process.ExitCode -ne 0) 'Malformed grant was accepted.'
+            Assert (@($job.Members()).Count -eq 0) 'Malformed grant left a Job writer.'
             $launcher.Process.Dispose()
             $launcher = $null
         } finally {
