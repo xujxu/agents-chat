@@ -94,6 +94,7 @@ export async function prepareWindowsWorker({
       failure ??= uncertain(error);
       for (const reply of pending.values()) reply.reject(failure);
       pending.clear();
+      wire.close();
     };
     const receiver = (async () => {
       while (true) {
@@ -114,7 +115,9 @@ export async function prepareWindowsWorker({
       reply.promise.catch(() => {});
       try {
         await wire.send({ id, method, ...extra });
-        return await bounded(reply.promise, method === 'run' ? 1800000 : 30000, `Windows ${method}`);
+        const value = await bounded(reply.promise, method === 'run' ? 1800000 : 30000, `Windows ${method}`);
+        if (!['run', 'observe'].includes(method) && value !== null) throw new Error('Invalid cleanup acknowledgement.');
+        return value;
       } catch (error) {
         fail(error);
         throw failure;

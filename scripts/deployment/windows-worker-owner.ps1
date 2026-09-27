@@ -131,7 +131,7 @@ try {
         $inputTask = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync([Console]::In, 131072)
     }
 } catch {
-    [Console]::Error.WriteLine('Native Windows owner failed; retain deployment evidence and inspect before recovery.')
+    [Console]::Error.WriteLine("Native Windows owner failed at line $($_.InvocationInfo.ScriptLineNumber) ($($_.Exception.GetType().FullName)); retain deployment evidence and inspect before recovery.")
     $global:LASTEXITCODE = 1
     exit 1
 } finally {

@@ -68,6 +68,30 @@ async function waitFile(file) {
 const writing = `const fs=require('node:fs');fs.writeFileSync('writer','x');
   fs.writeFileSync('started','yes');setInterval(()=>fs.appendFileSync('writer','x'),10);`;
 
+async function nativeOwners(f) {
+  return JSON.parse((await ps(`
+    $ErrorActionPreference='Stop'
+    $worker=$args[1]
+    $matches=@(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($args[0])" |
+      Where-Object { $_.CommandLine -like "*$worker*" } |
+      ForEach-Object {
+        $p=[Diagnostics.Process]::GetProcessById($_.ProcessId)
+        @{pid=$p.Id;identity="$($p.Id):$($p.StartTime.ToUniversalTime().Ticks)"}
+      })
+    ConvertTo-Json -InputObject $matches -Compress
+  `, [String(process.pid), f.owner.workerId])).stdout.trim());
+}
+
+async function killNative(helper) {
+  await ps(`
+    $ErrorActionPreference='Stop'
+    $p=[Diagnostics.Process]::GetProcessById([int]$args[0])
+    if("$($p.Id):$($p.StartTime.ToUniversalTime().Ticks)" -cne $args[1]){throw 'Helper identity changed.'}
+    $p.Kill()
+    if(-not $p.WaitForExit(15000)){throw 'Helper exit timed out.'}
+  `, [String(helper.pid), helper.identity]);
+}
+
 test('Windows saved engine connects Job identity to real admission and settlement receipts', async t => {
   const f = await fixture(t, 'process.stdout.write(process.env.TEST_LITERAL);process.stderr.write("err");');
   const result = await f.run();
@@ -184,4 +208,40 @@ test('Node controller death terminates native handle owner and writers without a
   assert.equal(await readFile(path.join(f.project, 'writer'), 'utf8'), before);
   assert.equal((await readWorkerJournal(f.control, owner)).at(-1).phase, 'admitted');
   await assert.rejects(createWorkerJournal(f.control, owner));
+});
+
+test('original native handle owner survives durable settlement and exits only during retirement', async t => {
+  const f = await fixture(t, 'process.stdout.write("done");');
+  const record = f.operations.record;
+  let original;
+  f.operations.record = async receipt => {
+    await record(receipt);
+    if (['owned', 'settled'].includes(receipt.phase)) {
+      const owners = await nativeOwners(f);
+      assert.equal(owners.length, 1);
+      if (original) assert.deepEqual(owners[0], original);
+      original = owners[0];
+    }
+  };
+  await f.run();
+  assert.deepEqual(await nativeOwners(f), []);
+});
+
+test('native owner death kills writers but remains blocked rather than claiming settlement', async t => {
+  const f = await fixture(t, writing);
+  const rejected = assert.rejects(f.run(), error => {
+    assert.equal(error.recoveryAllowed, false);
+    assert.equal(error.code, 'DEPLOYMENT_WORKER_UNSETTLED');
+    return true;
+  });
+  await waitFile(path.join(f.project, 'started'));
+  const owners = await nativeOwners(f);
+  assert.equal(owners.length, 1);
+  await killNative(owners[0]);
+  await rejected;
+  assert.equal(f.receipts.at(-1).phase, 'blocked');
+  assert.ok(!f.receipts.some(receipt => receipt.phase === 'settled'));
+  const before = await readFile(path.join(f.project, 'writer'), 'utf8');
+  await delay(300);
+  assert.equal(await readFile(path.join(f.project, 'writer'), 'utf8'), before);
 });
