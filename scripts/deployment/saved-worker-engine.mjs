@@ -8,9 +8,10 @@ import {
 } from './worker-files.mjs';
 
 const files = [
-  'owned-worker.mjs', 'saved-worker-engine.mjs', 'saved-worker-inspect.mjs',
+  'linux-worker-bootstrap.mjs', 'linux-worker.mjs', 'owned-worker.mjs', 'process-identity.mjs',
+  'saved-worker-engine.mjs', 'saved-worker-inspect.mjs',
   'stage-runner.mjs', 'worker-errors.mjs', 'worker-files.mjs',
-  'worker-identity.mjs', 'worker-journal.mjs',
+  'worker-identity.mjs', 'worker-journal.mjs', 'worker-wire.mjs',
 ];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const validDigest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);

@@ -13,9 +13,10 @@ import {
 
 const sourceTree = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
 const files = [
-  'owned-worker.mjs', 'saved-worker-engine.mjs', 'saved-worker-inspect.mjs',
+  'linux-worker-bootstrap.mjs', 'linux-worker.mjs', 'owned-worker.mjs', 'process-identity.mjs',
+  'saved-worker-engine.mjs', 'saved-worker-inspect.mjs',
   'stage-runner.mjs', 'worker-errors.mjs', 'worker-files.mjs',
-  'worker-identity.mjs', 'worker-journal.mjs',
+  'worker-identity.mjs', 'worker-journal.mjs', 'worker-wire.mjs',
 ];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -99,7 +100,7 @@ test('saved modules import without the source checkout or application node_modul
   const { save, project } = await fixture(t);
   const saved = await save();
   await rename(project, `${project}-removed`);
-  const urls = files.filter(file => file !== 'saved-worker-inspect.mjs')
+  const urls = files.filter(file => !['saved-worker-inspect.mjs', 'linux-worker-bootstrap.mjs'].includes(file))
     .map(file => pathToFileURL(path.join(saved.directory, file)).href);
   const output = await execute({
     file: process.execPath,
