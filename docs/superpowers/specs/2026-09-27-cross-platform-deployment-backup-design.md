@@ -17,8 +17,8 @@ run in GitHub Actions, not on the user's machine. Read-only inspection, editing
 and Git operations are permitted locally.
 
 The user requires successful Linux AND Windows first-deployment and upgrade
-acceptance before creating the implementation PR. Actions requires a remote
-test-branch push first; confirm that ordering with the user before pushing.
+acceptance before creating the implementation PR. The user approved remote
+test-branch pushes before Actions, with PR creation only after acceptance.
 Never interpret permission to push a test branch as permission to push directly
 to main. Use a normal reviewed PR for main integration.
 
@@ -46,7 +46,7 @@ Linux:
 
 ```bash
 sudo bash scripts/deploy.sh
-sudo bash scripts/upgrade.sh
+sudo bash scripts/update.sh
 sudo bash scripts/deploy.sh --no-pull
 sudo bash scripts/restore.sh
 ```
@@ -55,13 +55,13 @@ Windows, from an elevated PowerShell terminal:
 
 ```powershell
 .\scripts\deploy.ps1
-.\scripts\upgrade.ps1
+.\scripts\update.ps1
 .\scripts\deploy.ps1 -SkipGitPull
 .\scripts\restore.ps1
 ```
 
 `deploy` supports both first installation and existing deployment.
-`upgrade` requires an existing deployment and delegates to the same transaction;
+`update` requires an existing deployment and delegates to the same transaction;
 it must not pull first or make a second backup. `restore` delegates to the
 recovery entry point in the private external control directory.
 
@@ -82,6 +82,132 @@ Support an explicit target revision for controlled deployments on a clean
 checkout, so backup happens before switching source. Specify its exact flags
 in the implementation plan and README. Default upgrades require a tracking
 branch and a fast-forward update; never reset dirty or diverged user work.
+
+## Approved update enhancements (2026-09-27)
+
+This section extends the original design and takes precedence over the earlier
+implementation plan until that plan is revised. The previously proposed upgrade
+entry points have not shipped on main. Use `update.sh` and `update.ps1` only;
+do not add upgrade aliases. Rename the internal operation, help, tests and
+workflow path filters consistently. Historical references to the voice branch's
+old `upgrade.sh` describe existing code, not a supported new command.
+
+### Read-only preview
+
+Add `--dry-run` / `-DryRun`. Preview reads local state without fetching Git refs,
+installing dependencies, executing target code, creating a lock/control directory,
+writing history/configuration, copying a backup, or changing the service.
+Report local current and target revisions, backup location, estimated space,
+planned steps and checks that remain pending.
+
+When the upstream reference is missing or potentially stale, explicitly mark
+remote freshness and target selection as unknown/pending. A locally available
+explicit commit can be inspected without checkout. Do not claim preview is a
+successful admission check. Invalid or unsupported input is an error; an
+incomplete preview identifies its unknowns, not a fabricated success.
+Preview does not replace the most recent real operation's result.
+
+### Accurate already-current result
+
+Only `update`, not `deploy`, can skip an already-current installation.
+Require the resolved target commit, an accepted deployment receipt, actual
+build/dependency identity, relevant configuration identity and the observed
+service identity/state to agree. Existing interrupted, failed or unverified
+state blocks skipping. Missing provenance triggers normal admission and update,
+not a guess based solely on Git HEAD.
+
+The skip path does not stop/restart the application, copy or rotate the backup,
+install dependencies or rebuild. It reports `already-current` explicitly.
+If source matches but artifacts are missing/modified, use the normal update
+path. If the runtime or service cannot be inspected, report that obstruction
+rather than declaring the installation current.
+
+`deploy` remains an explicit way to rebuild/redeploy the chosen source.
+Do not interpret `--no-pull` as permission to bypass checks.
+
+### Compatibility before downtime
+
+Inspect the exact target's declared Node requirements and transaction protocol,
+required configuration shape and supported application-data formats before
+stopping the current service. Distinguish transaction protocol compatibility
+from application schema compatibility.
+
+The application currently initializes several SQLite stores and performs
+additive migrations during startup; there is no universal schema version to
+compare. Introduce explicit, bounded read-only compatibility checks for the
+supported historical baseline and target. Do not invoke store initialization
+or start the candidate against live data to discover compatibility.
+Read configuration without rewriting it or exposing secret values.
+
+Check all relevant application databases and their required tables/columns
+and migration markers, not only chats.db. A coherent read may need a read-only
+SQLite transaction; inability to obtain one is an explicit admission failure.
+Do not use SQLite immutable mode on a live WAL database or ignore committed WAL
+data. Inspection must not create persistent files in the application's state.
+
+Known incompatible, unsupported or unclassifiable data/configuration fails
+before mutation, with the failed check and a concrete next action. Define the
+supported historical shapes and engine ranges in the implementation plan from
+repository evidence; do not infer compatibility from a commit being newer.
+Future migration support requires an explicit contract and regression fixture.
+Restoration still restores matched code AND saved data after acknowledgement;
+do not open newer schemas with old code or introduce automatic database rollback.
+
+### Status, JSON and bounded diagnostics
+
+Add `--json` / `-Json` to operation, preview and status output. Keep stdout
+machine-readable, with progress and native command output on stderr or in a
+private log. Include operation ID, current/target revisions, phase and elapsed
+time, outcome, stable error code, observed runtime state, backup availability,
+pending checks and exact next-action/diagnostic commands.
+
+Redact credentials, environment values and authenticated remote URLs.
+Local recovery commands may include the necessary installation path; do not
+publish private paths in uploaded CI reports. Bound logs and retained summaries
+separately from the single full backup. Do not build an unbounded history store.
+Corrupt or unreadable status data is an explicit error, not an empty history.
+
+### Stage deadlines and cancellation
+
+Add `--timeout SECONDS` / `-TimeoutSeconds SECONDS` for a positive per-stage
+budget; retain `--wait` / `-WaitSeconds` for readiness. Document concrete defaults
+and interactions in the implementation plan and help. Report the active phase,
+elapsed time and applied budget during long steps.
+
+Timeout/cancellation stops new mutations, requests termination of this
+operation's owned workers, and confirms settlement before restarting or
+restoring any runtime. A Promise timeout alone does not stop a copying worker
+or npm child. If settlement cannot be established, retain ownership and the
+backup, record the unresolved processes and print inspection/recovery guidance.
+Never kill by process name or assume every listener on the app port is owned.
+
+Persist intent before mutation as already specified. Abrupt OOM/power loss
+continues to rely on durable phase/ownership records and the next invocation's
+diagnosis, not a catch handler that may never run.
+
+### Additional Actions gates
+
+Run these on Linux and Windows in addition to real first-deploy/update/restore:
+
+- Preview preserves application/control filesystem contents, Git refs and
+  service state, including when no control directory exists.
+- Already-current preserves backup identity and performs zero stop, install,
+  build or rotation operations. Missing receipts, altered artifacts/config and
+  unverified activation do not incorrectly skip.
+- Incompatible Node/protocol/config/data and unknown database shapes refuse
+  before stopping or mutating the application; supported historical fixtures
+  pass with committed WAL data included in inspection.
+- Timeout and cancellation cover commands with child processes and snapshot
+  copying; no writer remains when cleanup/recovery proceeds. Unconfirmed
+  termination retains ownership and reports a blocked outcome.
+- JSON remains parseable on success, preview, refusal, timeout and recovery;
+  errors retain nonzero exit codes and concrete next actions.
+- No new upgrade-named entry point or alias is advertised or introduced.
+
+Candidate worktree builds/canaries, automatic channel selection, full business
+draining and automatic database rollback remain deferred. Display the risk to
+in-flight chat/tool/scheduled work before a maintenance-window update; this
+warning is not a claim that business draining is implemented.
 
 ## Backup contents and placement
 
