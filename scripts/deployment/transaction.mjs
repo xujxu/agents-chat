@@ -35,31 +35,34 @@ export async function runDeployment(options, operations) {
     await operations.record(phase, context);
     context.phase = phase;
   };
-  const inspected = await invoke('inspect');
-  if (!inspected || typeof inspected.exists !== 'boolean' || typeof inspected.running !== 'boolean'
-    || inspected.owned !== true || (!inspected.exists && inspected.running)) {
-    throw new Error('Deployment inspection did not establish managed runtime ownership.');
-  }
-  context.inspection = inspected;
-  if (options.operation === 'update' && !inspected.exists) {
-    throw new Error('Update requires an existing deployment.');
-  }
-  context.target = await invoke('resolveTarget');
-  const admission = await invoke('admit');
-  if (admission?.compatibility !== 'passed') {
-    throw new Error('Deployment compatibility admission must pass before downtime.');
-  }
-  const current = alreadyCurrent({
-    ...admission.current, operation: options.operation, target: context.target?.commit,
-  });
-  if (current.skip && inspected.running) {
-    return { status: 'already-current', backupCreated: false };
-  }
-  await invoke('capacity');
-  await record('preflight');
+  let inspected;
+  let preflightComplete = false;
   let stopAttempted = false;
   let sourceMutationAttempted = false;
   try {
+    inspected = await invoke('inspect');
+    if (!inspected || typeof inspected.exists !== 'boolean' || typeof inspected.running !== 'boolean'
+      || inspected.owned !== true || (!inspected.exists && inspected.running)) {
+      throw new Error('Deployment inspection did not establish managed runtime ownership.');
+    }
+    context.inspection = inspected;
+    if (options.operation === 'update' && !inspected.exists) {
+      throw new Error('Update requires an existing deployment.');
+    }
+    context.target = await invoke('resolveTarget');
+    const admission = await invoke('admit');
+    if (admission?.compatibility !== 'passed') {
+      throw new Error('Deployment compatibility admission must pass before downtime.');
+    }
+    const current = alreadyCurrent({
+      ...admission.current, operation: options.operation, target: context.target?.commit,
+    });
+    if (current.skip && inspected.running) {
+      return { status: 'already-current', backupCreated: false };
+    }
+    await invoke('capacity');
+    await record('preflight');
+    preflightComplete = true;
     if (inspected.exists) {
       await record('stopped');
       stopAttempted = true;
@@ -91,6 +94,7 @@ export async function runDeployment(options, operations) {
     await record('accepted');
     return { status: 'accepted', backupCreated: inspected.exists };
   } catch (error) {
+    if (!preflightComplete && error?.recoveryAllowed !== false) throw error;
     const errors = [error];
     try {
       if (error?.recoveryAllowed !== false) {
@@ -103,7 +107,9 @@ export async function runDeployment(options, operations) {
     } catch (recoveryError) {
       errors.push(recoveryError);
     }
-    try { await record(errors.some(failure => failure?.recoveryAllowed === false) ? 'blocked' : 'recovery-required'); }
+    const blocked = errors.some(failure => failure?.recoveryAllowed === false);
+    context.errorCode = blocked ? 'DEPLOYMENT_WORKER_UNSETTLED' : error?.code ?? 'DEPLOYMENT_FAILED';
+    try { await record(blocked ? 'blocked' : 'recovery-required'); }
     catch (stateError) { errors.push(stateError); }
     if (errors.length > 1) {
       throw Object.assign(new AggregateError(errors,

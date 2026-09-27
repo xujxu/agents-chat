@@ -30,7 +30,7 @@ export async function processIdentity(pid) {
       `$ErrorActionPreference = 'Stop'; try { $p = [System.Diagnostics.Process]::GetProcessById(${pid}); ` +
       `[Console]::Write($p.StartTime.ToUniversalTime().Ticks.ToString()) } ` +
       `catch [System.ArgumentException] { [Console]::Write('missing') }`,
-    ], { windowsHide: true, timeout: 10000, maxBuffer: 4096 });
+    ], { windowsHide: true, timeout: 30000, maxBuffer: 4096 });
     const identity = stdout.trim();
     if (identity === 'missing') return null;
     if (!/^[0-9]+$/.test(identity)) throw new Error('Cannot read Windows process start identity.');

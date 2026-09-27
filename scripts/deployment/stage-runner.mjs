@@ -55,6 +55,9 @@ export async function runStage(stage, worker, {
       value => ({ value }), error => ({ error }),
     );
     const first = await Promise.race([completed, interruption]);
+    if (!interrupted && performance.now() - started >= timeoutMs) {
+      interrupt('DEPLOYMENT_STAGE_TIMEOUT');
+    }
     if (!interrupted) {
       if (Object.hasOwn(first, 'error')) throw first.error;
       return first.value;

@@ -90,7 +90,9 @@ function validateState(state) {
     || !['deploy', 'update', 'restore'].includes(state.operation)
     || !Object.hasOwn(transitions, state.phase)
     || (state.previousPhase !== null && !Object.hasOwn(transitions, state.previousPhase))
-    || !['running', 'stopped', 'absent'].includes(state.priorRuntime)
+    || (!['running', 'stopped', 'absent'].includes(state.priorRuntime)
+      && !(state.phase === 'blocked' && state.priorRuntime === 'unknown'))
+    || (state.phase === 'blocked' && state.errorCode !== 'DEPLOYMENT_WORKER_UNSETTLED')
     || !nonempty(state.runtimeIdentity)
     || ![state.startedAt, state.updatedAt].every(value => nonempty(value) && Number.isFinite(Date.parse(value)))) {
     throw new Error('Invalid or incomplete deployment state.');
@@ -140,6 +142,7 @@ export async function loadState(root) {
 
 export async function writeState(root, state) {
   validateState(state);
+  const initialBlocked = state.phase === 'blocked' && state.previousPhase === null;
   const directory = await ownedDirectory(root);
   const destination = path.join(directory, 'state.json');
   const old = await readRegularJson(destination, 'deployment state');
@@ -155,13 +158,15 @@ export async function writeState(root, state) {
       }
       nextPhase(old.phase, state.phase, { firstInstall: old.priorRuntime === 'absent' });
     } else if (state.previousPhase !== null
-      || (state.operation === 'restore'
+      || (initialBlocked
+        ? !['accepted', 'restored'].includes(old.phase)
+        : state.operation === 'restore'
         ? state.phase !== 'restore-preflight'
         : state.phase !== 'preflight' || !['accepted', 'restored'].includes(old.phase))) {
       throw new Error('Unfinished deployment state requires recovery before a new operation.');
     }
   } else if (state.previousPhase !== null
-    || state.phase !== (state.operation === 'restore' ? 'restore-preflight' : 'preflight')) {
+    || (!initialBlocked && state.phase !== (state.operation === 'restore' ? 'restore-preflight' : 'preflight'))) {
     throw new Error('Initial deployment state requires a preflight phase.');
   }
   const temporary = path.join(directory, `.state-${randomUUID()}.tmp`);
