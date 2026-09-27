@@ -1094,7 +1094,7 @@ still sees closed admission and cannot grant a target command.
 
 ### Task N2
 
-- [ ] **Step 1: Add causal contract tests.**
+- [x] **Step 1: Add causal contract tests.**
 
 Fixtures record each callback and return a synthetic validated identity. Test:
 
@@ -1114,7 +1114,7 @@ cancellation during settlement. Assert no grant after abort and no observation
 after failed controller settlement. Both OS identity shapes get fixtures;
 these are explicitly mocked contracts, not native process evidence.
 
-- [ ] **Step 2: Push tests and collect causal red in Actions.**
+- [x] **Step 2: Push tests and collect causal red in Actions.**
 
 ```bash
 git add tests/deployment-owned-worker.test.mjs .github/workflows/deployment-lifecycle.yml docs/superpowers/plans/2026-09-27-cross-platform-deployment-backup.md
@@ -1126,7 +1126,7 @@ gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch fe
 Expected red: missing `owned-worker.mjs`. Workflow runs the exact new test file
 alongside existing deployment contracts, on Linux and Windows.
 
-- [ ] **Step 3: Implement coordinator with the following core structure.**
+- [x] **Step 3: Implement coordinator with the following core structure.**
 
 ```js
 import path from 'node:path';
@@ -1294,7 +1294,7 @@ return/error behavior above are authoritative; the implementation is kept in
 one focused file. Do not add service activation, command parsing, disk storage,
 timer policy or recovery lock reclamation here.
 
-- [ ] **Step 4: Push implementation and require green on both platforms.**
+- [x] **Step 4: Push implementation and require green on both platforms.**
 
 ```bash
 git add scripts/deployment/owned-worker.mjs
@@ -1303,9 +1303,55 @@ git push origin feat/deployment-backup
 gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
 ```
 
-- [ ] **Step 5: Record accepted code/run and carry native integration forward.**
+- [x] **Step 5: Record accepted code/run and carry native integration forward.**
 
 N2 cannot unblock existing deployment state, release a lock, or establish OS
 ownership itself. Durable storage/private engine, concrete platform transport,
 original-handle/cgroup observations, crash reentry and all eight real-process
 groups remain required before public script integration.
+
+### N2 acceptance checkpoint
+
+- Initial red: `6a8380a`, Actions `36310712294`, missing coordinator module on
+  both platforms. Initial implementation `37341b0`, Actions `36310787103`:
+  Linux 118 pass; Windows 117 pass plus one existing Linux-only skip.
+- Evidence-retirement refinement red: `f6ac359`, Actions `36310861206`.
+  Both platforms fail exactly the two retirement contracts: omission of
+  post-receipt retirement and incorrectly successful retirement failure.
+- Accepted implementation: `18501ce19550d6c971762f3a7385c50b75f9f887`,
+  Actions `36310901780`: Linux 123 pass; Windows 122 pass plus one existing
+  Linux-only skip. Zero failures.
+- The 22 new coordinator contracts cover both identity schemas, frozen
+  receipts, cancellation at admission/settlement boundaries, original error
+  retention, cleanup failures, foreign/replaced identity, receipt failures,
+  ambiguous preparation, nested unsafe failures, invalid handles, native
+  evidence retirement, delayed controller join and late preparation after
+  the real stage runner's settlement allowance expires.
+- The late-prepare regression confirms the target is never granted even when
+  preparation eventually returns after the enclosing stage already rejected
+  as unsafe. A late worker-only settlement receipt does not revise the
+  enclosing deployment's blocked state or release its lock.
+- These tests use injected native adapters. They prove coordinator ordering,
+  not actual OS containment, filesystem durability or crash recovery.
+  `record` remains an injected durable-writer contract; no receipt store,
+  systemd unit or Windows Job has been created by this batch.
+- All validation ran in Actions. Only the feature branch changed. Main,
+  public deploy/update/restore entrypoints and the live installation remain
+  untouched.
+
+### Next native boundary after N2
+
+Keep the next implementation separate from this coordinator. Before native
+code is written, specify and implement the private saved-engine location and
+versioned receipt store, then the bootstrap transport and platform interop.
+The store must reject stale/concurrent writers and preserve intent after
+partial creation; coordinator callbacks alone do not supply those guarantees.
+Adapter cancellation/close/stop/join operations must be idempotent, cannot
+reopen command admission and must not reuse the aborted grant signal as a
+reason to skip native cleanup. Retire must release the original retained
+handle/evidence, never recreate a same-name domain.
+
+The concrete native interop/transport plan is still outstanding. No new
+interop package or external native dependency has been selected. All eight
+real-process acceptance groups in the approved spec remain open, followed by
+the full application deployment/update/restore acceptance and main PR.
