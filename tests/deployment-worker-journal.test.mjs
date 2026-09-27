@@ -410,3 +410,14 @@ test('a partial physical write is retained and cannot be retried or parsed as co
   await assert.rejects(readWorkerJournal(control, owner), unsafe);
   assert.equal(await readFile(file, 'utf8'), partial);
 });
+
+test('invalid UTF-8 cannot silently substitute a different native domain identity', async t => {
+  const { control, owner, receipt, file } = await fixture(t);
+  const bytes = Buffer.from(`${JSON.stringify(receipt('intent'))}\n${JSON.stringify(receipt('owned'))}\n`);
+  const index = bytes.indexOf(Buffer.from('/system.slice/'));
+  assert.ok(index >= 0);
+  bytes[index + 1] = 0xff;
+  await writeFile(file, bytes, { mode: 0o600 });
+  await assert.rejects(readWorkerJournal(control, owner), unsafe);
+  assert.deepEqual(await readFile(file), bytes);
+});
