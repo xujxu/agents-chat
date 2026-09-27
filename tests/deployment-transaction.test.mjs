@@ -296,3 +296,39 @@ test('cancelling a stopped pre-source operation can restart untouched app using 
   assert.equal(calls.at(-1), 'start');
   assert.equal(calls.includes('selectSource'), false);
 });
+
+test('wrapped worker uncertainty blocks preflight and mutations without runtime cleanup', async () => {
+  const unsafe = Object.assign(new Error('unsettled worker'), { recoveryAllowed: false });
+  for (const stage of ['inspect', 'snapshot', 'build']) {
+    for (const failure of [
+      new Error('adapter context', { cause: unsafe }),
+      new AggregateError([new Error('ordinary'), unsafe]),
+    ]) {
+      const { calls, phases, operations } = fixture();
+      operations[stage] = async () => { calls.push(stage); throw failure; };
+      await assert.rejects(runDeployment({ operation: 'update' }, operations), error => error === failure);
+      assert.equal(calls.at(-1), stage);
+      assert.equal(phases.at(-1), 'blocked');
+      assert.equal(calls.includes('start'), false);
+    }
+  }
+});
+
+test('nested cleanup uncertainty survives a second journal failure', async () => {
+  const { phases, operations } = fixture('build');
+  const unsafe = Object.assign(new Error('writer still alive'), { recoveryAllowed: false });
+  const cleanup = new Error('stop failed', { cause: unsafe });
+  let stops = 0;
+  operations.stop = async () => { if (++stops === 2) throw cleanup; };
+  operations.record = async phase => {
+    phases.push(phase);
+    if (phase === 'blocked') throw new Error('journal failed');
+  };
+  await assert.rejects(runDeployment({ operation: 'update' }, operations), error => {
+    assert.equal(error.recoveryAllowed, false);
+    assert.equal(error.errors[1], cleanup);
+    assert.match(error.errors[2].message, /journal failed/);
+    return true;
+  });
+  assert.equal(phases.at(-1), 'blocked');
+});

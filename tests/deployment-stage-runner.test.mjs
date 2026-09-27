@@ -108,3 +108,22 @@ test('late synchronous completion cannot outrun the deadline timer', async () =>
     return true;
   });
 });
+
+test('cancellation keeps wrapped and aggregate cleanup failures unsafe', async () => {
+  const unsafe = Object.assign(new Error('descendant remains'), { recoveryAllowed: false });
+  for (const failure of [
+    new Error('native adapter context', { cause: unsafe }),
+    new AggregateError([new Error('ordinary'), unsafe]),
+  ]) {
+    const controller = new AbortController();
+    await assert.rejects(runStage('build', signal => new Promise((resolve, reject) => {
+      signal.addEventListener('abort', () => reject(failure), { once: true });
+      controller.abort();
+    }), { timeoutMs: 10000, settlementMs: 1000, signal: controller.signal }), error => {
+      assert.equal(error.code, 'DEPLOYMENT_WORKER_UNSETTLED');
+      assert.equal(error.recoveryAllowed, false);
+      assert.equal(error.cause, failure);
+      return true;
+    });
+  }
+});
