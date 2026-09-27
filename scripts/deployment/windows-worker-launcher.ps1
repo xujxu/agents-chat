@@ -25,15 +25,15 @@ try {
     foreach ($key in @('file','args','cwd','env')) {
         if (-not $command.ContainsKey($key)) { throw 'Incomplete command.' }
     }
-    if ($command.file -isnot [string] -or $command.cwd -isnot [string] -or $command.args -isnot [array]
-        -or $command.env -isnot [System.Collections.IDictionary]) { throw 'Invalid command fields.' }
+    if ($command.file -isnot [string] -or $command.cwd -isnot [string] -or $command.args -isnot [array] -or
+        $command.env -isnot [System.Collections.IDictionary]) { throw 'Invalid command fields.' }
     foreach ($value in @($command.file, $command.cwd) + $command.args) {
         if ($value -isnot [string] -or $value.Contains([char]0)) { throw 'Invalid command text.' }
     }
     $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($entry in $command.env.GetEnumerator()) {
-        if ($entry.Key -cnotmatch '^[A-Za-z_][A-Za-z0-9_]*$' -or $entry.Value -isnot [string]
-            -or $entry.Value.Contains([char]0)) { throw 'Invalid environment.' }
+        if ($entry.Key -cnotmatch '^[A-Za-z_][A-Za-z0-9_]*$' -or $entry.Value -isnot [string] -or
+            $entry.Value.Contains([char]0)) { throw 'Invalid environment.' }
         $environment.Add($entry.Key, $entry.Value)
     }
     if ([Deployment.WindowsWorkerJob]::ProcessIdentity($OwnerPid) -cne $OwnerIdentity) { throw 'Owner changed before grant.' }
