@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFile, fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmod, chown, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import fs, { chmod, chown, mkdir, mkdtemp, readFile, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
-import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 import { acquireLock, writeState, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
@@ -19,7 +20,7 @@ const npm = path.join(path.dirname(node), 'npm');
 const quote = value => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%')}"`;
 
 async function fixture(t, { command = `${quote(npm)} start`, settings = '', dropIn = '', nonroot = false } = {}) {
-  const root = await temporaryDeployment(t);
+  const root = await realpath(await mkdtemp(path.join(await realpath(tmpdir()), 'agents-deployment-test-')));
   const project = path.join(root, 'app with spaces');
   await mkdir(project);
   if (nonroot) {
@@ -64,6 +65,7 @@ ${settings}
     await systemctl('stop', unit);
     await unlink(fragment);
     await systemctl('daemon-reload');
+    await rm(root, { recursive: true });
   });
   await writeFile(fragment, bytes, { flag: 'wx', mode: 0o644 });
   if (dropIn) {
@@ -241,12 +243,13 @@ test('existing inhibition is never overwritten and foreign locks never stop a ru
   assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
 });
 
-test('inhibition or lock replacement poisons stopped-state authority without restarting anything', async t => {
-  for (const kind of ['inhibition', 'lock']) {
+test('inhibition, journal or lock replacement poisons stopped-state authority without restarting anything', async t => {
+  for (const kind of ['inhibition', 'lock', 'journal']) {
     const f = await stopFixture(t);
     const stopped = await stopLinuxService(f);
     try {
-      const file = kind === 'lock' ? path.join(f.control, 'lock', 'owner.json') : f.inhibition;
+      const file = kind === 'lock' ? path.join(f.control, 'lock', 'owner.json')
+        : kind === 'journal' ? path.join(f.control, 'service-stop.ndjson') : f.inhibition;
       const bytes = await readFile(file);
       await rename(file, `${file}.old`);
       await writeFile(file, bytes, { mode: 0o600 });
@@ -296,6 +299,41 @@ test('actual controller death retains inhibition and blocked status both before 
         await assert.rejects(stopped.checkStopped(), error => error.recoveryAllowed === false);
         assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
       } finally { await stopped.close(); }
+    });
+
+    test('receipt flush failure never crosses the next manager mutation and retains blocked evidence', async t => {
+      for (const phase of ['intent', 'inhibited']) {
+        const f = await stopFixture(t);
+        const journalPath = path.join(f.control, 'service-stop.ndjson');
+        const nativeOpen = fs.open;
+        let injected = false;
+        fs.open = async function (file, ...args) {
+          const handle = await nativeOpen(file, ...args);
+          if (file === journalPath) {
+            const sync = handle.sync.bind(handle);
+            handle.sync = async () => {
+              await sync();
+              const text = await readFile(file, 'utf8');
+              if (text.trim() && JSON.parse(text.trim().split('\n').at(-1)).phase === phase) {
+                injected = true;
+                throw new Error('Injected service receipt flush failure.');
+              }
+            };
+          }
+          return handle;
+        };
+        syncBuiltinESMExports();
+        try { await assert.rejects(stopLinuxService(f), error => error.recoveryAllowed === false); }
+        finally { fs.open = nativeOpen; syncBuiltinESMExports(); }
+        assert.equal(injected, true);
+        assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+        if (phase === 'intent') await assert.rejects(readFile(f.inhibition), { code: 'ENOENT' });
+        else {
+          assert.match(await readFile(f.inhibition, 'utf8'), /RefuseManualStart=yes/);
+          await assert.rejects(systemctl('start', f.unit), /manual|refus/i);
+        }
+        assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+      }
     });
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`Stop controller did not reach receipt: ${diagnostic}`)), 45000);
