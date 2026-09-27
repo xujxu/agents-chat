@@ -177,6 +177,23 @@ test('foreign controller identity and implicit runtime account are refused befor
   assert.equal(stdout.trim(), 'not-found');
 });
 
+test('an existing same-name sentinel unit is refused without stopping or replacing it', async t => {
+  const f = await fixture(t, `require('node:fs').writeFileSync('must-not-run','bad');`);
+  const unit = `agents-deploy-${f.owner.workerId}.service`;
+  await execute('systemd-run', [
+    '--system', '--quiet', '--unit', unit, '--property=Type=exec',
+    '--property=RuntimeMaxSec=60s', '/usr/bin/sleep', 'infinity',
+  ], { timeout: 15000 });
+  const before = await execute('systemctl', ['show', unit, '--property=MainPID,InvocationID,ActiveState']);
+  await assert.rejects(prepareLinuxWorker({
+    owner: f.owner, saved: f.saved, command: f.command, uid: 0, gid: 0,
+  }), /already exists/);
+  const after = await execute('systemctl', ['show', unit, '--property=MainPID,InvocationID,ActiveState']);
+  assert.equal(after.stdout, before.stdout);
+  assert.match(after.stdout, /ActiveState=active/);
+  await assert.rejects(stat(path.join(f.project, 'must-not-run')), { code: 'ENOENT' });
+});
+
 async function waitForFile(file) {
   for (let index = 0; index < 200; index++) {
     try { return await readFile(file, 'utf8'); }
