@@ -2864,3 +2864,49 @@ and refuse backup/restart on uncertain outcomes. Original source ownership
 and application acceptance must also authorize eventual removal of inhibition.
 These mutation/recovery paths are not supplied by `inspectLinuxService`.
 Public entry scripts, main and the live deployment remain unchanged.
+
+### Durable Linux service inhibition and original-domain stop
+
+Implement `stopLinuxService({control, lock, unit, project, npm, node})` in
+`scripts/deployment/linux-service-stop.mjs`. Require the live original lock and
+matching `stopped` application phase before admission. Obtain the retained
+inspection internally, never trust a caller-provided ownership descriptor.
+Persist `service-stop.ndjson` intent before manager/configuration mutation.
+Use one exclusive root-owned persistent drop-in:
+`/etc/systemd/system/<unit>.d/90-agents-chat-deployment.conf`.
+
+```ini
+[Unit]
+RefuseManualStart=yes
+ConditionPathExists=!/etc/systemd/system/<unit>.d/90-agents-chat-deployment.conf
+```
+
+The drop-in inhibits manual starts and dependency/automatic starts, including
+after controller death or reboot; its own existence is the false start
+condition. Verify its retained inode/content and effective manager condition
+before requesting stop. Do not overwrite an existing inhibition file.
+Append inhibited -> stop-requested -> stopped receipts, pinning the lock and
+service identity. Use systemctl stop --no-block, then bounded observation;
+only the retained original cgroup's empty/deleted evidence plus matching
+stopped manager generation permits the final stopped receipt.
+
+Return `checkStopped()` and `close()`; close releases inspection descriptors,
+not the persistent inhibition or journal. This batch intentionally has no
+unconditional unmask/uninhibit, generic stale-lock adoption or automatic
+restart API. Releasing inhibition needs the subsequent activation/recovery
+state protocol; until then the public scripts must not call this helper.
+
+`service-*` evidence must block generic lock acquire/release, status must
+report blocked, and both live worker retirement and its independent cold
+cleanup must refuse it. Worker execution itself remains possible under the
+same live transaction lock for the future stopped-update sequence.
+
+- [ ] Write real installed-service stop contracts first and observe Actions red.
+- [ ] Add inhibited/stopped observations to the retained service inspector,
+  preserving existing read-only checks.
+- [ ] Implement exclusive durable inhibition, lock/file authority, bounded
+  stop and original-domain empty proof; include saved helper coverage.
+- [ ] Validate actual npm/detached writers, manual and dependency starts,
+  controller death, evidence replacement and lock/recovery barriers in Actions.
+- [ ] Persist accepted evidence and the explicit not-yet-supplied activation
+  and cold-service recovery paths.

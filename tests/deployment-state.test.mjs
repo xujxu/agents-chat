@@ -5,7 +5,20 @@ import path from 'node:path';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import {
   nextPhase, recoveryAdvice, loadState, writeState, acquireLock, releaseLock,
+  reconcileInterruptedOperation,
 } from '../scripts/deployment/state.mjs';
+
+test('service maintenance evidence blocks lock release, fresh admission and idle reporting', async t => {
+  const root = await temporaryDeployment(t);
+  const lock = await acquireLock(root, { project: root, operationId: 'service-stop' });
+  await writeFile(path.join(root, 'service-stop.ndjson'), '{"partial":');
+  await assert.rejects(releaseLock(root, lock), /service/i);
+  assert.equal((await reconcileInterruptedOperation(root)).status, 'blocked');
+  const other = await temporaryDeployment(t);
+  await writeFile(path.join(other, 'service-stop.ndjson'), '');
+  await assert.rejects(acquireLock(other, { project: other, operationId: 'new' }), /service/i);
+  assert.equal((await reconcileInterruptedOperation(other)).status, 'blocked');
+});
 
 test('update cannot replace dependencies before a complete backup', () => {
   assert.throws(() => nextPhase('copying', 'dependencies'), /transition/i);

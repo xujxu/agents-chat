@@ -8,6 +8,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
+import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
+import { acquireLock, writeState, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
 
 const execute = promisify(execFile);
 const native = (file, args) => execute(file, args, { timeout: 20000, maxBuffer: 8192 });
@@ -35,7 +37,7 @@ async function fixture(t, { command = `${quote(npm)} start`, settings = '', drop
   await writeFile(path.join(project, 'server.cjs'), `
 const fs = require('node:fs');
 const { spawn } = require('node:child_process');
-const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { detached:true, stdio:'ignore' });
+const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM",()=>{});setInterval(()=>require("node:fs").appendFileSync("writes","x"),20)'], { detached:true, stdio:'ignore' });
 fs.writeFileSync('ready', String(child.pid));
 setInterval(()=>{},1000);
 `);
@@ -56,11 +58,11 @@ TimeoutStopSec=2s
 ${settings}
 `;
   t.after(async () => {
+    await rm(dropDirectory, { recursive: true, force: true });
     await writeFile(fragment, `${bytes}\n[Service]\nKillMode=control-group\nRestart=no\nExecStop=\n`);
     await systemctl('daemon-reload');
     await systemctl('stop', unit);
     await unlink(fragment);
-    if (dropIn) await rm(dropDirectory, { recursive: true });
     await systemctl('daemon-reload');
   });
   await writeFile(fragment, bytes, { flag: 'wx', mode: 0o644 });
@@ -175,4 +177,82 @@ test('unsafe stop policy and writable unit sources are rejected before service m
   await ready(f);
   await chmod(f.fragment, 0o666);
   await assert.rejects(inspectLinuxService(f), /source|permission|writable/i);
+});
+
+async function stopFixture(t) {
+  const f = await fixture(t);
+  await ready(f);
+  const control = path.join(path.dirname(f.project), 'control');
+  await mkdir(control, { mode: 0o700 });
+  const lock = await acquireLock(control, { project: f.project, operationId: randomUUID() });
+  const state = {
+    version: 1, operationId: lock.operationId, project: f.project, operation: 'update',
+    phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
+    backupId: null, priorRuntime: 'running', runtimeIdentity: f.unit,
+    startedAt: lock.createdAt, updatedAt: lock.createdAt, errorCode: null,
+  };
+  await writeState(control, state);
+  await writeState(control, { ...state, phase: 'stopped', previousPhase: 'preflight' });
+  return { ...f, control, lock, inhibition: `/etc/systemd/system/${f.unit}.d/90-agents-chat-deployment.conf` };
+}
+
+test('durable inhibition stops the original service and detached writer before granting snapshot admission', async t => {
+  const f = await stopFixture(t);
+  const stopped = await stopLinuxService(f);
+  try {
+    assert.deepEqual(await stopped.checkStopped(), { stopped: true, inhibited: true });
+    const bytes = await readFile(path.join(f.project, 'writes'));
+    await delay(150);
+    assert.deepEqual(await readFile(path.join(f.project, 'writes')), bytes);
+    await assert.rejects(systemctl('start', f.unit), /refus|manual/i);
+    await systemctl('daemon-reload');
+    await assert.rejects(systemctl('start', f.unit), /refus|manual/i);
+    const receipts = (await readFile(path.join(f.control, 'service-stop.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+    assert.deepEqual(receipts.map(record => record.phase), ['intent', 'inhibited', 'stop-requested', 'stopped']);
+    await assert.rejects(releaseLock(f.control, f.lock), /service/i);
+    assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+  } finally { await stopped.close(); }
+  assert.match(await readFile(f.inhibition, 'utf8'), /RefuseManualStart=yes/);
+});
+
+test('dependency activation cannot bypass persistent inhibition', async t => {
+  const f = await stopFixture(t);
+  const stopped = await stopLinuxService(f);
+  try {
+    const requester = `agents-requester-${randomUUID()}.service`;
+    t.after(async () => { await systemctl('stop', requester); });
+    await native('/usr/bin/systemd-run', ['--quiet', '--unit', requester,
+      '--property=Type=exec', '--property=RemainAfterExit=yes', `--property=Wants=${f.unit}`,
+      `--property=After=${f.unit}`, '--', '/usr/bin/true']);
+    assert.deepEqual(await stopped.checkStopped(), { stopped: true, inhibited: true });
+    assert.equal((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim(), '0');
+  } finally { await stopped.close(); }
+});
+
+test('existing inhibition is never overwritten and foreign locks never stop a running service', async t => {
+  const f = await stopFixture(t);
+  await assert.rejects(stopLinuxService({ ...f, lock: { ...f.lock, token: randomUUID() } }));
+  assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+  await mkdir(path.dirname(f.inhibition));
+  await writeFile(f.inhibition, '# owned by someone else\n');
+  await systemctl('daemon-reload');
+  await assert.rejects(stopLinuxService(f));
+  assert.equal(await readFile(f.inhibition, 'utf8'), '# owned by someone else\n');
+  assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+});
+
+test('inhibition or lock replacement poisons stopped-state authority without restarting anything', async t => {
+  for (const kind of ['inhibition', 'lock']) {
+    const f = await stopFixture(t);
+    const stopped = await stopLinuxService(f);
+    try {
+      const file = kind === 'lock' ? path.join(f.control, 'lock', 'owner.json') : f.inhibition;
+      const bytes = await readFile(file);
+      await rename(file, `${file}.old`);
+      await writeFile(file, bytes, { mode: 0o600 });
+      await unlink(`${file}.old`);
+      await assert.rejects(stopped.checkStopped(), error => error.recoveryAllowed === false);
+      assert.equal((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim(), '0');
+    } finally { await stopped.close(); }
+  }
 });
