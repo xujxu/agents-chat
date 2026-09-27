@@ -2170,3 +2170,88 @@ retirement, complete historical deploy/update/restore lifecycle acceptance,
 public scripts/README and main PR also remain outstanding. No local tests,
 builds or native experiments were run; only the feature branch changed.
 Main and the live installation are untouched.
+
+## N7: Windows original-handle owner and Node coordinator adapter
+
+Continue inline. Extend the accepted primitive rather than creating another
+Job implementation. Files:
+
+- `windows-worker-owner.ps1`: saved native owner outside the Job, original
+  handle retained through settlement, bounded ID-correlated RPC, startup ACL/
+  account/session checks, launcher orchestration and independent Node lifetime
+  supervision.
+- `windows-worker.mjs`: `prepareWindowsWorker` verifies saved bundle/controller
+  identity, captures immutable command, starts explicit absolute pwsh, validates
+  ready identity and implements the six coordinator callbacks.
+- `WindowsWorkerJob.cs`: bounded asynchronous frame read for the owner control
+  loop and launcher replies, plus finite independent owner lifetime deadline.
+- Saved-engine allowlist includes the C#/PowerShell native files and adapter.
+- `tests/deployment-windows-worker.test.mjs` and an isolated Node controller
+  fixture: actual coordinator/journal/saved-engine/native integration.
+
+**Authority:** require an explicitly supplied absolute pwsh path, account SID
+and session ID. No credential switching/automatic elevation. The helper checks
+current account/session, private control/bundle ACLs and the live Node PID/start
+identity before creating a Job. The Job's original owner is this native helper;
+serialized domain `ownerIdentity` binds the Node operation controller, while
+readiness separately reports the helper PID/start identity. Node verifies that
+helper against its spawned child and never opens another named Job.
+
+**Transport:** redirected stdin/stdout pipes with bounded newline JSON. Node
+uses one receiver and correlates positive sequential request IDs. Responses
+must match an outstanding request; malformed/unknown/duplicate responses
+permanently invalidate transport. At most eight pending RPCs. A pending run
+may overlap cleanup after cancellation, but late run replies cannot fulfill a
+stop/join/observe request. No arbitrary executable instructions outside `run`.
+Remove case-insensitive NODE_OPTIONS/NODE_PATH from copied bootstrap env.
+
+```js
+{ id: 1, method: 'run', command: { file, args, cwd, env } }
+{ id: 1, type: 'reply', value: { exitCode: 0, stdout: '', stderr: '' } }
+{ id: 2, method: 'closeAdmission' }
+{ id: 2, type: 'reply', value: null }
+```
+
+The owner sends readiness only after the trusted launcher joined the configured
+Job and closed its temporary handle. It forwards exactly one grant after
+Node's durable admitted receipt. Its loop continues processing cleanup RPCs
+while target execution is pending. `closeAdmission` irreversibly rejects future
+run requests and closes launcher input. `stop` terminates the original Job.
+`join` waits for launcher exit and exact original Job emptiness; `observe`
+requires closed admission and completed join and returns the captured domain.
+`retire` is accepted only after that sequence; dispose original handle, send
+acknowledgement, exit. Node joins the helper before completing retirement.
+
+On controller identity loss, pipe loss or native owner crash, owner process
+exit closes the noninherited original handle and the OS kills the Job.
+Independent 30-minute lifetime ceiling bounds a live-but-stalled Node owner.
+Node records uncertainty on helper/transport loss: kill-on-close does not
+magically produce a durable verified settlement receipt.
+Cancellation of run rejects promptly but preserves correlation of its late
+reply; native cleanup uses fresh requests rather than the aborted grant signal.
+Partial preparation failure joins/kills only the actual spawned helper object,
+then remains unsafe. It never recreates a Job or clears an existing journal.
+
+**Tests and execution**
+
+- [ ] Push real Windows integration contracts and collect causal missing-module
+  red in the windows-native job.
+- [ ] Implement helper/adapter and closed saved-bundle dependency set; add the
+  bounded native frame reader without changing the existing primitive tests.
+- [ ] Run all four Actions jobs, diagnose bounded logs and require green.
+- [ ] Persist exact acceptance and outstanding account/reentry/fault gates.
+
+Core test wiring:
+
+```js
+const saved = await saveWorkerEngine({ source, control, project, operationId: owner.operationId });
+const journal = await createWorkerJournal(control, owner);
+const result = await runOwnedWorker({ owner, signal }, {
+  record: journal.record,
+  prepare: context => prepareWindowsWorker({ ...context, saved, command, pwsh, accountSid, sessionId }),
+});
+```
+
+Production wrappers still must aggregate close errors, hold installation
+authority, persist the pinned digest and retire fixed slots safely. N7 does
+not wire public deploy/update/restore or authorize interrupted reentry.

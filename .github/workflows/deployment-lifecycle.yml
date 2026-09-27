@@ -89,3 +89,8 @@ jobs:
       - name: Exercise explicit Job and gated launcher
         shell: pwsh
         run: ./tests/deployment-windows-job.ps1
+      - name: Exercise saved Windows coordinator and receipts
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          node --test tests/deployment-windows-worker.test.mjs
