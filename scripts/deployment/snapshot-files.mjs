@@ -21,7 +21,7 @@ export async function realDirectory(directory) {
   const expected = path.resolve(directory);
   const compare = value => process.platform === 'win32' ? value.toLowerCase() : value;
   if (!info.isDirectory() || info.isSymbolicLink() || compare(resolved) !== compare(expected)) {
-    throw new Error('Snapshot path must be a real directory without redirected ancestors.');
+    throw new Error(`Snapshot path must be a real directory without redirected ancestors: ${expected} (resolved: ${resolved}).`);
   }
   return resolved;
 }

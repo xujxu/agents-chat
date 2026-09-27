@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
-  chmod, copyFile, lstat, mkdir, readFile, readdir, readlink, realpath, statfs, symlink,
+  chmod, copyFile, lstat, mkdir, readdir, readlink, statfs, symlink,
 } from 'node:fs/promises';
 import path from 'node:path';
 import { constants } from 'node:fs';
