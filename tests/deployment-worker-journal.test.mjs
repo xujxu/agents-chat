@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { fork } from 'node:child_process';
-import { chmod, link, mkdir, readFile, rename, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, open, readFile, rename, stat, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -349,4 +349,64 @@ test('journal inspection does not require the old checkout to remain present', a
   await rename(project, `${project}-replaced`);
   assert.equal((await readWorkerJournal(control, owner)).at(-1).phase, 'intent');
   await assert.rejects(createWorkerJournal(control, owner), unsafe);
+});
+
+test('failed flush poisons the writer and prevents target admission through the coordinator', async t => {
+  const { create, owner, file, control, domain } = await fixture(t);
+  const journal = await create();
+  const probe = await open(file, 'r');
+  const prototype = Object.getPrototypeOf(probe);
+  await probe.close();
+  const sync = prototype.sync;
+  const failure = new Error('injected flush failure');
+  let flushes = 0;
+  t.mock.method(prototype, 'sync', async function () {
+    if (++flushes === 2) throw failure;
+    return sync.call(this);
+  });
+  let runs = 0;
+  const cleanup = [];
+  await assert.rejects(runOwnedWorker({ owner }, {
+    record: journal.record,
+    async prepare() {
+      return {
+        identity: domain,
+        async run() { runs++; },
+        async closeAdmission() { cleanup.push('close'); },
+        async stop() { cleanup.push('stop'); },
+        async join() { cleanup.push('join'); },
+        async observe() { return { identity: domain, empty: true }; },
+        async retire() { assert.fail('failed recording must retain native evidence'); },
+      };
+    },
+  }), unsafe);
+  t.mock.restoreAll();
+  assert.equal(runs, 0);
+  assert.deepEqual(cleanup, ['close', 'stop', 'join']);
+  await assert.rejects(journal.record({ version: 1, owner, phase: 'blocked', domain }), unsafe);
+  await journal.close();
+  await assert.rejects(createWorkerJournal(control, owner), unsafe);
+});
+
+test('a partial physical write is retained and cannot be retried or parsed as complete', async t => {
+  const { create, receipt, owner, file, control } = await fixture(t);
+  const journal = await create();
+  await journal.record(receipt('intent'));
+  const probe = await open(file, 'r');
+  const prototype = Object.getPrototypeOf(probe);
+  await probe.close();
+  const write = prototype.write;
+  let writes = 0;
+  t.mock.method(prototype, 'write', async function (buffer, offset, length, position) {
+    if (++writes === 1) return write.call(this, buffer, offset, Math.min(8, length), position);
+    throw new Error('injected partial write failure');
+  });
+  await assert.rejects(journal.record(receipt('owned')), unsafe);
+  t.mock.restoreAll();
+  const partial = await readFile(file, 'utf8');
+  assert.equal(partial.endsWith('\n'), false);
+  await assert.rejects(journal.record(receipt('owned')), unsafe);
+  await journal.close();
+  await assert.rejects(readWorkerJournal(control, owner), unsafe);
+  assert.equal(await readFile(file, 'utf8'), partial);
 });
