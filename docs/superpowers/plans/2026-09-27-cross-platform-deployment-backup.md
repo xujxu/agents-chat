@@ -2688,3 +2688,38 @@ Continue toward the public deployment flow with intended runtime identities,
 application/service/watchdog shutdown and real npm/Next execution, while
 retaining the explicit unresolved recovery gates above. Real historical
 deploy/update/restore acceptance, documentation and main PR remain outstanding.
+
+## Delivery gate 1: Explicit Linux command identity
+
+The existing public Linux script explicitly runs git/npm and the service as
+the invoking root account. Do not silently switch existing installations to
+SUDO_USER. This internal change enables the future service-inspected/explicit
+account path without changing public defaults yet.
+
+Keep systemd control and the trusted saved bootstrap root-owned: the private
+control directory and Unix socket must not become readable to the target.
+Capture explicit numeric uid/gid, send them with the one-use command grant,
+clear supplementary groups in the isolated bootstrap, and set target uid/gid
+in spawn before exec. The root bootstrap contains no application code.
+Set `NoNewPrivileges=yes` on the transient unit so target exec cannot regain
+privilege through setuid/file capabilities. Reject missing/negative/noninteger/
+out-of-range IDs before native creation. No credential or environment fallback.
+
+Modify `worker-identity.mjs`, `linux-worker.mjs` and the saved Linux bootstrap.
+Extend actual Linux native tests using an explicit unprivileged UID/GID,
+private control root, writable target directory and exact HOME/env. Assert
+real/effective UID/GID, supplementary groups, NoNewPrivs, file ownership,
+inability to regain root or read private control, and contained detached
+descendants after cancellation. Preserve existing explicit root behavior.
+
+```js
+prepareLinuxWorker({ owner, saved, command, uid: 65534, gid: 65534, signal });
+// Only the target and its descendants use this account; manager control
+// remains root and still verifies the original retained cgroup.
+```
+
+- [ ] Push causal non-root native contracts and observe root-only rejection.
+- [ ] Implement immutable account capture and privilege-safe target exec.
+- [ ] Validate on Actions with all existing worker/operation/recovery cases.
+- [ ] Record limits: no supplemental-group policy, account-name/service
+  resolution or public service-account migration supplied by this helper.

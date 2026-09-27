@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, chown, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -18,12 +18,17 @@ import { runStage } from '../scripts/deployment/stage-runner.mjs';
 const execute = promisify(execFile);
 const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
 
-async function fixture(t, code, args = [], controlName = 'ctl') {
+async function fixture(t, code, args = [], controlName = 'ctl', runtime = { uid: 0, gid: 0 }) {
   const root = await temporaryDeployment(t);
   const project = path.join(root, 'app');
   const control = path.join(root, controlName);
   await mkdir(project);
   await mkdir(control, { mode: 0o700 });
+  if (runtime.uid !== 0) {
+    await chmod(root, 0o711);
+    await chown(project, runtime.uid, runtime.gid);
+    await chmod(project, 0o700);
+  }
   const owner = {
     project, operationId: randomUUID(), workerId: randomUUID(),
     controllerIdentity: await processIdentity(process.pid),
@@ -37,7 +42,7 @@ async function fixture(t, code, args = [], controlName = 'ctl') {
   const controller = new AbortController();
   const operations = {
     async record(receipt) { await journal.record(receipt); receipts.push(receipt); },
-    prepare: context => prepareLinuxWorker({ ...context, saved, command, uid: 0, gid: 0 }),
+    prepare: context => prepareLinuxWorker({ ...context, saved, command, ...runtime }),
   };
   const run = () => runOwnedWorker({ owner, signal: controller.signal }, operations);
   t.after(async () => {
@@ -61,6 +66,67 @@ test('real systemd worker is admitted from the saved engine and settles its reta
   assert.deepEqual(f.receipts.map(receipt => receipt.phase), ['intent', 'owned', 'admitted', 'settled']);
   assert.equal(f.receipts[1].domain.kind, 'systemd');
   assert.equal((await readWorkerJournal(f.control, f.owner)).at(-1).phase, 'settled');
+});
+
+test('non-root target receives exact uid/gid without inherited privileged groups or capabilities', async t => {
+  const f = await fixture(t, `
+    const fs=require('node:fs'),path=require('node:path');
+    let rootDenied=false,controlDenied=false;
+    try{process.setuid(0)}catch(error){if(error.code!=='EPERM')throw error;rootDenied=true}
+    try{fs.readdirSync(path.resolve('../ctl'))}catch(error){if(error.code!=='EACCES')throw error;controlDenied=true}
+    fs.writeFileSync('owned','yes');
+    const status=fs.readFileSync('/proc/self/status','utf8');
+    process.stdout.write(JSON.stringify({
+      uid:process.getuid(),euid:process.geteuid(),gid:process.getgid(),egid:process.getegid(),
+      groups:process.getgroups(),rootDenied,controlDenied,home:process.env.HOME,
+      nnp:status.match(/^NoNewPrivs:\\s+(\\d+)$/m)[1],caps:status.match(/^CapEff:\\s+(\\w+)$/m)[1]
+    }));
+  `, [], 'ctl', { uid: 65534, gid: 65534 });
+  f.command.env.HOME = f.project;
+  assert.deepEqual(JSON.parse((await f.run()).stdout), {
+    uid: 65534, euid: 65534, gid: 65534, egid: 65534, groups: [65534],
+    rootDenied: true, controlDenied: true, home: f.project, nnp: '1', caps: '0000000000000000',
+  });
+  const info = await stat(path.join(f.project, 'owned'));
+  assert.equal(info.uid, 65534);
+  assert.equal(info.gid, 65534);
+  assert.equal(f.receipts.at(-1).phase, 'settled');
+});
+
+test('non-root detached descendants stop before cancellation settlement', async t => {
+  const f = await fixture(t, `
+    const {spawn}=require('node:child_process');
+    const code="const fs=require('node:fs');fs.writeFileSync('started',String(process.getuid()));setInterval(()=>fs.appendFileSync('writer','x'),10)";
+    const child=spawn(process.execPath,['-e',code],{detached:true,stdio:'ignore'});child.unref();
+    setInterval(()=>{},1000);
+  `, [], 'ctl', { uid: 65534, gid: 65534 });
+  const reason = new Error('cancel nonroot descendants');
+  const rejected = assert.rejects(f.run(), error => error === reason);
+  for (let index = 0; index < 400; index++) {
+    try { await stat(path.join(f.project, 'writer')); break; }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (index === 399) throw new Error('Non-root writer did not start.');
+    await delay(50);
+  }
+  assert.equal(await readFile(path.join(f.project, 'started'), 'utf8'), '65534');
+  f.controller.abort(reason);
+  await rejected;
+  const before = await readFile(path.join(f.project, 'writer'));
+  await delay(300);
+  assert.deepEqual(await readFile(path.join(f.project, 'writer')), before);
+  assert.equal(f.receipts.at(-1).phase, 'settled');
+});
+
+test('invalid explicit Linux IDs never create a native domain', async t => {
+  const f = await fixture(t, 'process.exit(0)');
+  for (const runtime of [{ uid: -1, gid: 0 }, { uid: 1.5, gid: 0 }, { uid: 0, gid: -1 },
+    { uid: 4294967295, gid: 0 }, { uid: '0', gid: 0 }]) {
+    await assert.rejects(prepareLinuxWorker({ owner: f.owner, saved: f.saved, command: f.command, ...runtime }),
+      /uid|gid|account/i);
+  }
+  const { stdout } = await execute('systemctl',
+    ['show', `agents-deploy-${f.owner.workerId}.service`, '--property=LoadState', '--value']);
+  assert.equal(stdout.trim(), 'not-found');
 });
 
 test('root exit cannot leave detached descendants writing after settlement', async t => {
