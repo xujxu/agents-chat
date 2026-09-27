@@ -2,7 +2,7 @@ import path from 'node:path';
 import { hasUnsettledWorker } from './worker-errors.mjs';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
-const methods = ['run', 'closeAdmission', 'stop', 'join', 'observe'];
+const methods = ['run', 'closeAdmission', 'stop', 'join', 'observe', 'retire'];
 const text = value => typeof value === 'string' && value.length > 0
   && value.length <= 4096 && !/[\0\r\n]/.test(value);
 
@@ -136,6 +136,10 @@ export async function runOwnedWorker({ owner: suppliedOwner, signal }, { record,
     if (!uncertain) {
       try { await write('settled'); }
       catch (error) { errors.push(error); }
+    }
+    if (!uncertain && handle) {
+      try { await handle.retire(); }
+      catch (error) { errors.push(error); uncertain = true; }
     }
     if (uncertain) {
       try { await write('blocked'); }
