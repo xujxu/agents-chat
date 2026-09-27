@@ -62,6 +62,7 @@ jobs:
           tests/deployment-worker-journal.test.mjs
           tests/deployment-saved-worker.test.mjs
           tests/deployment-worker-wire.test.mjs
+          tests/deployment-worker-operation.test.mjs
 
   linux-native:
     name: Native Linux worker domain

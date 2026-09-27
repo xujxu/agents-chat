@@ -2327,3 +2327,58 @@ Only then wire public deploy/update/restore and the real historical
 application lifecycle, backup/restore metadata, service/watchdog/ACP shutdown
 and rollback acceptance on both platforms. No main PR, main push, merge or
 live installation change is authorized by this intermediate acceptance.
+
+## N8: Durable operation authority and worker enrollment
+
+Continue the approved design inline; do not adopt dead owners or unblock state.
+This batch binds the existing exclusive lock to the saved manifest and every
+worker before native preparation. It deliberately does not delete metadata:
+release is refused while native evidence exists, even after worker settlement.
+Slot retirement and exclusive native recovery require separate acceptance.
+
+Files:
+- Extract the existing bounded append/prefix/inode/flush mechanics from
+  `worker-journal.mjs` into `evidence-journal.mjs`; preserve all worker journal
+  semantics and fault contracts.
+- Add `worker-operation.mjs`: create an exclusive `worker-operation.ndjson`,
+  immutable lock/manifest binding, sequential enrollment (maximum 32 workers),
+  actual platform adapter selection, and a seal after exact inventory and
+  settlement verification. No supplied native callback can authorize execution.
+- Add `assertLockOwner` in `state.mjs`, reusing current process identity and
+  strict bounded lock-file reading. Reject `releaseLock` while a saved engine,
+  operation journal or worker journal remains.
+- Include both new modules and `state.mjs` in the saved-engine dependency set.
+- Add shared filesystem contracts and actual Linux/Windows operation-worker
+  cases to the existing Actions jobs.
+
+Execution order:
+- [ ] Push causal missing-module tests for lock/digest binding, immutable
+  capture, competing creators, malformed evidence, no implicit unlock and
+  zero-worker sealing.
+- [ ] Extract storage without changing existing receipt validation; implement
+  the operation writer and native dispatch. One in-flight operation method,
+  permanent close/seal, enrollment before worker journal/native creation.
+- [ ] Add real native command success, nonzero exit, repeated worker rejection,
+  and operation seal checks on both platforms.
+- [ ] Require all Actions jobs green; record exact evidence and limitations.
+
+```js
+const operation = await createWorkerOperation({ control, lock, saved });
+try {
+  await operation.run({ workerId, command, runtime, signal });
+  await operation.seal();
+} finally {
+  await operation.close();
+}
+const records = await readWorkerOperation(control);
+// records.at(-1).phase === 'sealed' certifies workers, not app acceptance
+// or authorization to remove the operation lock.
+```
+
+Each persisted record has exactly
+`{version:1,phase,lock,manifestSha256,workerId}`. The first phase is `opened`
+with null workerId, followed by distinct `enrolled` UUIDs and optionally one
+terminal `sealed` with null workerId. Lock and digest cannot change between
+records. Read-only inspection never treats process death or a missing worker
+journal as settlement. Empty, truncated, replaced and poisoned evidence fails
+closed without rewriting any record.
