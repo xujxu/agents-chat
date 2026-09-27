@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, rename, symlink, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import {
@@ -101,4 +101,77 @@ test('snapshot refuses a running runtime rather than copying live SQLite data', 
     runtime: { platform: process.platform, state: 'running' },
   }), /stopped/i);
   assert.deepEqual(await readdir(root), ['app']);
+});
+
+for (const promoted of [false, true]) {
+  test(`rotation resumes after ${promoted ? 'promotion' : 'retirement'} rename`, async t => {
+    const root = await temporaryDeployment(t);
+    const project = path.join(root, 'app');
+    await snapshot(root, 'staging', 'one', 'first');
+    await rotateSnapshot(root, { project });
+    await snapshot(root, 'staging', 'two', 'second');
+    await writeFile(path.join(root, 'rotation.json'), JSON.stringify({
+      version: 1, project, oldId: 'one', newId: 'two',
+    }));
+    await rename(path.join(root, 'backup'), path.join(root, 'retiring'));
+    if (promoted) await rename(path.join(root, 'staging'), path.join(root, 'backup'));
+    assert.equal((await reconcileSnapshotSlots(root, { project })).status, 'interrupted-rotation');
+    await rotateSnapshot(root, { project });
+    assert.equal((await verifySnapshot(path.join(root, 'backup'))).id, 'two');
+    assert.deepEqual((await readdir(root)).sort(), ['app', 'backup']);
+  });
+}
+
+test('foreign project cannot rotate or discard someone else snapshot', async t => {
+  const root = await temporaryDeployment(t);
+  await snapshot(root, 'staging', 'one', 'first');
+  const other = path.join(root, 'other');
+  await mkdir(other);
+  await assert.rejects(rotateSnapshot(root, { project: other }), /foreign|owner/i);
+  assert.equal((await verifySnapshot(path.join(root, 'staging'))).id, 'one');
+});
+
+test('unexpected content blocks deletion of a retiring snapshot', async t => {
+  const root = await temporaryDeployment(t);
+  const project = path.join(root, 'app');
+  await snapshot(root, 'staging', 'one', 'first');
+  await rotateSnapshot(root, { project });
+  await snapshot(root, 'staging', 'two', 'second');
+  await writeFile(path.join(root, 'backup', 'user-file'), 'do not discard');
+  await assert.rejects(rotateSnapshot(root, { project }), /unexpected/i);
+  assert.equal(await readFile(path.join(root, 'backup', 'user-file'), 'utf8'), 'do not discard');
+});
+
+test('nested selected files capture their parents and empty directories', async t => {
+  const root = await temporaryDeployment(t);
+  const project = path.join(root, 'app');
+  await mkdir(path.join(project, 'nested', 'empty'), { recursive: true });
+  await writeFile(path.join(project, 'nested', 'data'), 'payload');
+  const manifest = await createSnapshot({
+    project, destination: path.join(root, 'staging'), id: 'nested',
+    files: ['nested/data', 'nested/empty'],
+    source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+  });
+  assert.deepEqual(manifest.entries.map(entry => entry.path).sort(), ['nested', 'nested/data', 'nested/empty']);
+});
+
+test('linux relative executable links remain confined to captured files', {
+  skip: process.platform !== 'linux',
+}, async t => {
+  const root = await temporaryDeployment(t);
+  const project = path.join(root, 'app');
+  await mkdir(path.join(project, '.bin'), { recursive: true });
+  await writeFile(path.join(project, 'engine'), 'executable');
+  await symlink('../engine', path.join(project, '.bin', 'engine'));
+  await createSnapshot({
+    project, destination: path.join(root, 'staging'), id: 'links',
+    files: ['.bin', 'engine'],
+    source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+  });
+  assert.equal((await verifySnapshot(path.join(root, 'staging'))).id, 'links');
+  await unlink(path.join(root, 'staging', 'files', '.bin', 'engine'));
+  await symlink(path.join(project, 'engine'), path.join(root, 'staging', 'files', '.bin', 'engine'));
+  await assert.rejects(verifySnapshot(path.join(root, 'staging')), /external/i);
 });
