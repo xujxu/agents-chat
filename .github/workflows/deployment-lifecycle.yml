@@ -76,7 +76,7 @@ jobs:
       - name: Characterize retained cgroup observation
         run: sudo "$(command -v node)" tests/deployment-linux-domain-probe.mjs
       - name: Exercise actual saved-engine systemd workers
-        run: sudo "$(command -v node)" --test tests/deployment-linux-worker.test.mjs
+        run: sudo "$(command -v node)" --test tests/deployment-linux-worker.test.mjs tests/deployment-native-operation.test.mjs
 
   windows-native:
     name: Native Windows Job ownership
@@ -94,4 +94,4 @@ jobs:
         shell: pwsh
         run: |
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
-          node --test tests/deployment-windows-worker.test.mjs
+          node --test tests/deployment-windows-worker.test.mjs tests/deployment-native-operation.test.mjs

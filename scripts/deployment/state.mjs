@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, open, readFile, realpath, rename, rmdir, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { processIdentity } from './process-identity.mjs';
+import { captureWorkerFields } from './worker-identity.mjs';
+import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 
 const transitions = {
   preflight: ['stopped', 'source-selected'],
@@ -221,6 +223,32 @@ export async function acquireLock(root, { project, operationId }) {
   return owner;
 }
 
+export function captureLockOwner(value) {
+  const owner = captureWorkerFields(value,
+    ['version', 'token', 'project', 'operationId', 'pid', 'processIdentity', 'createdAt'], 'lock owner');
+  if (owner.version !== 1 || !/^[a-f0-9-]{36}$/.test(owner.token)
+    || ![owner.project, owner.operationId, owner.processIdentity, owner.createdAt]
+      .every(field => nonempty(field) && field.length <= 4096)
+    || !path.isAbsolute(owner.project) || path.resolve(owner.project) !== owner.project
+    || !Number.isSafeInteger(owner.pid) || owner.pid < 1 || owner.pid > 2147483647
+    || !Number.isFinite(Date.parse(owner.createdAt))) throw new Error('Invalid deployment lock owner.');
+  return owner;
+}
+
+export async function assertLockOwner(root, suppliedOwner) {
+  const owner = captureLockOwner(suppliedOwner);
+  const { root: directory } = await canonicalWorkerDirectory(root, { privateMode: true });
+  await canonicalWorkerDirectory(path.join(directory, 'lock'), { privateMode: true });
+  const actual = captureLockOwner(JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
+    await readWorkerFile(path.join(directory, 'lock', 'owner.json'), 65536, { privateMode: true }),
+  )));
+  if (Object.keys(owner).some(key => owner[key] !== actual[key])
+    || owner.pid !== process.pid || owner.processIdentity !== await processIdentity(process.pid)) {
+    throw new Error('Only the current lock owner can authorize deployment workers.');
+  }
+  return owner;
+}
+
 export async function releaseLock(root, owner) {
   const directory = await ownedDirectory(root);
   if ((await loadState(directory))?.phase === 'blocked') {
@@ -235,6 +263,10 @@ export async function releaseLock(root, owner) {
     || actual.processIdentity !== owner.processIdentity
     || actual.processIdentity !== await processIdentity(process.pid)) {
     throw new Error('Only the current lock owner can release a deployment lock.');
+  }
+  if ((await readdir(directory)).some(name => name === 'worker-engine'
+    || name.startsWith('worker-') && name.endsWith('.ndjson'))) {
+    throw new Error('Native worker evidence requires verified retirement before lock release.');
   }
   await unlink(ownerPath);
   await rmdir(lockPath);
