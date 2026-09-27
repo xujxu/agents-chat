@@ -1646,7 +1646,7 @@ options or a statement that native domain extinction has been established.
 
 ### Task N4
 
-- [ ] **Step 1: Write failing copy/verification/execution contracts.**
+- [x] **Step 1: Write failing copy/verification/execution contracts.**
 
 ```js
 const saved = await saveWorkerEngine({ source, control, project, operationId });
@@ -1665,7 +1665,7 @@ corrupt manifest and source links; saved reader must not execute before
 verification; bounded stdin/output; preload env removal; copied module
 dependency closure imports without node_modules; Linux private modes.
 
-- [ ] **Step 2: Push tests/workflow/plan and obtain Actions causal red.**
+- [x] **Step 2: Push tests/workflow/plan and obtain Actions causal red.**
 
 ```bash
 git add tests/deployment-saved-worker.test.mjs .github/workflows/deployment-lifecycle.yml docs/superpowers/plans/2026-09-27-cross-platform-deployment-backup.md
@@ -1674,7 +1674,7 @@ git push origin feat/deployment-backup
 gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
 ```
 
-- [ ] **Step 3: Implement shared file boundaries, bundle and inspector.**
+- [x] **Step 3: Implement shared file boundaries, bundle and inspector.**
 
 Keep the saved allowlist closed; all its imports must be Node builtins or
 members of that list. Reuse the journal's directory/ownership checks through
@@ -1682,7 +1682,33 @@ the shared helper and retain cause aggregation on I/O and close failures.
 Only the journal reader is dynamically imported by the inspector after
 verification. No npm install, network call or target process is admitted here.
 
-- [ ] **Step 4: Push implementation and require both OS jobs green.**
+The complete accepted implementation is pinned at
+`c676fe071ddb8108caebb463d5546cacceca3831` in the four files listed above.
+The shared file module provides `canonicalWorkerDirectory`,
+`externalWorkerDirectory`, `requirePrivateMode`, `closeWorkerFile`,
+`syncWorkerDirectory`, `writeWorkerFile` and `readWorkerFile`. The journal now
+uses the same external-directory and flush/close policy rather than a copy.
+
+Concrete inspection wiring (after provisioning private control and capturing
+the source/project/operation authority):
+
+```js
+const saved = await saveWorkerEngine({ source, control, project, operationId });
+await verifyWorkerEngine({
+  control, project, operationId, manifestSha256: saved.manifestSha256,
+});
+const invocation = workerInspectionInvocation(saved, owner);
+const child = spawn(invocation.file, invocation.args, {
+  env: invocation.env, stdio: ['pipe', 'pipe', 'pipe'],
+});
+child.stdin.end(invocation.input);
+```
+
+Production callers still need bounded process execution, pinned digest
+persistence and aggregate-close handling; tests supply bounded execFile
+execution. This example is not a public update/recovery entrypoint.
+
+- [x] **Step 4: Push implementation and require both OS jobs green.**
 
 ```bash
 git add scripts/deployment/worker-files.mjs scripts/deployment/worker-journal.mjs scripts/deployment/saved-worker-engine.mjs scripts/deployment/saved-worker-inspect.mjs
@@ -1691,10 +1717,61 @@ git push origin feat/deployment-backup
 gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
 ```
 
-- [ ] **Step 5: Save results and retain integration gates.**
+- [x] **Step 5: Save results and retain integration gates.**
 
 Fixed-slot operation-level retirement, pinned-digest persistence in deployment
 authority, Windows private ACL/directory durability, native bootstrap transport
 and cgroup/Job adapters remain required. N4 must not delete an engine still
 referenced by an active/interrupted operation, invent a resume path or claim
 full restore capability.
+
+### N4 acceptance checkpoint
+
+- Missing-module red: `ff9f157`, Actions `36314179132`, both platforms.
+- Initial implementation: `aac693a`, Actions `36314326168`: Linux 163 pass;
+  Windows 159 pass, four explicitly Linux-only skips.
+- Interruption/canonical-identity contracts: `c547c30`, Actions
+  `36314376736`. Exactly the noncanonical project identity contract fails on
+  both platforms; source mutation, copy flush failure, oversize source and
+  substituted entrypoint contracts pass.
+- Accepted code: `c676fe071ddb8108caebb463d5546cacceca3831`,
+  Actions `36314436745`: Linux 168 pass; Windows 164 pass, four Linux-only
+  skips; zero failures. N4 adds 20 contracts to the prior 148.
+- Real Actions subprocesses execute the saved inspector after the fixture
+  checkout has been renamed away, without using its node_modules or modules.
+  Another subprocess imports the complete saved library dependency closure.
+  Inspection returns only `inspection-only`, the recorded phase and
+  `recoveryAuthorized: false`, with no receipt or control-directory mutation.
+- Whole-allowlist verification rejects same-size corruption, wrong manifest
+  digest/operation/project, unknown files, malformed/unsupported manifests,
+  source links, oversized files and changes during copying. Corrupted saved
+  journal code is not dynamically executed. Node preload variables are
+  removed case-insensitively from a copied invocation environment.
+- A single fixed worker-engine slot is exclusively created; concurrent,
+  duplicate and failed saves cannot overwrite it or allocate extra slots.
+  Partial copies and failed flushes retain evidence. No cleanup/replacement
+  or automatic recovery path was introduced.
+- The verifier/entrypoint/shared bootstrap modules and private filesystem
+  permissions remain the trust base; the bundle is not a defense against
+  privileged rewriting of that trust base. System Node remains required.
+- Only the feature branch changed. All validation ran in GitHub Actions;
+  main, public deployment scripts and the live installation remain untouched.
+
+### Next boundary after N4
+
+The saved engine and journal foundations are now implemented. Next specify
+and implement the actual native bootstrap transport/platform interop, rather
+than adding another general-purpose storage abstraction. Linux needs the
+unique transient system-service cgroup plus captured boot/invocation/group
+identity, gated execution and exact-domain extinction observation. Windows
+needs its explicit retained kill-on-close Job and trusted gated launcher.
+Neither exists yet; no containment claim follows from saved helper tests.
+
+Integrate the pinned manifest digest and helper lifetime with operation
+authority before native execution. The fixed slot deliberately rejects reuse
+today: verified operation-level retirement must precede subsequent updates,
+without deleting helpers/journals referenced by unfinished workers. Windows
+ACL provisioning and directory-entry power-loss durability remain open.
+All eight native process acceptance groups, full historical deploy/update/
+restore acceptance, README/public wrappers and the main-targeted PR remain
+outstanding.
