@@ -289,6 +289,33 @@ c.unref();const t=setInterval(()=>{if(fs.existsSync('writer')){clearInterval(t);
             if ($launcher) { $launcher.Process.WaitForExit(10000) | Out-Null; $launcher.Process.Dispose() }
         }
     }
+    Case 'output inherited by descendants keeps draining after the target root exits' {
+        $job = [Deployment.WindowsWorkerJob]::Create([guid]::NewGuid())
+        $launcher = $null
+        try {
+            $launcher = Start-Launcher $job
+            $code = @'
+const {spawn}=require('node:child_process'),fs=require('node:fs');
+const script="const fs=require('node:fs');process.stdout.on('error',()=>fs.writeFileSync('pipe-failed','yes'));fs.writeFileSync('pipe-writer','x');setInterval(()=>process.stdout.write('x'.repeat(65536),error=>{if(!error)fs.appendFileSync('pipe-writer','x')}),10)";
+const child=spawn(process.execPath,['-e',script],{detached:true,stdio:['ignore','inherit','inherit']});
+child.unref();const timer=setInterval(()=>{if(fs.existsSync('pipe-writer')){clearInterval(timer);process.exit(0)}},10);
+'@
+            Send-Target $launcher $code
+            $result = (Await-Task ($launcher.Process.StandardOutput.ReadLineAsync())) | ConvertFrom-Json
+            Assert ($result.exitCode -eq 0) 'Target root failed.'
+            $marker = Join-Path $root 'pipe-writer'
+            $length = (Get-Item $marker).Length
+            Start-Sleep -Milliseconds 700
+            Assert (-not (Test-Path (Join-Path $root 'pipe-failed'))) 'Root exit closed a live descendant output pipe.'
+            Assert ((Get-Item $marker).Length -gt $length) 'Descendant output stopped draining before settlement.'
+            Assert (@($job.Members()).Count -ge 2) 'Live output descendant disappeared before explicit settlement.'
+            Settle $job $launcher
+            $launcher = $null
+        } finally {
+            $job.Dispose()
+            if ($launcher) { $launcher.Process.WaitForExit(10000) | Out-Null; $launcher.Process.Dispose() }
+        }
+    }
     Write-Output ("WINDOWS_JOB_TESTS_PASSED=" + $script:passed)
 } finally {
     Remove-Item -LiteralPath $root -Recurse -Force
