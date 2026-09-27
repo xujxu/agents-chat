@@ -2067,10 +2067,10 @@ must remain outside the Job, and the launcher must not keep an extra handle.
 
 ### N6 execution
 
-- [ ] Write and push actual Windows tests; collect missing-interop/launcher red.
-- [ ] Implement checked C# boundary and gated launcher.
-- [ ] Run native Windows acceptance and all existing Linux/Windows jobs.
-- [ ] Record accepted revision, actual results and the remaining Node adapter,
+- [x] Write and push actual Windows tests; collect missing-interop/launcher red.
+- [x] Implement checked C# boundary and gated launcher.
+- [x] Run native Windows acceptance and all existing Linux/Windows jobs.
+- [x] Record accepted revision, actual results and the remaining Node adapter,
   saved manifest, durable receipt, account/session, ACL and recovery gates.
 
 The implementation itself belongs in the files above, with exact executable
@@ -2078,3 +2078,95 @@ test fixtures. Run only in Actions:
 `pwsh -NoProfile -File tests/deployment-windows-job.ps1`.
 Native Windows success does not imply physical Windows installation acceptance
 or complete deployment/restore support.
+
+### N6 Windows native primitive acceptance checkpoint
+
+- Missing-interop red: `8e5bcd6`, Actions `36315732290`. Windows native job
+  fails at Add-Type because `WindowsWorkerJob.cs` is absent.
+- Initial implementation: `36a5a51`, Actions `36316117901`. The real Job
+  configuration/collision case passes, but launcher parsing fails on a
+  PowerShell multiline boolean expression. No target was admitted.
+- Launcher continuation correction: `deaeadd`, Actions `36316181862`: all
+  jobs green, five native Windows cases pass.
+- DACL/owner-death expansion: `d3183b1`, Actions `36316233338`, causal red for
+  missing SecurityDescriptor readback. `a2f4a3a`, Actions `36316303764`, then
+  exposes an incorrectly nested C# property; `02a64bf`, Actions `36316381214`,
+  corrects that declaration and passes all jobs, eight Windows native cases.
+- Launcher-death/sentinel/oversize cases: `177a0e9`, Actions `36316445268`,
+  all jobs green, ten Windows native cases.
+- Inherited-output regression: `c90d334`, Actions `36316517548`, all jobs
+  green, eleven Windows native cases. Contrary to the suspected pipe lifetime
+  defect, real descendants continue writing inherited stdout after the root
+  exits under the current implementation; no speculative pipe rewrite was
+  made.
+- Final accepted revision: `ccde303dae2f82536686963876d482cf42121bae`,
+  Actions `36316611256`, all four jobs succeed:
+  **13 actual Windows Job cases**, **14 actual Linux systemd tests**,
+  **174 Linux shared contracts**, **170 Windows shared contracts with four
+  explicitly Linux-only skips**.
+- Final refinement changes bounded grant input accounting from repeated
+  whole-string UTF-8 encoding to incremental linear accounting and preserves
+  both native creation/security-descriptor cleanup failures. It also covers
+  control-pipe loss before grant and invalid generation/missing original Job/
+  reused owner identity rejection.
+
+`WindowsWorkerJob.cs` owns a non-inheritable original Job handle, configures
+only KILL_ON_JOB_CLOSE, rejects ERROR_ALREADY_EXISTS before modifying limits,
+and verifies assignment/query/termination/close results. The protected DACL
+is read back from the original object and checked in Actions for only current
+account and LocalSystem allow entries. The implementation validates the
+64-bit native structure sizes and caps process enumeration at 4096 with
+truncation/count/invalid-PID checks. It never reconstructs an empty same-name
+Job to prove extinction.
+
+`windows-worker-launcher.ps1` uses PowerShell 7 and sibling C# source. It
+checks the original owner PID/start identity, joins the Job itself, closes
+its temporary Job handle, acknowledges readiness, then accepts one bounded
+target grant. Exact target argv and environment use .NET ArgumentList and an
+explicit replacement environment, not cmd.exe or PowerShell evaluation.
+An independent owner-lifetime timer exits on lost/reused owner identity.
+Output tails are drained and retained at 8 KiB per stream, emitted as base64.
+
+Tests use private temporary copies of the interop source and launcher. They
+exercise actual nested assignment under the hosted runner's environment,
+detached descendants after root exit, explicit termination followed by empty
+original-Job observation, original owner-handle close, abrupt owner process
+termination without finally, independent stdout/stderr, malformed/oversized
+grants, launcher death while target writers remain, inherited output after
+root exit, and an unrelated live sentinel unaffected by Job termination.
+They join launchers and poll boundedly instead of using process-name kills.
+
+### Remaining Windows integration after N6
+
+This is native primitive acceptance, NOT the Windows equivalent of the Linux
+coordinator integration. There is no Node `prepareWindowsWorker` adapter yet.
+The C#/PowerShell files are not in the production saved-engine allowlist;
+test copying is not production manifest verification. No Windows Job identity
+has yet flowed through `runOwnedWorker` and the durable journal in these tests.
+
+Next define the explicit native owner process outside the Job and its bounded
+Node command/reply transport. That owner must retain the original handle until
+the coordinator durably records settlement, expose generation/account/session/
+owner identity, and implement closeAdmission/stop/join/observe/retire without
+conflating root exit, pipe EOF or successful termination requests with
+extinction. The Node controller's death must terminate this native owner (or
+otherwise explicitly terminate its original Job); last-handle kill alone is
+not sufficient if the owner helper itself remains alive. No target command
+may be granted before the shared coordinator has persisted admission.
+
+Required remaining work includes startup feature checks for pwsh/.NET/native
+ABI; saved-engine hash and ACL verification; stale/foreign/cross-session
+authority rejection; cancellation and timeout throughout preparation and
+execution; duplicate/late reply handling; original Job query/termination/
+assignment failure injection; truncated enumeration; partial creation and
+owner kill at every durable boundary; exclusive verified recovery reentry.
+The current-account native tests do not establish arbitrary runtime-account
+switching or physical Windows installation support. ARM64 structure checks
+are present but only hosted Windows x64 execution has been observed.
+
+The full approved eight-group native matrix remains open. Linux non-root
+account support, shared operation authority/digest persistence and fixed-slot
+retirement, complete historical deploy/update/restore lifecycle acceptance,
+public scripts/README and main PR also remain outstanding. No local tests,
+builds or native experiments were run; only the feature branch changed.
+Main and the live installation are untouched.
