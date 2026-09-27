@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import {
@@ -61,6 +61,16 @@ test('state persists a complete record and rejects malformed state', async t => 
   await writeState(root, state);
   assert.deepEqual(await loadState(root), state);
   assert.equal(JSON.parse(await readFile(path.join(root, 'state.json'), 'utf8')).phase, 'preflight');
+  const stopped = { ...state, phase: 'stopped', previousPhase: 'preflight' };
+  await writeState(root, stopped);
+  assert.deepEqual(await loadState(root), stopped);
+  if (process.platform === 'linux') {
+    assert.equal((await stat(path.join(root, 'state.json'))).mode & 0o777, 0o600);
+  }
+  await assert.rejects(writeState(root, {
+    ...stopped, phase: 'dependencies', previousPhase: 'stopped',
+  }), /transition/i);
+  assert.deepEqual(await loadState(root), stopped);
   await writeFile(path.join(root, 'state.json'), '{"version":1,');
   await assert.rejects(loadState(root), /state/i);
 });
@@ -90,5 +100,34 @@ test('orphaned lock is not silently discarded on reentry', async t => {
   await writeFile(ownerPath, JSON.stringify({ ...owner, pid: 2147483647 }));
   await assert.rejects(acquireLock(root, { project: root, operationId: 'retry' }), /lock|inspect/i);
   await writeFile(ownerPath, JSON.stringify(owner));
+  await releaseLock(root, lock);
+});
+
+test('lock records stable process identity, not only a reusable PID', async t => {
+  const root = await temporaryDeployment(t);
+  const lock = await acquireLock(root, { project: root, operationId: 'identity' });
+  assert.equal(typeof lock.processIdentity, 'string');
+  assert.ok(lock.processIdentity.length > 0);
+  await assert.rejects(releaseLock(root, {
+    ...lock, processIdentity: 'another-process-start',
+  }), /owner/i);
+  await releaseLock(root, lock);
+});
+
+test('deployment interruption reports the live owner or required inspection', async t => {
+  const root = await temporaryDeployment(t);
+  const lock = await acquireLock(root, { project: root, operationId: 'interrupted' });
+  const stateModule = await import('../scripts/deployment/state.mjs');
+  assert.equal(typeof stateModule.reconcileInterruptedOperation, 'function');
+  const alive = await stateModule.reconcileInterruptedOperation(root);
+  assert.equal(alive.status, 'active');
+  assert.equal(alive.operationId, 'interrupted');
+  const ownerPath = path.join(root, 'lock', 'owner.json');
+  await writeFile(ownerPath, JSON.stringify({ ...lock, processIdentity: 'previous-pid-owner' }));
+  const reused = await stateModule.reconcileInterruptedOperation(root);
+  assert.equal(reused.status, 'interrupted');
+  assert.match(reused.message, /inspect/i);
+  assert.notEqual(await readFile(ownerPath, 'utf8'), '');
+  await writeFile(ownerPath, JSON.stringify(lock));
   await releaseLock(root, lock);
 });
