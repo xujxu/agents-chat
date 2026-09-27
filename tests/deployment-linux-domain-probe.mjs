@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { open, readFile } from 'node:fs/promises';
+import { open, readFile, readlink } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 
@@ -17,6 +17,7 @@ const properties = async () => {
   }));
 };
 let handle;
+let directory;
 let creationAttempted = false;
 const errors = [];
 try {
@@ -35,6 +36,7 @@ try {
   assert.match(initial.InvocationID, /^[a-f0-9]{32}$/);
   assert.equal(initial.ControlGroup, `/system.slice/${unit}`);
   handle = await open(`/sys/fs/cgroup${initial.ControlGroup}/cgroup.events`, 'r');
+  directory = await open(`/sys/fs/cgroup${initial.ControlGroup}`, 'r');
   const retained = async () => {
     const bytes = Buffer.alloc(4096);
     const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
@@ -48,16 +50,22 @@ try {
     try { events = await retained(); }
     catch (error) { events = { code: error.code }; }
     const state = await properties();
-    if (!samples.length || JSON.stringify(samples.at(-1)) !== JSON.stringify({ events, state })) {
-      samples.push({ events, state });
+    const retainedDirectory = await readlink(`/proc/self/fd/${directory.fd}`);
+    if (!samples.length || JSON.stringify(samples.at(-1)) !== JSON.stringify({ events, state, retainedDirectory })) {
+      samples.push({ events, state, retainedDirectory });
     }
-    if (state.ActiveState === 'failed') break;
     await delay(100);
   }
+  assert.ok(samples.some(sample => sample.events?.code === 'ENODEV'
+    && sample.retainedDirectory === `/sys/fs/cgroup${initial.ControlGroup} (deleted)`));
   console.log(JSON.stringify({ unit, initial, samples }));
 } catch (error) { errors.push(error); }
 if (handle) {
   try { await handle.close(); }
+  catch (error) { errors.push(error); }
+}
+if (directory) {
+  try { await directory.close(); }
   catch (error) { errors.push(error); }
 }
 if (creationAttempted) {
