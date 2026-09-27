@@ -1867,11 +1867,11 @@ Never use process-name/port matching or missing cgroup path as extinction.
 ### N5 execution
 
 - [x] Add/execute bounded native characterization in Actions.
-- [ ] Push real adapter contracts; collect missing-module red.
-- [ ] Implement the three modules and extend the saved allowlist.
-- [ ] Push and iterate against real Linux worker tests plus both OS contract
+- [x] Push real adapter contracts; collect missing-module red.
+- [x] Implement the three modules and extend the saved allowlist.
+- [x] Push and iterate against real Linux worker tests plus both OS contract
   jobs; capture exact accepted revision and failure causes.
-- [ ] Record the implementation limits. This batch cannot claim Windows Job,
+- [x] Record the implementation limits. This batch cannot claim Windows Job,
   crash-reentry authorization, non-root account support, whole-operation helper
   retirement, OOM immunity or full application deployment acceptance.
 
@@ -1901,3 +1901,88 @@ is a test fixture, not a production implementation or zero-risk claim.
 Run exclusively via the `linux-native` job in deployment-lifecycle.yml.
 Capture its bounded JSON and Actions revision; do not run systemd experiments
 on the user's host. Shared Linux/Windows contracts still run independently.
+
+### N5 initial Linux native acceptance checkpoint
+
+- Original characterization: `5406228`, Actions `36314620935`, all jobs pass.
+- Missing-adapter red: `dbaa14e`, Actions `36314779931`, native job fails only
+  because `linux-worker.mjs` does not exist; shared contracts remain green.
+- First native implementation: `6d53c77`, Actions `36314966368`; shared jobs
+  pass, native execution blocks on ENODEV after cgroup removal. No unsafe
+  recovery or success-shaped missing-path fallback was introduced.
+- Extended original-directory characterization: `c88cbae`, Actions
+  `36315065300`, proves exact original-directory deleted linkage after
+  cgroup.events transitions from populated=0 to ENODEV. Adapter remains red.
+- Kernel-backed retirement correction: `411f358`, Actions `36315120078`,
+  all jobs pass, eight real native tests.
+- Crash/deadline/literal-path expansion: `3e0ef21`, Actions `36315222617`,
+  all jobs pass. Tests kill a real native bootstrap and a separate real CLI
+  controller, exercise actual runStage timeout, and use literal `%n`/`$HOME`
+  in saved bootstrap/socket paths. systemd-run preserves these tested paths;
+  no manual shell escaping or guessed systemd specifier rewrite was added.
+- Output/protocol regressions: `cb05e2b`, Actions `36315314180`; the new
+  binary output regression was initially nested in another test and exposed
+  the same decoded-tail limit defect. Corrected top-level registration
+  `ef6704d`, Actions `36315377362`, fails exactly that one native test.
+  Shared socket contracts pass on both OSes.
+- Output correction: `e2d0272`, Actions `36315441109`, all jobs pass. Binary
+  replacement decoding can expand output beyond the retained raw 8 KiB;
+  returned text is now bounded again at valid UTF-8 character boundaries.
+- Final accepted test/code revision:
+  `39240d338269ee7f9a98dec7c1d39109e8a5ce24`, Actions `36315471793`:
+  **14 actual Linux systemd worker tests pass**, Linux shared contracts
+  **174 pass**, Windows shared contracts **170 pass + four Linux-only skips**.
+  Final test also refuses an existing same-name sentinel unit while preserving
+  its original MainPID, InvocationID and active state.
+
+The implementation consists of `worker-wire.mjs`, `linux-worker-bootstrap.mjs`
+and `linux-worker.mjs`; the saved-engine allowlist also includes
+`process-identity.mjs`. `tests/deployment-linux-worker.test.mjs` executes the
+actual coordinator, actual flushed journal, actual saved engine and actual
+transient system service. `tests/deployment-linux-controller-child.mjs` is
+only the test fixture for killing the independent CLI owner.
+
+Accepted native coverage includes:
+
+- Exact command argument/environment transport without a shell; successful
+  and nonzero exit; large independent stdout/stderr and binary output.
+- Root exiting while a detached/session-changing child continues writing,
+  cancelled SIGTERM-ignoring target, cancellation after readiness before grant,
+  stage deadline and mutable caller command input.
+- Bootstrap death stops target writers; CLI death closes transport and causes
+  the manager to stop writers. CLI-death journal remains admitted, not settled
+  or automatically reclaimed; the test confirms another journal writer cannot
+  reopen it. This is containment-after-owner-death evidence, not reentry
+  authorization.
+- Original boot/unit/invocation/full-group identity, original retained events
+  and directory handles, explicit closure of admission, native kill and
+  bounded joining before empty-domain observation/receipt/retirement.
+- Shared wire contracts for fragmented exact text, invalid/oversized/invalid
+  UTF-8 messages, cancellation, timeout, concurrent reads and transport loss.
+
+### Remaining native work after the first Linux batch
+
+This adapter is internal and deliberately supports only explicitly requested
+uid=0/gid=0. It is NOT wired to deploy/update/restore. Intended non-root runtime
+accounts, private bootstrap transport access for those accounts, required
+platform feature admission and application/watchdog ownership remain open.
+Never broaden authority to root merely to use this initial adapter.
+
+Windows explicit retained Job implementation is still absent. Next complete
+its concrete interop/gated-launcher transport plan and real native adapter;
+shared Windows contract success is not Windows process-containment evidence.
+
+Do not claim all eight approved acceptance groups are complete. Still needed:
+original-domain reconciliation under exclusive recovery authority; controller
+kill at every durable boundary; changed/reused invocation and access-denied/
+query/kill failure injections; revoked/late transport cases; finite watchdog
+expiry under abandoned controller; intended runtime identities; actual npm/
+Git/Next workload execution. Helpers/journals remain in their fixed slots;
+pinned-digest authority integration and safe operation-level retirement are
+not implemented. Windows ACL/directory-entry power-loss semantics remain
+open. No host-wide OOM experiment was run or promised.
+
+Only the feature branch changed, with all validation in GitHub Actions.
+Main, existing public deployment scripts and live installation are unchanged.
+Full historical deployment/update/restore acceptance, user README and the
+main-targeted PR remain blocked on completing the preceding native work.
