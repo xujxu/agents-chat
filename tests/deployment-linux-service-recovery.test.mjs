@@ -108,7 +108,7 @@ for (const [phase, outcome, workerMode] of [
   });
 }
 
-for (const change of ['worker-file', 'helper', 'foreign', 'missing-worker', 'worker-path']) {
+for (const change of ['worker-file', 'helper', 'foreign', 'missing-worker', 'worker-path', 'downgrade']) {
   test(`combined recovery rejects worker inventory drift before service deletion: ${change}`, async t => {
     const f = await interrupted(t, 'retirement-intent', 'accepted', 'settled');
     await f.kill();
@@ -124,6 +124,11 @@ for (const change of ['worker-file', 'helper', 'foreign', 'missing-worker', 'wor
       marker.workers.files[0].file = path.join(f.control, 'backup', 'sentinel');
       await writeFile(markerPath, JSON.stringify(marker), { mode: 0o600 });
     }
+    if (change === 'downgrade') {
+      marker.version = 2;
+      delete marker.workers;
+      await writeFile(markerPath, JSON.stringify(marker), { mode: 0o600 });
+    }
     const before = (await readdir(f.control)).sort();
     const held = await readFile(marker.files[0].file);
     await assert.rejects(f.recover());
@@ -132,6 +137,18 @@ for (const change of ['worker-file', 'helper', 'foreign', 'missing-worker', 'wor
     assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
   });
 }
+
+test('v2 service-only retirement remains recoverable without adopting worker files', async t => {
+  const f = await interrupted(t);
+  await f.kill();
+  const file = path.join(f.control, 'service-retirement.json');
+  const marker = JSON.parse(await readFile(file, 'utf8'));
+  marker.version = 2;
+  delete marker.workers;
+  await writeFile(file, JSON.stringify(marker), { mode: 0o600 });
+  assert.equal(JSON.parse((await f.recover()).stdout).status, 'service-retired');
+  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-engine', 'state.json']);
+});
 
 test('cold service cleanup refuses live owner and preserves evidence without creating a guard', async t => {
   const f = await interrupted(t);
@@ -178,16 +195,19 @@ for (const change of ['restart', 'source', 'state', 'path', 'gap', 'worker', 'gu
   });
 }
 
-for (const fault of ['delete', 'state-drift', 'close', 'lock-delete']) {
+for (const fault of ['delete', 'state-drift', 'close', 'lock-delete', 'worker-delete', 'engine-rmdir']) {
   test(`cold service cleanup retains blocking authority on recovery fault: ${fault}`, async t => {
-    const f = await interrupted(t);
+    const combined = ['worker-delete', 'engine-rmdir'].includes(fault);
+    const f = await interrupted(t, 'retirement-unlink-0', 'accepted', combined ? 'settled' : 'none');
     await f.kill();
     let injected = false;
     const originalUnlink = fs.unlink;
     const originalOpen = fs.open;
+    const originalRmdir = fs.rmdir;
     t.mock.method(fs, 'unlink', async file => {
       if (fault === 'delete' && file === path.join(f.control, 'service-stop.ndjson')
-        || fault === 'lock-delete' && file === path.join(f.control, 'lock', 'owner.json')) {
+        || fault === 'lock-delete' && file === path.join(f.control, 'lock', 'owner.json')
+        || fault === 'worker-delete' && file === path.join(f.control, 'worker-engine', 'state.mjs')) {
         injected = true;
         throw new Error('injected exact recovery deletion failure');
       }
@@ -196,6 +216,13 @@ for (const fault of ['delete', 'state-drift', 'close', 'lock-delete']) {
         injected = true;
         await writeFile(path.join(f.control, 'state.json'), '{}');
       }
+    });
+    t.mock.method(fs, 'rmdir', async file => {
+      if (fault === 'engine-rmdir' && file === path.join(f.control, 'worker-engine')) {
+        injected = true;
+        throw new Error('injected helper directory retirement failure');
+      }
+      return originalRmdir(file);
     });
     t.mock.method(fs, 'open', async (file, ...args) => {
       const handle = await originalOpen(file, ...args);
@@ -227,11 +254,12 @@ for (const fault of ['delete', 'state-drift', 'close', 'lock-delete']) {
   });
 }
 
-test('killed recovery controller keeps exclusive guard and blocks a second recovery', async t => {
-  const f = await interrupted(t);
+for (const pause of ['service', 'worker']) {
+test(`killed recovery controller keeps exclusive guard and blocks a second recovery: ${pause}`, async t => {
+  const f = await interrupted(t, 'retirement-unlink-0', 'accepted', pause === 'worker' ? 'settled' : 'none');
   await f.kill();
   const child = fork(new URL('./deployment-service-recovery-child.mjs', import.meta.url),
-    [f.control, f.project, f.lock.operationId, f.saved.manifestSha256],
+    [f.control, f.project, f.lock.operationId, f.saved.manifestSha256, pause],
     { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let diagnostic = '';
   child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-4096); });
@@ -250,6 +278,11 @@ test('killed recovery controller keeps exclusive guard and blocks a second recov
   await exited;
   assert.ok((await readdir(f.control)).includes('service-retirement.json'));
   assert.ok((await readdir(f.control)).includes('recovery-lock'));
+  if (pause === 'worker') {
+    assert.ok((await readdir(f.control)).includes('worker-engine'));
+    assert.ok(!(await readdir(f.control)).includes('service-stop.ndjson'));
+  }
   assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
   await assert.rejects(f.recover());
 });
+}

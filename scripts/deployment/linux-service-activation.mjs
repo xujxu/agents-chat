@@ -155,6 +155,7 @@ export async function activateLinuxService(context, purpose) {
               await verify();
               await verifyEvidence();
               await retireLinuxService({ control, lock, held, runtime: active.identity, verify, verifyEvidence,
+                workerInventory: workers.retirementInventory,
                 closeAuthority: context.closeForRetirement });
             } catch (error) { throw journalUncertain(error); }
           },

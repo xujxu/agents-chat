@@ -7,9 +7,10 @@ import { captureLockOwner, loadState } from './state.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { inspectLinuxService } from './linux-service-inspection.mjs';
+import { workerEngineFiles } from './saved-worker-engine.mjs';
 import { canonicalWorkerDirectory, externalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
 
-const maximum = 512 * 1024;
+const maximum = 1024 * 1024;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
 const parse = bytes => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
@@ -34,13 +35,14 @@ function fileEntry(value, expected) {
 }
 
 function intent(bytes, control, project, operationId) {
-  const value = captureWorkerFields(parse(bytes), [
+  const parsed = parse(bytes);
+  const value = captureWorkerFields(parsed, [
     'version', 'lock', 'runtime', 'state', 'stateFile', 'lockFile',
-    'controlIdentity', 'lockIdentity', 'heldParentIdentity', 'files',
+    'controlIdentity', 'lockIdentity', 'heldParentIdentity', 'files', ...(parsed?.version === 3 ? ['workers'] : []),
   ], 'service retirement intent');
   const lock = captureLockOwner(value.lock);
   const unit = value.runtime?.runtime?.unit;
-  if (value.version !== 2 || lock.project !== project || lock.operationId !== operationId
+  if (![2, 3].includes(value.version) || lock.project !== project || lock.operationId !== operationId
     || typeof unit !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,180}\.service$/.test(unit)
     || value.runtime.runtime.project !== project || !Array.isArray(value.runtime.executables)
     || value.runtime.executables.length !== 2 || !value.runtime.configuration
@@ -50,8 +52,26 @@ function intent(bytes, control, project, operationId) {
   const inhibition = `/etc/systemd/system/${unit}.d/90-agents-chat-deployment.conf`;
   const files = [`${inhibition}.${lock.token}.held`,
     path.join(control, 'service-activation.ndjson'), path.join(control, 'service-stop.ndjson')];
+  let workers = null;
+  if (value.version === 3 && value.workers !== null) {
+    const fields = captureWorkerFields(value.workers, ['manifestSha256', 'engineIdentity', 'files'], 'service worker handoff');
+    if (typeof fields.manifestSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(fields.manifestSha256)
+      || !Array.isArray(fields.files) || fields.files.length > workerEngineFiles.length + 34) {
+      throw new Error('Invalid service worker handoff.');
+    }
+    const helpers = [...workerEngineFiles, 'manifest.json'].sort().map(name => path.join(control, 'worker-engine', name));
+    const journals = fields.files.map(entry => entry?.file).filter(file => typeof file === 'string'
+      && path.dirname(file) === control && /^worker-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.ndjson$/.test(path.basename(file)));
+    const paths = [...journals, ...helpers, path.join(control, 'worker-operation.ndjson')];
+    if (journals.length > 32 || new Set(paths).size !== paths.length
+      || !same(fields.files.map(entry => entry?.file), paths)) throw new Error('Worker handoff paths are not allowlisted.');
+    const entries = fields.files.map((entry, index) => fileEntry(entry, paths[index]));
+    if (entries.find(entry => entry.file === path.join(control, 'worker-engine', 'manifest.json')).sha256
+      !== fields.manifestSha256) throw new Error('Worker handoff manifest binding changed.');
+    workers = { ...fields, engineIdentity: directoryIdentity(fields.engineIdentity), files: entries };
+  }
   return {
-    ...value, lock, inhibition, files: value.files.map((entry, index) => fileEntry(entry, files[index])),
+    ...value, lock, inhibition, workers, files: value.files.map((entry, index) => fileEntry(entry, files[index])),
     stateFile: fileEntry(value.stateFile, path.join(control, 'state.json')),
     lockFile: fileEntry(value.lockFile, path.join(control, 'lock', 'owner.json')),
     controlIdentity: directoryIdentity(value.controlIdentity),
@@ -122,9 +142,16 @@ export async function recoverLinuxServiceRetirement({ control, project, operatio
     if (!same(captureLockOwner(parse(await checkFile(original.lockFile))), original.lock)) {
       throw new Error('Original service lock does not match intent.');
     }
+    const entries = [...original.files, ...(original.workers?.files ?? [])];
+    const enginePath = path.join(root, 'worker-engine');
+    let enginePresent = false;
+    if (original.workers) {
+      try { await lstat(enginePath); enginePresent = true; }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
     const remaining = new Map();
     let reachedRemaining = false;
-    for (const entry of original.files) {
+    for (const entry of entries) {
       try { await lstat(entry.file); }
       catch (error) {
         if (error.code === 'ENOENT' && !reachedRemaining) continue;
@@ -161,13 +188,24 @@ export async function recoverLinuxServiceRetirement({ control, project, operatio
       await checkFile(original.lockFile);
       if (!same((await readdir(path.join(root, 'lock'))).sort(), ['owner.json'])) throw new Error('Unexpected original lock inventory.');
       await checkGuard();
-      for (const entry of original.files) {
+      for (const entry of entries) {
         if (remaining.has(entry.file)) await checkFile(entry);
         else await absent(entry.file);
       }
       const names = await readdir(root);
-      if (names.some(name => name.startsWith('worker-'))) throw new Error('Worker evidence requires a combined recovery handoff.');
-      const expected = [markerName, ...[...remaining.keys()].filter(file => path.dirname(file) === root).map(file => path.basename(file))].sort();
+      const workerNames = [...remaining.keys()].filter(file => path.dirname(file) === root
+        && path.basename(file).startsWith('worker-')).map(file => path.basename(file));
+      if (enginePresent) workerNames.push('worker-engine');
+      if (!same(names.filter(name => name.startsWith('worker-')).sort(), workerNames.sort())) {
+        throw new Error('Worker evidence differs from the pinned combined handoff.');
+      }
+      if (enginePresent) {
+        await checkDirectory(enginePath, original.workers.engineIdentity);
+        const helpers = [...remaining.keys()].filter(file => path.dirname(file) === enginePath).map(file => path.basename(file)).sort();
+        if (!same((await readdir(enginePath)).sort(), helpers)) throw new Error('Worker helper handoff inventory changed.');
+      } else await absent(enginePath);
+      const expected = [markerName, ...[...remaining.keys()].filter(file => path.dirname(file) === root
+        && path.basename(file).startsWith('service-')).map(file => path.basename(file))].sort();
       if (!same(names.filter(name => name.startsWith('service-')).sort(), expected)) throw new Error('Unexpected service evidence inventory.');
     };
     await check();
@@ -183,12 +221,18 @@ export async function recoverLinuxServiceRetirement({ control, project, operatio
     await syncWorkerDirectory(guardPath);
     lease = { file: leasePath, ...identity(await lstat(leasePath)), bytes: bytes.length, sha256: digest(bytes) };
     await retain(lease);
-    for (const entry of original.files) {
+    for (const entry of entries) {
       if (!remaining.has(entry.file)) continue;
       await check();
       await unlink(entry.file);
       remaining.delete(entry.file);
       await syncWorkerDirectory(path.dirname(entry.file));
+    }
+    await check();
+    if (enginePresent) {
+      await rmdir(enginePath);
+      enginePresent = false;
+      await syncWorkerDirectory(root);
     }
     await check();
     result = { status: 'service-retired', operationId, restored: false };

@@ -3,7 +3,7 @@ import { lstat, open, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { readWorkerOperation } from './worker-operation.mjs';
 import { readWorkerJournal } from './worker-journal.mjs';
-import { readWorkerFile } from './worker-files.mjs';
+import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 import { verifyWorkerEngine } from './saved-worker-engine.mjs';
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -11,6 +11,7 @@ const inventory = async root => (await readdir(root)).filter(name => name.starts
 
 export async function retainActivationWorkers(control, lock) {
   const retained = [];
+  let operation;
   const close = async () => {
     const results = await Promise.allSettled(retained.map(entry => entry.handle.close()));
     const failures = results.filter(result => result.status === 'rejected').map(result => result.reason);
@@ -21,6 +22,7 @@ export async function retainActivationWorkers(control, lock) {
     if (files.length) {
       const records = await readWorkerOperation(control);
       const first = records[0];
+      operation = records;
       if (!same(first.lock, lock) || records.at(-1).phase !== 'sealed') {
         throw new Error('Service activation requires a matching sealed worker operation.');
       }
@@ -62,7 +64,25 @@ export async function retainActivationWorkers(control, lock) {
       }
     };
     await check();
-    return { check, close };
+    return {
+      check, close,
+      async retirementInventory() {
+        await check();
+        if (!operation) return null;
+        const manifestSha256 = operation[0].manifestSha256;
+        const saved = await verifyWorkerEngine({ control, project: lock.project, operationId: lock.operationId,
+          manifestSha256 });
+        const { info } = await canonicalWorkerDirectory(saved.directory, { privateMode: true });
+        const journals = operation.filter(record => record.phase === 'enrolled')
+          .map(record => path.join(control, `worker-${record.workerId}.ndjson`));
+        const helpers = (await readdir(saved.directory)).sort().map(name => path.join(saved.directory, name));
+        await check();
+        return {
+          manifestSha256, engineIdentity: { dev: String(info.dev), ino: String(info.ino) },
+          files: [...journals, ...helpers, path.join(control, 'worker-operation.ndjson')],
+        };
+      },
+    };
   } catch (error) {
     try { await close(); }
     catch (cleanup) { throw new AggregateError([error, cleanup]); }

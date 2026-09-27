@@ -11,7 +11,7 @@ const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // Only live activation authority may authorize this one-shot deletion inventory.
-export async function retireLinuxService({ control, lock, held, runtime, verify, verifyEvidence, closeAuthority }) {
+export async function retireLinuxService({ control, lock, held, runtime, verify, verifyEvidence, workerInventory, closeAuthority }) {
   const handles = [];
   const errors = [];
   try {
@@ -25,7 +25,7 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
       const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
       handles.push(handle);
       const opened = await handle.stat();
-      const bytes = await readWorkerFile(file, 512 * 1024, { privateMode: true });
+      const bytes = await readWorkerFile(file, 1024 * 1024, { privateMode: true });
       if (!same(identity(opened), identity(await lstat(file))) || opened.nlink !== 1) {
         throw new Error('Service retirement file changed during capture.');
       }
@@ -38,7 +38,7 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
         || !same(identity(opened), identity(named)) || opened.nlink !== 1) {
         throw new Error('Original service retirement file was replaced.');
       }
-      const bytes = await readWorkerFile(entry.file, 512 * 1024, { privateMode: true });
+      const bytes = await readWorkerFile(entry.file, 1024 * 1024, { privateMode: true });
       if (bytes.length !== entry.bytes || digest(bytes) !== entry.sha256) {
         throw new Error('Original service retirement content changed.');
       }
@@ -48,6 +48,12 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
     const entries = [];
     for (const file of [held, path.join(control, 'service-activation.ndjson'), path.join(control, 'service-stop.ndjson')]) {
       entries.push(await capture(file));
+    }
+    const workerSet = await workerInventory();
+    const workerEntries = [];
+    if (workerSet) {
+      for (const file of workerSet.files) workerEntries.push(await capture(file));
+      if (!same(await workerInventory(), workerSet)) throw new Error('Worker handoff inventory changed during capture.');
     }
     await verifyEvidence();
     const remaining = new Map(entries.map(entry => [entry.file, entry]));
@@ -67,6 +73,14 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
       }
       await checkFile(stateFile);
       await checkFile(lockFile);
+      for (const entry of workerEntries) await checkFile(entry);
+      if (workerSet) {
+        const engine = path.join(control, 'worker-engine');
+        const { info } = await canonicalWorkerDirectory(engine, { privateMode: true });
+        if (!same(identity(info), workerSet.engineIdentity)) throw new Error('Worker handoff engine directory changed.');
+        const expected = workerSet.files.filter(file => path.dirname(file) === engine).map(file => path.basename(file)).sort();
+        if (!same((await readdir(engine)).sort(), expected)) throw new Error('Worker handoff helper inventory changed.');
+      }
       for (const entry of remaining.values()) await checkFile(entry);
       for (const entry of entries.filter(entry => !remaining.has(entry.file))) {
         try { await lstat(entry.file); }
@@ -82,9 +96,10 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
     await check();
     const serialize = ({ handle, ...entry }) => entry;
     await writeWorkerFile(markerPath, Buffer.from(`${JSON.stringify({
-      version: 2, lock, runtime, state, stateFile: serialize(stateFile), lockFile: serialize(lockFile),
+      version: 3, lock, runtime, state, stateFile: serialize(stateFile), lockFile: serialize(lockFile),
       controlIdentity: identity(root.info), lockIdentity: identity(lockDirectory.info),
       heldParentIdentity: identity(parentInfo), files: entries.map(serialize),
+      workers: workerSet && { ...workerSet, files: workerEntries.map(serialize) },
     })}\n`));
     await syncWorkerDirectory(control);
     marker = await capture(markerPath);

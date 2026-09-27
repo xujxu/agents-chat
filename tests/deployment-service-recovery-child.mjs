@@ -4,13 +4,14 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { verifyRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
 
-const [control, project, operationId, manifestSha256] = process.argv.slice(2);
+const [control, project, operationId, manifestSha256, pause = 'service'] = process.argv.slice(2);
 try {
   const saved = await verifyRecoveryEngine({ control, manifestSha256 });
   const unlink = fs.unlink;
   fs.unlink = async file => {
     await unlink(file);
-    if (file === path.join(control, 'service-activation.ndjson')) {
+    if (pause === 'worker' ? path.dirname(file) === path.join(control, 'worker-engine')
+      : file === path.join(control, 'service-activation.ndjson')) {
       process.send({ deleted: file });
       setInterval(() => {}, 1000);
       await new Promise(() => {});

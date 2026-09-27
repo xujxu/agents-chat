@@ -3332,9 +3332,9 @@ between mutations. Version2 remains no-workers-only. The service marker and
 exclusive recovery guard remain until all combined evidence is retired;
 the old lock cannot be released while any listed worker files remain.
 
-- [ ] Push real settled-worker and sealed-empty-operation causal contracts.
-- [ ] Pin live worker deletion descriptors into the v3 service intent.
-- [ ] Extend cold missing-prefix/inventory checks to the complete allowlist.
+- [x] Push real settled-worker and sealed-empty-operation causal contracts.
+- [x] Pin live worker deletion descriptors into the v3 service intent.
+- [x] Extend cold missing-prefix/inventory checks to the complete allowlist.
 - [ ] Cover worker/helper tampering, unknown files, missing journals and
   redirected deletion paths before service deletion; inject worker cleanup
   failure/controller death and retain both original lock and recovery guard.
@@ -3353,3 +3353,12 @@ assert.deepEqual(JSON.parse((await recover()).stdout), {
 
 This does not yet adopt interrupted recovery guards or invent missing
 service-retirement intents. No public/main/live changes or local validation.
+
+Causal `17ccf7e` / Actions `36331268908` failed exactly the three new combined
+success paths (intent version remained2) and the worker-path binding contract
+(no worker inventory). The other four jobs passed. Implementation preserves
+version2 no-worker recovery, pins version3 worker evidence through retained
+handles and checks exact helper contents/directories during live handoff and
+cold deletion. Added helper-delete/directory-delete failures and recovery
+controller SIGKILL after a real helper unlink, with the service journals already
+gone but original lock, combined marker and recovery guard retained.
