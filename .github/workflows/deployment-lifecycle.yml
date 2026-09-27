@@ -35,18 +35,22 @@ concurrency:
 
 jobs:
   contracts:
-    name: Contracts (${{ matrix.os }}, ${{ matrix.suite }})
+    name: Contracts (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2022]
-        suite: [state, cli, snapshot, transaction]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - name: Run behavioral contracts
-        run: node --test tests/deployment-${{ matrix.suite }}.test.mjs
+        run: >-
+          node --test
+          tests/deployment-state.test.mjs
+          tests/deployment-cli.test.mjs
+          tests/deployment-snapshot.test.mjs
+          tests/deployment-transaction.test.mjs
