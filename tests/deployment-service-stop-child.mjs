@@ -6,6 +6,8 @@ import { acquireLock, writeState } from '../scripts/deployment/state.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 
 const [control, project, unit, npm, node, phase] = process.argv.slice(2);
+const activation = phase.startsWith('activation-');
+const receiptPhase = activation ? phase.slice('activation-'.length) : phase;
 const lock = await acquireLock(control, { project, operationId: randomUUID() });
 const state = {
   version: 1, operationId: lock.operationId, project, operation: 'update',
@@ -18,12 +20,12 @@ await writeState(control, { ...state, phase: 'stopped', previousPhase: 'prefligh
 const nativeOpen = fs.open;
 fs.open = async function (file, ...args) {
   const handle = await nativeOpen(file, ...args);
-  if (file === path.join(control, 'service-stop.ndjson')) {
+  if (file === path.join(control, activation ? 'service-activation.ndjson' : 'service-stop.ndjson')) {
     const sync = handle.sync.bind(handle);
     handle.sync = async () => {
       await sync();
       const text = await fs.readFile(file, 'utf8');
-      if (text.trim() && JSON.parse(text.trim().split('\n').at(-1)).phase === phase) {
+      if (text.trim() && JSON.parse(text.trim().split('\n').at(-1)).phase === receiptPhase) {
         process.send({ phase, lock });
         setInterval(() => {}, 1000);
         await new Promise(() => {});
@@ -33,5 +35,6 @@ fs.open = async function (file, ...args) {
   return handle;
 };
 syncBuiltinESMExports();
-await stopLinuxService({ control, lock, unit, project, npm, node });
+const stopped = await stopLinuxService({ control, lock, unit, project, npm, node });
+if (activation) await stopped.activate({ purpose: 'prior-runtime' });
 throw new Error('Fixture did not pause at the requested durable stop receipt.');

@@ -6,11 +6,14 @@ import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 import { acquireLock, loadState, writeState, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
+import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
+import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 
 const execute = promisify(execFile);
 const native = (file, args) => execute(file, args, { timeout: 20000, maxBuffer: 8192 });
@@ -429,5 +432,82 @@ test('invalid activation purpose, wrong state and unresolved worker evidence ret
       assert.match(await readFile(f.inhibition, 'utf8'), /Restart=no/);
       assert.equal((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim(), '0');
     } finally { await stopped.close(); }
+  }
+});
+
+test('activation admits real settled workers only after their operation is sealed', async t => {
+  for (const sealed of [false, true]) {
+    const f = await stopFixture(t);
+    const stopped = await stopLinuxService(f);
+    const saved = await saveWorkerEngine({ control: f.control, project: f.project, operationId: f.lock.operationId,
+      source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)) });
+    const workers = await createWorkerOperation({ control: f.control, lock: f.lock, saved });
+    try {
+      await workers.run({ workerId: randomUUID(), command: {
+        file: node, args: ['-e', 'process.exit(0)'], cwd: f.project, env: { PATH: '/usr/bin:/bin', HOME: '/root' },
+      }, runtime: { uid: 0, gid: 0 } });
+      if (sealed) {
+        await workers.seal();
+        assert.equal((await stopped.activate({ purpose: 'prior-runtime' })).status, 'active-unverified');
+      } else {
+        await assert.rejects(stopped.activate({ purpose: 'prior-runtime' }));
+        assert.match(await readFile(f.inhibition, 'utf8'), /Restart=no/);
+      }
+    } finally { await workers.close(); await stopped.close(); }
+  }
+});
+
+test('failed native startup restores the original inhibitor without claiming application recovery', async t => {
+  const f = await stopFixture(t, { nonroot: true });
+  const stopped = await stopLinuxService(f);
+  const original = await fs.stat(f.inhibition);
+  try {
+    await chmod(f.project, 0o000);
+    await assert.rejects(stopped.activate({ purpose: 'prior-runtime' }), error => error.recoveryAllowed === false);
+    const restored = await fs.stat(f.inhibition);
+    assert.equal(restored.ino, original.ino);
+    assert.equal(restored.dev, original.dev);
+    assert.equal(restored.nlink, 1);
+    assert.equal((await systemctl('show', f.unit, '--property=Restart', '--value')).stdout.trim(), 'no');
+    const receipts = (await readFile(path.join(f.control, 'service-activation.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+    assert.equal(receipts.at(-1).phase, 'reinhibited');
+    assert.equal(receipts.some(record => record.phase === 'started'), false);
+    assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+  } finally { await chmod(f.project, 0o755); await stopped.close(); }
+});
+
+test('controller death during staged, uninhibited and started activation retains explicit recovery evidence', async t => {
+  for (const phase of ['staged', 'uninhibited', 'started']) {
+    const f = await fixture(t);
+    await ready(f);
+    const control = path.join(path.dirname(f.project), 'control');
+    await mkdir(control, { mode: 0o700 });
+    const child = fork(new URL('./deployment-service-stop-child.mjs', import.meta.url),
+      [control, f.project, f.unit, f.npm, f.node, `activation-${phase}`],
+      { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    let diagnostic = '';
+    child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-4096); });
+    const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+    t.after(async () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await exited;
+    });
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Activation controller did not reach ${phase}: ${diagnostic}`)), 45000);
+      child.once('message', value => { clearTimeout(timer); resolve(value); });
+      child.once('exit', code => { clearTimeout(timer); reject(new Error(`Activation controller exited ${code}: ${diagnostic}`)); });
+      child.once('error', error => { clearTimeout(timer); reject(error); });
+    });
+    child.kill('SIGKILL');
+    await exited;
+    const records = (await readFile(path.join(control, 'service-activation.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+    const record = records.at(-1);
+    assert.equal(record.phase, phase);
+    assert.equal((await fs.stat(record.held)).nlink, phase === 'staged' ? 2 : 1);
+    if (phase === 'staged') await assert.rejects(systemctl('start', f.unit), /manual|refus/i);
+    const mainPid = Number((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim());
+    assert.equal(mainPid > 0, phase === 'started');
+    assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
+    await assert.rejects(acquireLock(control, { project: f.project, operationId: randomUUID() }), /service/i);
   }
 });

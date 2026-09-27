@@ -50,6 +50,21 @@ test('helper creation alone prevents legacy finally-based lock release', async t
   assert.equal(JSON.parse(await readFile(path.join(f.control, 'lock', 'owner.json'))).token, f.lock.token);
 });
 
+test('even partial service activation evidence closes new and existing worker admission', async t => {
+  for (const existing of [false, true]) {
+    const f = await fixture(t);
+    const operation = existing ? await f.create() : null;
+    await writeFile(path.join(f.control, 'service-activation.ndjson'), '{"partial":');
+    if (operation) {
+      await assert.rejects(operation.seal(), unsafe);
+      assert.equal((await readWorkerOperation(f.control)).at(-1).phase, 'opened');
+    } else {
+      await assert.rejects(f.create(), unsafe);
+      await assert.rejects(readFile(path.join(f.control, 'worker-operation.ndjson')), { code: 'ENOENT' });
+    }
+  }
+});
+
 test('foreign lock and invalid manifest never create operation authority', async t => {
   const f = await fixture(t);
   await assert.rejects(f.create({ lock: { ...f.lock, token: randomUUID() } }), unsafe);
