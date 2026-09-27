@@ -858,7 +858,7 @@ containment or discharge the eight real-process acceptance groups in the spec.
 
 ### Task N1: Make cleanup uncertainty survive error wrapping
 
-- [ ] **Step 1: Add failing tests with these concrete fixtures.**
+- [x] **Step 1: Add failing tests with these concrete fixtures.**
 
 ```js
 const unsafe = Object.assign(new Error('writer still alive'), {
@@ -895,7 +895,7 @@ blocked phase; cleanup/state errors retain all original causes. For the stage
 runner reject the wrapped error after its abort event and assert
 `DEPLOYMENT_WORKER_UNSETTLED`, `recoveryAllowed=false`, and original cause.
 
-- [ ] **Step 2: Commit/push only tests and workflow.**
+- [x] **Step 2: Commit/push only tests and workflow.**
 
 ```bash
 git add tests/deployment-worker-errors.test.mjs tests/deployment-stage-runner.test.mjs tests/deployment-transaction.test.mjs .github/workflows/deployment-lifecycle.yml
@@ -910,7 +910,7 @@ Run only in Actions:
 worker-errors export/module and wrapped failures incorrectly permitting cleanup.
 Inspect the actual returned run ID with `gh run view`; do not run tests locally.
 
-- [ ] **Step 3: Implement the bounded classifier and replace every gate.**
+- [x] **Step 3: Implement the bounded classifier and replace every gate.**
 
 ```js
 export function hasUnsettledWorker(error) {
@@ -960,7 +960,7 @@ with the same predicate. For arrays of failures use
 `errors.some(hasUnsettledWorker)` and `!errors.some(hasUnsettledWorker)`.
 Preserve original thrown errors and causes; do not reconstruct their messages.
 
-- [ ] **Step 4: Commit/push implementation and await both OS jobs.**
+- [x] **Step 4: Commit/push implementation and await both OS jobs.**
 
 ```bash
 git add scripts/deployment/worker-errors.mjs scripts/deployment/stage-runner.mjs scripts/deployment/transaction.mjs
@@ -973,10 +973,32 @@ Expected green: all existing and new contracts pass on both OSes, retaining the
 one explicitly Linux-only skip on Windows. Record actual IDs/results below.
 If tests fail, inspect bounded Actions logs, fix the cause and push again.
 
-- [ ] **Step 5: Persist evidence and carry forward native gates.**
+- [x] **Step 5: Persist evidence and carry forward native gates.**
 
 Record the accepted commit/run in this plan and session tasks. The next native
 batch must specify its private bootstrap transport, OS interop and durable
 admission/settlement receipts before writing platform code. Preserve the
 approved spec's requirements; do not substitute process groups/taskkill or
 claim that this error-classification fix delivers native process containment.
+
+### N1 acceptance checkpoint
+
+- Causal red: `55c1d33`, Actions `36309086437`. Both platforms fail the three
+  new integration contracts (cancelled stage, preflight/mutation suppression,
+  and nested cleanup plus journal failure), plus the missing classifier module.
+- Initial green: `7d9a7af`, Actions `36309147470`.
+- Compatibility refinement red: `c3fd589`, Actions `36309168991`. Both
+  platforms expose the inherited-marker regression; ordinary direct property
+  access previously respected those markers.
+- Accepted implementation: `f3b90a063d5b128c2a2a2f92e2305cf56d394850`,
+  Actions `36309230366`. Linux: 101 pass. Windows: 100 pass, one existing
+  Linux-only skip. Zero failures on either platform.
+- Classifier traversal now includes inherited descriptors and callable errors,
+  shares the 256-node budget, never invokes accessors or custom array iterators,
+  and blocks on malformed or uninspectable graphs. Both engine boundaries use
+  it without replacing the original error objects.
+- Validation ran exclusively in GitHub Actions. Only `feat/deployment-backup`
+  was pushed; no main, live service, public script, or installed data changes.
+- N1 is complete. Native cgroup/Job adapters, their concrete implementation
+  plan, and real-process acceptance remain outstanding, followed by the
+  previously recorded public deploy/update/restore lifecycle work.
