@@ -91,6 +91,16 @@ test('lock replacement or helper tampering prevents a seal and retains evidence'
   }
 });
 
+test('byte-identical lock owner replacement does not preserve live operation authority', async t => {
+  const f = await fixture(t);
+  const operation = await f.create();
+  const file = path.join(f.control, 'lock', 'owner.json');
+  await rename(file, `${file}.original`);
+  await writeFile(file, await readFile(`${file}.original`), { mode: 0o600 });
+  await assert.rejects(operation.seal(), unsafe);
+  assert.equal((await readWorkerOperation(f.control)).at(-1).phase, 'opened');
+});
+
 test('unregistered worker evidence prevents zero-worker sealing', async t => {
   const f = await fixture(t);
   const operation = await f.create();
