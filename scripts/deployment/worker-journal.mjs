@@ -2,6 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { captureWorkerFields, captureOwner, captureDomain } from './worker-identity.mjs';
+import { externalWorkerDirectory, requirePrivateMode, syncWorkerDirectory } from './worker-files.mjs';
 
 const maximumBytes = 128 * 1024;
 const transitions = {
@@ -37,33 +38,15 @@ function validateReceipt(value, owner, previous) {
   return Object.freeze({ version: 1, owner: recordedOwner, phase: fields.phase, domain });
 }
 
-function contains(parent, child) {
-  const relative = path.relative(parent, child);
-  return relative === '' || (!path.isAbsolute(relative)
-    && relative !== '..' && !relative.startsWith(`..${path.sep}`));
-}
-
-function privateMode(info) {
-  if (process.platform === 'linux' && (info.uid !== process.getuid() || (info.mode & 0o077))) {
-    throw new Error('Worker journal requires private current-user ownership.');
-  }
-}
-
 async function directory(root, owner) {
-  const resolved = path.resolve(root);
-  const info = await lstat(resolved);
-  if (!info.isDirectory() || info.isSymbolicLink() || await realpath(resolved) !== resolved
-    || contains(owner.project, resolved) || contains(resolved, owner.project)) {
-    throw new Error('Worker journal requires a canonical external control directory.');
-  }
-  privateMode(info);
+  const { root: resolved, info } = await externalWorkerDirectory(root, owner.project);
   return { root: resolved, info, file: path.join(resolved, `worker-${owner.workerId}.ndjson`) };
 }
 
 function regular(info) {
   if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1
     || info.size > maximumBytes) throw new Error('Invalid worker journal file type, links or size.');
-  privateMode(info);
+  requirePrivateMode(info);
 }
 
 async function namedFile(location, handle, owner) {
@@ -134,15 +117,7 @@ export async function createWorkerJournal(root, suppliedOwner) {
     location = await directory(root, owner);
     handle = await open(location.file, 'wx+', 0o600);
     await handle.sync();
-    if (process.platform === 'linux') {
-      const parent = await open(location.root, constants.O_RDONLY | constants.O_DIRECTORY);
-      const errors = [];
-      try { await parent.sync(); }
-      catch (error) { errors.push(error); }
-      try { await parent.close(); }
-      catch (error) { errors.push(error); }
-      if (errors.length) throw errors.length === 1 ? errors[0] : new AggregateError(errors);
-    }
+    await syncWorkerDirectory(location.root);
     await namedFile(location, handle, owner);
   } catch (error) {
     if (handle) {
