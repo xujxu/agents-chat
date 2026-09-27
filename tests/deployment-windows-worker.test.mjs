@@ -10,6 +10,7 @@ import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
 import { runOwnedWorker } from '../scripts/deployment/owned-worker.mjs';
+import { runStage } from '../scripts/deployment/stage-runner.mjs';
 import { createWorkerJournal, readWorkerJournal } from '../scripts/deployment/worker-journal.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { prepareWindowsWorker } from '../scripts/deployment/windows-worker.mjs';
@@ -282,4 +283,21 @@ test('a null helper DACL cannot pass as an empty set of foreign allow entries', 
   `, [path.join(f.saved.directory, 'WindowsWorkerJob.cs')]);
   await assert.rejects(f.run(), { recoveryAllowed: false });
   assert.deepEqual(f.receipts.map(receipt => receipt.phase), ['intent', 'blocked']);
+});
+
+test('stage deadline reports recoverable timeout only after the real Job has settled', { timeout: 60000 }, async t => {
+  const f = await fixture(t, writing);
+  await assert.rejects(runStage('windows-native', signal =>
+    runOwnedWorker({ owner: f.owner, signal }, f.operations),
+  { timeoutMs: 20000, settlementMs: 20000 }), error => {
+    assert.equal(error.code, 'DEPLOYMENT_STAGE_TIMEOUT');
+    assert.equal(error.recoveryAllowed, true);
+    assert.equal(f.receipts.at(-1).phase, 'settled');
+    return true;
+  });
+  assert.equal(await readFile(path.join(f.project, 'started'), 'utf8'), 'yes');
+  const before = await readFile(path.join(f.project, 'writer'), 'utf8');
+  await delay(300);
+  assert.equal(await readFile(path.join(f.project, 'writer'), 'utf8'), before);
+  assert.deepEqual(await nativeOwners(f), []);
 });
