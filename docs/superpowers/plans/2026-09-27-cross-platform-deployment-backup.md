@@ -2718,11 +2718,19 @@ prepareLinuxWorker({ owner, saved, command, uid: 65534, gid: 65534, signal });
 // remains root and still verifies the original retained cgroup.
 ```
 
-- [ ] Push causal non-root native contracts and observe root-only rejection.
-- [ ] Implement immutable account capture and privilege-safe target exec.
-- [ ] Validate on Actions with all existing worker/operation/recovery cases.
-- [ ] Record limits: no supplemental-group policy, account-name/service
+- [x] Push causal non-root native contracts and observe root-only rejection.
+- [x] Implement immutable account capture and privilege-safe target exec.
+- [x] Validate on Actions with all existing worker/operation/recovery cases.
+- [x] Record limits: no supplemental-group policy, account-name/service
   resolution or public service-account migration supplied by this helper.
+
+Causal red: `63bd223`, Actions `36321810730`. Accepted implementation:
+`4d1cbc3c3390e5ccfc0f243ff3167ecd20427466`, Actions `36321949034`,
+all four jobs successful. Exact evidence: 25 Linux native; 19 Windows native
+coordinator plus 13 Job primitives; 212 Linux shared; 208 Windows shared plus
+four Linux-only skips. Includes actual non-root npm invocation and explicit
+permission-denied failure with no privilege fallback. This does not count as
+acceptance of public deployment scripts or application lifecycle.
 
 The next part of the same gate adds read-only systemd account inspection in
 `linux-runtime.mjs`, with real transient-service tests. Read the configured
