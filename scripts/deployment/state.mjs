@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readFile, realpath, rename, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
+import { processIdentity } from './process-identity.mjs';
 
 const transitions = {
   preflight: ['stopped', 'source-selected'],
@@ -130,7 +131,24 @@ export async function writeState(root, state) {
   const directory = await ownedDirectory(root);
   const destination = path.join(directory, 'state.json');
   const old = await readRegularJson(destination, 'deployment state');
-  if (old !== null) validateState(old);
+  if (old !== null) {
+    validateState(old);
+    if (old.project !== state.project) throw new Error('Deployment state project changed.');
+    if (old.operationId === state.operationId) {
+      if (old.operation !== state.operation || state.previousPhase !== old.phase) {
+        throw new Error('Invalid deployment state transition identity.');
+      }
+      nextPhase(old.phase, state.phase, { firstInstall: old.priorRuntime === 'absent' });
+    } else if (state.previousPhase !== null
+      || (state.operation === 'restore'
+        ? state.phase !== 'restore-preflight'
+        : state.phase !== 'preflight' || !['accepted', 'restored'].includes(old.phase))) {
+      throw new Error('Unfinished deployment state requires recovery before a new operation.');
+    }
+  } else if (state.previousPhase !== null
+    || state.phase !== (state.operation === 'restore' ? 'restore-preflight' : 'preflight')) {
+    throw new Error('Initial deployment state requires a preflight phase.');
+  }
   const temporary = path.join(directory, `.state-${randomUUID()}.tmp`);
   const handle = await open(temporary, 'wx', 0o600);
   let closed = false;
@@ -155,6 +173,9 @@ export async function writeState(root, state) {
 export async function acquireLock(root, { project, operationId }) {
   if (!nonempty(project) || !nonempty(operationId)) throw new Error('Invalid lock owner.');
   const directory = await ownedDirectory(root);
+  const canonicalProject = await realpath(project);
+  const identity = await processIdentity(process.pid);
+  if (!identity) throw new Error('Cannot establish deployment lock owner identity.');
   const lockPath = path.join(directory, 'lock');
   try { await mkdir(lockPath, { mode: 0o700 }); }
   catch (error) {
@@ -164,8 +185,8 @@ export async function acquireLock(root, { project, operationId }) {
     throw error;
   }
   const owner = {
-    version: 1, token: randomUUID(), project: await realpath(project), operationId,
-    pid: process.pid, createdAt: new Date().toISOString(),
+    version: 1, token: randomUUID(), project: canonicalProject, operationId,
+    pid: process.pid, processIdentity: identity, createdAt: new Date().toISOString(),
   };
   const ownerPath = path.join(lockPath, 'owner.json');
   let handle;
@@ -187,9 +208,47 @@ export async function releaseLock(root, owner) {
   const ownerPath = path.join(lockPath, 'owner.json');
   const actual = await readRegularJson(ownerPath, 'deployment lock owner');
   if (!actual || !owner || actual.token !== owner.token || actual.operationId !== owner.operationId
-    || actual.project !== owner.project || actual.pid !== process.pid || owner.pid !== process.pid) {
+    || actual.project !== owner.project || actual.pid !== process.pid || owner.pid !== process.pid
+    || actual.processIdentity !== owner.processIdentity
+    || actual.processIdentity !== await processIdentity(process.pid)) {
     throw new Error('Only the current lock owner can release a deployment lock.');
   }
   await unlink(ownerPath);
   await rmdir(lockPath);
+}
+
+export async function reconcileInterruptedOperation(root) {
+  const directory = await ownedDirectory(root);
+  const state = await loadState(directory);
+  const lockPath = path.join(directory, 'lock');
+  let lockExists = true;
+  try { await ownedDirectory(lockPath); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    lockExists = false;
+  }
+  if (lockExists) {
+    const owner = await readRegularJson(path.join(lockPath, 'owner.json'), 'deployment lock owner');
+    if (owner !== null) {
+      if (owner.version !== 1 || !nonempty(owner.processIdentity)
+        || !nonempty(owner.operationId) || !nonempty(owner.project) || !nonempty(owner.token)) {
+        throw new Error('Invalid deployment lock owner; inspect before continuing.');
+      }
+      const identity = await processIdentity(owner.pid);
+      if (identity !== null && identity === owner.processIdentity) {
+        return { status: 'active', operationId: owner.operationId, phase: state?.phase ?? null,
+          message: 'Another deployment process owns this operation. Wait for it to finish.' };
+      }
+    }
+    return { status: 'interrupted', operationId: owner?.operationId ?? state?.operationId ?? null,
+      phase: state?.phase ?? null,
+      message: 'Interrupted deployment lock retained. Inspect owned child processes and recovery state before continuing.' };
+  }
+  if (state !== null && !['accepted', 'restored'].includes(state.phase)) {
+    return { status: state.phase === 'activation-unverified' ? 'unverified' : 'interrupted',
+      operationId: state.operationId, phase: state.phase,
+      message: 'Inspect the incomplete deployment and use its verification or recovery command before another upgrade.' };
+  }
+  return { status: 'idle', operationId: state?.operationId ?? null, phase: state?.phase ?? null,
+    message: 'No interrupted deployment operation recorded.' };
 }
