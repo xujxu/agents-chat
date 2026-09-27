@@ -1557,3 +1557,144 @@ must prevent unbounded journal accumulation across repeated updates. This
 small metadata retention task is separate from the existing one-full-backup
 constraint. Saved-engine code, native adapters, verified reentry and all eight
 real-process/native lifecycle groups remain outstanding.
+
+## N4: Saved worker engine and independent inspection
+
+Continue inline. This is the worker engine, not yet the complete application
+restore tool. Its purpose is to preserve the worker coordinator/receipt reader
+outside the checkout and prove independent inspection after checkout removal.
+
+**Files and responsibility**
+
+- `scripts/deployment/worker-files.mjs`: shared private canonical directory,
+  bounded regular-file I/O and checked flush/close helpers. Extract the private
+  external-directory policy from `worker-journal.mjs`; retain existing tests.
+- `scripts/deployment/saved-worker-engine.mjs`: fixed allowlist copy, bounded
+  hash manifest, bundle verification and sanitized inspection invocation.
+- `scripts/deployment/saved-worker-inspect.mjs`: read-only stdin owner input,
+  verified dynamic loading of the journal reader, bounded JSON output.
+- `tests/deployment-saved-worker.test.mjs`: actual external copies and Node
+  invocation in Actions; add to the existing workflow.
+
+### Storage and trust contract
+
+`saveWorkerEngine({ source, control, project, operationId })`:
+
+1. Validate canonical source and private external control directories, real
+   project identity, and bounded operation ID. Caller holds the installation
+   lock and supplies a trusted source tree admitted by source compatibility.
+2. Exclusively create the single `worker-engine` directory at mode 0700.
+   Existing complete OR incomplete directories reject without overwrite,
+   deletion or timestamped replacement. No hard links to source files.
+3. Copy only this exact built-in allowlist as newly created 0600 files, using
+   at most 1 MiB per file and rejecting symlinks/hardlinks/nonregular files:
+
+```js
+const files = [
+  'owned-worker.mjs', 'saved-worker-engine.mjs', 'saved-worker-inspect.mjs',
+  'stage-runner.mjs', 'worker-errors.mjs', 'worker-files.mjs',
+  'worker-identity.mjs', 'worker-journal.mjs',
+];
+```
+
+4. Record each file's SHA-256 and size in canonical order. Re-read source files
+   and compare before publishing completion, rejecting source mutation. Write
+   `manifest.json` last with `{ version: 1, project, operationId, files }`,
+   where `files` is an array of `{ name, bytes, sha256 }`. Flush files and, on
+   Linux, directory entries. Do not claim Windows directory power-loss safety.
+5. Return frozen `{ directory, entrypoint, manifestSha256 }`. The caller must
+   persist the manifest digest in operation authority before any native launch.
+   This batch does not extend the deployment state schema or claim that the
+   digest has already been integrated there.
+
+`verifyWorkerEngine({ control, project, operationId, manifestSha256 })`:
+reject missing/partial bundle, unexpected directory entries, links, oversized
+files, malformed/unsupported/extra manifest fields, wrong project/operation,
+wrong externally supplied digest or any content mismatch. Manifest is capped
+at 32 KiB. Source checkout need not still exist. Verify the complete allowlist
+before dynamically importing a saved worker journal module. Never fetch or
+repair missing files from the mutable checkout.
+
+The private bootstrap/verifier and filesystem permissions are the trust base;
+hashes detect corruption/replacement relative to the caller's pinned digest,
+not an adversary able to rewrite the bootstrap and its authority. Windows
+private ACL provisioning remains required before public native integration.
+The system Node binary remains an external prerequisite: this bundle removes
+dependency on project code/node_modules, not on the OS/runtime installation.
+
+`workerInspectionInvocation(saved, owner)` returns an executable/argument/env
+description plus stdin JSON, never a shell command. Use absolute
+`process.execPath`, absolute saved entrypoint, control directory, pinned
+manifest digest; remove case-insensitive NODE_OPTIONS and NODE_PATH from a
+copy of the environment, without modifying the caller's environment. It does
+not spawn any process itself. Native mutating targets cannot use this
+read-only entrypoint as a containment bypass.
+
+The saved entry accepts exactly two positional arguments (control and digest)
+and a bounded 32 KiB owner JSON document on stdin. After whole-bundle
+verification it dynamically imports the saved reader and emits exactly:
+
+```json
+{"status":"inspection-only","phase":"intent","recoveryAuthorized":false}
+```
+
+The phase comes from the last validated receipt; no automatic unlock, restore,
+restart, receipt append or deletion. On error emit a fixed bounded diagnostic
+on stderr, no success JSON, exit nonzero. No raw owner input, env or causes
+are dumped. Verify and invocation are internal APIs, not public deploy CLI
+options or a statement that native domain extinction has been established.
+
+### Task N4
+
+- [ ] **Step 1: Write failing copy/verification/execution contracts.**
+
+```js
+const saved = await saveWorkerEngine({ source, control, project, operationId });
+await rename(project, `${project}-removed`);
+const command = workerInspectionInvocation(saved, owner);
+const child = spawn(command.file, command.args, {
+  env: command.env, stdio: ['pipe', 'pipe', 'pipe'],
+});
+child.stdin.end(command.input);
+```
+
+Assert zero exit and exact inspection-only JSON after checkout removal. Also
+test: source mutation after save cannot alter the bundle; partial/duplicate/
+concurrent save; wrong identity/digest; same-size tampering; extra files;
+corrupt manifest and source links; saved reader must not execute before
+verification; bounded stdin/output; preload env removal; copied module
+dependency closure imports without node_modules; Linux private modes.
+
+- [ ] **Step 2: Push tests/workflow/plan and obtain Actions causal red.**
+
+```bash
+git add tests/deployment-saved-worker.test.mjs .github/workflows/deployment-lifecycle.yml docs/superpowers/plans/2026-09-27-cross-platform-deployment-backup.md
+git commit -m "test: define independently saved worker engine contracts" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+git push origin feat/deployment-backup
+gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
+```
+
+- [ ] **Step 3: Implement shared file boundaries, bundle and inspector.**
+
+Keep the saved allowlist closed; all its imports must be Node builtins or
+members of that list. Reuse the journal's directory/ownership checks through
+the shared helper and retain cause aggregation on I/O and close failures.
+Only the journal reader is dynamically imported by the inspector after
+verification. No npm install, network call or target process is admitted here.
+
+- [ ] **Step 4: Push implementation and require both OS jobs green.**
+
+```bash
+git add scripts/deployment/worker-files.mjs scripts/deployment/worker-journal.mjs scripts/deployment/saved-worker-engine.mjs scripts/deployment/saved-worker-inspect.mjs
+git commit -m "feat: preserve and verify external worker engine copies" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+git push origin feat/deployment-backup
+gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion
+```
+
+- [ ] **Step 5: Save results and retain integration gates.**
+
+Fixed-slot operation-level retirement, pinned-digest persistence in deployment
+authority, Windows private ACL/directory durability, native bootstrap transport
+and cgroup/Job adapters remain required. N4 must not delete an engine still
+referenced by an active/interrupted operation, invent a resume path or claim
+full restore capability.

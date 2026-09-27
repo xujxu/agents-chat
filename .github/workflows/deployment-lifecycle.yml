@@ -60,3 +60,4 @@ jobs:
           tests/deployment-worker-errors.test.mjs
           tests/deployment-owned-worker.test.mjs
           tests/deployment-worker-journal.test.mjs
+          tests/deployment-saved-worker.test.mjs
