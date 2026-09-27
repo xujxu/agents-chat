@@ -1,0 +1,156 @@
+import { createHash } from 'node:crypto';
+import {
+  chmod, copyFile, lstat, mkdir, readFile, readdir, readlink, realpath, statfs, symlink,
+} from 'node:fs/promises';
+import path from 'node:path';
+import { constants } from 'node:fs';
+import {
+  fileDigest, inventorySnapshot, readSnapshotJson, realDirectory, relativeSnapshotPath, writePrivateFile,
+} from './snapshot-files.mjs';
+export { inventorySnapshot } from './snapshot-files.mjs';
+export { rotateSnapshot, reconcileSnapshotSlots } from './snapshot-rotation.mjs';
+
+export function estimateRequiredBytes({ snapshotBytes, metadataBytes, deploymentBytes }) {
+  const values = [snapshotBytes, metadataBytes, deploymentBytes];
+  if (!values.every(value => Number.isSafeInteger(value) && value >= 0)
+    || !Number.isSafeInteger(values.reduce((sum, value) => sum + value, 0))) {
+    throw new Error('Snapshot bytes must be nonnegative safe integers.');
+  }
+  return values.reduce((sum, value) => sum + value, 0);
+}
+
+function validateManifest(manifest) {
+  if (manifest?.version !== 1 || !/^[a-zA-Z0-9_-]+$/.test(manifest.id ?? '')
+    || typeof manifest.project !== 'string' || !path.isAbsolute(manifest.project)
+    || !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(manifest.source?.commit ?? '')
+    || !['observed', 'verified'].includes(manifest.source?.provenance)
+    || manifest.runtime?.state !== 'stopped' || !['linux', 'win32'].includes(manifest.runtime?.platform)
+    || !Array.isArray(manifest.entries)) throw new Error('Invalid snapshot manifest.');
+  const seen = new Map();
+  for (const entry of manifest.entries) {
+    relativeSnapshotPath(entry.path);
+    const key = process.platform === 'win32' ? entry.path.toLowerCase() : entry.path;
+    if (seen.has(key)) throw new Error('Duplicate snapshot manifest path.');
+    if (!['directory', 'file', 'link'].includes(entry.kind)
+      || !Number.isInteger(entry.mode) || entry.mode < 0 || entry.mode > 0o777
+      || !Number.isSafeInteger(entry.uid) || entry.uid < 0
+      || !Number.isSafeInteger(entry.gid) || entry.gid < 0) throw new Error('Invalid snapshot metadata.');
+    if (entry.kind === 'file' && (!Number.isSafeInteger(entry.bytes) || entry.bytes < 0
+      || !/^[a-f0-9]{64}$/.test(entry.sha256 ?? ''))) throw new Error('Invalid snapshot checksum metadata.');
+    if (entry.kind === 'link' && (typeof entry.target !== 'string' || !entry.target
+      || path.isAbsolute(entry.target) || /[\0\r\n]/.test(entry.target))) throw new Error('Invalid snapshot link.');
+    seen.set(key, entry);
+  }
+  for (const entry of manifest.entries) {
+    const parts = entry.path.split('/');
+    while (parts.length > 1) {
+      parts.pop();
+      const parent = parts.join('/');
+      const key = process.platform === 'win32' ? parent.toLowerCase() : parent;
+      if (seen.get(key)?.kind !== 'directory') throw new Error('Missing or unsafe snapshot parent directory.');
+    }
+  }
+  return manifest;
+}
+
+export async function createSnapshot({ project, destination, id, files, source, runtime }) {
+  if (runtime?.state !== 'stopped') throw new Error('Snapshot requires a stopped runtime.');
+  const root = await realDirectory(project);
+  const parent = await realDirectory(path.dirname(destination));
+  const target = path.resolve(destination);
+  if (target === root || target.startsWith(root + path.sep)) {
+    throw new Error('Snapshot destination must be outside the application.');
+  }
+  const entries = await inventorySnapshot(root, files);
+  // Selected nested files require their parent entries in the captured tree.
+  const parents = new Set(entries.filter(entry => entry.kind === 'directory').map(entry => entry.path));
+  for (const entry of [...entries]) {
+    let relative = path.posix.dirname(entry.path);
+    while (relative !== '.') {
+      if (!parents.has(relative)) {
+        const info = await lstat(path.join(root, relative));
+        entries.push({ path: relative, kind: 'directory', mode: info.mode & 0o777, uid: info.uid, gid: info.gid });
+        parents.add(relative);
+      }
+      relative = path.posix.dirname(relative);
+    }
+  }
+  const manifest = {
+    version: 1, id, project: root, createdAt: new Date().toISOString(), source, runtime,
+    entries: entries.map(entry => entry.kind === 'file' ? { ...entry, sha256: '0'.repeat(64) } : entry),
+  };
+  validateManifest(manifest);
+  const snapshotBytes = entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), 0);
+  const required = estimateRequiredBytes({ snapshotBytes, metadataBytes: 1024 * 1024, deploymentBytes: 0 });
+  const space = await statfs(parent, { bigint: true });
+  if (space.bavail * space.bsize < BigInt(required)) throw new Error('Insufficient space for snapshot bytes.');
+  await mkdir(target, { mode: 0o700 });
+  await writePrivateFile(path.join(target, 'owner.json'), JSON.stringify({ version: 1, project: root, id }));
+  const contents = path.join(target, 'files');
+  await mkdir(contents, { mode: 0o700 });
+  const ordered = [...manifest.entries].sort((a, b) => a.path.split('/').length - b.path.split('/').length);
+  for (const entry of ordered.filter(item => item.kind === 'directory')) {
+    await mkdir(path.join(contents, entry.path), { mode: 0o700 });
+  }
+  for (const entry of ordered.filter(item => item.kind === 'file')) {
+    const from = path.join(root, entry.path);
+    const to = path.join(contents, entry.path);
+    await realDirectory(path.dirname(from));
+    const info = await lstat(from);
+    if (!info.isFile() || info.isSymbolicLink() || info.size !== entry.bytes) {
+      throw new Error('Snapshot source changed during copying.');
+    }
+    await copyFile(from, to, constants.COPYFILE_EXCL);
+    await chmod(to, 0o600);
+    entry.sha256 = await fileDigest(to);
+    if (entry.sha256 !== await fileDigest(from)) throw new Error('Snapshot source checksum changed during copying.');
+  }
+  for (const entry of ordered.filter(item => item.kind === 'link')) {
+    if (process.platform === 'win32') {
+      throw new Error('Windows snapshot links require native ACL/reparse support before capture.');
+    }
+    await symlink(entry.target, path.join(contents, entry.path));
+  }
+  const serialized = JSON.stringify(manifest);
+  await writePrivateFile(path.join(target, 'manifest.json'), serialized);
+  await writePrivateFile(path.join(target, 'complete.json'), JSON.stringify({
+    version: 1, id, sha256: createHash('sha256').update(serialized).digest('hex'),
+  }));
+  return verifySnapshot(target);
+}
+
+export async function verifySnapshot(destination) {
+  const root = await realDirectory(destination);
+  let completion;
+  try { completion = await readSnapshotJson(path.join(root, 'complete.json')); }
+  catch (error) {
+    if (error.code === 'ENOENT') throw new Error('Incomplete snapshot: completion marker missing.', { cause: error });
+    throw error;
+  }
+  const manifestFile = path.join(root, 'manifest.json');
+  const manifest = validateManifest(await readSnapshotJson(manifestFile));
+  if (completion.version !== 1 || completion.id !== manifest.id
+    || completion.sha256 !== await fileDigest(manifestFile)) throw new Error('Snapshot manifest integrity failure.');
+  const owner = await readSnapshotJson(path.join(root, 'owner.json'));
+  if (owner.version !== 1 || owner.id !== manifest.id || owner.project !== manifest.project) {
+    throw new Error('Snapshot owner does not match manifest.');
+  }
+  const topLevel = (await readdir(root)).sort();
+  if (JSON.stringify(topLevel) !== JSON.stringify(['complete.json', 'files', 'manifest.json', 'owner.json'])) {
+    throw new Error('Unexpected snapshot files; inspection required.');
+  }
+  const contents = await realDirectory(path.join(root, 'files'));
+  const observed = await inventorySnapshot(contents, await readdir(contents));
+  const byPath = new Map(observed.map(entry => [entry.path, entry]));
+  if (byPath.size !== manifest.entries.length) throw new Error('Snapshot inventory integrity failure.');
+  for (const entry of manifest.entries) {
+    const actual = byPath.get(entry.path);
+    if (!actual || actual.kind !== entry.kind) throw new Error('Snapshot file type integrity failure.');
+    const file = path.join(contents, entry.path);
+    if (entry.kind === 'file' && (actual.bytes !== entry.bytes || await fileDigest(file) !== entry.sha256)) {
+      throw new Error(`Snapshot file size or checksum integrity failure: ${entry.path}`);
+    }
+    if (entry.kind === 'link' && await readlink(file) !== entry.target) throw new Error('Snapshot link integrity failure.');
+  }
+  return manifest;
+}
