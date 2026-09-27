@@ -36,7 +36,7 @@ audio tests, or native workflows. The original2500ms no-save interval and
 **Files:** create both files above; modify the existing streaming-thinking
 case at `tests/test-ui.spec.ts:3905-3996`.
 
-- [ ] **Step 1: Add the helper below, retaining the old baseline evaluation.**
+- [x] **Step 1: Add the helper below, retaining the old baseline evaluation.**
 
 The strict payload validator is shared by contracts and the real route fixture.
 The intentionally old `streamSaveBaseline` returns a count after any matching
@@ -243,7 +243,7 @@ The helper uses Node assertions and the caller owns bounded Playwright waiting.
 No runtime import from the server SQLite modules is needed; `isRecord` is the
 existing pure protocol guard.
 
-- [ ] **Step 2: Add deterministic contract tests.**
+- [x] **Step 2: Add deterministic contract tests.**
 
 Create `tests/stream-save-baseline.spec.ts`:
 
@@ -353,7 +353,7 @@ test('stream final save preserves identity and occurs only after release', () =>
 });
 ```
 
-- [ ] **Step 3: Wire the same helper into the existing UI test.**
+- [x] **Step 3: Wire the same helper into the existing UI test.**
 
 Add:
 
@@ -421,7 +421,7 @@ route failures, not a duplicate readiness approximation. The direct pending
 assertion is the causal red/green boundary. The later `toBe(2)` is justified by
 semantic validation of the two transitions, not by blindly increasing a count.
 
-- [ ] **Step 4: Commit and push the red revision.**
+- [x] **Step 4: Commit and push the red revision.**
 
 ```bash
 git add tests/helpers/streamSaveBaseline.ts tests/stream-save-baseline.spec.ts tests/test-ui.spec.ts
@@ -430,7 +430,7 @@ git commit -m "test: expose early streaming save baseline" \
 git push origin experiment/voice-natural-long
 ```
 
-- [ ] **Step 5: Inspect the automatically triggered Actions run.**
+- [x] **Step 5: Inspect the automatically triggered Actions run.**
 
 ```bash
 revision=$(git rev-parse HEAD)
@@ -455,7 +455,7 @@ the intended assertions before proceeding.
 **Files:** modify `tests/helpers/streamSaveBaseline.ts`; all regression
 expectations stay unchanged.
 
-- [ ] **Step 1: Replace only the baseline evaluator.**
+- [x] **Step 1: Replace only the baseline evaluator.**
 
 ```ts
 export function streamSaveBaseline(
@@ -473,7 +473,7 @@ or extra saves as settling traffic. `finalReady` separately validates the
 post-release third save; do not call the pre-completion baseline evaluator
 after releasing completion.
 
-- [ ] **Step 2: Commit and push the repair.**
+- [x] **Step 2: Commit and push the repair.**
 
 ```bash
 git add tests/helpers/streamSaveBaseline.ts
@@ -482,7 +482,7 @@ git commit -m "test: await acknowledged streaming save baseline" \
 git push origin experiment/voice-natural-long
 ```
 
-- [ ] **Step 3: Inspect automatic acceptance.**
+- [x] **Step 3: Inspect automatic acceptance.**
 
 ```bash
 revision=$(git rev-parse HEAD)
@@ -506,14 +506,14 @@ failures separate and do not rerun them until green.
 
 **Files:** the approved specification and this plan; existing Draft PR #2 body.
 
-- [ ] **Step 1: Record actual red/green results.**
+- [x] **Step 1: Record actual red/green results.**
 
 Add source revisions, exact run URLs, red held-response assertion diagnostics,
 green contract/browser results and relevant artifact IDs/digests if inspected.
 Mark task checkboxes by actual outcome. Do not claim that this repair diagnoses
 historical transport resets or Windows leftovers.
 
-- [ ] **Step 2: Commit and push evidence.**
+- [x] **Step 2: Commit and push evidence.**
 
 ```bash
 git add docs/superpowers/specs/2026-09-26-stream-save-baseline-design.md \
@@ -523,7 +523,7 @@ git commit -m "docs: retain streaming baseline acceptance evidence" \
 git push origin experiment/voice-natural-long
 ```
 
-- [ ] **Step 3: Refresh and update PR #2 without removing historical evidence.**
+- [x] **Step 3: Refresh and update PR #2 without removing historical evidence.**
 
 Fetch the current body with `gh pr view 2 -R xujxu/agents-chat --json body`.
 Add the scoped repair and actual results, preserving all unrelated sections.
@@ -578,3 +578,20 @@ received2 where pending was required. Desktop3 has78 passed,2 skipped,1 failed;
 desktop2 has79 passed and the2 expected contract failures. Other4 jobs passed.
 The teardown violation is absent. This is the required clean red checkpoint;
 Task2 changes only the baseline evaluator, leaving those assertions unchanged.
+
+## Green acceptance
+
+Source6a261b91b450e4c84d53645d3d3678a01eaf660f passed
+[E2E36288645244](https://github.com/xujxu/agents-chat/actions/runs/36288645244),
+all6 jobs. Desktop shards passed81,81,79,46 cases with2 and35 existing skips
+in the latter two; Android123 passed/3 skipped; iPhone122 passed/4 skipped.
+The4 new contract cases and actual held-confirmation streaming UI case passed
+in their desktop-selected jobs, including final save acknowledgement.
+
+[Persistence36288645351](https://github.com/xujxu/agents-chat/actions/runs/36288645351),
+[typography36288645251](https://github.com/xujxu/agents-chat/actions/runs/36288645251)
+and [voice36288645247](https://github.com/xujxu/agents-chat/actions/runs/36288645247)
+also passed. No manual reruns, product changes or local validation were used.
+The companion specification retains the complete red/fixture-correction/green
+evidence and its limits. PR #2 remains Draft; historical transport-reset and
+Windows-residual causes remain unresolved.

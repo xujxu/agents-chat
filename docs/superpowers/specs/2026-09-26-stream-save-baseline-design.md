@@ -155,3 +155,49 @@ accuracy studies, releases and merges stay outside this scope.
 Completion requires causal red/green evidence for the held-confirmation
 boundary, strict payload/count protection before turn completion, final-save
 success, and persistent acceptance evidence. PR #2 remains Draft.
+
+## Accepted execution evidence
+
+Initial red source c38382e7f7c7abca9e3054af0870c2cfb25d3c38:
+[E2E36287256431](https://github.com/xujxu/agents-chat/actions/runs/36287256431)
+failed the two baseline contracts. The real browser trace also reached the
+held-confirmation assertion and returned2 instead of pending, but a subsequent
+fixture teardown error obscured it in the job log. That late request was
+`set-last-chat`, not a chat save. The fixture had incorrectly enrolled every
+POST in save-completion tracking.
+
+Fixture-only correction f38aa52b58e2e124018f6ef887b5834909b3d6d9 explicitly
+distinguishes this metadata action before save tracking, retaining its shape
+assertion and normal route-error propagation. Unknown save actions still fail.
+No errors were caught or ignored and the old evaluator remained unchanged.
+[Corrected red36288035696](https://github.com/xujxu/agents-chat/actions/runs/36288035696)
+then exposed precisely the intended held-response failure, received2, with no
+teardown violation. Desktop2 had79 passed/2 expected contract failures;
+desktop3 had78 passed/2 skipped/1 expected browser failure. Other4 jobs passed.
+
+The inspected initial-red desktop3 artifact10920812695 is2835256 bytes;
+archive SHA256
+`6f5c37b7879222ba0246a04d4456ac6327c4a89e66c86d32c71f95cbc93c6fdb`.
+Trace `expect@176` at194041.672 records the held-response assertion; the
+metadata request appears at194059.986. Paired browser and `route.fetch`
+network records are not duplicate frontend saves.
+
+Repair source **6a261b91b450e4c84d53645d3d3678a01eaf660f** changes only the
+baseline evaluator after the clean red checkpoint. It validates the complete
+sequence, rejects additional pre-baseline saves, and waits for both successful
+acknowledgements. The regression expectations are unchanged.
+
+| Acceptance at6a261b9 | Result |
+| --- | --- |
+| [Full E2E36288645244](https://github.com/xujxu/agents-chat/actions/runs/36288645244) | All6 jobs passed; desktop shards81,81,79,46 passed, with2 and35 existing skips in the latter two; Android123 passed/3 skipped; iPhone122 passed/4 skipped |
+| Streaming contracts | All4 passed in desktop shard2, including pending acknowledgements, invalid/extra saves, explicit response failures and final identity/release |
+| Actual streaming UI regression | Passed in desktop shard3, including held-confirmation pending state,2500ms no-save interval and acknowledged final save |
+| [Persistence36288645351](https://github.com/xujxu/agents-chat/actions/runs/36288645351) | Passed |
+| [Typography36288645251](https://github.com/xujxu/agents-chat/actions/runs/36288645251) | Passed |
+| [Voice36288645247](https://github.com/xujxu/agents-chat/actions/runs/36288645247) | Passed |
+
+The streaming contracts and UI case are desktop-selected; the Android/iPhone
+jobs cover their existing suites, not these newly added cases. All validation
+ran in Actions, with no manual reruns or local validation. This accepts the
+scoped test repair, not every persistence path or a product persistence change.
+Historical ECONNRESET and Windows residual causes remain unresolved.
