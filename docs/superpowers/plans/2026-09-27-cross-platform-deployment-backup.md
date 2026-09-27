@@ -2234,12 +2234,12 @@ then remains unsafe. It never recreates a Job or clears an existing journal.
 
 **Tests and execution**
 
-- [ ] Push real Windows integration contracts and collect causal missing-module
+- [x] Push real Windows integration contracts and collect causal missing-module
   red in the windows-native job.
-- [ ] Implement helper/adapter and closed saved-bundle dependency set; add the
+- [x] Implement helper/adapter and closed saved-bundle dependency set; add the
   bounded native frame reader without changing the existing primitive tests.
-- [ ] Run all four Actions jobs, diagnose bounded logs and require green.
-- [ ] Persist exact acceptance and outstanding account/reentry/fault gates.
+- [x] Run all four Actions jobs, diagnose bounded logs and require green.
+- [x] Persist exact acceptance and outstanding account/reentry/fault gates.
 
 Core test wiring:
 
@@ -2255,3 +2255,75 @@ const result = await runOwnedWorker({ owner, signal }, {
 Production wrappers still must aggregate close errors, hold installation
 authority, persist the pinned digest and retire fixed slots safely. N7 does
 not wire public deploy/update/restore or authorize interrupted reentry.
+
+### N7 execution evidence
+
+- Causal missing-adapter red: `fd8d4a1`, Actions `36317014836`.
+- Initial owner/adapter: `af56bc7`, Actions `36317150588`. Shared contracts,
+  Linux native and Windows primitive cases passed; Windows integration
+  correctly refused the fixture's saved-file ownership before granting a
+  command.
+- Bounded startup diagnostics and owner lifecycle cases: `8465c2b`,
+  Actions `36317266193`. The diagnostic identified the explicit private-owner
+  check, rather than relaxing it based on a guessed runtime failure.
+- Corrected fixture provisioning: `b0b202f`, Actions `36317398249`, all four
+  jobs green, including **11 Windows coordinator integration cases**.
+  Test setup explicitly assigns the intended account as saved-bundle/file
+  owner; creating files under a protected directory alone did not establish
+  that ownership on this hosted Windows runner. Production admission remains
+  strict and does not repair or broaden ACLs automatically.
+- Null-DACL characterization: `2fa2bf2`, Actions `36317504030`, all four
+  jobs green, **12 Windows integration cases**. The test sets and reads back
+  an actual null DACL. The existing ACL inspection rejects it, so no
+  speculative permission-check rewrite was made.
+- Final accepted revision: `13fdc6048fe29a084d7b16735786350931e5e014`,
+  Actions `36317668488`, all four jobs green: **13 Windows coordinator
+  integration cases**, **13 Windows native primitive cases**, **14 Linux
+  native tests**, **174 Linux shared contracts**, **170 Windows shared
+  contracts with four Linux-only skips**. This includes the real
+  stage-deadline case.
+
+The saved bundle now includes the Windows adapter, native owner, trusted
+launcher and C# interop. `prepareWindowsWorker` requires an explicit absolute
+pwsh executable, current account SID and session ID. The native helper is
+outside the Job, owns the original noninherited handle and watches the Node
+controller PID/start identity. A separate contained launcher must acknowledge
+membership before readiness. The domain receipt binds the Node controller;
+readiness separately verifies the actual helper PID/start identity.
+
+Requests use one bounded receive dispatcher and sequential correlated IDs.
+Run cancellation does not reuse its reply for cleanup: closeAdmission, stop,
+join and observe have independent replies. Invalid transport/replies close
+admission and remain unsafe. The owner retains its original handle while the
+coordinator persists settlement, then closes it during explicit retirement;
+Node joins the helper before returning. Both native timers have an independent
+30-minute ceiling. The asynchronous frame reader dispatches on the thread
+pool because `Console.In.ReadAsync` may otherwise block synchronously and
+prevent the owner loop from servicing cancellation or run completion.
+
+Actual integration cases cover durable receipt ordering/identity, literal
+argv/environment and immutable command capture, binary-safe bounded output
+and nonzero exit, pre-grant and running cancellation, detached descendants
+after root exit, explicit account/session/runtime rejection, Node controller
+death with an unreclaimed admitted journal, native owner death with a blocked
+receipt, retained owner identity through durable settlement, broad ACL and
+null-DACL rejection. The stage-deadline case requires the real writer to have
+started and to stop before the stage reports recoverable timeout.
+
+### Remaining gates after N7
+
+This is an internal current-account integration, not a production deployment
+entry point or a claim of zero edge cases. Public Windows setup must provision
+the intended control/bundle owner and ACLs explicitly; `saveWorkerEngine` does
+not currently do that. Arbitrary credential switching and physical Windows/
+ARM64 support have not been accepted. Native assignment/query/termination
+fault injection, bounded enumeration failure, every durable kill boundary,
+transport corruption/duplicate replies and exclusive interrupted reentry
+still need the complete approved matrix.
+
+Next prioritize operation-level authority/reentry and saved-engine digest
+persistence/slot retirement, together with Linux intended non-root identity.
+Only then wire public deploy/update/restore and the real historical
+application lifecycle, backup/restore metadata, service/watchdog/ACP shutdown
+and rollback acceptance on both platforms. No main PR, main push, merge or
+live installation change is authorized by this intermediate acceptance.
