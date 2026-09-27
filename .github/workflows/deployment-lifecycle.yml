@@ -73,3 +73,5 @@ jobs:
           node-version: 24
       - name: Characterize retained cgroup observation
         run: sudo "$(command -v node)" tests/deployment-linux-domain-probe.mjs
+      - name: Exercise actual saved-engine systemd workers
+        run: sudo "$(command -v node)" --test tests/deployment-linux-worker.test.mjs

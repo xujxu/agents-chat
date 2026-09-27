@@ -1776,6 +1776,93 @@ All eight native process acceptance groups, full historical deploy/update/
 restore acceptance, README/public wrappers and the main-targeted PR remain
 outstanding.
 
+### N5 Linux gated adapter implementation batch
+
+Characterization `5406228`, Actions `36314620935`, succeeded. A retained
+cgroup.events descriptor still returned `populated 0` after SIGKILL, while
+systemd's failed unit retained its original InvocationID but exposed an empty
+ControlGroup. Therefore use the retained descriptor, never reconstruct an
+empty domain from a missing path. Unit/boot identity checks remain mandatory.
+
+**Files**
+
+- `scripts/deployment/worker-wire.mjs`: bounded single-line JSON socket
+  messages, immutable exact target command snapshot, no shell encoding.
+- `scripts/deployment/linux-worker-bootstrap.mjs`: trusted saved Node process
+  inside the transient service. Connect to a private Unix socket, authenticate
+  a one-use token, acknowledge PID/start/group membership, wait for one command
+  grant, drain bounded output, keep the domain alive after root exit and
+  observe the original controller lifetime. Transport loss exits nonzero so
+  systemd kills the group. No target imports/preloads before admission.
+- `scripts/deployment/linux-worker.mjs`: saved-bundle verification, preflight,
+  socket owner, transient service creation, exact-domain identity, retained
+  events descriptor and implementation of N2's handle contract.
+- Extend saved-engine allowlist with the three files and process-identity.mjs.
+  Update the saved-engine dependency-closure contract rather than silently
+  relying on checkout modules.
+- `tests/deployment-linux-worker.test.mjs`: real root-capable isolated Actions
+  runner tests, independent of the cross-platform contract job.
+
+**Native protocol and admission**
+
+The controller verifies Linux/root/systemd/cgroup-v2 and its live process
+identity. This first internal adapter requires explicitly requested uid=0 and
+gid=0, and rejects other or implicit accounts. It is not wired to public
+deployment and must not silently replace the deployment's intended account.
+Non-root account support/private transport ACLs remain a later native gate.
+
+Create a Unix socket inside the already private external control directory;
+reject a path exceeding Linux's sockaddr_un limit before native creation.
+Invoke systemd-run with absolute saved bootstrap and Node paths, Type=exec,
+RemainAfterExit=yes, Restart=no, KillMode=control-group, SendSIGKILL=yes,
+finite start/stop/runtime limits, and cleared Node bootstrap preloads.
+Only bootstrap identity/token/controller PID information travels in argv;
+target cwd/argv/env travels as a bounded socket frame after durable admission.
+The parent retains the single socket and the exact cgroup.events handle.
+
+```js
+const ready = {
+  type: 'ready', token, pid: process.pid,
+  processIdentity: await processIdentity(process.pid), controlGroup,
+};
+const grant = { type: 'run', command: { file, args, cwd, env } };
+const result = { type: 'result', exitCode, signal, stdout, stderr };
+```
+
+Frames are at most 128 KiB, commands at most 64 KiB, stdout/stderr retain
+8 KiB tails each while continuing to drain. Validate frame type/shape, token,
+MainPID, PID start identity, boot ID, full ControlGroup and InvocationID before
+returning the handle. `run` checks its signal and permanently closed admission
+immediately before writing its sole grant. Bootstrap rejects duplicate grants.
+It checks controller start identity periodically; missing/reused controller or
+disconnection prevents further grants and exits, independent of CLI finally.
+
+Close admission destroys transport, preventing late commands. Stop validates
+the original boot/unit invocation then targets only that UUID unit. Join
+polls the retained descriptor under a finite allowance until populated=0.
+Observe rechecks original boot/unit identity and retained populated state.
+Retire is allowed only after N2 persisted settlement; close native observation
+and reset only the matching empty failed unit. An unreadable descriptor,
+replaced identity, failed query/kill or ambiguous partial creation is unsafe.
+Never use process-name/port matching or missing cgroup path as extinction.
+
+### N5 execution
+
+- [x] Add/execute bounded native characterization in Actions.
+- [ ] Push real adapter contracts; collect missing-module red.
+- [ ] Implement the three modules and extend the saved allowlist.
+- [ ] Push and iterate against real Linux worker tests plus both OS contract
+  jobs; capture exact accepted revision and failure causes.
+- [ ] Record the implementation limits. This batch cannot claim Windows Job,
+  crash-reentry authorization, non-root account support, whole-operation helper
+  retirement, OOM immunity or full application deployment acceptance.
+
+Use the established feature-branch commit/push and
+`gh run list -R xujxu/agents-chat --workflow deployment-lifecycle.yml --branch feat/deployment-backup --limit 1 --json databaseId,headSha,status,conclusion`
+sequence. Native tests run only as
+`sudo "$(command -v node)" --test tests/deployment-linux-worker.test.mjs`
+inside the Actions job. Local native experiments remain prohibited.
+
 ## N5 native Linux boundary: first establish actual retirement semantics
 
 Before selecting the Linux retirement proof, run the bounded
