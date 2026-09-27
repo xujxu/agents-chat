@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { runOwnedWorker } from '../scripts/deployment/owned-worker.mjs';
+import { runStage } from '../scripts/deployment/stage-runner.mjs';
 
 const workerId = '649276eb-c039-420b-9d28-bd76646f29fc';
 const owner = {
@@ -37,6 +38,7 @@ function fixture(identity = linux) {
     async stop() { calls.push('stop'); },
     async join() { calls.push('join'); },
     async observe() { calls.push('observe'); return { identity: { ...identity }, empty: true }; },
+    async retire() { assert.equal(calls.at(-1), 'settled'); },
   };
   const adapters = {
     async record(receipt) { calls.push(receipt.phase); receipts.push(receipt); },
@@ -291,4 +293,86 @@ test('invalid owner or callbacks fail before journal or native work', async () =
   }
   await assert.rejects(runOwnedWorker({ owner }, { ...adapters, prepare: null }), /adapter/i);
   assert.deepEqual(calls, []);
+});
+
+test('native evidence is retired only after the settlement receipt is durable', async () => {
+  const { run, calls, domain } = fixture();
+  domain.retire = async () => { calls.push('retire'); };
+  assert.equal(await run(), 23);
+  assert.deepEqual(calls.slice(-3), ['observe', 'settled', 'retire']);
+});
+
+test('native evidence is retained when cleanup or receipt recording is uncertain', async () => {
+  for (const boundary of ['stop', 'settled']) {
+    const { run, domain, adapters, calls } = fixture();
+    domain.retire = async () => assert.fail('uncertain evidence must not be retired');
+    if (boundary === 'stop') domain.stop = async () => { throw new Error('stop failed'); };
+    else {
+      const record = adapters.record;
+      adapters.record = async receipt => {
+        if (receipt.phase === 'settled') throw new Error('write failed');
+        await record(receipt);
+      };
+    }
+    await assert.rejects(run(), unsettled);
+    assert.equal(calls.at(-1), 'blocked');
+  }
+});
+
+test('retirement failure cannot leave a successful operation result', async () => {
+  const { run, domain, calls } = fixture();
+  const failure = new Error('native handle close failed');
+  domain.retire = async () => { throw failure; };
+  await assert.rejects(run(), error => {
+    unsettled(error);
+    assert.equal(error.cause, failure);
+    return true;
+  });
+  assert.equal(calls.at(-1), 'blocked');
+});
+
+test('empty observation waits for every launch-capable controller to finish', async () => {
+  const { run, domain, calls } = fixture();
+  const entered = Promise.withResolvers();
+  const joined = Promise.withResolvers();
+  domain.join = async () => {
+    calls.push('join');
+    entered.resolve();
+    await joined.promise;
+  };
+  const completion = run();
+  await entered.promise;
+  assert.equal(calls.includes('observe'), false);
+  assert.equal(calls.includes('settled'), false);
+  joined.resolve();
+  assert.equal(await completion, 23);
+  assert.equal(calls.includes('observe'), true);
+});
+
+test('late preparation after the stage settlement deadline cannot launch target code', async () => {
+  const { adapters, controller, calls } = fixture();
+  const entered = Promise.withResolvers();
+  const release = Promise.withResolvers();
+  const prepare = adapters.prepare;
+  adapters.prepare = async context => {
+    const domain = await prepare(context);
+    entered.resolve();
+    await release.promise;
+    return domain;
+  };
+  let ownedOutcome;
+  const stage = runStage('build', signal => {
+    const worker = runOwnedWorker({ owner, signal }, adapters);
+    ownedOutcome = worker.then(value => ({ value }), error => ({ error }));
+    return worker;
+  }, { timeoutMs: 10000, settlementMs: 30, signal: controller.signal });
+  await entered.promise;
+  controller.abort(new Error('cancelled while preparing'));
+  await assert.rejects(stage, unsettled);
+  assert.equal(calls.includes('run'), false);
+  release.resolve();
+  const outcome = await ownedOutcome;
+  assert.equal(outcome.error.code, 'DEPLOYMENT_STAGE_CANCELLED');
+  assert.equal(calls.includes('run'), false);
+  assert.deepEqual(calls.slice(-5), ['closeAdmission', 'stop', 'join', 'observe', 'settled']);
 });

@@ -1035,19 +1035,17 @@ variables or raw errors enter receipts.
 `prepare({ owner, signal })` creates only a trusted gated bootstrap and returns
 a handle with:
 
-```js
-{
-  identity, // captured, immutable platform identity described below
-  run: async ({ signal }) => { /* one-use native command grant and result */ },
-  closeAdmission: async () => { /* irrevocably revoke grants */ },
-  stop: async () => { /* request exact-domain termination, not exit proof */ },
-  join: async () => { /* join all launch-capable controllers */ },
-  observe: async () => ({ identity, empty: true }),
-}
-```
+| Member | Contract |
+| --- | --- |
+| `identity` | Captured platform identity described below |
+| `run({ signal })` | Async one-use native command grant and result |
+| `closeAdmission()` | Async irrevocable revocation of grants |
+| `stop()` | Async exact-domain termination request, not exit proof |
+| `join()` | Async join of all launch-capable controllers |
+| `observe()` | Async `{ identity, empty }` original-domain observation |
+| `retire()` | Async release of retained native handles/unit evidence after durable settlement |
 
-The comments above define callback responsibilities, not production fallback
-implementations. N2's test fixtures implement these callbacks explicitly.
+N2's test fixtures implement these callbacks explicitly.
 `prepare`/`run` must honor the same monotonic abort signal, including a
 synchronous check at the native grant boundary. Preparation must not release
 target code, including preload hooks. On preparation failure the coordinator
@@ -1071,7 +1069,7 @@ abort check -> record intent -> abort check -> prepare gated domain
 -> validate/copy identity -> abort check -> record owned
 -> abort check -> record admitted -> abort check -> run once
 -> abort local grant signal -> closeAdmission -> stop -> join -> observe
--> check exact identity AND empty === true -> record settled -> return result
+-> check exact identity AND empty === true -> record settled -> retire -> return result
 ```
 
 On any post-intent error, close local admission and attempt all three cleanup
@@ -1083,6 +1081,11 @@ failure, missing/mismatched observation or receipt failure remains unsafe;
 record blocked and preserve all original errors. `settled` means only no
 remaining worker, never application acceptance. Cancellation is checked again
 after result/receipt awaits so a late successful callback cannot return success.
+Native handles/unit evidence must not be retired before the settlement record
+is durable. Failed cleanup or recording retains that evidence. Retirement
+itself is checked; failure records blocked and cannot return success. A
+settled-then-blocked record represents failed evidence retirement, not
+permission to reopen admission or repeat the command.
 
 There is deliberately no internal Promise.race that abandons cleanup. The
 existing `runStage` supplies the deadline and settlement allowance. If a native
@@ -1130,7 +1133,7 @@ import path from 'node:path';
 import { hasUnsettledWorker } from './worker-errors.mjs';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
-const methods = ['run', 'closeAdmission', 'stop', 'join', 'observe'];
+const methods = ['run', 'closeAdmission', 'stop', 'join', 'observe', 'retire'];
 const text = value => typeof value === 'string' && value.length > 0
   && value.length <= 4096 && !/[\0\r\n]/.test(value);
 
@@ -1264,6 +1267,10 @@ export async function runOwnedWorker({ owner: suppliedOwner, signal }, { record,
     if (!uncertain) {
       try { await write('settled'); }
       catch (error) { errors.push(error); }
+    }
+    if (!uncertain && handle) {
+      try { await handle.retire(); }
+      catch (error) { errors.push(error); uncertain = true; }
     }
     if (uncertain) {
       try { await write('blocked'); }
