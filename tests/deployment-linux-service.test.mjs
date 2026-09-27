@@ -597,3 +597,106 @@ test('service retirement requires acceptance of this deployment, not just an act
     } finally { await stopped.close(); }
   }
 });
+
+test('service retirement permits worker retirement and the same fixed slots can run a second operation', async t => {
+  const f = await stopFixture(t);
+  let lock = f.lock;
+  for (let iteration = 0; iteration < 2; iteration++) {
+    if (iteration) {
+      lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+      const previous = await loadState(f.control);
+      await writeState(f.control, { ...previous, operationId: lock.operationId, phase: 'preflight', previousPhase: null,
+        startedAt: lock.createdAt, updatedAt: lock.createdAt });
+      await advanceState(f, ['stopped']);
+    }
+    const stopped = await stopLinuxService({ ...f, lock });
+    const saved = await saveWorkerEngine({ control: f.control, project: f.project, operationId: lock.operationId,
+      source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)) });
+    const workers = await createWorkerOperation({ control: f.control, lock, saved });
+    try {
+      await workers.run({ workerId: randomUUID(), command: {
+        file: node, args: ['-e', 'process.exit(0)'], cwd: f.project, env: { PATH: '/usr/bin:/bin', HOME: '/root' },
+      }, runtime: { uid: 0, gid: 0 } });
+      await workers.seal();
+      await activateDeployment(f, stopped);
+      await advanceState(f, ['accepted']);
+      await stopped.retire();
+      await workers.retire();
+      await releaseLock(f.control, lock);
+      assert.deepEqual(await fs.readdir(f.control), ['state.json']);
+    } finally { await workers.close(); await stopped.close(); }
+  }
+});
+
+test('partial service retirement retains durable intent and never unlocks or stops the accepted app', async t => {
+  for (const fault of ['intent-flush', 'second-unlink', 'marker-unlink', 'state-drift']) {
+    const f = await stopFixture(t);
+    const stopped = await stopLinuxService(f);
+    const active = await activateDeployment(f, stopped);
+    await advanceState(f, ['accepted']);
+    const marker = path.join(f.control, 'service-retirement.json');
+    const nativeOpen = fs.open;
+    const nativeUnlink = fs.unlink;
+    let injected = false;
+    fs.open = async function (file, ...args) {
+      const handle = await nativeOpen(file, ...args);
+      if (file === marker && fault === 'intent-flush' && args[0] === 'wx') {
+        const sync = handle.sync.bind(handle);
+        handle.sync = async () => { await sync(); injected = true; throw new Error('Injected intent flush failure.'); };
+      }
+      return handle;
+    };
+    fs.unlink = async function (file) {
+      if (fault === 'second-unlink' && file === path.join(f.control, 'service-activation.ndjson')
+        || fault === 'marker-unlink' && file === marker) {
+        injected = true;
+        throw new Error('Injected service retirement unlink failure.');
+      }
+      await nativeUnlink(file);
+      if (fault === 'state-drift' && String(file).endsWith('.held')) {
+        const state = await loadState(f.control);
+        await writeFile(path.join(f.control, 'state.json'), `${JSON.stringify({ ...state, targetCommit: 'c'.repeat(40) })}\n`);
+        injected = true;
+      }
+    };
+    syncBuiltinESMExports();
+    try { await assert.rejects(stopped.retire(), error => error.recoveryAllowed === false); }
+    finally { fs.open = nativeOpen; fs.unlink = nativeUnlink; syncBuiltinESMExports(); await stopped.close(); }
+    assert.equal(injected, true);
+    assert.ok((await fs.readdir(f.control)).includes('service-retirement.json'));
+    await assert.rejects(releaseLock(f.control, f.lock), /service/i);
+    assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(), active.identity.runtime.invocationId);
+    assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+  }
+});
+
+test('actual retirement-controller death after first unlink preserves the running app and blocks reentry', async t => {
+  const f = await fixture(t);
+  await ready(f);
+  const control = path.join(path.dirname(f.project), 'control');
+  await mkdir(control, { mode: 0o700 });
+  const child = fork(new URL('./deployment-service-stop-child.mjs', import.meta.url),
+    [control, f.project, f.unit, f.npm, f.node, 'retirement-unlink'],
+    { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let diagnostic = '';
+  child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-4096); });
+  const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
+  });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Retirement controller did not reach unlink: ${diagnostic}`)), 45000);
+    child.once('message', value => { clearTimeout(timer); resolve(value); });
+    child.once('exit', code => { clearTimeout(timer); reject(new Error(`Retirement controller exited ${code}: ${diagnostic}`)); });
+    child.once('error', error => { clearTimeout(timer); reject(error); });
+  });
+  child.kill('SIGKILL');
+  await exited;
+  const intent = JSON.parse(await readFile(path.join(control, 'service-retirement.json'), 'utf8'));
+  await assert.rejects(readFile(intent.files[0].file), { code: 'ENOENT' });
+  assert.ok((await fs.readdir(control)).includes('service-activation.ndjson'));
+  assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(), intent.runtime.runtime.invocationId);
+  assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
+  await assert.rejects(acquireLock(control, { project: f.project, operationId: randomUUID() }), /service/i);
+});

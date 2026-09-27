@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
-import { acquireLock, writeState } from '../scripts/deployment/state.mjs';
+import { acquireLock, loadState, writeState } from '../scripts/deployment/state.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 
 const [control, project, unit, npm, node, phase] = process.argv.slice(2);
@@ -37,4 +37,25 @@ fs.open = async function (file, ...args) {
 syncBuiltinESMExports();
 const stopped = await stopLinuxService({ control, lock, unit, project, npm, node });
 if (activation) await stopped.activate({ purpose: 'prior-runtime' });
+if (phase === 'retirement-unlink') {
+  for (const next of ['copying', 'rotating', 'backup-ready', 'source-selected',
+    'dependencies', 'building', 'configuring', 'activating']) {
+    const current = await loadState(control);
+    await writeState(control, { ...current, phase: next, previousPhase: current.phase });
+  }
+  await stopped.activate({ purpose: 'deployment' });
+  const current = await loadState(control);
+  await writeState(control, { ...current, phase: 'accepted', previousPhase: 'activating' });
+  const nativeUnlink = fs.unlink;
+  fs.unlink = async function (file) {
+    await nativeUnlink(file);
+    if (String(file).endsWith('.held')) {
+      process.send({ phase, lock });
+      setInterval(() => {}, 1000);
+      await new Promise(() => {});
+    }
+  };
+  syncBuiltinESMExports();
+  await stopped.retire();
+}
 throw new Error('Fixture did not pause at the requested durable stop receipt.');
