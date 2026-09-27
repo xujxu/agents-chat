@@ -55,16 +55,16 @@ export async function resolveTarget(project, { revision, noPull = false } = {}) 
     return { commit: await commitAt(source.project, revision), expectedSourceCommit: source.commit, mode: 'explicit' };
   }
   if (noPull) return { commit: source.commit, expectedSourceCommit: source.commit, mode: 'unchanged' };
-  if (!source.branch) throw new Error('Normal upgrade requires a tracking branch; use an explicit revision for detached source.');
+  if (!source.branch) throw new Error('Normal update requires a tracking branch; use an explicit revision for detached source.');
   const remoteResult = await git(source.project, ['config', '--get', `branch.${source.branch}.remote`], [1]);
   const remote = remoteResult.output.trim();
   if (!remote || !/^(?!-)[A-Za-z0-9_.-]+$/.test(remote)) {
-    throw new Error('Normal upgrade requires a configured tracking remote.');
+    throw new Error('Normal update requires a configured tracking remote.');
   }
   await git(source.project, ['fetch', '--no-tags', '--', remote]);
   const target = await commitAt(source.project, '@{upstream}');
   const ancestor = await git(source.project, ['merge-base', '--is-ancestor', source.commit, target], [1]);
-  if (ancestor.code === 1) throw new Error('Source and upstream diverged; automatic upgrade requires fast-forward history.');
+  if (ancestor.code === 1) throw new Error('Source and upstream diverged; automatic update requires fast-forward history.');
   return { commit: target, expectedSourceCommit: source.commit, branch: source.branch, mode: 'fast-forward' };
 }
 

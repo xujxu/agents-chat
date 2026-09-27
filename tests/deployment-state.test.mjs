@@ -7,7 +7,7 @@ import {
   nextPhase, recoveryAdvice, loadState, writeState, acquireLock, releaseLock,
 } from '../scripts/deployment/state.mjs';
 
-test('upgrade cannot replace dependencies before a complete backup', () => {
+test('update cannot replace dependencies before a complete backup', () => {
   assert.throws(() => nextPhase('copying', 'dependencies'), /transition/i);
   assert.equal(nextPhase('backup-ready', 'source-selected'), 'source-selected');
   assert.equal(nextPhase('activation-unverified', 'accepted'), 'accepted');
@@ -18,7 +18,7 @@ test('upgrade cannot replace dependencies before a complete backup', () => {
 test('failure exposes a concrete recovery command without claiming rollback', () => {
   const command = "sudo bash '/srv/.chat.deployment/restore.sh'";
   const advice = recoveryAdvice({
-    operation: 'upgrade', phase: 'building', backupComplete: true, restored: false,
+    operation: 'update', phase: 'building', backupComplete: true, restored: false,
     restoreCommand: command,
     diagnosticCommand: 'sudo journalctl -u agents-chat -n 40 --no-pager',
   });
@@ -42,7 +42,7 @@ test('first installation never invents a rollback backup', () => {
 
 test('missing recovery command is an error, not empty successful advice', () => {
   assert.throws(() => recoveryAdvice({
-    operation: 'upgrade', phase: 'building', backupComplete: true, restored: false,
+    operation: 'update', phase: 'building', backupComplete: true, restored: false,
     diagnosticCommand: 'journalctl -u agents-chat',
   }), /command/i);
 });
@@ -51,7 +51,7 @@ test('state persists a complete record and rejects malformed state', async t => 
   const root = await temporaryDeployment(t);
   assert.equal(await loadState(root), null);
   const state = {
-    version: 1, operationId: 'operation-1', project: root, operation: 'upgrade',
+    version: 1, operationId: 'operation-1', project: root, operation: 'update',
     phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40),
     targetCommit: 'b'.repeat(40), backupId: null,
     priorRuntime: 'running', runtimeIdentity: 'fixture',

@@ -75,7 +75,7 @@ function validateState(state) {
   }
   if (Object.keys(state).length !== stateFields.size
     || !nonempty(state.operationId) || !nonempty(state.project) || !path.isAbsolute(state.project)
-    || !['deploy', 'upgrade', 'restore'].includes(state.operation)
+    || !['deploy', 'update', 'restore'].includes(state.operation)
     || !Object.hasOwn(transitions, state.phase)
     || (state.previousPhase !== null && !Object.hasOwn(transitions, state.previousPhase))
     || !['running', 'stopped', 'absent'].includes(state.priorRuntime)
@@ -247,7 +247,7 @@ export async function reconcileInterruptedOperation(root) {
   if (state !== null && !['accepted', 'restored'].includes(state.phase)) {
     return { status: state.phase === 'activation-unverified' ? 'unverified' : 'interrupted',
       operationId: state.operationId, phase: state.phase,
-      message: 'Inspect the incomplete deployment and use its verification or recovery command before another upgrade.' };
+      message: 'Inspect the incomplete deployment and use its verification or recovery command before another update.' };
   }
   return { status: 'idle', operationId: state?.operationId ?? null, phase: state?.phase ?? null,
     message: 'No interrupted deployment operation recorded.' };

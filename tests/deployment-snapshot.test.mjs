@@ -48,7 +48,7 @@ async function snapshot(root, slot, id, contents) {
   });
 }
 
-test('two rotations retain exactly the latest pre-upgrade snapshot', async t => {
+test('two rotations retain exactly the latest pre-update snapshot', async t => {
   const root = await temporaryDeployment(t);
   const project = path.join(root, 'app');
   await snapshot(root, 'staging', 'one', 'first');

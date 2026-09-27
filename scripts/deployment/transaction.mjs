@@ -4,8 +4,8 @@ const operationNames = [
 ];
 
 export async function runDeployment(options, operations) {
-  if (!options || !['deploy', 'upgrade'].includes(options.operation)) {
-    throw new Error('Deployment transaction requires deploy or upgrade operation.');
+  if (!options || !['deploy', 'update'].includes(options.operation)) {
+    throw new Error('Deployment transaction requires deploy or update operation.');
   }
   if (!operations || operationNames.some(name => typeof operations[name] !== 'function')) {
     throw new Error('Deployment transaction requires every native operation.');
@@ -26,8 +26,8 @@ export async function runDeployment(options, operations) {
     throw new Error('Deployment inspection did not establish managed runtime ownership.');
   }
   context.inspection = inspected;
-  if (options.operation === 'upgrade' && !inspected.exists) {
-    throw new Error('Upgrade requires an existing deployment.');
+  if (options.operation === 'update' && !inspected.exists) {
+    throw new Error('Update requires an existing deployment.');
   }
   context.target = await invoke('resolveTarget');
   await invoke('capacity');

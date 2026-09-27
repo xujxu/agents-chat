@@ -136,7 +136,7 @@ least every 15 minutes while working or waiting; stop reminders when paused.
 | File | Responsibility |
 | --- | --- |
 | `scripts/deploy.sh`, `scripts/deploy.ps1` | Public deployment entry and native privilege checks |
-| `scripts/upgrade.sh`, `scripts/upgrade.ps1` | Require an existing deployment; delegate without pulling first |
+| `scripts/update.sh`, `scripts/update.ps1` | Require an existing deployment; delegate without pulling first |
 | `scripts/restore.sh`, `scripts/restore.ps1` | Discover and invoke the external recovery entry |
 | `scripts/deployment/protocol.json` | Explicit transaction protocol version accepted at source handoff |
 | `scripts/deployment/cli.mjs` | Parse normalized arguments, dispatch engine, print actionable errors |
@@ -171,7 +171,7 @@ where behavior is intentionally moved into the shared/native helper.
 | Intent | Linux | Windows |
 | --- | --- | --- |
 | First deploy or update | `sudo bash scripts/deploy.sh` | `.\scripts\deploy.ps1` |
-| Upgrade only | `sudo bash scripts/upgrade.sh` | `.\scripts\upgrade.ps1` |
+| Update only | `sudo bash scripts/update.sh` | `.\scripts\update.ps1` |
 | Target existing checkout from newer tools | `--project-dir /absolute/app` | `-ProjectDir C:\absolute\app` |
 | Explicit fetched revision | `--revision FULL_SHA` | `-Revision FULL_SHA` |
 | Keep current source | `--no-pull` | `-SkipGitPull` |
@@ -185,7 +185,7 @@ where behavior is intentionally moved into the shared/native helper.
 
 `--revision`/`-Revision` selects a commit already present in the target checkout,
 suppresses pull, and conflicts with an explicit no-pull flag. Resolve to a full
-commit before stopping the runtime; reject missing objects. Default upgrades
+commit before stopping the runtime; reject missing objects. Default updates
 fetch then resolve the upstream fast-forward target, but do not update working
 files until backup is committed. First installation builds the checked-out
 source without requiring a tracking branch.
@@ -193,7 +193,7 @@ source without requiring a tracking branch.
 Retain Windows task selection/removal/logon/trigger parameters. Add `-NoTunnel`
 and `-UserId` to the deploy/task chain: they are necessary for a portable first
 installation and real isolated CI, not a change to the service manager.
-On upgrade, omitted identity/mode flags preserve existing task values; on first
+On update, omitted identity/mode flags preserve existing task values; on first
 installation use the current valid account unless explicitly overridden.
 
 `--status`/`-Status` is read-only and prints phase, intended revision and exact
@@ -294,14 +294,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { recoveryAdvice, nextPhase } from '../scripts/deployment/state.mjs';
 
-test('upgrade cannot overwrite dependencies before a complete backup', () => {
+test('update cannot overwrite dependencies before a complete backup', () => {
   assert.throws(() => nextPhase('copying', 'dependencies'), /transition/i);
   assert.equal(nextPhase('backup-ready', 'source-selected'), 'source-selected');
 });
 
 test('failure exposes a concrete recovery command without claiming rollback', () => {
   const advice = recoveryAdvice({
-    operation: 'upgrade',
+    operation: 'update',
     phase: 'building',
     backupComplete: true,
     restored: false,
@@ -421,10 +421,10 @@ Record the exact red commit/run. Do not create a PR.
 
 ## Task 4: Linux transaction and deployment entry points
 
-**Files:** Linux deploy/upgrade/restore entry points, `linux.sh`,
+**Files:** Linux deploy/update/restore entry points, `linux.sh`,
 `transaction.mjs`, `source.mjs`, transaction tests.
 
-- [ ] Write failing transcript tests for both deploy and upgrade requiring:
+- [ ] Write failing transcript tests for both deploy and update requiring:
 
 ```text
 inspect -> resolve-target -> capacity -> stop -> snapshot -> verify-snapshot
@@ -432,7 +432,7 @@ inspect -> resolve-target -> capacity -> stop -> snapshot -> verify-snapshot
 ```
 
 Default deploy on a fresh installation skips backup/stop-old and never reports
-an old restore point. `upgrade` on a fresh installation fails before any write.
+an old restore point. `update` on a fresh installation fails before any write.
 The test observes the same common engine for both entry points.
 
 - [ ] Implement native operations `inspect`, `stop`, `capture`, `configure`,
@@ -462,7 +462,7 @@ The test observes the same common engine for both entry points.
 
 ## Task 5: Windows transaction and validated startup
 
-**Files:** Windows deploy/upgrade/restore entries, `windows.ps1`,
+**Files:** Windows deploy/update/restore entries, `windows.ps1`,
 `recovered-start.ps1`, `start.ps1`, `service-watchdog.ps1`,
 `install-scheduled-task.ps1`, native Windows tests.
 
@@ -475,7 +475,7 @@ The test observes the same common engine for both entry points.
   Stop and inhibit owned watchdog/task restarts before snapshotting.
 - [ ] Replace hardcoded account defaults with current/explicit identity for
   first installation. Preserve existing principal, trigger, logon type,
-  NoTunnel choice and enabled state on upgrade unless explicitly overridden.
+  NoTunnel choice and enabled state on update unless explicitly overridden.
   Unsupported credential-dependent task restoration must fail in preflight,
   not silently register as another user or invent stored credentials.
 - [ ] Trace task action, working directory and child tree ownership. Use
@@ -587,7 +587,7 @@ test('deployment preserves authenticated chat state', async ({ page }) => {
         chat: {
           id, name: 'Deployment continuity', ts: 1, agentSessions: {},
           messages: [{ id: 'saved-message', type: 'user', ts: 1,
-            content: 'Must survive source upgrade' }],
+            content: 'Must survive source update' }],
         },
       },
     });
@@ -598,7 +598,7 @@ test('deployment preserves authenticated chat state', async ({ page }) => {
   const result = await response.json();
   expect(result.chat.messages).toEqual(expect.arrayContaining([
     expect.objectContaining({
-      id: 'saved-message', content: 'Must survive source upgrade',
+      id: 'saved-message', content: 'Must survive source update',
     }),
   ]));
 });
@@ -623,7 +623,7 @@ ephemeral test credentials. It must not call `installMobileChatFixture`.
 - [ ] Test insufficient space and controlled install/build failure through
   narrow injected helper tests and isolated command fixtures; include at least
   one failed real deployment followed by real service/task restoration per OS.
-  No production test flags. Do not replace actual first-deploy/upgrade jobs
+  No production test flags. Do not replace actual first-deploy/update jobs
   with mocked systemctl/Scheduled Tasks.
 - [ ] Source/build acceptance checks compare the pinned Git tree, deployed
   build receipt, actual `.next/BUILD_ID` served assets and managed process
@@ -653,7 +653,7 @@ runner for this test using the existing Playwright version.
 **Files:** `README.md`, CLI tests, this plan's execution evidence section.
 
 - [ ] Replace ambiguous deployment prose with distinct Linux/Windows sections:
-  prerequisites, first deployment, upgrade, fixed revision, historical bootstrap,
+  prerequisites, first deployment, update, fixed revision, historical bootstrap,
   all flags, backup contents/location, downtime/capacity, errors and recovery.
   Explain default account selection and preserved overrides without claiming
   that a non-root user can run systemctl without permission.
@@ -691,7 +691,7 @@ Keep product edits and regression coverage in coherent commits with:
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ```
 
-Completion requires real first-deploy and historical-upgrade acceptance on
+Completion requires real first-deploy and historical-update acceptance on
 both platforms, executed recovery commands, bounded snapshot counts, correct
 permissions/identity, README/CLI consistency and a PR created only after green
 acceptance. A plan, a branch push, mocks alone, or only Linux success is not
@@ -706,7 +706,7 @@ The first implementation batch is saved through code commit
 `5bde1d92839e4a5b053af013f92edc86ad164989`.
 Actions run `36305762200` passed: Linux 59 contracts; Windows 58 contracts and
 one explicitly Linux-only symlink test skipped. This is NOT real deployment,
-upgrade or recovery acceptance, and does not authorize the implementation PR.
+update or recovery acceptance, and does not authorize the implementation PR.
 
 Implemented foundation modules:
 
@@ -718,7 +718,7 @@ Implemented foundation modules:
 - Callback-based deployment sequencing with durable phase recording before
   source/dependency/build mutations and explicit failure cleanup behavior.
 - Git source inspection, target resolution without checkout mutation, explicit
-  selection, preserved runtime configuration, fast-forward upgrades and refusal
+  selection, preserved runtime configuration, fast-forward updates and refusal
   of dirty or diverged source.
 
 Relevant causal evidence:
@@ -738,7 +738,7 @@ also moved out of an accidentally nested test registration.
 
 Remaining required integration, not yet implemented:
 
-- Native systemd and Scheduled Task/ACL adapters; public deploy/upgrade/restore
+- Native systemd and Scheduled Task/ACL adapters; public deploy/update/restore
   entry wiring; external private control ownership and versioned engine handoff.
 - Complete source/runtime inventory and source archive, absent-file metadata,
   native permission restoration, Windows reparse/link support and validated
@@ -747,7 +747,7 @@ Remaining required integration, not yet implemented:
 - Recoverable cleanup after interruption during retirement deletion (as opposed
   to the already covered rename boundaries), native capacity preflight,
   interrupted-child ownership and explicit restore/data-loss confirmation.
-- Real application first installation, historical upgrade, subsequent rotation,
+- Real application first installation, historical update, subsequent rotation,
   failure and no-build restore on BOTH OSes; README/public parameter completion.
 
 No existing deploy entry point, main branch or live service was changed.

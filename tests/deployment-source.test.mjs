@@ -69,7 +69,7 @@ test('source selection rejects edits and a stale source receipt without resettin
   assert.equal(await git(project, ['rev-parse', 'HEAD']), old);
 });
 
-test('no-pull works without upstream; normal upgrade requires a tracking branch', async t => {
+test('no-pull works without upstream; normal update requires a tracking branch', async t => {
   const { project, old } = await repository(t);
   assert.equal((await resolveTarget(project, { noPull: true })).commit, old);
   await assert.rejects(resolveTarget(project, {}), /tracking|upstream|branch/i);
@@ -82,7 +82,7 @@ test('untracked source and alternate tracked config changes do not bypass prefli
   await assert.rejects(inspectSource(project), /dirty|untracked|modified/i);
 });
 
-test('normal upgrade fetches first, then fast-forwards only during source selection', async t => {
+test('normal update fetches first, then fast-forwards only during source selection', async t => {
   const { root, project, next } = await repository(t);
   await git(project, ['switch', 'main']);
   const client = path.join(root, 'client');
