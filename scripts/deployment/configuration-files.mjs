@@ -105,7 +105,9 @@ export async function inspectConfigurationFiles({
       if (effective.__NEXT_PROCESSED_ENV || effective.NODE_ENV && effective.NODE_ENV !== 'production') {
         throw refusal('runtime-environment-policy');
       }
-      if (observedRuntime && [...new Set([...authenticationEnvironmentNames, ...Object.keys(effective)])]
+      if (observedRuntime && [...new Set([
+        ...authenticationEnvironmentNames, '__NEXT_PROCESSED_ENV', ...Object.keys(effective),
+      ])]
         .some(name => effective[name] !== observedRuntime[name])) throw refusal('runtime-environment-changed');
     };
     if (!Array.isArray(systemdFiles) || systemdFiles.length > 32 || systemdFiles.some(file =>

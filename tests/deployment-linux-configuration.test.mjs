@@ -10,7 +10,7 @@ import { inspectLinuxNodeVersion } from '../scripts/deployment/linux-node-versio
 import { acquireLock } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
-import { fixture, ready, quote, systemctl } from './deployment-linux-service-fixture.mjs';
+import { fixture, ready, systemctl } from './deployment-linux-service-fixture.mjs';
 
 const profile = 'agents-chat-auth-638c553';
 const settings = `Environment=NODE_ENV=production
@@ -42,7 +42,7 @@ test('actual EnvironmentFile overrides are observed and later mutations invalida
   const f = await retained(t);
   const file = path.join(f.project, 'runtime.env');
   await writeFile(file, 'NEXTAUTH_URL=https://override.example\n');
-  await writeFile(f.fragment, `${f.bytes}\nEnvironmentFile=${quote(file)}\n`);
+  await writeFile(f.fragment, `${f.bytes}\nEnvironmentFile=${file.replaceAll('%', '%%')}\n`);
   await systemctl('daemon-reload');
   await systemctl('restart', f.unit);
   const service = await inspectLinuxService(f);
