@@ -4217,3 +4217,11 @@ included in the saved worker engine's closed module list. Native tests assert
 descendant writes stop, repeated observation works, and replacement generation
 remains running. Full implementation acceptance is pending; cold recovery of an
 interrupted activation-stop sequence remains a separate unfinished requirement.
+
+**Activation-stop iteration:** `e0a5e90` / `36420355815` proved native stop,
+descendant quiescence, repeat observation and replacement-generation refusal.
+Three jobs failed on test expectations: both shared jobs retained the old explicit
+saved-engine inventory, and the native test matched an inner retirement-refusal
+message against the intentionally generic outer uncertainty error. Updated the
+independent file allowlist and asserted recoveryAllowed=false plus the nested
+cause. No production safety gate was relaxed; full corrected matrix is pending.

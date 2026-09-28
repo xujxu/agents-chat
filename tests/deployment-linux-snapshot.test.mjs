@@ -165,7 +165,8 @@ test('stopped native service project can recover saved data and ownership withou
       const journal = (await readFile(path.join(f.control, 'service-activation.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
       assert.deepEqual(journal.slice(-4).map(record => record.phase),
         ['activation-stop-intent', 'activation-stop-inhibited', 'activation-stop-requested', 'activation-stopped']);
-      await assert.rejects(f.stopped.retire(), /retirement|stopped|activation/i);
+      await assert.rejects(f.stopped.retire(), error => error.recoveryAllowed === false
+        && /retirement|stopped|activation/i.test(error.cause?.message ?? ''));
       assert.equal((await loadState(f.control)).phase, 'restore-activating');
     });
 
