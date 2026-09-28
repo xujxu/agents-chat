@@ -66,6 +66,41 @@ test('declared target reads immutable Git objects, not a dirty working checkout'
   assert.equal(JSON.stringify(result).includes('secret'), false);
 });
 
+test('current candidate commit carries a usable reviewed declaration', async () => {
+  const result = await inspect({ project: repository, commit: await git(repository, ['rev-parse', 'HEAD']) });
+  assert.equal(result.mode, 'declared');
+});
+
+test('Git replacement objects cannot disguise a changed source profile', async t => {
+  const f = await targetFixture(t, async p => writeFile(path.join(p, 'lib/chatStore.ts'), 'changed'));
+  await git(f.project, ['replace', f.commit, baseline]);
+  await assert.rejects(inspect(f), { code: 'DEPLOYMENT_TARGET_UNSUPPORTED' });
+});
+
+test('inherited Git redirection does not change the inspected project', async t => {
+  const f = await targetFixture(t);
+  const previous = process.env.GIT_DIR;
+  process.env.GIT_DIR = path.join(f.project, 'does-not-exist');
+  try { assert.equal((await inspect(f)).commit, f.commit); }
+  finally {
+    if (previous === undefined) delete process.env.GIT_DIR;
+    else process.env.GIT_DIR = previous;
+  }
+});
+
+for (const mode of ['100755', '120000']) {
+  test(`declaration is not accepted as an executable or symbolic link: ${mode}`, async t => {
+    const f = await targetFixture(t);
+    await git(f.project, ['switch', '--detach', f.commit]);
+    const file = 'scripts/deployment/compatibility.json';
+    const blob = await git(f.project, ['rev-parse', `${f.commit}:${file}`]);
+    await git(f.project, ['update-index', '--cacheinfo', `${mode},${blob},${file}`]);
+    await git(f.project, ['commit', '-m', 'wrong mode']);
+    await assert.rejects(inspect({ project: f.project, commit: await git(f.project, ['rev-parse', 'HEAD']) }),
+      { check: 'target-file-type' });
+  });
+}
+
 for (const [name, change] of [
   ['protocol', async p => writeFile(path.join(p, 'scripts/deployment/protocol.json'), '{"version":9,"snapshotVersion":1}')],
   ['extra-field', async p => writeFile(path.join(p, 'scripts/deployment/compatibility.json'), JSON.stringify({ ...metadata, skipChecks: true }))],
@@ -128,15 +163,35 @@ test('effective authentication configuration is checked without exposing values'
   assert.doesNotMatch(JSON.stringify(result), /fixture-|secret|password/i);
 });
 
+test('configuration accessors are refused without evaluating them', () => {
+  let called = false;
+  const candidate = { ...environment };
+  Object.defineProperty(candidate, 'NEXTAUTH_SECRET', { get() { called = true; throw new Error('secret'); } });
+  assert.throws(() => inspectConfigurationCompatibility({
+    profile: metadata.configurationProfile, environment: candidate,
+  }), { code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED' });
+  assert.equal(called, false);
+});
+
+test('inherited configuration cannot silently stand in for explicit effective settings', () => {
+  assert.throws(() => inspectConfigurationCompatibility({
+    profile: metadata.configurationProfile, environment: Object.create(environment),
+  }), { check: 'NEXTAUTH_SECRET' });
+});
+
 for (const [name, patch] of [
   ['secret', { NEXTAUTH_SECRET: '' }],
   ['placeholder', { NEXTAUTH_SECRET: 'change-me-to-a-random-string' }],
   ['url', { NEXTAUTH_URL: 'javascript:private-secret' }],
+  ['url-credentials', { NEXTAUTH_URL: 'https://private-user:private-password@example.invalid' }],
+  ['url-fragment', { NEXTAUTH_URL: 'https://example.invalid/#private' }],
   ['credential-pair', { ADMIN_PASSWORD: '' }],
   ['github-pair', { GITHUB_CLIENT_ID: 'private-id' }],
   ['github-allowlist', { GITHUB_CLIENT_ID: 'private-id', GITHUB_CLIENT_SECRET: 'private-secret' }],
   ['no-provider', { ADMIN_USERNAME: '', ADMIN_PASSWORD: '' }],
   ['nonproduction', { NODE_ENV: 'development' }],
+  ['azure-tenant', { AZURE_AD_CLIENT_ID: 'id', AZURE_AD_TENANT_ID: '' }],
+  ['oversized', { NEXTAUTH_SECRET: 'x'.repeat(65537) }],
 ]) {
   test(`invalid effective configuration refuses without secret output: ${name}`, () => {
     assert.throws(() => inspectConfigurationCompatibility({
