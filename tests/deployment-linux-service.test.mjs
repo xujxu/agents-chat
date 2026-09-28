@@ -527,6 +527,30 @@ test('service retirement requires acceptance of this deployment, not just an act
   }
 });
 
+test('live unlock refuses changed state, service generation and unrelated evidence', async t => {
+  for (const fault of ['state', 'runtime', 'foreign-worker', 'recovery']) {
+    const f = await stopFixture(t);
+    const stopped = await stopLinuxService(f);
+    try {
+      await activateDeployment(f, stopped);
+      await advanceState(f, ['accepted']);
+      await stopped.retire();
+      const receipt = await readFile(path.join(f.control, 'live-retirement.json'));
+      if (fault === 'state') {
+        const state = await loadState(f.control);
+        await writeFile(path.join(f.control, 'state.json'), JSON.stringify({ ...state, targetCommit: 'd'.repeat(40) }));
+      }
+      if (fault === 'runtime') await systemctl('restart', f.unit);
+      if (fault === 'foreign-worker') await writeFile(path.join(f.control, 'worker-foreign'), 'untouched');
+      if (fault === 'recovery') await mkdir(path.join(f.control, 'recovery-lock'), { mode: 0o700 });
+      await assert.rejects(releaseLock(f.control, f.lock));
+      assert.deepEqual(await readFile(path.join(f.control, 'live-retirement.json')), receipt);
+      assert.equal(JSON.parse(await readFile(path.join(f.control, 'lock', 'owner.json'))).token, f.lock.token);
+      assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
+    } finally { await stopped.close(); }
+  }
+});
+
 test('service retirement permits worker retirement and the same fixed slots can run a second operation', async t => {
   const f = await stopFixture(t);
   let lock = f.lock;

@@ -318,6 +318,7 @@ for (const [phase, mode] of [
   ['retirement-live-workers-done', 'settled'],
   ['retirement-live-lock-owner', 'settled'],
   ['retirement-live-lock-directory', 'none'],
+  ['retirement-live-lock-directory', 'settled'],
 ]) {
   test(`normal live retirement interruption preserves authority through unlock: ${phase}/${mode}`, async t => {
     const f = await interrupted(t, phase, 'accepted', mode);
@@ -339,6 +340,18 @@ for (const [phase, mode] of [
     await releaseLock(f.control, next);
   });
 }
+
+test('cold live-unlock recovery refuses a substituted old lock directory after owner unlink', async t => {
+  const f = await interrupted(t, 'retirement-live-lock-owner', 'accepted', 'none');
+  await f.kill();
+  const lock = path.join(f.control, 'lock');
+  await rename(lock, `${lock}.displaced`);
+  await mkdir(lock, { mode: 0o700 });
+  const receipt = await readFile(path.join(f.control, 'live-retirement.json'));
+  await assert.rejects(f.recover());
+  assert.deepEqual(await readFile(path.join(f.control, 'live-retirement.json')), receipt);
+  assert.ok(!(await readdir(f.control)).includes('recovery-lock'));
+});
 
 test('recovery may die twice without replacing its immutable lease or losing the cleanup inventory', async t => {
   const f = await interrupted(t, 'retirement-unlink-0', 'accepted', 'settled');
