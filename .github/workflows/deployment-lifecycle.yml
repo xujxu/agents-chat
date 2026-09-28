@@ -51,7 +51,7 @@ jobs:
           node-version: 24
       - run: npm ci --no-audit --no-fund
       - name: Inspect actual historical databases without initialization
-        run: node --test tests/deployment-database-compatibility.test.mjs tests/deployment-target-compatibility.test.mjs tests/deployment-data-content.test.mjs
+        run: node --test tests/deployment-database-compatibility.test.mjs tests/deployment-target-compatibility.test.mjs tests/deployment-data-content.test.mjs tests/deployment-dotenv-compatibility.test.mjs
 
   contracts:
     name: Contracts (${{ matrix.os }})
@@ -85,6 +85,7 @@ jobs:
           tests/deployment-worker-retirement.test.mjs
           tests/deployment-retirement-recovery.test.mjs
           tests/deployment-configuration-files.test.mjs
+          tests/deployment-runtime-version.test.mjs
       - name: Probe Windows cold retirement stability
         if: runner.os == 'Windows'
         shell: pwsh

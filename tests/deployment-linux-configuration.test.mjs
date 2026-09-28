@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
-import { writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { inspectLinuxConfiguration } from '../scripts/deployment/linux-configuration.mjs';
+import { inspectLinuxNodeVersion } from '../scripts/deployment/linux-node-version.mjs';
+import { acquireLock } from '../scripts/deployment/state.mjs';
+import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
+import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { fixture, ready, quote, systemctl } from './deployment-linux-service-fixture.mjs';
 
 const profile = 'agents-chat-auth-638c553';
@@ -80,4 +86,23 @@ test('the original service invocation must remain stable during configuration ad
   const result = await inspectLinuxConfiguration({ service: f.service, profile });
   await systemctl('restart', f.unit);
   await assert.rejects(result.check(), { code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED' });
+});
+
+test('actual runtime Node is observed through a settled non-root owned worker before downtime', async t => {
+  const f = await retained(t, { nonroot: true });
+  const control = path.join(path.dirname(f.project), 'control');
+  await mkdir(control, { mode: 0o700 });
+  const lock = await acquireLock(control, { project: f.project, operationId: randomUUID() });
+  const saved = await saveWorkerEngine({
+    source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)),
+    control, project: f.project, operationId: lock.operationId,
+  });
+  const operation = await createWorkerOperation({ control, lock, saved });
+  try {
+    const result = await inspectLinuxNodeVersion({ service: f.service, operation });
+    assert.equal(result.nodeVersion, process.versions.node);
+    assert.equal(result.status, 'runtime-observed');
+    await operation.seal();
+    assert.equal((await f.service.check()).populated, true);
+  } finally { await operation.close(); }
 });

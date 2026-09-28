@@ -68,6 +68,7 @@ for (const content of [
   'NEXTAUTH_SECRET=$OTHER', 'NEXTAUTH_SECRET="${OTHER}"', 'NEXTAUTH_SECRET="line\\nvalue"',
   'export NEXTAUTH_SECRET=value', 'NEXTAUTH_SECRET="first\nsecond"', 'NEXTAUTH_SECRET=x\0y',
   'private-unrecognized-line',
+  'NEXTAUTH_SECRET=`private-backtick-quoted`',
 ]) {
   test(`unsupported dotenv syntax is refused without exposing content ${JSON.stringify(content).length}`, async t => {
     const project = await temporaryDeployment(t);
@@ -128,4 +129,10 @@ test('dotenv-only settings are compared after the startup environment observatio
   delete configured.ADMIN_PASSWORD;
   const result = await inspect(project, { environment: configured, observedEnvironment: configured });
   assert.deepEqual(result.providers, ['credentials']);
+});
+
+test('Next environment-load suppression is refused rather than predicting files will load', async t => {
+  const project = await temporaryDeployment(t);
+  await assert.rejects(inspect(project, { environment: { ...environment, __NEXT_PROCESSED_ENV: 'true' } }),
+    { check: 'runtime-environment-policy' });
 });

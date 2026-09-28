@@ -3870,3 +3870,22 @@ actual native service environment, not supply controller process.env implicitly.
 Results expose profile/provider/source names, never secrets or secret hashes.
 Native checks must detect a stale running environment and recheck source evidence
 before permitting downtime. Windows Task environment collection remains separate.
+
+**Data/configuration checkpoint (2026-09-28):** `c9447c10efdffd567546f45e50f6353926f4b7dd`
+/ Actions `36389382331` passed all eight jobs. Configuration-file implementation
+`ff708a95768ce5c293b1a90d6790f0d858b0c6a2` / Actions `36391111852` also passed all
+eight jobs after both causal shared jobs at `73b61df` / `36390601408` failed on
+the missing file reader. Files are read with a 1MiB bound, regular/single-link
+checks, descriptor/path identity rechecks, exact retained bytes and absence
+observations. No secret hashes or values are returned. Unsupported shell/Next
+expansion, escapes, multiline values and backtick quoting refuse explicitly.
+
+Native startup-environment tests at `f33066b` / `36391401055` exposed missing
+stale-value comparisons in both shared jobs; native tests additionally require a
+new reader. Implementation `01b0aa3` observes typed systemd Environment and
+EnvironmentFiles, compares pre-dotenv settings against the original npm process
+environment, and retains original service/configuration/file observations through
+recheck. PassEnvironment, UnsetEnvironment and PAMName are deliberately unsupported.
+This detects changed EnvironmentFile content without restarting the installed
+service. The actual Next loader differential tests are the next validation layer.
+No configuration reader grants compatibility-passed by itself.
