@@ -21,7 +21,7 @@ for (const [group, blob] of sources) {
   const { stdout } = await execute('git', ['-C', repository, 'cat-file', 'blob', blob], { encoding: 'buffer' });
   const actual = createHash('sha1').update(`blob ${stdout.length}\0`).update(stdout).digest('hex');
   if (actual !== blob) throw new Error('Historical fixture provenance changed.');
-  const statements = stdout.toString('utf8').match(/CREATE (?:TABLE|INDEX) IF NOT EXISTS [\s\S]*?;/g);
+  const statements = stdout.toString('utf8').match(/CREATE (?:TABLE|INDEX) IF NOT EXISTS [^`]*?(?:;|(?=`))/g);
   if (!statements?.length) throw new Error('Historical fixture DDL missing.');
   ddl.set(group, statements.join('\n'));
 }
@@ -29,18 +29,21 @@ for (const [group, blob] of sources) {
 export const profile = 'agents-chat-638c553';
 
 export async function databaseFixture(t, { groups = ['chat', 'sync', 'transfer', 'schedule', 'config'], wal = false } = {}) {
+  const dbs = {};
+  t.after(() => { for (const db of Object.values(dbs)) if (db.open) db.close(); });
   const project = await temporaryDeployment(t);
   const directory = path.join(project, '.data');
   await mkdir(directory);
-  const dbs = {};
   for (const name of ['chats', 'config']) {
     const chosen = groups.filter(group => (group === 'config') === (name === 'config'));
     if (!chosen.length) continue;
     const db = new Database(path.join(directory, `${name}.db`));
     dbs[name] = db;
-    t.after(() => { if (db.open) db.close(); });
     if (wal) { db.pragma('journal_mode = WAL'); db.pragma('wal_autocheckpoint = 0'); }
-    for (const group of chosen) db.exec(ddl.get(group));
+    for (const group of chosen) {
+      try { db.exec(ddl.get(group)); }
+      catch (cause) { throw new Error(`Historical fixture DDL failed: ${group}: ${cause.message}`, { cause }); }
+    }
     if (chosen.includes('chat')) db.exec("ALTER TABLE chats ADD COLUMN agent_id TEXT NOT NULL DEFAULT ''");
     if (chosen.includes('schedule')) db.exec('ALTER TABLE cron_jobs ADD COLUMN timeout_minutes INTEGER');
     if (name === 'config') {

@@ -31,8 +31,10 @@ function inspectSchema(db, reference, name, signal) {
     if (db.pragma('user_version', { simple: true }) !== 0 || db.pragma('application_id', { simple: true }) !== 0) {
       throw refusal('database-version');
     }
-    const schema = db.prepare('SELECT type, name, tbl_name, sql FROM sqlite_schema ORDER BY type, name LIMIT 129').all();
-    if (schema.length > 128) throw refusal('schema-bound');
+    const schema = db.prepare(`SELECT type, substr(name,1,129) AS name, substr(tbl_name,1,129) AS tbl_name,
+      substr(sql,1,65537) AS sql FROM sqlite_schema ORDER BY type, name LIMIT 129`).all();
+    if (schema.length > 128 || schema.some(row => row.name.length > 128
+      || row.tbl_name.length > 128 || row.sql?.length > 65536)) throw refusal('schema-bound');
     const tables = schema.filter(row => row.type === 'table').map(row => row.name);
     const groups = databaseGroups[name];
     const allowed = groups.flat();

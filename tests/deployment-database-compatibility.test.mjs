@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { readFile, readdir, unlink, writeFile } from 'node:fs/promises';
+import { link, readFile, readdir, symlink, unlink, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import test from 'node:test';
 import { databaseFixture, profile } from './deployment-database-fixture.mjs';
@@ -51,6 +52,9 @@ for (const [name, sql] of [
   ['partial-group', 'DROP TABLE cron_runs'],
   ['index', 'CREATE INDEX unknown_index ON chats(name)'],
   ['changed-index', 'DROP INDEX idx_chats_user_ts; CREATE INDEX idx_chats_user_ts ON chats(name)'],
+  ['type', 'DROP TABLE shares; CREATE TABLE shares(share_id TEXT PRIMARY KEY, shared_by TEXT NOT NULL, shared_at TEXT NOT NULL, name TEXT NOT NULL, messages TEXT NOT NULL DEFAULT \'[]\')'],
+  ['default', 'DROP TABLE shares; CREATE TABLE shares(share_id TEXT PRIMARY KEY, shared_by TEXT NOT NULL, shared_at INTEGER NOT NULL, name TEXT NOT NULL, messages TEXT NOT NULL DEFAULT \'[ ]\')'],
+  ['constraint', 'DROP TABLE shares; CREATE TABLE shares(share_id TEXT PRIMARY KEY, shared_by TEXT NOT NULL, shared_at INTEGER NOT NULL, name TEXT NOT NULL CHECK(name != \'private-value\'), messages TEXT NOT NULL DEFAULT \'[]\')'],
   ['view', 'CREATE VIEW secret_view AS SELECT name FROM chats'],
   ['trigger', "CREATE TRIGGER secret_trigger AFTER INSERT ON chats BEGIN DELETE FROM chats; END"],
   ['version', 'PRAGMA user_version = 88'],
@@ -141,6 +145,41 @@ test('binding receives read-only/fileMustExist options and original database pat
     assert.ok(seen.some(call => call.file === path.join(f.directory, `${name}.db`)
       && call.options.readonly === true && call.options.fileMustExist === true));
   }
+});
+
+test('default inspector resolves the binding from the installed project', async t => {
+  const f = await databaseFixture(t);
+  await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)),
+    path.join(f.project, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+  assert.ok((await inspectDeploymentDatabases({ project: f.project, profile })).databases
+    .every(database => database.status === 'schema-supported'));
+});
+
+test('hard-linked database is refused before SQLite opens the application', async t => {
+  const f = await databaseFixture(t, { groups: ['chat'] });
+  await link(path.join(f.directory, 'chats.db'), path.join(f.project, 'linked.db'));
+  const before = await snapshot(f.directory);
+  await assert.rejects(inspect(f), { check: 'file-type' });
+  assert.deepEqual(await snapshot(f.directory), before);
+});
+
+test('additional application database is not silently omitted', async t => {
+  const f = await databaseFixture(t);
+  await writeFile(path.join(f.directory, 'future.db'), '');
+  await assert.rejects(inspect(f), { check: 'database-inventory' });
+});
+
+test('successful shape inspection alone cannot authorize transaction downtime', async t => {
+  const f = await databaseFixture(t);
+  const calls = [];
+  const operations = Object.fromEntries(['record', 'capacity', 'stop', 'snapshot', 'verifySnapshot',
+    'rotate', 'selectSource', 'dependencies', 'build', 'configure', 'start', 'verify']
+    .map(name => [name, async () => { calls.push(name); }]));
+  operations.inspect = async () => ({ exists: true, running: true, owned: true });
+  operations.resolveTarget = async () => ({ commit: 'a'.repeat(40) });
+  operations.admit = async () => inspect(f);
+  await assert.rejects(runDeployment({ operation: 'update' }, operations), /compatibility admission/);
+  assert.deepEqual(calls, []);
 });
 
 test('compatibility failure is propagated before transaction stop or state mutation', async t => {
