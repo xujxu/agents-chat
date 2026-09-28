@@ -1,4 +1,5 @@
 import { validateWorkflowPlan } from '../../lib/workflow/workflowSchema.mjs';
+import { createHash } from 'node:crypto';
 
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const string = value => typeof value === 'string';
@@ -109,7 +110,8 @@ export function inspectDatabaseContent(db, tables, signal, refuse) {
       if (!type) throw refuse('stored-type-policy');
       return `(${name} IS NULL AND ${column.notnull || column.pk ? 1 : 0})
         OR (${name} IS NOT NULL AND (typeof(${name}) != '${type}'
-        OR length(CAST(${name} AS BLOB)) > ${maxBytes}))`;
+        OR length(CAST(${name} AS BLOB)) > ${maxBytes}
+        ${type === 'integer' ? `OR ${name} NOT BETWEEN -9007199254740991 AND 9007199254740991` : ''}))`;
     }).join(' OR ');
     if (db.prepare(`SELECT 1 FROM "${table}" WHERE ${invalid} LIMIT 1`).get()) throw refuse('stored-scalar');
     if (db.prepare(`SELECT count(*) AS count FROM (SELECT 1 FROM "${table}" LIMIT ${maxRows + 1})`).get().count > maxRows) {
@@ -127,6 +129,20 @@ export function inspectDatabaseContent(db, tables, signal, refuse) {
     WHERE c.chunk_index < 0 OR c.chunk_index >= t.total OR length(c.data) !=
       CASE WHEN c.chunk_index=t.total-1 THEN t.bytes-c.chunk_index*262144 ELSE 262144 END LIMIT 1`).get()) {
     throw refuse('stored-transfer');
+  }
+  if (tables.includes('chat_transfers')) {
+    const chunks = db.prepare(`SELECT data FROM chat_transfer_chunks
+      WHERE user_id=? AND transfer_id=? ORDER BY chunk_index`);
+    for (const transfer of db.prepare('SELECT user_id,id,total,digest FROM chat_transfers').iterate()) {
+      const hash = createHash('sha256');
+      let count = 0;
+      for (const chunk of chunks.iterate(transfer.user_id, transfer.id)) {
+        signal?.throwIfAborted();
+        hash.update(chunk.data);
+        count++;
+      }
+      if (count === transfer.total && hash.digest('hex') !== transfer.digest) throw refuse('stored-transfer-digest');
+    }
   }
   signal?.throwIfAborted();
 }

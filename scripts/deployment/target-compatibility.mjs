@@ -17,6 +17,10 @@ const bindings = Object.freeze({
   'lib/chatSyncStore.ts': '005a819da01dff4e5dd512e40658ebdbdf4ebbb5',
   'lib/chatTransferStore.ts': 'bb03a556703881ff086aa958db22ebbe6bf0cc17',
   'lib/scheduler/scheduleStore.ts': 'ecb14acd9f5f1107094e9621ba4da7cb273e56cd',
+  'lib/chatDeltaValidation.ts': 'db23d472dc027b0a4faba21bf458eeaa412faf38',
+  'lib/chatSyncProtocol.ts': '292cc9704f031da8ba0093e45bfb7e605240d43d',
+  'lib/workflow/workflowSchema.mjs': '8b32e2db5480eacf874dc2ea0bc57d635ae2cdec',
+  'app/features/scheduler/scheduleSpec.ts': '4682a7cb55c9dd76a7cc54d2d4b3ae2571f2e095',
   'lib/auth.ts': '25a7f2115d53976733bdbdbec093e902852b41e4',
   'app/api/auth/[...nextauth]/route.ts': 'f5ae0ae509725efc21923232fa114d90c80489ac',
 });
