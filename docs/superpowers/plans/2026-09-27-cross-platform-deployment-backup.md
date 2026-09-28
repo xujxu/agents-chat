@@ -3914,3 +3914,26 @@ payload contains source code and project/profile identifiers, never secrets or
 database contents. Bound compressed/uncompressed payloads and validate the exact
 small result shape. A blocked SQLite/native import must be killed/joined by the
 existing stage/worker lifecycle; uncertain cleanup must still prohibit downtime.
+
+**Owned database checkpoint (2026-09-28, validation in progress):** Native runtime
+and configuration `b20dcec` / `36393607443` passed all eight jobs. Owned database
+causal `c737bcb` / `36398975040` failed the missing command/native reader imports.
+Implementation `6f87b3c` / `36399100244` passed both installed matrices and native
+blocked-binding/descendant cancellation. The real non-root binding fixture failed
+`inspection-unavailable` when linked through the runner workspace; no production
+refusal was weakened. Fixture `9b9c277` copies only better-sqlite3 and its two
+runtime dependencies into readable installation directories and first opens the
+binding with uid65534. Its native data job in `36399901278` passed, including
+actual read-only SQLite, cancellation and a 15-second deadline that settles the
+blocked process before allowing recovery. Full nine-job completion is pending.
+
+Before full compatibility admission, cover configStore's first-start imports:
+when config.db is absent, agents.json and nodes.json are automatically imported,
+and the historical initializer records import completion even after parse errors.
+Read and validate those files without initializing either store; reject duplicates
+that INSERT OR IGNORE would discard, validate known agent/model/env/flag fields
+using the same data validator, bound source size, and retain file/absence evidence.
+When the known config.db migration receipts already exist, those files are dormant
+and must not spuriously block an update. This belongs inside the owned data payload
+as well as the data inspection API. Causal tests are `fd33a66` / `36400621102`.
+The legacy implementation is presently uncommitted and must be preserved on OOM.

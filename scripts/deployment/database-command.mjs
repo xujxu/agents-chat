@@ -8,6 +8,7 @@ import { databaseProfile } from './database-shape-policy.mjs';
 const modulePaths = Object.freeze([
   'scripts/deployment/database-compatibility.mjs', 'scripts/deployment/database-shape-policy.mjs',
   'scripts/deployment/database-content.mjs', 'scripts/deployment/snapshot-files.mjs',
+  'scripts/deployment/legacy-configuration.mjs', 'scripts/deployment/worker-files.mjs',
   'lib/workflow/workflowSchema.mjs',
 ]);
 const checks = Object.freeze([
@@ -18,6 +19,7 @@ const checks = Object.freeze([
   'directory-replaced', 'inspection-unavailable', 'stored-content', 'stored-json',
   'database-integrity', 'database-foreign-key', 'stored-type-policy', 'stored-scalar',
   'stored-row-budget', 'stored-transfer', 'stored-transfer-digest',
+  'legacy-json', 'legacy-content', 'legacy-changed', 'legacy-inspection',
 ]);
 const origin = new URL('../../', import.meta.url);
 const virtualRoot = 'agents-deployment:///';

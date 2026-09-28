@@ -55,6 +55,13 @@ test('invalid persisted data produces a static refusal without stored contents',
   assert.throws(() => readDatabaseInspectionResult(output, profile), { check: 'stored-json' });
 });
 
+test('captured worker includes first-start legacy inspection without loading a SQLite binding', async t => {
+  const f = await databaseFixture(t, { groups: [] });
+  await writeFile(path.join(f.project, 'agents.json'), '{"agents":[{"id":"same"},{"id":"same"}]}');
+  const output = await run(await prepare(f));
+  assert.throws(() => readDatabaseInspectionResult(output, profile), { check: 'legacy-content' });
+});
+
 for (const stdout of [
   '{}', '{"ok":true}', 'private-invalid',
   '{"ok":false,"check":"private-secret"}',

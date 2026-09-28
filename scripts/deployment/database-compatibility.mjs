@@ -6,6 +6,7 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { realDirectory } from './snapshot-files.mjs';
 import { databaseGroups, databaseProfile, migrationKeys, referenceSchema } from './database-shape-policy.mjs';
 import { inspectDatabaseContent } from './database-content.mjs';
+import { inspectLegacyConfiguration } from './legacy-configuration.mjs';
 
 function refusal(check) {
   return Object.assign(new Error(`Database admission refused: ${check}.`), {
@@ -127,7 +128,10 @@ async function inspectDatabases({ project, profile, signal, Database: suppliedDa
     const root = await realDirectory(project);
     const directory = path.join(root, '.data');
     const original = await optionalStat(directory);
-    if (!original) return { profile, databases: Object.keys(databaseGroups).map(name => ({ name, status: 'absent' })) };
+    if (!original) {
+      if (content) await inspectLegacyConfiguration({ project: root, signal });
+      return { profile, databases: Object.keys(databaseGroups).map(name => ({ name, status: 'absent' })) };
+    }
     await realDirectory(directory);
     if ((await readdir(directory)).some(name => /\.(?:db|db-wal|db-shm|db-journal)$/i.test(name)
       && !Object.keys(databaseGroups).some(base => [base, `${base}-wal`, `${base}-shm`, `${base}-journal`].includes(name)))) {
@@ -143,6 +147,9 @@ async function inspectDatabases({ project, profile, signal, Database: suppliedDa
         reference.exec(referenceSchema);
       }
       databases.push(await inspectDatabase({ directory, name, Database, reference, signal, content }));
+    }
+    if (content && databases.find(db => db.name === 'config.db').status === 'absent') {
+      await inspectLegacyConfiguration({ project: root, signal });
     }
     const current = await optionalStat(directory);
     if (!current || !same(identity(original), identity(current))) throw refusal('directory-replaced');

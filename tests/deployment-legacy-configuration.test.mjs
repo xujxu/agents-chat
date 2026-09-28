@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, rmdir, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { databaseFixture, profile } from './deployment-database-fixture.mjs';
-import { inspectDeploymentData } from '../scripts/deployment/database-compatibility.mjs';
+import { inspectDeploymentData, inspectDeploymentDatabases } from '../scripts/deployment/database-compatibility.mjs';
 import { inspectLegacyConfiguration } from '../scripts/deployment/legacy-configuration.mjs';
 
 const agent = { id: 'agent', name: 'Agent', command: 'copilot', args: ['--acp'],
@@ -65,4 +65,26 @@ test('legacy JSON observations retain both present bytes and absence for recheck
   await result.check();
   await writeFile(path.join(f.project, 'nodes.json'), '{"nodes":[]}');
   await assert.rejects(result.check(), { check: 'legacy-changed' });
+});
+
+test('absent data directory still requires checking first-start imports', async t => {
+  const f = await databaseFixture(t, { groups: [] });
+  await rmdir(f.directory);
+  await writeFile(path.join(f.project, 'agents.json'), 'invalid');
+  await assert.rejects(inspectDeploymentData({ project: f.project, profile }), { check: 'legacy-json' });
+  assert.ok((await inspectDeploymentDatabases({ project: f.project, profile }))
+    .databases.every(db => db.status === 'absent'));
+});
+
+test('legacy file allocation is bounded before parsing', async t => {
+  const f = await databaseFixture(t, { groups: [] });
+  await writeFile(path.join(f.project, 'agents.json'), ' '.repeat(1024 * 1024 + 1));
+  await assert.rejects(inspectDeploymentData({ project: f.project, profile }), { check: 'legacy-inspection' });
+});
+
+test('linked legacy files do not bypass retained source admission', { skip: process.platform === 'win32' }, async t => {
+  const f = await databaseFixture(t, { groups: [] });
+  await writeFile(path.join(f.project, 'actual.json'), '{"agents":[]}');
+  await symlink('actual.json', path.join(f.project, 'agents.json'));
+  await assert.rejects(inspectDeploymentData({ project: f.project, profile }), { check: 'legacy-inspection' });
 });

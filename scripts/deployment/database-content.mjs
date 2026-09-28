@@ -48,7 +48,7 @@ function schedule(value, cron) {
     && cron === `${value.minute} ${value.hour} * * ${[...value.weekdays].sort((a, b) => a - b).join(',')}`;
 }
 
-function inspectRow(table, row, refuse) {
+export function inspectPersistedRow(table, row, refuse) {
   const require = valid => { if (!valid) throw refuse('stored-content'); };
   const json = field => {
     try { return JSON.parse(row[field]); }
@@ -121,7 +121,7 @@ export function inspectDatabaseContent(db, tables, signal, refuse) {
       ? `length("${column.name}") AS "${column.name}"` : `"${column.name}"`).join(',');
     for (const row of db.prepare(`SELECT ${projection} FROM "${table}"`).iterate()) {
       signal?.throwIfAborted();
-      inspectRow(table, row, refuse);
+      inspectPersistedRow(table, row, refuse);
     }
   }
   if (tables.includes('chat_transfer_chunks') && db.prepare(`SELECT 1 FROM chat_transfer_chunks c
