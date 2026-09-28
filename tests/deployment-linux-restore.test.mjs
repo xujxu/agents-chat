@@ -124,6 +124,18 @@ test('saved Linux restore entry works without checkout helpers and refuses missi
   await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
   await f.service.check();
   assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'new data');
+  const helper = path.join(saved.directory, 'linux-readiness.mjs');
+  const bytes = await readFile(helper);
+  await writeFile(helper, 'throw new Error("changed helper");\n');
+  assert.equal((await execute(true)).code, 1);
+  await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
+  await f.service.check();
+  await writeFile(helper, bytes);
+  input.backup = path.join(f.control, 'missing-backup');
+  assert.equal((await execute(true)).code, 1);
+  await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
+  await f.service.check();
+  input.backup = f.backup;
   const restored = await execute(true);
   assert.equal(restored.code, 0, restored.stderr);
   assert.deepEqual(JSON.parse(restored.stdout), { status: 'restored', backupId: 'live-restore' });

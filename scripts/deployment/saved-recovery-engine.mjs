@@ -3,15 +3,22 @@ import { lstat, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
+import { workerEngineFiles } from './saved-worker-engine.mjs';
 
-const files = Object.freeze([
+const files = Object.freeze([...new Set([
   'saved-recovery-engine.mjs', 'retirement-recovery-entry.mjs', 'retirement-recovery.mjs',
   'saved-worker-engine.mjs', 'worker-files.mjs', 'worker-identity.mjs', 'process-identity.mjs', 'state.mjs',
   'linux-service-recovery.mjs', 'linux-service-inspection.mjs', 'linux-runtime.mjs', 'linux-systemd.mjs',
   'linux-recovery-admission.mjs', 'linux-recovery-completion.mjs',
   'linux-live-retirement.mjs',
   'linux-worker-retirement-handoff.mjs',
-]);
+  ...workerEngineFiles,
+  'linux-restore-entry.mjs', 'linux-restore.mjs', 'linux-restore-compatibility.mjs',
+  'restore-transaction.mjs', 'restore-project.mjs', 'restore-external.mjs',
+  'linux-configuration.mjs', 'configuration-files.mjs', 'configuration-compatibility.mjs',
+  'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-scope.mjs', 'snapshot-external.mjs',
+  'linux-readiness.mjs', 'linux-listener.mjs',
+])]);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const descriptor = (directory, manifestSha256) => Object.freeze({
   directory, entrypoint: path.join(directory, 'retirement-recovery-entry.mjs'), manifestSha256,

@@ -4299,6 +4299,18 @@ checkout helpers, refuse missing data-loss acknowledgement before locking or
 stopping, then restore through the external entry. This does not yet authorize
 inactive-service or interrupted pre-acceptance recovery.
 
+Saved-entry causal `338ba4d` / `36427847562`: eight jobs passed; native case
+failed on the missing external `linux-restore-entry.mjs`, with the live
+composition cases still passing. Extended the existing recovery engine (rather
+than allocating another helper slot) with the pinned closed restore dependencies.
+The entry verifies the complete saved manifest before loading native restore
+modules, requires literal data-loss acknowledgement, reads bounded typed input,
+inspects the live service/configuration, acquires its own lock and runs the
+accepted composition. Pre-downtime rejection releases only its own pristine
+lock after state equality and original-service checks; mutated or uncertain
+transactions retain evidence. Native coverage also corrupts a saved helper and
+supplies a missing backup before successful checkout-independent restoration.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
