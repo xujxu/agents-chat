@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fixture, ready, systemctl } from './deployment-linux-service-fixture.mjs';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
-import { verifyLinuxReadiness } from '../scripts/deployment/linux-readiness.mjs';
+import { verifyLinuxReadiness, waitLinuxReadiness } from '../scripts/deployment/linux-readiness.mjs';
 
 async function serving(t, { host = '127.0.0.1', response } = {}) {
   const f = await fixture(t, { nonroot: true, server: `
@@ -82,4 +82,34 @@ test('readiness refuses a replacement generation even on the same service unit',
   const f = await serving(t);
   await systemctl('restart', f.unit);
   await assert.rejects(verifyLinuxReadiness({ service: f.service, port: f.port, providers: ['credentials'] }));
+});
+
+test('readiness waits through an owned HTTP 503 startup window before accepting providers', async t => {
+  const f = await serving(t, { response: `
+  const attempts = fs.readFileSync('requests','utf8').trim().split('\\n').length;
+  if (attempts < 3) { res.writeHead(503); res.end('starting'); return; }
+  res.setHeader('Content-Type','application/json');
+  res.end(JSON.stringify({credentials:{id:'credentials',name:'Credentials',type:'credentials',
+    signinUrl:'http://localhost/api/auth/signin/credentials',callbackUrl:'http://localhost/api/auth/callback/credentials'}}));
+  ` });
+  assert.equal((await waitLinuxReadiness({
+    service: f.service, port: f.port, providers: ['credentials'], waitSeconds: 10,
+  })).status, 'ready');
+  assert.equal((await readFile(path.join(f.project, 'requests'), 'utf8')).trim().split('\n').length, 3);
+});
+
+test('readiness wait deadline closes a hanging response and leaves the managed runtime running', async t => {
+  const f = await serving(t, { response: 'res.writeHead(200,{"Content-Type":"application/json"});res.write("{");' });
+  await assert.rejects(waitLinuxReadiness({
+    service: f.service, port: f.port, providers: ['credentials'], waitSeconds: 1,
+  }), { code: 'DEPLOYMENT_STAGE_TIMEOUT', recoveryAllowed: true });
+  await f.service.check();
+});
+
+test('readiness wait does not hide a provider mismatch behind startup retries', async t => {
+  const f = await serving(t, { response: 'res.setHeader("Content-Type","application/json");res.end("{}");' });
+  await assert.rejects(waitLinuxReadiness({
+    service: f.service, port: f.port, providers: ['credentials'], waitSeconds: 10,
+  }), /providers do not match/i);
+  assert.equal((await readFile(path.join(f.project, 'requests'), 'utf8')).trim().split('\n').length, 1);
 });
