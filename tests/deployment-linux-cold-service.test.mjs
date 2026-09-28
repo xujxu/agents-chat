@@ -46,6 +46,7 @@ test('retained cold inspection detects changed source, inhibitor bytes and accou
   await writeFile(f.inhibition, `${bytes}\n`);
   await assert.rejects(service.check(), /inhibit|changed/i);
   await writeFile(f.inhibition, bytes);
+  await systemctl('daemon-reload');
   const wrongAccount = structuredClone(f.original);
   wrongAccount.runtime.uid = 12345;
   await assert.rejects(inspectLinuxColdService({ original: wrongAccount }), /account|identity/i);

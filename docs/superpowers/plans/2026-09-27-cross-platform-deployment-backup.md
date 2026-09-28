@@ -4320,8 +4320,32 @@ checks saved relative module references, and imports the restore and recovery
 compositions in a fresh process. Strengthen the native missing-backup case to
 require `stage=restore` and `ENOENT`, preventing unrelated import errors from
 satisfying the pre-downtime refusal assertion. The existing failed native run is
-the causal evidence; no repeat missing-entry run is needed. Actions acceptance
-for this correction is pending.
+the causal evidence; no repeat missing-entry run is needed. Correction `f64f218`
+/ Actions `36432769102` passed all nine jobs, including the external native
+restore entry, the precise missing-backup refusal and both module-closure tests.
+
+### Cold pre-acceptance recovery: stopped-service evidence
+
+The next prerequisite is native read-only reinspection after the original
+controller and its open cgroup/source handles are gone. Reuse the existing
+systemd policy, source-file and executable inspection, rather than accepting a
+service name or port as ownership. `linux-cold-service.mjs` checks the original
+boot, account, executable identities, unit source identities/content, exact
+deployment inhibition, terminal generation and absent or retained empty cgroup.
+It accepts an optional matching held inhibitor hardlink for interrupted
+activation-stop recovery. Different boots, replaced source/policy, changed
+inhibitor, populated/recreated domains and foreign generations remain refused.
+This read-only object is not permission to replace the old lock or write data.
+
+Native causal cases in `deployment-linux-cold-service.test.mjs` kill the original
+controller at its durable stopped receipt, then require reinspection without
+the original handles. They also require refusal of missing/changed inhibition,
+changed account/source evidence and a replacement running generation without
+stopping that generation. Implement the inspector only after these cases are
+pushed for Actions-red evidence. Follow with exclusive cold restore admission,
+durable recovery ownership and interrupted activation-stop settlement before
+connecting the external restore entry; do not report the inspector alone as
+cold restoration acceptance.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

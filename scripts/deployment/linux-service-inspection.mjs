@@ -28,7 +28,7 @@ function freezeEvidence(value) {
   return value;
 }
 
-async function configuration(unit, npm) {
+export async function inspectLinuxServicePolicy(unit, npm) {
   const state = await linuxSystemdProperties(unit, properties);
   if (state.Id !== unit || state.LoadState !== 'loaded' || state.Transient !== 'no'
     || state.NeedDaemonReload !== 'no' || !['simple', 'exec'].includes(state.Type)
@@ -91,7 +91,7 @@ async function sourceDirectory(directory) {
   }
 }
 
-async function sourceInfo(file) {
+export async function inspectLinuxServiceSource(file) {
   await sourceDirectory(path.dirname(file));
   const info = await lstat(file);
   if (!info.isFile() || info.isSymbolicLink() || info.uid !== 0 || info.mode & 0o022
@@ -101,7 +101,7 @@ async function sourceInfo(file) {
   return fileIdentity(info);
 }
 
-async function executable(file) {
+export async function inspectLinuxServiceExecutable(file) {
   if (typeof file !== 'string' || !path.isAbsolute(file) || path.resolve(file) !== file
     || /[\0\r\n]/.test(file)) throw new Error('An explicit absolute runtime executable is required.');
   const target = await realpath(file);
@@ -126,11 +126,11 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
   };
   try {
     const runtime = await inspectLinuxRuntimeAccount({ unit, project });
-    const config = await configuration(unit, npm);
+    const config = await inspectLinuxServicePolicy(unit, npm);
     if (config.conditions.length || config.state.RefuseManualStart !== 'no') {
       throw new Error('Service already has unsupported start conditions or inhibition.');
     }
-    const executables = await Promise.all([executable(npm), executable(node)]);
+    const executables = await Promise.all([inspectLinuxServiceExecutable(npm), inspectLinuxServiceExecutable(node)]);
     const boot = await bootId();
     const { state } = config;
     if (!['/etc/systemd/system/', '/usr/lib/systemd/system/', '/run/systemd/system/']
@@ -143,14 +143,14 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
       if (!path.isAbsolute(file) || path.resolve(file) !== file || /[\0\r\n]/.test(file)) {
         throw new Error('Noncanonical service source path.');
       }
-      const original = await sourceInfo(file);
+      const original = await inspectLinuxServiceSource(file);
       const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
       const source = { file, handle, original };
       sources.push(source);
       const bytes = Buffer.alloc(original.size);
       const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
       if (bytesRead !== bytes.length || !same(fileIdentity(await handle.stat()), original)
-        || !same(await sourceInfo(file), original)) throw new Error('Service source file changed while reading.');
+        || !same(await inspectLinuxServiceSource(file), original)) throw new Error('Service source file changed while reading.');
       source.sha256 = hash(bytes);
     }
     const group = `/system.slice/${unit}`;
@@ -171,7 +171,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
         const { bytesRead } = await source.handle.read(bytes, 0, bytes.length, 0);
         if (bytesRead !== bytes.length || hash(bytes) !== source.sha256
           || !same(fileIdentity(await source.handle.stat()), source.original)
-          || !same(await sourceInfo(source.file), source.original)) {
+          || !same(await inspectLinuxServiceSource(source.file), source.original)) {
           throw new Error('Retained service source file was changed or replaced.');
         }
       }
@@ -203,9 +203,9 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
     };
     const check = async () => {
       if (closed) throw new Error('Service inspection is closed.');
-      if (await bootId() !== boot || !same(await configuration(unit, npm), config)
+      if (await bootId() !== boot || !same(await inspectLinuxServicePolicy(unit, npm), config)
         || !same(await inspectLinuxRuntimeAccount({ unit, project }), runtime)
-        || !same(await Promise.all([executable(npm), executable(node)]), executables)) {
+        || !same(await Promise.all([inspectLinuxServiceExecutable(npm), inspectLinuxServiceExecutable(node)]), executables)) {
         throw new Error('Service configuration or runtime identity changed.');
       }
       await checkSources();
@@ -221,7 +221,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
     const inhibition = `/etc/systemd/system/${unit}.d/90-agents-chat-deployment.conf`;
     const checkInhibited = async ({ stopped = false } = {}) => {
       if (closed) throw new Error('Service inspection is closed.');
-      const current = await configuration(unit, npm);
+      const current = await inspectLinuxServicePolicy(unit, npm);
       const ignored = stopped ? ['MainPID', 'ActiveState', 'SubState', 'ControlGroup', 'InvocationID'] : [];
       if (await bootId() !== boot
         || properties.some(key => !ignored.includes(key)
@@ -260,7 +260,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
     };
     const checkPolicy = async ({ inhibited = false, stopped = false } = {}) => {
       if (closed) throw new Error('Service inspection is closed.');
-      const current = await configuration(unit, npm);
+      const current = await inspectLinuxServicePolicy(unit, npm);
       const runtimeKeys = ['MainPID', 'ActiveState', 'SubState', 'ControlGroup', 'InvocationID'];
       if (await bootId() !== boot
         || properties.some(key => !runtimeKeys.includes(key) && current.state[key] !== (
