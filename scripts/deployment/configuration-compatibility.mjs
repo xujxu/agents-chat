@@ -1,3 +1,9 @@
+export const authenticationEnvironmentNames = Object.freeze([
+  'NEXTAUTH_SECRET', 'NEXTAUTH_URL', 'NODE_ENV', 'ADMIN_USERNAME', 'ADMIN_PASSWORD',
+  'AZURE_AD_CLIENT_ID', 'AZURE_AD_CLIENT_SECRET', 'AZURE_AD_TENANT_ID',
+  'GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_ALLOWED_EMAILS', 'ADMIN_EMAILS',
+]);
+
 function refusal(check) {
   return Object.assign(new Error(`Configuration compatibility refused: ${check}.`), {
     code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED', check,
@@ -9,9 +15,7 @@ export function inspectConfigurationCompatibility({ profile, environment }) {
   if (profile !== 'agents-chat-auth-638c553') throw refusal('unsupported-profile');
   if (!environment || typeof environment !== 'object' || Array.isArray(environment)) throw refusal('environment');
   const values = {};
-  for (const name of ['NEXTAUTH_SECRET', 'NEXTAUTH_URL', 'NODE_ENV', 'ADMIN_USERNAME', 'ADMIN_PASSWORD',
-    'AZURE_AD_CLIENT_ID', 'AZURE_AD_CLIENT_SECRET', 'AZURE_AD_TENANT_ID',
-    'GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_ALLOWED_EMAILS', 'ADMIN_EMAILS']) {
+  for (const name of authenticationEnvironmentNames) {
     const descriptor = Object.getOwnPropertyDescriptor(environment, name);
     if (descriptor && (!Object.hasOwn(descriptor, 'value') || typeof descriptor.value !== 'string'
       || descriptor.value.length > 65536 || /[\0\r\n]/.test(descriptor.value))) throw refusal(name);

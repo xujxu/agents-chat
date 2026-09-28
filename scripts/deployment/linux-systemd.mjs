@@ -8,6 +8,17 @@ export const linuxNative = (file, args) => execute(file, args, {
   env, timeout: 30000, maxBuffer: 16384,
 });
 
+export async function linuxSystemdBus(args, signature) {
+  const { stdout } = await linuxNative('/usr/bin/busctl', ['--system', '--json=short', ...args]);
+  const result = JSON.parse(stdout);
+  if (result.type !== signature || !Array.isArray(result.data)
+    || args[0] === 'call' && result.data.length !== 1) {
+    throw new Error('Unsupported typed systemd property response.');
+  }
+  // Method replies wrap their return arguments; get-property unwraps its variant.
+  return args[0] === 'call' ? result.data[0] : result.data;
+}
+
 export async function linuxSystemdProperties(unit, names) {
   if (typeof unit !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,180}\.service$/.test(unit)
     || !Array.isArray(names) || !names.length || new Set(names).size !== names.length

@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, open, readFile, readlink, realpath, statfs } from 'node:fs/promises';
 import path from 'node:path';
-import { linuxNative, linuxSystemdProperties } from './linux-systemd.mjs';
+import { linuxSystemdBus as bus, linuxSystemdProperties } from './linux-systemd.mjs';
 import { inspectLinuxRuntimeAccount } from './linux-runtime.mjs';
 import { processIdentity } from './process-identity.mjs';
 
@@ -26,17 +26,6 @@ function freezeEvidence(value) {
     Object.freeze(value);
   }
   return value;
-}
-
-async function bus(args, signature) {
-  const { stdout } = await linuxNative('/usr/bin/busctl', ['--system', '--json=short', ...args]);
-  const result = JSON.parse(stdout);
-  if (result.type !== signature || !Array.isArray(result.data)
-    || args[0] === 'call' && result.data.length !== 1) {
-    throw new Error('Unsupported typed systemd property response.');
-  }
-  // Method replies wrap their return arguments; get-property unwraps its variant.
-  return args[0] === 'call' ? result.data[0] : result.data;
 }
 
 async function configuration(unit, npm) {

@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
-import { inspectConfigurationCompatibility } from './configuration-compatibility.mjs';
+import { authenticationEnvironmentNames, inspectConfigurationCompatibility } from './configuration-compatibility.mjs';
 import { realDirectory } from './snapshot-files.mjs';
 
 const dotenvNames = ['.env.production.local', '.env.local', '.env.production', '.env'];
@@ -49,8 +49,11 @@ async function observe(file, optional) {
   } finally { await handle.close(); }
 }
 
-function assignments(bytes) {
+function assignments(bytes, kind) {
   const result = Object.create(null);
+  if (kind === 'systemd' && bytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))) {
+    throw refusal('configuration-syntax');
+  }
   const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   if (/[\0\r]/.test(text.replaceAll('\r\n', '\n'))) throw refusal('configuration-syntax');
   for (const raw of text.split(/\r?\n/)) {
@@ -59,7 +62,7 @@ function assignments(bytes) {
     const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
     if (!match) throw refusal('configuration-syntax');
     let value = match[2];
-    if (/[$\\]/.test(value)) throw refusal('configuration-syntax');
+    if (/[$\\`]/.test(value)) throw refusal('configuration-syntax');
     if (value.startsWith('"') || value.startsWith("'")) {
       const quote = value[0];
       if (value.length < 2 || value.at(-1) !== quote || value.slice(1, -1).includes(quote)) {
@@ -89,12 +92,22 @@ function copyEnvironment(environment) {
   return result;
 }
 
-export async function inspectConfigurationFiles({ project, profile, environment, systemdFiles = [], signal }) {
+export async function inspectConfigurationFiles({
+  project, profile, environment, systemdFiles = [], observedEnvironment, signal,
+}) {
   try {
     signal?.throwIfAborted();
     const root = await realDirectory(project);
     const rootIdentity = identity(await lstat(root, { bigint: true }));
     const effective = copyEnvironment(environment);
+    const observedRuntime = observedEnvironment === undefined ? null : copyEnvironment(observedEnvironment);
+    const checkRuntime = () => {
+      if (effective.__NEXT_PROCESSED_ENV || effective.NODE_ENV && effective.NODE_ENV !== 'production') {
+        throw refusal('runtime-environment-policy');
+      }
+      if (observedRuntime && [...new Set([...authenticationEnvironmentNames, ...Object.keys(effective)])]
+        .some(name => effective[name] !== observedRuntime[name])) throw refusal('runtime-environment-changed');
+    };
     if (!Array.isArray(systemdFiles) || systemdFiles.length > 32 || systemdFiles.some(file =>
       !file || typeof file.path !== 'string' || !path.isAbsolute(file.path)
       || path.resolve(file.path) !== file.path || /[\0\r\n]/.test(file.path)
@@ -104,12 +117,17 @@ export async function inspectConfigurationFiles({ project, profile, environment,
       ...dotenvNames.map(name => ({ path: path.join(root, name), optional: true, kind: 'dotenv' })),
     ];
     const retained = [];
+    let checkedRuntime = false;
     for (const source of sources) {
       signal?.throwIfAborted();
+      if (source.kind === 'dotenv' && !checkedRuntime) {
+        checkRuntime();
+        checkedRuntime = true;
+      }
       const observed = await observe(source.path, source.optional);
       retained.push({ source, observed });
       if (!observed) continue;
-      for (const [name, value] of Object.entries(assignments(observed.bytes))) {
+      for (const [name, value] of Object.entries(assignments(observed.bytes, source.kind))) {
         if (source.kind === 'systemd' || !Object.hasOwn(effective, name)) effective[name] = value;
       }
     }
