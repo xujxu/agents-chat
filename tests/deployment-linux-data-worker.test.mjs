@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { chown, cp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
+import { chmod, chown, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -13,6 +13,7 @@ import { acquireLock } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
+import { runStage } from '../scripts/deployment/stage-runner.mjs';
 
 async function owned(t) {
   const f = await fixture(t, { nonroot: true });
@@ -45,7 +46,29 @@ async function data(t, f) {
 test('real SQLite inspection runs as the installed non-root account in a settled owned worker', async t => {
   const f = await owned(t);
   await data(t, f);
-  await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), path.join(f.project, 'node_modules'));
+  const modules = path.join(f.project, 'node_modules');
+  await mkdir(modules);
+  async function readable(file) {
+    const entries = await readdir(file, { withFileTypes: true });
+    await chmod(file, 0o755);
+    for (const entry of entries) {
+      const child = path.join(file, entry.name);
+      if (entry.isDirectory()) await readable(child);
+      else if (entry.isFile()) await chmod(child, 0o644);
+      else throw new Error('Unexpected installed binding fixture link.');
+    }
+  }
+  for (const name of ['better-sqlite3', 'bindings', 'file-uri-to-path']) {
+    const destination = path.join(modules, name);
+    await cp(fileURLToPath(new URL(`../node_modules/${name}`, import.meta.url)), destination, { recursive: true });
+    await readable(destination);
+  }
+  const observed = await f.operation.run({
+    workerId: randomUUID(), runtime: { uid: 65534, gid: 65534 },
+    command: { file: process.execPath, cwd: f.project, env: {}, args: ['-e',
+      'const D=require("better-sqlite3");const db=new D(":memory:");db.close();process.stdout.write(String(process.getuid()));'] },
+  });
+  assert.equal(observed.stdout, '65534');
   const result = await inspectLinuxData({ service: f.service, operation: f.operation, profile });
   assert.ok(result.databases.every(db => db.status === 'data-supported'));
   await f.operation.seal();
@@ -89,5 +112,24 @@ test('blocked installed binding and descendant settle on cancellation without st
   const before = await bytes();
   await delay(100);
   assert.deepEqual(await bytes(), before);
+  assert.equal((await f.service.check()).populated, true);
+});
+
+test('stage deadline interrupts synchronous SQLite binding work and proves the original domain settled', async t => {
+  const f = await owned(t);
+  await data(t, f);
+  const binding = path.join(f.project, 'node_modules', 'better-sqlite3');
+  await mkdir(binding, { recursive: true });
+  await writeFile(path.join(binding, 'index.js'), `
+    require('node:fs').writeFileSync('deadline-binding', String(process.pid));
+    while(true) {}
+  `);
+  await assert.rejects(runStage('data-admission', signal =>
+    inspectLinuxData({ service: f.service, operation: f.operation, profile, signal }),
+  { timeoutMs: 15000 }), { code: 'DEPLOYMENT_STAGE_TIMEOUT', recoveryAllowed: true });
+  const pid = Number(await readFile(path.join(f.project, 'deadline-binding'), 'utf8'));
+  assert.ok(pid > 0);
+  assert.equal(await processIdentity(pid), null);
+  await f.operation.seal();
   assert.equal((await f.service.check()).populated, true);
 });
