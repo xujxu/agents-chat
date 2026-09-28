@@ -4032,3 +4032,21 @@ extended permission support and saved restore engine remain delivery requirement
 External inputs are bounded to 64 files of at most 1 MiB each. Even optional files
 require an existing canonical parent directory; unsupported missing parents refuse
 rather than inventing restoration ownership/permissions for an uncaptured directory.
+
+**Native snapshot acceptance:** `52900612c94e7c8c587aa9c55e7684972187c409` /
+Actions `36409369077` passed all nine jobs, including actual non-root systemd
+stop/snapshot and stale admitted-configuration refusal.
+
+**Completion consistency follow-up:** causal `a662b6d` / `36409495671` demonstrated
+that changes at the final authority boundary could still seal stale source,
+inventory, permissions or external configuration; corrupt copied payload was
+detected only after writing completion. Cancelled that causal run after the
+Linux contract failures were established. The implementation reuses selected
+inventory/implicit-parent capture, rechecks original metadata and file digests,
+then verifies owner, complete copied inventory, external payload and serialized
+manifest before sealing. File streams flush before closure; Linux directories
+are synchronized bottom-up before completion and the containing directory is
+synchronized after completion. Capacity includes actual serialized manifest size,
+and over-budget manifests refuse before creating staging. These durability
+operations are not a power-loss simulation or a Windows directory-ACL guarantee.
+Implementation full matrix is pending. Public restoration is still not wired.

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { constants, createReadStream } from 'node:fs';
 import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import {
@@ -31,7 +31,7 @@ export async function realDirectory(directory) {
 export async function fileDigest(file, { signal } = {}) {
   signal?.throwIfAborted();
   const hash = createHash('sha256');
-  await pipeline(createReadStream(file), new Writable({
+  await pipeline(createReadStream(file, { flags: constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) }), new Writable({
     write(chunk, encoding, callback) { hash.update(chunk); callback(); },
   }), { signal });
   return hash.digest('hex');
@@ -130,5 +130,26 @@ export async function inventorySnapshot(project, files, { signal, excludedPaths 
     if (!seen.has(identity)) throw new Error(`Snapshot link target not captured: ${entry.path}`);
   }
   signal?.throwIfAborted();
+  return entries;
+}
+
+export async function captureSnapshotInventory(project, files, options = {}) {
+  const entries = await inventorySnapshot(project, files, options);
+  const parents = new Set(entries.filter(entry => entry.kind === 'directory').map(entry => entry.path));
+  for (const entry of [...entries]) {
+    options.signal?.throwIfAborted();
+    let relative = path.posix.dirname(entry.path);
+    while (relative !== '.') {
+      if (!parents.has(relative)) {
+        const info = await lstat(path.join(project, relative));
+        if (!info.isDirectory() || info.isSymbolicLink() || info.mode & 0o7000) {
+          throw new Error('Snapshot parent has unsupported type or permission bits.');
+        }
+        entries.push({ path: relative, kind: 'directory', mode: info.mode & 0o777, uid: info.uid, gid: info.gid });
+        parents.add(relative);
+      }
+      relative = path.posix.dirname(relative);
+    }
+  }
   return entries;
 }
