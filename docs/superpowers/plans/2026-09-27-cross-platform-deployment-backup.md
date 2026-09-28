@@ -3567,3 +3567,43 @@ interruptions/reboot, installed Windows task/account integration, complete
 backup/restore/public entrypoint wiring and actual dual-platform application
 lifecycle acceptance remain outside this checkpoint. No main branch, PR,
 installed deployment, or public script changed.
+
+### Interrupted live worker retirement handoff
+
+Continue the approved combined-retirement design inline. Do not invoke worker-only
+recovery underneath a live service receipt and do not ignore a second marker.
+`linux-service-recovery.mjs` remains the coordinator; a focused helper will validate
+the exact worker v2 intent against the already validated live service v3 intent:
+lock, control/lock/engine identities, state descriptor, manifest and every ordered
+file descriptor must agree after converting relative paths to absolute paths.
+The worker marker is retained and rechecked alongside existing authority.
+
+Only after original-owner death, exact remaining-prefix inventory, original lock,
+service generation and exclusive recovery lease are established may service
+recovery unlink the matching worker marker. This is a transfer of duplicate
+cleanup authority, not loss of the sole receipt: the live service receipt still
+binds all worker files and survives through final unlock. Death before transfer
+revalidates both markers; death after transfer resumes the existing service-only
+combined inventory. Empty helper-directory removal before worker-operation deletion
+is accepted because ordinary live retirement uses that order. Gaps or absent
+helpers with remaining helper files are refused by the existing inventory checks.
+
+Files: new `scripts/deployment/linux-worker-retirement-handoff.mjs`, modify
+`linux-service-recovery.mjs` and the saved recovery allowlist. Extract reusable
+native fixture into `tests/deployment-linux-service-recovery-fixture.mjs`; new
+`tests/deployment-linux-worker-handoff.test.mjs`; extend both native pause children.
+Run the new matrix in an isolated Linux Actions job, keeping the existing native
+recovery matrix (roughly seven minutes) within its ten-minute limit.
+
+- [ ] Push causal native SIGKILL contracts at worker intent, journal, first/last
+  helper, helper directory, operation and marker deletion. Example result:
+  `assert.equal(JSON.parse((await f.recover()).stdout).status, 'service-retired')`.
+  Require original service generation/state/backup and next-operation protection.
+- [ ] Observe the expected refusals in the new Actions job before implementation:
+  `sudo "$(command -v node)" --test tests/deployment-linux-worker-handoff.test.mjs`.
+- [ ] Implement exact cross-binding and guarded marker transfer; keep partial,
+  foreign, gap, absent-lock and tampered records blocked before any deletion.
+- [ ] Require recovery-controller SIGKILL before/after transfer and during remaining
+  cleanup to resume, plus marker-unlink failure preserving both receipts and lock.
+- [ ] Push implementation, inspect all six Actions jobs, record exact results and
+  remaining limits, and commit the checkpoint. No local validation or live changes.

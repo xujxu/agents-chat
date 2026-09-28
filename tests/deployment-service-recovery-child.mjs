@@ -29,6 +29,7 @@ try {
     const targets = {
       service: path.join(control, 'service-activation.ndjson'),
       marker: path.join(control, 'service-retirement.json'),
+      'worker-marker': path.join(control, 'worker-retirement.json'),
       'lock-owner': path.join(control, 'lock', 'owner.json'),
       'guard-owner': path.join(control, 'recovery-lock', 'owner.json'),
     };

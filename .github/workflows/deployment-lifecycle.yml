@@ -101,6 +101,18 @@ jobs:
       - name: Recover interrupted actual service retirement
         run: sudo "$(command -v node)" --test tests/deployment-recovery-admission.test.mjs tests/deployment-linux-service-recovery.test.mjs
 
+  linux-worker-handoff:
+    name: Native Linux retirement handoff
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Recover interrupted live worker retirement
+        run: sudo "$(command -v node)" --test tests/deployment-linux-worker-handoff.test.mjs
+
   windows-native:
     name: Native Windows Job ownership
     runs-on: windows-2022

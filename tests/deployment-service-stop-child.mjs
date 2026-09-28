@@ -23,7 +23,8 @@ await writeState(control, { ...state, phase: 'stopped', previousPhase: 'prefligh
 const nativeOpen = fs.open;
 fs.open = async function (file, ...args) {
   const handle = await nativeOpen(file, ...args);
-  if (phase === 'retirement-intent' && file === path.join(control, 'service-retirement.json')) {
+  if (phase === 'retirement-intent' && file === path.join(control, 'service-retirement.json')
+    || phase === 'retirement-live-worker-intent' && file === path.join(control, 'worker-retirement.json')) {
     const sync = handle.sync.bind(handle);
     handle.sync = async () => {
       await sync();
@@ -88,12 +89,20 @@ if (phase.startsWith('retirement-')) {
   fs.rmdir = async file => {
     await nativeRmdir(file);
     if (phase === 'retirement-live-lock-directory' && file === path.join(control, 'lock')) await pause();
+    if (phase === 'retirement-live-worker-directory' && file === path.join(control, 'worker-engine')) await pause();
   };
   let deleted = 0;
   const pauseAfter = phase === 'retirement-unlink' ? 0 : Number(phase.slice('retirement-unlink-'.length));
   fs.unlink = async function (file) {
     await nativeUnlink(file);
     if (phase === 'retirement-live-lock-owner' && file === path.join(control, 'lock', 'owner.json')) await pause();
+    if (phase === 'retirement-live-worker-journal' && /^worker-[a-f0-9-]{36}\.ndjson$/.test(path.basename(file))
+      || phase === 'retirement-live-worker-operation' && file === path.join(control, 'worker-operation.ndjson')
+      || phase === 'retirement-live-worker-marker' && file === path.join(control, 'worker-retirement.json')) await pause();
+    if (path.dirname(file) === path.join(control, 'worker-engine')) {
+      if (phase === 'retirement-live-worker-helper'
+        || phase === 'retirement-live-worker-last-helper' && (await fs.readdir(path.dirname(file))).length === 0) await pause();
+    }
     if ((String(file).endsWith('.held') || ['service-activation.ndjson', 'service-stop.ndjson'].includes(path.basename(file)))
       && deleted++ === pauseAfter) {
       process.send({ phase, lock });
