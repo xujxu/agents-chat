@@ -38,6 +38,43 @@ test('missing databases are classified without creating state or invoking SQLite
   assert.deepEqual(await readdir(project), []);
 });
 
+test('an empty existing data directory does not require an installed binding', async t => {
+  const f = await databaseFixture(t, { groups: [] });
+  const result = await inspectDeploymentDatabases({ project: f.project, profile });
+  assert.ok(result.databases.every(database => database.status === 'absent'));
+  assert.deepEqual(await readdir(f.directory), []);
+});
+
+test('schema reads use one WAL snapshot while a writer commits a schema change', async t => {
+  const f = await databaseFixture(t, { groups: ['chat'], wal: true });
+  let changed = false;
+  function Concurrent(file, options) {
+    const db = new Database(file, options);
+    if (file === path.join(f.directory, 'chats.db')) {
+      const prepare = db.prepare.bind(db);
+      db.prepare = sql => {
+        const statement = prepare(sql);
+        if (sql.includes('FROM sqlite_schema')) {
+          const all = statement.all.bind(statement);
+          statement.all = (...args) => {
+            const rows = all(...args);
+            assert.equal(db.inTransaction, true);
+            f.chats.exec('ALTER TABLE chats ADD COLUMN future TEXT');
+            changed = true;
+            return rows;
+          };
+        }
+        return statement;
+      };
+    }
+    return db;
+  }
+  const result = await inspectDeploymentDatabases({ project: f.project, profile, Database: Concurrent });
+  assert.equal(changed, true);
+  assert.equal(result.databases[0].status, 'schema-supported');
+  await assert.rejects(inspect(f), { code: 'DEPLOYMENT_DATABASE_UNSUPPORTED' });
+});
+
 for (const groups of [['chat'], ['schedule'], ['chat', 'transfer'], ['config']]) {
   test(`lazy table groups are permitted independently: ${groups.join(',')}`, async t => {
     const f = await databaseFixture(t, { groups });

@@ -131,12 +131,15 @@ export async function inspectDeploymentDatabases({ project, profile, signal, Dat
       && !Object.keys(databaseGroups).some(base => [base, `${base}-wal`, `${base}-shm`, `${base}-journal`].includes(name)))) {
       throw refusal('database-inventory');
     }
-    const Database = suppliedDatabase ?? createRequire(path.join(root, 'package.json'))('better-sqlite3');
-    reference = new Database(':memory:');
-    reference.exec(referenceSchema);
+    let Database = suppliedDatabase;
     const databases = [];
     for (const name of Object.keys(databaseGroups)) {
       signal?.throwIfAborted();
+      if (!reference && await optionalStat(path.join(directory, name))) {
+        Database ??= createRequire(path.join(root, 'package.json'))('better-sqlite3');
+        reference = new Database(':memory:');
+        reference.exec(referenceSchema);
+      }
       databases.push(await inspectDatabase({ directory, name, Database, reference, signal }));
     }
     const current = await optionalStat(directory);
