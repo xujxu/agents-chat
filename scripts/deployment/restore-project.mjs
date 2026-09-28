@@ -1,5 +1,5 @@
 import { constants, createReadStream, createWriteStream } from 'node:fs';
-import { chmod, chown, lchown, lstat, mkdir, open, readdir, rmdir, statfs, symlink, unlink } from 'node:fs/promises';
+import { chmod, chown, lchown, lstat, mkdir, open, readdir, realpath, rmdir, statfs, symlink, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { isDeepStrictEqual as same } from 'node:util';
@@ -118,12 +118,35 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
     catch (error) { errors.push(error); }
     await closeWorkerFile(handle, errors);
   }
-  for (const entry of manifest.entries.filter(entry => entry.kind === 'link')) {
-    await checkGroup(entry);
-    const target = path.join(root, entry.path);
-    await realDirectory(path.dirname(target));
-    await symlink(entry.target, target);
-    await lchown(target, entry.uid, entry.gid);
+  for (const entry of [...directories].reverse()) {
+    signal?.throwIfAborted();
+    await syncWorkerDirectory(path.join(root, entry.path));
+  }
+  await syncWorkerDirectory(root);
+  let pendingLinks = manifest.entries.filter(entry => entry.kind === 'link');
+  while (pendingLinks.length) {
+    const deferred = [];
+    for (const entry of pendingLinks) {
+      await checkGroup(entry);
+      const target = path.join(root, entry.path);
+      await realDirectory(path.dirname(target));
+      let actual;
+      try { actual = await realpath(path.resolve(path.dirname(target), entry.target)); }
+      catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        deferred.push(entry);
+        continue;
+      }
+      const savedTarget = await realpath(path.join(saved, 'files', entry.path));
+      if (actual !== path.join(root, path.relative(path.join(saved, 'files'), savedTarget))) {
+        throw new Error('Restored link target differs from the retained snapshot.');
+      }
+      await symlink(entry.target, target);
+      await lchown(target, entry.uid, entry.gid);
+      await syncWorkerDirectory(path.dirname(target));
+    }
+    if (deferred.length === pendingLinks.length) throw new Error('Restored links have missing or circular targets.');
+    pendingLinks = deferred;
   }
   for (const entry of [...directories].reverse()) {
     signal?.throwIfAborted();

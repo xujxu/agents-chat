@@ -4177,3 +4177,20 @@ Causal `31736c3` / `36416849913` introduces native admission tests against a
 captured backup and reactivated actual non-root service, plus incompatible saved
 identity/policy/path cases. These remain module/native fixture acceptance, not a
 claim of public recovery or real application acceptance.
+
+**Native restore admission acceptance:** `6ac37afdbd3ae1f7809079ff608d26d7e08cb152` /
+Actions `36417717423` passed all nine jobs, including live restoration activation
+and corrected original-authority retirement, incompatible backup refusal before
+downtime, and cold restored-terminal cleanup.
+
+### Interrupted chained-link restoration
+
+Causal `5e24514` / `36418874673` exposed a real retry gap: creating a link before
+its target link could leave a dangling live path if cancellation occurred between
+the two creations. The next attempt correctly refused that uninspectable tree.
+After capturing the Linux ENOENT failure, the causal run was cancelled. Restoration
+now creates links only once their final target is present and matches the saved
+target, defers unresolved dependencies, and refuses missing/circular targets.
+Files/directories are flushed before link creation and link parents after each
+creation. The interrupted test proves the first created link resolves, then retries
+from the same unchanged backup. Implementation full matrix remains pending.
