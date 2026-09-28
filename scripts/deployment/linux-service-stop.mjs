@@ -186,6 +186,17 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
         } finally { busy = false; }
         await close();
       },
+      async stopActivated() {
+        if (busy || retirementAttempted || closed || poisoned || !activated) {
+          throw journalUncertain(new Error('Activation stop requires the original live activated authority.'));
+        }
+        busy = true;
+        try { return await activated.stop(); }
+        catch (error) {
+          poisoned = true;
+          throw error;
+        } finally { busy = false; }
+      },
       close,
     });
   } catch (error) {

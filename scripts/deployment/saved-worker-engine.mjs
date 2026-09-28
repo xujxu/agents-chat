@@ -18,7 +18,7 @@ export const workerEngineFiles = Object.freeze([
   'linux-systemd.mjs', 'linux-runtime.mjs',
   'linux-service-inspection.mjs',
   'linux-service-stop.mjs',
-  'linux-service-activation.mjs', 'service-activation-workers.mjs',
+  'linux-service-activation.mjs', 'linux-activation-stop.mjs', 'service-activation-workers.mjs',
   'linux-service-retirement.mjs',
   'linux-recovery-admission.mjs',
   'linux-live-retirement.mjs',

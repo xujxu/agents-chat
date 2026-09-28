@@ -4194,3 +4194,26 @@ target, defers unresolved dependencies, and refuses missing/circular targets.
 Files/directories are flushed before link creation and link parents after each
 creation. The interrupted test proves the first created link resolves, then retries
 from the same unchanged backup. Implementation full matrix remains pending.
+
+**Link retry acceptance:** `c63928ffda7311b97aaf29e9d8c64f629cb0a33f` /
+Actions `36418991197` passed all nine jobs.
+
+### Stopping a live activation rejected by health verification
+
+Causal `9c47f33` / `36420070149` failed on missing `stopActivated` in the native
+restore fixture and was cancelled after retaining the failure. A live activation
+now retains a separate cleanup operation using its exact new service generation,
+not the pre-deployment generation or a port lookup. Before requesting stop it
+rechecks original activation/state/worker/held-inhibitor evidence, journals intent,
+relinks the held inhibitor, reloads systemd, verifies effective inhibition and
+journals the stop request. Completion requires the retained new cgroup be empty.
+The four stop records bind the exact started identity and remain on disk.
+
+Repeated live checks can prove the stopped/inhibited result; retirement as a
+successful activation is forbidden afterward. If another actor restarted the
+service, cleanup refuses before stop instead of terminating that replacement.
+Any uncertain cleanup retains evidence and recoveryAllowed=false. The helper is
+included in the saved worker engine's closed module list. Native tests assert
+descendant writes stop, repeated observation works, and replacement generation
+remains running. Full implementation acceptance is pending; cold recovery of an
+interrupted activation-stop sequence remains a separate unfinished requirement.

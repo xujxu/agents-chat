@@ -4,7 +4,7 @@ import { chmod, chown, lstat, mkdir, readFile, writeFile } from 'node:fs/promise
 import path from 'node:path';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { fixture, ready } from './deployment-linux-service-fixture.mjs';
+import { fixture, ready, systemctl } from './deployment-linux-service-fixture.mjs';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { inspectLinuxConfiguration } from '../scripts/deployment/linux-configuration.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
@@ -167,6 +167,18 @@ test('stopped native service project can recover saved data and ownership withou
         ['activation-stop-intent', 'activation-stop-inhibited', 'activation-stop-requested', 'activation-stopped']);
       await assert.rejects(f.stopped.retire(), /retirement|stopped|activation/i);
       assert.equal((await loadState(f.control)).phase, 'restore-activating');
+    });
+
+    test('activation failure cleanup refuses a replacement service generation rather than stopping it', async t => {
+      const f = await retained(t, { restoring: true });
+      await writeState(f.control, { ...await loadState(f.control), phase: 'restore-activating', previousPhase: 'restoring' });
+      await f.stopped.activate({ purpose: 'restore' });
+      await systemctl('restart', f.unit);
+      const before = (await systemctl('show', f.unit, '--property=MainPID,InvocationID,ActiveState')).stdout;
+      await assert.rejects(f.stopped.stopActivated(), error => error.recoveryAllowed === false);
+      assert.equal((await systemctl('show', f.unit, '--property=MainPID,InvocationID,ActiveState')).stdout, before);
+      const journal = (await readFile(path.join(f.control, 'service-activation.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+      assert.equal(journal.at(-1).phase, 'started');
     });
     await writeFile(data, 'post-backup version');
     await writeFile(path.join(f.project, 'server.cjs'), 'throw new Error("partial deployment");');

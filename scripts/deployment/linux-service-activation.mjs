@@ -8,6 +8,7 @@ import { inspectLinuxService } from './linux-service-inspection.mjs';
 import { retainActivationWorkers } from './service-activation-workers.mjs';
 import { readWorkerFile, syncWorkerDirectory } from './worker-files.mjs';
 import { retireLinuxService } from './linux-service-retirement.mjs';
+import { stopLinuxActivation } from './linux-activation-stop.mjs';
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const allowed = {
@@ -16,6 +17,7 @@ const allowed = {
   restore: ['restore-activating'],
 };
 const phases = ['intent', 'staged', 'uninhibited', 'start-requested', 'started'];
+const stopPhases = ['activation-stop-intent', 'activation-stop-inhibited', 'activation-stop-requested', 'activation-stopped'];
 
 // Only the original live stop handle supplies this internal authority.
 export async function activateLinuxService(context, purpose) {
@@ -27,6 +29,8 @@ export async function activateLinuxService(context, purpose) {
   let heldCreated = false;
   let inhibitorRemoved = false;
   let closed = false;
+  let stopAttempted = false;
+  let checkStopped;
   const held = `${inhibition}.${lock.token}.held`;
   const parent = path.dirname(inhibition);
   const close = async () => {
@@ -51,9 +55,16 @@ export async function activateLinuxService(context, purpose) {
     const bytes = await readWorkerFile(inhibition, 8192, { privateMode: true });
     const base = { version: 1, lock, prior: service.identity, purpose, state, inhibition, held };
     journal = await createEvidenceJournal({
-      root: control, project, name: 'service-activation.ndjson', maximumBytes: 512 * 1024, maximumRecords: 6,
+      root: control, project, name: 'service-activation.ndjson', maximumBytes: 1024 * 1024, maximumRecords: 9,
       validate(value, records) {
         const { phase, started, ...rest } = value;
+        if (stopPhases.includes(phase)) {
+          if (!same(rest, base) || phase !== stopPhases[records.length - phases.length]
+            || !started || !same(started, records[phases.length - 1]?.started)) {
+            throw new Error('Invalid activated-generation stop receipt.');
+          }
+          return Object.freeze(value);
+        }
         if (!same(rest, base) || (phase === 'reinhibited'
           ? !records.length || ['started', 'reinhibited'].includes(records.at(-1).phase)
           : phase !== phases[records.length])
@@ -124,8 +135,21 @@ export async function activateLinuxService(context, purpose) {
         await record('started', active.identity);
         return Object.freeze({
           status: 'active-unverified', identity: active.identity, close,
+          async stop() {
+            if (closed) throw journalUncertain(new Error('Activation stop requires retained live authority.'));
+            if (checkStopped) {
+              try { return await checkStopped(); }
+              catch (error) { throw journalUncertain(error); }
+            }
+            if (stopAttempted) throw journalUncertain(new Error('Activation stop is incomplete; retain evidence.'));
+            stopAttempted = true;
+            try {
+              checkStopped = await stopLinuxActivation({ active, held, inhibition, checkHeld, record, checkAuthority: check });
+              return await checkStopped();
+            } catch (error) { throw journalUncertain(error); }
+          },
           async retire() {
-            if (closed) {
+            if (closed || stopAttempted) {
               throw journalUncertain(new Error('Service retirement requires the original live activation authority.'));
             }
             const verify = async () => {
