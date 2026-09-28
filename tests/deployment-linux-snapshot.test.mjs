@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { chmod, chown, lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
@@ -12,6 +12,7 @@ import { acquireLock, loadState, releaseLock, writeState } from '../scripts/depl
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { restoreProjectSnapshot } from '../scripts/deployment/restore-project.mjs';
 import { restoreExternalSnapshot } from '../scripts/deployment/restore-external.mjs';
+import { admitLinuxRestore } from '../scripts/deployment/linux-restore-compatibility.mjs';
 
 async function retained(t, { restoring = false } = {}) {
   const f = await fixture(t, { nonroot: true, settings: `Environment=NODE_ENV=production
@@ -89,6 +90,59 @@ test('stopped native service project can recover saved data and ownership withou
     await writeFile(data, 'saved version');
     await createLinuxServiceSnapshot({
       ...f, destination: backup, id: 'restore-native', source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    });
+
+    async function restoreCandidate(t) {
+      const f = await retained(t);
+      const backup = path.join(f.control, 'backup');
+      await createLinuxServiceSnapshot({
+        ...f, destination: backup, id: 'restore-admission', source: { commit: 'a'.repeat(40), provenance: 'observed' },
+      });
+      const activated = await f.stopped.activate({ purpose: 'prior-runtime' });
+      await writeState(f.control, {
+        ...await loadState(f.control), phase: 'prior-runtime-restored', previousPhase: 'copying', errorCode: 'FIXTURE_CAPTURE',
+      });
+      await activated.retire();
+      await releaseLock(f.control, f.lock);
+      const service = await inspectLinuxService(f);
+      t.after(() => service.close());
+      const configuration = await inspectLinuxConfiguration({ service, profile: 'agents-chat-auth-638c553' });
+      return { ...f, backup, service, configuration };
+    }
+
+    test('native restore admission binds saved unit/account/executables and checks backup before downtime', async t => {
+      const f = await restoreCandidate(t);
+      const admitted = await admitLinuxRestore(f);
+      assert.equal(admitted.snapshot.id, 'restore-admission');
+      assert.deepEqual(admitted.authorizedPaths, [f.fragment]);
+      assert.deepEqual(admitted.snapshot.runtime.executables, f.service.identity.executables);
+      await admitted.check({ signal: new AbortController().signal });
+      await f.service.check();
+      await writeFile(path.join(f.backup, 'files/package.json'), 'corrupt');
+      await assert.rejects(admitted.check(), /checksum|integrity/i);
+      await f.service.check();
+    });
+
+    test('native restore admission rejects valid but incompatible saved identity before service mutation', async t => {
+      const f = await restoreCandidate(t);
+      const manifestFile = path.join(f.backup, 'manifest.json');
+      const completionFile = path.join(f.backup, 'complete.json');
+      const original = JSON.parse(await readFile(manifestFile, 'utf8'));
+      for (const change of ['unit', 'uid', 'executables', 'scope', 'external']) {
+        const manifest = structuredClone(original);
+        if (change === 'unit') manifest.runtime.unit = 'foreign.service';
+        if (change === 'uid') manifest.runtime.uid = 0;
+        if (change === 'executables') manifest.runtime.executables = [];
+        if (change === 'scope') manifest.scope = 'selected';
+        if (change === 'external') manifest.externalFiles[0].sha256 = '0'.repeat(64);
+        const bytes = JSON.stringify(manifest);
+        await writeFile(manifestFile, bytes);
+        await writeFile(completionFile, JSON.stringify({
+          version: 1, id: manifest.id, sha256: createHash('sha256').update(bytes).digest('hex'),
+        }));
+        await assert.rejects(admitLinuxRestore(f));
+        await f.service.check();
+      }
     });
     await writeFile(data, 'post-backup version');
     await writeFile(path.join(f.project, 'server.cjs'), 'throw new Error("partial deployment");');
