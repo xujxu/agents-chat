@@ -50,6 +50,34 @@ test('prior-runtime-restored is a failed pre-source outcome, never a new deploym
   await writeState(root, { ...base, operationId: 'retry-update' });
 });
 
+test('preflight refusal is a distinct retryable failed outcome with no downtime or restoration claim', async t => {
+  assert.equal(nextPhase('preflight', 'preflight-refused'), 'preflight-refused');
+  for (const phase of ['stopped', 'copying', 'source-selected', 'accepted', 'restored', 'blocked']) {
+    assert.throws(() => nextPhase(phase, 'preflight-refused'));
+  }
+  const root = await temporaryDeployment(t);
+  const base = {
+    version: 1, operationId: 'refused', project: root, operation: 'update',
+    phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
+    backupId: null, priorRuntime: 'running', runtimeIdentity: 'fixture',
+    startedAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z', errorCode: null,
+  };
+  await writeState(root, base);
+  const terminal = { ...base, phase: 'preflight-refused', previousPhase: 'preflight',
+    errorCode: 'DEPLOYMENT_ADMISSION_REFUSED' };
+  for (const change of [{ errorCode: null }, { operation: 'restore' }, { previousPhase: 'stopped' }]) {
+    await assert.rejects(writeState(root, { ...terminal, ...change }));
+  }
+  await writeState(root, terminal);
+  assert.equal((await reconcileInterruptedOperation(root)).status, 'preflight-refused');
+  const advice = recoveryAdvice({ phase: terminal.phase, backupComplete: true, restored: false,
+    retryCommand: 'retry', diagnosticCommand: 'inspect' });
+  assert.equal(advice.status, 'preflight-refused');
+  assert.equal(advice.command, 'retry');
+  assert.match(advice.message, /before.*downtime/i);
+  await writeState(root, { ...base, operationId: 'retry' });
+});
+
 test('update cannot replace dependencies before a complete backup', () => {
   assert.throws(() => nextPhase('copying', 'dependencies'), /transition/i);
   assert.equal(nextPhase('backup-ready', 'source-selected'), 'source-selected');

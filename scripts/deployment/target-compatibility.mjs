@@ -46,7 +46,7 @@ export async function inspectTargetCompatibility({ project, commit, nodeVersion,
       GIT_NO_REPLACE_OBJECTS: '1', GIT_LITERAL_PATHSPECS: '1' });
     const git = async (args, maxBuffer = 16384) => {
       signal?.throwIfAborted();
-      return (await execute('git', ['--no-replace-objects', '-C', root, ...args], {
+      return (await execute('git', ['--no-replace-objects', '-c', `safe.directory=${root}`, '-C', root, ...args], {
         env, signal, timeout: 30000, maxBuffer, windowsHide: true, encoding: 'buffer',
       })).stdout;
     };

@@ -3936,4 +3936,32 @@ using the same data validator, bound source size, and retain file/absence eviden
 When the known config.db migration receipts already exist, those files are dormant
 and must not spuriously block an update. This belongs inside the owned data payload
 as well as the data inspection API. Causal tests are `fd33a66` / `36400621102`.
-The legacy implementation is presently uncommitted and must be preserved on OOM.
+Legacy implementation is `604d810` / `36401552315`; installed Linux and native
+data jobs have passed, with the full matrix still running. Owned database
+`9b9c27762e6f2665a3ed911852bb3f9e64b5d627` / `36399901278` finished all nine jobs
+green. The controller captures only the fixed module registry, then the original
+worker protocol delivers it to the service-account Node process; no native
+SQLite binding is loaded in the privileged controller.
+
+### Composed Linux compatibility and remaining transaction integration
+
+Native composed-admission causal tests are `2a98e6b` / `36402372897`. The next
+adapter composes original running-service evidence, owned installed Node version,
+immutable target source bindings, effective configuration, owned data/legacy
+inspection and final configuration recheck. Only all these successful observations
+may return compatibility-passed. Historical metadata absence is supported only
+for the exact reviewed baseline/source-profile adapter, without executing its
+deployment scripts. The returned check repeats configuration and owned data
+inspection before downtime. Privileged Git object reads must scope safe.directory
+to this already-canonical explicit project rather than change global trust or
+silently substitute controller ownership for the installed application account.
+
+This closes the live-Linux compatibility reader, not public transaction delivery:
+the controller must retain and invoke the check before service stop, handle
+first-install/inactive services separately, and retire failed preflight workers
+without calling the operation accepted or prior-runtime-restored. A rejected
+admission has not restarted anything. Add an explicit settled preflight-refusal
+terminal outcome before wiring that failure path into public update/deploy.
+Unsettled workers continue to retain the lock and forbid all recovery actions.
+Windows Task/account environment admission and actual dual-platform application
+lifecycle acceptance remain required; fixture-native acceptance is not that gate.

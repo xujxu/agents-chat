@@ -9,7 +9,7 @@ import test from 'node:test';
 import { fixture, ready } from './deployment-linux-service-fixture.mjs';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { admitLinuxCompatibility } from '../scripts/deployment/linux-compatibility.mjs';
-import { acquireLock } from '../scripts/deployment/state.mjs';
+import { acquireLock, loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 
@@ -37,7 +37,7 @@ async function installation(t, options = {}) {
   });
   const operation = await createWorkerOperation({ control, lock, saved });
   t.after(() => operation.close());
-  return { ...f, service, operation };
+  return { ...f, service, operation, control, lock };
 }
 
 for (const historical of [false, true]) {
@@ -90,4 +90,41 @@ test('retained compatibility recheck detects changed config and newly incompatib
     await f.operation.seal();
     assert.equal((await f.service.check()).populated, true);
   }
+});
+
+async function recordPreflight(f) {
+  const state = {
+    version: 1, operationId: f.lock.operationId, project: f.project, operation: 'update',
+    phase: 'preflight', previousPhase: null, sourceCommit: baseline, targetCommit: baseline,
+    backupId: null, priorRuntime: 'running', runtimeIdentity: f.service.identity.runtime.invocationId,
+    startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), errorCode: null,
+  };
+  await writeState(f.control, state);
+  return state;
+}
+
+test('settled refused admission retires worker evidence and unlocks without pretending deployment succeeded', async t => {
+  const { closeRejectedLinuxPreflight } = await import('../scripts/deployment/linux-preflight-refusal.mjs');
+  const f = await installation(t);
+  await recordPreflight(f);
+  await writeFile(path.join(f.project, 'agents.json'), 'private-invalid-json');
+  await assert.rejects(admitLinuxCompatibility({ ...f, commit: baseline }), { check: 'legacy-json' });
+  const result = await closeRejectedLinuxPreflight(f);
+  assert.equal(result.status, 'preflight-refused');
+  assert.equal((await loadState(f.control)).phase, 'preflight-refused');
+  assert.equal((await f.service.check()).populated, true);
+  assert.equal((await readdir(f.control)).some(name => name === 'lock' || name.startsWith('worker-')), false);
+  const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+  await releaseLock(f.control, lock);
+});
+
+test('failed-preflight cleanup cannot be used after downtime was recorded', async t => {
+  const { closeRejectedLinuxPreflight } = await import('../scripts/deployment/linux-preflight-refusal.mjs');
+  const f = await installation(t);
+  const state = await recordPreflight(f);
+  await writeState(f.control, { ...state, phase: 'stopped', previousPhase: 'preflight' });
+  await assert.rejects(closeRejectedLinuxPreflight(f), { code: 'DEPLOYMENT_PREFLIGHT_CLOSEOUT_REFUSED' });
+  assert.ok((await readdir(f.control)).includes('lock'));
+  assert.equal((await loadState(f.control)).phase, 'stopped');
+  assert.equal((await f.service.check()).populated, true);
 });
