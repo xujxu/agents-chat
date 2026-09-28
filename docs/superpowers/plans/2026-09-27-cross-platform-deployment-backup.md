@@ -4477,6 +4477,32 @@ file, then require a new controller to restore actual saved bytes and service
 files while preserving the old lock/state and keeping MainPID zero. The
 checkpoint is inspected separately from final application acceptance.
 
+Cold-files causal `3358dd8` / `36443837610` recorded 35 native passes, one
+missing-module failure and no cancellations before its remaining jobs were
+cancelled. Implementation `9b97cce` / `36444258404` passed the new real
+interrupted-copy restoration case and seven other jobs, but **did not obtain
+full acceptance**: Ubuntu database-content testing aborted inside
+`better_sqlite3.node` `Database::~Database()` with Node 24.21.0's
+`RemoveEnvironmentCleanupHook` assertion `(env) != nullptr`. The dependency
+manifests, database inspector and data-content fixtures are unchanged from the
+accepted lease commit. This identifies the failing native boundary, not its
+root cause; no dependency substitution, timeout relaxation or blind retry was
+performed.
+
+### Retained cold policy observation for activation
+
+The cold service object now distinguishes policy observation from stopped
+authority. `checkPolicy` may inspect the original unit/account/executables
+after explicitly requested uninhibition or a new generation; it never returns
+a stopped/owned-running result. `check()` and `checkInhibited({stopped:true})`
+still require the retained original inhibited, empty domain. A requested
+stopped policy check rejects a newly running generation.
+
+Native causal `f2d169d` exercises the missing policy method, then explicit
+uninhibition and startup while proving ordinary cold stopped checks cannot
+be reused afterward. This prepares the existing native activation composition;
+it does not itself activate the restored application or complete recovery.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

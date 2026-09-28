@@ -56,26 +56,28 @@ export async function inspectLinuxColdService({ original: supplied, held = null 
       if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== 0 || info.mode & 0o022
         || !same(fileIdentity(info), fileIdentity(parentInfo))) throw new Error('Cold service inhibitor directory changed.');
     };
-    const checkPolicy = async () => {
+    const checkPolicy = async ({ inhibited = true, stopped = true } = {}) => {
+      if (typeof inhibited !== 'boolean' || typeof stopped !== 'boolean') throw new Error('Invalid cold service policy observation.');
       if ((await readFile('/proc/sys/kernel/random/boot_id', 'utf8')).trim() !== bootId) {
         throw new Error('Original service boot identity changed.');
       }
       const current = await inspectLinuxServicePolicy(runtime.unit, executables[0].file);
       const state = current.state;
-      if (state.MainPID !== '0' || !['inactive', 'failed'].includes(state.ActiveState)
+      if (stopped && (state.MainPID !== '0' || !['inactive', 'failed'].includes(state.ActiveState)
         || state.InvocationID && state.InvocationID !== runtime.invocationId
-        || state.ControlGroup && state.ControlGroup !== controlGroup
-        || state.RefuseManualStart !== 'yes' || state.Restart !== 'no'
-        || !same(current.conditions, [['ConditionPathExists', false, true, inhibition]])
-        || !same([...current.drops].sort(), [...configuration.drops, inhibition].sort())
+        || state.ControlGroup && state.ControlGroup !== controlGroup)
+        || state.RefuseManualStart !== (inhibited ? 'yes' : configuration.state.RefuseManualStart)
+        || state.Restart !== (inhibited ? 'no' : configuration.state.Restart)
+        || !same(current.conditions, inhibited ? [['ConditionPathExists', false, true, inhibition]] : [])
+        || !same([...current.drops].sort(), [...configuration.drops, ...(inhibited ? [inhibition] : [])].sort())
         || !same(current.command, configuration.command)
         || Object.keys(state).some(key => ![...runtimeKeys, 'RefuseManualStart', 'Restart'].includes(key)
           && state[key] !== configuration.state[key])) {
         throw new Error('Cold service inhibition, generation or original policy changed.');
       }
       const account = await inspectLinuxRuntimeAccount({ unit: runtime.unit, project: runtime.project });
-      if (accountKeys.some(key => account[key] !== runtime[key]) || account.mainPid !== 0
-        || await processIdentity(runtime.mainPid) === runtime.processIdentity
+      if (accountKeys.some(key => account[key] !== runtime[key])
+        || stopped && (account.mainPid !== 0 || await processIdentity(runtime.mainPid) === runtime.processIdentity)
         || !same(await Promise.all(executables.map(entry => inspectLinuxServiceExecutable(entry.file))), executables)) {
         throw new Error('Cold service account or executable identity changed.');
       }
@@ -107,9 +109,10 @@ export async function inspectLinuxColdService({ original: supplied, held = null 
       // Absence is acceptable only before acquiring either handle; partial observation is not extinction.
       if (error.code !== 'ENOENT' || group || events) throw error;
     }
-    const checkFiles = async () => {
+    const checkFiles = async (includeInhibitor = true) => {
       await checkParent();
       for (const entry of retained) {
+        if (entry.inhibitor && !includeInhibitor) continue;
         const info = await entry.handle.stat();
         const named = await lstat(entry.file);
         if (!same(fileIdentity(info), fileIdentity(named)) || !same(fileIdentity(info), fileIdentity(entry.expected))) {
@@ -157,7 +160,20 @@ export async function inspectLinuxColdService({ original: supplied, held = null 
       return Object.freeze({ stopped: true, inhibited: true });
     };
     await check();
-    return Object.freeze({ identity: structuredClone(original), check, close });
+    return Object.freeze({
+      identity: structuredClone(original), check, close,
+      async checkInhibited({ stopped = true } = {}) {
+        if (stopped !== true) throw new Error('Cold inspection does not authorize an original running generation.');
+        return check();
+      },
+      async checkPolicy({ inhibited = false, stopped = false } = {}) {
+        if (closed) throw new Error('Cold service inspection is closed.');
+        await checkFiles(false);
+        await checkPolicy({ inhibited, stopped });
+        if (stopped) await checkDomain();
+        await checkFiles(false);
+      },
+    });
   } catch (error) {
     try { await close(); }
     catch (cleanup) { throw new AggregateError([error, cleanup], 'Cold service inspection and cleanup failed.'); }
