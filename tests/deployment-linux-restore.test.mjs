@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { fixture, ready, systemctl } from './deployment-linux-service-fixture.mjs';
 import { acquireLock, loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
@@ -11,6 +13,7 @@ import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 import { createLinuxServiceSnapshot } from '../scripts/deployment/linux-snapshot.mjs';
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { runLinuxLiveRestore } from '../scripts/deployment/linux-restore.mjs';
+import { saveRecoveryEngine, verifyRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
 
 const profile = 'agents-chat-auth-638c553';
 async function candidate(t, valid = true) {
@@ -90,4 +93,42 @@ test('composed native restore health refusal stops its activation and retains lo
   const journal = (await readFile(path.join(f.control, 'service-activation.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.equal(journal.at(-1).phase, 'activation-stopped');
   assert.equal((await verifySnapshot(f.backup)).id, 'live-restore');
+});
+
+test('saved Linux restore entry works without checkout helpers and refuses missing acknowledgement before downtime', async t => {
+  const f = await candidate(t);
+  await releaseLock(f.control, f.lock);
+  const source = path.join(f.project, 'scripts', 'deployment');
+  await cp(fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), source, { recursive: true });
+  const saved = await saveRecoveryEngine({ source, control: f.control });
+  await rename(path.join(f.project, 'scripts'), path.join(f.project, 'unavailable-scripts'));
+  const input = {
+    project: f.project, unit: f.unit, npm: f.npm, node: f.node, backup: f.backup,
+    port: f.port, waitSeconds: 10, timeoutSeconds: 60,
+  };
+  const execute = acknowledge => new Promise((resolve, reject) => {
+    const child = execFile(process.execPath, [
+      path.join(saved.directory, 'linux-restore-entry.mjs'), f.control, saved.manifestSha256,
+      ...(acknowledge ? ['--accept-data-loss'] : []),
+    ], { cwd: '/', timeout: 90000, maxBuffer: 16384,
+      env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' } }, (error, stdout, stderr) => {
+      if (error && typeof error.code !== 'number') reject(error);
+      else resolve({ code: error?.code ?? 0, stdout, stderr });
+    });
+    child.stdin.on('error', error => { if (error.code !== 'EPIPE') reject(error); });
+    child.stdin.end(JSON.stringify(input));
+  });
+  const refused = await execute(false);
+  assert.equal(refused.code, 1);
+  assert.match(refused.stderr, /acknowledgement|accept-data-loss/i);
+  await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
+  await f.service.check();
+  assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'new data');
+  const restored = await execute(true);
+  assert.equal(restored.code, 0, restored.stderr);
+  assert.deepEqual(JSON.parse(restored.stdout), { status: 'restored', backupId: 'live-restore' });
+  assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'backup data');
+  assert.equal((await loadState(f.control)).phase, 'restored');
+  await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
+  assert.deepEqual(await verifyRecoveryEngine({ control: f.control, manifestSha256: saved.manifestSha256 }), saved);
 });

@@ -4290,6 +4290,15 @@ one. Cancelled after exact missing-rejection evidence. Both now accept an
 expected snapshot and refuse mismatch before mutation; live composition passes
 its retained admitted manifest into each primitive.
 
+Combined correction `b92de5c` / `36426602317`: all nine Actions jobs accepted.
+Live Linux restore now has native success, failed-health owned-stop and no
+install/build evidence, with restored provider inspection and bounded startup
+waiting. Next extend the existing external recovery engine's closed helper set
+and add a saved live-restore entry. A native child-process fixture will displace
+checkout helpers, refuse missing data-loss acknowledgement before locking or
+stopping, then restore through the external entry. This does not yet authorize
+inactive-service or interrupted pre-acceptance recovery.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
