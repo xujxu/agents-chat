@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -47,6 +47,9 @@ test('scope includes source, runtime, dependencies and model data without Git/lo
     source: { commit: 'a'.repeat(40), provenance: 'observed' },
     runtime: { platform: process.platform, state: 'stopped' },
   });
+  const info = await lstat(f.project);
+  assert.equal(manifest.scope, 'project');
+  assert.deepEqual(manifest.projectMetadata, { mode: info.mode & 0o777, uid: info.uid, gid: info.gid });
   const paths = manifest.entries.map(entry => entry.path);
   assert.ok(paths.includes('.data/deployments/models/model.bin'));
   assert.ok(paths.includes('.next/server/app/index.html'));
@@ -57,6 +60,29 @@ test('scope includes source, runtime, dependencies and model data without Git/lo
   assert.deepEqual(manifest.absentPaths, scope.absentPaths);
   assert.equal(await readFile(path.join(destination, 'files', '.env.local'), 'utf8'), 'PRIVATE_VALUE=retained');
   await verifySnapshot(destination);
+});
+
+test('a selected-file snapshot cannot claim full-project recovery scope', async t => {
+  const f = await installation(t);
+  const scope = await inspectSnapshotScope({ project: f.project });
+  await assert.rejects(createSnapshot({
+    project: f.project, destination: path.join(f.root, 'staging'), id: 'partial',
+    ...scope, files: ['app'],
+    source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+  }), /scope|inventory/i);
+  await assert.rejects(readFile(path.join(f.root, 'staging', 'complete.json')), { code: 'ENOENT' });
+});
+
+test('full-project capture checks new top-level files even without a caller source check', async t => {
+  const f = await installation(t);
+  const scope = await inspectSnapshotScope({ project: f.project });
+  await f.file('new-assets/model');
+  await assert.rejects(createSnapshot({
+    project: f.project, destination: path.join(f.root, 'staging'), id: 'late',
+    ...scope, source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+  }), /scope|inventory/i);
 });
 
 test('new configuration after scope observation is not captured as formerly absent', async t => {

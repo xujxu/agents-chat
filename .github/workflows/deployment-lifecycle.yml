@@ -93,6 +93,7 @@ jobs:
           tests/deployment-snapshot-external.test.mjs
           tests/deployment-transaction.test.mjs
           tests/deployment-restore-transaction.test.mjs
+          tests/deployment-restore-project.test.mjs
           tests/deployment-source.test.mjs
           tests/deployment-update-policy.test.mjs
           tests/deployment-stage-runner.test.mjs
