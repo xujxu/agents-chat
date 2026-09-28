@@ -132,7 +132,10 @@ test('saved Linux restore entry works without checkout helpers and refuses missi
   await f.service.check();
   await writeFile(helper, bytes);
   input.backup = path.join(f.control, 'missing-backup');
-  assert.equal((await execute(true)).code, 1);
+  const missing = await execute(true);
+  assert.equal(missing.code, 1);
+  assert.match(missing.stderr, /stage=restore/);
+  assert.match(missing.stderr, /code=ENOENT/);
   await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
   await f.service.check();
   input.backup = f.backup;

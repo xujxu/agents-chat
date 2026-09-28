@@ -16,7 +16,7 @@ const files = Object.freeze([...new Set([
   'linux-restore-entry.mjs', 'linux-restore.mjs', 'linux-restore-compatibility.mjs',
   'restore-transaction.mjs', 'restore-project.mjs', 'restore-external.mjs',
   'linux-configuration.mjs', 'configuration-files.mjs', 'configuration-compatibility.mjs',
-  'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-scope.mjs', 'snapshot-external.mjs',
+  'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-scope.mjs', 'snapshot-external.mjs', 'snapshot-rotation.mjs',
   'linux-readiness.mjs', 'linux-listener.mjs',
 ])]);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');

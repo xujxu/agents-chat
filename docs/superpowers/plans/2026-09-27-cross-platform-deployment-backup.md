@@ -4311,6 +4311,18 @@ lock after state equality and original-service checks; mutated or uncertain
 transactions retain evidence. Native coverage also corrupts a saved helper and
 supplies a missing backup before successful checkout-independent restoration.
 
+Saved-entry implementation `fb601b0` / `36428977367` passed eight jobs but failed
+the external restore with `ERR_MODULE_NOT_FOUND` before service inspection.
+`snapshot.mjs` re-exports `snapshot-rotation.mjs`; that transitive dependency was
+absent from the fixed saved manifest. Include it without weakening manifest
+verification. Add cross-platform closure coverage that displaces the source,
+checks saved relative module references, and imports the restore and recovery
+compositions in a fresh process. Strengthen the native missing-backup case to
+require `stage=restore` and `ENOENT`, preventing unrelated import errors from
+satisfying the pre-downtime refusal assertion. The existing failed native run is
+the causal evidence; no repeat missing-entry run is needed. Actions acceptance
+for this correction is pending.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

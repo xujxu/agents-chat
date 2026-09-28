@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import fs, { cp, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -14,6 +14,33 @@ import { recoverRetirement } from '../scripts/deployment/retirement-recovery.mjs
 
 const sourceTree = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
 const execute = promisify(execFile);
+
+test('saved recovery bundle closes module dependencies after its source disappears', async t => {
+  const root = await temporaryDeployment(t);
+  const source = path.join(root, 'source');
+  const control = path.join(root, 'control');
+  await cp(sourceTree, source, { recursive: true });
+  await mkdir(control, { mode: 0o700 });
+  const saved = await saveRecoveryEngine({ source, control });
+  await rename(source, `${source}.displaced`);
+  const names = new Set(await readdir(saved.directory));
+  for (const name of names) {
+    if (!name.endsWith('.mjs')) continue;
+    const text = await readFile(path.join(saved.directory, name), 'utf8');
+    for (const [, dependency] of text.matchAll(/['"]\.\/([^'"]+\.mjs)['"]/g)) {
+      assert.ok(names.has(dependency), `${name} requires missing saved dependency ${dependency}`);
+    }
+  }
+  const modules = ['linux-restore.mjs', 'linux-service-recovery.mjs', 'retirement-recovery.mjs'];
+  const urls = modules.map(name => pathToFileURL(path.join(saved.directory, name)).href);
+  await execute(process.execPath, ['--input-type=module', '--eval',
+    `for (const url of ${JSON.stringify(urls)}) await import(url);`], {
+    cwd: root, timeout: 30000, maxBuffer: 8192,
+    env: Object.fromEntries(Object.entries(process.env)
+      .filter(([key]) => !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase()))),
+  });
+});
+
 async function fixture(t, outcome = 'accepted') {
   const root = await temporaryDeployment(t);
   const project = path.join(root, 'app');
