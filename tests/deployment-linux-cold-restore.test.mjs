@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, readFile, writeFile } from 'node:fs/promises';
+import { cp, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -34,6 +34,9 @@ test('cold restore admission rejects a live controller and binds dead-owner evid
   assert.deepEqual(await readFile(path.join(f.control, 'state.json')), originalState);
   await assert.rejects(admitLinuxColdRestore({ ...f, acceptDataLoss: true }), /admission|locking/i);
   assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'new data');
+  await rename(lockFile, `${lockFile}.old`);
+  await writeFile(lockFile, originalLock, { mode: 0o600 });
+  await assert.rejects(admitted.check(), /evidence|changed/i);
 });
 
 test('cold restore admission refuses incomplete service evidence and unclassified workers without repairing either', async t => {

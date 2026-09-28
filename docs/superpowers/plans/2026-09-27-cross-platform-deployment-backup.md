@@ -4390,6 +4390,25 @@ output before fixture cleanup. Do not call a later pass a diagnosis of that
 activation failure. Cancel the remaining causal jobs after preserving these
 outcomes; the combined implementation/fixture gate must pass independently.
 
+### Exclusive cold restore admission
+
+`linux-cold-restore-admission.mjs` holds the native recovery flock while binding
+the dead original controller, unchanged lock/state file handles, complete stop
+journal, optional fully stopped activation journal, and sealed/settled worker
+evidence. It then combines cold same-policy service inspection with complete
+backup checks and saved effective configuration admission. Live owners,
+competing recovery, partial stop evidence, unclassified workers, replacement
+file identities and changed backups are refused without repairing evidence.
+An incomplete activation-stop sequence still needs explicit native settlement.
+
+Extract the existing complete-backup/nonroot HTTP fixture for reuse by live and
+cold tests. Native causal tests at `5c6dd09` require original-owner refusal,
+exclusive reentry, unchanged lock/state/data, corrupted-evidence refusal,
+backup recheck and complete activation-stop binding. The admitted object is
+read-only: it does not take over the old lock, clear blocked state, restore
+files or restart the service. Durable cold ownership transfer and a restartable
+restoration transaction remain the next mutating boundary.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

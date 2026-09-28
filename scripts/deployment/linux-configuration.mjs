@@ -75,7 +75,7 @@ export async function inspectLinuxRestoreConfiguration({ service, backup, snapsh
   await service.check();
   if (!same(await configuration(service.identity.runtime.unit), config)) throw refusal('runtime-configuration-changed');
   await saved.check({ signal });
-  return saved;
+  return Object.freeze({ ...saved, sourcePaths: Object.freeze(config.systemdFiles.map(file => file.path)) });
 }
 
 export async function inspectLinuxConfiguration({ service, profile, signal }) {

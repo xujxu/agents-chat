@@ -6,10 +6,30 @@ import { inspectLinuxRestoreConfiguration } from './linux-configuration.mjs';
 
 const inside = (parent, file) => file === parent || file.startsWith(parent + path.sep);
 
+export function validateLinuxRestoreSnapshot({ identity, manifest, authorizedPaths }) {
+  const { runtime, sources, executables } = identity;
+  if (manifest.project !== runtime.project || manifest.scope !== 'project'
+    || manifest.runtime.platform !== 'linux'
+    || ['unit', 'uid', 'gid', 'user', 'home'].some(key => manifest.runtime[key] !== runtime[key])
+    || !same(manifest.runtime.executables, executables)) {
+    throw new Error('Saved restore scope, service identity or Node/npm executables differ from the installed runtime.');
+  }
+  if (!same((manifest.externalFiles ?? []).map(file => file.path).sort(), authorizedPaths)) {
+    throw new Error('Saved external paths do not match native service configuration authority.');
+  }
+  for (const source of sources) {
+    const file = manifest.externalFiles.find(entry => entry.path === source.path);
+    if (file?.kind !== 'file' || file.sha256 !== source.sha256 || file.bytes !== source.size
+      || file.uid !== source.uid || file.gid !== source.gid || file.mode !== (source.mode & 0o777)) {
+      throw new Error('Restoring changed unit policy requires a separate native policy transition.');
+    }
+  }
+}
+
 export async function admitLinuxRestore({ service, configuration, backup, signal }) {
   signal?.throwIfAborted();
   if (process.platform !== 'linux') throw new Error('Native restore admission requires Linux.');
-  const { runtime, sources, executables } = service.identity;
+  const { runtime, sources } = service.identity;
   const saved = (await canonicalWorkerDirectory(backup, { privateMode: true })).root;
   if (inside(runtime.project, saved) || inside(saved, runtime.project)) {
     throw new Error('Restore backup must be outside the installed project.');
@@ -23,22 +43,7 @@ export async function admitLinuxRestore({ service, configuration, backup, signal
     await service.check();
     await configuration.check({ signal: checkSignal });
     const manifest = await verifySnapshot(saved, { signal: checkSignal });
-    if (manifest.project !== runtime.project || manifest.scope !== 'project'
-      || manifest.runtime.platform !== 'linux'
-      || ['unit', 'uid', 'gid', 'user', 'home'].some(key => manifest.runtime[key] !== runtime[key])
-      || !same(manifest.runtime.executables, executables)) {
-      throw new Error('Saved restore scope, service identity or Node/npm executables differ from the installed runtime.');
-    }
-    if (!same((manifest.externalFiles ?? []).map(file => file.path).sort(), authorizedPaths)) {
-      throw new Error('Saved external paths do not match native service configuration authority.');
-    }
-    for (const source of sources) {
-      const file = manifest.externalFiles.find(entry => entry.path === source.path);
-      if (file?.kind !== 'file' || file.sha256 !== source.sha256 || file.bytes !== source.size
-        || file.uid !== source.uid || file.gid !== source.gid || file.mode !== (source.mode & 0o777)) {
-        throw new Error('Restoring changed unit policy requires a separate native policy transition.');
-      }
-    }
+    validateLinuxRestoreSnapshot({ identity: service.identity, manifest, authorizedPaths });
     await inspectLinuxRestoreConfiguration({
       service, backup: saved, snapshot: manifest, profile: configuration.profile, signal: checkSignal,
     });
