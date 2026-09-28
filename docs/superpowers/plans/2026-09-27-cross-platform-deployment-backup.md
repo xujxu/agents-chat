@@ -3889,3 +3889,28 @@ recheck. PassEnvironment, UnsetEnvironment and PAMName are deliberately unsuppor
 This detects changed EnvironmentFile content without restarting the installed
 service. The actual Next loader differential tests are the next validation layer.
 No configuration reader grants compatibility-passed by itself.
+
+Native configuration run `36392107696` failed one fixture assertion: a quoted
+EnvironmentFile path did not appear in the manager's effective file inventory.
+All other jobs and six other native configuration contracts passed. The fixture
+now uses the existing service template's unquoted whole-path directive; the next
+run must establish this correction rather than hiding the missing source.
+Both installed Next-loader differential matrices passed at `3407bc2` /
+`36392777491`; its shared/native jobs intentionally lack the Node observer.
+Node observation implementation is `b20dceccc788742736cab6ce14e66f3dbfff4119`,
+queued in `36393607443`. It uses the owned worker journal, explicit retained
+service account/HOME and executable, no inherited NODE_OPTIONS, original service
+rechecks, bounded exact version output, and preserves unsettled-worker refusal.
+
+Next, run the database inspector inside the existing owned worker rather than
+loading the installed native binding or blocking on SQLite in the privileged
+controller. Capture a closed list of trusted controller module bytes into an
+in-memory Node24 module registry; transmit that immutable bounded payload to the
+worker using the existing command protocol. This avoids executing candidate
+scripts, exposing the private control directory, or creating a second mutable
+temporary-code cleanup tree. The installed SQLite dependency is loaded only
+after the native worker starts under the retained application account. The
+payload contains source code and project/profile identifiers, never secrets or
+database contents. Bound compressed/uncompressed payloads and validate the exact
+small result shape. A blocked SQLite/native import must be killed/joined by the
+existing stage/worker lifecycle; uncertain cleanup must still prohibit downtime.

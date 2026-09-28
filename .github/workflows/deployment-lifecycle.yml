@@ -51,7 +51,24 @@ jobs:
           node-version: 24
       - run: npm ci --no-audit --no-fund
       - name: Inspect actual historical databases without initialization
-        run: node --test tests/deployment-database-compatibility.test.mjs tests/deployment-target-compatibility.test.mjs tests/deployment-data-content.test.mjs tests/deployment-dotenv-compatibility.test.mjs
+        run: node --test tests/deployment-database-compatibility.test.mjs tests/deployment-target-compatibility.test.mjs tests/deployment-data-content.test.mjs tests/deployment-dotenv-compatibility.test.mjs tests/deployment-database-command.test.mjs
+
+  linux-data-admission:
+    name: Native Linux database admission
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+      - name: Inspect databases under the installed account and settle blocked bindings
+        run: |
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo "$(command -v node)" --test tests/deployment-linux-data-worker.test.mjs
 
   contracts:
     name: Contracts (${{ matrix.os }})
