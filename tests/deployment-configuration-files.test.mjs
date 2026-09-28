@@ -101,3 +101,31 @@ test('linked configuration sources are unsupported', { skip: process.platform ==
   await symlink('actual', path.join(project, '.env'));
   await assert.rejects(inspect(project), { check: 'configuration-file' });
 });
+
+test('startup environment must match configured values before Next dotenv loading', async t => {
+  const project = await temporaryDeployment(t);
+  const file = path.join(project, 'service.env');
+  await writeFile(file, 'ADMIN_PASSWORD=changed-private-password\n');
+  await assert.rejects(inspect(project, {
+    systemdFiles: [{ path: file, optional: false }], observedEnvironment: environment,
+  }), { check: 'runtime-environment-changed' });
+});
+
+test('a removed startup setting is not inherited from the running process', async t => {
+  const project = await temporaryDeployment(t);
+  const configured = { ...environment };
+  delete configured.ADMIN_USERNAME;
+  delete configured.ADMIN_PASSWORD;
+  await assert.rejects(inspect(project, { environment: configured, observedEnvironment: environment }),
+    { check: 'runtime-environment-changed' });
+});
+
+test('dotenv-only settings are compared after the startup environment observation', async t => {
+  const project = await temporaryDeployment(t);
+  await writeFile(path.join(project, '.env.production.local'), 'ADMIN_USERNAME=fixture\nADMIN_PASSWORD=private-password\n');
+  const configured = { ...environment };
+  delete configured.ADMIN_USERNAME;
+  delete configured.ADMIN_PASSWORD;
+  const result = await inspect(project, { environment: configured, observedEnvironment: configured });
+  assert.deepEqual(result.providers, ['credentials']);
+});
