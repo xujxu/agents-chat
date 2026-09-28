@@ -68,7 +68,7 @@ jobs:
       - name: Inspect databases under the installed account and settle blocked bindings
         run: |
           sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
-          sudo "$(command -v node)" --test tests/deployment-linux-data-worker.test.mjs
+          sudo "$(command -v node)" --test tests/deployment-linux-data-worker.test.mjs tests/deployment-linux-compatibility.test.mjs
 
   contracts:
     name: Contracts (${{ matrix.os }})
