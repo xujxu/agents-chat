@@ -11,15 +11,17 @@ import { createWorkerOperation } from '../scripts/deployment/worker-operation.mj
 const [control, project, unit, npm, node, phase, outcome = 'accepted', workerMode = 'none'] = process.argv.slice(2);
 const activation = phase.startsWith('activation-');
 const receiptPhase = activation ? phase.slice('activation-'.length) : phase;
+const restoring = outcome === 'restored';
 const lock = await acquireLock(control, { project, operationId: randomUUID() });
 const state = {
-  version: 1, operationId: lock.operationId, project, operation: 'update',
-  phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
+  version: 1, operationId: lock.operationId, project, operation: restoring ? 'restore' : 'update',
+  phase: restoring ? 'restore-preflight' : 'preflight', previousPhase: null,
+  sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
   backupId: null, priorRuntime: 'running', runtimeIdentity: unit,
   startedAt: lock.createdAt, updatedAt: lock.createdAt, errorCode: null,
 };
 await writeState(control, state);
-await writeState(control, { ...state, phase: 'stopped', previousPhase: 'preflight' });
+await writeState(control, { ...state, phase: restoring ? 'restoring' : 'stopped', previousPhase: state.phase });
 const nativeOpen = fs.open;
 fs.open = async function (file, ...args) {
   const handle = await nativeOpen(file, ...args);
@@ -65,12 +67,12 @@ if (workerMode !== 'none') {
 if (activation) await stopped.activate({ purpose: 'prior-runtime' });
 if (phase.startsWith('retirement-')) {
   const prior = outcome === 'prior-runtime-restored';
-  for (const next of prior ? ['copying'] : ['copying', 'rotating', 'backup-ready', 'source-selected',
+  for (const next of restoring ? ['restore-activating'] : prior ? ['copying'] : ['copying', 'rotating', 'backup-ready', 'source-selected',
     'dependencies', 'building', 'configuring', 'activating']) {
     const current = await loadState(control);
     await writeState(control, { ...current, phase: next, previousPhase: current.phase });
   }
-  await stopped.activate({ purpose: prior ? 'prior-runtime' : 'deployment' });
+  await stopped.activate({ purpose: restoring ? 'restore' : prior ? 'prior-runtime' : 'deployment' });
   const current = await loadState(control);
   await writeState(control, { ...current, phase: outcome, previousPhase: current.phase,
     errorCode: prior ? 'BACKUP_FAILED' : null });

@@ -49,7 +49,8 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
     lockHandle = await open(lockPath, constants.O_RDONLY | constants.O_NOFOLLOW);
     const lockFile = identity(await lockHandle.stat());
     const initial = await loadState(root);
-    if (!initial || initial.phase !== 'stopped' || initial.project !== project
+    const restoring = initial?.operation === 'restore';
+    if (!initial || initial.phase !== (restoring ? 'restoring' : 'stopped') || initial.project !== project
       || initial.operationId !== lock.operationId || initial.priorRuntime !== 'running') {
       throw new Error('Service stop requires matching stopped-phase transaction admission.');
     }
@@ -63,10 +64,13 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
         || !same(identity(await lstat(lockPath)), lockFile) || !same(identity(retained), lockFile)
         || retained.nlink !== 1) throw new Error('Original service transaction lock was replaced.');
       const state = await loadState(root);
-      if (!state || state.project !== project || state.operationId !== lock.operationId
-        || !['stopped', 'copying', 'rotating', 'backup-ready', 'source-selected',
+      const phases = restoring
+        ? ['restoring', 'restore-activating', ...(retiring ? ['restored'] : [])]
+        : ['stopped', 'copying', 'rotating', 'backup-ready', 'source-selected',
           'dependencies', 'building', 'configuring', 'activating',
-          ...(retiring ? ['accepted', 'prior-runtime-restored'] : [])].includes(state.phase)) {
+          ...(retiring ? ['accepted', 'prior-runtime-restored'] : [])];
+      if (!state || state.project !== project || state.operationId !== lock.operationId
+        || state.operation !== initial.operation || !phases.includes(state.phase)) {
         throw new Error('Service maintenance transaction state no longer authorizes stopped work.');
       }
       if (journal && !retiring) await journal.check();

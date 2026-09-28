@@ -46,7 +46,8 @@ test('external restore recovers exact bytes/mode and original absence without co
   }
   const before = await lstat(f.unit, { bigint: true });
   await restoreExternalSnapshot(f.options);
-  assert.deepEqual(await lstat(f.unit, { bigint: true }), before);
+  const after = await lstat(f.unit, { bigint: true });
+  for (const key of ['dev', 'ino', 'mode', 'uid', 'gid', 'mtimeNs', 'ctimeNs']) assert.equal(after[key], before[key]);
   await unlink(f.unit);
   await restoreExternalSnapshot(f.options);
   assert.equal(await readFile(f.unit, 'utf8'), 'original unit\n');

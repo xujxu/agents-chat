@@ -99,7 +99,8 @@ test('stopped native service project can recover saved data and ownership withou
     await restoreExternalSnapshot({
       project: f.project, backup, acceptDataLoss: true, authorizedPaths: external.map(entry => entry.path), checkStopped,
     });
-    assert.deepEqual(await lstat(f.fragment, { bigint: true }), unitBefore);
+    const unitAfter = await lstat(f.fragment, { bigint: true });
+    for (const key of ['dev', 'ino', 'mode', 'uid', 'gid', 'mtimeNs', 'ctimeNs']) assert.equal(unitAfter[key], unitBefore[key]);
     const restored = await loadState(f.control);
     await writeState(f.control, { ...restored, phase: 'restore-activating', previousPhase: 'restoring' });
     const activated = await f.stopped.activate({ purpose: 'restore' });

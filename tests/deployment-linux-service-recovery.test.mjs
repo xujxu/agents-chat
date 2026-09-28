@@ -39,6 +39,24 @@ test('cold service cleanup preserves the failed-update outcome after verified pr
   assert.equal((await reconcileInterruptedOperation(f.control)).status, 'prior-runtime-restored');
 });
 
+for (const phase of ['retirement-unlink-0', 'retirement-live-lock-owner']) {
+  test(`cold cleanup preserves restored acceptance after interruption: ${phase}`, async t => {
+    const f = await interrupted(t, phase, 'restored');
+    await f.kill();
+    const before = await readFile(path.join(f.control, 'state.json'));
+    assert.equal(JSON.parse(before).operation, 'restore');
+    assert.equal(JSON.parse(before).phase, 'restored');
+    await rename(f.source, `${f.source}.displaced`);
+    await f.recover();
+    assert.deepEqual(await readFile(path.join(f.control, 'state.json')), before);
+    await assert.rejects(readFile(path.join(f.control, 'lock', 'owner.json')), { code: 'ENOENT' });
+    assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
+    await f.recover();
+    const next = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+    await releaseLock(f.control, next);
+  });
+}
+
 for (const [phase, outcome, workerMode] of [
   ['retirement-intent', 'accepted', 'settled'],
   ['retirement-unlink-0', 'accepted', 'empty'],

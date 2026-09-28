@@ -85,6 +85,9 @@ export async function restoreExternalSnapshot({
     await checkParent(item);
     const { entry, current, bytes } = item;
     if (!same(await currentFile(entry.path), current)) throw new Error('External restore target changed before writing.');
+    if (entry.kind === 'file' && current && current.uid === entry.uid && current.gid === entry.gid
+      && (current.mode & 0o777) === entry.mode
+      && bytes.equals(await readWorkerFile(entry.path, 1024 * 1024))) continue;
     if (entry.kind === 'absent') {
       if (current) await unlink(entry.path);
     } else {

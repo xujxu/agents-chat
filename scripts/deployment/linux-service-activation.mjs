@@ -13,6 +13,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const allowed = {
   deployment: ['activating'],
   'prior-runtime': ['stopped', 'copying', 'rotating', 'backup-ready'],
+  restore: ['restore-activating'],
 };
 const phases = ['intent', 'staged', 'uninhibited', 'start-requested', 'started'];
 
@@ -132,7 +133,9 @@ export async function activateLinuxService(context, purpose) {
               const prior = purpose === 'prior-runtime';
               if ((prior
                 ? accepted.phase !== 'prior-runtime-restored' || accepted.previousPhase !== state.phase || !accepted.errorCode
-                : accepted.phase !== 'accepted' || !['activating', 'activation-unverified'].includes(accepted.previousPhase))
+                : purpose === 'restore'
+                  ? accepted.operation !== 'restore' || accepted.phase !== 'restored' || accepted.previousPhase !== 'restore-activating'
+                  : accepted.phase !== 'accepted' || !['activating', 'activation-unverified'].includes(accepted.previousPhase))
                 || Object.keys(state).filter(key => !['phase', 'previousPhase', 'updatedAt', ...(prior ? ['errorCode'] : [])].includes(key))
                   .some(key => accepted[key] !== state[key])) {
                 throw new Error('Matching application acceptance is required for service retirement.');

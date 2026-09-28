@@ -4128,3 +4128,30 @@ is pending. The caller must derive authorization from native restore evidence, n
 blindly echo a manifest. Existing live stop authority intentionally rejects changed
 unit-source evidence, so this primitive is not yet composed with service activation.
 Cold/native restoration authority and external recovery tooling remain outstanding.
+
+**External restore acceptance:** `d4ed91c80a3f23586cd09059fdea1018b475ef8b` /
+Actions `36415501626` passed all nine jobs.
+
+### Live native restore activation and terminal cleanup
+
+Linux live stop authority now admits restore/restoring separately from deployment
+stop and pins the operation type through all subsequent checks. Restore activation
+requires restore-activating; retirement requires restored acceptance rather than
+update acceptance. Live unlock and saved cold retirement cleanup recognize this
+verified restore terminal state without weakening original lock, source, generation,
+worker or deletion-inventory checks. Cold cleanup does not itself restore files.
+
+External files already matching saved bytes, ownership and permissions are not
+rewritten. This preserves retained original unit identity and modification metadata
+for same-policy restoration. Reading may update access time; source authority
+intentionally binds modification/change times instead.
+
+Causal `92b74a5` / `36416403093` failed native admission because restoring was not
+an admitted stop phase, and shared Linux contracts exposed unnecessary external
+rewrites. The run was cancelled after retaining both failures. New native coverage
+restores saved server code/data from a stopped fixture, activates a new npm service
+generation, records restored, retires evidence and unlocks with backup intact.
+Additional SIGKILL cases cover restore retirement deletion and partial live unlock
+using the saved engine after checkout helper displacement. Implementation validation
+is pending. Changed-unit policy rebinding, interrupted pre-acceptance/cold restore,
+actual application readiness and public entry points remain outstanding.

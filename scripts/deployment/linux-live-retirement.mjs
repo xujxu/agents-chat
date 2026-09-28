@@ -20,7 +20,7 @@ export async function releaseLiveRetirement(control, owner) {
     const originalFile = identity(await lstat(file));
     const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
     if (value.version !== 3 || !same(value.lock, owner)
-      || !['accepted', 'prior-runtime-restored'].includes(value.state?.phase)
+      || !['accepted', 'prior-runtime-restored', ...(value.state?.operation === 'restore' ? ['restored'] : [])].includes(value.state?.phase)
       || !same(await loadState(control), value.state)) throw new Error('Live retirement does not authorize this unlock.');
     service = await inspectLinuxService({ unit: value.runtime.runtime.unit, project: owner.project,
       npm: value.runtime.executables[0].file, node: value.runtime.executables[1].file });

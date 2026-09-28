@@ -159,7 +159,7 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
     const guardPath = path.join(root, 'recovery-lock');
     await deadOwner();
     const state = await loadState(root);
-    if (!state || !['accepted', 'prior-runtime-restored'].includes(state.phase)
+    if (!state || !['accepted', 'prior-runtime-restored', ...(state.operation === 'restore' ? ['restored'] : [])].includes(state.phase)
       || state.operationId !== operationId
       || state.project !== project || !same(state, original.state)) {
       throw new Error('Service recovery requires the original verified completed state.');

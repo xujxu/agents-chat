@@ -43,7 +43,8 @@ export async function readServiceCompletion({ control, project, operationId, par
   }
   const original = parseIntent(Buffer.from(receipt.intent), control, project,
     operationId ?? parse(Buffer.from(receipt.intent))?.lock?.operationId);
-  if (!original.state || !['accepted', 'prior-runtime-restored'].includes(original.state.phase)
+  if (!original.state || !['accepted', 'prior-runtime-restored',
+    ...(original.state.operation === 'restore' ? ['restored'] : [])].includes(original.state.phase)
     || original.state.project !== project || original.state.operationId !== original.lock.operationId) {
     throw new Error('Completion proof does not describe a verified terminal operation.');
   }
