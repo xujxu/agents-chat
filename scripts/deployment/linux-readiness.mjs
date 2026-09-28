@@ -67,19 +67,6 @@ export async function verifyLinuxReadiness({ service, port, providers, signal })
     throw new Error('Readiness requires the admitted authentication provider list.');
   }
 
-  export async function waitLinuxReadiness({ service, port, providers, waitSeconds = 120, signal }) {
-    if (!Number.isSafeInteger(waitSeconds) || waitSeconds <= 0) throw new Error('Readiness wait must be a positive safe integer.');
-    return runStage('readiness', async stageSignal => {
-      while (true) {
-        try { return await verifyLinuxReadiness({ service, port, providers, signal: stageSignal }); }
-        catch (error) {
-          stageSignal.throwIfAborted();
-          if (error?.code !== 'DEPLOYMENT_READINESS_NOT_READY') throw error;
-          await delay(100, undefined, { signal: stageSignal });
-        }
-      }
-    }, { timeoutMs: Math.min(waitSeconds * 1000, Number.MAX_SAFE_INTEGER), signal });
-  }
   const owned = await retainLinuxListener({ service, port, signal });
   const bytes = await readProviders(port, signal);
   let body;
@@ -102,4 +89,18 @@ export async function verifyLinuxReadiness({ service, port, providers, signal })
     status: 'ready', invocationId: service.identity.runtime.invocationId, port,
     providers: Object.freeze([...providers]),
   });
+}
+
+export async function waitLinuxReadiness({ service, port, providers, waitSeconds = 120, signal }) {
+  if (!Number.isSafeInteger(waitSeconds) || waitSeconds <= 0) throw new Error('Readiness wait must be a positive safe integer.');
+  return runStage('readiness', async stageSignal => {
+    while (true) {
+      try { return await verifyLinuxReadiness({ service, port, providers, signal: stageSignal }); }
+      catch (error) {
+        stageSignal.throwIfAborted();
+        if (error?.code !== 'DEPLOYMENT_READINESS_NOT_READY') throw error;
+        await delay(100, undefined, { signal: stageSignal });
+      }
+    }
+  }, { timeoutMs: Math.min(waitSeconds * 1000, Number.MAX_SAFE_INTEGER), signal });
 }

@@ -4254,6 +4254,27 @@ generation. This remains endpoint/ownership acceptance, not authentication login
 database continuity or full application acceptance. Public integration remains
 unfinished.
 
+### Composed live Linux restoration
+
+`runLinuxLiveRestore` connects the shared acknowledged restore transaction to
+native backup admission, original lock/state checks, filesystem capacity,
+project and external-file restoration, retained stop/activation authority and
+owned HTTP readiness. Restored effective configuration is inspected again after
+activation, so readiness does not reuse the pre-restore provider list. Acceptance
+precedes evidence retirement and lock release. Failed health acceptance stops the
+new generation and retains lock, stop evidence and backup for explicit recovery.
+Native fixtures cover success and invalid-provider failure without install/build.
+This is the running-service/same-policy composition, not the public or cold
+recovery controller; incomplete-state recovery, Git restoration and saved restore
+entrypoint remain outstanding.
+
+Readiness-wait implementation `021acfb` / `36424238681` was superseded in the
+queue, not accepted. Composition causal `3e1fe75` / `36424270838` failed on missing
+`linux-restore.mjs` and also exposed the wait export accidentally nested inside
+the one-shot probe. Moved it to module scope and retained the startup/cancellation
+tests unchanged. Cancelled the causal run after both errors were recorded;
+the complete combined implementation matrix is pending.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
