@@ -142,7 +142,7 @@ jobs:
         with:
           node-version: 24
       - name: Recover interrupted actual service retirement
-        run: sudo "$(command -v node)" --test tests/deployment-recovery-admission.test.mjs tests/deployment-linux-service-recovery.test.mjs
+        run: sudo "$(command -v node)" --test tests/deployment-recovery-admission.test.mjs tests/deployment-linux-service-recovery.test.mjs tests/deployment-linux-cold-service.test.mjs
 
   linux-worker-handoff:
     name: Native Linux retirement handoff
