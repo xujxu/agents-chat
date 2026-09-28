@@ -4,7 +4,7 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { inventorySnapshot, realDirectory } from './snapshot-files.mjs';
 
 const excludedRoots = Object.freeze(['.git', 'logs', '.npm', '.pnpm-store']);
-const excludedPaths = Object.freeze([...excludedRoots, '.next/cache', 'node_modules/.cache']);
+export const projectSnapshotExclusions = Object.freeze([...excludedRoots, '.next/cache', 'node_modules/.cache']);
 const optionalPaths = Object.freeze([
   '.data', '.next', 'node_modules', 'agents.json', 'nodes.json',
   '.env', '.env.local', '.env.production', '.env.production.local',
@@ -21,7 +21,7 @@ export async function inspectSnapshotScope({ project, signal }) {
   }
   const files = names.filter(name => !excludedRoots.includes(name));
   const absentPaths = optionalPaths.filter(name => !names.includes(name));
-  const entries = await inventorySnapshot(root, files, { signal, excludedPaths });
+  const entries = await inventorySnapshot(root, files, { signal, excludedPaths: projectSnapshotExclusions });
   let snapshotBytes = 0;
   for (const entry of entries) {
     snapshotBytes += entry.bytes ?? 0;
@@ -38,7 +38,8 @@ export async function inspectSnapshotScope({ project, signal }) {
   };
   await check();
   return Object.freeze({
-    files: Object.freeze(files), absentPaths: Object.freeze(absentPaths), excludedPaths,
+    projectScope: true, files: Object.freeze(files), absentPaths: Object.freeze(absentPaths),
+    excludedPaths: projectSnapshotExclusions,
     snapshotBytes, entryCount: entries.length, check,
   });
 }

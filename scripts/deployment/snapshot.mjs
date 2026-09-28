@@ -14,6 +14,9 @@ export { inventorySnapshot } from './snapshot-files.mjs';
 export { rotateSnapshot, reconcileSnapshotSlots } from './snapshot-rotation.mjs';
 import { captureExternalSnapshot, validateExternalSnapshot, verifyExternalSnapshot } from './snapshot-external.mjs';
 import { syncWorkerDirectory } from './worker-files.mjs';
+import { projectSnapshotExclusions } from './snapshot-scope.mjs';
+
+const projectMetadata = info => ({ mode: info.mode & 0o777, uid: info.uid, gid: info.gid });
 
 export function estimateRequiredBytes({ snapshotBytes, metadataBytes, deploymentBytes }) {
   const values = [snapshotBytes, metadataBytes, deploymentBytes];
@@ -31,6 +34,19 @@ function validateManifest(manifest) {
     || !['observed', 'verified'].includes(manifest.source?.provenance)
     || manifest.runtime?.state !== 'stopped' || !['linux', 'win32'].includes(manifest.runtime?.platform)
     || !Array.isArray(manifest.entries)) throw new Error('Invalid snapshot manifest.');
+  if (manifest.scope !== undefined && !['project', 'selected'].includes(manifest.scope)) {
+    throw new Error('Invalid snapshot scope.');
+  }
+  if (manifest.scope === 'project' && (!same(manifest.excludedPaths, projectSnapshotExclusions)
+    || !manifest.projectMetadata)) throw new Error('Incomplete project snapshot scope.');
+  if (manifest.projectMetadata !== undefined) {
+    const info = manifest.projectMetadata;
+    if (!info || !Number.isInteger(info.mode) || info.mode < 0 || info.mode > 0o777
+      || !Number.isSafeInteger(info.uid) || info.uid < 0 || !Number.isSafeInteger(info.gid) || info.gid < 0
+      || !same(Object.keys(info).sort(), ['gid', 'mode', 'uid'])) {
+      throw new Error('Invalid snapshot project metadata.');
+    }
+  }
   validateExternalSnapshot(manifest.externalFiles ?? [], manifest.project);
   const seen = new Map();
   for (const entry of manifest.entries) {
@@ -76,13 +92,27 @@ function validateManifest(manifest) {
 
 export async function createSnapshot({
   project, destination, id, files, source, runtime, signal, absentPaths = [], excludedPaths = [],
-  externalFiles = [], checkSource,
+  externalFiles = [], checkSource, projectScope = false,
 }) {
   signal?.throwIfAborted();
   if (checkSource !== undefined && typeof checkSource !== 'function') throw new Error('Snapshot source check must be callable.');
   await checkSource?.();
   if (runtime?.state !== 'stopped') throw new Error('Snapshot requires a stopped runtime.');
   const root = await realDirectory(project);
+  const rootInfo = await lstat(root);
+  if (rootInfo.mode & 0o7000 || typeof projectScope !== 'boolean') throw new Error('Unsupported project snapshot metadata.');
+  const checkProject = async () => {
+    signal?.throwIfAborted();
+    const current = await lstat(await realDirectory(project));
+    if (current.dev !== rootInfo.dev || current.ino !== rootInfo.ino
+      || !same(projectMetadata(current), projectMetadata(rootInfo))) throw new Error('Snapshot project metadata changed.');
+    if (projectScope) {
+      const included = (await readdir(root)).sort().filter(name => !projectSnapshotExclusions.includes(name));
+      if (!Array.isArray(files) || !same([...files].sort(), included)
+        || !same(excludedPaths, projectSnapshotExclusions)) throw new Error('Incomplete project snapshot scope inventory.');
+    }
+  };
+  await checkProject();
   const parent = await realDirectory(path.dirname(destination));
   const target = path.resolve(destination);
   if (target === root || target.startsWith(root + path.sep)) {
@@ -95,6 +125,7 @@ export async function createSnapshot({
   const entries = await captureSnapshotInventory(root, files, { signal, excludedPaths });
   const manifest = {
     version: 1, id, project: root, createdAt: new Date().toISOString(), source, runtime, absentPaths, excludedPaths,
+    scope: projectScope ? 'project' : 'selected', projectMetadata: projectMetadata(rootInfo),
     externalFiles: external.entries,
     entries: entries.map(entry => entry.kind === 'file' ? { ...entry, sha256: '0'.repeat(64) } : entry),
   };
@@ -148,6 +179,7 @@ export async function createSnapshot({
   await writePrivateFile(path.join(target, 'manifest.json'), serialized);
   signal?.throwIfAborted();
   await checkSource?.();
+  await checkProject();
   await assertSnapshotAbsent(root, absentPaths);
   if (!same(entries, await captureSnapshotInventory(root, files, { signal, excludedPaths }))) {
     throw new Error('Snapshot source inventory or metadata changed during capture.');

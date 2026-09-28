@@ -4073,3 +4073,36 @@ or rotated. Causal `fbed2eb` / `36412176382` failed in Linux contracts on the
 missing coordinator, then was cancelled to advance implementation. Native file
 restoration, cold restore authority and external recovery entry remain unimplemented;
 shared coordinator acceptance alone is not no-build application recovery acceptance.
+
+**Restore coordinator acceptance:** `58f623be8e50ab368b7565a2154598ef16e9800c` /
+Actions `36412316042` passed all nine jobs.
+
+### Project-file restoration
+
+Snapshots explicitly distinguish complete-project from selected-file scope and
+record the project directory's original uid/gid/mode. Full scope must match actual
+top-level inventory and the fixed exclusions at capture and completion. Older
+selected snapshots remain verifiable but cannot authorize whole-project deletion.
+
+The Linux project restore helper checks acknowledgement, backup ownership,
+full scope, stopped/inhibited authority, capacity, original project identity and
+the current removal inventory before replacing application contents. It preserves
+the project directory itself and excluded top-level Git/log/cache roots. Nested
+build caches are inspected (including mount/link/worktree checks) before removal,
+not silently traversed. Links are removed before targets so interrupted removal
+can be inspected again. Copies are independent, streamed and flushed; saved
+ownership/modes and originally absent files are restored. Final inventory,
+metadata, file hashes and retained backup are verified without install/build.
+Cancellation/authority-loss leaves the backup unchanged and permits retry.
+
+Causal scope/project tests `5f82a0b` were superseded in the pending Actions slot
+by native tests `24a0331` / `36412692496`. Shared Linux failures demonstrate
+missing full-scope/root metadata checks; shared and native jobs fail on missing
+`restore-project.mjs`. The causal run was then cancelled to advance implementation.
+Actual stopped systemd fixture now checks restoration of uid/gid 65534 and mode
+0640, not only mocked file content. Full implementation acceptance is pending.
+
+This is a project-file primitive, not yet a public restore: the external unit/env
+restorer, durable cold restore authority, Git provenance/index restoration,
+saved recovery engine, native activation and extended permission/Windows ACL
+support remain required. No application restore acceptance is claimed here.

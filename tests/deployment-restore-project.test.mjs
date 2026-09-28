@@ -22,6 +22,7 @@ async function fixture(t, full = true) {
   })) await writeFile(path.join(project, name), content);
   await chmod(path.join(project, '.env.local'), 0o600);
   await chmod(project, 0o750);
+  if (process.platform === 'linux') await symlink('.next/BUILD_ID', path.join(project, 'build-link'));
   const scope = full ? await inspectSnapshotScope({ project }) : { files: ['package.json'] };
   await createSnapshot({
     project, destination: backup, id: 'restore-point', ...scope,
@@ -50,6 +51,8 @@ test('project restore replaces source/data/artifacts directly, preserves backup 
     assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'saved data');
     assert.equal(await readFile(path.join(f.project, '.next/BUILD_ID'), 'utf8'), 'saved build');
     assert.equal(await readFile(path.join(f.project, 'node_modules/saved'), 'utf8'), 'saved dependency');
+    assert.equal((await lstat(path.join(f.project, 'build-link'))).isSymbolicLink(), true);
+    assert.equal(await readFile(path.join(f.project, 'build-link'), 'utf8'), 'saved build');
     assert.equal(await readFile(path.join(f.project, 'logs/runtime.log'), 'utf8'), 'new log');
     assert.equal(await readFile(path.join(f.project, '.git/HEAD'), 'utf8'), 'git metadata');
     assert.equal((await lstat(path.join(f.project, '.env.local'))).mode & 0o777, 0o600);
@@ -109,6 +112,21 @@ test('lost stopped authority leaves the authoritative backup intact for retry', 
   assert.equal((await verifySnapshot(f.backup)).id, 'restore-point');
   await restoreProjectSnapshot(f.options);
   assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'saved data');
+});
+
+test('cancelled project restoration leaves the backup unchanged and can be retried', linux, async t => {
+  const f = await fixture(t);
+  const controller = new AbortController();
+  let checks = 0;
+  await assert.rejects(restoreProjectSnapshot({
+    ...f.options, signal: controller.signal, checkStopped: async () => {
+      if (++checks === 4) controller.abort(new Error('cancel restoration'));
+      return { stopped: true, inhibited: true };
+    },
+  }), /cancel restoration/);
+  assert.equal((await verifySnapshot(f.backup)).id, 'restore-point');
+  await restoreProjectSnapshot(f.options);
+  assert.equal(await readFile(path.join(f.project, '.next/BUILD_ID'), 'utf8'), 'saved build');
 });
 
 test('Windows project restoration refuses until a native ACL adapter is supplied', {
