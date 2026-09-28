@@ -34,6 +34,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  database-admission:
+    name: Database admission (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+      - name: Inspect actual historical databases without initialization
+        run: node --test tests/deployment-database-compatibility.test.mjs
+
   contracts:
     name: Contracts (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

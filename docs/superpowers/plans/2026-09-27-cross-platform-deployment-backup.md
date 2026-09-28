@@ -3643,3 +3643,55 @@ task/account integration remain blocked or unimplemented as previously noted.
 Full backup/restore/public entrypoints and real dual-platform application
 lifecycle acceptance are still separate delivery gates. Feature branch only;
 no main/PR/public entrypoint/live deployment changes.
+
+### Read-only persisted database shape admission
+
+This batch implements the database portion of approved delta D, not the entire
+target/config/runtime compatibility decision. Historical base is
+`638c553c62406dbb7e6b5aeb41cdddf4cd6de179`. The five store files are unchanged
+between that base and this branch: chatStore blob `aa201f3edc25e3d66bc76e9453c1cb3cda55db99`,
+configStore `7f037928778e147cc68e46c550bf109759227765`,
+chatSyncStore `005a819da01dff4e5dd512e40658ebdbdf4ebbb5`,
+chatTransferStore `bb03a556703881ff086aa958db22ebbe6bf0cc17`,
+scheduleStore `ecb14acd9f5f1107094e9621ba4da7cb273e56cd`.
+They use `.data/chats.db` and `.data/config.db`; sync, transfers and scheduler
+share chats.db. Missing lazy table groups are supported, but a partially present
+group is not. Config migrations are import/add-column receipts, not a schema
+version. Require the five known completed keys for initialized config.db.
+
+`chatStore.ts:211` drops `orchestrations` at initialization. Do not run it in
+admission. Refuse nonempty orchestration parent/child tables for this baseline
+instead of declaring a destructive startup safe. Do not modify application
+migration behavior in this batch. Persisted JSON content and target-version
+semantics need separate checks; schema support alone cannot authorize downtime.
+
+- [ ] Add `tests/deployment-database-fixture.mjs`: derive test-only DDL from the
+  five pinned historical blobs (verify Git blob IDs), never import store modules.
+  Fixtures create databases using the repository's installed `better-sqlite3`.
+- [ ] Add `tests/deployment-database-compatibility.test.mjs`: actual historical
+  schema, lazy groups, committed WAL-only schema changes, missing database/
+  sidecar, unknown table/column/type/default/index/view/trigger/version/migration,
+  partial group and populated orchestrations; verify no main/WAL byte changes
+  or new application files after success and refusal.
+- [ ] Run a dedicated Ubuntu/Windows Actions matrix with `npm ci` and
+  `node --test tests/deployment-database-compatibility.test.mjs`. First observe
+  missing inspector failure; no local installs/tests.
+- [ ] Add `database-shape-policy.mjs` with fixed, trusted reference DDL and
+  groups. Add `database-compatibility.mjs` exporting
+  `inspectDeploymentDatabases({ project, profile, signal })`. Require the explicit
+  supported profile, return only `status: 'schema-supported'` per existing DB
+  or `status: 'absent'`, never `compatibility: 'passed'`.
+- [ ] Resolve `better-sqlite3` from the installed project, open with
+  `{readonly:true,fileMustExist:true}`, use `query_only` and one read transaction
+  per DB, compare bounded table/column/foreign-key/index metadata against a
+  trusted in-memory reference. Never call store initialization or checkpoint.
+  Reject unknown/corrupt formats with a static error code and next action.
+- [ ] Require canonical regular single-link DB files; reject rollback journals.
+  Read the SQLite header before opening. WAL mode requires existing nonempty
+  WAL/SHM files, avoiding SQLite's missing-sidecar creation path; absence is a
+  refusal, not permission to use immutable mode. Recheck original path identities
+  after inspection. This is not a substitute for later stopped-runtime snapshot
+  ownership; cross-database snapshots and adversarial path races are not claimed.
+- [ ] Push implementation, inspect all Actions results, checkpoint the exact
+  supported shapes and limits. Target Git metadata, Node/config/content checks
+  and public adapter wiring remain separate required admission work.
