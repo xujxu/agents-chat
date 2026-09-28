@@ -141,7 +141,7 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
     const authorizedPaths = [...new Set([...service.identity.sources.map(source => source.path),
       ...config.sourcePaths.filter(file => !inside(project, file))])].sort();
     validateLinuxRestoreSnapshot({ identity: service.identity, manifest: snapshot, authorizedPaths });
-    const checkEvidence = async ({ signal: checkSignal = signal } = {}, recoverySources = false) => {
+    const checkEvidence = async ({ signal: checkSignal = signal } = {}, recoverySources = false, verifyBackup = true) => {
       if (closed) throw new Error('Cold restore admission is closed.');
       checkSignal?.throwIfAborted();
       await admission.check();
@@ -150,7 +150,8 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
       if (!same(identity((await canonicalWorkerDirectory(lockDirectory, { privateMode: true })).info), identity(directory.info))
         || !same(inventory(await readdir(root)), inventory([...names]))) throw new Error('Cold restore authority inventory changed.');
       for (const entry of retained) {
-        if (recoverySources && coldRestoreLeaseNames.some(name => path.dirname(entry.file) === path.join(root, name))) continue;
+        if (recoverySources && (path.dirname(entry.file) === path.join(root, 'cold-restore-staging')
+          || entry.file === path.join(root, 'recovery-lock', 'owner.json'))) continue;
         const info = await entry.handle.stat();
         if (info.nlink !== 1 || !same(identity(info), entry.info) || !same(identity(await lstat(entry.file)), entry.info)
           || !(await readWorkerFile(entry.file, entry.maximum, { privateMode: true })).equals(entry.bytes)) {
@@ -160,8 +161,10 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
       }
       await workers.check();
       await service.check();
-      await config.check({ signal: checkSignal });
-      if (!same(await verifySnapshot(saved, { signal: checkSignal }), snapshot)) throw new Error('Admitted cold restore backup changed.');
+      if (verifyBackup) {
+        await config.check({ signal: checkSignal });
+        if (!same(await verifySnapshot(saved, { signal: checkSignal }), snapshot)) throw new Error('Admitted cold restore backup changed.');
+      }
       checkSignal?.throwIfAborted();
     };
     const check = options => checkEvidence(options);
@@ -170,6 +173,7 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
       lock: structuredClone(lock), state: structuredClone(state), snapshot: structuredClone(snapshot),
       service, providers: config.providers, authorizedPaths: Object.freeze(authorizedPaths), lease, check, close,
       checkRecoverySources: options => checkEvidence(options, true),
+      checkRecoveryStopped: options => checkEvidence(options, true, false),
     });
   } catch (error) {
     try { await close(); }

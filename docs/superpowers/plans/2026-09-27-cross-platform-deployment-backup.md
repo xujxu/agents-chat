@@ -4445,6 +4445,38 @@ and refusal to repair a malformed staging record. Full implementation
 acceptance is pending. This lease is not yet the file restoration, activation,
 state transition or terminal recovery-cleanup composition.
 
+Lease implementation `d6ff7b8` / `36442221791` passed all nine Actions jobs,
+including both killed-controller publication boundaries and malformed staging
+refusal. The original application lock/state remain unchanged.
+
+### Actual cold file restoration under the recovery lease
+
+`linux-cold-restore-files.mjs` applies the admitted complete project and external
+snapshot through the existing destructive primitives, with explicit data-loss
+acknowledgement, per-stage deadlines and retained stopped-service ownership.
+Every primitive receives the exact admitted snapshot. Runtime Node/npm
+executables inside the mutable project are refused during backup admission.
+
+The repeated stopped-authority callback checks lock/state, owned service,
+workers and lease evidence without rehashing the entire backup for every
+top-level project entry. Full backup/configuration checks still occur at
+admission, stage boundaries and the underlying restoration integrity checks.
+Each new stage supplies its own signal; returned authority must not retain an
+expired admission-stage signal.
+
+After both project and external restoration verify, publish a private immutable
+`recovery-lock/files-restored.json` checkpoint bound to the original operation
+and exact backup. Retain its file identity/content through lease renewal.
+Reentry always repeats restoration rather than treating that checkpoint as
+proof that externally writable application files have stayed unchanged.
+This stage returns only `files-restored`: it does not start the service, change
+application state or unlock.
+
+Causal tests `3358dd8` kill a cold controller after deleting the first saved-data
+file, then require a new controller to restore actual saved bytes and service
+files while preserving the old lock/state and keeping MainPID zero. The
+checkpoint is inspected separately from final application acceptance.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

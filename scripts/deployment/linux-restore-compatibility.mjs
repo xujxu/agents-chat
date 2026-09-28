@@ -8,6 +8,9 @@ const inside = (parent, file) => file === parent || file.startsWith(parent + pat
 
 export function validateLinuxRestoreSnapshot({ identity, manifest, authorizedPaths }) {
   const { runtime, sources, executables } = identity;
+  if (executables.some(entry => inside(runtime.project, entry.file) || inside(runtime.project, entry.target))) {
+    throw new Error('Recovery runtime executables must be outside the mutable project.');
+  }
   if (manifest.project !== runtime.project || manifest.scope !== 'project'
     || manifest.runtime.platform !== 'linux'
     || ['unit', 'uid', 'gid', 'user', 'home'].some(key => manifest.runtime[key] !== runtime[key])

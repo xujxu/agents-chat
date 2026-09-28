@@ -14,6 +14,11 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export const coldRestoreSnapshotDigest = snapshot => digest(Buffer.from(JSON.stringify(snapshot)));
 const parse = bytes => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
 const validDigest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+const filesReceipt = record => ({
+  version: 1, phase: 'files-restored', project: record.project,
+  operationId: record.lock.operationId, token: record.lock.token,
+  backupId: record.backupId, snapshotSha256: record.snapshotSha256,
+});
 
 export async function inspectColdRestoreLease({ control, project, backup, lock, state, retain }) {
   const root = await canonicalWorkerDirectory(control, { privateMode: true });
@@ -27,7 +32,10 @@ export async function inspectColdRestoreLease({ control, project, backup, lock, 
     const entries = (await readdir(directory)).sort();
     const info = identity(location.info);
     if (name === 'cold-restore-staging' && !entries.length) return { directory, info, record: null, bytes: null };
-    if (!same(entries, ['owner.json'])) throw new Error('Cold restore lease contains incomplete or foreign evidence.');
+    const hasReceipt = name === 'recovery-lock' && entries.includes('files-restored.json');
+    if (!same(entries, [...(hasReceipt ? ['files-restored.json'] : []), 'owner.json'])) {
+      throw new Error('Cold restore lease contains incomplete or foreign evidence.');
+    }
     const bytes = await read(path.join(directory, 'owner.json'));
     const record = captureWorkerFields(parse(bytes), [
       'version', 'project', 'backup', 'backupId', 'snapshotSha256', 'controlIdentity', 'lockIdentity',
@@ -49,7 +57,14 @@ export async function inspectColdRestoreLease({ control, project, backup, lock, 
         throw new Error('Invalid cold restore lease directory identity.');
       }
     }
-    return { directory, info, record: { ...record, owner }, bytes };
+    let receipt = null;
+    if (hasReceipt) {
+      const file = path.join(directory, 'files-restored.json');
+      const receiptBytes = await read(file);
+      if (!same(parse(receiptBytes), filesReceipt(record))) throw new Error('Cold restore file completion receipt changed.');
+      receipt = { bytes: receiptBytes, info: identity(await lstat(file)) };
+    }
+    return { directory, info, record: { ...record, owner }, bytes, receipt };
   };
   const guard = await inspect('recovery-lock');
   const staging = await inspect('cold-restore-staging');
@@ -75,11 +90,13 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
   const guard = path.join(control, 'recovery-lock');
   let guardHandle;
   let ownerHandle;
+  let receiptHandle;
+  let receipt = admitted.lease.guard?.receipt ?? null;
   let closed = false;
   const close = async () => {
     if (closed) return;
     closed = true;
-    const results = await Promise.allSettled([ownerHandle?.close(), guardHandle?.close()]);
+    const results = await Promise.allSettled([ownerHandle?.close(), receiptHandle?.close(), guardHandle?.close()]);
     const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
     try { await admitted.close(); }
     catch (error) { errors.push(error); }
@@ -148,25 +165,51 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
     guardHandle = await open(guard, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     ownerHandle = await open(ownerPath, constants.O_RDONLY | constants.O_NOFOLLOW);
     const ownerIdentity = identity(await ownerHandle.stat());
-    const check = async ({ signal } = {}) => {
+    const checkAuthority = async ({ signal } = {}, verifyBackup = true) => {
       if (closed) throw new Error('Cold restore lease is closed.');
-      await admitted.checkRecoverySources({ signal });
+      if (verifyBackup) await admitted.checkRecoverySources({ signal });
+      else await admitted.checkRecoveryStopped({ signal });
       if (owner.pid !== process.pid || await processIdentity(process.pid) !== owner.processIdentity
         || !same(identity((await canonicalWorkerDirectory(guard, { privateMode: true })).info), guardIdentity)
         || !same(identity(await guardHandle.stat()), guardIdentity)
         || (await ownerHandle.stat()).nlink !== 1 || !same(identity(await ownerHandle.stat()), ownerIdentity)
-        || !same((await readdir(guard)).sort(), ['owner.json'])
+        || !same((await readdir(guard)).sort(), [...(receipt ? ['files-restored.json'] : []), 'owner.json'])
         || !same(identity(await lstat(ownerPath)), ownerIdentity)
         || !(await readWorkerFile(ownerPath, 1024 * 1024, { privateMode: true })).equals(bytes)
         || (await readdir(control)).includes('cold-restore-staging')) {
         throw new Error('Current cold restore lease authority changed.');
       }
+      if (receipt) {
+        const file = path.join(guard, 'files-restored.json');
+        if (!same(identity(await lstat(file)), receipt.info)
+          || !(await readWorkerFile(file, 1024 * 1024, { privateMode: true })).equals(receipt.bytes)
+          || receiptHandle && ((await receiptHandle.stat()).nlink !== 1
+            || !same(identity(await receiptHandle.stat()), receipt.info))) {
+          throw new Error('Cold restored-files receipt was replaced.');
+        }
+      }
     };
+    const check = options => checkAuthority(options);
     await check();
     return Object.freeze({
       owner: Object.freeze(owner), lock: admitted.lock, state: admitted.state, snapshot: admitted.snapshot,
       service: admitted.service, providers: admitted.providers, authorizedPaths: admitted.authorizedPaths,
       check, close,
+      async checkStopped(options) {
+        await checkAuthority(options, false);
+        return Object.freeze({ stopped: true, inhibited: true });
+      },
+      async markFilesRestored(options) {
+        await check(options);
+        if (receipt) return;
+        const file = path.join(guard, 'files-restored.json');
+        const bytes = Buffer.from(`${JSON.stringify(filesReceipt(record))}\n`);
+        await writeWorkerFile(file, bytes);
+        await syncWorkerDirectory(guard);
+        receiptHandle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+        receipt = { bytes, info: identity(await receiptHandle.stat()) };
+        await check(options);
+      },
     });
   } catch (error) {
     try { await close(); }
