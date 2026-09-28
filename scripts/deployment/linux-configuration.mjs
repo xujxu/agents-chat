@@ -91,7 +91,7 @@ export async function inspectLinuxConfiguration({ service, profile, signal }) {
       }
     };
     await check();
-    return Object.freeze({ ...files, check });
+    return Object.freeze({ ...files, checkFiles: files.check, check });
   } catch (error) {
     signal?.throwIfAborted();
     if (error?.code === 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED') throw error;

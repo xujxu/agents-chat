@@ -3987,3 +3987,48 @@ failure. Existing abstract adapters without a retained checker keep their prior
 contract; the concrete Linux adapter always supplies one. Public deployment
 controller, inactive/first-install native admission and Windows integration are
 still not wired. Do not mistake this checkpoint for application lifecycle delivery.
+
+**Retained-check checkpoint:** `013338276c284abb065a53ae54a0d54b273d03e2` /
+Actions `36405903448` passed all nine jobs. Causal `36404995443` was cancelled
+after the intended shared skipped-recheck and native stale-signal failures were
+observed; implementation acceptance was not substituted by rerunning failed tests.
+
+### Complete project scope and Linux external resources
+
+Backup inventory now selects all actual project top-level contents except `.git`,
+`logs`, `.npm`, `.pnpm-store`, with nested `.next/cache` and `node_modules/.cache`
+excluded explicitly. It never treats `.data/deployments` or unknown model/asset
+directories as disposable. Nested repository/worktree markers and links into
+excluded content refuse instead of creating incomplete snapshots. Entry counts
+and manifest bytes are bounded. Optional runtime/configuration paths are recorded
+as absent and checked before capture and completion; scope identity/top-level
+inventory can be rechecked before copying. Existing callers without explicit
+absence/exclusions remain supported. These are additive fields in the unpublished
+snapshot-v1 format, not a claim of compatibility with a shipped restore reader.
+
+Scope causal `72c5d72` / `36407100381` failed on the missing scope module in both
+shared jobs, then was cancelled to advance full implementation validation.
+Implementation `1effc08` / `36407209112` passed all nine jobs. External resource causal
+contracts `c689843` / `36407467455` require Linux unit/drop-in/environment files,
+source modes/uid/gid, checksums, and explicit absence in the same completed
+snapshot. The Linux causal job failed on missing external metadata/payload,
+missing rejection and dropped special mode bits; the remaining run was cancelled
+after those failures were established. They require no stored secrets in metadata,
+private payload files, and refuse unsupported Windows ACL capture. Native
+stopped-systemd and final-authority-check causal tests are committed at `22c3ea3`,
+Actions `36408441381`: native job failed on missing `linux-snapshot.mjs`, shared
+contracts failed on the missing final source recheck. Implementation now captures
+external files with byte/identity retention and private payloads, and composes
+native stopped authority with file-only configuration rechecks. Cancellation in
+the final source check cannot write the completion marker. Full matrix acceptance
+is pending the implementation commit.
+
+The native Linux wrapper must prove original stopped/inhibited service authority,
+recheck admitted configuration bytes without requiring the process still run,
+and capture original unit/drop-ins, never its temporary deployment inhibitor.
+Recheck runtime/configuration/scope immediately before writing the completion
+marker. This work does not yet implement no-build restoration or Windows ACLs;
+extended permission support and saved restore engine remain delivery requirements.
+External inputs are bounded to 64 files of at most 1 MiB each. Even optional files
+require an existing canonical parent directory; unsupported missing parents refuse
+rather than inventing restoration ownership/permissions for an uncaptured directory.

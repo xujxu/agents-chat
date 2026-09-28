@@ -30,8 +30,6 @@ export async function admitLinuxCompatibility({ service, operation, commit, sign
   return Object.freeze({
     compatibility: 'passed', commit: target.commit, mode: target.mode,
     adapter: target.mode === 'historical' ? 'agents-chat-638c553' : 'protocol-1',
-    runtime, configuration: Object.freeze({
-      status: configuration.status, profile: configuration.profile, providers: configuration.providers,
-    }), data, pendingChecks: Object.freeze([]), check,
+    runtime, configuration, data, pendingChecks: Object.freeze([]), check,
   });
 }

@@ -96,6 +96,7 @@ export async function inventorySnapshot(project, files, { signal, excludedPaths 
     const file = path.join(root, relative);
     const info = await lstat(file);
     if (info.dev !== rootDevice) throw new Error(`Snapshot path crosses filesystem: ${relative}`);
+    if (info.mode & 0o7000) throw new Error('Snapshot source has unsupported special permission bits.');
     const metadata = { path: relative, mode: info.mode & 0o777, uid: info.uid, gid: info.gid };
     if (info.isSymbolicLink()) {
       const target = await readlink(file);

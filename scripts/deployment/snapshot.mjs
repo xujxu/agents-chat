@@ -11,6 +11,7 @@ import {
 } from './snapshot-files.mjs';
 export { inventorySnapshot } from './snapshot-files.mjs';
 export { rotateSnapshot, reconcileSnapshotSlots } from './snapshot-rotation.mjs';
+import { captureExternalSnapshot, validateExternalSnapshot, verifyExternalSnapshot } from './snapshot-external.mjs';
 
 export function estimateRequiredBytes({ snapshotBytes, metadataBytes, deploymentBytes }) {
   const values = [snapshotBytes, metadataBytes, deploymentBytes];
@@ -28,6 +29,7 @@ function validateManifest(manifest) {
     || !['observed', 'verified'].includes(manifest.source?.provenance)
     || manifest.runtime?.state !== 'stopped' || !['linux', 'win32'].includes(manifest.runtime?.platform)
     || !Array.isArray(manifest.entries)) throw new Error('Invalid snapshot manifest.');
+  validateExternalSnapshot(manifest.externalFiles ?? [], manifest.project);
   const seen = new Map();
   for (const entry of manifest.entries) {
     relativeSnapshotPath(entry.path);
@@ -72,8 +74,11 @@ function validateManifest(manifest) {
 
 export async function createSnapshot({
   project, destination, id, files, source, runtime, signal, absentPaths = [], excludedPaths = [],
+  externalFiles = [], checkSource,
 }) {
   signal?.throwIfAborted();
+  if (checkSource !== undefined && typeof checkSource !== 'function') throw new Error('Snapshot source check must be callable.');
+  await checkSource?.();
   if (runtime?.state !== 'stopped') throw new Error('Snapshot requires a stopped runtime.');
   const root = await realDirectory(project);
   const parent = await realDirectory(path.dirname(destination));
@@ -81,6 +86,7 @@ export async function createSnapshot({
   if (target === root || target.startsWith(root + path.sep)) {
     throw new Error('Snapshot destination must be outside the application.');
   }
+  const external = await captureExternalSnapshot({ files: externalFiles, project: root, destination: target, signal });
   absentPaths = snapshotPathList(absentPaths);
   excludedPaths = snapshotPathList(excludedPaths);
   await assertSnapshotAbsent(root, absentPaths);
@@ -101,10 +107,11 @@ export async function createSnapshot({
   }
   const manifest = {
     version: 1, id, project: root, createdAt: new Date().toISOString(), source, runtime, absentPaths, excludedPaths,
+    externalFiles: external.entries,
     entries: entries.map(entry => entry.kind === 'file' ? { ...entry, sha256: '0'.repeat(64) } : entry),
   };
   validateManifest(manifest);
-  const snapshotBytes = entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), 0);
+  const snapshotBytes = entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), external.bytes);
   const required = estimateRequiredBytes({ snapshotBytes, metadataBytes: 1024 * 1024, deploymentBytes: 0 });
   const space = await statfs(parent, { bigint: true });
   if (space.bavail * space.bsize < BigInt(required)) throw new Error('Insufficient space for snapshot bytes.');
@@ -139,11 +146,15 @@ export async function createSnapshot({
     }
     await symlink(entry.target, path.join(contents, entry.path));
   }
+  await external.copy();
   const serialized = JSON.stringify(manifest);
   if (Buffer.byteLength(serialized) > 32 * 1024 * 1024) throw new Error('Snapshot manifest exceeds size limit.');
   await assertSnapshotAbsent(root, absentPaths);
+  await external.check();
   signal?.throwIfAborted();
   await writePrivateFile(path.join(target, 'manifest.json'), serialized);
+  signal?.throwIfAborted();
+  await checkSource?.();
   signal?.throwIfAborted();
   await writePrivateFile(path.join(target, 'complete.json'), JSON.stringify({
     version: 1, id, sha256: createHash('sha256').update(serialized).digest('hex'),
@@ -169,9 +180,12 @@ export async function verifySnapshot(destination, { signal } = {}) {
     throw new Error('Snapshot owner does not match manifest.');
   }
   const topLevel = (await readdir(root)).sort();
-  if (JSON.stringify(topLevel) !== JSON.stringify(['complete.json', 'files', 'manifest.json', 'owner.json'])) {
+  const expectedTopLevel = ['complete.json', 'files', 'manifest.json', 'owner.json',
+    ...(manifest.externalFiles?.length ? ['external'] : [])].sort();
+  if (JSON.stringify(topLevel) !== JSON.stringify(expectedTopLevel)) {
     throw new Error('Unexpected snapshot files; inspection required.');
   }
+  await verifyExternalSnapshot(root, manifest.externalFiles ?? [], signal);
   const contents = await realDirectory(path.join(root, 'files'));
   await assertSnapshotAbsent(contents, manifest.absentPaths ?? []);
   const observed = await inventorySnapshot(contents, await readdir(contents), { signal });

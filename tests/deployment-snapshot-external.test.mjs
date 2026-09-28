@@ -96,3 +96,13 @@ test('failed final source authority check leaves an incomplete snapshot without 
   assert.equal(calls, 2);
   await assert.rejects(readFile(path.join(f.options.destination, 'complete.json')), { code: 'ENOENT' });
 });
+
+test('cancellation during final source check cannot seal the snapshot', async t => {
+  const f = await fixture(t);
+  const controller = new AbortController();
+  let calls = 0;
+  await assert.rejects(createSnapshot({ ...f.options, signal: controller.signal, checkSource: async () => {
+    if (++calls === 2) controller.abort(new Error('snapshot cancelled'));
+  } }), /snapshot cancelled/);
+  await assert.rejects(readFile(path.join(f.options.destination, 'complete.json')), { code: 'ENOENT' });
+});
