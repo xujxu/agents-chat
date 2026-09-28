@@ -13,7 +13,7 @@ export const node = process.execPath;
 export const npm = path.join(path.dirname(node), 'npm');
 export const quote = value => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%')}"`;
 
-export async function fixture(t, { command = `${quote(npm)} start`, settings = '', dropIn = '', nonroot = false } = {}) {
+export async function fixture(t, { command = `${quote(npm)} start`, settings = '', dropIn = '', nonroot = false, server } = {}) {
   const root = await realpath(await mkdtemp(path.join(await realpath(tmpdir()), 'agents-deployment-test-')));
   const project = path.join(root, 'app with spaces');
   await mkdir(project);
@@ -29,7 +29,7 @@ export async function fixture(t, { command = `${quote(npm)} start`, settings = '
   await writeFile(path.join(project, 'package.json'), JSON.stringify({
     private: true, scripts: { start: `${JSON.stringify(node)} server.cjs` },
   }));
-  await writeFile(path.join(project, 'server.cjs'), `
+  await writeFile(path.join(project, 'server.cjs'), server ?? `
 const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM",()=>{});setInterval(()=>require("node:fs").appendFileSync("writes","x"),20)'], { detached:true, stdio:'ignore' });
