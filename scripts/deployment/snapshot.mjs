@@ -6,7 +6,8 @@ import path from 'node:path';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import {
-  fileDigest, inventorySnapshot, readSnapshotJson, realDirectory, relativeSnapshotPath, writePrivateFile,
+  assertSnapshotAbsent, fileDigest, inventorySnapshot, readSnapshotJson, realDirectory,
+  relativeSnapshotPath, snapshotPathList, writePrivateFile,
 } from './snapshot-files.mjs';
 export { inventorySnapshot } from './snapshot-files.mjs';
 export { rotateSnapshot, reconcileSnapshotSlots } from './snapshot-rotation.mjs';
@@ -42,6 +43,21 @@ function validateManifest(manifest) {
       || path.isAbsolute(entry.target) || /[\0\r\n]/.test(entry.target))) throw new Error('Invalid snapshot link.');
     seen.set(key, entry);
   }
+  const absent = snapshotPathList(manifest.absentPaths ?? []);
+  const excluded = snapshotPathList(manifest.excludedPaths ?? []);
+  for (const name of absent) {
+    const key = process.platform === 'win32' ? name.toLowerCase() : name;
+    if ([...seen].some(([stored, entry]) => stored === key || stored.startsWith(`${key}/`)
+      || entry.kind !== 'directory' && key.startsWith(`${stored}/`))) {
+      throw new Error('Snapshot absent path conflicts with captured inventory.');
+    }
+  }
+  for (const name of excluded) {
+    const key = process.platform === 'win32' ? name.toLowerCase() : name;
+    if ([...seen.keys()].some(stored => stored === key || stored.startsWith(`${key}/`))) {
+      throw new Error('Snapshot excluded path conflicts with captured inventory.');
+    }
+  }
   for (const entry of manifest.entries) {
     const parts = entry.path.split('/');
     while (parts.length > 1) {
@@ -54,7 +70,9 @@ function validateManifest(manifest) {
   return manifest;
 }
 
-export async function createSnapshot({ project, destination, id, files, source, runtime, signal }) {
+export async function createSnapshot({
+  project, destination, id, files, source, runtime, signal, absentPaths = [], excludedPaths = [],
+}) {
   signal?.throwIfAborted();
   if (runtime?.state !== 'stopped') throw new Error('Snapshot requires a stopped runtime.');
   const root = await realDirectory(project);
@@ -63,7 +81,10 @@ export async function createSnapshot({ project, destination, id, files, source, 
   if (target === root || target.startsWith(root + path.sep)) {
     throw new Error('Snapshot destination must be outside the application.');
   }
-  const entries = await inventorySnapshot(root, files, { signal });
+  absentPaths = snapshotPathList(absentPaths);
+  excludedPaths = snapshotPathList(excludedPaths);
+  await assertSnapshotAbsent(root, absentPaths);
+  const entries = await inventorySnapshot(root, files, { signal, excludedPaths });
   // Selected nested files require their parent entries in the captured tree.
   const parents = new Set(entries.filter(entry => entry.kind === 'directory').map(entry => entry.path));
   for (const entry of [...entries]) {
@@ -79,7 +100,7 @@ export async function createSnapshot({ project, destination, id, files, source, 
     }
   }
   const manifest = {
-    version: 1, id, project: root, createdAt: new Date().toISOString(), source, runtime,
+    version: 1, id, project: root, createdAt: new Date().toISOString(), source, runtime, absentPaths, excludedPaths,
     entries: entries.map(entry => entry.kind === 'file' ? { ...entry, sha256: '0'.repeat(64) } : entry),
   };
   validateManifest(manifest);
@@ -119,6 +140,8 @@ export async function createSnapshot({ project, destination, id, files, source, 
     await symlink(entry.target, path.join(contents, entry.path));
   }
   const serialized = JSON.stringify(manifest);
+  if (Buffer.byteLength(serialized) > 32 * 1024 * 1024) throw new Error('Snapshot manifest exceeds size limit.');
+  await assertSnapshotAbsent(root, absentPaths);
   signal?.throwIfAborted();
   await writePrivateFile(path.join(target, 'manifest.json'), serialized);
   signal?.throwIfAborted();
@@ -150,6 +173,7 @@ export async function verifySnapshot(destination, { signal } = {}) {
     throw new Error('Unexpected snapshot files; inspection required.');
   }
   const contents = await realDirectory(path.join(root, 'files'));
+  await assertSnapshotAbsent(contents, manifest.absentPaths ?? []);
   const observed = await inventorySnapshot(contents, await readdir(contents), { signal });
   const byPath = new Map(observed.map(entry => [entry.path, entry]));
   if (byPath.size !== manifest.entries.length) throw new Error('Snapshot inventory integrity failure.');

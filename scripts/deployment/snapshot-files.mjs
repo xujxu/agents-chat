@@ -54,16 +54,42 @@ export async function readSnapshotJson(file) {
   catch (cause) { throw new Error('Invalid snapshot manifest JSON.', { cause }); }
 }
 
-export async function inventorySnapshot(project, files, { signal } = {}) {
+export function snapshotPathList(paths) {
+  if (!Array.isArray(paths) || paths.length > 4096) throw new Error('Invalid snapshot path list.');
+  const seen = new Set();
+  for (const name of paths) {
+    relativeSnapshotPath(name);
+    const key = process.platform === 'win32' ? name.toLowerCase() : name;
+    if (seen.has(key)) throw new Error('Duplicate snapshot path.');
+    seen.add(key);
+  }
+  return [...paths];
+}
+
+export async function assertSnapshotAbsent(root, paths) {
+  for (const name of snapshotPathList(paths)) {
+    try { await lstat(path.join(root, name)); }
+    catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+    throw new Error('A snapshot path recorded as absent is now present.');
+  }
+}
+
+export async function inventorySnapshot(project, files, { signal, excludedPaths = [] } = {}) {
   signal?.throwIfAborted();
   const root = await realDirectory(project);
   if (!Array.isArray(files) || !files.length) throw new Error('Snapshot requires explicit paths.');
+  const excluded = snapshotPathList(excludedPaths);
   const entries = [];
   const seen = new Set();
   const rootDevice = (await lstat(root)).dev;
   async function visit(relative) {
     signal?.throwIfAborted();
     relativeSnapshotPath(relative);
+    if (excluded.some(name => relative === name || relative.startsWith(`${name}/`))) return;
+    if (relative.split('/').some(part => part.toLowerCase() === '.git')) {
+      throw new Error('Nested repository/worktree content is unsupported in a deployment snapshot.');
+    }
+    if (entries.length >= 250000) throw new Error('Snapshot inventory exceeds entry budget.');
     const identity = process.platform === 'win32' ? relative.toLowerCase() : relative;
     if (seen.has(identity)) throw new Error(`Duplicate snapshot path: ${relative}`);
     seen.add(identity);
