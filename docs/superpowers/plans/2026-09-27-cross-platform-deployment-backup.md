@@ -3768,18 +3768,53 @@ ADMIN_EMAILS fallback. Return provider names only; errors report static setting
 names/check codes, never supplied values. This is an auth configuration check,
 not collection of service env files or validation of every app setting.
 
-- [ ] Push `tests/deployment-target-compatibility.test.mjs` into existing installed
+- [x] Push `tests/deployment-target-compatibility.test.mjs` into existing installed
   Ubuntu/Windows matrix and observe missing-module failures. Use cloned disposable
   Git repos with real historical objects; assert checkout/index unchanged.
-- [ ] Implement fixed-profile source binding, regular blob mode/size checks,
+- [x] Implement fixed-profile source binding, regular blob mode/size checks,
   local-only Git with replacement objects disabled and bounded JSON declarations.
   Read blobs by immutable object identity, check bytes against the object digest,
   and sanitize all Git/parse errors. Cancellation precedes and bounds each read.
-- [ ] Add compatibility.json with exact database/config/runtime profile names.
+- [x] Add compatibility.json with exact database/config/runtime profile names.
   Keep `protocol.json` schema unchanged. Do not add package dependencies.
-- [ ] Implement explicit effective-env auth checks; validate target/error secret
+- [x] Implement explicit effective-env auth checks; validate target/error secret
   non-disclosure and prove combined partial results still cannot yield
   `compatibility: passed` or cause downtime.
-- [ ] Inspect both new matrices plus native regressions and checkpoint. Persisted
+- [x] Inspect both new matrices plus native regressions and checkpoint. Persisted
   row-content compatibility, effective-environment collection, integrity/runtime
   observation and public admission wiring remain required before full step1 closes.
+
+**Checkpoint (2026-09-28):** Final executable/tests
+`122ed90aa11a5c33b56e4637c8f82860eb3b398a`, Actions `36373234163`: all eight jobs
+passed. Installed admission matrices each passed 80 contracts (39 database and
+41 target/config); all six pre-existing shared/native jobs passed. Test-only
+`7fe2d44` / `36371985871` failed both installed matrices because target inspector
+was missing, with the other six jobs green. Implementation `666b9d8` /
+`36372584715` passed before the final object-substitution/config boundary tests.
+
+Target inspection requires a literal SHA-1 commit and regular non-executable
+declaration blobs no larger than 16KiB. It disables Git replacements, lazy fetch
+and optional locks, removes inherited Git redirection, reads declarations by blob
+ID and verifies their byte digest. Real disposable-repository tests cover dirty
+checkout/index preservation, altered package/lock/store/auth sources, unsupported
+declarations and runtime versions, replacements and executable/symlink modes.
+No candidate module is imported and no fetch, checkout or index refresh is used.
+The current branch HEAD declares the reviewed profiles and passes inspection.
+
+Configuration tests cover complete provider pairs, no-provider refusal, URL
+credentials/fragments, placeholder secrets, bounded scalar settings, rejected
+accessors/inherited settings, Azure public-client behavior and GitHub allowlist
+fallback. Results contain only static profile/provider names, not env values or
+hashes of low-entropy secrets. The caller must supply the actual effective service
+environment; process.env is not implicitly consulted for configuration.
+
+**Remaining:** neither target/config nor database inspection returns
+`compatibility: passed`. A transaction test proves their combined partial results
+still refuse before record/capacity/stop. This checkpoint does not complete
+delivery step1: persisted data content/integrity, effective service environment
+collection, native runtime-version observation and final admission orchestration
+remain. The fixed reviewed Node24 profile deliberately refuses other majors;
+expanding it or accepting changed package/store/auth files requires explicit
+review and acceptance, not copying the profile declaration. Historical baseline
+protocol remains null and needs a distinct historical adapter. Public
+deploy/update/restore scripts, main, PR and the live installation remain untouched.
