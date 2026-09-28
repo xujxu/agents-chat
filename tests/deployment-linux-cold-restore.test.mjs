@@ -9,6 +9,8 @@ import { interrupted } from './deployment-linux-service-recovery-fixture.mjs';
 import { releaseLock } from '../scripts/deployment/state.mjs';
 import { admitLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-admission.mjs';
 import { claimLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-lease.mjs';
+import { restoreLinuxColdFiles } from '../scripts/deployment/linux-cold-restore-files.mjs';
+import { systemctl } from './deployment-linux-service-fixture.mjs';
 
 async function candidate(t, phase = 'stopped') {
   const f = await restoreCandidate(t);
@@ -124,3 +126,41 @@ for (const pause of ['staged', 'published']) {
     await assert.rejects(claimLinuxColdRestore({ ...f, acceptDataLoss: true }), /alive|owner/i);
   });
 }
+
+test('cold file restoration resumes after controller death during project removal without unlocking or starting the service', async t => {
+  const f = await candidate(t);
+  await f.kill();
+  const originalLock = await readFile(path.join(f.control, 'lock', 'owner.json'));
+  const originalState = await readFile(path.join(f.control, 'state.json'));
+  const child = fork(new URL('./deployment-cold-files-child.mjs', import.meta.url),
+    [f.control, f.project, f.backup], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let diagnostic = '';
+  child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
+  const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
+  });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Cold file restore did not pause: ${diagnostic}`)), 90000);
+    child.once('message', message => { clearTimeout(timer); resolve(message); });
+    child.once('exit', code => { clearTimeout(timer); reject(new Error(`Cold file restore exited ${code}: ${diagnostic}`)); });
+    child.once('error', error => { clearTimeout(timer); reject(error); });
+  });
+  child.kill('SIGKILL');
+  await exited;
+  await assert.rejects(readFile(path.join(f.project, 'saved-data')), { code: 'ENOENT' });
+  const restored = await restoreLinuxColdFiles({ ...f, acceptDataLoss: true, timeoutSeconds: 90 });
+  t.after(() => restored.close());
+  assert.equal(restored.status, 'files-restored');
+  assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'backup data');
+  assert.deepEqual(await readFile(path.join(f.project, 'server.cjs')), await readFile(path.join(f.backup, 'files', 'server.cjs')));
+  assert.equal((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim(), '0');
+  assert.deepEqual(await readFile(path.join(f.control, 'lock', 'owner.json')), originalLock);
+  assert.deepEqual(await readFile(path.join(f.control, 'state.json')), originalState);
+  await restored.check();
+  const receipt = JSON.parse(await readFile(path.join(f.control, 'recovery-lock', 'files-restored.json'), 'utf8'));
+  assert.equal(receipt.phase, 'files-restored');
+  assert.equal(receipt.backupId, 'live-restore');
+  assert.equal(receipt.token, f.lock.token);
+});
