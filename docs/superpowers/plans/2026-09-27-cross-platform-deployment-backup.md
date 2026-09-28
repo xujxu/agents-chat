@@ -4050,3 +4050,26 @@ synchronized after completion. Capacity includes actual serialized manifest size
 and over-budget manifests refuse before creating staging. These durability
 operations are not a power-loss simulation or a Windows directory-ACL guarantee.
 Implementation full matrix is pending. Public restoration is still not wired.
+
+**Completion acceptance:** `858a8f0a255bb9a619f310b82675e496139db957` /
+Actions `36410292431` passed all nine jobs. OOM recovery confirmed a clean
+worktree at that commit; none of the accepted workloads were repeated locally.
+
+### Explicit restore transaction
+
+The shared restore coordinator requires literal data-loss acknowledgement before
+any callback, validates managed runtime ownership and a retained backup check,
+checks capacity, and rechecks the backup with a fresh stage signal before downtime.
+It records restore-preflight/restoring/restore-activating/restored and calls only
+stop, file restoration, configuration restoration, no-build activation and health
+verification. No dependency, build, source-selection, backup creation or rotation
+operation belongs in restoration. Health verification cannot be disabled.
+
+Settled failures after stop leave recovery-required and stop partial activation
+using a fresh cleanup signal. Unsettled writers instead leave blocked and forbid
+further restoration/activation; cleanup and state-write errors preserve the
+original error. The authoritative backup remains available for retry, not removed
+or rotated. Causal `fbed2eb` / `36412176382` failed in Linux contracts on the
+missing coordinator, then was cancelled to advance implementation. Native file
+restoration, cold restore authority and external recovery entry remain unimplemented;
+shared coordinator acceptance alone is not no-build application recovery acceptance.
