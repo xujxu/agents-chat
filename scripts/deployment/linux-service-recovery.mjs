@@ -9,6 +9,7 @@ import { processIdentity } from './process-identity.mjs';
 import { inspectLinuxService } from './linux-service-inspection.mjs';
 import { workerEngineFiles } from './saved-worker-engine.mjs';
 import { acquireRecoveryAdmission } from './linux-recovery-admission.mjs';
+import { validateWorkerRetirementHandoff } from './linux-worker-retirement-handoff.mjs';
 import { finishServiceRecovery, readServiceCompletion, recoveryPathExists, validateRecoveryLease } from './linux-recovery-completion.mjs';
 import { canonicalWorkerDirectory, externalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
 
@@ -171,6 +172,19 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
     if (ownerPresent && !same(captureLockOwner(parse(await checkFile(original.lockFile))), original.lock)) {
       throw new Error('Original service lock does not match intent.');
     }
+    const workerMarkerPath = path.join(root, 'worker-retirement.json');
+    let workerMarker;
+    if (await recoveryPathExists(workerMarkerPath)) {
+      if (!live || !lockPresent || !ownerPresent) {
+        throw new Error('Worker handoff requires the original live service receipt and lock.');
+      }
+      for (const entry of original.files) await absent(entry.file);
+      const bytes = await readWorkerFile(workerMarkerPath, maximum, { privateMode: true });
+      validateWorkerRetirementHandoff(bytes, root, original);
+      workerMarker = { file: workerMarkerPath, ...identity(await lstat(workerMarkerPath)),
+        bytes: bytes.length, sha256: digest(bytes) };
+      await retain(workerMarker);
+    }
     const entries = [...original.files, ...(original.workers?.files ?? [])];
     const enginePath = path.join(root, 'worker-engine');
     let enginePresent = false;
@@ -232,6 +246,8 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
       await checkDirectory(path.dirname(original.inhibition), original.heldParentIdentity, false);
       await absent(original.inhibition);
       await checkFile(marker);
+      if (workerMarker) await checkFile(workerMarker);
+      else await absent(workerMarkerPath);
       await checkFile(original.stateFile);
       if (!live || ownerPresent) await checkFile(original.lockFile);
       else await absent(original.lockFile.file);
@@ -247,6 +263,7 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
       const workerNames = [...remaining.keys()].filter(file => path.dirname(file) === root
         && path.basename(file).startsWith('worker-')).map(file => path.basename(file));
       if (enginePresent) workerNames.push('worker-engine');
+      if (workerMarker) workerNames.push('worker-retirement.json');
       if (!same(names.filter(name => name.startsWith('worker-')).sort(), workerNames.sort())) {
         throw new Error('Worker evidence differs from the pinned combined handoff.');
       }
@@ -286,6 +303,13 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
       lease = { file: leasePath, ...identity(await lstat(leasePath)), bytes: bytes.length, sha256: digest(bytes) };
       ownLease = true;
       await retain(lease);
+    }
+    if (workerMarker) {
+      await check();
+      // The original service receipt still pins every remaining worker file.
+      await unlink(workerMarkerPath);
+      workerMarker = null;
+      await syncWorkerDirectory(root);
     }
     for (const entry of entries) {
       if (!remaining.has(entry.file)) continue;
