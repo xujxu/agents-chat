@@ -4106,3 +4106,25 @@ This is a project-file primitive, not yet a public restore: the external unit/en
 restorer, durable cold restore authority, Git provenance/index restoration,
 saved recovery engine, native activation and extended permission/Windows ACL
 support remain required. No application restore acceptance is claimed here.
+
+**Project restore acceptance:** `a96f85c0e63bb7e69ecfbd2d19928016833753f6` /
+Actions `36413305133` passed all nine jobs, including actual stopped systemd
+project restoration with original non-root ownership.
+
+### Authorized external-file restoration
+
+The Linux external restore primitive requires an exact independently authorized
+destination list, acknowledged data loss, stopped/inhibited authority and a valid
+snapshot belonging to the project. Before any file mutation it checks every
+parent, destination type/link count, payload digest, ownership applicability and
+space. Missing parents refuse instead of inventing directory metadata. It restores
+saved bytes/modes/uid/gid or original absence, flushes writes and parent directories,
+and verifies the resulting files and unchanged backup. Partial writes are retryable
+from the same backup and never allocate additional retained copies.
+
+Causal `526a2b0` / `36415354573` failed on missing `restore-external.mjs` in Linux
+contracts and was cancelled after recording that evidence. Implementation validation
+is pending. The caller must derive authorization from native restore evidence, not
+blindly echo a manifest. Existing live stop authority intentionally rejects changed
+unit-source evidence, so this primitive is not yet composed with service activation.
+Cold/native restoration authority and external recovery tooling remain outstanding.
