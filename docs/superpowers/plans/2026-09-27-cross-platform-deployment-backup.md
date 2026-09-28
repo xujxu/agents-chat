@@ -3665,33 +3665,79 @@ instead of declaring a destructive startup safe. Do not modify application
 migration behavior in this batch. Persisted JSON content and target-version
 semantics need separate checks; schema support alone cannot authorize downtime.
 
-- [ ] Add `tests/deployment-database-fixture.mjs`: derive test-only DDL from the
+- [x] Add `tests/deployment-database-fixture.mjs`: derive test-only DDL from the
   five pinned historical blobs (verify Git blob IDs), never import store modules.
   Fixtures create databases using the repository's installed `better-sqlite3`.
-- [ ] Add `tests/deployment-database-compatibility.test.mjs`: actual historical
+- [x] Add `tests/deployment-database-compatibility.test.mjs`: actual historical
   schema, lazy groups, committed WAL-only schema changes, missing database/
   sidecar, unknown table/column/type/default/index/view/trigger/version/migration,
   partial group and populated orchestrations; verify no main/WAL byte changes
   or new application files after success and refusal.
-- [ ] Run a dedicated Ubuntu/Windows Actions matrix with `npm ci` and
+- [x] Run a dedicated Ubuntu/Windows Actions matrix with `npm ci` and
   `node --test tests/deployment-database-compatibility.test.mjs`. First observe
   missing inspector failure; no local installs/tests.
-- [ ] Add `database-shape-policy.mjs` with fixed, trusted reference DDL and
+- [x] Add `database-shape-policy.mjs` with fixed, trusted reference DDL and
   groups. Add `database-compatibility.mjs` exporting
   `inspectDeploymentDatabases({ project, profile, signal })`. Require the explicit
   supported profile, return only `status: 'schema-supported'` per existing DB
   or `status: 'absent'`, never `compatibility: 'passed'`.
-- [ ] Resolve `better-sqlite3` from the installed project, open with
+- [x] Resolve `better-sqlite3` from the installed project, open with
   `{readonly:true,fileMustExist:true}`, use `query_only` and one read transaction
   per DB, compare bounded table/column/foreign-key/index metadata against a
   trusted in-memory reference. Never call store initialization or checkpoint.
   Reject unknown/corrupt formats with a static error code and next action.
-- [ ] Require canonical regular single-link DB files; reject rollback journals.
+- [x] Require canonical regular single-link DB files; reject rollback journals.
   Read the SQLite header before opening. WAL mode requires existing nonempty
   WAL/SHM files, avoiding SQLite's missing-sidecar creation path; absence is a
   refusal, not permission to use immutable mode. Recheck original path identities
   after inspection. This is not a substitute for later stopped-runtime snapshot
   ownership; cross-database snapshots and adversarial path races are not claimed.
-- [ ] Push implementation, inspect all Actions results, checkpoint the exact
+- [x] Push implementation, inspect all Actions results, checkpoint the exact
   supported shapes and limits. Target Git metadata, Node/config/content checks
   and public adapter wiring remain separate required admission work.
+
+**Checkpoint (2026-09-28):** Executable
+`be6794daf326b57923d62cfbbd0f58dac9ea397e`, Actions `36370131506`: all eight jobs
+passed. Database admission passed 39 contracts on each OS; Linux shared 222,
+Windows shared 218 plus four platform skips, Linux native 70, Linux recovery 59,
+Linux handoff 20 and Windows coordinator 19 plus native Job probe. Five Windows
+cold-retirement diagnostic samples also passed; prior unexplained refusal remains
+an open investigation, not an asserted fix.
+
+Causal `469fa56` / `36368208629` failed both database jobs for the missing
+inspector while the other six jobs passed. Initial `1fbdec6` /
+`36368887672` exposed two fixture issues: chatSyncStore's DDL ends at a template
+literal without a semicolon, and Windows cleanup attempted unlink before closing
+the fixture writer. `07ec8f7` fixed those test mechanisms and passed all eight
+jobs (`36369514666`). Final `be6794d` added actual concurrent-WAL snapshot and
+existing-empty-data-directory coverage; no relaxed schema checks or retries.
+
+The inspector compares bounded schema SQL (preserving quoted literal contents)
+and table/foreign-key/index metadata to a fixed trusted in-memory schema.
+Unknown versions, tables, columns, defaults, constraints, views, triggers,
+indexes and migration keys refuse with static diagnostics; no stored values
+are exposed. Lazy groups match actual shared-store initialization. Both a
+schema refusal and a successful `schema-supported` result alone are proven
+insufficient to authorize transaction downtime. Installed binding resolution,
+hard-link refusal, absent DBs, missing sidecars, rollback journals, corrupt
+headers, orphan WAL and extra DB files have explicit coverage.
+
+For existing WAL databases the checker requires existing WAL/SHM sidecars and
+uses one SQLite read transaction per database. A concurrent writer schema change
+after the first schema read does not split that snapshot; the next independent
+inspection sees and rejects the new schema. Main database and WAL bytes and
+directory inventory are unchanged in the non-concurrent success/refusal cases.
+SHM byte equality is intentionally not asserted: SQLite readers participate in
+shared-memory coordination. No immutable mode, initialization, migration,
+checkpoint, persistent scratch DB or application file creation is used.
+
+**Limits:** closed WAL-mode databases without sidecars fail closed rather than
+allowing SQLite to create sidecars; supporting that state requires a separate
+safe inspection path. File identity rechecks do not make external writers/path
+replacement races impossible, and the two DB snapshots are not a single
+cross-database transaction. Native integration must retain appropriate runtime/
+directory ownership and recheck before mutation. This profile establishes only
+the reviewed baseline SQL shape, not row JSON validity, database-wide integrity,
+target compatibility or no-loss application restart. Target Git-object metadata,
+Node requirements, configuration/content checks, public admission wiring and
+actual historical-update acceptance remain mandatory follow-on work.
