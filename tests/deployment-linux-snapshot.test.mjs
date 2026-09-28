@@ -84,7 +84,7 @@ test('stopped native service project can recover saved data and ownership withou
     ...f, destination: backup, id: 'restore-native', source: { commit: 'a'.repeat(40), provenance: 'observed' },
   });
 
-  test('native restore activates saved artifacts with unchanged unit identity and retires only after restored acceptance', async t => {
+  await t.test('native restore activates saved artifacts with unchanged unit identity and retires only after restored acceptance', async t => {
     const f = await retained(t, { restoring: true });
     const backup = path.join(f.control, 'backup');
     const data = path.join(f.project, 'saved-data');
@@ -111,7 +111,7 @@ test('stopped native service project can recover saved data and ownership withou
       return { ...f, backup, service, configuration };
     }
 
-    test('native restore admission binds saved unit/account/executables and checks backup before downtime', async t => {
+    await t.test('native restore admission binds saved unit/account/executables and checks backup before downtime', async t => {
       const f = await restoreCandidate(t);
       const admitted = await admitLinuxRestore(f);
       assert.equal(admitted.snapshot.id, 'restore-admission');
@@ -124,7 +124,7 @@ test('stopped native service project can recover saved data and ownership withou
       await f.service.check();
     });
 
-    test('native restore admission rejects valid but incompatible saved identity before service mutation', async t => {
+    await t.test('native restore admission rejects valid but incompatible saved identity before service mutation', async t => {
       const f = await restoreCandidate(t);
       const manifestFile = path.join(f.backup, 'manifest.json');
       const completionFile = path.join(f.backup, 'complete.json');
@@ -152,7 +152,7 @@ test('stopped native service project can recover saved data and ownership withou
       }
     });
 
-    test('native restore admission rejects incompatible saved configuration before stopping the healthy installation', async t => {
+    await t.test('native restore admission rejects incompatible saved configuration before stopping the healthy installation', async t => {
       const f = await restoreCandidate(t);
       const manifest = JSON.parse(await readFile(path.join(f.backup, 'manifest.json'), 'utf8'));
       const content = Buffer.from('unsupported-private-assignment\n');
@@ -172,7 +172,7 @@ test('stopped native service project can recover saved data and ownership withou
       await f.service.check();
     });
 
-    test('failed restore health acceptance can re-inhibit and stop only its newly activated generation', async t => {
+    await t.test('failed restore health acceptance can re-inhibit and stop only its newly activated generation', async t => {
       const f = await retained(t, { restoring: true });
       await writeState(f.control, { ...await loadState(f.control), phase: 'restore-activating', previousPhase: 'restoring' });
       const activation = await f.stopped.activate({ purpose: 'restore' });
@@ -190,7 +190,7 @@ test('stopped native service project can recover saved data and ownership withou
       assert.equal((await loadState(f.control)).phase, 'restore-activating');
     });
 
-    test('activation failure cleanup refuses a replacement service generation rather than stopping it', async t => {
+    await t.test('activation failure cleanup refuses a replacement service generation rather than stopping it', async t => {
       const f = await retained(t, { restoring: true });
       await writeState(f.control, { ...await loadState(f.control), phase: 'restore-activating', previousPhase: 'restoring' });
       await f.stopped.activate({ purpose: 'restore' });

@@ -4353,8 +4353,9 @@ retirement-fixture failure: a PowerShell process-start identity query exited
 after roughly 33 seconds with no stderr (query budget is 30 seconds). This is
 not evidence of a cold-inspection regression or an established timeout cause.
 `8d94eb2` adds bounded code/signal/killed fixture diagnostics; no retry, identity
-relaxation or timeout increase was added. Implementation `bb8e75f` is awaiting
-its full Actions gate. Additional native coverage kills the controller after
+relaxation or timeout increase was added. Implementation `bb8e75f` passed all
+nine jobs in `36433873228`; this does not classify the earlier Windows failure.
+Additional native coverage kills the controller after
 its activated-generation stop receipt and binds both original inhibitor links.
 
 ### Saved effective configuration before destructive restoration
@@ -4379,6 +4380,15 @@ the healthy installed generation stays unchanged. This is also a prerequisite
 for cold restoration, where inspecting a nonexistent old process environment
 cannot establish the restored configuration. Remote red/green evidence is
 pending; no tests or servers were run locally.
+
+Run `36434780266` at `8d94eb2` confirmed the missing saved-configuration module
+on both contract hosts. Native saved-configuration rejection was **not**
+established: an existing parent restoration activation failed, cancelling its
+unawaited nested subtests before the new assertion ran. Await those subtests
+with their explicit parent context, and capture bounded failed-unit journal
+output before fixture cleanup. Do not call a later pass a diagnosis of that
+activation failure. Cancel the remaining causal jobs after preserving these
+outcomes; the combined implementation/fixture gate must pass independently.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

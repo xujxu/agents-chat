@@ -53,6 +53,11 @@ TimeoutStopSec=2s
 ${settings}
 `;
   t.after(async () => {
+    const state = (await systemctl('show', unit, '--property=ActiveState,SubState,Result')).stdout;
+    if (/^Result=(?!success$).+/m.test(state)) {
+      const { stdout } = await native('/usr/bin/journalctl', ['-b', '--no-pager', '-n', '12', '-u', unit]);
+      t.diagnostic(`Fixture service failure before cleanup:\n${state}${stdout}`);
+    }
     await rm(dropDirectory, { recursive: true, force: true });
     await writeFile(fragment, `${bytes}\n[Unit]\nRefuseManualStop=no\n[Service]\nKillMode=control-group\nRestart=no\nExecStop=\n`);
     await systemctl('daemon-reload');

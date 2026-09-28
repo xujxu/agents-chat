@@ -28,7 +28,7 @@ export async function inspectSnapshotConfiguration({
       }
       return { path: path.join(files, relative), optional: source.optional };
     }
-    const index = snapshot.externalFiles.findIndex(entry => entry.path === source.path);
+    const index = (snapshot.externalFiles ?? []).findIndex(entry => entry.path === source.path);
     if (index < 0) throw new Error('External configuration source was not captured in the snapshot.');
     return { path: path.join(root, 'external', String(index)), optional: source.optional };
   });
