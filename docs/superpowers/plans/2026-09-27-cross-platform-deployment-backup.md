@@ -3965,3 +3965,25 @@ terminal outcome before wiring that failure path into public update/deploy.
 Unsettled workers continue to retain the lock and forbid all recovery actions.
 Windows Task/account environment admission and actual dual-platform application
 lifecycle acceptance remain required; fixture-native acceptance is not that gate.
+
+**Live Linux admission/closeout checkpoint:** `39a313e0be3a1ee7372a7a51ccac0f1be8262516`
+/ Actions `36404188122` passed all nine jobs. Native composed tests prove declared
+and exact historical target admission, original-runtime preservation on invalid
+auth/legacy data, and configuration/data mutation refusal on recheck. The root
+controller reads Git objects using a command-scoped safe.directory for the exact
+canonical installation; no global Git trust is changed. A separate
+`preflight-refused` terminal phase permits settled worker retirement and retry
+without claiming acceptance or a restart. Native closeout verifies original
+lock/state/runtime, seals the original operation, records refusal, retires
+worker evidence and unlocks. Any failure retains evidence with recovery disallowed.
+It cannot run after a stopped/source-mutation phase.
+
+The next transaction integration is `0133382` / `36405903448` (pending): retain
+the admission object, run its check after capacity and before the first durable
+stop/source-mutation phase, and give that check a fresh cancellable stage budget.
+The initial admission stage's signal is not reused for later checks. Causal
+`42af874` / `36404995443` exposed skipped checks and the old captured-signal
+failure. Existing abstract adapters without a retained checker keep their prior
+contract; the concrete Linux adapter always supplies one. Public deployment
+controller, inactive/first-install native admission and Windows integration are
+still not wired. Do not mistake this checkpoint for application lifecycle delivery.
