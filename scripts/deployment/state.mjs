@@ -6,7 +6,7 @@ import { captureWorkerFields } from './worker-identity.mjs';
 import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 
 const transitions = {
-  preflight: ['stopped', 'source-selected'],
+  preflight: ['stopped', 'source-selected', 'preflight-refused'],
   stopped: ['copying', 'prior-runtime-restored'],
   copying: ['rotating', 'prior-runtime-restored'],
   rotating: ['backup-ready', 'prior-runtime-restored'],
@@ -23,12 +23,13 @@ const transitions = {
   accepted: [],
   restored: [],
   'prior-runtime-restored': [],
+  'preflight-refused': [],
   'recovery-required': [],
   blocked: [],
 };
 
 export function completedDeploymentPhase(phase) {
-  return ['accepted', 'restored', 'prior-runtime-restored'].includes(phase);
+  return ['accepted', 'restored', 'prior-runtime-restored', 'preflight-refused'].includes(phase);
 }
 
 export function nextPhase(from, to, { firstInstall = false } = {}) {
@@ -62,6 +63,16 @@ export function recoveryAdvice(details) {
       status: 'blocked',
       message: 'Owned workers may still write. Retain lock and backup; inspect worker termination before restore or restart.',
       command: details.diagnosticCommand, diagnostics: details.diagnosticCommand,
+    };
+  }
+  if (details.phase === 'preflight-refused') {
+    if (details.restored || !nonempty(details.retryCommand) || !nonempty(details.diagnosticCommand)) {
+      throw new Error('Refused preflight requires retry/diagnostic commands, not backup restoration.');
+    }
+    return {
+      status: 'preflight-refused',
+      message: 'Deployment was refused before downtime or source mutation. No deployment or restoration was accepted.',
+      command: details.retryCommand, diagnostics: details.diagnosticCommand,
     };
   }
   if (details.phase === 'prior-runtime-restored') {
@@ -128,6 +139,10 @@ function validateState(state) {
     && (state.operation === 'restore' || state.priorRuntime !== 'running' || state.errorCode === null
       || !['stopped', 'copying', 'rotating', 'backup-ready'].includes(state.previousPhase))) {
     throw new Error('Prior runtime recovery requires a failed pre-source operation and previously running service.');
+  }
+  if (state.phase === 'preflight-refused'
+    && (state.operation === 'restore' || state.previousPhase !== 'preflight' || state.errorCode === null)) {
+    throw new Error('Refused preflight requires a failed admission before any downtime or source mutation.');
   }
   return state;
 }
@@ -377,6 +392,12 @@ export async function reconcileInterruptedOperation(root) {
     return { status: 'interrupted', operationId: owner?.operationId ?? state?.operationId ?? null,
       phase: state?.phase ?? null,
       message: 'Interrupted deployment lock retained. Inspect owned child processes and recovery state before continuing.' };
+  }
+  if (state?.phase === 'preflight-refused') {
+    return {
+      status: 'preflight-refused', operationId: state.operationId, phase: state.phase,
+      message: 'Deployment was refused before downtime or source mutation. Inspect the admission failure before retrying.',
+    };
   }
   if (state?.phase === 'prior-runtime-restored') {
     return {
