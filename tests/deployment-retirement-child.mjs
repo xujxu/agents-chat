@@ -62,5 +62,8 @@ try {
   throw new Error('Retirement crash fixture unexpectedly completed.');
 } catch (error) {
   process.stderr.write(`${error.stack}\n`);
+  process.stderr.write(`Retirement fixture failure: ${JSON.stringify({
+    code: error.code ?? null, signal: error.signal ?? null, killed: error.killed ?? null,
+  })}\n`);
   process.exit(1);
 }
