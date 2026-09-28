@@ -36,6 +36,43 @@ test('capacity refusal leaves running application and source untouched', async (
   assert.deepEqual(calls, ['inspect', 'resolveTarget', 'admit', 'capacity']);
 });
 
+test('retained compatibility is rechecked after capacity and before any downtime or source mutation', async () => {
+  for (const existing of [false, true]) {
+    const f = fixture();
+    f.operations.inspect = async () => ({ exists: existing, running: existing, owned: true });
+    const admission = { compatibility: 'passed', check: async ({ signal }) => {
+      assert.equal(signal.aborted, false);
+      assert.equal(f.calls.at(-1), 'capacity');
+      assert.deepEqual(f.phases, []);
+      throw new Error('configuration changed after admission');
+    } };
+    f.operations.admit = async () => admission;
+    await assert.rejects(runDeployment({ operation: existing ? 'update' : 'deploy' }, f.operations), /configuration changed/);
+    assert.equal(f.calls.includes('stop'), false);
+    assert.equal(f.calls.includes('selectSource'), false);
+    assert.deepEqual(f.phases, []);
+  }
+});
+
+test('compatibility recheck uses its own cancellable stage and must settle before returning timeout', async () => {
+  const f = fixture();
+  let admittedSignal;
+  let settled = false;
+  f.operations.admit = async ({ signal }) => {
+    admittedSignal = signal;
+    return { compatibility: 'passed', check: async ({ signal: recheckSignal }) => {
+      assert.notEqual(recheckSignal, admittedSignal);
+      await new Promise(resolve => recheckSignal.addEventListener('abort', resolve, { once: true }));
+      settled = true;
+      recheckSignal.throwIfAborted();
+    } };
+  };
+  await assert.rejects(runDeployment({ operation: 'update', timeoutSeconds: 1 }, f.operations),
+    { code: 'DEPLOYMENT_STAGE_TIMEOUT', stage: 'compatibility-recheck', recoveryAllowed: true });
+  assert.equal(settled, true);
+  assert.equal(f.calls.includes('stop'), false);
+});
+
 test('backup failure restarts the unchanged previously running application', async () => {
   const { calls, phases, operations } = fixture('snapshot');
   await assert.rejects(runDeployment({ operation: 'update' }, operations), /snapshot/);

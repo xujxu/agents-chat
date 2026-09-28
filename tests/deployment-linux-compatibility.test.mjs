@@ -128,3 +128,17 @@ test('failed-preflight cleanup cannot be used after downtime was recorded', asyn
   assert.equal((await loadState(f.control)).phase, 'stopped');
   assert.equal((await f.service.check()).populated, true);
 });
+
+test('retained native compatibility accepts the new stage cancellation signal instead of keeping an expired one', async t => {
+  const f = await installation(t);
+  const old = new AbortController();
+  const result = await admitLinuxCompatibility({ ...f, commit: baseline, signal: old.signal });
+  old.abort(new Error('old admission stage is no longer active'));
+  await result.check({ signal: new AbortController().signal });
+  const cancelled = new AbortController();
+  const reason = new Error('new stage cancelled');
+  cancelled.abort(reason);
+  await assert.rejects(result.check({ signal: cancelled.signal }), error => error === reason);
+  await f.operation.seal();
+  assert.equal((await f.service.check()).populated, true);
+});
