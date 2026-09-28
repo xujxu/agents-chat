@@ -3595,15 +3595,51 @@ native fixture into `tests/deployment-linux-service-recovery-fixture.mjs`; new
 Run the new matrix in an isolated Linux Actions job, keeping the existing native
 recovery matrix (roughly seven minutes) within its ten-minute limit.
 
-- [ ] Push causal native SIGKILL contracts at worker intent, journal, first/last
+- [x] Push causal native SIGKILL contracts at worker intent, journal, first/last
   helper, helper directory, operation and marker deletion. Example result:
   `assert.equal(JSON.parse((await f.recover()).stdout).status, 'service-retired')`.
   Require original service generation/state/backup and next-operation protection.
-- [ ] Observe the expected refusals in the new Actions job before implementation:
+- [x] Observe the expected refusals in the new Actions job before implementation:
   `sudo "$(command -v node)" --test tests/deployment-linux-worker-handoff.test.mjs`.
-- [ ] Implement exact cross-binding and guarded marker transfer; keep partial,
+- [x] Implement exact cross-binding and guarded marker transfer; keep partial,
   foreign, gap, absent-lock and tampered records blocked before any deletion.
-- [ ] Require recovery-controller SIGKILL before/after transfer and during remaining
+- [x] Require recovery-controller SIGKILL before/after transfer and during remaining
   cleanup to resume, plus marker-unlink failure preserving both receipts and lock.
-- [ ] Push implementation, inspect all six Actions jobs, record exact results and
+- [x] Push implementation, inspect all six Actions jobs, record exact results and
   remaining limits, and commit the checkpoint. No local validation or live changes.
+
+**Checkpoint (2026-09-28):** Causal test-only `92da06a` /
+Actions `36365970793` produced the expected 11 handoff failures (seven original
+worker interruption paths, three recovery-controller interruptions, and the
+unreached marker-unlink fault). Nine existing/refusal paths passed; the other
+five jobs passed. The recorded cause was the unrecognized worker marker in the
+combined inventory, not a fixture timeout or missing runtime dependency.
+
+Executable `d0f27a5a5af07a6a3150f4170beb5de420093241` /
+Actions `36366523791` passed all six jobs: 20 new handoff contracts, 59 existing
+Linux recovery/admission contracts, 70 Linux native contracts, 222 Linux shared
+contracts, 218 Windows shared contracts plus four platform skips, and 19 Windows
+coordinator contracts plus the native Job probe. Five further Windows diagnostic
+samples (ten executions) passed; the previously unexplained Windows refusal
+remains unproven as fixed.
+
+The new handoff helper compares the entire worker intent to a projection of the
+validated original service intent. It grants no independent worker recovery
+authority. Both original marker handles and bytes are retained until transfer;
+all checks are repeated with the immutable exclusive recovery lease present
+before deleting the duplicate worker marker. Original service/state/lock and
+remaining file bindings continue to govern every subsequent deletion. No new
+receipt schema or synthesized ownership is needed. Eight live interruption
+cases include sealed-empty and actual settled workers and a failed-update
+`prior-runtime-restored` outcome. Recovery resumes after SIGKILL at durable lease,
+worker-marker removal and subsequent helper removal; explicit unlink failure
+keeps both handoffs, lock and recovery lease and does not authorize another
+controller while the first is alive.
+
+This resolves the coexisting complete worker/live-service marker gap noted in
+the preceding checkpoint. Partial worker-marker writes, partial initial recovery
+records, interrupted pre-acceptance service phases/reboot and Windows installed
+task/account integration remain blocked or unimplemented as previously noted.
+Full backup/restore/public entrypoints and real dual-platform application
+lifecycle acceptance are still separate delivery gates. Feature branch only;
+no main/PR/public entrypoint/live deployment changes.
