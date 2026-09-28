@@ -134,20 +134,20 @@ export async function inspectConfigurationFiles({
       }
     }
     const result = inspectConfigurationCompatibility({ profile, environment: effective });
-    const check = async () => {
+    const check = async ({ signal: checkSignal = signal } = {}) => {
       try {
-        signal?.throwIfAborted();
+        checkSignal?.throwIfAborted();
         const currentRoot = await realDirectory(project);
         const info = await lstat(currentRoot, { bigint: true });
         if (currentRoot !== root || info.dev !== rootIdentity.dev || info.ino !== rootIdentity.ino) {
           throw refusal('configuration-changed');
         }
         for (const { source, observed } of retained) {
-          signal?.throwIfAborted();
+          checkSignal?.throwIfAborted();
           if (!same(await observe(source.path, source.optional), observed)) throw refusal('configuration-changed');
         }
       } catch (error) {
-        signal?.throwIfAborted();
+        checkSignal?.throwIfAborted();
         if (error?.code === 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED') throw error;
         throw refusal('configuration-recheck');
       }

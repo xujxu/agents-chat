@@ -74,18 +74,18 @@ export async function inspectLinuxConfiguration({ service, profile, signal }) {
     const config = await configuration(unit);
     const observedEnvironment = await startupEnvironment(mainPid, signal);
     const files = await inspectConfigurationFiles({ project, profile, ...config, observedEnvironment, signal });
-    const check = async () => {
+    const check = async ({ signal: checkSignal = signal } = {}) => {
       try {
-        signal?.throwIfAborted();
+        checkSignal?.throwIfAborted();
         await service.check();
         if (!same(await configuration(unit), config)
-          || !same(await startupEnvironment(mainPid, signal), observedEnvironment)) {
+          || !same(await startupEnvironment(mainPid, checkSignal), observedEnvironment)) {
           throw refusal('runtime-environment-changed');
         }
-        await files.check();
+        await files.check({ signal: checkSignal });
         await service.check();
       } catch (error) {
-        signal?.throwIfAborted();
+        checkSignal?.throwIfAborted();
         if (error?.code === 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED') throw error;
         throw refusal('runtime-configuration-changed');
       }

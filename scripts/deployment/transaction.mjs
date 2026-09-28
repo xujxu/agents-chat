@@ -23,7 +23,7 @@ export async function runDeployment(options, operations) {
   if (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds <= 0) {
     throw new Error('Invalid deployment timeout interval.');
   }
-  const context = { options, inspection: null, target: null, snapshot: null, phase: 'preflight' };
+  const context = { options, inspection: null, target: null, admission: null, snapshot: null, phase: 'preflight' };
   const invoke = async (name, recovering = false) => {
     const seconds = name === 'verify'
       ? Math.min(timeoutSeconds, recovering ? options.waitSeconds || 120 : options.waitSeconds ?? 120) : timeoutSeconds;
@@ -57,6 +57,10 @@ export async function runDeployment(options, operations) {
     if (admission?.compatibility !== 'passed') {
       throw new Error('Deployment compatibility admission must pass before downtime.');
     }
+    if (admission.check !== undefined && typeof admission.check !== 'function') {
+      throw new Error('Retained deployment compatibility check must be callable.');
+    }
+    context.admission = admission;
     const current = alreadyCurrent({
       ...admission.current, operation: options.operation, target: context.target?.commit,
     });
@@ -64,6 +68,11 @@ export async function runDeployment(options, operations) {
       return { status: 'already-current', backupCreated: false };
     }
     await invoke('capacity');
+    if (admission.check) {
+      await runStage('compatibility-recheck', signal => admission.check({ signal }), {
+        timeoutMs: Math.min(timeoutSeconds * 1000, Number.MAX_SAFE_INTEGER), signal: options.signal,
+      });
+    }
     await record('preflight');
     preflightComplete = true;
     if (inspected.exists) {

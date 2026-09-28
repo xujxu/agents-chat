@@ -73,6 +73,16 @@ test('compatibility recheck uses its own cancellable stage and must settle befor
   assert.equal(f.calls.includes('stop'), false);
 });
 
+test('a malformed retained-check field is not ignored as an absent checker', async () => {
+  for (const check of [null, false, 'not-callable']) {
+    const f = fixture();
+    f.operations.admit = async () => ({ compatibility: 'passed', check });
+    await assert.rejects(runDeployment({ operation: 'update' }, f.operations), /callable/);
+    assert.equal(f.calls.includes('capacity'), false);
+    assert.deepEqual(f.phases, []);
+  }
+});
+
 test('backup failure restarts the unchanged previously running application', async () => {
   const { calls, phases, operations } = fixture('snapshot');
   await assert.rejects(runDeployment({ operation: 'update' }, operations), /snapshot/);

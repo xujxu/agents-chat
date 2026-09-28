@@ -14,16 +14,16 @@ export async function admitLinuxCompatibility({ service, operation, commit, sign
   const configuration = await inspectLinuxConfiguration({
     service, profile: target.configurationProfile, signal,
   });
-  const inspectData = () => inspectLinuxData({
-    service, operation, profile: target.databaseProfile, signal,
+  const inspectData = (checkSignal = signal) => inspectLinuxData({
+    service, operation, profile: target.databaseProfile, signal: checkSignal,
   });
   const data = await inspectData();
   await configuration.check();
-  const check = async () => {
-    signal?.throwIfAborted();
-    await configuration.check();
-    await inspectData();
-    await configuration.check();
+  const check = async ({ signal: checkSignal = signal } = {}) => {
+    checkSignal?.throwIfAborted();
+    await configuration.check({ signal: checkSignal });
+    await inspectData(checkSignal);
+    await configuration.check({ signal: checkSignal });
   };
   // Historical mode is limited by the target reader to the exact reviewed commit
   // and source bindings. It uses this controller, never that target's deploy code.

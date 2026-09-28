@@ -136,3 +136,14 @@ test('Next environment-load suppression is refused rather than predicting files 
   await assert.rejects(inspect(project, { environment: { ...environment, __NEXT_PROCESSED_ENV: 'true' } }),
     { check: 'runtime-environment-policy' });
 });
+
+test('configuration source recheck uses the new stage signal while keeping captured evidence', async t => {
+  const project = await temporaryDeployment(t);
+  const old = new AbortController();
+  const result = await inspect(project, { signal: old.signal });
+  old.abort(new Error('previous stage ended'));
+  await result.check({ signal: new AbortController().signal });
+  await writeFile(path.join(project, '.env'), '# changed');
+  await assert.rejects(result.check({ signal: new AbortController().signal }),
+    { check: 'configuration-changed' });
+});
