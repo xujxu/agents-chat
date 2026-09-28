@@ -8,11 +8,12 @@ import { inspectLinuxService } from '../scripts/deployment/linux-service-inspect
 import { inspectLinuxConfiguration } from '../scripts/deployment/linux-configuration.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 import { createLinuxServiceSnapshot } from '../scripts/deployment/linux-snapshot.mjs';
-import { acquireLock, writeState } from '../scripts/deployment/state.mjs';
+import { acquireLock, loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { restoreProjectSnapshot } from '../scripts/deployment/restore-project.mjs';
+import { restoreExternalSnapshot } from '../scripts/deployment/restore-external.mjs';
 
-async function retained(t) {
+async function retained(t, { restoring = false } = {}) {
   const f = await fixture(t, { nonroot: true, settings: `Environment=NODE_ENV=production
 Environment=NEXTAUTH_SECRET=fixture-private-secret
 Environment=NEXTAUTH_URL=http://localhost:3010
@@ -26,16 +27,17 @@ Environment=ADMIN_PASSWORD=fixture-private-password` });
   await mkdir(control, { mode: 0o700 });
   const lock = await acquireLock(control, { project: f.project, operationId: randomUUID() });
   const state = {
-    version: 1, operationId: lock.operationId, project: f.project, operation: 'update',
-    phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
+    version: 1, operationId: lock.operationId, project: f.project, operation: restoring ? 'restore' : 'update',
+    phase: restoring ? 'restore-preflight' : 'preflight', previousPhase: null,
+    sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
     backupId: null, priorRuntime: 'running', runtimeIdentity: service.identity.runtime.invocationId,
     startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), errorCode: null,
   };
   await writeState(control, state);
-  await writeState(control, { ...state, phase: 'stopped', previousPhase: 'preflight' });
+  await writeState(control, { ...state, phase: restoring ? 'restoring' : 'stopped', previousPhase: state.phase });
   const stopped = await stopLinuxService({ ...f, control, lock });
   t.after(() => stopped.close());
-  await writeState(control, { ...state, phase: 'copying', previousPhase: 'stopped' });
+  if (!restoring) await writeState(control, { ...state, phase: 'copying', previousPhase: 'stopped' });
   return { ...f, control, lock, service, configuration, stopped };
 }
 
@@ -78,6 +80,40 @@ test('stopped native service project can recover saved data and ownership withou
   const backup = path.join(f.control, 'staging');
   await createLinuxServiceSnapshot({
     ...f, destination: backup, id: 'restore-native', source: { commit: 'a'.repeat(40), provenance: 'observed' },
+  });
+
+  test('native restore activates saved artifacts with unchanged unit identity and retires only after restored acceptance', async t => {
+    const f = await retained(t, { restoring: true });
+    const backup = path.join(f.control, 'backup');
+    const data = path.join(f.project, 'saved-data');
+    await writeFile(data, 'saved version');
+    await createLinuxServiceSnapshot({
+      ...f, destination: backup, id: 'restore-native', source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    });
+    await writeFile(data, 'post-backup version');
+    await writeFile(path.join(f.project, 'server.cjs'), 'throw new Error("partial deployment");');
+    const checkStopped = () => f.stopped.checkStopped();
+    await restoreProjectSnapshot({ project: f.project, backup, acceptDataLoss: true, checkStopped });
+    const external = (await verifySnapshot(backup)).externalFiles;
+    const unitBefore = await lstat(f.fragment, { bigint: true });
+    await restoreExternalSnapshot({
+      project: f.project, backup, acceptDataLoss: true, authorizedPaths: external.map(entry => entry.path), checkStopped,
+    });
+    assert.deepEqual(await lstat(f.fragment, { bigint: true }), unitBefore);
+    const restored = await loadState(f.control);
+    await writeState(f.control, { ...restored, phase: 'restore-activating', previousPhase: 'restoring' });
+    const activated = await f.stopped.activate({ purpose: 'restore' });
+    assert.equal(activated.status, 'active-unverified');
+    assert.equal(await readFile(data, 'utf8'), 'saved version');
+    const current = await inspectLinuxService(f);
+    t.after(() => current.close());
+    await current.check();
+    assert.notEqual(current.identity.runtime.invocationId, f.service.identity.runtime.invocationId);
+    await writeState(f.control, { ...await loadState(f.control), phase: 'restored', previousPhase: 'restore-activating' });
+    await activated.retire();
+    await releaseLock(f.control, f.lock);
+    assert.equal((await loadState(f.control)).phase, 'restored');
+    assert.equal((await verifySnapshot(backup)).id, 'restore-native');
   });
   await writeFile(file, 'changed data');
   await chown(file, 0, 0);
