@@ -5,6 +5,7 @@ import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
 import { realDirectory } from './snapshot-files.mjs';
 import { databaseGroups, databaseProfile, migrationKeys, referenceSchema } from './database-shape-policy.mjs';
+import { inspectDatabaseContent } from './database-content.mjs';
 
 function refusal(check) {
   return Object.assign(new Error(`Database admission refused: ${check}.`), {
@@ -23,7 +24,7 @@ const normalizedSql = value => value === null ? null : value.match(
   /'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|[A-Za-z_][A-Za-z_0-9]*|\d+|[^\s]/g,
 ).map(token => ["'", '"', '`', '['].includes(token[0]) ? token : token.toLowerCase()).join('');
 
-function inspectSchema(db, reference, name, signal) {
+function inspectSchema(db, reference, name, signal, content) {
   db.pragma('query_only = ON');
   db.pragma('trusted_schema = OFF');
   return db.transaction(() => {
@@ -67,11 +68,12 @@ function inspectSchema(db, reference, name, signal) {
         || db.prepare('SELECT 1 FROM orchestration_nodes LIMIT 1').get()) throw refusal('destructive-startup');
     }
     signal?.throwIfAborted();
-    return { name, status: 'schema-supported' };
+    if (content) inspectDatabaseContent(db, tables, signal, refusal);
+    return { name, status: content ? 'data-supported' : 'schema-supported' };
   })();
 }
 
-async function inspectDatabase({ directory, name, Database, reference, signal }) {
+async function inspectDatabase({ directory, name, Database, reference, signal, content }) {
   const file = path.join(directory, name);
   const files = [file, `${file}-wal`, `${file}-shm`, `${file}-journal`];
   const initial = await Promise.all(files.map(optionalStat));
@@ -100,7 +102,7 @@ async function inspectDatabase({ directory, name, Database, reference, signal })
       : initial[1] || initial[2]) throw refusal('sidecar-inventory');
     signal?.throwIfAborted();
     db = new Database(file, { readonly: true, fileMustExist: true, timeout: 1000 });
-    const result = inspectSchema(db, reference, name, signal);
+    const result = inspectSchema(db, reference, name, signal, content);
     db.close();
     db = null;
     const after = await Promise.all(files.map(optionalStat));
@@ -117,7 +119,7 @@ async function inspectDatabase({ directory, name, Database, reference, signal })
   }
 }
 
-export async function inspectDeploymentDatabases({ project, profile, signal, Database: suppliedDatabase }) {
+async function inspectDatabases({ project, profile, signal, Database: suppliedDatabase }, content) {
   signal?.throwIfAborted();
   if (profile !== databaseProfile) throw refusal('unsupported-profile');
   let reference;
@@ -140,7 +142,7 @@ export async function inspectDeploymentDatabases({ project, profile, signal, Dat
         reference = new Database(':memory:');
         reference.exec(referenceSchema);
       }
-      databases.push(await inspectDatabase({ directory, name, Database, reference, signal }));
+      databases.push(await inspectDatabase({ directory, name, Database, reference, signal, content }));
     }
     const current = await optionalStat(directory);
     if (!current || !same(identity(original), identity(current))) throw refusal('directory-replaced');
@@ -152,3 +154,6 @@ export async function inspectDeploymentDatabases({ project, profile, signal, Dat
     throw refusal('inspection-unavailable');
   } finally { reference?.close(); }
 }
+
+export const inspectDeploymentDatabases = options => inspectDatabases(options, false);
+export const inspectDeploymentData = options => inspectDatabases(options, true);
