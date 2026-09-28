@@ -3835,10 +3835,38 @@ not store initialization. Bound each JSON value at 16MiB and streamed rows at
 never truncated acceptance. Large-installation support needs a separate budget.
 Do not emit stored row values or native integrity diagnostics.
 
-- [ ] Push actual populated/WAL fixtures and failures before implementing.
-- [ ] Add data checks inside the existing coherent read transaction. Verify
+- [x] Push actual populated/WAL fixtures and failures before implementing.
+- [x] Add data checks inside the existing coherent read transaction. Verify
   integrity failures, wrong scalar/JSON/message/session/agent values and orphaned
   references without persistent mutation.
 - [ ] Validate in the installed dual-platform matrix, then continue with effective
   environment collection and the native admission coordinator, without waiting
   for another user message. Record remaining limits rather than claim full deploy.
+
+Implementation `cae81a73a303aef6fb657ed999122cdeddfefc4c`, run `36389236435`,
+passed all eight jobs after causal `49f5c5e` / `36388505663` failed both installed
+matrices on the missing data inspector export. Extended acceptance at `c9447c1`
+also covers workflow/scheduler/sync/transfer records, complete-transfer hashes,
+row/value budgets and a writer changing content after the schema snapshot starts.
+Target bindings now also pin the reviewed message, transfer, workflow and
+scheduler validators. The workflow checker reuses the controller's pure validator;
+it does not import a candidate Git object or initialize a store.
+
+The content budget applies to every scalar value, not only JSON. All integer
+storage must fit the JavaScript safe range. Workflow graphs are limited to 128
+nodes/dependencies per node before the shared semantic validator runs. Unfinished
+uploads are valid; complete uploads must match their retained digest. Schema and
+content share one database transaction, not an atomic snapshot across both DBs.
+SQLite's synchronous integrity/scan work still needs an owned native worker to
+enforce the stage deadline. A data-supported observation is not downtime authority.
+
+Next configuration work retains ordered systemd EnvironmentFile observations and
+the four production Next dotenv candidates, including absence and exact identity.
+Only unambiguous single-line assignment syntax is initially supported; expansion,
+multiline values and escapes refuse explicitly rather than being guessed.
+Systemd files override explicit runtime environment; production Next dotenv files
+fill only missing keys in their documented priority. The caller must collect the
+actual native service environment, not supply controller process.env implicitly.
+Results expose profile/provider/source names, never secrets or secret hashes.
+Native checks must detect a stale running environment and recheck source evidence
+before permitting downtime. Windows Task environment collection remains separate.
