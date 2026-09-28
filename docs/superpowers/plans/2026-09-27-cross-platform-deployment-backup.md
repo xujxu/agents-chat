@@ -3818,3 +3818,27 @@ expanding it or accepting changed package/store/auth files requires explicit
 review and acceptance, not copying the profile declaration. Historical baseline
 protocol remains null and needs a distinct historical adapter. Public
 deploy/update/restore scripts, main, PR and the live installation remain untouched.
+
+### Continuous delivery: persisted data and native admission
+
+Do not stop for user continuation at subtask checkpoints. Continue approved delta
+D through real native/public integration; preserve explicit safety refusals and
+Actions-only validation. Persist changes and evidence before switching tasks.
+
+Data content inspection extends the same read transaction used for schema checks,
+with SQLite integrity/foreign-key checks, declared scalar storage types, bounded
+JSON parsing and historical message/session/agent structures. A separate
+`inspectDeploymentData` entry returns data-supported; the earlier shape entry
+remains shape-only. New helper `database-content.mjs` owns content validation,
+not store initialization. Bound each JSON value at 16MiB and streamed rows at
+100,000 per table; exceeding either limit is an explicit unsupported result,
+never truncated acceptance. Large-installation support needs a separate budget.
+Do not emit stored row values or native integrity diagnostics.
+
+- [ ] Push actual populated/WAL fixtures and failures before implementing.
+- [ ] Add data checks inside the existing coherent read transaction. Verify
+  integrity failures, wrong scalar/JSON/message/session/agent values and orphaned
+  references without persistent mutation.
+- [ ] Validate in the installed dual-platform matrix, then continue with effective
+  environment collection and the native admission coordinator, without waiting
+  for another user message. Record remaining limits rather than claim full deploy.
