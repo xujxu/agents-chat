@@ -51,7 +51,7 @@ jobs:
           node-version: 24
       - run: npm ci --no-audit --no-fund
       - name: Inspect actual historical databases without initialization
-        run: node --test tests/deployment-database-compatibility.test.mjs
+        run: node --test tests/deployment-database-compatibility.test.mjs tests/deployment-target-compatibility.test.mjs
 
   contracts:
     name: Contracts (${{ matrix.os }})

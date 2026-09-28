@@ -3741,3 +3741,45 @@ the reviewed baseline SQL shape, not row JSON validity, database-wide integrity,
 target compatibility or no-loss application restart. Target Git-object metadata,
 Node requirements, configuration/content checks, public admission wiring and
 actual historical-update acceptance remain mandatory follow-on work.
+
+### Target Git-object and effective authentication configuration admission
+
+Continue approved delta D inline. Use two bounded readers, not candidate execution:
+`target-compatibility.mjs` reads literal full commit Git objects; a private fixed
+profile binds package.json, package-lock.json, all five reviewed stores and both
+authentication files to their historical blob identities. New targets must declare
+the existing v1 protocol and new compatibility.json profiles. The one exact
+historical baseline may omit both; return protocol null and pending historical
+adapter, never invent support for re-entry into an old transaction implementation.
+Changed source with unchanged profile is refused until explicitly reviewed.
+
+The runtime profile initially supports Node 24 stable on Linux/Windows only,
+matching actual native validation. This is intentionally narrower than the pinned
+Next >=20.9 and better-sqlite3 20/22/23/24/25 declared ranges. Do not implement an
+incomplete general semver parser or assume future packages compatible. Existing
+package.json has no engines field; lockfile and package hash pin this policy.
+
+`configuration-compatibility.mjs` takes the explicit effective runtime environment,
+not controller process.env or candidate dotenv execution. Require non-placeholder
+NEXTAUTH_SECRET, HTTP(S) NEXTAUTH_URL without embedded credentials, complete local/
+GitHub credential pairs and at least one enabled provider. Preserve reviewed
+Azure public-client behavior (client secret optional), and GitHub explicit-email/
+ADMIN_EMAILS fallback. Return provider names only; errors report static setting
+names/check codes, never supplied values. This is an auth configuration check,
+not collection of service env files or validation of every app setting.
+
+- [ ] Push `tests/deployment-target-compatibility.test.mjs` into existing installed
+  Ubuntu/Windows matrix and observe missing-module failures. Use cloned disposable
+  Git repos with real historical objects; assert checkout/index unchanged.
+- [ ] Implement fixed-profile source binding, regular blob mode/size checks,
+  local-only Git with replacement objects disabled and bounded JSON declarations.
+  Read blobs by immutable object identity, check bytes against the object digest,
+  and sanitize all Git/parse errors. Cancellation precedes and bounds each read.
+- [ ] Add compatibility.json with exact database/config/runtime profile names.
+  Keep `protocol.json` schema unchanged. Do not add package dependencies.
+- [ ] Implement explicit effective-env auth checks; validate target/error secret
+  non-disclosure and prove combined partial results still cannot yield
+  `compatibility: passed` or cause downtime.
+- [ ] Inspect both new matrices plus native regressions and checkpoint. Persisted
+  row-content compatibility, effective-environment collection, integrity/runtime
+  observation and public admission wiring remain required before full step1 closes.
