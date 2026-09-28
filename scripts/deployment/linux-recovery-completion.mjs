@@ -37,7 +37,7 @@ export async function readServiceCompletion({ control, project, operationId, par
   const receiptIdentity = identity(await lstat(receiptPath));
   const receipt = captureWorkerFields(parse(receiptBytes),
     ['version', 'intent', 'intentSha256', 'marker', 'guard', 'lease', 'leaseBytes'], 'service completion');
-  if (receipt.version !== 1 || typeof receipt.intent !== 'string'
+  if (![1, 2].includes(receipt.version) || typeof receipt.intent !== 'string'
     || digest(Buffer.from(receipt.intent)) !== receipt.intentSha256 || typeof receipt.leaseBytes !== 'string') {
     throw new Error('Invalid service completion proof.');
   }
@@ -48,7 +48,7 @@ export async function readServiceCompletion({ control, project, operationId, par
     throw new Error('Completion proof does not describe a verified terminal operation.');
   }
   const leaseOwner = validateRecoveryLease(parse(Buffer.from(receipt.leaseBytes)), original, receipt.intentSha256, receipt.guard);
-  const markerPath = path.join(control, 'service-retirement.json');
+  const markerPath = path.join(control, receipt.version === 2 ? 'live-retirement.json' : 'service-retirement.json');
   const lockDirectory = path.join(control, 'lock');
   const guardPath = path.join(control, 'recovery-lock');
   const leasePath = path.join(guardPath, 'owner.json');
@@ -87,10 +87,13 @@ export async function finishServiceRecovery({ control, project, operationId, par
     npm: original.runtime.executables[0].file, node: original.runtime.executables[1].file });
   try {
     if (!same(service.identity, original.runtime)) throw new Error('Completed service generation changed.');
-    const sequence = [
-      { file: markerPath, entry: receipt.marker },
+    const lockSteps = [
       { file: original.lockFile.file, entry: original.lockFile },
       { file: lockDirectory, directory: original.lockIdentity },
+    ];
+    const markerStep = { file: markerPath, entry: receipt.marker };
+    const sequence = [
+      ...(receipt.version === 2 ? [...lockSteps, markerStep] : [markerStep, ...lockSteps]),
       { file: leasePath, entry: receipt.lease },
       { file: guardPath, directory: receipt.guard },
     ];
@@ -119,7 +122,8 @@ export async function finishServiceRecovery({ control, project, operationId, par
         throw new Error('Completed service inhibition or helper directory reappeared.');
       }
       const names = await readdir(control);
-      if (names.some(name => name.startsWith('worker-') || name.startsWith('service-') && name !== 'service-retirement.json')) {
+      if (names.some(name => name.startsWith('worker-')
+        || (name.startsWith('service-') || name === 'live-retirement.json') && name !== path.basename(markerPath))) {
         throw new Error('Unexpected completion evidence inventory.');
       }
       let reached = false;

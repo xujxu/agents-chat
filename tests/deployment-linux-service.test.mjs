@@ -490,7 +490,7 @@ test('accepted service maintenance retires exactly its files without touching th
     const state = await readFile(path.join(f.control, 'state.json'));
     const activation = JSON.parse((await readFile(path.join(f.control, 'service-activation.ndjson'), 'utf8')).split('\n')[0]);
     await stopped.retire();
-    assert.deepEqual((await fs.readdir(f.control)).sort(), ['backup', 'lock', 'state.json']);
+    assert.deepEqual((await fs.readdir(f.control)).sort(), ['backup', 'live-retirement.json', 'lock', 'state.json']);
     await assert.rejects(readFile(activation.held), { code: 'ENOENT' });
     assert.deepEqual(await readFile(path.join(f.control, 'state.json')), state);
     assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained complete backup');
@@ -566,6 +566,7 @@ test('partial service retirement retains durable intent and never unlocks or sto
     const marker = path.join(f.control, 'service-retirement.json');
     const nativeOpen = fs.open;
     const nativeUnlink = fs.unlink;
+    const nativeRename = fs.rename;
     let injected = false;
     let closeArmed = false;
     fs.open = async function (file, ...args) {
@@ -582,8 +583,7 @@ test('partial service retirement retains durable intent and never unlocks or sto
       return handle;
     };
     fs.unlink = async function (file) {
-      if (fault === 'second-unlink' && file === path.join(f.control, 'service-activation.ndjson')
-        || fault === 'marker-unlink' && file === marker) {
+      if (fault === 'second-unlink' && file === path.join(f.control, 'service-activation.ndjson')) {
         injected = true;
         throw new Error('Injected service retirement unlink failure.');
       }
@@ -594,9 +594,16 @@ test('partial service retirement retains durable intent and never unlocks or sto
         injected = true;
       }
     };
+    fs.rename = async (from, to) => {
+      if (fault === 'marker-unlink' && from === marker) {
+        injected = true;
+        throw new Error('Injected service retirement publication failure.');
+      }
+      return nativeRename(from, to);
+    };
     syncBuiltinESMExports();
     try { await assert.rejects(stopped.retire(), error => error.recoveryAllowed === false); }
-    finally { fs.open = nativeOpen; fs.unlink = nativeUnlink; syncBuiltinESMExports(); await stopped.close(); }
+    finally { fs.open = nativeOpen; fs.unlink = nativeUnlink; fs.rename = nativeRename; syncBuiltinESMExports(); await stopped.close(); }
     assert.equal(injected, true);
     assert.ok((await fs.readdir(f.control)).includes('service-retirement.json'));
     await assert.rejects(releaseLock(f.control, f.lock), /service/i);

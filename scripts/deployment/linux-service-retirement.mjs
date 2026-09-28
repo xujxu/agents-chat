@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { lstat, open, readdir, unlink } from 'node:fs/promises';
+import { lstat, open, readdir, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { loadState } from './state.mjs';
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
@@ -115,7 +115,9 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
       await handles[0].close();
       handles.shift();
     }
-    await unlink(markerPath);
+    const livePath = path.join(control, 'live-retirement.json');
+    if ((await readdir(control)).includes('live-retirement.json')) throw new Error('Existing live retirement handoff requires recovery.');
+    await rename(markerPath, livePath);
     await syncWorkerDirectory(control);
   } catch (error) { errors.push(error); }
   const closed = await Promise.allSettled(handles.map(handle => handle.close()));

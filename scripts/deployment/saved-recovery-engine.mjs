@@ -9,6 +9,7 @@ const files = Object.freeze([
   'saved-worker-engine.mjs', 'worker-files.mjs', 'worker-identity.mjs', 'process-identity.mjs', 'state.mjs',
   'linux-service-recovery.mjs', 'linux-service-inspection.mjs', 'linux-runtime.mjs', 'linux-systemd.mjs',
   'linux-recovery-admission.mjs', 'linux-recovery-completion.mjs',
+  'linux-live-retirement.mjs',
 ]);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const descriptor = (directory, manifestSha256) => Object.freeze({

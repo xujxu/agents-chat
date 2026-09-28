@@ -233,6 +233,9 @@ async function acquireLockAdmitted(root, { project, operationId }) {
   const directory = await ownedDirectory(root);
   await requireNoRecovery(directory);
   await requireNoServiceMaintenance(directory);
+  if ((await readdir(directory)).includes('live-retirement.json')) {
+    throw new Error('Live service retirement requires original unlock or recovery.');
+  }
   const canonicalProject = await realpath(project);
   const identity = await processIdentity(process.pid);
   if (!identity) throw new Error('Cannot establish deployment lock owner identity.');
@@ -289,6 +292,10 @@ export async function assertLockOwner(root, suppliedOwner) {
 }
 
 export async function releaseLock(root, owner) {
+  if (process.platform === 'linux' && (await readdir(root)).includes('live-retirement.json')) {
+    const { releaseLiveRetirement } = await import('./linux-live-retirement.mjs');
+    return releaseLiveRetirement(root, owner);
+  }
   const directory = await ownedDirectory(root);
   await requireNoRecovery(directory);
   await requireNoServiceMaintenance(directory);
@@ -321,7 +328,7 @@ export async function requireNoServiceMaintenance(directory) {
 export async function reconcileInterruptedOperation(root) {
   const directory = await ownedDirectory(root);
   const state = await loadState(directory);
-  if ((await readdir(directory)).some(name => name.startsWith('service-'))) {
+  if ((await readdir(directory)).some(name => name.startsWith('service-') || name === 'live-retirement.json')) {
     return {
       status: 'blocked', operationId: state?.operationId ?? null, phase: state?.phase ?? null,
       message: 'Service maintenance evidence exists. Retain lock and inhibition; inspect before restart or recovery.',

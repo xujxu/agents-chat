@@ -3513,10 +3513,17 @@ service-retirement recovery keeps its existing order. Replay cannot touch a
 new operation's lock. Existing incomplete worker-retirement intents continue
 to require the independent worker recovery path; no inferred worker ownership.
 
-- [ ] Push native controller-death contracts at live receipt publication,
+- [x] Push native controller-death contracts at live receipt publication,
   settled-worker cleanup completion, old lock owner deletion and lock directory
   deletion, with original service/state/backup preservation and new-lock refusal.
-- [ ] Implement no-clobber live intent handoff and exact live unlock validation.
-- [ ] Wire alternative-intent recovery and its ordered completion proof.
+- [x] Implement no-clobber live intent handoff and exact live unlock validation.
+- [x] Wire alternative-intent recovery and its ordered completion proof.
 - [ ] Validate existing live repeated cycles, fault barriers, all new crash
   boundaries and both platform contract matrices in Actions, then checkpoint.
+
+Causal test-only `0134505` / Actions `36356286137` failed the five new live
+publication/worker-complete/lock deletion paths: no live receipt existed.
+Implementation retains identical intent bytes by rename, permits the existing
+sealed live worker retirement, and verifies service/state/original lock under
+kernel admission for live unlock. Cold recovery uses completion version2 for
+the live order (old lock before live receipt), preserving version1 recovery.

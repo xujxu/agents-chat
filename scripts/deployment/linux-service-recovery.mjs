@@ -100,7 +100,10 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
   try {
     if (process.platform !== 'linux' || process.getuid() !== 0) throw new Error('Service recovery requires a Linux root controller.');
     const { root } = await externalWorkerDirectory(control, project);
-    const markerPath = path.join(root, markerName);
+    const live = await recoveryPathExists(path.join(root, 'live-retirement.json'));
+    const activeMarkerName = live ? 'live-retirement.json' : markerName;
+    const markerPath = path.join(root, activeMarkerName);
+    if (live && await recoveryPathExists(path.join(root, markerName))) throw new Error('Competing service retirement intents.');
     const receiptPath = path.join(root, 'recovery-complete.json');
     let superseded;
     if (await recoveryPathExists(receiptPath)) {
@@ -162,8 +165,10 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
     }
     await retain(marker);
     await retain(original.stateFile);
-    await retain(original.lockFile);
-    if (!same(captureLockOwner(parse(await checkFile(original.lockFile))), original.lock)) {
+    const lockPresent = await recoveryPathExists(path.join(root, 'lock'));
+    const ownerPresent = await recoveryPathExists(original.lockFile.file);
+    if (!live || ownerPresent) await retain(original.lockFile);
+    if (ownerPresent && !same(captureLockOwner(parse(await checkFile(original.lockFile))), original.lock)) {
       throw new Error('Original service lock does not match intent.');
     }
     const entries = [...original.files, ...(original.workers?.files ?? [])];
@@ -184,6 +189,9 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
       reachedRemaining = true;
       await retain(entry);
       remaining.set(entry.file, entry);
+    }
+    if (live && (!lockPresent || !ownerPresent) && (remaining.size || enginePresent)) {
+      throw new Error('Live unlock started before combined cleanup completed.');
     }
     service = await inspectLinuxService({ unit: original.runtime.runtime.unit, project,
       npm: original.runtime.executables[0].file, node: original.runtime.executables[1].file });
@@ -219,13 +227,17 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
       await deadOwner();
       await service.check();
       await checkDirectory(root, original.controlIdentity);
-      await checkDirectory(path.join(root, 'lock'), original.lockIdentity);
+      if (!live || lockPresent) await checkDirectory(path.join(root, 'lock'), original.lockIdentity);
+      else await absent(path.join(root, 'lock'));
       await checkDirectory(path.dirname(original.inhibition), original.heldParentIdentity, false);
       await absent(original.inhibition);
       await checkFile(marker);
       await checkFile(original.stateFile);
-      await checkFile(original.lockFile);
-      if (!same((await readdir(path.join(root, 'lock'))).sort(), ['owner.json'])) throw new Error('Unexpected original lock inventory.');
+      if (!live || ownerPresent) await checkFile(original.lockFile);
+      else await absent(original.lockFile.file);
+      if (lockPresent && !same((await readdir(path.join(root, 'lock'))).sort(), ownerPresent ? ['owner.json'] : [])) {
+        throw new Error('Unexpected original lock inventory.');
+      }
       await checkGuard();
       for (const entry of entries) {
         if (remaining.has(entry.file)) await checkFile(entry);
@@ -243,9 +255,11 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
         const helpers = [...remaining.keys()].filter(file => path.dirname(file) === enginePath).map(file => path.basename(file)).sort();
         if (!same((await readdir(enginePath)).sort(), helpers)) throw new Error('Worker helper handoff inventory changed.');
       } else await absent(enginePath);
-      const expected = [markerName, ...[...remaining.keys()].filter(file => path.dirname(file) === root
+      const expected = [activeMarkerName, ...[...remaining.keys()].filter(file => path.dirname(file) === root
         && path.basename(file).startsWith('service-')).map(file => path.basename(file))].sort();
-      if (!same(names.filter(name => name.startsWith('service-')).sort(), expected)) throw new Error('Unexpected service evidence inventory.');
+      if (!same(names.filter(name => name.startsWith('service-') || name === 'live-retirement.json').sort(), expected)) {
+        throw new Error('Unexpected service evidence inventory.');
+      }
     };
     await check();
     if (superseded) {
@@ -289,7 +303,7 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
     await check();
     const completePath = path.join(root, 'recovery-complete.pending');
     const complete = Buffer.from(`${JSON.stringify({
-      version: 1, intent: markerBytes.toString('utf8'), intentSha256: marker.sha256,
+      version: live ? 2 : 1, intent: markerBytes.toString('utf8'), intentSha256: marker.sha256,
       marker, guard, lease, leaseBytes: (await checkFile(lease)).toString('utf8'),
     })}\n`);
     if (await recoveryPathExists(completePath)) {
