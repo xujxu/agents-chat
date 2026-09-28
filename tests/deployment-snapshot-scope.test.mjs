@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -109,4 +109,20 @@ test('verification refuses extra cached content even when it was excluded from t
   await mkdir(path.join(destination, 'files', '.next', 'cache'));
   await writeFile(path.join(destination, 'files', '.next', 'cache', 'foreign'), 'do not ignore');
   await assert.rejects(verifySnapshot(destination), /inventory|integrity/i);
+});
+
+test('special permission bits are refused before snapshot copying rather than silently lost', {
+  skip: process.platform !== 'linux',
+}, async t => {
+  const f = await installation(t);
+  await chmod(path.join(f.project, 'app', 'page.tsx'), 0o2755);
+  await assert.rejects(inspectSnapshotScope({ project: f.project }), /permission|mode/i);
+});
+
+test('links to deliberately excluded logs cannot silently create an incomplete backup', {
+  skip: process.platform !== 'linux',
+}, async t => {
+  const f = await installation(t);
+  await symlink('logs/app.log', path.join(f.project, 'runtime-log-link'));
+  await assert.rejects(inspectSnapshotScope({ project: f.project }), /target not captured/i);
 });

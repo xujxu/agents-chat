@@ -90,6 +90,7 @@ jobs:
           tests/deployment-cli.test.mjs
           tests/deployment-snapshot.test.mjs
           tests/deployment-snapshot-scope.test.mjs
+          tests/deployment-snapshot-external.test.mjs
           tests/deployment-transaction.test.mjs
           tests/deployment-source.test.mjs
           tests/deployment-update-policy.test.mjs
