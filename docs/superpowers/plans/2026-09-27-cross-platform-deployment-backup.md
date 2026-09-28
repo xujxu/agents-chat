@@ -4225,3 +4225,31 @@ saved-engine inventory, and the native test matched an inner retirement-refusal
 message against the intentionally generic outer uncertainty error. Updated the
 independent file allowlist and asserted recoveryAllowed=false plus the nested
 cause. No production safety gate was relaxed; full corrected matrix is pending.
+
+**Activation-stop acceptance:** `d7ea25b26f8d1259c926def7e6626e57125285f9` /
+Actions `36421391543` passed all nine jobs. OOM recovery confirmed the clean
+feature worktree and did not repeat accepted workloads locally.
+
+### Service-owned HTTP readiness
+
+Readiness must not accept a foreign healthy listener. The Linux probe first binds
+the explicit port's unique TCP listening inode to a descriptor in the inspected
+service's original cgroup and the controller network namespace. The same process
+start identity, descriptor, socket inode and service generation are rechecked after
+the HTTP response. Multiple listeners, other namespaces, inaccessible evidence or
+unowned sockets refuse; no port-derived process termination is performed.
+
+HTTP probes connect directly to IPv4 loopback with no proxy, redirects, shared
+connection pool or credential headers. They request the existing
+`/api/auth/providers` endpoint and require HTTP 200, bounded uncompressed JSON,
+exact admitted provider IDs/types and structurally valid endpoint URLs.
+Headers, body size and wall-clock duration are bounded. Cancellation destroys
+the request and settles before returning. Response bodies and provider URLs
+are not exposed in errors or the acceptance result.
+
+Causal `98fef40` / `36422847700` adds real non-root systemd HTTP fixtures for
+IPv4 and dual-stack wildcard sockets, foreign listeners that must receive no
+probe, malformed/oversized/redirect responses, cancellation and changed service
+generation. This remains endpoint/ownership acceptance, not authentication login,
+database continuity or full application acceptance. Public integration remains
+unfinished.
