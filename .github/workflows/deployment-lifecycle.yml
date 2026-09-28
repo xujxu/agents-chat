@@ -107,6 +107,7 @@ jobs:
           tests/deployment-worker-retirement.test.mjs
           tests/deployment-retirement-recovery.test.mjs
           tests/deployment-configuration-files.test.mjs
+          tests/deployment-snapshot-configuration.test.mjs
           tests/deployment-runtime-version.test.mjs
       - name: Probe Windows cold retirement stability
         if: runner.os == 'Windows'

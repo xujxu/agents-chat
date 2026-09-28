@@ -152,6 +152,26 @@ test('stopped native service project can recover saved data and ownership withou
       }
     });
 
+    test('native restore admission rejects incompatible saved configuration before stopping the healthy installation', async t => {
+      const f = await restoreCandidate(t);
+      const manifest = JSON.parse(await readFile(path.join(f.backup, 'manifest.json'), 'utf8'));
+      const content = Buffer.from('unsupported-private-assignment\n');
+      await writeFile(path.join(f.backup, 'files', '.env'), content, { mode: 0o600 });
+      manifest.absentPaths = manifest.absentPaths.filter(name => name !== '.env');
+      manifest.entries.push({
+        path: '.env', kind: 'file', mode: 0o600, uid: 0, gid: 0,
+        bytes: content.length, sha256: createHash('sha256').update(content).digest('hex'),
+      });
+      const bytes = JSON.stringify(manifest);
+      await writeFile(path.join(f.backup, 'manifest.json'), bytes);
+      await writeFile(path.join(f.backup, 'complete.json'), JSON.stringify({
+        version: 1, id: manifest.id, sha256: createHash('sha256').update(bytes).digest('hex'),
+      }));
+      assert.equal((await verifySnapshot(f.backup)).id, 'restore-admission');
+      await assert.rejects(admitLinuxRestore(f), { code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED' });
+      await f.service.check();
+    });
+
     test('failed restore health acceptance can re-inhibit and stop only its newly activated generation', async t => {
       const f = await retained(t, { restoring: true });
       await writeState(f.control, { ...await loadState(f.control), phase: 'restore-activating', previousPhase: 'restoring' });
