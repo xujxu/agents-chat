@@ -86,3 +86,13 @@ test('Windows external resources require native ACL capture rather than POSIX me
     /Windows|ACL|external/i);
   assert.equal((await readdir(f.root)).includes('staging'), false);
 });
+
+test('failed final source authority check leaves an incomplete snapshot without completion marker', async t => {
+  const f = await fixture(t);
+  let calls = 0;
+  await assert.rejects(createSnapshot({ ...f.options, checkSource: async () => {
+    if (++calls === 2) throw new Error('source authority lost');
+  } }), /source authority lost/);
+  assert.equal(calls, 2);
+  await assert.rejects(readFile(path.join(f.options.destination, 'complete.json')), { code: 'ENOENT' });
+});
