@@ -68,3 +68,18 @@ test('retained cold inspection detects changed source, inhibitor bytes and accou
   await systemctl('daemon-reload');
   await assert.rejects(inspectLinuxColdService({ original: f.original }), /source|changed/i);
 });
+
+test('cold policy recheck supports explicit uninhibition without turning policy observation into stopped authority', async t => {
+  const f = await stopped(t);
+  const service = await inspectLinuxColdService({ original: f.original });
+  t.after(() => service.close());
+  await service.checkPolicy({ inhibited: true, stopped: true });
+  await unlink(f.inhibition);
+  await systemctl('daemon-reload');
+  await service.checkPolicy({ stopped: true });
+  await assert.rejects(service.check());
+  await systemctl('start', f.unit);
+  await service.checkPolicy();
+  await assert.rejects(service.checkPolicy({ stopped: true }), /stopped|generation|policy/i);
+  assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+});
