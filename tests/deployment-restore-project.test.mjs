@@ -46,6 +46,14 @@ async function fixture(t, full = true) {
 
 const linux = { skip: process.platform !== 'linux' };
 
+test('project mutation refuses a different backup from the one admitted before downtime', linux, async t => {
+  const f = await fixture(t);
+  const expectedSnapshot = await verifySnapshot(f.backup);
+  expectedSnapshot.source.commit = 'b'.repeat(40);
+  await assert.rejects(restoreProjectSnapshot({ ...f.options, expectedSnapshot }), /admitted|changed|backup/i);
+  assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'post-backup data');
+});
+
 test('project restore replaces source/data/artifacts directly, preserves backup and excluded roots, and is retryable', linux, async t => {
   const f = await fixture(t);
   const original = await lstat(f.project);

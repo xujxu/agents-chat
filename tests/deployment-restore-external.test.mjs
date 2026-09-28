@@ -62,6 +62,15 @@ test('all external destinations must be explicitly authorized before any write',
   }
 });
 
+test('external mutation refuses a different backup even when its destination list is unchanged', linux, async t => {
+  const f = await fixture(t);
+  const expectedSnapshot = await verifySnapshot(f.backup);
+  expectedSnapshot.source.commit = 'b'.repeat(40);
+  await assert.rejects(restoreExternalSnapshot({ ...f.options, expectedSnapshot }), /admitted|changed|backup/i);
+  assert.equal(await readFile(f.unit, 'utf8'), 'changed unit\n');
+  assert.equal(await readFile(f.env, 'utf8'), 'PRIVATE=new');
+});
+
 test('invalid acknowledgement or stop evidence refuses external mutation', linux, async t => {
   const f = await fixture(t);
   for (const overrides of [
