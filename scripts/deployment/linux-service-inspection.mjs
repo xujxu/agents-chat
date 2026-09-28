@@ -36,8 +36,10 @@ async function configuration(unit, npm) {
     || state.KillMode !== 'control-group' || state.SendSIGKILL !== 'yes') {
     throw new Error('Unsupported or stale installed service configuration/stop policy.');
   }
+  // A cleanly stopped unit may be garbage-collected between observations.
+  // LoadUnit loads its policy without starting it; typed property lookups also reload it.
   const object = await bus(['call', 'org.freedesktop.systemd1', '/org/freedesktop/systemd1',
-    'org.freedesktop.systemd1.Manager', 'GetUnit', 's', unit], 'o');
+    'org.freedesktop.systemd1.Manager', 'LoadUnit', 's', unit], 'o');
   if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
     throw new Error('Invalid systemd unit object identity.');
   }

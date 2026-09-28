@@ -4275,6 +4275,21 @@ the one-shot probe. Moved it to module scope and retained the startup/cancellati
 tests unchanged. Cancelled the causal run after both errors were recorded;
 the complete combined implementation matrix is pending.
 
+Composition implementation `5d25011` / `36425313943` passed eight jobs including
+readiness startup/deadline cases; native composition exposed a clean-stop
+systemd garbage-collection boundary during fixture backup capture. A successful
+service exit can unload the unit between `show` and `GetUnit`. Inspection now
+uses `LoadUnit` (policy load, not start) before the same typed properties;
+systemd typed object lookup also reloads unloaded units. No source, inhibitor,
+generation or empty-cgroup checks were relaxed. Root cause confirmed against
+systemd v255 `src/core/dbus.c` `find_unit`/`manager_load_unit_from_dbus_path`.
+
+Backup-binding causal `c2a64c0` / `36425368603` proved both destructive primitives
+previously accepted another valid manifest instead of the pre-downtime admitted
+one. Cancelled after exact missing-rejection evidence. Both now accept an
+expected snapshot and refuse mismatch before mutation; live composition passes
+its retained admitted manifest into each primitive.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

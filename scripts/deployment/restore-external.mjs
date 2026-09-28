@@ -22,7 +22,7 @@ async function currentFile(file) {
 }
 
 export async function restoreExternalSnapshot({
-  project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal,
+  project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal, expectedSnapshot,
 }) {
   if (process.platform !== 'linux') throw new Error('External restoration requires Linux metadata; Windows requires native ACL restoration.');
   signal?.throwIfAborted();
@@ -33,6 +33,7 @@ export async function restoreExternalSnapshot({
   const saved = (await canonicalWorkerDirectory(backup, { privateMode: true })).root;
   if (inside(root, saved) || inside(saved, root)) throw new Error('External restore backup must be outside the project.');
   const manifest = await verifySnapshot(saved, { signal });
+  if (expectedSnapshot !== undefined && !same(manifest, expectedSnapshot)) throw new Error('Admitted external restore backup changed.');
   if (manifest.project !== root || manifest.runtime.platform !== 'linux') throw new Error('External restore project owner or platform differs.');
   const entries = manifest.externalFiles ?? [];
   if (!Array.isArray(authorizedPaths) || authorizedPaths.some(file => typeof file !== 'string')

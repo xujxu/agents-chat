@@ -102,12 +102,15 @@ export async function runLinuxLiveRestore({
       },
       async restoreFiles({ signal: stageSignal }) {
         await authority();
-        return restoreProjectSnapshot({ project, backup, acceptDataLoss, checkStopped, signal: stageSignal });
+        return restoreProjectSnapshot({
+          project, backup, acceptDataLoss, checkStopped, signal: stageSignal, expectedSnapshot: admission.snapshot,
+        });
       },
       async configure({ signal: stageSignal }) {
         await authority();
         return restoreExternalSnapshot({
           project, backup, acceptDataLoss, authorizedPaths: admission.authorizedPaths, checkStopped, signal: stageSignal,
+          expectedSnapshot: admission.snapshot,
         });
       },
       async start() {

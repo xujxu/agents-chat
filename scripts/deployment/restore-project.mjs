@@ -16,7 +16,7 @@ const metadata = entry => {
 };
 const byPath = entries => [...entries].sort((a, b) => a.path.localeCompare(b.path));
 
-export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, checkStopped, signal }) {
+export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, checkStopped, signal, expectedSnapshot }) {
   signal?.throwIfAborted();
   if (process.platform !== 'linux') throw new Error('Project restoration requires Linux metadata; Windows requires native ACL restoration.');
   if (acceptDataLoss !== true || typeof checkStopped !== 'function') {
@@ -27,6 +27,7 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
   const saved = (await canonicalWorkerDirectory(backup, { privateMode: true })).root;
   if (inside(root, saved) || inside(saved, root)) throw new Error('Restore backup must be outside the project.');
   const manifest = await verifySnapshot(saved, { signal });
+  if (expectedSnapshot !== undefined && !same(manifest, expectedSnapshot)) throw new Error('Admitted project restore backup changed.');
   if (manifest.project !== root || manifest.runtime.platform !== 'linux') throw new Error('Restore backup project owner or platform differs.');
   if (manifest.scope !== 'project' || !manifest.projectMetadata
     || !same(manifest.excludedPaths, projectSnapshotExclusions)) {
