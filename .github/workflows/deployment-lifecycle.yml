@@ -65,6 +65,15 @@ jobs:
           tests/deployment-worker-operation.test.mjs
           tests/deployment-worker-retirement.test.mjs
           tests/deployment-retirement-recovery.test.mjs
+      - name: Probe Windows cold retirement stability
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            Write-Host "Cold retirement diagnostic sample $attempt"
+            node --test --test-name-pattern="independent saved recovery finishes|cold worker retirement preserves" tests/deployment-retirement-recovery.test.mjs
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
   linux-native:
     name: Native Linux worker domain
