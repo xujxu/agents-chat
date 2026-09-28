@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { chmod, lstat, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
+import fs, { chmod, lstat, mkdir, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -22,7 +23,10 @@ async function fixture(t, full = true) {
   })) await writeFile(path.join(project, name), content);
   await chmod(path.join(project, '.env.local'), 0o600);
   await chmod(project, 0o750);
-  if (process.platform === 'linux') await symlink('.next/BUILD_ID', path.join(project, 'build-link'));
+  if (process.platform === 'linux') {
+    await symlink('z-build-link', path.join(project, 'build-link'));
+    await symlink('.next/BUILD_ID', path.join(project, 'z-build-link'));
+  }
   const scope = full ? await inspectSnapshotScope({ project }) : { files: ['package.json'] };
   await createSnapshot({
     project, destination: backup, id: 'restore-point', ...scope,
@@ -127,6 +131,31 @@ test('cancelled project restoration leaves the backup unchanged and can be retri
   assert.equal((await verifySnapshot(f.backup)).id, 'restore-point');
   await restoreProjectSnapshot(f.options);
   assert.equal(await readFile(path.join(f.project, '.next/BUILD_ID'), 'utf8'), 'saved build');
+});
+
+test('interruption after creating any restored link never leaves a dangling link that blocks retry', linux, async t => {
+  const f = await fixture(t);
+  const controller = new AbortController();
+  const nativeSymlink = fs.symlink;
+  let copiedLink;
+  fs.symlink = async (...args) => {
+    const result = await nativeSymlink(...args);
+    copiedLink = args[1];
+    controller.abort(new Error('interrupt after creating link'));
+    return result;
+  };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(restoreProjectSnapshot({ ...f.options, signal: controller.signal }), /interrupt after creating link/);
+  } finally {
+    fs.symlink = nativeSymlink;
+    syncBuiltinESMExports();
+  }
+  assert.ok(copiedLink);
+  assert.equal(await realpath(copiedLink), path.join(f.project, '.next/BUILD_ID'));
+  await restoreProjectSnapshot(f.options);
+  assert.equal(await readFile(path.join(f.project, 'build-link'), 'utf8'), 'saved build');
+  assert.equal((await verifySnapshot(f.backup)).id, 'restore-point');
 });
 
 test('Windows project restoration refuses until a native ACL adapter is supplied', {
