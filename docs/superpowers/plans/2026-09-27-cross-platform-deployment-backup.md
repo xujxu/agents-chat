@@ -4253,3 +4253,18 @@ probe, malformed/oversized/redirect responses, cancellation and changed service
 generation. This remains endpoint/ownership acceptance, not authentication login,
 database continuity or full application acceptance. Public integration remains
 unfinished.
+
+**Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
+Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
+IPv4 and dual-stack checks; the foreign listener received no probe.
+
+### Bounded readiness startup wait
+
+Causal `c068a0e` / `36423114774` requires bounded waiting for an owned endpoint
+to leave HTTP 503 startup state, cancellation of an unfinished response at the
+stage deadline, and no retry of incompatible authentication-provider responses.
+Only the explicit no-listener-yet and HTTP 503 conditions are retryable.
+Ownership changes, ambiguity, malformed response and provider mismatch are final
+errors. Every retry re-establishes native listener ownership. The existing stage
+runner supplies deadline, cancellation and settlement semantics; no local server
+or validation was used. Full implementation acceptance is pending.

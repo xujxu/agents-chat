@@ -1,6 +1,8 @@
 import { request } from 'node:http';
 import { isDeepStrictEqual as same } from 'node:util';
 import { retainLinuxListener } from './linux-listener.mjs';
+import { setTimeout as delay } from 'node:timers/promises';
+import { runStage } from './stage-runner.mjs';
 
 function readProviders(port, signal) {
   signal?.throwIfAborted();
@@ -17,6 +19,13 @@ function readProviders(port, signal) {
         response.destroy();
         req.destroy(failure);
       };
+      if (response.statusCode === 503) {
+        failure = Object.assign(new Error('Readiness endpoint reports startup unavailable.'), {
+          code: 'DEPLOYMENT_READINESS_NOT_READY',
+        });
+        fail(failure.message);
+        return;
+      }
       if (response.statusCode !== 200
         || !/^application\/json(?:;|$)/i.test(response.headers['content-type'] ?? '')
         || response.headers['content-encoding'] && response.headers['content-encoding'] !== 'identity') {
@@ -56,6 +65,20 @@ export async function verifyLinuxReadiness({ service, port, providers, signal })
   if (!Array.isArray(providers) || !providers.length || new Set(providers).size !== providers.length
     || providers.some(id => !['credentials', 'azure-ad', 'github'].includes(id))) {
     throw new Error('Readiness requires the admitted authentication provider list.');
+  }
+
+  export async function waitLinuxReadiness({ service, port, providers, waitSeconds = 120, signal }) {
+    if (!Number.isSafeInteger(waitSeconds) || waitSeconds <= 0) throw new Error('Readiness wait must be a positive safe integer.');
+    return runStage('readiness', async stageSignal => {
+      while (true) {
+        try { return await verifyLinuxReadiness({ service, port, providers, signal: stageSignal }); }
+        catch (error) {
+          stageSignal.throwIfAborted();
+          if (error?.code !== 'DEPLOYMENT_READINESS_NOT_READY') throw error;
+          await delay(100, undefined, { signal: stageSignal });
+        }
+      }
+    }, { timeoutMs: Math.min(waitSeconds * 1000, Number.MAX_SAFE_INTEGER), signal });
   }
   const owned = await retainLinuxListener({ service, port, signal });
   const bytes = await readProviders(port, signal);

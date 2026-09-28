@@ -33,6 +33,9 @@ async function listener(port, signal) {
       matches.push(fields[9]);
     }
   }
+  if (!matches.length) throw Object.assign(new Error('Readiness listener is not yet available.'), {
+    code: 'DEPLOYMENT_READINESS_NOT_READY',
+  });
   if (matches.length !== 1) throw new Error('Readiness requires exactly one owned listener on the selected port.');
   return matches[0];
 }
