@@ -3520,7 +3520,7 @@ original live worker retirement may proceed with the receipt present.
   deletion, with original service/state/backup preservation and new-lock refusal.
 - [x] Implement no-clobber live intent handoff and exact live unlock validation.
 - [x] Wire alternative-intent recovery and its ordered completion proof.
-- [ ] Validate existing live repeated cycles, fault barriers, all new crash
+- [x] Validate existing live repeated cycles, fault barriers, all new crash
   boundaries and both platform contract matrices in Actions, then checkpoint.
 
 Causal test-only `0134505` / Actions `36356286137` failed the five new live
@@ -3529,3 +3529,41 @@ Implementation retains identical intent bytes by rename, permits the existing
 sealed live worker retirement, and verifies service/state/original lock under
 kernel admission for live unlock. Cold recovery uses completion version2 for
 the live order (old lock before live receipt), preserving version1 recovery.
+
+**Checkpoint (2026-09-28):** Executable/workflow head
+`c99b62292d6c6cf8fd27e6345f77c8f2a3905166`, Actions `36364440674`, all five jobs
+passed: 59 Linux service recovery/admission contracts, 70 Linux native contracts,
+222 Linux shared contracts, 218 Windows shared contracts plus 4 platform skips,
+19 Windows coordinator contracts and the native Job probe. The Windows job also
+passed five independent samples of the two previously failing recovery paths
+(10 additional successful executions). Samples stop at their first failure;
+they do not retry a failed cleanup or turn a failure into a successful job.
+
+The covered live boundaries are receipt publication (without workers and with
+a settled worker), completed worker retirement, old owner deletion, and old lock
+directory deletion. Cold continuation preserves state, backup and the original
+running service generation; successful continuation permits the next operation
+but old receipt replay cannot touch that operation. Original live unlock refuses
+changed state/runtime, foreign worker evidence and a recovery guard.
+Worker-only cold recovery now refuses a live service receipt before creating its
+guard or deleting evidence. Only original live worker retirement opts into
+continuing beneath that receipt.
+
+**Unresolved Windows diagnostic:** `654388b` / `36362744251` failed the
+prior-runtime-restored cold-worker case; `641ed2f` / `36363291489` failed the
+displaced-checkout cold-worker case. The latter reported
+`DEPLOYMENT_RECOVERY_UNSETTLED` with a nested unclassified error. Neither log
+identifies the root cause. `d9b842d` adds bounded static file/directory/content/
+inventory error codes, not a speculative Windows fix; its run `36363891973`
+passed, followed by the final matrix and five diagnostic samples above.
+Non-reproduction does not establish a root-cause fix. Keep this investigation
+open and use the more specific error codes on recurrence.
+
+**Remaining boundary:** controller death during ordinary worker retirement can
+leave both `worker-retirement.json` and `live-retirement.json`. Both recovery
+paths deliberately refuse that combination; explicit validated combined
+handoff is still required. Partial initial recovery records, earlier deployment
+interruptions/reboot, installed Windows task/account integration, complete
+backup/restore/public entrypoint wiring and actual dual-platform application
+lifecycle acceptance remain outside this checkpoint. No main branch, PR,
+installed deployment, or public script changed.
