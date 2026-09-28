@@ -102,6 +102,14 @@ for (const pause of ['staged', 'published']) {
     await assert.rejects(claimLinuxColdRestore({ ...f, acceptDataLoss: true }), /admission|locking|alive/i);
     child.kill('SIGKILL');
     await exited;
+    if (pause === 'staged') {
+      const file = path.join(f.control, 'cold-restore-staging', 'owner.json');
+      const complete = await readFile(file);
+      await writeFile(file, '{"partial":');
+      await assert.rejects(claimLinuxColdRestore({ ...f, acceptDataLoss: true }));
+      assert.equal(await readFile(file, 'utf8'), '{"partial":');
+      await writeFile(file, complete);
+    }
     const claimed = await claimLinuxColdRestore({ ...f, acceptDataLoss: true });
     t.after(() => claimed.close());
     await claimed.check();

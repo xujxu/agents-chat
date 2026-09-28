@@ -4409,6 +4409,42 @@ read-only: it does not take over the old lock, clear blocked state, restore
 files or restart the service. Durable cold ownership transfer and a restartable
 restoration transaction remain the next mutating boundary.
 
+Saved-configuration/fixture correction `405e924` / `36436308202` passed all nine
+jobs. Cold-admission causal `5c6dd09` / `36436753268` recorded 35 passing native
+cases and one missing-module failure, with no cancelled subtests. Remaining
+causal jobs were cancelled after that evidence. Cold admission `154b1fa` /
+`36437554325` then passed all nine jobs.
+
+### Durable cold recovery lease without discarding the application lock
+
+Keep the original application lock, state and maintenance evidence unchanged.
+`linux-cold-restore-lease.mjs` publishes a separate recovery controller lease in
+the already-reserved `recovery-lock` guard. The lease binds the original
+lock/state, control and lock directory identities, exact selected backup digest,
+and the new controller's process-start identity. A private fixed staging
+directory permits atomic first publication and atomic renewal of a dead
+controller's lease. Renewal also binds the prior lease checksum. Only a
+complete validated staging record, or the precisely identified empty staging
+directory left after publication, can be reconciled; malformed/foreign evidence
+is retained and refused.
+
+`admitLinuxColdRestore` recognizes these bound dead leases under native recovery
+admission, and still rejects live recovery owners. Separate source-evidence
+rechecks let lease publication change only its own guard/staging paths while
+all original lock/state, service, worker and backup checks remain enforced.
+The returned live lease pins both the guard directory and owner-file handles.
+Closing the controller's handles does not remove the durable guard or claim
+restoration success.
+
+Causal `ca2a1ba` / `36440467810`: eight jobs passed; the native job failed only
+because the new lease module was missing. Child-process tests pause after
+complete staging and after atomic guard publication, kill that controller,
+then require another controller to obtain a validated lease with the original
+application lock/state/data unchanged. They also cover competing/live owners
+and refusal to repair a malformed staging record. Full implementation
+acceptance is pending. This lease is not yet the file restoration, activation,
+state transition or terminal recovery-cleanup composition.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

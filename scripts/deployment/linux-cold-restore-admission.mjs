@@ -13,6 +13,7 @@ import { readEvidenceJournal } from './evidence-journal.mjs';
 import { retainActivationWorkers } from './service-activation-workers.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { canonicalWorkerDirectory, externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
+import { coldRestoreLeaseNames, coldRestoreSnapshotDigest, inspectColdRestoreLease } from './linux-cold-restore-lease.mjs';
 
 const identity = info => ({ dev: info.dev, ino: info.ino });
 const inside = (parent, file) => file === parent || file.startsWith(parent + path.sep);
@@ -64,8 +65,14 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
       throw new Error('Cold restore requires matching incomplete stopped-operation state.');
     }
     const names = await readdir(root);
-    if (names.some(name => ['recovery-lock', 'live-retirement.json', 'service-retirement.json', 'worker-retirement.json'].includes(name))) {
+    if (names.some(name => ['live-retirement.json', 'service-retirement.json', 'worker-retirement.json'].includes(name))) {
       throw new Error('Existing recovery or retirement authority requires its own recovery path.');
+    }
+    const lease = await inspectColdRestoreLease({ control: root, project, backup, lock, state, retain });
+    for (const slot of [lease.guard, lease.staging]) {
+      if (slot?.record && await processIdentity(slot.record.owner.pid) === slot.record.owner.processIdentity) {
+        throw new Error('The previous cold restore lease owner is still alive.');
+      }
     }
     const serviceFiles = names.filter(name => name.startsWith('service-')).sort();
     const activated = serviceFiles.includes('service-activation.ndjson');
@@ -122,25 +129,34 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
     const saved = (await canonicalWorkerDirectory(backup, { privateMode: true })).root;
     if (inside(project, saved) || inside(saved, project)) throw new Error('Cold restore backup must be outside the installed project.');
     const snapshot = await verifySnapshot(saved, { signal });
+    for (const slot of [lease.guard, lease.staging]) {
+      if (slot?.record && (slot.record.backupId !== snapshot.id
+        || slot.record.snapshotSha256 !== coldRestoreSnapshotDigest(snapshot))) {
+        throw new Error('Cold restore lease backup changed.');
+      }
+    }
     const config = await inspectLinuxRestoreConfiguration({
       service, backup: saved, snapshot, profile: 'agents-chat-auth-638c553', signal,
     });
     const authorizedPaths = [...new Set([...service.identity.sources.map(source => source.path),
       ...config.sourcePaths.filter(file => !inside(project, file))])].sort();
     validateLinuxRestoreSnapshot({ identity: service.identity, manifest: snapshot, authorizedPaths });
-    const check = async ({ signal: checkSignal = signal } = {}) => {
+    const checkEvidence = async ({ signal: checkSignal = signal } = {}, recoverySources = false) => {
       if (closed) throw new Error('Cold restore admission is closed.');
       checkSignal?.throwIfAborted();
       await admission.check();
       await deadOwner();
+      const inventory = entries => entries.filter(name => !recoverySources || !coldRestoreLeaseNames.includes(name)).sort();
       if (!same(identity((await canonicalWorkerDirectory(lockDirectory, { privateMode: true })).info), identity(directory.info))
-        || !same((await readdir(root)).sort(), [...names].sort())) throw new Error('Cold restore authority inventory changed.');
+        || !same(inventory(await readdir(root)), inventory([...names]))) throw new Error('Cold restore authority inventory changed.');
       for (const entry of retained) {
+        if (recoverySources && coldRestoreLeaseNames.some(name => path.dirname(entry.file) === path.join(root, name))) continue;
         const info = await entry.handle.stat();
         if (info.nlink !== 1 || !same(identity(info), entry.info) || !same(identity(await lstat(entry.file)), entry.info)
           || !(await readWorkerFile(entry.file, entry.maximum, { privateMode: true })).equals(entry.bytes)) {
           throw new Error('Retained cold restore evidence changed.');
         }
+        if (!recoverySources) await inspectColdRestoreLease({ control: root, project, backup, lock, state });
       }
       await workers.check();
       await service.check();
@@ -148,10 +164,12 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
       if (!same(await verifySnapshot(saved, { signal: checkSignal }), snapshot)) throw new Error('Admitted cold restore backup changed.');
       checkSignal?.throwIfAborted();
     };
+    const check = options => checkEvidence(options);
     await check();
     return Object.freeze({
       lock: structuredClone(lock), state: structuredClone(state), snapshot: structuredClone(snapshot),
-      service, providers: config.providers, authorizedPaths: Object.freeze(authorizedPaths), check, close,
+      service, providers: config.providers, authorizedPaths: Object.freeze(authorizedPaths), lease, check, close,
+      checkRecoverySources: options => checkEvidence(options, true),
     });
   } catch (error) {
     try { await close(); }
