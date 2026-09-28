@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chmod, chown, lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fixture, ready } from './deployment-linux-service-fixture.mjs';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { inspectLinuxConfiguration } from '../scripts/deployment/linux-configuration.mjs';
@@ -149,6 +150,23 @@ test('stopped native service project can recover saved data and ownership withou
         await assert.rejects(admitLinuxRestore(f));
         await f.service.check();
       }
+    });
+
+    test('failed restore health acceptance can re-inhibit and stop only its newly activated generation', async t => {
+      const f = await retained(t, { restoring: true });
+      await writeState(f.control, { ...await loadState(f.control), phase: 'restore-activating', previousPhase: 'restoring' });
+      const activation = await f.stopped.activate({ purpose: 'restore' });
+      assert.notEqual(activation.identity.runtime.invocationId, f.service.identity.runtime.invocationId);
+      assert.deepEqual(await f.stopped.stopActivated(), { stopped: true, inhibited: true });
+      const before = await readFile(path.join(f.project, 'writes'));
+      await delay(150);
+      assert.deepEqual(await readFile(path.join(f.project, 'writes')), before);
+      assert.deepEqual(await f.stopped.stopActivated(), { stopped: true, inhibited: true });
+      const journal = (await readFile(path.join(f.control, 'service-activation.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+      assert.deepEqual(journal.slice(-4).map(record => record.phase),
+        ['activation-stop-intent', 'activation-stop-inhibited', 'activation-stop-requested', 'activation-stopped']);
+      await assert.rejects(f.stopped.retire(), /retirement|stopped|activation/i);
+      assert.equal((await loadState(f.control)).phase, 'restore-activating');
     });
     await writeFile(data, 'post-backup version');
     await writeFile(path.join(f.project, 'server.cjs'), 'throw new Error("partial deployment");');
