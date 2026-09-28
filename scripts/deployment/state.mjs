@@ -319,8 +319,9 @@ export async function releaseLock(root, owner) {
   await rmdir(lockPath);
 }
 
-export async function requireNoServiceMaintenance(directory) {
-  if ((await readdir(directory)).some(name => name.startsWith('service-'))) {
+export async function requireNoServiceMaintenance(directory, { allowLiveRetirement = false } = {}) {
+  if ((await readdir(directory)).some(name => name.startsWith('service-')
+    || !allowLiveRetirement && name === 'live-retirement.json')) {
     throw new Error('Service maintenance evidence requires explicit service recovery before this operation.');
   }
 }

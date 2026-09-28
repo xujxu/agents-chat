@@ -95,6 +95,17 @@ test('saved cold worker cleanup refuses service maintenance evidence without del
   assert.equal((await reconcileInterruptedOperation(f.control)).status, 'blocked');
 });
 
+test('worker-only recovery cannot discard the lock beneath a live service retirement handoff', async t => {
+  const f = await fixture(t);
+  await f.kill();
+  await writeFile(path.join(f.control, 'live-retirement.json'), '{"partial":');
+  const before = (await readdir(f.saved.directory)).sort();
+  await assert.rejects(f.recover());
+  assert.deepEqual((await readdir(f.saved.directory)).sort(), before);
+  assert.ok((await readdir(f.control)).includes('lock'));
+  assert.ok(!(await readdir(f.control)).includes('recovery-lock'));
+});
+
 test('malformed or foreign deletion evidence is rejected before any additional deletion', async t => {
   for (const mode of ['truncated', 'path', 'state', 'foreign']) {
     const f = await fixture(t);

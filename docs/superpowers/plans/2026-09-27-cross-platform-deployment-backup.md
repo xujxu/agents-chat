@@ -3510,8 +3510,10 @@ If the old lock is already partly removed, all service/worker cleanup must
 be complete before continuation. Final completion proof uses the live order
 old lock owner/directory -> live receipt -> recovery owner/directory; normal
 service-retirement recovery keeps its existing order. Replay cannot touch a
-new operation's lock. Existing incomplete worker-retirement intents continue
-to require the independent worker recovery path; no inferred worker ownership.
+new operation's lock. A worker-retirement intent coexisting with the live service
+receipt remains blocked until explicit combined handoff support is implemented.
+Worker-only recovery must not delete its lock beneath that receipt; only the
+original live worker retirement may proceed with the receipt present.
 
 - [x] Push native controller-death contracts at live receipt publication,
   settled-worker cleanup completion, old lock owner deletion and lock directory

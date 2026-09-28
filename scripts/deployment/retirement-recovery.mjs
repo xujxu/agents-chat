@@ -76,9 +76,13 @@ export async function recoverRetirement({ control, project, operationId }) {
     const checkFile = async entry => {
       const file = path.join(root, entry.path);
       const info = await lstat(file, { bigint: true });
-      if (!same(identity(info), { dev: entry.dev, ino: entry.ino })) throw new Error('Recovery file was replaced.');
+      if (!same(identity(info), { dev: entry.dev, ino: entry.ino })) {
+        throw Object.assign(new Error('Recovery file was replaced.'), { code: 'DEPLOYMENT_RECOVERY_FILE_IDENTITY' });
+      }
       const content = await readWorkerFile(file, maximum, { privateMode: true });
-      if (content.length !== entry.bytes || digest(content) !== entry.sha256) throw new Error('Recovery content changed.');
+      if (content.length !== entry.bytes || digest(content) !== entry.sha256) {
+        throw Object.assign(new Error('Recovery content changed.'), { code: 'DEPLOYMENT_RECOVERY_FILE_CONTENT' });
+      }
       return content;
     };
     const retain = async entry => {
@@ -91,11 +95,13 @@ export async function recoverRetirement({ control, project, operationId }) {
     };
     const checkDirectory = async (relative, expected) => {
       const current = await canonicalWorkerDirectory(path.join(root, relative), { privateMode: true });
-      if (!same(identity(current.info), expected)) throw new Error('Original recovery directory was replaced.');
+      if (!same(identity(current.info), expected)) {
+        throw Object.assign(new Error('Original recovery directory was replaced.'), { code: 'DEPLOYMENT_RECOVERY_DIRECTORY_IDENTITY' });
+      }
     };
     const requireDeadOwner = async () => {
       if (await processIdentity(original.lock.pid) === original.lock.processIdentity) {
-        throw new Error('Original retirement controller is still alive.');
+        throw Object.assign(new Error('Original retirement controller is still alive.'), { code: 'DEPLOYMENT_RECOVERY_OWNER_ALIVE' });
       }
     };
     const state = await loadState(root);
@@ -155,13 +161,15 @@ export async function recoverRetirement({ control, project, operationId }) {
       expected.push(markerName);
       if (enginePresent) expected.push('worker-engine');
       const actual = (await readdir(root)).filter(file => file.startsWith('worker-')).sort();
-      if (!same(actual, expected.sort())) throw new Error('Unexpected cold recovery inventory.');
+      if (!same(actual, expected.sort())) {
+        throw Object.assign(new Error('Unexpected cold recovery inventory.'), { code: 'DEPLOYMENT_RECOVERY_INVENTORY' });
+      }
       if (enginePresent) {
         await checkDirectory('worker-engine', original.engineIdentity);
         const expectedEngine = [...remaining.keys()].filter(file => file.startsWith(`worker-engine${path.sep}`))
           .map(file => path.basename(file)).sort();
         if (!same((await readdir(path.join(root, 'worker-engine'))).sort(), expectedEngine)) {
-          throw new Error('Unexpected cold helper inventory.');
+          throw Object.assign(new Error('Unexpected cold helper inventory.'), { code: 'DEPLOYMENT_RECOVERY_HELPER_INVENTORY' });
         }
       }
     };

@@ -72,20 +72,20 @@ export async function readWorkerFile(file, maximumBytes, { privateMode = false }
     const opened = await handle.stat();
     check(opened);
     if (opened.dev !== named.dev || opened.ino !== named.ino || opened.size !== named.size) {
-      throw new Error('Worker file changed before reading.');
+      throw Object.assign(new Error('Worker file changed before reading.'), { code: 'DEPLOYMENT_WORKER_FILE_OPEN_CHANGED' });
     }
     bytes = Buffer.alloc(opened.size);
     let offset = 0;
     while (offset < bytes.length) {
       const { bytesRead } = await handle.read(bytes, offset, bytes.length - offset, offset);
-      if (!bytesRead) throw new Error('Worker file changed during reading.');
+      if (!bytesRead) throw Object.assign(new Error('Worker file changed during reading.'), { code: 'DEPLOYMENT_WORKER_FILE_SHORT_READ' });
       offset += bytesRead;
     }
     const after = await lstat(file);
     check(after);
     if (after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size
       || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs) {
-      throw new Error('Worker file changed during reading.');
+      throw Object.assign(new Error('Worker file changed during reading.'), { code: 'DEPLOYMENT_WORKER_FILE_READ_CHANGED' });
     }
   } catch (error) { errors.push(error); }
   await closeWorkerFile(handle, errors);

@@ -27,7 +27,7 @@ export async function retireWorkerEvidence({ control, lock, saved, workers, clos
   let checkAuthority;
   try {
     ({ root, info: controlInfo } = await canonicalWorkerDirectory(control, { privateMode: true }));
-    await requireNoServiceMaintenance(root);
+    await requireNoServiceMaintenance(root, { allowLiveRetirement: true });
     ({ info: lockInfo } = await canonicalWorkerDirectory(path.join(root, 'lock'), { privateMode: true }));
     await assertLockOwner(root, lock);
     const state = await loadState(root);
@@ -91,7 +91,7 @@ export async function retireWorkerEvidence({ control, lock, saved, workers, clos
       if (marker) await checkFile(marker);
     };
     const checkInventory = async () => {
-      await requireNoServiceMaintenance(root);
+      await requireNoServiceMaintenance(root, { allowLiveRetirement: true });
       await checkAuthority();
       const expected = [...remaining.keys()].filter(file => !file.startsWith(`worker-engine${path.sep}`));
       if (!engineRemoved) expected.push('worker-engine');
