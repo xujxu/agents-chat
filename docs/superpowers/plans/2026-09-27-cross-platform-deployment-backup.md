@@ -4347,6 +4347,39 @@ durable recovery ownership and interrupted activation-stop settlement before
 connecting the external restore entry; do not report the inspector alone as
 cold restoration acceptance.
 
+Cold-inspection causal `04510d3` / `36433145755` failed on the missing
+`linux-cold-service.mjs` as intended. It also had an independent Windows
+retirement-fixture failure: a PowerShell process-start identity query exited
+after roughly 33 seconds with no stderr (query budget is 30 seconds). This is
+not evidence of a cold-inspection regression or an established timeout cause.
+`8d94eb2` adds bounded code/signal/killed fixture diagnostics; no retry, identity
+relaxation or timeout increase was added. Implementation `bb8e75f` is awaiting
+its full Actions gate. Additional native coverage kills the controller after
+its activated-generation stop receipt and binds both original inhibitor links.
+
+### Saved effective configuration before destructive restoration
+
+`snapshot-configuration.mjs` resolves dotenv files and declared ordered
+EnvironmentFiles against the verified full backup, never the current project.
+External sources must be captured explicitly, including optional absence;
+excluded project paths are refused rather than treated as empty settings.
+Reuse the existing bounded configuration parser, precedence rules and auth
+profile. Require snapshot equality on admission and recheck. Keep environment
+values out of returned diagnostics.
+
+`linux-configuration.mjs` obtains the same-policy unit's declared environment;
+`linux-restore-compatibility.mjs` checks its saved effective configuration before
+any downtime. Unit loading remains read-only (`LoadUnit`, not service start),
+including after inactive unit garbage collection. Add the new module to the
+existing saved recovery closure.
+
+Causal tests `b1ae915` require both cross-platform saved-source behavior and
+native rejection of a checksum-valid backup with invalid dotenv syntax while
+the healthy installed generation stays unchanged. This is also a prerequisite
+for cold restoration, where inspecting a nonexistent old process environment
+cannot establish the restored configuration. Remote red/green evidence is
+pending; no tests or servers were run locally.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

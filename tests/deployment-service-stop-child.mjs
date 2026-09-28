@@ -10,7 +10,9 @@ import { createWorkerOperation } from '../scripts/deployment/worker-operation.mj
 
 const [control, project, unit, npm, node, phase, outcome = 'accepted', workerMode = 'none'] = process.argv.slice(2);
 const activation = phase.startsWith('activation-');
-const receiptPhase = activation ? phase.slice('activation-'.length) : phase;
+const activationStopping = phase.startsWith('activation-stop:');
+const receiptPhase = activationStopping ? phase.slice('activation-stop:'.length)
+  : activation ? phase.slice('activation-'.length) : phase;
 const restoring = outcome === 'restored';
 const lock = await acquireLock(control, { project, operationId: randomUUID() });
 const state = {
@@ -65,6 +67,7 @@ if (workerMode !== 'none') {
   await workers.seal();
 }
 if (activation) await stopped.activate({ purpose: 'prior-runtime' });
+if (activationStopping) await stopped.stopActivated();
 if (phase.startsWith('retirement-')) {
   const prior = outcome === 'prior-runtime-restored';
   for (const next of restoring ? ['restore-activating'] : prior ? ['copying'] : ['copying', 'rotating', 'backup-ready', 'source-selected',

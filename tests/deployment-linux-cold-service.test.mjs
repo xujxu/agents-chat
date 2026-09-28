@@ -38,6 +38,20 @@ test('cold inspection refuses missing inhibition and never stops a replacement g
   assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
 });
 
+test('cold inspection binds both inhibitor links after death during activated-generation stop', async t => {
+  const f = await interrupted(t, 'activation-stop:activation-stopped');
+  await f.kill();
+  const records = (await readFile(path.join(f.control, 'service-activation.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+  const last = records.at(-1);
+  assert.equal(last.phase, 'activation-stopped');
+  const service = await inspectLinuxColdService({ original: last.started, held: last.held });
+  t.after(() => service.close());
+  assert.deepEqual(await service.check(), { stopped: true, inhibited: true });
+  await assert.rejects(inspectLinuxColdService({ original: last.started }), /inhibit/i);
+  await unlink(last.held);
+  await assert.rejects(service.check(), /inhibit|ENOENT/i);
+});
+
 test('retained cold inspection detects changed source, inhibitor bytes and account evidence', async t => {
   const f = await stopped(t);
   const service = await inspectLinuxColdService({ original: f.original });

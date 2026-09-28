@@ -17,6 +17,7 @@ const files = Object.freeze([...new Set([
   'linux-cold-service.mjs',
   'restore-transaction.mjs', 'restore-project.mjs', 'restore-external.mjs',
   'linux-configuration.mjs', 'configuration-files.mjs', 'configuration-compatibility.mjs',
+  'snapshot-configuration.mjs',
   'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-scope.mjs', 'snapshot-external.mjs', 'snapshot-rotation.mjs',
   'linux-readiness.mjs', 'linux-listener.mjs',
 ])]);

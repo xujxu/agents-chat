@@ -2,6 +2,7 @@ import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
 import { verifySnapshot } from './snapshot.mjs';
 import { canonicalWorkerDirectory } from './worker-files.mjs';
+import { inspectLinuxRestoreConfiguration } from './linux-configuration.mjs';
 
 const inside = (parent, file) => file === parent || file.startsWith(parent + path.sep);
 
@@ -38,6 +39,9 @@ export async function admitLinuxRestore({ service, configuration, backup, signal
         throw new Error('Restoring changed unit policy requires a separate native policy transition.');
       }
     }
+    await inspectLinuxRestoreConfiguration({
+      service, backup: saved, snapshot: manifest, profile: configuration.profile, signal: checkSignal,
+    });
     await configuration.check({ signal: checkSignal });
     await service.check();
     checkSignal?.throwIfAborted();

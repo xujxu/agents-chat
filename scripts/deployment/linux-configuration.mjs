@@ -3,6 +3,7 @@ import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
 import { inspectConfigurationFiles } from './configuration-files.mjs';
+import { inspectSnapshotConfiguration } from './snapshot-configuration.mjs';
 import { linuxSystemdBus as bus, linuxSystemdProperties } from './linux-systemd.mjs';
 
 function refusal(check) {
@@ -46,7 +47,7 @@ async function startupEnvironment(pid, signal) {
 
 async function configuration(unit) {
   const object = await bus(['call', 'org.freedesktop.systemd1', '/org/freedesktop/systemd1',
-    'org.freedesktop.systemd1.Manager', 'GetUnit', 's', unit], 'o');
+    'org.freedesktop.systemd1.Manager', 'LoadUnit', 's', unit], 'o');
   if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
     throw refusal('runtime-unit');
   }
@@ -64,6 +65,17 @@ async function configuration(unit) {
     throw refusal('runtime-environment-files');
   }
   return { environment: environment(values), systemdFiles: files.map(([file, optional]) => ({ path: file, optional })) };
+}
+
+export async function inspectLinuxRestoreConfiguration({ service, backup, snapshot, profile, signal }) {
+  signal?.throwIfAborted();
+  await service.check();
+  const config = await configuration(service.identity.runtime.unit);
+  const saved = await inspectSnapshotConfiguration({ backup, snapshot, profile, ...config, signal });
+  await service.check();
+  if (!same(await configuration(service.identity.runtime.unit), config)) throw refusal('runtime-configuration-changed');
+  await saved.check({ signal });
+  return saved;
 }
 
 export async function inspectLinuxConfiguration({ service, profile, signal }) {
