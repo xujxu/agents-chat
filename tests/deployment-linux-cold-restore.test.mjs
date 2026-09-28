@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { fork } from 'node:child_process';
 import { cp, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +8,7 @@ import { restoreCandidate } from './deployment-linux-restore-fixture.mjs';
 import { interrupted } from './deployment-linux-service-recovery-fixture.mjs';
 import { releaseLock } from '../scripts/deployment/state.mjs';
 import { admitLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-admission.mjs';
+import { claimLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-lease.mjs';
 
 async function candidate(t, phase = 'stopped') {
   const f = await restoreCandidate(t);
@@ -75,3 +77,42 @@ test('cold restore admission recognizes only the recorded stopped activation and
   await admitted.check();
   assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'new data');
 });
+
+for (const pause of ['staged', 'published']) {
+  test(`cold restore lease survives controller death after durable ${pause} publication without replacing the old lock`, async t => {
+    const f = await candidate(t);
+    await f.kill();
+    const originalLock = await readFile(path.join(f.control, 'lock', 'owner.json'));
+    const originalState = await readFile(path.join(f.control, 'state.json'));
+    const child = fork(new URL('./deployment-cold-lease-child.mjs', import.meta.url),
+      [f.control, f.project, f.backup, pause], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    let diagnostic = '';
+    child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
+    const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+    t.after(async () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await exited;
+    });
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Cold lease did not pause: ${diagnostic}`)), 60000);
+      child.once('message', message => { clearTimeout(timer); resolve(message); });
+      child.once('exit', code => { clearTimeout(timer); reject(new Error(`Cold lease exited ${code}: ${diagnostic}`)); });
+      child.once('error', error => { clearTimeout(timer); reject(error); });
+    });
+    await assert.rejects(claimLinuxColdRestore({ ...f, acceptDataLoss: true }), /admission|locking|alive/i);
+    child.kill('SIGKILL');
+    await exited;
+    const claimed = await claimLinuxColdRestore({ ...f, acceptDataLoss: true });
+    t.after(() => claimed.close());
+    await claimed.check();
+    assert.equal(claimed.owner.pid, process.pid);
+    assert.equal(claimed.snapshot.id, 'live-restore');
+    assert.deepEqual(await readFile(path.join(f.control, 'lock', 'owner.json')), originalLock);
+    assert.deepEqual(await readFile(path.join(f.control, 'state.json')), originalState);
+    assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'new data');
+    const lease = JSON.parse(await readFile(path.join(f.control, 'recovery-lock', 'owner.json'), 'utf8'));
+    assert.deepEqual(lease.owner, claimed.owner);
+    await claimed.close();
+    await assert.rejects(claimLinuxColdRestore({ ...f, acceptDataLoss: true }), /alive|owner/i);
+  });
+}
