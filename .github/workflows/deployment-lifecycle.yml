@@ -51,7 +51,7 @@ jobs:
           node-version: 24
       - run: npm ci --no-audit --no-fund
       - name: Inspect actual historical databases without initialization
-        run: node --test tests/deployment-database-compatibility.test.mjs tests/deployment-target-compatibility.test.mjs tests/deployment-data-content.test.mjs tests/deployment-dotenv-compatibility.test.mjs tests/deployment-database-command.test.mjs
+        run: node --test tests/deployment-database-compatibility.test.mjs tests/deployment-target-compatibility.test.mjs tests/deployment-data-content.test.mjs tests/deployment-dotenv-compatibility.test.mjs tests/deployment-database-command.test.mjs tests/deployment-legacy-configuration.test.mjs
 
   linux-data-admission:
     name: Native Linux database admission
