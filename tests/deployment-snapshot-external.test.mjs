@@ -106,3 +106,17 @@ test('cancellation during final source check cannot seal the snapshot', async t 
   } }), /snapshot cancelled/);
   await assert.rejects(readFile(path.join(f.options.destination, 'complete.json')), { code: 'ENOENT' });
 });
+
+test('external configuration changed at final authority boundary cannot seal a stale snapshot', {
+  skip: process.platform !== 'linux',
+}, async t => {
+  const f = await fixture(t);
+  let calls = 0;
+  await assert.rejects(createSnapshot({
+    ...f.options, externalFiles: [{ path: f.file, optional: false }],
+    async checkSource() {
+      if (++calls === 2) await writeFile(f.file, 'SECRET=changed');
+    },
+  }), /external|source|changed/i);
+  await assert.rejects(readFile(path.join(f.options.destination, 'complete.json')), { code: 'ENOENT' });
+});

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdir, readFile, writeFile, readdir, rename, symlink, unlink } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile, readdir, rename, symlink, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import {
@@ -26,6 +26,34 @@ test('snapshot copies data without aliasing live files and detects corruption', 
   await writeFile(path.join(destination, 'files', 'fixture.db'), 'corruption');
   await assert.rejects(verifySnapshot(destination), /checksum|integrity|size/i);
 });
+
+for (const change of ['contents', 'inventory', 'permissions', 'copied-payload']) {
+  test(`snapshot refuses ${change} changed at the final authority boundary before marking complete`, {
+    skip: change === 'permissions' && process.platform !== 'linux',
+  }, async t => {
+    const root = await temporaryDeployment(t);
+    const project = path.join(root, 'app');
+    const destination = path.join(root, 'staging');
+    await mkdir(path.join(project, 'data'), { recursive: true });
+    const file = path.join(project, 'data', 'saved');
+    await writeFile(file, 'before');
+    if (change === 'permissions') await chmod(file, 0o644);
+    let checks = 0;
+    await assert.rejects(createSnapshot({
+      project, destination, id: 'changing', files: ['data'],
+      source: { commit: 'a'.repeat(40), provenance: 'observed' },
+      runtime: { platform: process.platform, state: 'stopped' },
+      async checkSource() {
+        if (++checks !== 2) return;
+        if (change === 'contents') await writeFile(file, 'after!');
+        if (change === 'inventory') await writeFile(path.join(project, 'data', 'new'), 'new file');
+        if (change === 'permissions') await chmod(file, 0o600);
+        if (change === 'copied-payload') await writeFile(path.join(destination, 'files', 'data', 'saved'), 'after!');
+      },
+    }), /source|changed|checksum|integrity/i);
+    await assert.rejects(readFile(path.join(destination, 'complete.json')), { code: 'ENOENT' });
+  });
+}
 
 test('cancelled snapshot, inventory and verification do not create or mutate snapshot contents', async t => {
   const root = await temporaryDeployment(t);
