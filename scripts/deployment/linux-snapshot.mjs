@@ -27,7 +27,8 @@ export async function createLinuxServiceSnapshot({
     project, destination, id, source, signal, ...scope, externalFiles: [...external.values()],
     runtime: { platform: 'linux', state: 'stopped', unit: service.identity.runtime.unit,
       uid: service.identity.runtime.uid, gid: service.identity.runtime.gid,
-      user: service.identity.runtime.user, home: service.identity.runtime.home },
+      user: service.identity.runtime.user, home: service.identity.runtime.home,
+      executables: service.identity.executables },
     async checkSource() {
       await checkRuntime();
       await scope.check({ signal });

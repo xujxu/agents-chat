@@ -98,11 +98,11 @@ test('stopped native service project can recover saved data and ownership withou
       await createLinuxServiceSnapshot({
         ...f, destination: backup, id: 'restore-admission', source: { commit: 'a'.repeat(40), provenance: 'observed' },
       });
-      const activated = await f.stopped.activate({ purpose: 'prior-runtime' });
+      await f.stopped.activate({ purpose: 'prior-runtime' });
       await writeState(f.control, {
         ...await loadState(f.control), phase: 'prior-runtime-restored', previousPhase: 'copying', errorCode: 'FIXTURE_CAPTURE',
       });
-      await activated.retire();
+      await f.stopped.retire();
       await releaseLock(f.control, f.lock);
       const service = await inspectLinuxService(f);
       t.after(() => service.close());
@@ -128,13 +128,19 @@ test('stopped native service project can recover saved data and ownership withou
       const manifestFile = path.join(f.backup, 'manifest.json');
       const completionFile = path.join(f.backup, 'complete.json');
       const original = JSON.parse(await readFile(manifestFile, 'utf8'));
-      for (const change of ['unit', 'uid', 'executables', 'scope', 'external']) {
+      for (const change of ['unit', 'uid', 'executables', 'scope', 'external-path', 'external']) {
         const manifest = structuredClone(original);
         if (change === 'unit') manifest.runtime.unit = 'foreign.service';
         if (change === 'uid') manifest.runtime.uid = 0;
         if (change === 'executables') manifest.runtime.executables = [];
         if (change === 'scope') manifest.scope = 'selected';
-        if (change === 'external') manifest.externalFiles[0].sha256 = '0'.repeat(64);
+        if (change === 'external-path') manifest.externalFiles[0].path = '/etc/foreign-restore.service';
+        if (change === 'external') {
+          const changed = Buffer.from('changed saved unit policy');
+          manifest.externalFiles[0].bytes = changed.length;
+          manifest.externalFiles[0].sha256 = createHash('sha256').update(changed).digest('hex');
+          await writeFile(path.join(f.backup, 'external', '0'), changed);
+        }
         const bytes = JSON.stringify(manifest);
         await writeFile(manifestFile, bytes);
         await writeFile(completionFile, JSON.stringify({
@@ -165,7 +171,7 @@ test('stopped native service project can recover saved data and ownership withou
     await current.check();
     assert.notEqual(current.identity.runtime.invocationId, f.service.identity.runtime.invocationId);
     await writeState(f.control, { ...await loadState(f.control), phase: 'restored', previousPhase: 'restore-activating' });
-    await activated.retire();
+    await f.stopped.retire();
     await releaseLock(f.control, f.lock);
     assert.equal((await loadState(f.control)).phase, 'restored');
     assert.equal((await verifySnapshot(backup)).id, 'restore-native');

@@ -4155,3 +4155,25 @@ Additional SIGKILL cases cover restore retirement deletion and partial live unlo
 using the saved engine after checkout helper displacement. Implementation validation
 is pending. Changed-unit policy rebinding, interrupted pre-acceptance/cold restore,
 actual application readiness and public entry points remain outstanding.
+
+**Live restore iteration:** `987ac9e` / `36416651343` passed eight jobs,
+including saved cold cleanup for restored acceptance after SIGKILL. The native
+snapshot job restored and activated the service but its test called `retire()` on
+the activation result instead of the retained stop authority. Corrected that
+fixture to the existing `stopped.retire()` API; full acceptance still pending.
+
+### Native pre-downtime restore admission
+
+Linux snapshot runtime metadata now retains the observed npm/Node executable
+identities. Restore admission checks complete-project scope, project, unit,
+uid/gid/user/HOME and those executable identities before stopping the current
+service. It derives external destinations from the inspected service sources and
+actual admitted configuration files, instead of accepting manifest paths as their
+own authorization. Changed unit/drop-in bytes or permissions deliberately refuse
+until policy rebinding is implemented. Backup and current service/configuration
+are rechecked with the replacement stage signal before downtime.
+
+Causal `31736c3` / `36416849913` introduces native admission tests against a
+captured backup and reactivated actual non-root service, plus incompatible saved
+identity/policy/path cases. These remain module/native fixture acceptance, not a
+claim of public recovery or real application acceptance.
