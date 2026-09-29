@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { fork } from 'node:child_process';
+import { execFile, fork } from 'node:child_process';
 import { cp, lstat, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -337,6 +337,45 @@ for (const phase of ['state-published', 'lock-owner-removed', 'guard-removed']) 
       await unlink(ownerPath);
       await rename(`${ownerPath}.retained`, ownerPath);
     }
+
+    test('saved restore entry completes dead-controller cold restoration without checkout helpers', async t => {
+      const f = await candidate(t);
+      await f.kill();
+      await rename(path.join(f.project, 'scripts'), path.join(f.project, 'unavailable-scripts'));
+      const oldLock = await readFile(path.join(f.control, 'lock/owner.json'));
+      const input = {
+        project: f.project, unit: f.unit, npm: f.npm, node: f.node, backup: f.backup,
+        port: f.port, waitSeconds: 10, timeoutSeconds: 90,
+      };
+      const execute = acknowledge => new Promise((resolve, reject) => {
+        const child = execFile(process.execPath, [
+          path.join(f.saved.directory, 'linux-restore-entry.mjs'), f.control, f.saved.manifestSha256,
+          ...(acknowledge ? ['--accept-data-loss'] : []),
+        ], { cwd: '/', timeout: 120000, maxBuffer: 16384,
+          env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' } }, (error, stdout, stderr) => {
+          if (error && typeof error.code !== 'number') reject(error);
+          else resolve({ code: error?.code ?? 0, stdout, stderr });
+        });
+        child.stdin.on('error', error => { if (error.code !== 'EPIPE') reject(error); });
+        child.stdin.end(JSON.stringify(input));
+      });
+      assert.equal((await execute(false)).code, 1);
+      assert.deepEqual(await readFile(path.join(f.control, 'lock/owner.json')), oldLock);
+      input.unit = 'unrelated-cold-restore.service';
+      assert.equal((await execute(true)).code, 1);
+      assert.deepEqual(await readFile(path.join(f.control, 'lock/owner.json')), oldLock);
+      assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'new data');
+      input.unit = f.unit;
+      const result = await execute(true);
+      assert.equal(result.code, 0, result.stderr);
+      assert.equal(JSON.parse(result.stdout).status, 'restored');
+      assert.equal(JSON.parse(result.stdout).backupId, 'live-restore');
+      assert.equal((await loadState(f.control)).phase, 'restored');
+      assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'backup data');
+      await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
+      await assert.rejects(lstat(path.join(f.control, 'recovery-lock')), { code: 'ENOENT' });
+      assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+    });
     const result = await completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 });
     assert.equal(result.status, 'restored');
     assert.equal((await loadState(f.control)).phase, 'restored');
