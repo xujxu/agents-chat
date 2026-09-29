@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -28,6 +28,9 @@ test('dependency and build commands use explicit Node/npm paths without a shell 
   assert.deepEqual(build.args, [f.npmCli, 'run', 'build']);
   assert.equal(Object.isFrozen(build), true);
   assert.equal(Object.isFrozen(build.env), true);
+  await unlink(path.join(f.project, 'package-lock.json'));
+  assert.deepEqual((await prepareNpmCommand({ ...f, stage: 'build' })).args, build.args);
+  await assert.rejects(prepareNpmCommand({ ...f, stage: 'dependencies' }), { code: 'ENOENT' });
 });
 
 test('unsupported npm stages, missing lockfile and absent build script refuse before execution', async t => {
@@ -40,6 +43,8 @@ test('unsupported npm stages, missing lockfile and absent build script refuse be
   await assert.rejects(prepareNpmCommand({ ...f, stage: 'dependencies' }), /lock/i);
   await assert.rejects(prepareNpmCommand({ ...f, stage: 'dependencies',
     environment: { NODE_OPTIONS: '--import=untrusted.mjs' } }), /environment/i);
+  await assert.rejects(prepareNpmCommand({ ...f, stage: 'build',
+    environment: { node_options: '--import=untrusted.mjs' } }), /environment/i);
   const controller = new AbortController();
   controller.abort(new Error('cancel npm preparation'));
   await assert.rejects(prepareNpmCommand({ ...f, stage: 'build', signal: controller.signal }), /cancel npm/);
