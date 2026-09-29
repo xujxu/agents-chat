@@ -4823,6 +4823,25 @@ and auto-restart remain immediate refusals. Do not increase deadlines or blindly
 retry starting the service. Add deterministic regression for each boundary; the
 existing real service recovery matrix still exercises native start/stop.
 
+### Installed Linux source/build composition
+
+`prepareLinuxSourceBuild` captures source execution before downtime using the
+observed installed Node/npm and explicitly selected Git. All workers use the
+installed service uid/gid, not the privileged controller identity. Read-only
+inspection and target resolution recheck the running service; source selection
+and npm stages require the retained stopped/inhibited service and unchanged
+unit policy before/after execution. Npm stages require exact selected Git
+metadata and reject tracked-source drift afterward. They do not mark a build
+as accepted or create a provenance receipt.
+
+The native systemd fixture creates a two-commit source checkout owned by the
+installed non-root account. It refuses selection before stop and npm with the
+wrong commit, then performs actual selection, npm ci and build under durable
+inhibition. Assert the artifact's contents and ownership both identify uid
+65534, the expected source is selected, and no service activation occurred.
+Environment is an explicit caller-supplied capture; public controller admission
+still needs to bind the complete configured build environment and receipts.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
