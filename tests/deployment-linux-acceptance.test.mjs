@@ -42,7 +42,6 @@ test(`native acceptance binds source, artifacts and owned HTTP generation (healt
       runtimeIdentity: f.service.identity.runtime.invocationId, startedAt: f.lock.createdAt,
       updatedAt: new Date().toISOString(), errorCode: null,
     });
-    }
     previousPhase = phase;
   }
   const receipt = await publishDeploymentReceipt({ control: f.control, lock: f.lock, ...accepted });
@@ -52,3 +51,4 @@ test(`native acceptance binds source, artifacts and owned HTTP generation (healt
   await assert.rejects(publishDeploymentReceipt({ control: f.control, lock: f.lock, ...accepted }), /artifact|changed/i);
   assert.deepEqual(await readDeploymentReceipt(f.control, f.project), receipt);
 });
+}
