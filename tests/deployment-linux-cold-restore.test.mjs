@@ -181,12 +181,25 @@ for (const valid of [true, false]) {
       await active.check();
       assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
       await assert.rejects(restored.checkStopped());
+      const readyFile = path.join(f.control, 'recovery-lock', 'activation-ready.json');
+      const readyBytes = await readFile(readyFile);
+      const ready = JSON.parse(readyBytes);
+      assert.equal(ready.phase, 'ready-to-commit');
+      assert.equal(ready.backupId, 'live-restore');
+      assert.deepEqual(ready.runtime, active.identity);
+      assert.equal(ready.port, f.port);
+      assert.deepEqual(ready.providers, ['credentials']);
+      assert.deepEqual(ready.lock, f.lock);
+      await rename(readyFile, `${readyFile}.old`);
+      await writeFile(readyFile, readyBytes, { mode: 0o600 });
+      await assert.rejects(active.check(), /evidence|authority|receipt|changed|replaced/i);
     } else {
       await assert.rejects(activateLinuxColdRestore({ restored, port: f.port, waitSeconds: 10, timeoutSeconds: 90 }),
         /providers do not match/i);
       assert.equal((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim(), '0');
       const journal = (await readFile(path.join(f.control, 'service-activation.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
       assert.equal(journal.at(-1).phase, 'activation-stopped');
+      await assert.rejects(readFile(path.join(f.control, 'recovery-lock', 'activation-ready.json')), { code: 'ENOENT' });
     }
     assert.deepEqual(await readFile(path.join(f.control, 'state.json')), originalState);
     assert.deepEqual(await readFile(path.join(f.control, 'lock', 'owner.json')), originalLock);

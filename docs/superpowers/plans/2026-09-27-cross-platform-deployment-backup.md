@@ -4538,6 +4538,16 @@ before activation intent publication. Rename its returned activation-only check
 so the pre-publication call resolves the outer stopped lease check. Configuration
 drift refusal and all previous cold restore cases already passed in this run.
 
+Fix `f406d24` / `36504314416` passed all nine jobs, including healthy cold
+activation, stopped failed-health generation and pre-uninhibition config drift.
+Next persist the already-observed health result as `activation-ready.json`,
+bound to the recovery owner, activation intent digest, exact backup and new
+runtime generation. This is a retirement prerequisite, not a restored result:
+old lock/state and recovery guard stay retained. The native test must require
+this receipt, detect identical-byte inode replacement and require its absence
+on failed health. Terminal publication/cleanup still needs its own crash-safe
+handoff and must not infer acceptance from files-restored or activation-started.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
