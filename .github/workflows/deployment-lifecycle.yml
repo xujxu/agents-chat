@@ -97,6 +97,7 @@ jobs:
           tests/deployment-restore-external.test.mjs
           tests/deployment-source.test.mjs
           tests/deployment-npm-command.test.mjs
+          tests/deployment-build-artifacts.test.mjs
           tests/deployment-git-metadata.test.mjs
           tests/deployment-update-policy.test.mjs
           tests/deployment-stage-runner.test.mjs

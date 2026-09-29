@@ -156,9 +156,11 @@ test('installed non-root service identity governs source selection and npm build
   await writeFile(path.join(f.project, 'package-lock.json'), JSON.stringify({
     name: pkg.name, version: pkg.version, lockfileVersion: 3, packages: { '': { name: pkg.name, version: pkg.version } },
   }));
-  await writeFile(path.join(f.project, '.gitignore'), 'ready\nwrites\n.npm/\nnode_modules/\nartifact\n');
+  await writeFile(path.join(f.project, '.gitignore'), 'ready\nwrites\n.npm/\n.next/\nnode_modules/\nartifact\n');
   await writeFile(path.join(f.project, 'build.cjs'),
-    "require('node:fs').writeFileSync('artifact',String(process.getuid()));");
+    `const fs=require('node:fs');fs.mkdirSync('.next',{recursive:true});fs.mkdirSync('node_modules',{recursive:true});
+fs.writeFileSync('.next/BUILD_ID','installed-build');fs.writeFileSync('.next/app.js','compiled application');
+fs.writeFileSync('artifact',String(process.getuid()));`);
   await writeFile(path.join(f.project, 'source.txt'), 'old source\n');
   await setup('init', '--initial-branch=main');
   await setup('config', 'user.name', 'Deployment fixture');
@@ -199,11 +201,16 @@ test('installed non-root service identity governs source selection and npm build
   assert.equal((await stages.select({ target, stopped })).commit, next);
   await assert.rejects(stages.npm({ stage: 'dependencies', commit: old, stopped }), /commit/i);
   await stages.npm({ stage: 'dependencies', commit: next, stopped });
-  await stages.npm({ stage: 'build', commit: next, stopped });
+  const built = await stages.npm({ stage: 'build', commit: next, stopped });
+  assert.equal(built.sourceCommit, next);
+  assert.equal(built.artifacts.identity.buildId, 'installed-build');
+  await built.artifacts.check();
   assert.equal(await readFile(path.join(f.project, 'artifact'), 'utf8'), '65534');
   assert.equal((await fs.lstat(path.join(f.project, 'artifact'))).uid, 65534);
   assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'new source\n');
   assert.deepEqual(await stopped.checkStopped(), { stopped: true, inhibited: true });
+  await writeFile(path.join(f.project, '.next/app.js'), 'changed after build');
+  await assert.rejects(built.artifacts.check(), /artifact|changed/i);
   await operation.seal();
 });
 
