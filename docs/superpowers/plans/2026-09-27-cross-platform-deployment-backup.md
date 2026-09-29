@@ -4921,6 +4921,39 @@ or artifact drift even if a previous accepted receipt remains on disk.
 This binds observed acceptance; prior-source/build provenance must still come
 from the controlled build pipeline, not a newly guessed Git HEAD.
 
+Receipt implementation `ac78956` / Actions `36590344899` passed all eleven jobs.
+Native acceptance integration `cf49d50` failed before execution because its
+parameterized test had a misplaced closing brace; `5b11776` fixes that exact
+parse error. The native acceptance result must not be inferred from the receipt
+primitive's passing contract tests.
+
+### Existing-running Linux deployment composition
+
+`linux-deployment.mjs` composes the existing transaction with installed-account
+source/dependency/build workers, target/config/data admission, pre-stop space
+and snapshot-slot checks, complete backup/rotation, unchanged service-policy
+activation, owned HTTP acceptance and durable receipt publication. The build
+returns retained Git authority, so acceptance does not recapture an unrelated
+HEAD after building. Workers seal before activation and are retired through the
+existing service handoff, not independently while service evidence still owns
+them. Settled preflight refusal unlocks without downtime; pre-source failure
+can verify/retire the restarted prior runtime. Post-source failure retains the
+complete backup and stops only the new owned generation.
+
+The internal entry requires a running inspected service, caller-owned lock,
+positive readiness wait and explicit additional build-space budget. It does
+not implement public argument handling, first install/inactive services,
+changed service policy, already-current or cold receipt takeover. Publication
+failure after accepted state retains the lock and live evidence; it cannot
+claim complete delivery or silently downgrade the terminal state.
+
+The new Actions-only composition gate upgrades a synthetic running service
+into the actual current application, including real npm ci/Next build and
+native activation/receipt/retirement. A second case refuses an unsupported
+target before downtime and checks settled preflight cleanup. This is not the
+historical application upgrade, second update, restore or API-data continuity
+gate; those remain required independently.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
