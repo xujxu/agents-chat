@@ -34,6 +34,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  linux-deployment:
+    name: Native Linux deployment composition
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Update running fixture into actual application with owned source build
+        run: |
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo env DEPLOYMENT_TEST_REAL_DEPLOYMENT=1 "$(command -v node)" --test tests/deployment-linux-deployment.test.mjs
+
   application-build:
     name: Owned application build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
