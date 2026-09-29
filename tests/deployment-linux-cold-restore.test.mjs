@@ -303,6 +303,8 @@ test('cold restore terminal completion preserves the owned runtime and backup wh
   assert.deepEqual(await readFile(path.join(f.backup, 'manifest.json')), backup);
   assert.deepEqual(await completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 }), result);
   const next = await acquireLock(f.control, { project: f.project, operationId: 'next-after-cold-restore' });
+  await assert.rejects(lstat(path.join(f.control, 'cold-restore-complete.json')), { code: 'ENOENT' });
+  assert.equal((await loadState(f.control)).phase, 'restored');
   await releaseLock(f.control, next);
 });
 

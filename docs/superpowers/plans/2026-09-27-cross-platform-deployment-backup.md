@@ -4633,6 +4633,21 @@ Keep the unchanged live restore path when no cold authority exists.
 The saved-entry test was accidentally registered inside each terminal crash
 case; move it to one top-level test without removing any crash assertions.
 
+Saved cold entry `d67e550` / `36545627216` and extended identity/idempotence
+coverage `df4b820` / `36545709295` both passed all nine jobs.
+
+### Superseding a completed cold recovery receipt
+
+The completed cold receipt is valid for idempotent recovery only until a new
+operation starts. Leaving it forever makes the external entry select an obsolete
+recovery instead of the new operation. Before acquiring the next lock, under the
+existing exclusive admission, validate the receipt, exact terminal state,
+absence of every retired path and expected root inventory. Then remove only
+that completed receipt and sync the directory. No backup or terminal state is
+deleted, and no service action occurs. A crash before new lock creation leaves a
+normal terminal state; incomplete recovery never enters this path because its
+guard/service marker blocks ordinary lock admission first.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
