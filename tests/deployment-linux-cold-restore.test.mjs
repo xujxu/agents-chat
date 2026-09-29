@@ -11,9 +11,10 @@ import { admitLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-
 import { claimLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-lease.mjs';
 import { restoreLinuxColdFiles } from '../scripts/deployment/linux-cold-restore-files.mjs';
 import { systemctl } from './deployment-linux-service-fixture.mjs';
+import { activateLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-activation.mjs';
 
-async function candidate(t, phase = 'stopped') {
-  const f = await restoreCandidate(t);
+async function candidate(t, phase = 'stopped', valid = true) {
+  const f = await restoreCandidate(t, valid);
   await releaseLock(f.control, f.lock);
   await cp(fileURLToPath(new URL('../scripts/deployment/', import.meta.url)),
     path.join(f.project, 'scripts', 'deployment'), { recursive: true });
@@ -163,4 +164,47 @@ test('cold file restoration resumes after controller death during project remova
   assert.equal(receipt.phase, 'files-restored');
   assert.equal(receipt.backupId, 'live-restore');
   assert.equal(receipt.token, f.lock.token);
+});
+
+for (const valid of [true, false]) {
+  test(`cold activation verifies restored artifacts and retains recovery evidence (healthy=${valid})`, async t => {
+    const f = await candidate(t, 'stopped', valid);
+    await f.kill();
+    const originalState = await readFile(path.join(f.control, 'state.json'));
+    const originalLock = await readFile(path.join(f.control, 'lock', 'owner.json'));
+    const restored = await restoreLinuxColdFiles({ ...f, acceptDataLoss: true, timeoutSeconds: 90 });
+    t.after(() => restored.close());
+    if (valid) {
+      const active = await activateLinuxColdRestore({ restored, port: f.port, waitSeconds: 10, timeoutSeconds: 90 });
+      t.after(() => active.close());
+      assert.equal(active.status, 'ready-to-commit');
+      await active.check();
+      assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+      await assert.rejects(restored.checkStopped());
+    } else {
+      await assert.rejects(activateLinuxColdRestore({ restored, port: f.port, waitSeconds: 10, timeoutSeconds: 90 }),
+        /providers do not match/i);
+      assert.equal((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim(), '0');
+      const journal = (await readFile(path.join(f.control, 'service-activation.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+      assert.equal(journal.at(-1).phase, 'activation-stopped');
+    }
+    assert.deepEqual(await readFile(path.join(f.control, 'state.json')), originalState);
+    assert.deepEqual(await readFile(path.join(f.control, 'lock', 'owner.json')), originalLock);
+    const intent = JSON.parse(await readFile(path.join(f.control, 'recovery-lock', 'activation-intent.json'), 'utf8'));
+    assert.equal(intent.state.operation, 'restore');
+    assert.equal(intent.state.phase, 'restore-activating');
+    assert.equal(intent.state.backupId, 'live-restore');
+  });
+}
+
+test('cold activation refuses post-copy configuration drift before uninhibiting', async t => {
+  const f = await candidate(t);
+  await f.kill();
+  const restored = await restoreLinuxColdFiles({ ...f, acceptDataLoss: true, timeoutSeconds: 90 });
+  t.after(() => restored.close());
+  await writeFile(path.join(f.project, '.env'), 'IGNORED_SETTING=changed\n');
+  await assert.rejects(activateLinuxColdRestore({ restored, port: f.port, waitSeconds: 10, timeoutSeconds: 90 }),
+    /configuration|snapshot/i);
+  assert.equal((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim(), '0');
+  await assert.rejects(readFile(path.join(f.control, 'service-activation.ndjson')), { code: 'ENOENT' });
 });
