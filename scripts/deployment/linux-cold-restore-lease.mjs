@@ -93,13 +93,17 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
   let receiptHandle;
   let activationHandle;
   let activationIntent;
+  let readyHandle;
+  let readyReceipt;
   let activationAttempted = false;
   let receipt = admitted.lease.guard?.receipt ?? null;
   let closed = false;
   const close = async () => {
     if (closed) return;
     closed = true;
-    const results = await Promise.allSettled([ownerHandle?.close(), receiptHandle?.close(), activationHandle?.close(), guardHandle?.close()]);
+    const results = await Promise.allSettled([
+      ownerHandle?.close(), receiptHandle?.close(), activationHandle?.close(), readyHandle?.close(), guardHandle?.close(),
+    ]);
     const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
     try { await admitted.close(); }
     catch (error) { errors.push(error); }
@@ -178,7 +182,8 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
         || !same(identity(await guardHandle.stat()), guardIdentity)
         || (await ownerHandle.stat()).nlink !== 1 || !same(identity(await ownerHandle.stat()), ownerIdentity)
         || !same((await readdir(guard)).sort(),
-          [...(activationIntent ? ['activation-intent.json'] : []), ...(receipt ? ['files-restored.json'] : []), 'owner.json'])
+          [...(activationIntent ? ['activation-intent.json'] : []), ...(readyReceipt ? ['activation-ready.json'] : []),
+            ...(receipt ? ['files-restored.json'] : []), 'owner.json'])
         || !same(identity(await lstat(ownerPath)), ownerIdentity)
         || !(await readWorkerFile(ownerPath, 1024 * 1024, { privateMode: true })).equals(bytes)
         || (await readdir(control)).includes('cold-restore-staging')) {
@@ -199,6 +204,15 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
             || !same(identity(await lstat(file)), activationIntent.info)
             || !(await readWorkerFile(file, 1024 * 1024, { privateMode: true })).equals(activationIntent.bytes)) {
             throw new Error('Cold activation intent was replaced or changed.');
+          }
+        }
+        if (readyReceipt) {
+          const file = path.join(guard, 'activation-ready.json');
+          if ((await readyHandle.stat()).nlink !== 1
+            || !same(identity(await readyHandle.stat()), readyReceipt.info)
+            || !same(identity(await lstat(file)), readyReceipt.info)
+            || !(await readWorkerFile(file, 1024 * 1024, { privateMode: true })).equals(readyReceipt.bytes)) {
+            throw new Error('Cold activation readiness receipt was replaced or changed.');
           }
         }
       }
@@ -248,7 +262,32 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
           return structuredClone(state);
         };
         await checkActivation(options);
-        return Object.freeze({ control, lock: admitted.lock, state: Object.freeze(state), check: checkActivation });
+        return Object.freeze({
+          control, lock: admitted.lock, state: Object.freeze(state), check: checkActivation,
+          async markReady({ runtime, port, providers, signal }) {
+            if (readyReceipt || runtime?.runtime?.project !== project
+              || runtime.runtime.unit !== admitted.service.identity.runtime.unit
+              || !runtime.runtime.invocationId
+              || runtime.runtime.invocationId === admitted.service.identity.runtime.invocationId
+              || !Number.isInteger(port) || port < 1 || port > 65535
+              || !Array.isArray(providers) || !providers.length
+              || !same([...providers].sort(), [...admitted.providers].sort())) {
+              throw new Error('Cold readiness requires the new verified generation and admitted providers.');
+            }
+            await checkActivation({ signal });
+            const file = path.join(guard, 'activation-ready.json');
+            const bytes = Buffer.from(`${JSON.stringify({
+              version: 1, phase: 'ready-to-commit', owner, lock: admitted.lock,
+              backupId: record.backupId, snapshotSha256: record.snapshotSha256,
+              activationSha256: digest(activationIntent.bytes), runtime, port, providers,
+            })}\n`);
+            await writeWorkerFile(file, bytes);
+            await syncWorkerDirectory(guard);
+            readyHandle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+            readyReceipt = { bytes, info: identity(await readyHandle.stat()) };
+            await checkActivation({ signal });
+          },
+        });
       },
     });
   } catch (error) {

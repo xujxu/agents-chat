@@ -4548,6 +4548,13 @@ this receipt, detect identical-byte inode replacement and require its absence
 on failed health. Terminal publication/cleanup still needs its own crash-safe
 handoff and must not infer acceptance from files-restored or activation-started.
 
+Causal `532d7b8` / `36505055349` failed exactly when opening the missing
+`recovery-lock/activation-ready.json` after healthy activation. Publish the
+receipt only after owned readiness and effective-configuration recheck. Pin its
+inode, single-link identity and bytes for subsequent authority checks; failed
+health must never create it. This remains intermediate health evidence, not
+permission to unlock or to skip fresh runtime checks after controller death.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

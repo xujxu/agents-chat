@@ -56,6 +56,7 @@ export async function activateLinuxColdRestore({ restored, port, waitSeconds = 1
       const current = await inspectLinuxConfiguration({ service: active, profile: configuration.profile, signal: stageSignal });
       await waitLinuxReadiness({ service: active, port, providers: current.providers, waitSeconds, signal: stageSignal });
       await current.check({ signal: stageSignal });
+      await authority.markReady({ runtime: active.identity, port, providers: current.providers, signal: stageSignal });
     }, Math.min(waitSeconds, timeoutSeconds));
     return Object.freeze({
       status: 'ready-to-commit', identity: active.identity, close,
