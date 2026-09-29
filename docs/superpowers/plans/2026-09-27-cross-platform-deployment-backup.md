@@ -4977,6 +4977,15 @@ profile, while separately requiring at least one enabled login mechanism.
 Readiness retains exact provider-set/type matching, owned-listener admission
 and refusal of the wrong default ID. No application auth changes are needed.
 
+Extend the composed real-application case through the saved external restore
+entry from `/`, with a minimal environment. Require the previous source commit,
+owned provider readiness, unchanged retained backup and released lock afterward.
+The synthetic old package has no build script or lockfile, so restore must use
+its saved runnable source rather than install/build. The old deployment receipt
+remains historical evidence while state becomes `restored`, not `accepted`.
+This tests the composition-to-recovery handoff; it still does not establish
+historical application/database continuity.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

@@ -123,7 +123,7 @@ test('native deployment retains backup and inhibition after actual dependency in
   await assert.rejects(inspectLinuxService(f), /running|inhibit|policy|start|service/i);
 });
 
-test('native deployment composes snapshot, real application build, owned activation and accepted receipt', {
+test('native deployment composes real application acceptance and saved no-build restoration', {
   skip: process.env.DEPLOYMENT_TEST_REAL_DEPLOYMENT !== '1',
 }, async t => {
   const f = await installation(t);
@@ -140,5 +140,29 @@ test('native deployment composes snapshot, real application build, owned activat
     (await execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project,
       'show', `${f.prior}:server.cjs`])).stdout);
   assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'recovery-engine', 'state.json']);
-  await saveRecoveryEngine({ source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), control: f.control });
+  const saved = await saveRecoveryEngine({
+    source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), control: f.control,
+  });
+  const restored = await new Promise((resolve, reject) => {
+    const child = execFile(node, [path.join(saved.directory, 'linux-restore-entry.mjs'),
+      f.control, saved.manifestSha256, '--accept-data-loss'], {
+      cwd: '/', timeout: 180000, maxBuffer: 16384, env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' },
+    }, (error, stdout, stderr) => {
+      if (error) reject(new Error(`Saved restore failed: ${stderr}`, { cause: error }));
+      else resolve(stdout);
+    });
+    child.stdin.on('error', reject);
+    child.stdin.end(JSON.stringify({ project: f.project, unit: f.unit, npm: f.npm, node: f.node,
+      backup: path.join(f.control, 'backup'), port: 3010, waitSeconds: 30, timeoutSeconds: 120 }));
+  });
+  assert.deepEqual(JSON.parse(restored), { status: 'restored', backupId: backup.id });
+  assert.equal((await loadState(f.control)).phase, 'restored');
+  assert.equal((await execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project,
+    'rev-parse', 'HEAD'])).stdout.trim(), f.prior);
+  const active = await inspectLinuxService(f);
+  t.after(() => active.close());
+  await waitLinuxReadiness({ service: active, port: 3010, providers: ['admin-login'] });
+  assert.deepEqual(await verifySnapshot(path.join(f.control, 'backup')), backup);
+  assert.deepEqual(await readDeploymentReceipt(f.control, f.project), receipt);
+  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'recovery-engine', 'state.json']);
 });
