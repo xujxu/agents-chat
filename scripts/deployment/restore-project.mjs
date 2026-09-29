@@ -7,6 +7,9 @@ import { verifySnapshot } from './snapshot.mjs';
 import { assertSnapshotAbsent, fileDigest, inventorySnapshot, realDirectory } from './snapshot-files.mjs';
 import { projectSnapshotExclusions } from './snapshot-scope.mjs';
 import { canonicalWorkerDirectory, closeWorkerFile, syncWorkerDirectory } from './worker-files.mjs';
+import { readSnapshotGit } from './snapshot-git.mjs';
+import { restoreGitMetadata } from './restore-git.mjs';
+import { inspectGitMetadata } from './git-metadata.mjs';
 
 const inside = (parent, child) => child === parent || child.startsWith(parent + path.sep);
 const depth = entry => entry.path.split('/').length;
@@ -59,6 +62,13 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
   await check();
   if (!same(await verifySnapshot(saved, { signal }), manifest) || !same(await includedNames(), names)) {
     throw new Error('Restore backup or project scope changed before mutation.');
+  }
+  if (manifest.gitMetadata) {
+    const record = await readSnapshotGit(saved, manifest);
+    await restoreGitMetadata({ project: root, record, checkStopped: async () => {
+      await check();
+      return { stopped: true, inhibited: true };
+    }, signal });
   }
   await chmod(root, (original.mode & 0o777) | 0o700);
   for (const entry of current.filter(entry => entry.kind === 'directory').sort((a, b) => depth(a) - depth(b))) {
@@ -171,6 +181,12 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
     if (await fileDigest(path.join(root, entry.path), { signal }) !== entry.sha256) {
       throw new Error('Restored project checksum changed before acceptance.');
     }
+  }
+  await check();
+  if (manifest.gitMetadata) {
+    const observed = await inspectGitMetadata({ project: root, commit: manifest.source.commit, signal });
+    if (!same(observed.record, await readSnapshotGit(saved, manifest))) throw new Error('Restored Git source metadata changed.');
+    await observed.check();
   }
   await check();
   return manifest;

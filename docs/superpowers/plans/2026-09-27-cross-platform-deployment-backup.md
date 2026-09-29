@@ -4719,6 +4719,21 @@ using the same saved record, asserting unchanged worktree contents and exact
 HEAD/index restoration. This primitive still needs wiring before native
 restoration can claim Git/source provenance.
 
+Native integration captures Git metadata whenever the installed project has a
+standalone `.git` directory; an existing unsupported layout is refused, not
+treated as absent. Complete-project restoration applies saved Git metadata under
+the same stopped authority after capacity/integrity checks, before worktree
+replacement, and checks the exact restored record again afterward. Both live
+and cold/saved paths share this primitive. Extend the real systemd fixture with
+a real two-commit repository to require matching source files, branch HEAD and
+byte-identical saved index. Synthetic non-Git fixtures and legacy snapshots
+without Git metadata keep their explicit existing behavior.
+
+This restores checkout metadata, not a Git object database backup or proof that
+the captured build was produced from that commit. Object availability and
+build/dependency provenance still require explicit admission before public
+controllers may claim full source-based recovery.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
