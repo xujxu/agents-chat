@@ -14,6 +14,7 @@ import { createWorkerOperation, readWorkerOperation } from '../scripts/deploymen
 import { readWorkerJournal } from '../scripts/deployment/worker-journal.mjs';
 import { saveRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
 import { prepareNpmCommand } from '../scripts/deployment/npm-command.mjs';
+import { prepareSourceCommand, readSourceCommandResult } from '../scripts/deployment/source-command.mjs';
 
 const execute = promisify(execFile);
 const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
@@ -94,6 +95,45 @@ test('real native workers require enrolled lock-bound authority and seal exact s
       const run = async (stage, signal) => f.operation.run({
         workerId: randomUUID(), runtime: f.runtime, signal,
         command: await prepareNpmCommand({ project: f.project, node: process.execPath, npmCli, stage, environment, signal }),
+      });
+
+      test('actual Git source selection runs through saved native ownership without relying on checkout helpers', async t => {
+        const f = await fixture(t);
+        const git = process.env.DEPLOYMENT_TEST_GIT;
+        assert.ok(git, 'Actions must supply the installed Git executable.');
+        const setup = async (...args) => (await execute(git, ['-C', f.project, ...args])).stdout.trim();
+        await setup('init', '--initial-branch=main');
+        await setup('config', 'user.name', 'Deployment fixture');
+        await setup('config', 'user.email', 'fixture@example.invalid');
+        await setup('config', 'core.autocrlf', 'false');
+        await writeFile(path.join(f.project, 'source.txt'), 'old\n');
+        await setup('add', '.');
+        await setup('commit', '-m', 'old');
+        const old = await setup('rev-parse', 'HEAD');
+        await writeFile(path.join(f.project, 'source.txt'), 'new\n');
+        await setup('commit', '-am', 'new');
+        const next = await setup('rev-parse', 'HEAD');
+        await setup('switch', '--detach', old);
+        const environment = Object.fromEntries(Object.entries(process.env)
+          .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase())));
+        const run = async (action, options = {}) => {
+          const command = await prepareSourceCommand({
+            project: f.project, node: process.execPath, git, action, options, environment,
+          });
+          return readSourceCommandResult(await f.operation.run({
+            workerId: randomUUID(), runtime: f.runtime, command,
+          }), action, f.project);
+        };
+        assert.equal((await run('inspect')).commit, old);
+        const target = await run('resolve', { revision: next });
+        assert.equal(target.commit, next);
+        assert.equal(await setup('rev-parse', 'HEAD'), old);
+        assert.equal((await run('select', target)).commit, next);
+        assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'new\n');
+        await writeFile(path.join(f.project, 'source.txt'), 'preserve dirty source\n');
+        await assert.rejects(run('inspect'), { code: 'DEPLOYMENT_COMMAND_FAILED' });
+        assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'preserve dirty source\n');
+        await f.operation.seal();
       });
       await run('dependencies');
       await run('build');

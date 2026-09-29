@@ -6,6 +6,7 @@ import { mkdir, writeFile, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectSource, previewTarget, resolveTarget, selectSource } from '../scripts/deployment/source.mjs';
+import { prepareSourceCommand, readSourceCommandResult } from '../scripts/deployment/source-command.mjs';
 
 const execute = promisify(execFile);
 async function git(project, args) {
@@ -151,4 +152,24 @@ test('preview explicitly reports unavailable targets and still rejects dirty sou
   await assert.rejects(previewTarget(project, { revision: next, noPull: true }), /revision/i);
   await writeFile(path.join(project, 'app.txt'), 'local work\n');
   await assert.rejects(previewTarget(project), /dirty|modified/i);
+});
+
+test('owned source commands reject unsupported actions and bind bounded structured results', async t => {
+  const { project, old } = await repository(t);
+  const input = { project, node: process.execPath, git: process.execPath, environment: {} };
+  await assert.rejects(prepareSourceCommand({ ...input, action: 'reset' }), /action/i);
+  await assert.rejects(prepareSourceCommand({ ...input, action: 'resolve', options: { force: true } }), /options/i);
+  await assert.rejects(prepareSourceCommand({ ...input, action: 'inspect', git: 'git' }), /absolute/i);
+  await assert.rejects(prepareSourceCommand({ ...input, action: 'inspect', environment: { NODE_OPTIONS: '--import=x' } }), /environment/i);
+  const command = await prepareSourceCommand({ ...input, action: 'resolve', options: { noPull: true } });
+  assert.equal(command.file, process.execPath);
+  assert.equal(command.cwd, project);
+  assert.equal(command.args[0], '--input-type=module');
+  const result = { project, commit: old, branch: null, modifiedRuntime: [] };
+  const output = { stdout: JSON.stringify({ action: 'inspect', result }), stderr: '', exitCode: 0, signal: null };
+  assert.deepEqual(readSourceCommandResult(output, 'inspect', project), result);
+  assert.throws(() => readSourceCommandResult(output, 'select', project), /action/i);
+  assert.throws(() => readSourceCommandResult(output, 'inspect', path.dirname(project)), /project/i);
+  assert.throws(() => readSourceCommandResult({ ...output, stdout: 'x'.repeat(4097) }, 'inspect', project), /result/i);
+  assert.throws(() => readSourceCommandResult({ ...output, exitCode: 1 }, 'inspect', project), /result/i);
 });
