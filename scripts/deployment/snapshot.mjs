@@ -15,6 +15,7 @@ export { rotateSnapshot, reconcileSnapshotSlots } from './snapshot-rotation.mjs'
 import { captureExternalSnapshot, validateExternalSnapshot, verifyExternalSnapshot } from './snapshot-external.mjs';
 import { syncWorkerDirectory } from './worker-files.mjs';
 import { projectSnapshotExclusions } from './snapshot-scope.mjs';
+import { captureSnapshotGit, readSnapshotGit, validateSnapshotGit } from './snapshot-git.mjs';
 
 const projectMetadata = info => ({ mode: info.mode & 0o777, uid: info.uid, gid: info.gid });
 
@@ -48,6 +49,7 @@ function validateManifest(manifest) {
     }
   }
   validateExternalSnapshot(manifest.externalFiles ?? [], manifest.project);
+  if (manifest.gitMetadata !== undefined) validateSnapshotGit(manifest.gitMetadata);
   const seen = new Map();
   for (const entry of manifest.entries) {
     relativeSnapshotPath(entry.path);
@@ -92,11 +94,12 @@ function validateManifest(manifest) {
 
 export async function createSnapshot({
   project, destination, id, files, source, runtime, signal, absentPaths = [], excludedPaths = [],
-  externalFiles = [], checkSource, projectScope = false,
+  externalFiles = [], checkSource, projectScope = false, gitMetadata,
 }) {
   signal?.throwIfAborted();
   if (checkSource !== undefined && typeof checkSource !== 'function') throw new Error('Snapshot source check must be callable.');
   await checkSource?.();
+  const git = gitMetadata === undefined ? null : await captureSnapshotGit(gitMetadata, source?.commit);
   if (runtime?.state !== 'stopped') throw new Error('Snapshot requires a stopped runtime.');
   const root = await realDirectory(project);
   const rootInfo = await lstat(root);
@@ -127,18 +130,20 @@ export async function createSnapshot({
     version: 1, id, project: root, createdAt: new Date().toISOString(), source, runtime, absentPaths, excludedPaths,
     scope: projectScope ? 'project' : 'selected', projectMetadata: projectMetadata(rootInfo),
     externalFiles: external.entries,
+    ...(git ? { gitMetadata: git.descriptor } : {}),
     entries: entries.map(entry => entry.kind === 'file' ? { ...entry, sha256: '0'.repeat(64) } : entry),
   };
   validateManifest(manifest);
   const manifestBytes = Buffer.byteLength(JSON.stringify(manifest));
   if (manifestBytes > 32 * 1024 * 1024) throw new Error('Snapshot manifest exceeds size limit.');
-  const snapshotBytes = entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), external.bytes);
+  const snapshotBytes = entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), external.bytes + (git?.bytes.length ?? 0));
   const required = estimateRequiredBytes({ snapshotBytes, metadataBytes: manifestBytes + 64 * 1024, deploymentBytes: 0 });
   const space = await statfs(parent, { bigint: true });
   if (space.bavail * space.bsize < BigInt(required)) throw new Error('Insufficient space for snapshot bytes.');
   signal?.throwIfAborted();
   await mkdir(target, { mode: 0o700 });
   await writePrivateFile(path.join(target, 'owner.json'), JSON.stringify({ version: 1, project: root, id }));
+  if (git) await writePrivateFile(path.join(target, 'git.json'), git.bytes);
   const contents = path.join(target, 'files');
   await mkdir(contents, { mode: 0o700 });
   const ordered = [...manifest.entries].sort((a, b) => a.path.split('/').length - b.path.split('/').length);
@@ -179,6 +184,7 @@ export async function createSnapshot({
   await writePrivateFile(path.join(target, 'manifest.json'), serialized);
   signal?.throwIfAborted();
   await checkSource?.();
+  if (git) await gitMetadata.check();
   await checkProject();
   await assertSnapshotAbsent(root, absentPaths);
   if (!same(entries, await captureSnapshotInventory(root, files, { signal, excludedPaths }))) {
@@ -202,6 +208,7 @@ export async function createSnapshot({
   await syncWorkerDirectory(contents);
   if (external.entries.length) await syncWorkerDirectory(path.join(target, 'external'));
   await syncWorkerDirectory(target);
+  if (git) await gitMetadata.check();
   signal?.throwIfAborted();
   await writePrivateFile(path.join(target, 'complete.json'), JSON.stringify({
     version: 1, id, sha256: manifestDigest,
@@ -235,11 +242,12 @@ async function verifySnapshotContents(root, manifest, { signal, complete = true 
   }
   const topLevel = (await readdir(root)).sort();
   const expectedTopLevel = [...(complete ? ['complete.json'] : []), 'files', 'manifest.json', 'owner.json',
-    ...(manifest.externalFiles?.length ? ['external'] : [])].sort();
+    ...(manifest.externalFiles?.length ? ['external'] : []), ...(manifest.gitMetadata ? ['git.json'] : [])].sort();
   if (JSON.stringify(topLevel) !== JSON.stringify(expectedTopLevel)) {
     throw new Error('Unexpected snapshot files; inspection required.');
   }
   await verifyExternalSnapshot(root, manifest.externalFiles ?? [], signal);
+  if (manifest.gitMetadata) await readSnapshotGit(root, manifest);
   const contents = await realDirectory(path.join(root, 'files'));
   await assertSnapshotAbsent(contents, manifest.absentPaths ?? []);
   const observed = await inventorySnapshot(contents, await readdir(contents), { signal });

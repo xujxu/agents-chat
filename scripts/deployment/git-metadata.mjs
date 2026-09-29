@@ -4,6 +4,7 @@ import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
 import { canonicalWorkerDirectory } from './worker-files.mjs';
+import { captureWorkerFields } from './worker-identity.mjs';
 
 const identity = info => ({ dev: info.dev, ino: info.ino });
 const commitPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
@@ -17,6 +18,38 @@ function branchRef(value) {
     throw new Error('Unsupported Git HEAD branch reference.');
   }
   return value;
+}
+
+function validateIndex(indexBytes, commit) {
+  const checksumBytes = commit.length / 2;
+  if (indexBytes.length < 12 + checksumBytes || indexBytes.subarray(0, 4).toString('ascii') !== 'DIRC'
+    || ![2, 3, 4].includes(indexBytes.readUInt32BE(4))
+    || !digest(indexBytes.subarray(0, -checksumBytes), commit.length === 40 ? 'sha1' : 'sha256')
+      .equals(indexBytes.subarray(-checksumBytes))) {
+    throw new Error('Git index format or checksum is invalid.');
+  }
+}
+
+export function validateGitMetadata(value, commit) {
+  const record = captureWorkerFields(value, ['version', 'commit', 'ref', 'head', 'index'], 'Git metadata');
+  if (record.version !== 1 || !commitPattern.test(record.commit ?? '') || record.commit !== commit) {
+    throw new Error('Git metadata does not match snapshot source commit.');
+  }
+  const decode = (value, maximum) => {
+    if (typeof value !== 'string' || value.length > Math.ceil(maximum / 3) * 4) {
+      throw new Error('Git metadata bytes exceed the supported limit.');
+    }
+    const bytes = Buffer.from(value, 'base64');
+    if (bytes.length > maximum || bytes.toString('base64') !== value) throw new Error('Invalid Git metadata byte encoding.');
+    return bytes;
+  };
+  const head = text(decode(record.head, 4096)).trimEnd();
+  if (record.ref !== null) branchRef(record.ref);
+  if (head !== (record.ref === null ? record.commit : `ref: ${record.ref}`)) {
+    throw new Error('Git metadata HEAD and branch reference differ.');
+  }
+  validateIndex(decode(record.index, 16 * 1024 * 1024), commit);
+  return Object.freeze(record);
 }
 
 async function readMetadata(file, maximum, optional = false) {
@@ -88,13 +121,7 @@ export async function inspectGitMetadata({ project, commit, signal }) {
     }
     if (resolved !== commit) throw new Error('Git metadata does not match the selected source commit.');
     const indexBytes = Buffer.from(index.bytes, 'base64');
-    const checksumBytes = commit.length / 2;
-    if (indexBytes.length < 12 + checksumBytes || indexBytes.subarray(0, 4).toString('ascii') !== 'DIRC'
-      || ![2, 3, 4].includes(indexBytes.readUInt32BE(4))
-      || !digest(indexBytes.subarray(0, -checksumBytes), commit.length === 40 ? 'sha1' : 'sha256')
-        .equals(indexBytes.subarray(-checksumBytes))) {
-      throw new Error('Git index format or checksum is invalid.');
-    }
+    validateIndex(indexBytes, commit);
     signal?.throwIfAborted();
     return { head, index, config, ref, reference, packed };
   };
@@ -104,9 +131,9 @@ export async function inspectGitMetadata({ project, commit, signal }) {
   };
   await check();
   return Object.freeze({
-    record: Object.freeze({
+    record: validateGitMetadata({
       version: 1, commit, ref: original.ref, head: original.head.bytes, index: original.index.bytes,
-    }),
+    }, commit),
     check,
   });
 }

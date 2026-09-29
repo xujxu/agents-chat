@@ -4688,6 +4688,20 @@ and collect the isolated fixture unit's state and last 24 journal lines on
 failed pause admission even when its eventual Result is success. No retry,
 timeout relaxation or altered acceptance behavior is introduced.
 
+Diagnostic commit `3f6738a` / `36553414300` passed all nine jobs; the previous
+native activation failure remains unclassified, not fixed by that pass.
+Snapshot-binding causal `3c0231f` / `36553465727` failed on both platforms:
+no Git descriptor was returned and HEAD drift did not prevent completion.
+
+Capture a separately bounded `git.json` payload only from a retained Git
+observation. Its version/size/hash are bound into the completed snapshot
+manifest, verified along with every other payload, and included in capacity.
+Validate canonical base64, exact source/HEAD/ref agreement and the index checksum
+both on capture and on saved reads. Recheck the retained source before
+publishing completion. Legacy snapshots without this descriptor retain their
+current behavior; this change does not yet make native restore update Git.
+Include the two new modules in the saved recovery engine dependency closure.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
