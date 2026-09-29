@@ -4890,6 +4890,26 @@ must explicitly implement its native link/ACL semantics before enabling them.
 Regression covers default refusal, accepted internal dependency junction,
 dependency tampering, outside-project target and uncaptured cache target.
 
+Actions 36587582415 accepted de94a9f in all eleven jobs, including real
+application source installation/build and complete artifact checks on both
+Linux and Windows. This is not complete deploy/update/restore acceptance.
+
+### Durable accepted deployment receipt
+
+`deployment-receipt.mjs` publishes private `deployment.json` only under the
+original application lock, matching accepted state/target, and a caller's fresh
+source/artifact/config/service identity checks. The bounded record contains
+hashes, project/operation identity and acceptance time, never credentials.
+Publication stages, fsyncs and renames under repeated state/lock/file identity
+checks. Identical completed publication is idempotent; matching interrupted
+staging can resume only after fresh acceptance, while malformed/foreign staging
+is preserved and refused. Windows rename durability has the existing platform
+limit (no directory fsync).
+
+The receipt primitive does not establish runtime health itself. Controller
+composition must supply real identity/health checks, publish before retiring
+its lock, and never treat a receipt alone as current-state verification.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import fs, { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment, acceptOperation } from './deployment-fixture.mjs';
@@ -29,10 +30,12 @@ test('deployment receipts require accepted state and fresh matching source/artif
   assert.deepEqual(receipt.identity, f.identity);
   assert.equal(receipt.operationId, f.lock.operationId);
   assert.deepEqual(await readDeploymentReceipt(f.control, f.lock.project), receipt);
+  const info = await lstat(path.join(f.control, 'deployment.json'), { bigint: true });
   await publishDeploymentReceipt(f);
+  assert.equal((await lstat(path.join(f.control, 'deployment.json'), { bigint: true })).ino, info.ino);
   await assert.rejects(publishDeploymentReceipt({ ...f,
     checkAccepted: async () => ({ ...f.identity, build: 'f'.repeat(64) }) }), /identity|changed/i);
-  await assert.rejects(readDeploymentReceipt(f.control, path.dirname(f.lock.project)), /project/i);
+  await assert.rejects(readDeploymentReceipt(f.control, path.join(f.lock.project, 'other')), /project/i);
 });
 
 test('incomplete or foreign staged receipts are retained rather than overwritten', async t => {
@@ -54,4 +57,29 @@ test('receipt publication cannot hide a failed live acceptance check or invalid 
     /source|state/i);
   await assert.rejects(publishDeploymentReceipt({ ...f, identity: { ...f.identity, config: 'missing' } }), /identity/i);
   assert.equal(await readDeploymentReceipt(f.control, f.lock.project), null);
+});
+
+test('interrupted receipt publication resumes only its matching staged record after fresh acceptance', async t => {
+  const f = await fixture(t);
+  await acceptOperation(f.control, f.lock);
+  const original = fs.rename;
+  let interrupted = false;
+  t.mock.method(fs, 'rename', async (source, destination) => {
+    if (destination === path.join(f.control, 'deployment.json') && !interrupted) {
+      interrupted = true;
+      throw new Error('receipt publication interrupted');
+    }
+    return original(source, destination);
+  });
+  syncBuiltinESMExports();
+  try { await assert.rejects(publishDeploymentReceipt(f), /publication interrupted/); }
+  finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+  assert.equal(await readDeploymentReceipt(f.control, f.lock.project), null);
+  const staged = await readFile(path.join(f.control, '.deployment.json.staging'));
+  await assert.rejects(publishDeploymentReceipt({ ...f,
+    checkAccepted: async () => { throw new Error('new runtime no longer healthy'); } }), /no longer healthy/);
+  assert.deepEqual(await readFile(path.join(f.control, '.deployment.json.staging')), staged);
+  const receipt = await publishDeploymentReceipt(f);
+  assert.deepEqual(await readDeploymentReceipt(f.control, f.lock.project), receipt);
+  await assert.rejects(readFile(path.join(f.control, '.deployment.json.staging')), { code: 'ENOENT' });
 });
