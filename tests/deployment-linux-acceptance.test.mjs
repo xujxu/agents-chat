@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import test from 'node:test';
+import { restoreCandidate } from './deployment-linux-restore-fixture.mjs';
+import { inspectGitMetadata } from '../scripts/deployment/git-metadata.mjs';
+import { inspectBuildArtifacts } from '../scripts/deployment/build-artifacts.mjs';
+import { captureLinuxDeploymentAcceptance } from '../scripts/deployment/linux-deployment-acceptance.mjs';
+import { writeState } from '../scripts/deployment/state.mjs';
+import { publishDeploymentReceipt, readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
+
+test('native acceptance binds source, complete artifacts, configuration and owned HTTP generation', async t => {
+  const f = await restoreCandidate(t, true, { gitSource: true });
+  await mkdir(path.join(f.project, '.next'));
+  await mkdir(path.join(f.project, 'node_modules'));
+  await writeFile(path.join(f.project, 'package-lock.json'), '{"lockfileVersion":3}');
+  await writeFile(path.join(f.project, '.next/BUILD_ID'), 'acceptance-fixture');
+  const source = await inspectGitMetadata({ project: f.project, commit: await f.git('rev-parse', 'HEAD') });
+  const artifacts = await inspectBuildArtifacts({ project: f.project });
+  const accepted = await captureLinuxDeploymentAcceptance({
+    service: f.service, configuration: f.configuration, source, artifacts, port: f.port, waitSeconds: 10,
+  });
+  assert.equal(accepted.identity.source, source.record.commit);
+  assert.equal(accepted.identity.build, artifacts.identity.build);
+  assert.equal(accepted.identity.dependencies, artifacts.identity.dependencies);
+  assert.match(accepted.identity.config, /^[a-f0-9]{64}$/);
+  assert.match(accepted.identity.service, /^[a-f0-9]{64}$/);
+  assert.deepEqual(await accepted.checkAccepted(), accepted.identity);
+  let previousPhase = null;
+  for (const phase of ['preflight', 'stopped', 'copying', 'rotating', 'backup-ready',
+    'source-selected', 'dependencies', 'building', 'configuring', 'activating', 'accepted']) {
+    await writeState(f.control, {
+      version: 1, operationId: f.lock.operationId, project: f.project, operation: 'update', phase, previousPhase,
+      sourceCommit: f.savedCommit, targetCommit: source.record.commit, backupId: 'live-restore', priorRuntime: 'running',
+      runtimeIdentity: f.service.identity.runtime.invocationId, startedAt: f.lock.createdAt,
+      updatedAt: new Date().toISOString(), errorCode: null,
+    });
+    previousPhase = phase;
+  }
+  const receipt = await publishDeploymentReceipt({ control: f.control, lock: f.lock, ...accepted });
+  assert.deepEqual((await readDeploymentReceipt(f.control, f.project)).identity, accepted.identity);
+  await writeFile(path.join(f.project, '.next/BUILD_ID'), 'replaced-build');
+  await assert.rejects(accepted.checkAccepted(), /artifact|changed/i);
+  await assert.rejects(publishDeploymentReceipt({ control: f.control, lock: f.lock, ...accepted }), /artifact|changed/i);
+  assert.deepEqual(await readDeploymentReceipt(f.control, f.project), receipt);
+});
