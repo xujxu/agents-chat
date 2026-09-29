@@ -22,7 +22,8 @@ export async function inspectBuildArtifacts({ project, signal }) {
     await realDirectory(path.join(root, '.next'));
     await realDirectory(path.join(root, 'node_modules'));
     const names = ['package.json', 'package-lock.json', '.next', 'node_modules'];
-    const entries = await inventorySnapshot(root, names, { signal: checkSignal, excludedPaths });
+    const options = { signal: checkSignal, excludedPaths, allowInternalWindowsLinks: true };
+    const entries = await inventorySnapshot(root, names, options);
     const hashes = [];
     const stamps = [];
     for (const entry of entries) {
@@ -41,7 +42,7 @@ export async function inspectBuildArtifacts({ project, signal }) {
     const buildId = new TextDecoder('utf-8', { fatal: true })
       .decode(await readWorkerFile(path.join(root, '.next/BUILD_ID'), 4096)).trim();
     if (!buildId || !/^[A-Za-z0-9_.-]+$/.test(buildId)) throw new Error('Invalid Next build identity.');
-    if (!same(await inventorySnapshot(root, names, { signal: checkSignal, excludedPaths }), entries)) {
+    if (!same(await inventorySnapshot(root, names, options), entries)) {
       throw new Error('Build artifact inventory changed during hashing.');
     }
     for (const entry of stamps) {

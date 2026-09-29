@@ -4877,6 +4877,19 @@ plus explicit isolated build settings reaches the application; GitHub tokens
 are not passed to build subprocesses. These are actual application **build**
 gates, not first-install/update/restore or HTTP/data acceptance gates.
 
+Actual application run 36585216792: ten jobs passed, including Linux real npm
+ci/Next build plus complete artifact observation and source cleanliness.
+Windows also finished npm ci/build but artifact capture refused Next's
+`.next/node_modules/better-sqlite3-*` absolute internal junction.
+
+Artifact observation opts into internal Windows absolute links only: resolve
+the canonical target, require it strictly inside the same project, require it
+in the captured non-cache inventory, then hash its project-relative linkage.
+Default snapshot behavior still rejects absolute links; Windows restoration
+must explicitly implement its native link/ACL semantics before enabling them.
+Regression covers default refusal, accepted internal dependency junction,
+dependency tampering, outside-project target and uncaptured cache target.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

@@ -74,7 +74,7 @@ export async function assertSnapshotAbsent(root, paths) {
   }
 }
 
-export async function inventorySnapshot(project, files, { signal, excludedPaths = [] } = {}) {
+export async function inventorySnapshot(project, files, { signal, excludedPaths = [], allowInternalWindowsLinks = false } = {}) {
   signal?.throwIfAborted();
   const root = await realDirectory(project);
   if (!Array.isArray(files) || !files.length) throw new Error('Snapshot requires explicit paths.');
@@ -99,12 +99,17 @@ export async function inventorySnapshot(project, files, { signal, excludedPaths 
     if (info.mode & 0o7000) throw new Error('Snapshot source has unsupported special permission bits.');
     const metadata = { path: relative, mode: info.mode & 0o777, uid: info.uid, gid: info.gid };
     if (info.isSymbolicLink()) {
-      const target = await readlink(file);
-      if (path.isAbsolute(target) || /[\0\r\n]/.test(target)) {
+      let target = await readlink(file);
+      const absolute = path.isAbsolute(target);
+      if (absolute && !(allowInternalWindowsLinks && process.platform === 'win32') || /[\0\r\n]/.test(target)) {
         throw new Error(`External snapshot link: ${relative}`);
       }
       const actual = await realpath(file);
-      if (!actual.startsWith(root + path.sep)) throw new Error(`External snapshot link: ${relative}`);
+      const location = path.relative(root, actual);
+      if (!location || location === '..' || location.startsWith(`..${path.sep}`) || path.isAbsolute(location)) {
+        throw new Error(`External snapshot link: ${relative}`);
+      }
+      if (absolute) target = path.relative(path.dirname(file), actual);
       entries.push({ ...metadata, kind: 'link', target });
     } else if (info.isDirectory()) {
       await realDirectory(file);
