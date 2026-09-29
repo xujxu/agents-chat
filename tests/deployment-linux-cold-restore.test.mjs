@@ -379,6 +379,11 @@ test('saved restore entry completes dead-controller cold restoration without che
   assert.deepEqual(await readFile(path.join(f.control, 'lock/owner.json')), oldLock);
   assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'new data');
   input.unit = f.unit;
+  input.node = '/unrelated/node';
+  assert.equal((await execute(true)).code, 1);
+  assert.deepEqual(await readFile(path.join(f.control, 'lock/owner.json')), oldLock);
+  assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'new data');
+  input.node = f.node;
   const result = await execute(true);
   assert.equal(result.code, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).status, 'restored');
@@ -388,4 +393,9 @@ test('saved restore entry completes dead-controller cold restoration without che
   await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
   await assert.rejects(lstat(path.join(f.control, 'recovery-lock')), { code: 'ENOENT' });
   assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+  const invocation = (await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim();
+  const repeated = await execute(true);
+  assert.equal(repeated.code, 0, repeated.stderr);
+  assert.deepEqual(JSON.parse(repeated.stdout), JSON.parse(result.stdout));
+  assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(), invocation);
 });
