@@ -8,6 +8,7 @@ import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectGitMetadata } from '../scripts/deployment/git-metadata.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { inspectSnapshotScope } from '../scripts/deployment/snapshot-scope.mjs';
+import { restoreGitMetadata } from '../scripts/deployment/restore-git.mjs';
 
 const execute = promisify(execFile);
 async function git(project, ...args) {
@@ -102,4 +103,25 @@ test('a source change after Git observation cannot complete a snapshot of mismat
     runtime: { platform: process.platform, state: 'stopped' },
   }), /metadata|HEAD|changed/i);
   await assert.rejects(readFile(path.join(destination, 'complete.json')), { code: 'ENOENT' });
+});
+
+test('Git restoration resets only saved HEAD/index/ref under stopped authority, without checkout or build', async t => {
+  const f = await fixture(t);
+  const metadata = await inspectGitMetadata({ project: f.project, commit: f.commit });
+  await writeFile(path.join(f.project, 'app.txt'), 'updated\n');
+  await git(f.project, 'commit', '-am', 'updated');
+  const next = await git(f.project, 'rev-parse', 'HEAD');
+  const config = await readFile(path.join(f.project, '.git/config'));
+  await assert.rejects(restoreGitMetadata({ project: f.project, record: metadata.record,
+    checkStopped: async () => ({ stopped: false, inhibited: true }) }), /stopped|inhibited/i);
+  assert.equal(await git(f.project, 'rev-parse', 'HEAD'), next);
+  await restoreGitMetadata({ project: f.project, record: metadata.record,
+    checkStopped: async () => ({ stopped: true, inhibited: true }) });
+  assert.equal(await git(f.project, 'rev-parse', 'HEAD'), f.commit);
+  assert.equal(await git(f.project, 'symbolic-ref', 'HEAD'), 'refs/heads/main');
+  assert.deepEqual(await readFile(path.join(f.project, '.git/index')), Buffer.from(metadata.record.index, 'base64'));
+  assert.equal(await readFile(path.join(f.project, 'app.txt'), 'utf8'), 'updated\n');
+  assert.deepEqual(await readFile(path.join(f.project, '.git/config')), config);
+  await restoreGitMetadata({ project: f.project, record: metadata.record,
+    checkStopped: async () => ({ stopped: true, inhibited: true }) });
 });
