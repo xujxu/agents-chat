@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
+import path from 'node:path';
 import { captureSourceCommands, readSourceCommandResult } from './source-command.mjs';
 import { prepareNpmCommand } from './npm-command.mjs';
 import { captureWorkerCommand } from './worker-wire.mjs';
 import { inspectGitMetadata } from './git-metadata.mjs';
+import { inspectBuildArtifacts } from './build-artifacts.mjs';
+import { readWorkerFile } from './worker-files.mjs';
 
 export async function prepareLinuxSourceBuild({ service, operation, git, environment, signal }) {
   signal?.throwIfAborted();
@@ -56,6 +59,9 @@ export async function prepareLinuxSourceBuild({ service, operation, git, environ
         throw new Error('Build requires the exact selected source commit.');
       }
       const before = await inspectGitMetadata({ project, commit, signal: stageSignal });
+      const inputs = await Promise.all(['package.json', 'package-lock.json'].map(async name => ({
+        file: path.join(project, name), bytes: await readWorkerFile(path.join(project, name), 16 * 1024 * 1024),
+      })));
       const command = await prepareNpmCommand({
         project, node, npmCli, stage, environment: env, signal: stageSignal,
       });
@@ -68,8 +74,14 @@ export async function prepareLinuxSourceBuild({ service, operation, git, environ
         action: 'inspect', signal: stageSignal,
       }), stageSignal), 'inspect', project);
       if (inspected.commit !== commit) throw new Error('Build changed the selected source commit.');
+      for (const input of inputs) {
+        if (!(await readWorkerFile(input.file, 16 * 1024 * 1024)).equals(input.bytes)) {
+          throw new Error('npm execution changed the admitted package or lock file.');
+        }
+      }
+      const artifacts = stage === 'build' ? await inspectBuildArtifacts({ project, signal: stageSignal }) : undefined;
       await checkStopped(stopped, stageSignal);
-      return output;
+      return stage === 'build' ? Object.freeze({ output, sourceCommit: commit, artifacts }) : output;
     },
   });
 }

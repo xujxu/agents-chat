@@ -4849,6 +4849,25 @@ itself is not evidence that the race disappeared. Npm command preparation also
 captures environment values before its first asynchronous filesystem operation,
 so caller mutation cannot change the eventual command's environment.
 
+### Build artifact identity admission
+
+`inspectBuildArtifacts` hashes the full `.next` and `node_modules` inventories,
+including file bytes, paths, links, ownership and modes, excluding only the
+existing `.next/cache` and `node_modules/.cache` cache policy. It separately
+binds package/lock bytes and a bounded Next BUILD_ID; matching BUILD_ID alone
+never accepts replaced output or dependencies. Reinventory and bigint file
+identity/timestamp checks reject changes during hashing. A retained check
+rehashes artifacts using the current stage signal.
+
+Installed Linux npm stages pin package/lock inputs before execution and reject
+post-command changes. Successful build returns selected commit plus retained
+artifact observation; it still does not publish application acceptance.
+The native fixture requires artifact identity, uid/gid, source commit and stopped
+authority to agree, and rejects later output changes. Cross-platform contracts
+exercise output/dependency/inventory/lock drift and allowed runtime cache writes.
+Actual Next application builds and durable successful deployment receipts remain
+separate gates; fixture success must not be represented as those gates passing.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
