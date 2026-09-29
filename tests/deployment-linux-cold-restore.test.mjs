@@ -12,6 +12,7 @@ import { claimLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-
 import { restoreLinuxColdFiles } from '../scripts/deployment/linux-cold-restore-files.mjs';
 import { systemctl } from './deployment-linux-service-fixture.mjs';
 import { activateLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-activation.mjs';
+import { inspectLinuxColdActivation } from '../scripts/deployment/linux-cold-activation-recovery.mjs';
 
 async function candidate(t, phase = 'stopped', valid = true) {
   const f = await restoreCandidate(t, valid);
@@ -220,4 +221,56 @@ test('cold activation refuses post-copy configuration drift before uninhibiting'
     /configuration|snapshot/i);
   assert.equal((await systemctl('show', f.unit, '--property=MainPID', '--value')).stdout.trim(), '0');
   await assert.rejects(readFile(path.join(f.control, 'service-activation.ndjson')), { code: 'ENOENT' });
+});
+
+test('cold activation readiness survives controller death but never substitutes for fresh owned admission', async t => {
+  const f = await candidate(t);
+  await f.kill();
+  const child = fork(new URL('./deployment-cold-activation-child.mjs', import.meta.url),
+    [f.control, f.project, f.backup, String(f.port)], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let diagnostic = '';
+  child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
+  const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
+  });
+  const ready = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Cold activation did not pause: ${diagnostic}`)), 90000);
+    child.once('message', value => { clearTimeout(timer); resolve(value); });
+    child.once('exit', code => { clearTimeout(timer); reject(new Error(`Cold activation exited ${code}: ${diagnostic}`)); });
+    child.once('error', error => { clearTimeout(timer); reject(error); });
+  });
+  const options = { ...f, waitSeconds: 10, timeoutSeconds: 90 };
+  await assert.rejects(inspectLinuxColdActivation(options), /admission|locking|alive/i);
+  child.kill('SIGKILL');
+  await exited;
+  const paths = ['state.json', 'lock/owner.json', 'recovery-lock/owner.json',
+    'recovery-lock/activation-intent.json', 'recovery-lock/activation-ready.json',
+    'service-stop.ndjson', 'service-activation.ndjson'];
+  const evidence = await Promise.all(paths.map(file => readFile(path.join(f.control, file))));
+  const admitted = await inspectLinuxColdActivation(options);
+  t.after(() => admitted.close());
+  assert.equal(admitted.status, 'ready-to-commit');
+  assert.deepEqual(admitted.identity, ready.identity);
+  await admitted.check();
+  await assert.rejects(inspectLinuxColdActivation(options), /admission|locking/i);
+  assert.deepEqual(await Promise.all(paths.map(file => readFile(path.join(f.control, file)))), evidence);
+  await admitted.close();
+  const readyPath = path.join(f.control, 'recovery-lock/activation-ready.json');
+  const receipt = JSON.parse(evidence[4]);
+  await writeFile(readyPath, JSON.stringify({ ...receipt, activationSha256: '0'.repeat(64) }));
+  await assert.rejects(inspectLinuxColdActivation(options), /receipt|intent|evidence/i);
+  await writeFile(readyPath, evidence[4]);
+  const environment = await readFile(path.join(f.project, '.env'));
+  await writeFile(path.join(f.project, '.env'), 'IGNORED_SETTING=drift\n');
+  await assert.rejects(inspectLinuxColdActivation(options), /configuration|snapshot/i);
+  await writeFile(path.join(f.project, '.env'), environment);
+  const reentered = await inspectLinuxColdActivation(options);
+  t.after(() => reentered.close());
+  await systemctl('restart', f.unit);
+  await assert.rejects(reentered.check(), /generation|runtime|identity|changed/i);
+  await reentered.close();
+  await assert.rejects(inspectLinuxColdActivation(options), /generation|runtime|identity|changed/i);
+  assert.deepEqual(await Promise.all(paths.map(file => readFile(path.join(f.control, file)))), evidence);
 });
