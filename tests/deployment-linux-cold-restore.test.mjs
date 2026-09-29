@@ -1,18 +1,19 @@
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
-import { cp, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { cp, lstat, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { restoreCandidate } from './deployment-linux-restore-fixture.mjs';
 import { interrupted } from './deployment-linux-service-recovery-fixture.mjs';
-import { releaseLock } from '../scripts/deployment/state.mjs';
+import { acquireLock, loadState, releaseLock } from '../scripts/deployment/state.mjs';
 import { admitLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-admission.mjs';
 import { claimLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-lease.mjs';
 import { restoreLinuxColdFiles } from '../scripts/deployment/linux-cold-restore-files.mjs';
 import { systemctl } from './deployment-linux-service-fixture.mjs';
 import { activateLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-activation.mjs';
 import { inspectLinuxColdActivation } from '../scripts/deployment/linux-cold-activation-recovery.mjs';
+import { completeLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-completion.mjs';
 
 async function candidate(t, phase = 'stopped', valid = true) {
   const f = await restoreCandidate(t, valid);
@@ -273,4 +274,34 @@ test('cold activation readiness survives controller death but never substitutes 
   await reentered.close();
   await assert.rejects(inspectLinuxColdActivation(options), /generation|runtime|identity|changed/i);
   assert.deepEqual(await Promise.all(paths.map(file => readFile(path.join(f.control, file)))), evidence);
+});
+
+test('cold restore terminal completion preserves the owned runtime and backup while releasing recovery evidence', async t => {
+  const f = await candidate(t);
+  await f.kill();
+  const backup = await readFile(path.join(f.backup, 'manifest.json'));
+  const restored = await restoreLinuxColdFiles({ ...f, acceptDataLoss: true, timeoutSeconds: 90 });
+  t.after(() => restored.close());
+  const active = await activateLinuxColdRestore({ restored, port: f.port, waitSeconds: 10, timeoutSeconds: 90 });
+  t.after(() => active.close());
+  const result = await completeLinuxColdRestore({ ...f, restored, active, waitSeconds: 10, timeoutSeconds: 90 });
+  assert.equal(result.status, 'restored');
+  assert.equal(result.backupId, 'live-restore');
+  const state = await loadState(f.control);
+  assert.equal(state.phase, 'restored');
+  assert.equal(state.operation, 'restore');
+  assert.equal(state.backupId, 'live-restore');
+  assert.equal(state.targetCommit, 'a'.repeat(40));
+  assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(),
+    active.identity.runtime.invocationId);
+  for (const name of ['lock', 'recovery-lock', 'service-stop.ndjson', 'service-activation.ndjson',
+    'service-cold-retirement.json', '.cold-restore-state.json']) {
+    await assert.rejects(lstat(path.join(f.control, name)), { code: 'ENOENT' });
+  }
+  await assert.rejects(lstat(`/etc/systemd/system/${f.unit}.d/90-agents-chat-deployment.conf.${f.lock.token}.held`),
+    { code: 'ENOENT' });
+  assert.deepEqual(await readFile(path.join(f.backup, 'manifest.json')), backup);
+  assert.deepEqual(await completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 }), result);
+  const next = await acquireLock(f.control, { project: f.project, operationId: 'next-after-cold-restore' });
+  await releaseLock(f.control, next);
 });

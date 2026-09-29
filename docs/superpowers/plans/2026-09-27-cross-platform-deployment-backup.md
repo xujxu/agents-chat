@@ -4588,6 +4588,28 @@ unlink only that test-created file before testing generation replacement.
 The causal reentry run was superseded while pending (Actions concurrency),
 not a red test result; it was explicitly rerun after implementation started.
 
+Corrected reentry fixture `e08705b` / `36508857836` passed all nine jobs.
+Rerun causal `6b87403` / `36507545961` failed on the absent
+`linux-cold-activation-recovery.mjs`, establishing the missing implementation.
+
+### Cold restored-state publication and terminal retirement
+
+After fresh owned readiness, capture a fixed retirement proof containing the
+old lock/state, recovery lease/intent/ready receipt, native runtime generation,
+held inhibitor and settled worker deletion inventory. Publish
+`service-cold-retirement.json` before changing state or deleting evidence.
+It blocks ordinary application lock acquisition throughout retirement.
+
+Write the exact restored state through a fixed private staged file and atomic
+rename, preserving the selected backup and new runtime. Delete only the
+captured inventory, in order, checking identities and hashes each time.
+Application lock removal precedes recovery guard removal. Rename the retirement
+proof to `cold-restore-complete.json` only after all required deletions; retain
+that receipt for idempotent completion. Reentry must reject gaps, replacement
+files, changed runtime/configuration, alive foreign controllers and incomplete
+staged state rather than guessing or rebuilding. Both live completion and
+post-controller-death completion must freshly inspect the same owned generation.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
