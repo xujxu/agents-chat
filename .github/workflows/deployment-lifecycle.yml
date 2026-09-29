@@ -145,6 +145,7 @@ jobs:
           tests/deployment-build-artifacts.test.mjs
           tests/deployment-receipt.test.mjs
           tests/deployment-git-metadata.test.mjs
+          tests/deployment-git-objects.test.mjs
           tests/deployment-update-policy.test.mjs
           tests/deployment-stage-runner.test.mjs
           tests/deployment-worker-errors.test.mjs
