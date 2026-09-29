@@ -28,6 +28,12 @@ test('dependency and build commands use explicit Node/npm paths without a shell 
   assert.deepEqual(build.args, [f.npmCli, 'run', 'build']);
   assert.equal(Object.isFrozen(build), true);
   assert.equal(Object.isFrozen(build.env), true);
+  const preparing = prepareNpmCommand({ ...f, stage: 'build' });
+  f.environment.PATH = '/changed-after-capture';
+  f.environment.NODE_ENV = 'changed';
+  const captured = await preparing;
+  assert.equal(captured.env.NODE_ENV, 'production');
+  assert.notEqual(captured.env.PATH, `${path.dirname(process.execPath)}${path.delimiter}/changed-after-capture`);
   await unlink(path.join(f.project, 'package-lock.json'));
   assert.deepEqual((await prepareNpmCommand({ ...f, stage: 'build' })).args, build.args);
   await assert.rejects(prepareNpmCommand({ ...f, stage: 'dependencies' }), { code: 'ENOENT' });

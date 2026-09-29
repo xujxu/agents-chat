@@ -33,6 +33,10 @@ export async function prepareNpmCommand({ project, node, npmCli, stage, environm
     || Object.keys(environment).some(key => ['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase()))) {
     throw new Error('Unsupported deployment npm environment.');
   }
+  if (typeof node !== 'string' || !path.isAbsolute(node)) {
+    throw new Error('npm execution requires explicit absolute Node and npm CLI paths.');
+  }
+  const suppliedEnvironment = captureWorkerCommand({ file: node, cwd: project, args: [], env: environment }).env;
   const root = await realDirectory(project);
   await explicitFile(node, true);
   const cli = await explicitFile(npmCli);
@@ -45,11 +49,11 @@ export async function prepareNpmCommand({ project, node, npmCli, stage, environm
   } else if (typeof pkg.scripts?.build !== 'string' || !pkg.scripts.build.trim()) {
     throw new Error('Deployment requires an explicit package build script.');
   }
-  const paths = Object.entries(environment).filter(([key]) => key.toUpperCase() === 'PATH');
+  const paths = Object.entries(suppliedEnvironment).filter(([key]) => key.toUpperCase() === 'PATH');
   if (paths.length > 1 || paths.some(([, value]) => typeof value !== 'string')) {
     throw new Error('Ambiguous deployment npm PATH environment.');
   }
-  const env = Object.fromEntries(Object.entries(environment).filter(([key]) => key.toUpperCase() !== 'PATH'));
+  const env = Object.fromEntries(Object.entries(suppliedEnvironment).filter(([key]) => key.toUpperCase() !== 'PATH'));
   env.PATH = [path.dirname(node), ...(paths.length ? [paths[0][1]] : [])].join(path.delimiter);
   signal?.throwIfAborted();
   return captureWorkerCommand({

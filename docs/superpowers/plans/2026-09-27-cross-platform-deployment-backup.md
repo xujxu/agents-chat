@@ -4842,6 +4842,13 @@ inhibition. Assert the artifact's contents and ownership both identify uid
 Environment is an explicit caller-supplied capture; public controller admission
 still needs to bind the complete configured build environment and receipts.
 
+Retained source capture cc337f8 passed all nine jobs in Actions 36579603389,
+including displaced-helper native Git execution on both systems. The earlier
+queued-activation failure is addressed separately above; a later green run by
+itself is not evidence that the race disappeared. Npm command preparation also
+captures environment values before its first asynchronous filesystem operation,
+so caller mutation cannot change the eventual command's environment.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
