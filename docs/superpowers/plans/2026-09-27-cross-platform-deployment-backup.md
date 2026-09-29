@@ -4770,6 +4770,24 @@ bytes afterward. Existing saved native operation evidence and seal rules apply.
 This is command/native integration, not yet complete application build provenance
 or public deploy/update wiring. It does not install machine-level prerequisites.
 
+### Owned Git source execution
+
+`source-command.mjs` captures the existing source helper and its filesystem
+dependency before source mutation. It runs inspect/resolve/select inside the
+enrolled native worker using explicit Node/Git paths, rather than allowing a
+controller-owned Git process to outlive a killed CLI. The child module registry
+does not load code from the checkout being replaced. Git output is processed
+inside the worker with the existing 8 MiB bound; only a validated 4 KiB source
+receipt crosses the native diagnostic-tail transport, preventing a truncated
+dirty-file listing from becoming successful admission.
+
+Existing direct source readers remain available for read-only preview. The
+owned path supplies the executable/environment explicitly and passes through
+the same dirty-source, target identity and fast-forward policies. Both platform
+native jobs exercise actual Git inspection, explicit selection, local-remote
+fetch without checkout mutation, fast-forward selection, and dirty-source refusal.
+No public controller or successful build receipt is claimed by this batch.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

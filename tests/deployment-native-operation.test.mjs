@@ -130,6 +130,24 @@ test('real native workers require enrolled lock-bound authority and seal exact s
         assert.equal(await setup('rev-parse', 'HEAD'), old);
         assert.equal((await run('select', target)).commit, next);
         assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'new\n');
+        await setup('switch', 'main');
+        const upstream = path.join(path.dirname(f.project), 'upstream');
+        await execute(git, ['clone', '--no-hardlinks', f.project, upstream]);
+        for (const args of [['config', 'user.name', 'Deployment fixture'], ['config', 'user.email', 'fixture@example.invalid']]) {
+          await execute(git, ['-C', upstream, ...args]);
+        }
+        await writeFile(path.join(upstream, 'source.txt'), 'upstream\n');
+        await execute(git, ['-C', upstream, 'commit', '-am', 'upstream']);
+        const third = (await execute(git, ['-C', upstream, 'rev-parse', 'HEAD'])).stdout.trim();
+        await setup('remote', 'add', 'origin', upstream);
+        await setup('config', 'branch.main.remote', 'origin');
+        await setup('config', 'branch.main.merge', 'refs/heads/main');
+        const fetched = await run('resolve');
+        assert.equal(fetched.mode, 'fast-forward');
+        assert.equal(fetched.commit, third);
+        assert.equal(await setup('rev-parse', 'HEAD'), next);
+        assert.equal((await run('select', fetched)).commit, third);
+        assert.equal(await setup('symbolic-ref', '--short', 'HEAD'), 'main');
         await writeFile(path.join(f.project, 'source.txt'), 'preserve dirty source\n');
         await assert.rejects(run('inspect'), { code: 'DEPLOYMENT_COMMAND_FAILED' });
         assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'preserve dirty source\n');

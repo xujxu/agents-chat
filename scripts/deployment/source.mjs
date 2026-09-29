@@ -6,37 +6,39 @@ const execute = promisify(execFile);
 const fullCommit = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 const runtimeFiles = new Set(['agents.json']);
 
-async function git(project, args, allowedExitCodes = []) {
+async function git(project, args, allowedExitCodes = [], execution = {}) {
   try {
-    const { stdout } = await execute('git', ['-C', project, ...args], {
+    const { stdout } = await execute(execution.git ?? 'git', ['-C', project, ...args], {
       maxBuffer: 8 * 1024 * 1024, timeout: 120000, windowsHide: true,
+      signal: execution.signal,
       env: {
-        ...process.env, GIT_TERMINAL_PROMPT: '0',
+        ...(execution.environment ?? process.env), GIT_TERMINAL_PROMPT: '0',
         GIT_OPTIONAL_LOCKS: '0', GIT_NO_LAZY_FETCH: '1',
       },
     });
     return { code: 0, output: stdout };
   } catch (error) {
+    execution.signal?.throwIfAborted();
     if (allowedExitCodes.includes(error.code)) return { code: error.code, output: error.stdout ?? '' };
     throw new Error(`Git ${args[0]} failed (exit ${error.code ?? 'unknown'}); inspect the checkout and remote configuration.`);
   }
 }
 
-async function commitAt(project, revision) {
-  const result = await git(project, ['rev-parse', '--verify', '--end-of-options', `${revision}^{commit}`]);
+async function commitAt(project, revision, execution) {
+  const result = await git(project, ['rev-parse', '--verify', '--end-of-options', `${revision}^{commit}`], [], execution);
   const commit = result.output.trim();
   if (!fullCommit.test(commit)) throw new Error('Cannot resolve source commit identity.');
   return commit;
 }
 
-export async function inspectSource(project) {
+export async function inspectSource(project, execution) {
   const root = await realDirectory(project);
-  const toplevel = (await git(root, ['rev-parse', '--show-toplevel'])).output.trim();
+  const toplevel = (await git(root, ['rev-parse', '--show-toplevel'], [], execution)).output.trim();
   if (await realDirectory(toplevel) !== root) throw new Error('Deployment project must be the source checkout root.');
-  const commit = await commitAt(root, 'HEAD');
-  const branchResult = await git(root, ['symbolic-ref', '--quiet', '--short', 'HEAD'], [1]);
+  const commit = await commitAt(root, 'HEAD', execution);
+  const branchResult = await git(root, ['symbolic-ref', '--quiet', '--short', 'HEAD'], [1], execution);
   const branch = branchResult.code === 1 ? null : branchResult.output.trim();
-  const status = await git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=normal']);
+  const status = await git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=normal'], [], execution);
   const modifiedRuntime = [];
   for (const record of status.output.split('\0').filter(Boolean)) {
     const flags = record.slice(0, 2);
@@ -85,47 +87,47 @@ export async function previewTarget(project, { revision, noPull = false } = {}) 
   };
 }
 
-export async function resolveTarget(project, { revision, noPull = false } = {}) {
+export async function resolveTarget(project, { revision, noPull = false } = {}, execution) {
   validateTargetOptions(revision, noPull);
-  const source = await inspectSource(project);
+  const source = await inspectSource(project, execution);
   if (revision) {
-    return { commit: await commitAt(source.project, revision), expectedSourceCommit: source.commit, mode: 'explicit' };
+    return { commit: await commitAt(source.project, revision, execution), expectedSourceCommit: source.commit, mode: 'explicit' };
   }
   if (noPull) return { commit: source.commit, expectedSourceCommit: source.commit, mode: 'unchanged' };
   if (!source.branch) throw new Error('Normal update requires a tracking branch; use an explicit revision for detached source.');
-  const remoteResult = await git(source.project, ['config', '--get', `branch.${source.branch}.remote`], [1]);
+  const remoteResult = await git(source.project, ['config', '--get', `branch.${source.branch}.remote`], [1], execution);
   const remote = remoteResult.output.trim();
   if (!remote || !/^(?!-)[A-Za-z0-9_.-]+$/.test(remote)) {
     throw new Error('Normal update requires a configured tracking remote.');
   }
-  await git(source.project, ['fetch', '--no-tags', '--', remote]);
-  const target = await commitAt(source.project, '@{upstream}');
-  const ancestor = await git(source.project, ['merge-base', '--is-ancestor', source.commit, target], [1]);
+  await git(source.project, ['fetch', '--no-tags', '--', remote], [], execution);
+  const target = await commitAt(source.project, '@{upstream}', execution);
+  const ancestor = await git(source.project, ['merge-base', '--is-ancestor', source.commit, target], [1], execution);
   if (ancestor.code === 1) throw new Error('Source and upstream diverged; automatic update requires fast-forward history.');
   return { commit: target, expectedSourceCommit: source.commit, branch: source.branch, mode: 'fast-forward' };
 }
 
-export async function selectSource(project, target) {
+export async function selectSource(project, target, execution) {
   if (!target || !fullCommit.test(target.commit ?? '') || !fullCommit.test(target.expectedSourceCommit ?? '')
     || (target.mode !== undefined && !['explicit', 'unchanged', 'fast-forward'].includes(target.mode))) {
     throw new Error('Invalid source selection receipt.');
   }
-  const source = await inspectSource(project);
+  const source = await inspectSource(project, execution);
   if (source.commit !== target.expectedSourceCommit) throw new Error('Source changed after preflight receipt.');
-  if (await commitAt(source.project, target.commit) !== target.commit) throw new Error('Target revision changed.');
+  if (await commitAt(source.project, target.commit, execution) !== target.commit) throw new Error('Target revision changed.');
   const runtimeChanges = await git(source.project, [
     'diff', '--name-only', source.commit, target.commit, '--', ...runtimeFiles,
-  ]);
+  ], [], execution);
   if (runtimeChanges.output.trim()) {
     throw new Error('Target changes tracked runtime configuration; resolve configuration explicitly before source selection.');
   }
   if (target.mode === 'fast-forward') {
     if (source.branch !== target.branch) throw new Error('Tracking branch changed after preflight receipt.');
-    await git(source.project, ['merge', '--ff-only', '--no-edit', target.commit]);
+    await git(source.project, ['merge', '--ff-only', '--no-edit', target.commit], [], execution);
   } else if (source.commit !== target.commit) {
-    await git(source.project, ['switch', '--detach', target.commit]);
+    await git(source.project, ['switch', '--detach', target.commit], [], execution);
   }
-  const result = await inspectSource(source.project);
+  const result = await inspectSource(source.project, execution);
   if (result.commit !== target.commit) throw new Error('Source selection did not activate the target commit.');
   return result;
 }
