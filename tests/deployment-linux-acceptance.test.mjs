@@ -9,17 +9,24 @@ import { captureLinuxDeploymentAcceptance } from '../scripts/deployment/linux-de
 import { writeState } from '../scripts/deployment/state.mjs';
 import { publishDeploymentReceipt, readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
 
-test('native acceptance binds source, complete artifacts, configuration and owned HTTP generation', async t => {
-  const f = await restoreCandidate(t, true, { gitSource: true });
+for (const healthy of [true, false]) {
+test(`native acceptance binds source, artifacts and owned HTTP generation (healthy=${healthy})`, async t => {
+  const f = await restoreCandidate(t, healthy, { gitSource: true });
   await mkdir(path.join(f.project, '.next'));
   await mkdir(path.join(f.project, 'node_modules'));
   await writeFile(path.join(f.project, 'package-lock.json'), '{"lockfileVersion":3}');
   await writeFile(path.join(f.project, '.next/BUILD_ID'), 'acceptance-fixture');
   const source = await inspectGitMetadata({ project: f.project, commit: await f.git('rev-parse', 'HEAD') });
   const artifacts = await inspectBuildArtifacts({ project: f.project });
-  const accepted = await captureLinuxDeploymentAcceptance({
+  const options = {
     service: f.service, configuration: f.configuration, source, artifacts, port: f.port, waitSeconds: 10,
-  });
+  };
+  if (!healthy) {
+    await assert.rejects(captureLinuxDeploymentAcceptance(options), /providers do not match/i);
+    assert.equal(await readDeploymentReceipt(f.control, f.project), null);
+    return;
+  }
+  const accepted = await captureLinuxDeploymentAcceptance(options);
   assert.equal(accepted.identity.source, source.record.commit);
   assert.equal(accepted.identity.build, artifacts.identity.build);
   assert.equal(accepted.identity.dependencies, artifacts.identity.dependencies);
@@ -35,6 +42,7 @@ test('native acceptance binds source, complete artifacts, configuration and owne
       runtimeIdentity: f.service.identity.runtime.invocationId, startedAt: f.lock.createdAt,
       updatedAt: new Date().toISOString(), errorCode: null,
     });
+    }
     previousPhase = phase;
   }
   const receipt = await publishDeploymentReceipt({ control: f.control, lock: f.lock, ...accepted });

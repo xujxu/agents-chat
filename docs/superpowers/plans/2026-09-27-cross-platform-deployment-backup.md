@@ -4910,6 +4910,17 @@ The receipt primitive does not establish runtime health itself. Controller
 composition must supply real identity/health checks, publish before retiring
 its lock, and never treat a receipt alone as current-state verification.
 
+`captureLinuxDeploymentAcceptance` supplies the native receipt checker: retained
+Git metadata and complete build/dependency artifacts, effective configuration
+file hashes/absence/permissions, installed service generation identity, and
+owned HTTP provider readiness are rechecked together. Configuration values are
+not serialized into the receipt. Checks accept fresh per-stage signals rather
+than holding an expired capture signal. Native systemd coverage requires a
+healthy provider response before publication and refuses unhealthy responses
+or artifact drift even if a previous accepted receipt remains on disk.
+This binds observed acceptance; prior-source/build provenance must still come
+from the controlled build pipeline, not a newly guessed Git HEAD.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
