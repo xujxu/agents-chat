@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectBuildArtifacts } from '../scripts/deployment/build-artifacts.mjs';
+import { inventorySnapshot } from '../scripts/deployment/snapshot-files.mjs';
 
 async function fixture(t) {
   const project = path.join(await temporaryDeployment(t), 'app');
@@ -55,4 +56,26 @@ test('artifact observation refuses missing build identity and respects cancellat
   const controller = new AbortController();
   controller.abort(new Error('cancel artifacts'));
   await assert.rejects(inspectBuildArtifacts({ project, signal: controller.signal }), /cancel artifacts/);
+});
+
+test('Windows Next internal junctions bind captured dependencies without admitting external targets', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const project = await fixture(t);
+  const junction = path.join(project, '.next', 'native-dependency');
+  await symlink(path.join(project, 'node_modules/example'), junction, 'junction');
+  await assert.rejects(inventorySnapshot(project, ['.next', 'node_modules']), /external.*link/i);
+  const captured = await inspectBuildArtifacts({ project });
+  await captured.check();
+  await writeFile(path.join(project, 'node_modules/example/index.js'), 'modified native module');
+  await assert.rejects(captured.check(), /artifact|changed/i);
+  await unlink(junction);
+  const external = path.join(path.dirname(project), 'external-module');
+  await mkdir(external);
+  await symlink(external, junction, 'junction');
+  await assert.rejects(inspectBuildArtifacts({ project }), /external.*link/i);
+  await unlink(junction);
+  const uncaptured = path.join(project, '.next/cache');
+  await symlink(uncaptured, junction, 'junction');
+  await assert.rejects(inspectBuildArtifacts({ project }), /not captured/i);
 });
