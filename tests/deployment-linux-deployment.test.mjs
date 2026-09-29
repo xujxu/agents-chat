@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { chown, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -60,7 +61,7 @@ require('node:http').createServer((req, res) => {
   t.after(() => service.close());
   const control = path.join(path.dirname(f.project), 'control');
   await mkdir(control, { mode: 0o700 });
-  const lock = await acquireLock(control, { project: f.project });
+  const lock = await acquireLock(control, { project: f.project, operationId: randomUUID() });
   const environment = {
     PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: service.identity.runtime.home,
     USER: 'nobody', LOGNAME: 'nobody', NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1',
