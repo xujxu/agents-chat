@@ -11,6 +11,7 @@ import { acquireLock, loadState } from '../scripts/deployment/state.mjs';
 import { runLinuxLiveDeployment } from '../scripts/deployment/linux-deployment.mjs';
 import { readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
+import { saveRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../', import.meta.url));
@@ -36,7 +37,7 @@ require('node:http').createServer((req, res) => {
   await git('init', '--initial-branch=fixture');
   await git('config', 'user.name', 'Deployment fixture');
   await git('config', 'user.email', 'fixture@example.invalid');
-  await writeFile(path.join(f.project, '.git/info/exclude'), 'ready\n');
+  await writeFile(path.join(f.project, '.git/info/exclude'), 'ready\n.npm/\n');
   await git('add', 'package.json', 'server.cjs');
   await git('commit', '-m', 'prior fixture source');
   const prior = await git('rev-parse', 'HEAD');
@@ -93,5 +94,6 @@ test('native deployment composes snapshot, real application build, owned activat
   assert.equal(await readFile(path.join(f.control, 'backup/files/server.cjs'), 'utf8'),
     (await execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project,
       'show', `${f.prior}:server.cjs`])).stdout);
-  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'state.json']);
+  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'recovery-engine', 'state.json']);
+  await saveRecoveryEngine({ source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), control: f.control });
 });

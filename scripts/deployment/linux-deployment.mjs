@@ -7,6 +7,7 @@ import { runStage } from './stage-runner.mjs';
 import { assertLockOwner, captureLockOwner, loadState, releaseLock, writeState } from './state.mjs';
 import { externalWorkerDirectory, syncWorkerDirectory } from './worker-files.mjs';
 import { saveWorkerEngine } from './saved-worker-engine.mjs';
+import { saveRecoveryEngine, verifyRecoveryEngine } from './saved-recovery-engine.mjs';
 import { createWorkerOperation } from './worker-operation.mjs';
 import { prepareLinuxSourceBuild } from './linux-source-build.mjs';
 import { admitLinuxCompatibility } from './linux-compatibility.mjs';
@@ -50,6 +51,7 @@ export async function runLinuxLiveDeployment({
   let active;
   let built;
   let accepted;
+  let recovery;
   let sealed = false;
   let activationAttempted = false;
   let result;
@@ -132,6 +134,7 @@ export async function runLinuxLiveDeployment({
         if ([...budgets.values()].some(value => value.required > value.available)) {
           throw new Error('Insufficient space for complete backup and declared build budget.');
         }
+        recovery = await saveRecoveryEngine({ control, source: fileURLToPath(new URL('./', import.meta.url)) });
       },
       async stop({ recovering }) {
         await authority();
@@ -139,6 +142,7 @@ export async function runLinuxLiveDeployment({
           if (!stopped) throw journalUncertain(new Error('Original deployment stop did not complete.'));
           return activationAttempted ? stopped.stopActivated() : stopped.checkStopped();
         }
+        await verifyRecoveryEngine({ control, manifestSha256: recovery.manifestSha256 });
         stopped = await stopLinuxService({ ...native, control, lock });
       },
       async snapshot({ signal: stageSignal }) {

@@ -4939,6 +4939,9 @@ existing service handoff, not independently while service evidence still owns
 them. Settled preflight refusal unlocks without downtime; pre-source failure
 can verify/retire the restarted prior runtime. Post-source failure retains the
 complete backup and stops only the new owned generation.
+The complete external recovery engine is saved and verified before downtime,
+independently of the per-operation worker engine. It remains after successful
+retirement so later restore does not import helpers from replaced source.
 
 The internal entry requires a running inspected service, caller-owned lock,
 positive readiness wait and explicit additional build-space budget. It does
