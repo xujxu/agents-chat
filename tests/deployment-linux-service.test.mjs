@@ -203,6 +203,8 @@ fs.writeFileSync('artifact',String(process.getuid()));`);
   await stages.npm({ stage: 'dependencies', commit: next, stopped });
   const built = await stages.npm({ stage: 'build', commit: next, stopped });
   assert.equal(built.sourceCommit, next);
+  assert.equal(built.source.record.commit, next);
+  await built.source.check();
   assert.equal(built.artifacts.identity.buildId, 'installed-build');
   await built.artifacts.check();
   assert.equal(await readFile(path.join(f.project, 'artifact'), 'utf8'), '65534');

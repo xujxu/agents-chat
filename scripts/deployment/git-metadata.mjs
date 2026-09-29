@@ -87,8 +87,8 @@ export async function inspectGitMetadata({ project, commit, signal }) {
   const { root } = await canonicalWorkerDirectory(project);
   const directory = path.join(root, '.git');
   const gitDirectory = await inspectGitDirectory(directory);
-  const observe = async () => {
-    signal?.throwIfAborted();
+  const observe = async (checkSignal = signal) => {
+    checkSignal?.throwIfAborted();
     const current = await inspectGitDirectory(directory);
     if (!same(identity(current.info), identity(gitDirectory.info))) throw new Error('Git metadata directory changed.');
     const names = await readdir(directory);
@@ -133,12 +133,12 @@ export async function inspectGitMetadata({ project, commit, signal }) {
     }
     const indexBytes = Buffer.from(index.bytes, 'base64');
     validateIndex(indexBytes, resolved);
-    signal?.throwIfAborted();
+    checkSignal?.throwIfAborted();
     return { head, index, config, ref, reference, packed, commit: resolved };
   };
   const original = await observe();
-  const check = async () => {
-    if (!same(await observe(), original)) throw new Error('Captured Git HEAD/index metadata changed.');
+  const check = async ({ signal: checkSignal = signal } = {}) => {
+    if (!same(await observe(checkSignal), original)) throw new Error('Captured Git HEAD/index metadata changed.');
   };
   await check();
   return Object.freeze({

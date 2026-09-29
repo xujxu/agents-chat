@@ -24,7 +24,7 @@ export async function captureLinuxDeploymentAcceptance({
     checkSignal?.throwIfAborted();
     await service.check();
     await configuration.check({ signal: checkSignal });
-    await source.check();
+    await source.check({ signal: checkSignal });
     if (!same(source.record, record) || !same(artifacts.identity, artifactIdentity)
       || digest(service.identity) !== runtimeIdentity) throw new Error('Linux acceptance authority changed.');
     await artifacts.check({ signal: checkSignal });
@@ -39,7 +39,7 @@ export async function captureLinuxDeploymentAcceptance({
     }
     await waitLinuxReadiness({ service, port, providers: configuration.providers, waitSeconds, signal: checkSignal });
     await configuration.check({ signal: checkSignal });
-    await source.check();
+    await source.check({ signal: checkSignal });
     await artifacts.check({ signal: checkSignal });
     await service.check();
     return Object.freeze({

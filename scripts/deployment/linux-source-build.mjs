@@ -81,7 +81,7 @@ export async function prepareLinuxSourceBuild({ service, operation, git, environ
       }
       const artifacts = stage === 'build' ? await inspectBuildArtifacts({ project, signal: stageSignal }) : undefined;
       await checkStopped(stopped, stageSignal);
-      return stage === 'build' ? Object.freeze({ output, sourceCommit: commit, artifacts }) : output;
+      return stage === 'build' ? Object.freeze({ output, sourceCommit: commit, source: before, artifacts }) : output;
     },
   });
 }

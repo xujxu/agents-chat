@@ -79,6 +79,18 @@ test('Git metadata capture pins exact HEAD/index and resolved source without ref
   await assert.rejects(captured.check(), /metadata|index|changed/i);
 });
 
+test('retained Git metadata accepts fresh stage signals but never ignores cancellation', async t => {
+  const f = await fixture(t);
+  const initial = new AbortController();
+  const captured = await inspectGitMetadata({ ...f, signal: initial.signal });
+  initial.abort(new Error('capture stage cancelled'));
+  await assert.rejects(captured.check(), /capture stage cancelled/);
+  const next = new AbortController();
+  await captured.check({ signal: next.signal });
+  next.abort(new Error('acceptance cancelled'));
+  await assert.rejects(captured.check({ signal: next.signal }), /acceptance cancelled/);
+});
+
 test('Git metadata supports detached and packed HEAD references but refuses stale commit identity', async t => {
   const f = await fixture(t);
   await git(f.project, 'pack-refs', '--all');
