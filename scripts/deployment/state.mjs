@@ -105,7 +105,7 @@ const stateFields = new Set([
   'startedAt', 'updatedAt', 'errorCode',
 ]);
 
-function validateState(state) {
+export function validateState(state) {
   if (!state || typeof state !== 'object' || Array.isArray(state)) {
     throw new Error('Invalid deployment state record.');
   }

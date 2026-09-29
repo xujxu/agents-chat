@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { lstat, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
-import { captureLockOwner } from './state.mjs';
+import { captureLockOwner, validateState } from './state.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { workerEngineFiles } from './saved-worker-engine.mjs';
 import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
@@ -49,6 +49,9 @@ export function parseColdRetirement(bytes, control, project, backup) {
   const lock = captureLockOwner(proof.lock);
   const owner = captureLockOwner(proof.lease?.owner);
   const { intent, ready, state, oldState, lease } = proof;
+  validateState(oldState);
+  validateState(intent?.state);
+  validateState(state);
   const unit = ready?.runtime?.runtime?.unit;
   const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
   if (proof.version !== 1 || proof.project !== project || proof.backup !== path.resolve(backup)

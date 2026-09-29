@@ -14,7 +14,7 @@ import { verifySnapshot } from './snapshot.mjs';
 import { waitLinuxReadiness } from './linux-readiness.mjs';
 import { runStage } from './stage-runner.mjs';
 import {
-  captureColdRetirementEntries, coldCompletionMarker, coldDigest, coldFileDescriptor, coldGuardFiles,
+  captureColdRetirementEntries, coldCompletionMarker, coldDigest, coldFileDescriptor,
   coldIdentity, coldParse, coldRetirementMarker, coldSerialize, coldStateStage, parseColdRetirement,
 } from './linux-cold-retirement-proof.mjs';
 
@@ -26,6 +26,7 @@ async function exists(file) {
 async function captureProof({ control, project, backup, restored, active, waitSeconds, timeoutSeconds, signal }) {
   let admitted;
   let workers;
+  const errors = [];
   try {
     if (active || restored) {
       if (!active || !restored || active.status !== 'ready-to-commit' || restored.status !== 'files-restored') {
@@ -69,11 +70,13 @@ async function captureProof({ control, project, backup, restored, active, waitSe
     await workers.check();
     await writeWorkerFile(path.join(control, coldRetirementMarker), bytes);
     await syncWorkerDirectory(control);
-  } finally {
+  } catch (error) { errors.push(error); }
+  finally {
     const results = await Promise.allSettled([workers?.close(), admitted?.close(), restored?.close()]);
-    const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
-    if (errors.length) throw new AggregateError(errors, 'Cold terminal authority handoff cleanup failed.');
+    errors.push(...results.filter(result => result.status === 'rejected').map(result => result.reason));
   }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length) throw new AggregateError(errors, 'Cold terminal authority handoff and cleanup failed.');
 }
 
 export async function completeLinuxColdRestore(options) {
