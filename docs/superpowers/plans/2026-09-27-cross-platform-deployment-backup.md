@@ -4734,6 +4734,21 @@ the captured build was produced from that commit. Object availability and
 build/dependency provenance still require explicit admission before public
 controllers may claim full source-based recovery.
 
+Actions 36561410292 accepted snapshot binding in all nine jobs. Native causal
+run 36562369885 demonstrated both missing Git snapshot metadata and a cold
+restore that left HEAD at the newer commit. Native wiring is now implemented
+in the shared stopped-project path. Cold interruption coverage also kills the
+controller after index publication and during worktree removal, requiring
+reentry to restore exact HEAD/index and source bytes without starting a service.
+
+Windows contracts in 36561683828 and 36562369885 exposed Git restoration's
+numeric filesystem identity validation: native file IDs may exceed JavaScript's
+safe integer range. Git file and directory observations now use bigint stats,
+serialize dev/ino as decimal strings, and retain nanosecond change checks.
+Tests compare saved identities directly with bigint filesystem observations,
+including each interrupted publication prefix. Do not relax identity checks or
+convert an already-rounded numeric ID to a string. Remote validation is pending.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

@@ -130,13 +130,14 @@ for (const pause of ['staged', 'published']) {
   });
 }
 
-test('cold file restoration resumes after controller death during project removal without unlocking or starting the service', async t => {
-  const f = await candidate(t);
+for (const pause of ['project-removal', 'git-index']) {
+test(`cold file restoration resumes after controller death during ${pause} without unlocking or starting the service`, async t => {
+  const f = await candidate(t, 'stopped', true, { gitSource: true });
   await f.kill();
   const originalLock = await readFile(path.join(f.control, 'lock', 'owner.json'));
   const originalState = await readFile(path.join(f.control, 'state.json'));
   const child = fork(new URL('./deployment-cold-files-child.mjs', import.meta.url),
-    [f.control, f.project, f.backup], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    [f.control, f.project, f.backup, pause], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let diagnostic = '';
   child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
   const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
@@ -152,7 +153,11 @@ test('cold file restoration resumes after controller death during project remova
   });
   child.kill('SIGKILL');
   await exited;
-  await assert.rejects(readFile(path.join(f.project, 'saved-data')), { code: 'ENOENT' });
+  if (pause === 'project-removal') await assert.rejects(readFile(path.join(f.project, 'saved-data')), { code: 'ENOENT' });
+  else {
+    assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'new data');
+    await readFile(path.join(f.project, '.git', 'agents-chat-restore', 'intent.json'));
+  }
   const restored = await restoreLinuxColdFiles({ ...f, acceptDataLoss: true, timeoutSeconds: 90 });
   t.after(() => restored.close());
   assert.equal(restored.status, 'files-restored');
@@ -166,7 +171,11 @@ test('cold file restoration resumes after controller death during project remova
   assert.equal(receipt.phase, 'files-restored');
   assert.equal(receipt.backupId, 'live-restore');
   assert.equal(receipt.token, f.lock.token);
+  assert.equal(await f.git('rev-parse', 'HEAD'), f.savedCommit);
+  assert.deepEqual(await readFile(path.join(f.project, '.git', 'index')), f.savedIndex);
+  assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'saved source\n');
 });
+}
 
 for (const valid of [true, false]) {
   test(`cold activation verifies restored artifacts and retains recovery evidence (healthy=${valid})`, async t => {

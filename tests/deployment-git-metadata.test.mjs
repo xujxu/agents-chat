@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFile, fork } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import fs from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
-import { inspectGitMetadata } from '../scripts/deployment/git-metadata.mjs';
+import { inspectGitMetadata, readGitMetadataFile } from '../scripts/deployment/git-metadata.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { inspectSnapshotScope } from '../scripts/deployment/snapshot-scope.mjs';
 import { restoreGitMetadata } from '../scripts/deployment/restore-git.mjs';
@@ -29,10 +31,41 @@ async function fixture(t) {
   return { root, project, commit: await git(project, 'rev-parse', 'HEAD') };
 }
 
+test('Git file identities preserve all bits above the JavaScript safe integer range', async t => {
+  const f = await fixture(t);
+  const originalLstat = fs.lstat;
+  const originalOpen = fs.open;
+  const exact = 9007199254740993n;
+  const withIdentity = info => {
+    info.ino = typeof info.ino === 'bigint' ? exact : Number(exact);
+    return info;
+  };
+  t.mock.method(fs, 'lstat', async (...args) => withIdentity(await originalLstat(...args)));
+  t.mock.method(fs, 'open', async (...args) => {
+    const handle = await originalOpen(...args);
+    const originalStat = handle.stat.bind(handle);
+    t.mock.method(handle, 'stat', async (...options) => withIdentity(await originalStat(...options)));
+    return handle;
+  });
+  syncBuiltinESMExports();
+  try {
+    const descriptor = await readGitMetadataFile(path.join(f.project, '.git/index'), 16 * 1024 * 1024);
+    assert.equal(descriptor.ino, exact.toString());
+    assert.notEqual(descriptor.ino, String(Number(exact)));
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
 test('Git metadata capture pins exact HEAD/index and resolved source without refreshing the index', async t => {
   const f = await fixture(t);
   const indexPath = path.join(f.project, '.git/index');
   const index = await readFile(indexPath);
+  const info = await lstat(indexPath, { bigint: true });
+  const descriptor = await readGitMetadataFile(indexPath, 16 * 1024 * 1024);
+  assert.equal(descriptor.dev, String(info.dev));
+  assert.equal(descriptor.ino, String(info.ino));
   const head = await readFile(path.join(f.project, '.git/HEAD'));
   const captured = await inspectGitMetadata({ project: f.project, commit: f.commit });
   assert.equal(captured.record.version, 1);
@@ -150,6 +183,14 @@ for (const pause of ['refs/heads/main', 'index', 'HEAD']) {
       child.once('error', error => { clearTimeout(timer); reject(error); });
     });
     const options = { project: f.project, record, checkStopped: async () => ({ stopped: true, inhibited: true }) };
+    const proof = JSON.parse(await readFile(path.join(f.project, '.git/agents-chat-restore/intent.json'), 'utf8'));
+    for (const entry of proof.entries) {
+      const published = proof.entries.findIndex(item => item.file === entry.file)
+        <= proof.entries.findIndex(item => item.file === pause);
+      const info = await lstat(path.join(f.project, '.git', `${entry.file}${published ? '' : '.lock'}`), { bigint: true });
+      assert.equal(entry.staged.dev, String(info.dev));
+      assert.equal(entry.staged.ino, String(info.ino));
+    }
     await assert.rejects(restoreGitMetadata(options), /alive/i);
     child.kill('SIGKILL');
     await exited;

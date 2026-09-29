@@ -6,7 +6,7 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { canonicalWorkerDirectory } from './worker-files.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 
-const identity = info => ({ dev: info.dev, ino: info.ino });
+const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
 const commitPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 const text = bytes => new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 const digest = (bytes, algorithm = 'sha256') => createHash(algorithm).update(bytes).digest();
@@ -54,33 +54,42 @@ export function validateGitMetadata(value, commit) {
 
 export async function readGitMetadataFile(file, maximum, optional = false) {
   let named;
-  try { named = await lstat(file); }
+  try { named = await lstat(file, { bigint: true }); }
   catch (error) { if (optional && error.code === 'ENOENT') return null; throw error; }
-  if (!named.isFile() || named.isSymbolicLink() || named.nlink !== 1 || named.size > maximum
+  if (!named.isFile() || named.isSymbolicLink() || named.nlink !== 1n || named.size > BigInt(maximum)
     || await realpath(file) !== file) throw new Error('Unsupported Git metadata file type, links or size.');
   const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
-    const opened = await handle.stat();
+    const opened = await handle.stat({ bigint: true });
     const bytes = await handle.readFile();
-    const after = await lstat(file);
+    const after = await lstat(file, { bigint: true });
     if (!same(identity(named), identity(opened)) || !same(identity(after), identity(opened))
-      || bytes.length !== opened.size || after.size !== opened.size
-      || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs) {
+      || BigInt(bytes.length) !== opened.size || after.size !== opened.size
+      || after.mtimeNs !== opened.mtimeNs || after.ctimeNs !== opened.ctimeNs) {
       throw new Error('Git metadata changed during capture.');
     }
-    return { ...identity(opened), bytes: bytes.toString('base64'), mode: opened.mode & 0o777,
-      uid: opened.uid, gid: opened.gid };
+    return { ...identity(opened), bytes: bytes.toString('base64'), mode: Number(opened.mode & 0o777n),
+      uid: Number(opened.uid), gid: Number(opened.gid) };
   } finally { await handle.close(); }
+}
+
+export async function inspectGitDirectory(directory, options) {
+  const { root } = await canonicalWorkerDirectory(directory, options);
+  const info = await lstat(root, { bigint: true });
+  if (!info.isDirectory() || info.isSymbolicLink() || await realpath(root) !== root) {
+    throw new Error('Git metadata directory changed.');
+  }
+  return { root, info };
 }
 
 export async function inspectGitMetadata({ project, commit, signal }) {
   if (commit !== undefined && !commitPattern.test(commit)) throw new Error('Git metadata requires an exact source commit.');
   const { root } = await canonicalWorkerDirectory(project);
   const directory = path.join(root, '.git');
-  const gitDirectory = await canonicalWorkerDirectory(directory);
+  const gitDirectory = await inspectGitDirectory(directory);
   const observe = async () => {
     signal?.throwIfAborted();
-    const current = await canonicalWorkerDirectory(directory);
+    const current = await inspectGitDirectory(directory);
     if (!same(identity(current.info), identity(gitDirectory.info))) throw new Error('Git metadata directory changed.');
     const names = await readdir(directory);
     if (names.some(name => name.endsWith('.lock') || name.startsWith('sharedindex.')

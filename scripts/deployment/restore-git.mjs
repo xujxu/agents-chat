@@ -2,12 +2,12 @@ import { mkdir, lstat, open, readdir, rename, rmdir, unlink } from 'node:fs/prom
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual as same } from 'node:util';
-import { inspectGitMetadata, readGitMetadataFile, validateGitMetadata } from './git-metadata.mjs';
+import { inspectGitDirectory, inspectGitMetadata, readGitMetadataFile, validateGitMetadata } from './git-metadata.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
 
-const identity = info => ({ dev: info.dev, ino: info.ino });
+const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const maximum = 16 * 1024 * 1024;
 const descriptor = value => value === null ? null : {
@@ -32,7 +32,7 @@ export async function restoreGitMetadata({ project, record: supplied, checkStopp
   await checkAuthority();
   const { root } = await canonicalWorkerDirectory(project);
   const directory = path.join(root, '.git');
-  const git = await canonicalWorkerDirectory(directory);
+  const git = await inspectGitDirectory(directory);
   const guard = path.join(directory, 'agents-chat-restore');
   const proofFile = path.join(guard, 'intent.json');
   const files = [...(record.ref ? [record.ref] : []), 'index', 'HEAD'];
@@ -47,7 +47,7 @@ export async function restoreGitMetadata({ project, record: supplied, checkStopp
   let proofIdentity;
   const captureProof = async () => {
     proofBytes = await readWorkerFile(proofFile, 65536, { privateMode: true });
-    proofIdentity = identity(await lstat(proofFile));
+    proofIdentity = identity(await lstat(proofFile, { bigint: true }));
     proof = captureWorkerFields(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(proofBytes)),
       ['version', 'project', 'owner', 'recordSha256', 'root', 'guard', 'parents', 'policy', 'entries'], 'Git restore intent');
     if (proof.version !== 1 || proof.project !== root || proof.recordSha256 !== hash(Buffer.from(JSON.stringify(record)))
@@ -61,7 +61,7 @@ export async function restoreGitMetadata({ project, record: supplied, checkStopp
       || typeof proof.owner.identity !== 'string' || !proof.owner.identity) throw new Error('Invalid Git restore controller.');
     const validateIdentity = value => {
       captureWorkerFields(value, ['dev', 'ino'], 'Git directory identity');
-      if (!Object.values(value).every(number => Number.isSafeInteger(number) && number >= 0)) {
+      if (!Object.values(value).every(number => typeof number === 'string' && /^(0|[1-9][0-9]{0,19})$/.test(number))) {
         throw new Error('Invalid Git directory identity.');
       }
     };
@@ -109,12 +109,12 @@ export async function restoreGitMetadata({ project, record: supplied, checkStopp
     await current.check();
     await checkAuthority();
     if (!await exists(guard)) await mkdir(guard, { mode: 0o700 });
-    const guardInfo = (await canonicalWorkerDirectory(guard, { privateMode: true })).info;
+    const guardInfo = (await inspectGitDirectory(guard, { privateMode: true })).info;
     const before = await Promise.all(files.map(file => observe(path.join(directory, file))));
     const policy = await Promise.all(['config', 'packed-refs'].map(async file =>
       ({ file, identity: await observe(path.join(directory, file)) })));
     const directories = await Promise.all(parents.map(async file =>
-      ({ file, identity: identity((await canonicalWorkerDirectory(file)).info) })));
+      ({ file, identity: identity((await inspectGitDirectory(file)).info) })));
     const entries = [];
     for (const [index, file] of files.entries()) {
       await checkAuthority();
@@ -123,7 +123,7 @@ export async function restoreGitMetadata({ project, record: supplied, checkStopp
       try {
         await handle.writeFile(contents[index]);
         if (process.platform === 'linux') {
-          await handle.chown(before[index]?.uid ?? git.info.uid, before[index]?.gid ?? git.info.gid);
+          await handle.chown(before[index]?.uid ?? Number(git.info.uid), before[index]?.gid ?? Number(git.info.gid));
           await handle.chmod(before[index]?.mode ?? 0o644);
         }
         await handle.sync();
@@ -145,15 +145,15 @@ export async function restoreGitMetadata({ project, record: supplied, checkStopp
     if (proof.owner.pid !== process.pid && await processIdentity(proof.owner.pid) === proof.owner.identity) {
       throw new Error('The original Git restore controller is still alive.');
     }
-    if (!same(identity((await canonicalWorkerDirectory(directory)).info), proof.root)
-      || !same(identity((await canonicalWorkerDirectory(guard, { privateMode: true })).info), proof.guard)
+    if (!same(identity((await inspectGitDirectory(directory)).info), proof.root)
+      || !same(identity((await inspectGitDirectory(guard, { privateMode: true })).info), proof.guard)
       || !same(await readdir(guard), ['intent.json'])
-      || !same(identity(await lstat(proofFile)), proofIdentity)
+      || !same(identity(await lstat(proofFile, { bigint: true })), proofIdentity)
       || !(await readWorkerFile(proofFile, 65536, { privateMode: true })).equals(proofBytes)) {
       throw new Error('Git restore evidence or directory changed.');
     }
     for (const parent of proof.parents) {
-      if (!same(identity((await canonicalWorkerDirectory(parent.file)).info), parent.identity)) throw new Error('Git ref parent changed.');
+      if (!same(identity((await inspectGitDirectory(parent.file)).info), parent.identity)) throw new Error('Git ref parent changed.');
     }
     for (const policy of proof.policy) {
       if (!same(await observe(path.join(directory, policy.file)), policy.identity)) throw new Error('Git configuration or packed refs changed.');
