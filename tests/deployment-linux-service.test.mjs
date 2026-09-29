@@ -10,6 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
+import { hasFailedLinuxActivation } from '../scripts/deployment/linux-service-activation.mjs';
 import { acquireLock, loadState, writeState, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
@@ -18,6 +19,18 @@ import { fixture, ready, systemctl, node, npm, quote } from './deployment-linux-
 
 const execute = promisify(execFile);
 const native = (file, args) => execute(file, args, { timeout: 20000, maxBuffer: 8192 });
+
+test('queued new activation does not inherit old stopped-generation failure', () => {
+  const prior = 'a'.repeat(32);
+  const observed = { ActiveState: 'failed', SubState: 'failed', MainPID: '0',
+    InvocationID: prior, Job: '1824', Result: 'timeout' };
+  assert.equal(hasFailedLinuxActivation(observed, prior), false);
+  for (const changes of [{ Job: '' }, { Job: '0' }, { Job: 'invalid' },
+    { InvocationID: 'b'.repeat(32) }, { MainPID: '123' }, { SubState: 'auto-restart' }]) {
+    assert.equal(hasFailedLinuxActivation({ ...observed, ...changes }, prior), true);
+  }
+  assert.equal(hasFailedLinuxActivation({ ...observed, ActiveState: 'activating', SubState: 'start' }, prior), false);
+});
 
 test('retains actual installed npm service sources and cgroup without stopping its detached descendants', async t => {
   const f = await fixture(t);
