@@ -13,6 +13,7 @@ import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs'
 import { createWorkerOperation, readWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { readWorkerJournal } from '../scripts/deployment/worker-journal.mjs';
 import { saveRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
+import { prepareNpmCommand } from '../scripts/deployment/npm-command.mjs';
 
 const execute = promisify(execFile);
 const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
@@ -73,6 +74,55 @@ test('real native workers require enrolled lock-bound authority and seal exact s
   for (const workerId of [first, second]) {
     const receipts = await readWorkerJournal(f.control, {
       project: f.project, operationId: f.lock.operationId, workerId, controllerIdentity: f.lock.processIdentity,
+    });
+
+    test('actual npm install and build run inside enrolled native ownership with descendant settlement', async t => {
+      const f = await fixture(t);
+      const npmCli = process.env.DEPLOYMENT_TEST_NPM_CLI;
+      assert.ok(npmCli, 'Actions must supply the installed npm CLI path.');
+      await writeFile(path.join(f.project, 'package.json'), JSON.stringify({
+        name: 'deployment-build-fixture', version: '1.0.0', scripts: { build: 'node build.cjs' },
+      }));
+      await writeFile(path.join(f.project, 'package-lock.json'), JSON.stringify({
+        name: 'deployment-build-fixture', version: '1.0.0', lockfileVersion: 3,
+        packages: { '': { name: 'deployment-build-fixture', version: '1.0.0' } },
+      }));
+      await writeFile(path.join(f.project, 'build.cjs'), "require('node:fs').writeFileSync('artifact','built');");
+      const environment = Object.fromEntries(Object.entries(process.env)
+        .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !['NODE_OPTIONS', 'NODE_PATH'].includes(key)));
+      environment.npm_config_cache = path.join(f.project, '.npm');
+      const run = async (stage, signal) => f.operation.run({
+        workerId: randomUUID(), runtime: f.runtime, signal,
+        command: await prepareNpmCommand({ project: f.project, node: process.execPath, npmCli, stage, environment, signal }),
+      });
+      await run('dependencies');
+      await run('build');
+      assert.equal(await readFile(path.join(f.project, 'artifact'), 'utf8'), 'built');
+      await writeFile(path.join(f.project, 'build.cjs'), 'process.exit(19);');
+      await assert.rejects(run('build'), error => error.code === 'DEPLOYMENT_COMMAND_FAILED' && error.result.exitCode !== 0);
+      await writeFile(path.join(f.project, 'build.cjs'), `
+        const {spawn}=require('node:child_process');
+        spawn(process.execPath,['-e',${JSON.stringify("const fs=require('node:fs');fs.writeFileSync('writer-ready','yes');setInterval(()=>fs.appendFileSync('writer','x'),10);")}],
+          {detached:true,stdio:'ignore'}).unref();
+        setInterval(()=>{},1000);
+      `);
+      const controller = new AbortController();
+      const reason = new Error('cancel real npm build');
+      const rejected = assert.rejects(run('build', controller.signal), error => error === reason);
+      try {
+        for (let attempt = 0; ; attempt++) {
+          try { await readFile(path.join(f.project, 'writer')); break; }
+          catch (error) { if (error.code !== 'ENOENT') throw error; }
+          if (attempt === 600) throw new Error('npm build descendant did not start.');
+          await delay(50);
+        }
+      } finally { controller.abort(reason); }
+      await rejected;
+      const before = await readFile(path.join(f.project, 'writer'));
+      await delay(200);
+      assert.deepEqual(await readFile(path.join(f.project, 'writer')), before);
+      await f.operation.seal();
+      assert.equal((await readWorkerOperation(f.control)).at(-1).phase, 'sealed');
     });
     assert.deepEqual(receipts.map(receipt => receipt.phase), ['intent', 'owned', 'admitted', 'settled']);
   }
