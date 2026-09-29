@@ -61,8 +61,7 @@ async function sourceBootstrap() {
   process.stdout.write(output);
 }
 
-export async function prepareSourceCommand({ project, node, git, action, options = {}, environment, signal }) {
-  signal?.throwIfAborted();
+function captureSourceOptions(action, options) {
   if (!['inspect', 'resolve', 'select'].includes(action)) throw new Error('Unsupported owned source action.');
   if (!options || typeof options !== 'object' || Array.isArray(options)) throw new Error('Invalid source options.');
   let input;
@@ -75,6 +74,11 @@ export async function prepareSourceCommand({ project, node, git, action, options
       || options.revision !== undefined && options.noPull) throw new Error('Invalid source target options.');
     input = { ...options };
   }
+  return input;
+}
+
+export async function captureSourceCommands({ project, node, git, environment, signal }) {
+  signal?.throwIfAborted();
   if (!environment || typeof environment !== 'object' || Array.isArray(environment)
     || Object.keys(environment).some(key => ['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase()))) {
     throw new Error('Unsupported source worker environment.');
@@ -83,6 +87,9 @@ export async function prepareSourceCommand({ project, node, git, action, options
     if (typeof file !== 'string' || !path.isAbsolute(file) || /[\0\r\n]/.test(file)) {
       throw new Error('Source workers require explicit absolute Node and Git executables.');
     }
+  }
+  const env = captureWorkerCommand({ file: node, cwd: project, args: [], env: environment }).env;
+  for (const file of [node, git]) {
     const info = await lstat(await realpath(file));
     if (!info.isFile() || process.platform === 'linux' && !(info.mode & 0o111)) throw new Error('Invalid source executable.');
   }
@@ -96,15 +103,27 @@ export async function prepareSourceCommand({ project, node, git, action, options
     const bytes = await readWorkerFile(fileURLToPath(new URL(name, import.meta.url)), 64 * 1024);
     if (!bytes.equals(Buffer.from(captured[index][1]))) throw new Error('Source worker modules changed during capture.');
   }
-  const payload = gzipSync(Buffer.from(JSON.stringify({ modules: captured, project: root, git, action, options: input }))).toString('base64');
   const code = `(${sourceBootstrap.toString()})().catch(()=>{process.stderr.write("Owned source operation refused; inspect checkout and target configuration.\\n");process.exitCode=1;});`;
-  const command = captureWorkerCommand({
-    file: node, cwd: root, env: environment,
-    args: ['--input-type=module', '--eval', code, '--', payload],
-  });
-  if (command.args.join(' ').length > 28000) throw new Error('Source command exceeds native command-line budget.');
   signal?.throwIfAborted();
-  return command;
+  return Object.freeze({
+    prepare({ action, options = {}, signal: commandSignal }) {
+      commandSignal?.throwIfAborted();
+      const input = captureSourceOptions(action, options);
+      const payload = gzipSync(Buffer.from(JSON.stringify({
+        modules: captured, project: root, git, action, options: input,
+      }))).toString('base64');
+      const command = captureWorkerCommand({
+        file: node, cwd: root, env, args: ['--input-type=module', '--eval', code, '--', payload],
+      });
+      if (command.args.join(' ').length > 28000) throw new Error('Source command exceeds native command-line budget.');
+      return command;
+    },
+  });
+}
+
+export async function prepareSourceCommand({ action, options = {}, ...input }) {
+  captureSourceOptions(action, options);
+  return (await captureSourceCommands(input)).prepare({ action, options, signal: input.signal });
 }
 
 export function readSourceCommandResult(output, action, project) {

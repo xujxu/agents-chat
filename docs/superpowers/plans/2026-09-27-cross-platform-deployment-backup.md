@@ -4788,6 +4788,19 @@ native jobs exercise actual Git inspection, explicit selection, local-remote
 fetch without checkout mutation, fast-forward selection, and dirty-source refusal.
 No public controller or successful build receipt is claimed by this batch.
 
+Retain `captureSourceCommands` before selecting new source. Subsequent stages
+prepare commands from this captured registry and environment, without reopening
+controller modules from the now-replaced checkout or retaining an expired stage
+signal. Native coverage copies the helper closure, captures it, displaces its
+directory, then executes every real Git stage through the retained factory.
+Each command accepts its own fresh cancellation signal.
+
+Npm causal run 36576419555 reported the missing command module as intended.
+Implementation 29f0d93 passed all nine jobs in 36576520876, including real native
+npm install/build and detached-writer cancellation on both platforms. Source
+causal 36577701957 likewise reports the missing source-command module; owned
+source implementation acceptance is still pending.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

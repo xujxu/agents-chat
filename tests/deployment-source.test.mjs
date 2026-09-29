@@ -6,7 +6,7 @@ import { mkdir, writeFile, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectSource, previewTarget, resolveTarget, selectSource } from '../scripts/deployment/source.mjs';
-import { prepareSourceCommand, readSourceCommandResult } from '../scripts/deployment/source-command.mjs';
+import { captureSourceCommands, prepareSourceCommand, readSourceCommandResult } from '../scripts/deployment/source-command.mjs';
 
 const execute = promisify(execFile);
 async function git(project, args) {
@@ -172,4 +172,11 @@ test('owned source commands reject unsupported actions and bind bounded structur
   assert.throws(() => readSourceCommandResult(output, 'inspect', path.dirname(project)), /project/i);
   assert.throws(() => readSourceCommandResult({ ...output, stdout: 'x'.repeat(4097) }, 'inspect', project), /result/i);
   assert.throws(() => readSourceCommandResult({ ...output, exitCode: 1 }, 'inspect', project), /result/i);
+  const controller = new AbortController();
+  const environment = { SOURCE_CAPTURE_FIXTURE: 'original' };
+  const captured = await captureSourceCommands({ ...input, environment, signal: controller.signal });
+  environment.SOURCE_CAPTURE_FIXTURE = 'modified';
+  controller.abort(new Error('source capture stage ended'));
+  assert.equal(captured.prepare({ action: 'inspect' }).env.SOURCE_CAPTURE_FIXTURE, 'original');
+  assert.throws(() => captured.prepare({ action: 'inspect', signal: controller.signal }), /stage ended/i);
 });

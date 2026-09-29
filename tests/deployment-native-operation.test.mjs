@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFile, fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, open, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
@@ -14,7 +14,7 @@ import { createWorkerOperation, readWorkerOperation } from '../scripts/deploymen
 import { readWorkerJournal } from '../scripts/deployment/worker-journal.mjs';
 import { saveRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
 import { prepareNpmCommand } from '../scripts/deployment/npm-command.mjs';
-import { prepareSourceCommand, readSourceCommandResult } from '../scripts/deployment/source-command.mjs';
+import { readSourceCommandResult } from '../scripts/deployment/source-command.mjs';
 
 const execute = promisify(execFile);
 const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
@@ -116,10 +116,21 @@ test('real native workers require enrolled lock-bound authority and seal exact s
         await setup('switch', '--detach', old);
         const environment = Object.fromEntries(Object.entries(process.env)
           .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase())));
+        const helpers = path.join(path.dirname(f.project), 'source-helpers');
+        await mkdir(helpers);
+        for (const name of ['source-command.mjs', 'source.mjs', 'snapshot-files.mjs',
+          'worker-files.mjs', 'worker-wire.mjs', 'worker-identity.mjs']) {
+          await copyFile(path.join(source, name), path.join(helpers, name));
+        }
+        const { captureSourceCommands } = await import(pathToFileURL(path.join(helpers, 'source-command.mjs')).href);
+        const captureSignal = new AbortController();
+        const commands = await captureSourceCommands({
+          project: f.project, node: process.execPath, git, environment, signal: captureSignal.signal,
+        });
+        captureSignal.abort(new Error('Capture stage ended; later stages use fresh signals.'));
+        await rename(helpers, `${helpers}-displaced`);
         const run = async (action, options = {}) => {
-          const command = await prepareSourceCommand({
-            project: f.project, node: process.execPath, git, action, options, environment,
-          });
+          const command = commands.prepare({ action, options });
           return readSourceCommandResult(await f.operation.run({
             workerId: randomUUID(), runtime: f.runtime, command,
           }), action, f.project);
