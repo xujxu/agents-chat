@@ -42,7 +42,8 @@ require('node:http').createServer((req, res) => {
   await git('config', 'user.name', 'Deployment fixture');
   await git('config', 'user.email', 'fixture@example.invalid');
   await writeFile(path.join(f.project, '.git/info/exclude'), 'ready\n.npm/\n');
-  await git('add', 'package.json', 'server.cjs');
+  await writeFile(path.join(f.project, 'agents.json'), await readFile(path.join(repository, 'agents.json')));
+  await git('add', 'package.json', 'server.cjs', 'agents.json');
   await git('commit', '-m', 'prior fixture source');
   const prior = await git('rev-parse', 'HEAD');
   await git('fetch', '--quiet', repository, 'HEAD');

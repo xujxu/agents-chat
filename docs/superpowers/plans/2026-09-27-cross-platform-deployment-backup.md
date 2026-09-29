@@ -4957,6 +4957,15 @@ target before downtime and checks settled preflight cleanup. This is not the
 historical application upgrade, second update, restore or API-data continuity
 gate; those remain required independently.
 
+The first native composition run reaching the controller (`3c7bdb0` /
+`36596723621`) passed unsupported-target refusal and exposed two integration
+mistakes. The synthetic source must retain the same tracked `agents.json` as
+its target; otherwise the source policy correctly refuses configuration changes
+before installation. Service retirement transfers authority to worker
+retirement: call `workers.retire()` after `stopped.retire()`, not merely
+`workers.close()`, before unlocking. The latter leaves evidence that correctly
+blocks release. Keep both failure-path contracts to exercise this ordering.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

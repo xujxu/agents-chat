@@ -82,7 +82,7 @@ export async function runLinuxLiveDeployment({
   const retire = async () => {
     await authority();
     await stopped.retire();
-    await workers.close();
+    await workers.retire();
     await releaseLock(control, lock);
   };
   try {
