@@ -4660,6 +4660,22 @@ supersede the first completion receipt; a second external restore must return
 the new operation ID, restore saved data, complete and unlock normally. This
 checks the actual repeated recovery route, not merely receipt absence.
 
+Both manifest correction `626a940` / `36548797100` and consecutive saved
+recovery `f39a1a8` / `36549612383` passed all nine jobs.
+
+### Exact Git metadata prerequisite for source restoration
+
+Project snapshots intentionally exclude `.git`; restored files alone do not
+restore checkout HEAD/index. Establish bounded, read-only capture of exact HEAD
+and index bytes, the resolved commit and optional local branch ref. Pin the
+standalone Git directory and metadata observations and reject changed metadata,
+active Git lock files or linked/shared worktree layouts rather than writing
+another worktree's state. Support both packed branch refs and detached HEAD.
+The initial contract runs actual Git on Linux and Windows and verifies no index
+refresh. Subsequent work must bind this record into complete snapshots and
+restore it under owned stopped-runtime authority; this capture alone does not
+claim Git restoration or verified build provenance.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
