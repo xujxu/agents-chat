@@ -4,6 +4,8 @@ import { promisify } from 'node:util';
 import { chown, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import test from 'node:test';
 import { fixture, ready, node } from './deployment-linux-service-fixture.mjs';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
@@ -12,6 +14,7 @@ import { runLinuxLiveDeployment } from '../scripts/deployment/linux-deployment.m
 import { readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { saveRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
+import { waitLinuxReadiness } from '../scripts/deployment/linux-readiness.mjs';
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../', import.meta.url));
@@ -76,6 +79,46 @@ test('native deployment refuses unsupported target before downtime and releases 
   assert.equal((await loadState(f.control)).phase, 'preflight-refused');
   assert.equal((await f.service.check()).populated, true);
   assert.deepEqual((await readdir(f.control)).sort(), ['state.json']);
+});
+
+test('native deployment restores prior owned runtime after pre-source snapshot rotation failure', async t => {
+  const f = await installation(t);
+  const original = fs.rename;
+  t.mock.method(fs, 'rename', async (from, to) => {
+    if (from === path.join(f.control, 'staging') && to === path.join(f.control, 'backup')) {
+      throw new Error('fixture rotation publication failure');
+    }
+    return original(from, to);
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(runLinuxLiveDeployment({ ...f, revision: f.target }), /fixture rotation publication failure/);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+  assert.equal((await loadState(f.control)).phase, 'prior-runtime-restored');
+  const active = await inspectLinuxService(f);
+  t.after(() => active.close());
+  await waitLinuxReadiness({ service: active, port: 3010, providers: ['credentials'] });
+  assert.equal((await verifySnapshot(path.join(f.control, 'staging'))).source.commit, f.prior);
+  assert.equal(await readDeploymentReceipt(f.control, f.project), null);
+  assert.equal((await readdir(f.control)).includes('lock'), false);
+});
+
+test('native deployment retains backup and inhibition after actual dependency installation fails', async t => {
+  const f = await installation(t);
+  const environment = { ...f.environment, npm_config_cache: path.join(f.control, 'inaccessible-cache') };
+  await assert.rejects(runLinuxLiveDeployment({ ...f, environment, revision: f.target }), /worker|exit|command/i);
+  const state = await loadState(f.control);
+  assert.equal(state.phase, 'recovery-required');
+  assert.equal(state.previousPhase, 'dependencies');
+  assert.equal((await verifySnapshot(path.join(f.control, 'backup'))).source.commit, f.prior);
+  assert.equal(await readDeploymentReceipt(f.control, f.project), null);
+  const files = await readdir(f.control);
+  assert.ok(files.includes('lock'));
+  assert.ok(files.includes('service-stop.ndjson'));
+  await assert.rejects(inspectLinuxService(f), /running|inhibit|policy|start|service/i);
 });
 
 test('native deployment composes snapshot, real application build, owned activation and accepted receipt', {
