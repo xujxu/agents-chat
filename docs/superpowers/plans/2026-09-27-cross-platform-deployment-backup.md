@@ -4966,6 +4966,17 @@ retirement: call `workers.retire()` after `stopped.retire()`, not merely
 `workers.close()`, before unlocking. The latter leaves evidence that correctly
 blocks release. Keep both failure-path contracts to exercise this ordering.
 
+`9f6bf70` / `36597940934` passed all three native failure-path contracts and
+the eleven existing jobs. The actual application completed source/install/build
+and activation, then correctly failed strict readiness on provider mismatch.
+The reviewed auth route explicitly uses ID `admin-login` (type `credentials`),
+not the default ID `credentials`. It always registers that provider even when
+admin login is disabled; OAuth-only installations still advertise it.
+Correct the compatibility prediction and all native fixtures to that exact
+profile, while separately requiring at least one enabled login mechanism.
+Readiness retains exact provider-set/type matching, owned-listener admission
+and refusal of the wrong default ID. No application auth changes are needed.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

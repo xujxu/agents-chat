@@ -13,8 +13,8 @@ const fs = require('node:fs');
 const server = require('node:http').createServer((req, res) => {
   fs.appendFileSync('requests', req.url + '\\n');
   ${response ?? `res.setHeader('Content-Type','application/json');res.end(JSON.stringify({
-    credentials:{id:'credentials',name:'Credentials',type:'credentials',
-      signinUrl:'http://localhost/api/auth/signin/credentials',callbackUrl:'http://localhost/api/auth/callback/credentials'}
+    'admin-login':{id:'admin-login',name:'Admin',type:'credentials',
+      signinUrl:'http://localhost/api/auth/signin/admin-login',callbackUrl:'http://localhost/api/auth/callback/admin-login'}
   }));`}
 });
 server.listen(0, ${JSON.stringify(host)}, () => {
@@ -30,11 +30,11 @@ server.listen(0, ${JSON.stringify(host)}, () => {
 for (const host of ['127.0.0.1', '::']) {
   test(`readiness binds HTTP auth providers to an owned listener (${host})`, async t => {
     const f = await serving(t, { host });
-    const result = await verifyLinuxReadiness({ service: f.service, port: f.port, providers: ['credentials'] });
+    const result = await verifyLinuxReadiness({ service: f.service, port: f.port, providers: ['admin-login'] });
     assert.equal(result.status, 'ready');
     assert.equal(result.invocationId, f.service.identity.runtime.invocationId);
     assert.equal(result.port, f.port);
-    assert.deepEqual(result.providers, ['credentials']);
+    assert.deepEqual(result.providers, ['admin-login']);
     assert.equal(await readFile(path.join(f.project, 'requests'), 'utf8'), '/api/auth/providers\n');
   });
 }
@@ -46,21 +46,38 @@ test('healthy foreign listener cannot satisfy readiness or receive the probe', a
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
   await assert.rejects(verifyLinuxReadiness({
-    service: f.service, port: server.address().port, providers: ['credentials'],
+    service: f.service, port: server.address().port, providers: ['admin-login'],
   }), /owned|listener|service/i);
   assert.equal(requests, 0);
   await f.service.check();
 });
 
+test('readiness matches advertised admin-login plus OAuth providers even without enabled admin credentials', async t => {
+  const f = await serving(t, { response: `
+  res.setHeader('Content-Type','application/json');
+  res.end(JSON.stringify(Object.fromEntries(['admin-login','azure-ad'].map(id => [id, {
+    id, name: id, type: id === 'admin-login' ? 'credentials' : 'oauth',
+    signinUrl: 'http://localhost/api/auth/signin/' + id,
+    callbackUrl: 'http://localhost/api/auth/callback/' + id
+  }]))));
+  ` });
+  assert.equal((await verifyLinuxReadiness({
+    service: f.service, port: f.port, providers: ['admin-login', 'azure-ad'],
+  })).status, 'ready');
+});
+
 for (const [label, response] of [
   ['redirect', 'res.writeHead(302,{Location:"http://127.0.0.1:1/foreign"});res.end();'],
   ['empty providers', 'res.setHeader("Content-Type","application/json");res.end("{}");'],
+  ['default credentials ID instead of application admin-login', `res.setHeader('Content-Type','application/json');
+    res.end(JSON.stringify({credentials:{id:'credentials',name:'Credentials',type:'credentials',
+      signinUrl:'http://localhost/api/auth/signin/credentials',callbackUrl:'http://localhost/api/auth/callback/credentials'}}));`],
   ['oversized body', 'res.setHeader("Content-Type","application/json");res.end("x".repeat(70000));'],
   ['HTML response', 'res.setHeader("Content-Type","text/html");res.end("<html>healthy</html>");'],
 ]) {
   test(`readiness refuses ${label} instead of claiming restored acceptance`, async t => {
     const f = await serving(t, { response });
-    await assert.rejects(verifyLinuxReadiness({ service: f.service, port: f.port, providers: ['credentials'] }),
+    await assert.rejects(verifyLinuxReadiness({ service: f.service, port: f.port, providers: ['admin-login'] }),
       /health|readiness|provider|response|limit/i);
     await f.service.check();
   });
@@ -72,7 +89,7 @@ test('cancelled readiness settles an unfinished HTTP response without stopping t
   const timer = setTimeout(() => controller.abort(new Error('cancel health check')), 1000);
   try {
     await assert.rejects(verifyLinuxReadiness({
-      service: f.service, port: f.port, providers: ['credentials'], signal: controller.signal,
+      service: f.service, port: f.port, providers: ['admin-login'], signal: controller.signal,
     }), /cancel health check/);
   } finally { clearTimeout(timer); }
   await f.service.check();
@@ -81,7 +98,7 @@ test('cancelled readiness settles an unfinished HTTP response without stopping t
 test('readiness refuses a replacement generation even on the same service unit', async t => {
   const f = await serving(t);
   await systemctl('restart', f.unit);
-  await assert.rejects(verifyLinuxReadiness({ service: f.service, port: f.port, providers: ['credentials'] }));
+  await assert.rejects(verifyLinuxReadiness({ service: f.service, port: f.port, providers: ['admin-login'] }));
 });
 
 test('readiness waits through an owned HTTP 503 startup window before accepting providers', async t => {
@@ -89,11 +106,11 @@ test('readiness waits through an owned HTTP 503 startup window before accepting 
   const attempts = fs.readFileSync('requests','utf8').trim().split('\\n').length;
   if (attempts < 3) { res.writeHead(503); res.end('starting'); return; }
   res.setHeader('Content-Type','application/json');
-  res.end(JSON.stringify({credentials:{id:'credentials',name:'Credentials',type:'credentials',
-    signinUrl:'http://localhost/api/auth/signin/credentials',callbackUrl:'http://localhost/api/auth/callback/credentials'}}));
+  res.end(JSON.stringify({'admin-login':{id:'admin-login',name:'Admin',type:'credentials',
+    signinUrl:'http://localhost/api/auth/signin/admin-login',callbackUrl:'http://localhost/api/auth/callback/admin-login'}}));
   ` });
   assert.equal((await waitLinuxReadiness({
-    service: f.service, port: f.port, providers: ['credentials'], waitSeconds: 10,
+    service: f.service, port: f.port, providers: ['admin-login'], waitSeconds: 10,
   })).status, 'ready');
   assert.equal((await readFile(path.join(f.project, 'requests'), 'utf8')).trim().split('\n').length, 3);
 });
@@ -101,7 +118,7 @@ test('readiness waits through an owned HTTP 503 startup window before accepting 
 test('readiness wait deadline closes a hanging response and leaves the managed runtime running', async t => {
   const f = await serving(t, { response: 'res.writeHead(200,{"Content-Type":"application/json"});res.write("{");' });
   await assert.rejects(waitLinuxReadiness({
-    service: f.service, port: f.port, providers: ['credentials'], waitSeconds: 1,
+    service: f.service, port: f.port, providers: ['admin-login'], waitSeconds: 1,
   }), { code: 'DEPLOYMENT_STAGE_TIMEOUT', recoveryAllowed: true });
   await f.service.check();
 });
@@ -109,7 +126,7 @@ test('readiness wait deadline closes a hanging response and leaves the managed r
 test('readiness wait does not hide a provider mismatch behind startup retries', async t => {
   const f = await serving(t, { response: 'res.setHeader("Content-Type","application/json");res.end("{}");' });
   await assert.rejects(waitLinuxReadiness({
-    service: f.service, port: f.port, providers: ['credentials'], waitSeconds: 10,
+    service: f.service, port: f.port, providers: ['admin-login'], waitSeconds: 10,
   }), /providers do not match/i);
   assert.equal((await readFile(path.join(f.project, 'requests'), 'utf8')).trim().split('\n').length, 1);
 });

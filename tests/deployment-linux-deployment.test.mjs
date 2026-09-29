@@ -30,9 +30,9 @@ async function installation(t) {
 const fs = require('node:fs');
 require('node:http').createServer((req, res) => {
   res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({ credentials: { id: 'credentials', name: 'Credentials', type: 'credentials',
-    signinUrl: 'http://localhost:3010/api/auth/signin/credentials',
-    callbackUrl: 'http://localhost:3010/api/auth/callback/credentials' } }));
+  res.end(JSON.stringify({ 'admin-login': { id: 'admin-login', name: 'Admin', type: 'credentials',
+    signinUrl: 'http://localhost:3010/api/auth/signin/admin-login',
+    callbackUrl: 'http://localhost:3010/api/auth/callback/admin-login' } }));
 }).listen(3010, '127.0.0.1', () => fs.writeFileSync('ready', String(process.pid)));
 ` });
   await ready(f);
@@ -102,7 +102,7 @@ test('native deployment restores prior owned runtime after pre-source snapshot r
   assert.equal((await loadState(f.control)).phase, 'prior-runtime-restored');
   const active = await inspectLinuxService(f);
   t.after(() => active.close());
-  await waitLinuxReadiness({ service: active, port: 3010, providers: ['credentials'] });
+  await waitLinuxReadiness({ service: active, port: 3010, providers: ['admin-login'] });
   assert.equal((await verifySnapshot(path.join(f.control, 'staging'))).source.commit, f.prior);
   assert.equal(await readDeploymentReceipt(f.control, f.project), null);
   assert.equal((await readdir(f.control)).includes('lock'), false);

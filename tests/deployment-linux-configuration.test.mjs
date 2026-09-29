@@ -32,7 +32,7 @@ test('inspect actual installed configuration without stopping the original servi
   const before = (await systemctl('show', f.unit, '--property=MainPID,InvocationID')).stdout;
   const result = await inspectLinuxConfiguration({ service: f.service, profile });
   assert.equal(result.status, 'configuration-supported');
-  assert.deepEqual(result.providers, ['credentials']);
+  assert.deepEqual(result.providers, ['admin-login']);
   assert.doesNotMatch(JSON.stringify(result), /private-fixture/);
   await result.check();
   assert.equal((await systemctl('show', f.unit, '--property=MainPID,InvocationID')).stdout, before);
@@ -62,7 +62,7 @@ test('Next dotenv-only credentials need not be present in the initial npm proces
     'ADMIN_USERNAME=fixture', 'ADMIN_PASSWORD=private-fixture-password',
   ].join('\n'));
   const result = await inspectLinuxConfiguration({ service: f.service, profile });
-  assert.deepEqual(result.providers, ['credentials']);
+  assert.deepEqual(result.providers, ['admin-login']);
 });
 
 test('optional absent EnvironmentFile remains observed through admission', async t => {

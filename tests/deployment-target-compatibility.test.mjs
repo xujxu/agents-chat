@@ -159,7 +159,7 @@ test('nonliteral target refs and unsupported platforms refuse', async () => {
 test('effective authentication configuration is checked without exposing values', () => {
   const result = inspectConfigurationCompatibility({ profile: metadata.configurationProfile, environment });
   assert.equal(result.status, 'configuration-supported');
-  assert.deepEqual(result.providers, ['credentials']);
+  assert.deepEqual(result.providers, ['admin-login']);
   assert.doesNotMatch(JSON.stringify(result), /fixture-|secret|password/i);
 });
 
@@ -209,12 +209,12 @@ test('Azure public-client and GitHub admin allowlist fallback match reviewed aut
     profile: metadata.configurationProfile,
     environment: { NEXTAUTH_SECRET: environment.NEXTAUTH_SECRET, NEXTAUTH_URL: environment.NEXTAUTH_URL, AZURE_AD_CLIENT_ID: 'id' },
   });
-  assert.deepEqual(azure.providers, ['azure-ad']);
+  assert.deepEqual(azure.providers, ['admin-login', 'azure-ad']);
   const github = inspectConfigurationCompatibility({
     profile: metadata.configurationProfile,
     environment: { ...environment, GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 'secret', ADMIN_EMAILS: 'user@example.invalid' },
   });
-  assert.deepEqual(github.providers, ['credentials', 'github']);
+  assert.deepEqual(github.providers, ['admin-login', 'github']);
 });
 
 test('target/config partial results cannot authorize transaction downtime', async t => {

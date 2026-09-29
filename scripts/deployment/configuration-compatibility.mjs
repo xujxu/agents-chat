@@ -31,16 +31,19 @@ export function inspectConfigurationCompatibility({ profile, environment }) {
     throw refusal('NEXTAUTH_URL');
   }
   if (values.NODE_ENV && values.NODE_ENV !== 'production') throw refusal('NODE_ENV');
-  const providers = [];
+  // NextAuth advertises admin-login even when its authorize callback is disabled.
+  const providers = ['admin-login'];
+  let enabled = false;
   if (Boolean(values.ADMIN_USERNAME) !== Boolean(values.ADMIN_PASSWORD)) throw refusal('ADMIN_USERNAME/ADMIN_PASSWORD');
   if (values.ADMIN_USERNAME && values.ADMIN_PASSWORD) {
     if (!values.ADMIN_USERNAME.trim() || !values.ADMIN_PASSWORD.trim()) throw refusal('ADMIN_USERNAME/ADMIN_PASSWORD');
-    providers.push('credentials');
+    enabled = true;
   }
   if (values.AZURE_AD_CLIENT_ID) {
     if (!values.AZURE_AD_CLIENT_ID.trim()) throw refusal('AZURE_AD_CLIENT_ID');
     if (Object.hasOwn(environment, 'AZURE_AD_TENANT_ID') && !values.AZURE_AD_TENANT_ID.trim()) throw refusal('AZURE_AD_TENANT_ID');
     providers.push('azure-ad');
+    enabled = true;
   }
   if (Boolean(values.GITHUB_CLIENT_ID) !== Boolean(values.GITHUB_CLIENT_SECRET)) throw refusal('GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET');
   if (values.GITHUB_CLIENT_ID && values.GITHUB_CLIENT_SECRET) {
@@ -49,7 +52,8 @@ export function inspectConfigurationCompatibility({ profile, environment }) {
     const explicit = emails(values.GITHUB_ALLOWED_EMAILS);
     if (!(explicit.length ? explicit : emails(values.ADMIN_EMAILS)).length) throw refusal('GITHUB_ALLOWED_EMAILS/ADMIN_EMAILS');
     providers.push('github');
+    enabled = true;
   }
-  if (!providers.length) throw refusal('authentication-provider');
+  if (!enabled) throw refusal('authentication-provider');
   return { status: 'configuration-supported', profile, providers };
 }

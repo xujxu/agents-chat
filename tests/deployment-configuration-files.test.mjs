@@ -16,7 +16,7 @@ test('explicit runtime environment is inspected without consulting controller se
   const project = await temporaryDeployment(t);
   const result = await inspect(project);
   assert.equal(result.status, 'configuration-supported');
-  assert.deepEqual(result.providers, ['credentials']);
+  assert.deepEqual(result.providers, ['admin-login']);
   assert.equal(result.files.length, 4);
   assert.ok(result.files.every(file => !file.present));
   assert.doesNotMatch(JSON.stringify(result), /fixture-private/);
@@ -128,7 +128,7 @@ test('dotenv-only settings are compared after the startup environment observatio
   delete configured.ADMIN_USERNAME;
   delete configured.ADMIN_PASSWORD;
   const result = await inspect(project, { environment: configured, observedEnvironment: configured });
-  assert.deepEqual(result.providers, ['credentials']);
+  assert.deepEqual(result.providers, ['admin-login']);
 });
 
 test('Next environment-load suppression is refused rather than predicting files will load', async t => {

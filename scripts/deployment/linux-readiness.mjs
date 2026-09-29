@@ -63,7 +63,7 @@ function readProviders(port, signal) {
 export async function verifyLinuxReadiness({ service, port, providers, signal }) {
   signal?.throwIfAborted();
   if (!Array.isArray(providers) || !providers.length || new Set(providers).size !== providers.length
-    || providers.some(id => !['credentials', 'azure-ad', 'github'].includes(id))) {
+    || providers.some(id => !['admin-login', 'azure-ad', 'github'].includes(id))) {
     throw new Error('Readiness requires the admitted authentication provider list.');
   }
 
@@ -75,7 +75,7 @@ export async function verifyLinuxReadiness({ service, port, providers, signal })
   if (!body || typeof body !== 'object' || Array.isArray(body)
     || !same(Object.keys(body).sort(), [...providers].sort())
     || providers.some(id => body[id]?.id !== id || typeof body[id].name !== 'string' || !body[id].name
-      || body[id].type !== (id === 'credentials' ? 'credentials' : 'oauth')
+      || body[id].type !== (id === 'admin-login' ? 'credentials' : 'oauth')
       || ['signinUrl', 'callbackUrl'].some(key => {
         try {
           const url = new URL(body[id][key]);

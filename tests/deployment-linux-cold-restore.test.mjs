@@ -35,7 +35,7 @@ test('cold restore admission rejects a live controller and binds dead-owner evid
   t.after(() => admitted.close());
   assert.equal(admitted.snapshot.id, 'live-restore');
   assert.deepEqual(admitted.lock, f.lock);
-  assert.deepEqual(admitted.providers, ['credentials']);
+  assert.deepEqual(admitted.providers, ['admin-login']);
   await admitted.check();
   assert.deepEqual(await readFile(lockFile), originalLock);
   assert.deepEqual(await readFile(path.join(f.control, 'state.json')), originalState);
@@ -199,7 +199,7 @@ for (const valid of [true, false]) {
       assert.equal(ready.backupId, 'live-restore');
       assert.deepEqual(ready.runtime, active.identity);
       assert.equal(ready.port, f.port);
-      assert.deepEqual(ready.providers, ['credentials']);
+      assert.deepEqual(ready.providers, ['admin-login']);
       assert.deepEqual(ready.lock, f.lock);
       await rename(readyFile, `${readyFile}.old`);
       await writeFile(readyFile, readyBytes, { mode: 0o600 });

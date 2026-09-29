@@ -33,7 +33,7 @@ test('saved effective configuration uses backup dotenv rather than current insta
   await writeFile(path.join(f.project, '.env'), 'NEXTAUTH_URL=invalid\n');
   const before = await readFile(path.join(f.project, '.env'));
   const result = await inspectSnapshotConfiguration(f);
-  assert.deepEqual(result.providers, ['credentials']);
+  assert.deepEqual(result.providers, ['admin-login']);
   assert.doesNotMatch(JSON.stringify(result), /saved-private/);
   await result.check();
   assert.deepEqual(await readFile(path.join(f.project, '.env')), before);
@@ -57,7 +57,7 @@ test('saved environment file overrides and saved optional absence are independen
   const result = await inspectSnapshotConfiguration({
     ...f, systemdFiles: [{ path: f.absent, optional: true }],
   });
-  assert.deepEqual(result.providers, ['credentials']);
+  assert.deepEqual(result.providers, ['admin-login']);
 });
 
 test('uncaptured external sources and excluded project paths cannot become assumed optional absence', async t => {

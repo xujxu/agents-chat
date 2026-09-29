@@ -17,8 +17,8 @@ export async function restoreCandidate(t, valid = true, { gitSource = false } = 
 const fs=require('node:fs');
 const server=require('node:http').createServer((req,res)=>{
   res.setHeader('Content-Type','application/json');
-  res.end(JSON.stringify(${valid ? `{credentials:{id:'credentials',name:'Credentials',type:'credentials',
-    signinUrl:'http://localhost/api/auth/signin/credentials',callbackUrl:'http://localhost/api/auth/callback/credentials'}}` : '{}'}));
+  res.end(JSON.stringify(${valid ? `{'admin-login':{id:'admin-login',name:'Admin',type:'credentials',
+    signinUrl:'http://localhost/api/auth/signin/admin-login',callbackUrl:'http://localhost/api/auth/callback/admin-login'}}` : '{}'}));
 });
 server.listen(${port},'127.0.0.1',()=>{
   fs.writeFileSync('port',String(server.address().port));fs.writeFileSync('ready',String(process.pid));
