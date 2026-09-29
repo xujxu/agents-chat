@@ -4619,6 +4619,20 @@ same service InvocationID and retained backup. Identical-byte owner replacement
 must block cleanup, and idempotent completion must still recheck live ownership
 and health rather than returning success from a receipt alone.
 
+Terminal implementation `9e0ac48` / `36543429865` passed all nine jobs.
+Saved cold entry causal `596c200` / `36543900080` failed at
+`stage=service-inspection`: the external entry still assumed a running service.
+Route existing application/recovery locks and cold retirement receipts through
+the cold composition instead. Bind caller-specified unit and runtime executable
+paths against retained evidence before lease publication or file mutation.
+Healthy interrupted activation proceeds through fresh admission/completion;
+fully stopped original operations restore files, activate and retire normally.
+Incomplete activation remains refused, never silently retried or unlocked.
+Keep the unchanged live restore path when no cold authority exists.
+
+The saved-entry test was accidentally registered inside each terminal crash
+case; move it to one top-level test without removing any crash assertions.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

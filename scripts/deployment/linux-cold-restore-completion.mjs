@@ -13,6 +13,7 @@ import { canonicalWorkerDirectory, externalWorkerDirectory, readWorkerFile, sync
 import { verifySnapshot } from './snapshot.mjs';
 import { waitLinuxReadiness } from './linux-readiness.mjs';
 import { runStage } from './stage-runner.mjs';
+import { assertColdRestoreNative } from './linux-restore-compatibility.mjs';
 import {
   captureColdRetirementEntries, coldCompletionMarker, coldDigest, coldFileDescriptor,
   coldIdentity, coldParse, coldRetirementMarker, coldSerialize, coldStateStage, parseColdRetirement,
@@ -23,7 +24,7 @@ async function exists(file) {
   catch (error) { if (error.code === 'ENOENT') return false; throw error; }
 }
 
-async function captureProof({ control, project, backup, restored, active, waitSeconds, timeoutSeconds, signal }) {
+async function captureProof({ control, project, backup, restored, active, waitSeconds, timeoutSeconds, signal, expectedNative }) {
   let admitted;
   let workers;
   const errors = [];
@@ -37,6 +38,7 @@ async function captureProof({ control, project, backup, restored, active, waitSe
       admitted = await inspectLinuxColdActivation({ control, project, backup, waitSeconds, timeoutSeconds, signal });
     }
     await admitted.check({ signal });
+    assertColdRestoreNative(admitted.identity, expectedNative);
     const lock = captureLockOwner(coldParse(await readWorkerFile(path.join(control, 'lock/owner.json'), 65536, { privateMode: true })));
     const oldState = await loadState(control);
     const lease = await inspectColdRestoreLease({ control, project, backup, lock, state: oldState, activation: true });
@@ -80,7 +82,7 @@ async function captureProof({ control, project, backup, restored, active, waitSe
 }
 
 export async function completeLinuxColdRestore(options) {
-  const { control, project, backup, active, restored, waitSeconds = 120, timeoutSeconds = 1800, signal } = options;
+  const { control, project, backup, active, restored, waitSeconds = 120, timeoutSeconds = 1800, signal, expectedNative } = options;
   if (process.platform !== 'linux' || process.getuid() !== 0
     || ![waitSeconds, timeoutSeconds].every(value => Number.isSafeInteger(value) && value > 0)) {
     throw new Error('Cold completion requires Linux root and positive deadlines.');
@@ -90,18 +92,18 @@ export async function completeLinuxColdRestore(options) {
     const marker = path.join(control, coldRetirementMarker);
     const completed = path.join(control, coldCompletionMarker);
     if (!await exists(marker) && !await exists(completed)) {
-      await captureProof({ control, project, backup, active, restored, waitSeconds, timeoutSeconds, signal: stageSignal });
+      await captureProof({ control, project, backup, active, restored, waitSeconds, timeoutSeconds, signal: stageSignal, expectedNative });
     } else if (active || restored) {
       throw new Error('Existing cold terminal evidence requires fresh recovery without live handles.');
     }
     const admission = await acquireRecoveryAdmission(control);
     try {
-      return await finish({ control, project, backup, waitSeconds, signal: stageSignal, admission });
+      return await finish({ control, project, backup, waitSeconds, signal: stageSignal, admission, expectedNative });
     } finally { await admission.close(); }
   }, { timeoutMs: Math.min(timeoutSeconds * 1000, Number.MAX_SAFE_INTEGER), signal });
 }
 
-async function finish({ control, project, backup, waitSeconds, signal, admission }) {
+async function finish({ control, project, backup, waitSeconds, signal, admission, expectedNative }) {
   let service;
   try {
     const marker = path.join(control, coldRetirementMarker);
@@ -112,6 +114,7 @@ async function finish({ control, project, backup, waitSeconds, signal, admission
     const proofBytes = await readWorkerFile(proofPath, 4 * 1024 * 1024, { privateMode: true });
     const proofIdentity = coldIdentity(await lstat(proofPath));
     const proof = parseColdRetirement(proofBytes, control, project, backup);
+    assertColdRestoreNative(proof.ready.runtime, expectedNative);
     const statePath = path.join(control, 'state.json');
     const stagedPath = path.join(control, coldStateStage);
     const stateBytes = coldSerialize(proof.state);

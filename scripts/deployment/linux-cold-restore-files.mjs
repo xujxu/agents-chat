@@ -5,7 +5,7 @@ import { runStage } from './stage-runner.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
 
 export async function restoreLinuxColdFiles({
-  control, project, backup, acceptDataLoss, timeoutSeconds = 1800, signal,
+  control, project, backup, acceptDataLoss, timeoutSeconds = 1800, signal, expectedNative,
 }) {
   if (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds <= 0) {
     throw new Error('Cold restore requires a positive stage deadline.');
@@ -14,7 +14,7 @@ export async function restoreLinuxColdFiles({
     signal, timeoutMs: Math.min(timeoutSeconds * 1000, Number.MAX_SAFE_INTEGER),
   });
   const claimed = await stage('cold-restore-admission', stageSignal =>
-    claimLinuxColdRestore({ control, project, backup, acceptDataLoss, signal: stageSignal }));
+    claimLinuxColdRestore({ control, project, backup, acceptDataLoss, signal: stageSignal, expectedNative }));
   const options = {
     project, backup, acceptDataLoss, expectedSnapshot: claimed.snapshot,
     checkStopped: context => claimed.checkStopped(context),

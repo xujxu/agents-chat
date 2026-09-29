@@ -6,6 +6,13 @@ import { inspectLinuxRestoreConfiguration } from './linux-configuration.mjs';
 
 const inside = (parent, file) => file === parent || file.startsWith(parent + path.sep);
 
+export function assertColdRestoreNative(identity, expected) {
+  if (expected && (identity?.runtime?.unit !== expected.unit || identity?.executables?.[0]?.file !== expected.npm
+    || identity?.executables?.[1]?.file !== expected.node)) {
+    throw new Error('Saved cold restore input does not match the retained native service identity.');
+  }
+}
+
 export function validateLinuxRestoreSnapshot({ identity, manifest, authorizedPaths }) {
   const { runtime, sources, executables } = identity;
   if (executables.some(entry => inside(runtime.project, entry.file) || inside(runtime.project, entry.target))) {

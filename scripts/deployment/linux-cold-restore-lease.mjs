@@ -119,10 +119,10 @@ export async function inspectColdRestoreLease({ control, project, backup, lock, 
   return { guard, staging };
 }
 
-export async function claimLinuxColdRestore({ control: suppliedControl, project, backup, acceptDataLoss, signal }) {
+export async function claimLinuxColdRestore({ control: suppliedControl, project, backup, acceptDataLoss, signal, expectedNative }) {
   const control = path.resolve(suppliedControl);
   const { admitLinuxColdRestore } = await import('./linux-cold-restore-admission.mjs');
-  const admitted = await admitLinuxColdRestore({ control, project, backup, acceptDataLoss, signal });
+  const admitted = await admitLinuxColdRestore({ control, project, backup, acceptDataLoss, signal, expectedNative });
   const stage = path.join(control, 'cold-restore-staging');
   const guard = path.join(control, 'recovery-lock');
   let guardHandle;

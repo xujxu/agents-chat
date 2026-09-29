@@ -5,7 +5,7 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { acquireRecoveryAdmission } from './linux-recovery-admission.mjs';
 import { inspectLinuxColdService } from './linux-cold-service.mjs';
 import { inspectLinuxRestoreConfiguration } from './linux-configuration.mjs';
-import { validateLinuxRestoreSnapshot } from './linux-restore-compatibility.mjs';
+import { assertColdRestoreNative, validateLinuxRestoreSnapshot } from './linux-restore-compatibility.mjs';
 import { captureLockOwner, completedDeploymentPhase, loadState } from './state.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
@@ -22,7 +22,7 @@ const stopPhases = ['intent', 'inhibited', 'stop-requested', 'stopped'];
 const activationPhases = ['intent', 'staged', 'uninhibited', 'start-requested', 'started',
   'activation-stop-intent', 'activation-stop-inhibited', 'activation-stop-requested', 'activation-stopped'];
 
-export async function admitLinuxColdRestore({ control, project, backup, acceptDataLoss, signal }) {
+export async function admitLinuxColdRestore({ control, project, backup, acceptDataLoss, signal, expectedNative }) {
   if (acceptDataLoss !== true) throw new Error('Cold restore requires explicit data-loss acknowledgement.');
   if (process.platform !== 'linux' || process.getuid() !== 0) throw new Error('Cold restore admission requires Linux root.');
   signal?.throwIfAborted();
@@ -94,6 +94,7 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
       },
     });
     if (stops.length !== stopPhases.length) throw new Error('Cold restore requires a complete original stop receipt.');
+    assertColdRestoreNative(stops[0].service, expectedNative);
     let original = stops[0].service;
     let held = null;
     if (activated) {

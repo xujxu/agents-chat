@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual as same } from 'node:util';
@@ -42,20 +43,29 @@ try {
     throw new Error('Saved restore requires positive deadlines and an explicit valid port.');
   }
   operations = await import('./state.mjs');
-  const { inspectLinuxService } = await import('./linux-service-inspection.mjs');
-  const { inspectLinuxConfiguration } = await import('./linux-configuration.mjs');
-  const { runLinuxLiveRestore } = await import('./linux-restore.mjs');
-  stage = 'service-inspection';
-  service = await inspectLinuxService(input);
-  const configuration = await inspectLinuxConfiguration({ service, profile: 'agents-chat-auth-638c553' });
-  stage = 'lock-admission';
-  lock = await operations.acquireLock(control, { project: input.project, operationId: randomUUID() });
-  originalState = await operations.loadState(control);
-  stage = 'restore';
-  result = await runLinuxLiveRestore({
-    ...input, control, lock, service, configuration, acceptDataLoss: true,
-  });
-  lock = undefined;
+  const names = await readdir(control);
+  const cold = names.includes('lock') || names.includes('recovery-lock')
+    || names.includes('service-cold-retirement.json') || names.includes('cold-restore-complete.json');
+  if (cold) {
+    stage = 'cold-restore';
+    const { runLinuxColdRestore } = await import('./linux-cold-restore.mjs');
+    result = await runLinuxColdRestore({ ...input, control, acceptDataLoss: true });
+  } else {
+    const { inspectLinuxService } = await import('./linux-service-inspection.mjs');
+    const { inspectLinuxConfiguration } = await import('./linux-configuration.mjs');
+    const { runLinuxLiveRestore } = await import('./linux-restore.mjs');
+    stage = 'service-inspection';
+    service = await inspectLinuxService(input);
+    const configuration = await inspectLinuxConfiguration({ service, profile: 'agents-chat-auth-638c553' });
+    stage = 'lock-admission';
+    lock = await operations.acquireLock(control, { project: input.project, operationId: randomUUID() });
+    originalState = await operations.loadState(control);
+    stage = 'restore';
+    result = await runLinuxLiveRestore({
+      ...input, control, lock, service, configuration, acceptDataLoss: true,
+    });
+    lock = undefined;
+  }
 } catch (error) {
   errors.push(error);
   if (lock && originalState !== undefined) {
