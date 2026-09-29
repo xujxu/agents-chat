@@ -124,7 +124,7 @@ export async function activateLinuxService(context, purpose) {
     const deadline = performance.now() + 30000;
     while (performance.now() < deadline) {
       await checkHeld();
-      const observed = await linuxSystemdProperties(unit, ['ActiveState', 'SubState', 'MainPID']);
+      const observed = await linuxSystemdProperties(unit, ['ActiveState', 'SubState', 'MainPID', 'InvocationID', 'Job', 'Result']);
       if (observed.ActiveState === 'active' && observed.SubState === 'running' && observed.MainPID !== '0') {
         active = await inspectLinuxService({ unit, project, npm, node });
         if (active.identity.runtime.invocationId === service.identity.runtime.invocationId) {
@@ -189,7 +189,9 @@ export async function activateLinuxService(context, purpose) {
         });
       }
       if (observed.ActiveState === 'failed' || observed.SubState === 'auto-restart') {
-        throw new Error('Service activation failed.');
+        throw Object.assign(new Error('Service activation failed.'), {
+          observed, priorInvocationId: service.identity.runtime.invocationId,
+        });
       }
       await delay(50);
     }

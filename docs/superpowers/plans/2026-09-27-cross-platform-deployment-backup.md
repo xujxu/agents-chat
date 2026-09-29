@@ -4676,6 +4676,18 @@ refresh. Subsequent work must bind this record into complete snapshots and
 restore it under owned stopped-runtime authority; this capture alone does not
 claim Git restoration or verified build provenance.
 
+Git metadata causal `6d1486a` / `36551551506` failed on the missing
+`git-metadata.mjs`. Implementation `e909d37` / `36551643979` passed both
+platform contracts and six other jobs, but the native service recovery job
+failed in the existing cold-service activated-generation-stop fixture before
+its pause. The child reported only `Service activation failed`; cleanup's
+conditional failure diagnostic did not retain that unit's earlier journal.
+Do not classify this as fixed or assume a stale systemd state race. Include
+bounded activation state/InvocationID/job/result evidence in the native error,
+and collect the isolated fixture unit's state and last 24 journal lines on
+failed pause admission even when its eventual Result is success. No retry,
+timeout relaxation or altered acceptance behavior is introduced.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

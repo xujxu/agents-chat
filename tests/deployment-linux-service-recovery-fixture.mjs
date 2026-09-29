@@ -35,6 +35,18 @@ export async function interrupted(t, phase = 'retirement-unlink-0', outcome = 'a
     child.once('message', value => { clearTimeout(timer); resolve(value); });
     child.once('exit', code => { clearTimeout(timer); reject(new Error(`Retirement exited ${code}: ${diagnostic}`)); });
     child.once('error', error => { clearTimeout(timer); reject(error); });
+  }).catch(async error => {
+    const results = await Promise.allSettled([
+      execute('/usr/bin/systemctl', ['--system', 'show', f.unit,
+        '--property=ActiveState,SubState,Result,InvocationID,MainPID,Job'], { timeout: 10000, maxBuffer: 8192 }),
+      execute('/usr/bin/journalctl', ['-b', '--no-pager', '-n', '24', '-u', f.unit], { timeout: 10000, maxBuffer: 16384 }),
+    ]);
+    for (const result of results) {
+      if (result.status === 'fulfilled') t.diagnostic(`Interrupted fixture ${phase} failure evidence:\n${result.value.stdout}`);
+    }
+    const failures = results.filter(result => result.status === 'rejected').map(result => result.reason);
+    if (failures.length) throw new AggregateError([error, ...failures], 'Fixture failed and native diagnostics were incomplete.');
+    throw error;
   });
   const kill = async () => { child.kill('SIGKILL'); await exited; };
   const recover = async () => {
