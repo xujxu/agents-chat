@@ -19,6 +19,13 @@ const allowed = {
 const phases = ['intent', 'staged', 'uninhibited', 'start-requested', 'started'];
 const stopPhases = ['activation-stop-intent', 'activation-stop-inhibited', 'activation-stop-requested', 'activation-stopped'];
 
+export function hasFailedLinuxActivation(observed, priorInvocationId) {
+  const pendingPriorFailure = observed.ActiveState === 'failed' && observed.SubState === 'failed'
+    && observed.MainPID === '0' && observed.InvocationID === priorInvocationId
+    && /^[1-9][0-9]*$/.test(observed.Job);
+  return (observed.ActiveState === 'failed' || observed.SubState === 'auto-restart') && !pendingPriorFailure;
+}
+
 // Only the original live stop handle supplies this internal authority.
 export async function activateLinuxService(context, purpose) {
   const { control, lock, unit, project, npm, node, service, inhibition, checkAuthority, checkInhibition } = context;
@@ -188,7 +195,7 @@ export async function activateLinuxService(context, purpose) {
           },
         });
       }
-      if (observed.ActiveState === 'failed' || observed.SubState === 'auto-restart') {
+      if (hasFailedLinuxActivation(observed, service.identity.runtime.invocationId)) {
         throw Object.assign(new Error('Service activation failed.'), {
           observed, priorInvocationId: service.identity.runtime.invocationId,
         });

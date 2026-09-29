@@ -4807,6 +4807,22 @@ npm install/build and detached-writer cancellation on both platforms. Source
 causal 36577701957 likewise reports the missing source-command module; owned
 source implementation acceptance is still pending.
 
+### Prior-generation failed state during queued activation
+
+Source implementation run 36578775194 passed both contracts and native source
+workers but failed native service recovery. Job 109443877572 captured the
+previous generation with MainPID=0, ActiveState/SubState=failed, Result=timeout,
+Job=1824 and unchanged InvocationID after `start --no-block`. The subsequent
+fixture observation and journal showed a healthy new generation. The activation
+loop had mistaken the old stop timeout for failure of the newly queued start.
+
+Wait within the existing 30-second activation budget only when this exact
+old-generation, no-main-process, pending-numeric-job failed state is observed.
+Failure without a pending job, a new generation's failure, any live old process,
+and auto-restart remain immediate refusals. Do not increase deadlines or blindly
+retry starting the service. Add deterministic regression for each boundary; the
+existing real service recovery matrix still exercises native start/stop.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
