@@ -4795,6 +4795,12 @@ signal. Native coverage copies the helper closure, captures it, displaces its
 directory, then executes every real Git stage through the retained factory.
 Each command accepts its own fresh cancellation signal.
 
+The native npm fixture additionally runs its detached writer through the actual
+`runStage` deadline (15 seconds). Require that the writer really started, that
+the stage reports `DEPLOYMENT_STAGE_TIMEOUT` with proven settlement, and that
+writer bytes stop changing before the operation can seal. This verifies the
+deadline boundary with npm rather than only synthetic stage adapters.
+
 Npm causal run 36576419555 reported the missing command module as intended.
 Implementation 29f0d93 passed all nine jobs in 36576520876, including real native
 npm install/build and detached-writer cancellation on both platforms. Source

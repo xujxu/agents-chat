@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { copyFile, mkdir, open, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, open, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -15,6 +15,7 @@ import { readWorkerJournal } from '../scripts/deployment/worker-journal.mjs';
 import { saveRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
 import { prepareNpmCommand } from '../scripts/deployment/npm-command.mjs';
 import { readSourceCommandResult } from '../scripts/deployment/source-command.mjs';
+import { runStage } from '../scripts/deployment/stage-runner.mjs';
 
 const execute = promisify(execFile);
 const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
@@ -76,127 +77,134 @@ test('real native workers require enrolled lock-bound authority and seal exact s
     const receipts = await readWorkerJournal(f.control, {
       project: f.project, operationId: f.lock.operationId, workerId, controllerIdentity: f.lock.processIdentity,
     });
-
-    test('actual npm install and build run inside enrolled native ownership with descendant settlement', async t => {
-      const f = await fixture(t);
-      const npmCli = process.env.DEPLOYMENT_TEST_NPM_CLI;
-      assert.ok(npmCli, 'Actions must supply the installed npm CLI path.');
-      await writeFile(path.join(f.project, 'package.json'), JSON.stringify({
-        name: 'deployment-build-fixture', version: '1.0.0', scripts: { build: 'node build.cjs' },
-      }));
-      await writeFile(path.join(f.project, 'package-lock.json'), JSON.stringify({
-        name: 'deployment-build-fixture', version: '1.0.0', lockfileVersion: 3,
-        packages: { '': { name: 'deployment-build-fixture', version: '1.0.0' } },
-      }));
-      await writeFile(path.join(f.project, 'build.cjs'), "require('node:fs').writeFileSync('artifact','built');");
-      const environment = Object.fromEntries(Object.entries(process.env)
-        .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase())));
-      environment.npm_config_cache = path.join(f.project, '.npm');
-      const run = async (stage, signal) => f.operation.run({
-        workerId: randomUUID(), runtime: f.runtime, signal,
-        command: await prepareNpmCommand({ project: f.project, node: process.execPath, npmCli, stage, environment, signal }),
-      });
-
-      test('actual Git source selection runs through saved native ownership without relying on checkout helpers', async t => {
-        const f = await fixture(t);
-        const git = process.env.DEPLOYMENT_TEST_GIT;
-        assert.ok(git, 'Actions must supply the installed Git executable.');
-        const setup = async (...args) => (await execute(git, ['-C', f.project, ...args])).stdout.trim();
-        await setup('init', '--initial-branch=main');
-        await setup('config', 'user.name', 'Deployment fixture');
-        await setup('config', 'user.email', 'fixture@example.invalid');
-        await setup('config', 'core.autocrlf', 'false');
-        await writeFile(path.join(f.project, 'source.txt'), 'old\n');
-        await setup('add', '.');
-        await setup('commit', '-m', 'old');
-        const old = await setup('rev-parse', 'HEAD');
-        await writeFile(path.join(f.project, 'source.txt'), 'new\n');
-        await setup('commit', '-am', 'new');
-        const next = await setup('rev-parse', 'HEAD');
-        await setup('switch', '--detach', old);
-        const environment = Object.fromEntries(Object.entries(process.env)
-          .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase())));
-        const helpers = path.join(path.dirname(f.project), 'source-helpers');
-        await mkdir(helpers);
-        for (const name of ['source-command.mjs', 'source.mjs', 'snapshot-files.mjs',
-          'worker-files.mjs', 'worker-wire.mjs', 'worker-identity.mjs']) {
-          await copyFile(path.join(source, name), path.join(helpers, name));
-        }
-        const { captureSourceCommands } = await import(pathToFileURL(path.join(helpers, 'source-command.mjs')).href);
-        const captureSignal = new AbortController();
-        const commands = await captureSourceCommands({
-          project: f.project, node: process.execPath, git, environment, signal: captureSignal.signal,
-        });
-        captureSignal.abort(new Error('Capture stage ended; later stages use fresh signals.'));
-        await rename(helpers, `${helpers}-displaced`);
-        const run = async (action, options = {}) => {
-          const command = commands.prepare({ action, options });
-          return readSourceCommandResult(await f.operation.run({
-            workerId: randomUUID(), runtime: f.runtime, command,
-          }), action, f.project);
-        };
-        assert.equal((await run('inspect')).commit, old);
-        const target = await run('resolve', { revision: next });
-        assert.equal(target.commit, next);
-        assert.equal(await setup('rev-parse', 'HEAD'), old);
-        assert.equal((await run('select', target)).commit, next);
-        assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'new\n');
-        await setup('switch', 'main');
-        const upstream = path.join(path.dirname(f.project), 'upstream');
-        await execute(git, ['clone', '--no-hardlinks', f.project, upstream]);
-        for (const args of [['config', 'user.name', 'Deployment fixture'], ['config', 'user.email', 'fixture@example.invalid']]) {
-          await execute(git, ['-C', upstream, ...args]);
-        }
-        await writeFile(path.join(upstream, 'source.txt'), 'upstream\n');
-        await execute(git, ['-C', upstream, 'commit', '-am', 'upstream']);
-        const third = (await execute(git, ['-C', upstream, 'rev-parse', 'HEAD'])).stdout.trim();
-        await setup('remote', 'add', 'origin', upstream);
-        await setup('config', 'branch.main.remote', 'origin');
-        await setup('config', 'branch.main.merge', 'refs/heads/main');
-        const fetched = await run('resolve');
-        assert.equal(fetched.mode, 'fast-forward');
-        assert.equal(fetched.commit, third);
-        assert.equal(await setup('rev-parse', 'HEAD'), next);
-        assert.equal((await run('select', fetched)).commit, third);
-        assert.equal(await setup('symbolic-ref', '--short', 'HEAD'), 'main');
-        await writeFile(path.join(f.project, 'source.txt'), 'preserve dirty source\n');
-        await assert.rejects(run('inspect'), { code: 'DEPLOYMENT_COMMAND_FAILED' });
-        assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'preserve dirty source\n');
-        await f.operation.seal();
-      });
-      await run('dependencies');
-      await run('build');
-      assert.equal(await readFile(path.join(f.project, 'artifact'), 'utf8'), 'built');
-      await writeFile(path.join(f.project, 'build.cjs'), 'process.exit(19);');
-      await assert.rejects(run('build'), error => error.code === 'DEPLOYMENT_COMMAND_FAILED' && error.result.exitCode !== 0);
-      await writeFile(path.join(f.project, 'build.cjs'), `
-        const {spawn}=require('node:child_process');
-        spawn(process.execPath,['-e',${JSON.stringify("const fs=require('node:fs');fs.writeFileSync('writer-ready','yes');setInterval(()=>fs.appendFileSync('writer','x'),10);")}],
-          {detached:true,stdio:'ignore'}).unref();
-        setInterval(()=>{},1000);
-      `);
-      const controller = new AbortController();
-      const reason = new Error('cancel real npm build');
-      const rejected = assert.rejects(run('build', controller.signal), error => error === reason);
-      try {
-        for (let attempt = 0; ; attempt++) {
-          try { await readFile(path.join(f.project, 'writer')); break; }
-          catch (error) { if (error.code !== 'ENOENT') throw error; }
-          if (attempt === 600) throw new Error('npm build descendant did not start.');
-          await delay(50);
-        }
-      } finally { controller.abort(reason); }
-      await rejected;
-      const before = await readFile(path.join(f.project, 'writer'));
-      await delay(200);
-      assert.deepEqual(await readFile(path.join(f.project, 'writer')), before);
-      await f.operation.seal();
-      assert.equal((await readWorkerOperation(f.control)).at(-1).phase, 'sealed');
-    });
     assert.deepEqual(receipts.map(receipt => receipt.phase), ['intent', 'owned', 'admitted', 'settled']);
   }
   await assert.rejects(f.run('process.exit(0)'), { recoveryAllowed: false });
   await assert.rejects(releaseLock(f.control, f.lock), /evidence/);
+});
+
+test('actual npm install and build run inside enrolled native ownership with descendant settlement', async t => {
+  const f = await fixture(t);
+  const npmCli = process.env.DEPLOYMENT_TEST_NPM_CLI;
+  assert.ok(npmCli, 'Actions must supply the installed npm CLI path.');
+  await writeFile(path.join(f.project, 'package.json'), JSON.stringify({
+    name: 'deployment-build-fixture', version: '1.0.0', scripts: { build: 'node build.cjs' },
+  }));
+  await writeFile(path.join(f.project, 'package-lock.json'), JSON.stringify({
+    name: 'deployment-build-fixture', version: '1.0.0', lockfileVersion: 3,
+    packages: { '': { name: 'deployment-build-fixture', version: '1.0.0' } },
+  }));
+  await writeFile(path.join(f.project, 'build.cjs'), "require('node:fs').writeFileSync('artifact','built');");
+  const environment = Object.fromEntries(Object.entries(process.env)
+    .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase())));
+  environment.npm_config_cache = path.join(f.project, '.npm');
+  const run = async (stage, signal) => f.operation.run({
+    workerId: randomUUID(), runtime: f.runtime, signal,
+    command: await prepareNpmCommand({ project: f.project, node: process.execPath, npmCli, stage, environment, signal }),
+  });
+
+  await run('dependencies');
+  await run('build');
+  assert.equal(await readFile(path.join(f.project, 'artifact'), 'utf8'), 'built');
+  await writeFile(path.join(f.project, 'build.cjs'), 'process.exit(19);');
+  await assert.rejects(run('build'), error => error.code === 'DEPLOYMENT_COMMAND_FAILED' && error.result.exitCode !== 0);
+  await writeFile(path.join(f.project, 'build.cjs'), `
+    const {spawn}=require('node:child_process');
+    spawn(process.execPath,['-e',${JSON.stringify("const fs=require('node:fs');fs.writeFileSync('writer-ready','yes');setInterval(()=>fs.appendFileSync('writer','x'),10);")}],
+      {detached:true,stdio:'ignore'}).unref();
+    setInterval(()=>{},1000);
+  `);
+  const controller = new AbortController();
+  const reason = new Error('cancel real npm build');
+  const rejected = assert.rejects(run('build', controller.signal), error => error === reason);
+  try {
+    for (let attempt = 0; ; attempt++) {
+      try { await readFile(path.join(f.project, 'writer')); break; }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+      if (attempt === 600) throw new Error('npm build descendant did not start.');
+      await delay(50);
+    }
+  } finally { controller.abort(reason); }
+  await rejected;
+  const before = await readFile(path.join(f.project, 'writer'));
+  await delay(200);
+  assert.deepEqual(await readFile(path.join(f.project, 'writer')), before);
+  await unlink(path.join(f.project, 'writer'));
+  await assert.rejects(runStage('build', signal => run('build', signal), { timeoutMs: 15000 }),
+    error => error.code === 'DEPLOYMENT_STAGE_TIMEOUT' && error.recoveryAllowed === true);
+  const timedOut = await readFile(path.join(f.project, 'writer'));
+  assert.ok(timedOut.length, 'Timed build must actually run its descendant before the deadline.');
+  await delay(200);
+  assert.deepEqual(await readFile(path.join(f.project, 'writer')), timedOut);
+  await f.operation.seal();
+  assert.equal((await readWorkerOperation(f.control)).at(-1).phase, 'sealed');
+});
+test('actual Git source selection runs through saved native ownership without relying on checkout helpers', async t => {
+  const f = await fixture(t);
+  const git = process.env.DEPLOYMENT_TEST_GIT;
+  assert.ok(git, 'Actions must supply the installed Git executable.');
+  const setup = async (...args) => (await execute(git, ['-C', f.project, ...args])).stdout.trim();
+  await setup('init', '--initial-branch=main');
+  await setup('config', 'user.name', 'Deployment fixture');
+  await setup('config', 'user.email', 'fixture@example.invalid');
+  await setup('config', 'core.autocrlf', 'false');
+  await writeFile(path.join(f.project, 'source.txt'), 'old\n');
+  await setup('add', '.');
+  await setup('commit', '-m', 'old');
+  const old = await setup('rev-parse', 'HEAD');
+  await writeFile(path.join(f.project, 'source.txt'), 'new\n');
+  await setup('commit', '-am', 'new');
+  const next = await setup('rev-parse', 'HEAD');
+  await setup('switch', '--detach', old);
+  const environment = Object.fromEntries(Object.entries(process.env)
+    .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase())));
+  const helpers = path.join(path.dirname(f.project), 'source-helpers');
+  await mkdir(helpers);
+  for (const name of ['source-command.mjs', 'source.mjs', 'snapshot-files.mjs',
+    'worker-files.mjs', 'worker-wire.mjs', 'worker-identity.mjs']) {
+    await copyFile(path.join(source, name), path.join(helpers, name));
+  }
+  const { captureSourceCommands } = await import(pathToFileURL(path.join(helpers, 'source-command.mjs')).href);
+  const captureSignal = new AbortController();
+  const commands = await captureSourceCommands({
+    project: f.project, node: process.execPath, git, environment, signal: captureSignal.signal,
+  });
+  captureSignal.abort(new Error('Capture stage ended; later stages use fresh signals.'));
+  await rename(helpers, `${helpers}-displaced`);
+  const run = async (action, options = {}) => {
+    const command = commands.prepare({ action, options });
+    return readSourceCommandResult(await f.operation.run({
+      workerId: randomUUID(), runtime: f.runtime, command,
+    }), action, f.project);
+  };
+  assert.equal((await run('inspect')).commit, old);
+  const target = await run('resolve', { revision: next });
+  assert.equal(target.commit, next);
+  assert.equal(await setup('rev-parse', 'HEAD'), old);
+  assert.equal((await run('select', target)).commit, next);
+  assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'new\n');
+  await setup('switch', 'main');
+  const upstream = path.join(path.dirname(f.project), 'upstream');
+  await execute(git, ['clone', '--no-hardlinks', f.project, upstream]);
+  for (const args of [['config', 'user.name', 'Deployment fixture'], ['config', 'user.email', 'fixture@example.invalid']]) {
+    await execute(git, ['-C', upstream, ...args]);
+  }
+  await writeFile(path.join(upstream, 'source.txt'), 'upstream\n');
+  await execute(git, ['-C', upstream, 'commit', '-am', 'upstream']);
+  const third = (await execute(git, ['-C', upstream, 'rev-parse', 'HEAD'])).stdout.trim();
+  await setup('remote', 'add', 'origin', upstream);
+  await setup('config', 'branch.main.remote', 'origin');
+  await setup('config', 'branch.main.merge', 'refs/heads/main');
+  const fetched = await run('resolve');
+  assert.equal(fetched.mode, 'fast-forward');
+  assert.equal(fetched.commit, third);
+  assert.equal(await setup('rev-parse', 'HEAD'), next);
+  assert.equal((await run('select', fetched)).commit, third);
+  assert.equal(await setup('symbolic-ref', '--short', 'HEAD'), 'main');
+  await writeFile(path.join(f.project, 'source.txt'), 'preserve dirty source\n');
+  await assert.rejects(run('inspect'), { code: 'DEPLOYMENT_COMMAND_FAILED' });
+  assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'preserve dirty source\n');
+  await f.operation.seal();
 });
 
 test('a reused enrollment cannot recreate the original native domain', async t => {
