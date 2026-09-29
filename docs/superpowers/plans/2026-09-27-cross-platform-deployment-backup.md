@@ -4503,6 +4503,34 @@ uninhibition and startup while proving ordinary cold stopped checks cannot
 be reused afterward. This prepares the existing native activation composition;
 it does not itself activate the restored application or complete recovery.
 
+Cold policy implementation `2076855` / `36445815509` passed all nine jobs,
+including actual interrupted cold file restoration. This does not diagnose the
+earlier native SQLite destructor failure.
+
+### Cold restored-artifact activation and owned health acceptance
+
+Native causal `1d58e5d` requires healthy cold activation, failed-health stop of
+only the new generation, and refusal of post-copy configuration drift before
+uninhibition. The old application lock/state and recovery guard remain present;
+the intermediate result is `ready-to-commit`, not final restored acceptance.
+
+Reuse the native activation and readiness primitives under a durable immutable
+`recovery-lock/activation-intent.json`. The intent binds the current recovery
+owner, original lock and exact restored backup. Stop-only admission remains
+strict: only explicitly armed activation checks may observe the new activation
+journal without insisting the old service remains stopped. Original retained
+lock/state/stop/worker evidence must remain unchanged. Existing activation
+evidence cannot be overwritten; that branch still requires explicit recovery.
+
+Before arming, read effective configuration from the actual restored files and
+compare their bytes/absence with the snapshot. Retain the file and declared
+environment observations through startup, then independently inspect the new
+process's effective configuration and probe only its owned listener. Failed
+health must invoke the retained new-generation stop authority before handles
+close. Successful health leaves durable intent and journals for the forthcoming
+accepted-state/retirement composition. An interrupted cold activation remains
+blocked until that recovery path is wired; no application lock is discarded.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

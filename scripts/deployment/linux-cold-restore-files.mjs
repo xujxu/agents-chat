@@ -32,6 +32,7 @@ export async function restoreLinuxColdFiles({
       status: 'files-restored', close: claimed.close,
       check: (context = {}) => claimed.check({ signal: context.signal ?? continuedSignal }),
       checkStopped: (context = {}) => claimed.checkStopped({ signal: context.signal ?? continuedSignal }),
+      prepareActivation: (context = {}) => claimed.prepareActivation({ signal: context.signal ?? continuedSignal }),
     });
   } catch (error) {
     try { await claimed.close(); }

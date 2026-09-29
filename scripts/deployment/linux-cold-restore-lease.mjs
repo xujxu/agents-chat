@@ -91,12 +91,15 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
   let guardHandle;
   let ownerHandle;
   let receiptHandle;
+  let activationHandle;
+  let activationIntent;
+  let activationAttempted = false;
   let receipt = admitted.lease.guard?.receipt ?? null;
   let closed = false;
   const close = async () => {
     if (closed) return;
     closed = true;
-    const results = await Promise.allSettled([ownerHandle?.close(), receiptHandle?.close(), guardHandle?.close()]);
+    const results = await Promise.allSettled([ownerHandle?.close(), receiptHandle?.close(), activationHandle?.close(), guardHandle?.close()]);
     const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
     try { await admitted.close(); }
     catch (error) { errors.push(error); }
@@ -165,15 +168,17 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
     guardHandle = await open(guard, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     ownerHandle = await open(ownerPath, constants.O_RDONLY | constants.O_NOFOLLOW);
     const ownerIdentity = identity(await ownerHandle.stat());
-    const checkAuthority = async ({ signal } = {}, verifyBackup = true) => {
+    const checkAuthority = async ({ signal } = {}, verifyBackup = true, activating = false) => {
       if (closed) throw new Error('Cold restore lease is closed.');
-      if (verifyBackup) await admitted.checkRecoverySources({ signal });
+      if (activating) await admitted.checkActivationEvidence({ signal });
+      else if (verifyBackup) await admitted.checkRecoverySources({ signal });
       else await admitted.checkRecoveryStopped({ signal });
       if (owner.pid !== process.pid || await processIdentity(process.pid) !== owner.processIdentity
         || !same(identity((await canonicalWorkerDirectory(guard, { privateMode: true })).info), guardIdentity)
         || !same(identity(await guardHandle.stat()), guardIdentity)
         || (await ownerHandle.stat()).nlink !== 1 || !same(identity(await ownerHandle.stat()), ownerIdentity)
-        || !same((await readdir(guard)).sort(), [...(receipt ? ['files-restored.json'] : []), 'owner.json'])
+        || !same((await readdir(guard)).sort(),
+          [...(activationIntent ? ['activation-intent.json'] : []), ...(receipt ? ['files-restored.json'] : []), 'owner.json'])
         || !same(identity(await lstat(ownerPath)), ownerIdentity)
         || !(await readWorkerFile(ownerPath, 1024 * 1024, { privateMode: true })).equals(bytes)
         || (await readdir(control)).includes('cold-restore-staging')) {
@@ -187,6 +192,15 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
             || !same(identity(await receiptHandle.stat()), receipt.info))) {
           throw new Error('Cold restored-files receipt was replaced.');
         }
+        if (activationIntent) {
+          const file = path.join(guard, 'activation-intent.json');
+          if ((await activationHandle.stat()).nlink !== 1
+            || !same(identity(await activationHandle.stat()), activationIntent.info)
+            || !same(identity(await lstat(file)), activationIntent.info)
+            || !(await readWorkerFile(file, 1024 * 1024, { privateMode: true })).equals(activationIntent.bytes)) {
+            throw new Error('Cold activation intent was replaced or changed.');
+          }
+        }
       }
     };
     const check = options => checkAuthority(options);
@@ -196,6 +210,7 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
       service: admitted.service, providers: admitted.providers, authorizedPaths: admitted.authorizedPaths,
       check, close,
       async checkStopped(options) {
+        if (activationAttempted) throw new Error('Cold activation already attempted; original stopped authority cannot be reused.');
         await checkAuthority(options, false);
         return Object.freeze({ stopped: true, inhibited: true });
       },
@@ -209,6 +224,31 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
         receiptHandle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
         receipt = { bytes, info: identity(await receiptHandle.stat()) };
         await check(options);
+      },
+      async prepareActivation(options) {
+        if (activationAttempted || !receipt) throw new Error('Cold activation requires restored files and unused authority.');
+        await check(options);
+        await admitted.armActivation(options);
+        activationAttempted = true;
+        const state = {
+          version: 1, operationId: admitted.lock.operationId, project, operation: 'restore',
+          phase: 'restore-activating', previousPhase: 'restoring', sourceCommit: admitted.state.sourceCommit,
+          targetCommit: admitted.snapshot.source.commit, backupId: admitted.snapshot.id, priorRuntime: 'running',
+          runtimeIdentity: admitted.service.identity.runtime.invocationId,
+          startedAt: owner.createdAt, updatedAt: owner.createdAt, errorCode: null,
+        };
+        const file = path.join(guard, 'activation-intent.json');
+        const bytes = Buffer.from(`${JSON.stringify({ version: 1, owner, lock: admitted.lock, state })}\n`);
+        await writeWorkerFile(file, bytes);
+        await syncWorkerDirectory(guard);
+        activationHandle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+        activationIntent = { bytes, info: identity(await activationHandle.stat()) };
+        const check = async (context = {}) => {
+          await checkAuthority(context, false, true);
+          return structuredClone(state);
+        };
+        await check(options);
+        return Object.freeze({ control, lock: admitted.lock, state: Object.freeze(state), check });
       },
     });
   } catch (error) {

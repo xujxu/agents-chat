@@ -141,12 +141,15 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
     const authorizedPaths = [...new Set([...service.identity.sources.map(source => source.path),
       ...config.sourcePaths.filter(file => !inside(project, file))])].sort();
     validateLinuxRestoreSnapshot({ identity: service.identity, manifest: snapshot, authorizedPaths });
-    const checkEvidence = async ({ signal: checkSignal = signal } = {}, recoverySources = false, verifyBackup = true) => {
+    let activationArmed = false;
+    const checkEvidence = async ({ signal: checkSignal = signal } = {}, recoverySources = false, verifyBackup = true, activating = false) => {
       if (closed) throw new Error('Cold restore admission is closed.');
       checkSignal?.throwIfAborted();
       await admission.check();
       await deadOwner();
-      const inventory = entries => entries.filter(name => !recoverySources || !coldRestoreLeaseNames.includes(name)).sort();
+      if (activating && !activationArmed) throw new Error('Cold activation authority is not armed.');
+      const inventory = entries => entries.filter(name => (!recoverySources || !coldRestoreLeaseNames.includes(name))
+        && (!activating || name !== 'service-activation.ndjson')).sort();
       if (!same(identity((await canonicalWorkerDirectory(lockDirectory, { privateMode: true })).info), identity(directory.info))
         || !same(inventory(await readdir(root)), inventory([...names]))) throw new Error('Cold restore authority inventory changed.');
       for (const entry of retained) {
@@ -157,10 +160,10 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
           || !(await readWorkerFile(entry.file, entry.maximum, { privateMode: true })).equals(entry.bytes)) {
           throw new Error('Retained cold restore evidence changed.');
         }
-        if (!recoverySources) await inspectColdRestoreLease({ control: root, project, backup, lock, state });
       }
+      if (!recoverySources) await inspectColdRestoreLease({ control: root, project, backup, lock, state });
       await workers.check();
-      await service.check();
+      if (!activating) await service.check();
       if (verifyBackup) {
         await config.check({ signal: checkSignal });
         if (!same(await verifySnapshot(saved, { signal: checkSignal }), snapshot)) throw new Error('Admitted cold restore backup changed.');
@@ -174,6 +177,12 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
       service, providers: config.providers, authorizedPaths: Object.freeze(authorizedPaths), lease, check, close,
       checkRecoverySources: options => checkEvidence(options, true),
       checkRecoveryStopped: options => checkEvidence(options, true, false),
+      async armActivation(options) {
+        if (activationArmed || activated) throw new Error('Existing activation requires explicit recovery before another activation.');
+        await checkEvidence(options, true);
+        activationArmed = true;
+      },
+      checkActivationEvidence: options => checkEvidence(options, true, false, true),
     });
   } catch (error) {
     try { await close(); }

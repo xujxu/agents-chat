@@ -1,9 +1,10 @@
 import { constants } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { lstat, open } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
 import { inspectConfigurationFiles } from './configuration-files.mjs';
 import { inspectSnapshotConfiguration } from './snapshot-configuration.mjs';
+import { fileDigest } from './snapshot-files.mjs';
 import { linuxSystemdBus as bus, linuxSystemdProperties } from './linux-systemd.mjs';
 
 function refusal(check) {
@@ -76,6 +77,35 @@ export async function inspectLinuxRestoreConfiguration({ service, backup, snapsh
   if (!same(await configuration(service.identity.runtime.unit), config)) throw refusal('runtime-configuration-changed');
   await saved.check({ signal });
   return Object.freeze({ ...saved, sourcePaths: Object.freeze(config.systemdFiles.map(file => file.path)) });
+}
+
+export async function inspectLinuxStoppedConfiguration({ service, snapshot, profile, signal }) {
+  await service.check();
+  const { unit, project } = service.identity.runtime;
+  const config = await configuration(unit);
+  const files = await inspectConfigurationFiles({ project, profile, ...config, signal });
+  for (const source of files.files) {
+    signal?.throwIfAborted();
+    const relative = path.relative(project, source.path);
+    const inside = relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+    const entry = inside
+      ? snapshot.entries.find(entry => entry.path === relative.split(path.sep).join('/'))
+      : snapshot.externalFiles.find(entry => entry.path === source.path);
+    if (!entry || entry.kind === 'absent') {
+      if (source.present) throw refusal('restored-configuration-snapshot');
+    } else {
+      if (entry.kind !== 'file' || !source.present
+        || (await lstat(source.path)).size !== entry.bytes
+        || await fileDigest(source.path, { signal }) !== entry.sha256) throw refusal('restored-configuration-snapshot');
+    }
+  }
+  const check = async ({ signal: checkSignal = signal } = {}) => {
+    checkSignal?.throwIfAborted();
+    if (!same(await configuration(unit), config)) throw refusal('restored-configuration-policy');
+    await files.check({ signal: checkSignal });
+  };
+  await check();
+  return Object.freeze({ ...files, check });
 }
 
 export async function inspectLinuxConfiguration({ service, profile, signal }) {
