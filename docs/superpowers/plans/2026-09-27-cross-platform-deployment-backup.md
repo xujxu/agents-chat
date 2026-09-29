@@ -4749,6 +4749,27 @@ Tests compare saved identities directly with bigint filesystem observations,
 including each interrupted publication prefix. Do not relax identity checks or
 convert an already-rounded numeric ID to a string. Remote validation is pending.
 
+Actions 36570291906 accepted commit 3866ab6 in all nine jobs, including actual
+Linux live/saved cold Git restoration and Windows exact-identity contracts.
+
+### Owned npm execution integration
+
+`npm-command.mjs` prepares fixed dependency/build commands for the existing
+enrolled native operation, never spawns them in the CLI process. Invoke explicit
+Node plus `npm-cli.js` instead of shell/cmd wrappers; normalize PATH to the
+selected Node and refuse Node preload variables. Dependencies use
+`ci --include=dev --no-audit --no-fund` so a production service environment does
+not omit the compiler/type packages required by the build. Build uses only
+`run build`, never an implicit install. Require a supported lock for dependency
+installation and an explicit build script for the build stage.
+
+Both native Actions jobs run actual npm against an isolated no-external-dependency
+package: install, successful artifact creation, failed build, then cancellation
+of a build with a detached writer. Require worker settlement and unchanged writer
+bytes afterward. Existing saved native operation evidence and seal rules apply.
+This is command/native integration, not yet complete application build provenance
+or public deploy/update wiring. It does not install machine-level prerequisites.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

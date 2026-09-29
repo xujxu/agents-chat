@@ -89,7 +89,7 @@ test('real native workers require enrolled lock-bound authority and seal exact s
       }));
       await writeFile(path.join(f.project, 'build.cjs'), "require('node:fs').writeFileSync('artifact','built');");
       const environment = Object.fromEntries(Object.entries(process.env)
-        .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !['NODE_OPTIONS', 'NODE_PATH'].includes(key)));
+        .filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase())));
       environment.npm_config_cache = path.join(f.project, '.npm');
       const run = async (stage, signal) => f.operation.run({
         workerId: randomUUID(), runtime: f.runtime, signal,
