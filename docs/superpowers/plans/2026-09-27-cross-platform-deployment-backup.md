@@ -4610,6 +4610,15 @@ files, changed runtime/configuration, alive foreign controllers and incomplete
 staged state rather than guessing or rebuilding. Both live completion and
 post-controller-death completion must freshly inspect the same owned generation.
 
+Causal `7ea5225` / `36510310073` failed on the missing
+`linux-cold-restore-completion.mjs`. The implementation separates strict
+retirement-proof serialization/path validation from native state publication
+and ordered cleanup. Native fault injection pauses after restored-state rename,
+application-owner removal and recovery-guard removal; reentry must keep the
+same service InvocationID and retained backup. Identical-byte owner replacement
+must block cleanup, and idempotent completion must still recheck live ownership
+and health rather than returning success from a receipt alone.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

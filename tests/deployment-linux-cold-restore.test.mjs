@@ -305,3 +305,47 @@ test('cold restore terminal completion preserves the owned runtime and backup wh
   const next = await acquireLock(f.control, { project: f.project, operationId: 'next-after-cold-restore' });
   await releaseLock(f.control, next);
 });
+
+for (const phase of ['state-published', 'lock-owner-removed', 'guard-removed']) {
+  test(`cold terminal cleanup resumes after controller death at ${phase} without restarting or losing the backup`, async t => {
+    const f = await candidate(t);
+    await f.kill();
+    const child = fork(new URL('./deployment-cold-completion-child.mjs', import.meta.url),
+      [f.control, f.project, f.backup, String(f.port), phase], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    let diagnostic = '';
+    child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
+    const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+    t.after(async () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await exited;
+    });
+    const paused = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Cold completion did not pause: ${diagnostic}`)), 90000);
+      child.once('message', value => { clearTimeout(timer); resolve(value); });
+      child.once('exit', code => { clearTimeout(timer); reject(new Error(`Cold completion exited ${code}: ${diagnostic}`)); });
+      child.once('error', error => { clearTimeout(timer); reject(error); });
+    });
+    await assert.rejects(completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 }), /admission|locking|alive/i);
+    child.kill('SIGKILL');
+    await exited;
+    if (phase === 'state-published') {
+      const ownerPath = path.join(f.control, 'lock/owner.json');
+      const bytes = await readFile(ownerPath);
+      await rename(ownerPath, `${ownerPath}.retained`);
+      await writeFile(ownerPath, bytes, { mode: 0o600 });
+      await assert.rejects(completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 }), /identity|changed|inventory/i);
+      await unlink(ownerPath);
+      await rename(`${ownerPath}.retained`, ownerPath);
+    }
+    const result = await completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 });
+    assert.equal(result.status, 'restored');
+    assert.equal((await loadState(f.control)).phase, 'restored');
+    assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(),
+      paused.identity.runtime.invocationId);
+    assert.equal(await readFile(path.join(f.backup, 'files/saved-data'), 'utf8'), 'backup data');
+    for (const name of ['lock', 'recovery-lock', 'service-cold-retirement.json']) {
+      await assert.rejects(lstat(path.join(f.control, name)), { code: 'ENOENT' });
+    }
+    assert.deepEqual(await completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 }), result);
+  });
+}
