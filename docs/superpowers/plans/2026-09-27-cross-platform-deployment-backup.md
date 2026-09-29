@@ -4555,6 +4555,30 @@ inode, single-link identity and bytes for subsequent authority checks; failed
 health must never create it. This remains intermediate health evidence, not
 permission to unlock or to skip fresh runtime checks after controller death.
 
+### Re-establishing healthy cold activation after controller death
+
+The native killed-controller case (`6b87403`) pauses only after the readiness
+receipt is durable. Require exclusive admission while the controller is alive,
+then kill it and re-inspect without changing old lock/state, recovery owner,
+activation intent or journals. Refuse a changed intent digest, restored-config
+drift and a replacement running generation; readiness history is never current
+runtime authority.
+
+`linux-cold-activation-recovery.mjs` holds recovery admission and pins original
+evidence while validating both dead controllers, the exact lease/intent/ready
+chain, complete stop/start journals, held inhibitor, sealed workers, unchanged
+service policy/account/executables, selected snapshot and effective live/saved
+configuration. It probes the recorded port only after matching the owned live
+generation. It returns only `ready-to-commit` with retained checks and close,
+without renewing ownership or deleting evidence. Ordinary cold file admission
+still refuses an activation-bearing guard. A dedicated opt-in lease reader is
+used only by this read-only recovery inspector.
+
+The restored-configuration inspector is renamed to describe its actual shared
+responsibility: compare restored files with the snapshot under the caller's
+native service authority, which may be either stopped or freshly owned active.
+No stopped ownership check is relaxed in the file restoration path.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

@@ -79,7 +79,7 @@ export async function inspectLinuxRestoreConfiguration({ service, backup, snapsh
   return Object.freeze({ ...saved, sourcePaths: Object.freeze(config.systemdFiles.map(file => file.path)) });
 }
 
-export async function inspectLinuxStoppedConfiguration({ service, snapshot, profile, signal }) {
+export async function inspectLinuxRestoredConfiguration({ service, snapshot, profile, signal }) {
   await service.check();
   const { unit, project } = service.identity.runtime;
   const config = await configuration(unit);

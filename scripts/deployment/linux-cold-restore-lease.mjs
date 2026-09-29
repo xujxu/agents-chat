@@ -19,8 +19,15 @@ const filesReceipt = record => ({
   operationId: record.lock.operationId, token: record.lock.token,
   backupId: record.backupId, snapshotSha256: record.snapshotSha256,
 });
+const activationState = record => ({
+  version: 1, operationId: record.lock.operationId, project: record.project, operation: 'restore',
+  phase: 'restore-activating', previousPhase: 'restoring', sourceCommit: record.state.sourceCommit,
+  targetCommit: record.targetCommit, backupId: record.backupId, priorRuntime: 'running',
+  runtimeIdentity: record.runtimeIdentity,
+  startedAt: record.owner.createdAt, updatedAt: record.owner.createdAt, errorCode: null,
+});
 
-export async function inspectColdRestoreLease({ control, project, backup, lock, state, retain }) {
+export async function inspectColdRestoreLease({ control, project, backup, lock, state, retain, activation = false }) {
   const root = await canonicalWorkerDirectory(control, { privateMode: true });
   const applicationLock = await canonicalWorkerDirectory(path.join(control, 'lock'), { privateMode: true });
   const read = retain ?? (file => readWorkerFile(file, 1024 * 1024, { privateMode: true }));
@@ -33,7 +40,10 @@ export async function inspectColdRestoreLease({ control, project, backup, lock, 
     const info = identity(location.info);
     if (name === 'cold-restore-staging' && !entries.length) return { directory, info, record: null, bytes: null };
     const hasReceipt = name === 'recovery-lock' && entries.includes('files-restored.json');
-    if (!same(entries, [...(hasReceipt ? ['files-restored.json'] : []), 'owner.json'])) {
+    const hasActivation = activation && name === 'recovery-lock' && entries.includes('activation-intent.json');
+    const hasReady = hasActivation && entries.includes('activation-ready.json');
+    if (!same(entries, [...(hasActivation ? ['activation-intent.json'] : []),
+      ...(hasReady ? ['activation-ready.json'] : []), ...(hasReceipt ? ['files-restored.json'] : []), 'owner.json'])) {
       throw new Error('Cold restore lease contains incomplete or foreign evidence.');
     }
     const bytes = await read(path.join(directory, 'owner.json'));
@@ -64,7 +74,34 @@ export async function inspectColdRestoreLease({ control, project, backup, lock, 
       if (!same(parse(receiptBytes), filesReceipt(record))) throw new Error('Cold restore file completion receipt changed.');
       receipt = { bytes: receiptBytes, info: identity(await lstat(file)) };
     }
-    return { directory, info, record: { ...record, owner }, bytes, receipt };
+    let intent = null;
+    let ready = null;
+    if (hasActivation) {
+      if (!receipt) throw new Error('Cold activation intent requires restored-file evidence.');
+      const intentBytes = await read(path.join(directory, 'activation-intent.json'));
+      intent = captureWorkerFields(parse(intentBytes), ['version', 'owner', 'lock', 'state'], 'cold activation intent');
+      if (intent.version !== 1 || !same(intent.owner, owner) || !same(intent.lock, lock)
+        || !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(intent.state?.targetCommit ?? '')
+        || typeof intent.state?.runtimeIdentity !== 'string' || !/^[a-f0-9]{32}$/.test(intent.state.runtimeIdentity)
+        || !same(intent.state, activationState({
+          ...record, targetCommit: intent.state.targetCommit, runtimeIdentity: intent.state.runtimeIdentity,
+        }))) throw new Error('Cold activation intent does not match the retained lease.');
+      if (hasReady) {
+        ready = captureWorkerFields(parse(await read(path.join(directory, 'activation-ready.json'))),
+          ['version', 'phase', 'owner', 'lock', 'backupId', 'snapshotSha256',
+            'activationSha256', 'runtime', 'port', 'providers'], 'cold readiness receipt');
+        if (ready.version !== 1 || ready.phase !== 'ready-to-commit'
+          || !same(ready.owner, owner) || !same(ready.lock, lock)
+          || ready.backupId !== record.backupId || ready.snapshotSha256 !== record.snapshotSha256
+          || ready.activationSha256 !== digest(intentBytes)
+          || !Number.isInteger(ready.port) || ready.port < 1 || ready.port > 65535
+          || !Array.isArray(ready.providers) || !ready.providers.length
+          || !ready.providers.every(provider => typeof provider === 'string')) {
+          throw new Error('Cold readiness receipt does not match the activation intent.');
+        }
+      }
+    }
+    return { directory, info, record: { ...record, owner }, bytes, receipt, intent, ready };
   };
   const guard = await inspect('recovery-lock');
   const staging = await inspect('cold-restore-staging');
@@ -244,13 +281,8 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
         await check(options);
         await admitted.armActivation(options);
         activationAttempted = true;
-        const state = {
-          version: 1, operationId: admitted.lock.operationId, project, operation: 'restore',
-          phase: 'restore-activating', previousPhase: 'restoring', sourceCommit: admitted.state.sourceCommit,
-          targetCommit: admitted.snapshot.source.commit, backupId: admitted.snapshot.id, priorRuntime: 'running',
-          runtimeIdentity: admitted.service.identity.runtime.invocationId,
-          startedAt: owner.createdAt, updatedAt: owner.createdAt, errorCode: null,
-        };
+        const state = activationState({ ...record, targetCommit: admitted.snapshot.source.commit,
+          runtimeIdentity: admitted.service.identity.runtime.invocationId });
         const file = path.join(guard, 'activation-intent.json');
         const bytes = Buffer.from(`${JSON.stringify({ version: 1, owner, lock: admitted.lock, state })}\n`);
         await writeWorkerFile(file, bytes);

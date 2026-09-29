@@ -1,4 +1,4 @@
-import { inspectLinuxStoppedConfiguration, inspectLinuxConfiguration } from './linux-configuration.mjs';
+import { inspectLinuxRestoredConfiguration, inspectLinuxConfiguration } from './linux-configuration.mjs';
 import { activateLinuxService } from './linux-service-activation.mjs';
 import { inspectLinuxService } from './linux-service-inspection.mjs';
 import { waitLinuxReadiness } from './linux-readiness.mjs';
@@ -32,7 +32,7 @@ export async function activateLinuxColdRestore({ restored, port, waitSeconds = 1
   try {
     configuration = await stage('cold-activation-configuration', async stageSignal => {
       await restored.check({ signal: stageSignal });
-      return inspectLinuxStoppedConfiguration({ service, snapshot, profile: 'agents-chat-auth-638c553', signal: stageSignal });
+      return inspectLinuxRestoredConfiguration({ service, snapshot, profile: 'agents-chat-auth-638c553', signal: stageSignal });
     });
     authority = await stage('cold-activation-intent', stageSignal => restored.prepareActivation({ signal: stageSignal }));
     await stage('cold-activation-start', async stageSignal => {
