@@ -4531,6 +4531,13 @@ close. Successful health leaves durable intent and journals for the forthcoming
 accepted-state/retirement composition. An interrupted cold activation remains
 blocked until that recovery path is wired; no application lock is discarded.
 
+Causal `1d58e5d` / `36502895645` failed specifically on the absent new activation
+module. Implementation `ecdc0c4` / `36503000258` passed eight jobs; both native
+activation cases exposed a temporal-dead-zone error in `prepareActivation`,
+before activation intent publication. Rename its returned activation-only check
+so the pre-publication call resolves the outer stopped lease check. Configuration
+drift refusal and all previous cold restore cases already passed in this run.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

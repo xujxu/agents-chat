@@ -243,12 +243,12 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
         await syncWorkerDirectory(guard);
         activationHandle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
         activationIntent = { bytes, info: identity(await activationHandle.stat()) };
-        const check = async (context = {}) => {
+        const checkActivation = async (context = {}) => {
           await checkAuthority(context, false, true);
           return structuredClone(state);
         };
-        await check(options);
-        return Object.freeze({ control, lock: admitted.lock, state: Object.freeze(state), check });
+        await checkActivation(options);
+        return Object.freeze({ control, lock: admitted.lock, state: Object.freeze(state), check: checkActivation });
       },
     });
   } catch (error) {
