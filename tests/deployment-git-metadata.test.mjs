@@ -6,6 +6,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectGitMetadata } from '../scripts/deployment/git-metadata.mjs';
+import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
+import { inspectSnapshotScope } from '../scripts/deployment/snapshot-scope.mjs';
 
 const execute = promisify(execFile);
 async function git(project, ...args) {
@@ -68,4 +70,36 @@ test('Git metadata refuses shared-worktree and locked-index layouts without writ
   const pointer = await readFile(path.join(worktree, '.git'));
   await assert.rejects(inspectGitMetadata({ project: worktree, commit: f.commit }), /standalone|directory|worktree/i);
   assert.deepEqual(await readFile(path.join(worktree, '.git')), pointer);
+});
+
+test('complete snapshots bind exact Git metadata and detect payload tampering without including the Git tree', async t => {
+  const f = await fixture(t);
+  const gitMetadata = await inspectGitMetadata({ project: f.project, commit: f.commit });
+  const scope = await inspectSnapshotScope({ project: f.project });
+  const destination = path.join(f.root, 'backup');
+  const snapshot = await createSnapshot({
+    project: f.project, destination, id: 'git-source', ...scope, gitMetadata,
+    source: { commit: f.commit, provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+  });
+  assert.equal(snapshot.gitMetadata.version, 1);
+  assert.deepEqual(JSON.parse(await readFile(path.join(destination, 'git.json'), 'utf8')), gitMetadata.record);
+  assert.equal(snapshot.entries.some(entry => entry.path === '.git' || entry.path.startsWith('.git/')), false);
+  await verifySnapshot(destination);
+  await writeFile(path.join(destination, 'git.json'), '{}');
+  await assert.rejects(verifySnapshot(destination), /Git|metadata|checksum|integrity/i);
+});
+
+test('a source change after Git observation cannot complete a snapshot of mismatched provenance', async t => {
+  const f = await fixture(t);
+  const gitMetadata = await inspectGitMetadata({ project: f.project, commit: f.commit });
+  await git(f.project, 'switch', '--detach', f.commit);
+  const destination = path.join(f.root, 'backup');
+  await assert.rejects(createSnapshot({
+    project: f.project, destination, id: 'changed-git',
+    ...await inspectSnapshotScope({ project: f.project }), gitMetadata,
+    source: { commit: f.commit, provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+  }), /metadata|HEAD|changed/i);
+  await assert.rejects(readFile(path.join(destination, 'complete.json')), { code: 'ENOENT' });
 });
