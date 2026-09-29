@@ -22,6 +22,21 @@ test('composed native live restoration restores files, verifies owned HTTP readi
   assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
 });
 
+test('native source restoration restores matching worktree, branch HEAD and exact index from the backup', async t => {
+  const f = await candidate(t, true, { gitSource: true });
+  assert.notEqual(await f.git('rev-parse', 'HEAD'), f.savedCommit);
+  const backup = await verifySnapshot(f.backup);
+  assert.equal(backup.gitMetadata.version, 1);
+  const result = await runLinuxLiveRestore({ ...f, acceptDataLoss: true, waitSeconds: 10 });
+  assert.equal(result.status, 'restored');
+  assert.equal(await f.git('rev-parse', 'HEAD'), f.savedCommit);
+  assert.equal(await f.git('symbolic-ref', 'HEAD'), 'refs/heads/main');
+  assert.deepEqual(await readFile(path.join(f.project, '.git/index')), f.savedIndex);
+  assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'saved source\n');
+  assert.equal(await f.git('diff', '--name-only', 'HEAD', '--', 'source.txt', 'server.cjs', 'package.json'), '');
+  assert.equal((await loadState(f.control)).targetCommit, f.savedCommit);
+});
+
 test('composed native restore health refusal stops its activation and retains lock, evidence and backup', async t => {
   const f = await candidate(t, false);
   await assert.rejects(runLinuxLiveRestore({ ...f, acceptDataLoss: true, waitSeconds: 10 }), /providers do not match/i);

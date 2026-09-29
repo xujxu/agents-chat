@@ -15,8 +15,8 @@ import { activateLinuxColdRestore } from '../scripts/deployment/linux-cold-resto
 import { inspectLinuxColdActivation } from '../scripts/deployment/linux-cold-activation-recovery.mjs';
 import { completeLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-completion.mjs';
 
-async function candidate(t, phase = 'stopped', valid = true) {
-  const f = await restoreCandidate(t, valid);
+async function candidate(t, phase = 'stopped', valid = true, options) {
+  const f = await restoreCandidate(t, valid, options);
   await releaseLock(f.control, f.lock);
   await cp(fileURLToPath(new URL('../scripts/deployment/', import.meta.url)),
     path.join(f.project, 'scripts', 'deployment'), { recursive: true });
@@ -362,7 +362,7 @@ for (const phase of ['state-published', 'lock-owner-removed', 'guard-removed']) 
 }
 
 test('saved restore entry completes dead-controller cold restoration without checkout helpers', async t => {
-  const f = await candidate(t);
+  const f = await candidate(t, 'stopped', true, { gitSource: true });
   await f.kill();
   await rename(path.join(f.project, 'scripts'), path.join(f.project, 'unavailable-scripts'));
   const oldLock = await readFile(path.join(f.control, 'lock/owner.json'));
@@ -400,6 +400,8 @@ test('saved restore entry completes dead-controller cold restoration without che
   assert.equal(JSON.parse(result.stdout).backupId, 'live-restore');
   assert.equal((await loadState(f.control)).phase, 'restored');
   assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'backup data');
+  assert.equal(await f.git('rev-parse', 'HEAD'), f.savedCommit);
+  assert.deepEqual(await readFile(path.join(f.project, '.git/index')), f.savedIndex);
   await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
   await assert.rejects(lstat(path.join(f.control, 'recovery-lock')), { code: 'ENOENT' });
   assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');

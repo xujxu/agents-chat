@@ -7,8 +7,12 @@ import { inspectLinuxService } from '../scripts/deployment/linux-service-inspect
 import { inspectLinuxConfiguration } from '../scripts/deployment/linux-configuration.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 import { createLinuxServiceSnapshot } from '../scripts/deployment/linux-snapshot.mjs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
-export async function restoreCandidate(t, valid = true) {
+const execute = promisify(execFile);
+
+export async function restoreCandidate(t, valid = true, { gitSource = false } = {}) {
   const server = port => `
 const fs=require('node:fs');
 const server=require('node:http').createServer((req,res)=>{
@@ -45,10 +49,25 @@ Environment=ADMIN_PASSWORD=fixture-private-password` });
   t.after(() => stopped.close());
   await writeState(control, { ...state, phase: 'copying', previousPhase: 'stopped' });
   await writeFile(path.join(f.project, 'saved-data'), 'backup data');
+  const git = async (...args) => (await execute('git', ['-c', `safe.directory=${f.project}`, '-C', f.project, ...args],
+    { timeout: 20000, maxBuffer: 16384 })).stdout.trim();
+  let savedCommit = 'a'.repeat(40);
+  let savedIndex;
+  if (gitSource) {
+    await git('init', '--initial-branch=main');
+    await git('config', 'user.name', 'Deployment fixture');
+    await git('config', 'user.email', 'fixture@example.invalid');
+    await git('config', 'core.autocrlf', 'false');
+    await writeFile(path.join(f.project, 'source.txt'), 'saved source\n');
+    await git('add', 'source.txt', 'server.cjs', 'package.json');
+    await git('commit', '-m', 'saved source');
+    savedCommit = await git('rev-parse', 'HEAD');
+    savedIndex = await readFile(path.join(f.project, '.git/index'));
+  }
   const backup = path.join(control, 'backup');
   await createLinuxServiceSnapshot({
     service, stopped, configuration, destination: backup, id: 'live-restore',
-    source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    source: { commit: savedCommit, provenance: 'observed' },
   });
   await stopped.activate({ purpose: 'prior-runtime' });
   await writeState(control, { ...await loadState(control), phase: 'prior-runtime-restored',
@@ -56,9 +75,13 @@ Environment=ADMIN_PASSWORD=fixture-private-password` });
   await stopped.retire();
   await releaseLock(control, lock);
   await writeFile(path.join(f.project, 'saved-data'), 'new data');
+  if (gitSource) {
+    await writeFile(path.join(f.project, 'source.txt'), 'updated source\n');
+    await git('commit', '-am', 'updated source');
+  }
   const current = await inspectLinuxService(f);
   t.after(() => current.close());
   const config = await inspectLinuxConfiguration({ service: current, profile: 'agents-chat-auth-638c553' });
   const owner = await acquireLock(control, { project: f.project, operationId: randomUUID() });
-  return { ...f, service: current, configuration: config, control, lock: owner, backup, port };
+  return { ...f, service: current, configuration: config, control, lock: owner, backup, port, git, savedCommit, savedIndex };
 }
