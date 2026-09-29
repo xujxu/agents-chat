@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import { lstat, readdir } from 'node:fs/promises';
+import { lstat, readdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
-import { captureLockOwner, validateState } from './state.mjs';
+import { captureLockOwner, loadState, validateState } from './state.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { workerEngineFiles } from './saved-worker-engine.mjs';
-import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
+import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory } from './worker-files.mjs';
 
 export const coldRetirementMarker = 'service-cold-retirement.json';
 export const coldCompletionMarker = 'cold-restore-complete.json';
@@ -125,4 +125,31 @@ export function parseColdRetirement(bytes, control, project, backup) {
       || !name || path.basename(name) !== name || ['.', '..', coldRetirementMarker, coldStateStage, coldCompletionMarker].includes(name))
     || new Set(proof.names).size !== proof.names.length) throw new Error('Invalid cold retirement root inventory.');
   return { ...proof, held };
+}
+
+export async function retireCompletedColdReceipt(control, project) {
+  const file = path.join(control, coldCompletionMarker);
+  const bytes = await readWorkerFile(file, 4 * 1024 * 1024, { privateMode: true });
+  const info = coldIdentity(await lstat(file));
+  const proof = parseColdRetirement(bytes, control, project, coldParse(bytes)?.backup);
+  const expectedNames = proof.names.filter(name =>
+    !proof.entries.some(entry => entry.file === path.join(control, name)));
+  expectedNames.push(coldCompletionMarker);
+  const check = async () => {
+    if (!same(coldIdentity((await canonicalWorkerDirectory(control, { privateMode: true })).info), proof.root)
+      || !same(await loadState(control), proof.state)
+      || !same((await readdir(control)).sort(), expectedNames.sort())
+      || !same(coldIdentity(await lstat(file)), info)
+      || !(await readWorkerFile(file, 4 * 1024 * 1024, { privateMode: true })).equals(bytes)) {
+      throw new Error('Completed cold recovery receipt or terminal state changed.');
+    }
+    for (const entry of proof.entries) {
+      try { await lstat(entry.file); }
+      catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+      throw new Error('Cold recovery cleanup is incomplete or retired evidence reappeared.');
+    }
+  };
+  await check();
+  await unlink(file);
+  await syncWorkerDirectory(control);
 }

@@ -302,6 +302,14 @@ test('cold restore terminal completion preserves the owned runtime and backup wh
     { code: 'ENOENT' });
   assert.deepEqual(await readFile(path.join(f.backup, 'manifest.json')), backup);
   assert.deepEqual(await completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 }), result);
+  const completionPath = path.join(f.control, 'cold-restore-complete.json');
+  const completion = await readFile(completionPath);
+  const proof = JSON.parse(completion);
+  await writeFile(completionPath, JSON.stringify({ ...proof, state: { ...proof.state, backupId: 'foreign-backup' } }));
+  await assert.rejects(acquireLock(f.control, { project: f.project, operationId: 'refuse-corrupt-receipt' }),
+    /proof|restoration/i);
+  await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
+  await writeFile(completionPath, completion);
   const next = await acquireLock(f.control, { project: f.project, operationId: 'next-after-cold-restore' });
   await assert.rejects(lstat(path.join(f.control, 'cold-restore-complete.json')), { code: 'ENOENT' });
   assert.equal((await loadState(f.control)).phase, 'restored');

@@ -254,6 +254,10 @@ async function acquireLockAdmitted(root, { project, operationId }) {
   const canonicalProject = await realpath(project);
   const identity = await processIdentity(process.pid);
   if (!identity) throw new Error('Cannot establish deployment lock owner identity.');
+  if ((await readdir(directory)).includes('cold-restore-complete.json')) {
+    const { retireCompletedColdReceipt } = await import('./linux-cold-retirement-proof.mjs');
+    await retireCompletedColdReceipt(directory, canonicalProject);
+  }
   const lockPath = path.join(directory, 'lock');
   try { await mkdir(lockPath, { mode: 0o700 }); }
   catch (error) {

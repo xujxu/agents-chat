@@ -22,6 +22,7 @@ export const workerEngineFiles = Object.freeze([
   'linux-service-retirement.mjs',
   'linux-recovery-admission.mjs',
   'linux-live-retirement.mjs',
+  'linux-cold-retirement-proof.mjs',
 ]);
 const files = workerEngineFiles;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
