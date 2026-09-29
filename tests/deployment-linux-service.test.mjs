@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import fs, { chmod, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import fs, { chmod, chown, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -11,6 +11,7 @@ import test from 'node:test';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 import { hasFailedLinuxActivation } from '../scripts/deployment/linux-service-activation.mjs';
+import { prepareLinuxSourceBuild } from '../scripts/deployment/linux-source-build.mjs';
 import { acquireLock, loadState, writeState, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
@@ -142,6 +143,69 @@ async function stopFixture(t, options) {
   await writeState(control, { ...state, phase: 'stopped', previousPhase: 'preflight' });
   return { ...f, control, lock, inhibition: `/etc/systemd/system/${f.unit}.d/90-agents-chat-deployment.conf` };
 }
+
+test('installed non-root service identity governs source selection and npm build only while inhibited', async t => {
+  const f = await stopFixture(t, { nonroot: true });
+  const git = '/usr/bin/git';
+  const setup = async (...args) => (await native(git, ['-c', `safe.directory=${f.project}`, '-C', f.project, ...args])).stdout.trim();
+  const pkg = JSON.parse(await readFile(path.join(f.project, 'package.json'), 'utf8'));
+  pkg.name = 'installed-build-fixture';
+  pkg.version = '1.0.0';
+  pkg.scripts.build = 'node build.cjs';
+  await writeFile(path.join(f.project, 'package.json'), JSON.stringify(pkg));
+  await writeFile(path.join(f.project, 'package-lock.json'), JSON.stringify({
+    name: pkg.name, version: pkg.version, lockfileVersion: 3, packages: { '': { name: pkg.name, version: pkg.version } },
+  }));
+  await writeFile(path.join(f.project, '.gitignore'), 'ready\nwrites\n.npm/\nnode_modules/\nartifact\n');
+  await writeFile(path.join(f.project, 'build.cjs'),
+    "require('node:fs').writeFileSync('artifact',String(process.getuid()));");
+  await writeFile(path.join(f.project, 'source.txt'), 'old source\n');
+  await setup('init', '--initial-branch=main');
+  await setup('config', 'user.name', 'Deployment fixture');
+  await setup('config', 'user.email', 'fixture@example.invalid');
+  await setup('add', '.');
+  await setup('commit', '-m', 'old');
+  const old = await setup('rev-parse', 'HEAD');
+  await writeFile(path.join(f.project, 'source.txt'), 'new source\n');
+  await setup('commit', '-am', 'new');
+  const next = await setup('rev-parse', 'HEAD');
+  await setup('switch', '--detach', old);
+  const assignOwner = async directory => {
+    await chown(directory, 65534, 65534);
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) await assignOwner(file);
+      else if (entry.isFile()) await chown(file, 65534, 65534);
+      else throw new Error('Unexpected source fixture link.');
+    }
+  };
+  await assignOwner(f.project);
+  const service = await inspectLinuxService(f);
+  t.after(() => service.close());
+  const saved = await saveWorkerEngine({ control: f.control, project: f.project, operationId: f.lock.operationId,
+    source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)) });
+  const operation = await createWorkerOperation({ control: f.control, lock: f.lock, saved });
+  t.after(() => operation.close());
+  const stages = await prepareLinuxSourceBuild({ service, operation, git, environment: {
+    PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: service.identity.runtime.home,
+    USER: 'nobody', LOGNAME: 'nobody', NODE_ENV: 'production', npm_config_cache: path.join(f.project, '.npm'),
+  } });
+  assert.equal((await stages.inspect()).commit, old);
+  const target = await stages.resolve({ options: { revision: next } });
+  await assert.rejects(stages.select({ target }), /stopped/i);
+  assert.equal(await setup('rev-parse', 'HEAD'), old);
+  const stopped = await stopLinuxService(f);
+  t.after(() => stopped.close());
+  assert.equal((await stages.select({ target, stopped })).commit, next);
+  await assert.rejects(stages.npm({ stage: 'dependencies', commit: old, stopped }), /commit/i);
+  await stages.npm({ stage: 'dependencies', commit: next, stopped });
+  await stages.npm({ stage: 'build', commit: next, stopped });
+  assert.equal(await readFile(path.join(f.project, 'artifact'), 'utf8'), '65534');
+  assert.equal((await fs.lstat(path.join(f.project, 'artifact'))).uid, 65534);
+  assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'new source\n');
+  assert.deepEqual(await stopped.checkStopped(), { stopped: true, inhibited: true });
+  await operation.seal();
+});
 
 test('durable inhibition stops the original service and detached writer before granting snapshot admission', async t => {
   const f = await stopFixture(t);
