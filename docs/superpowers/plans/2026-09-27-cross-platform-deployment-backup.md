@@ -4648,6 +4648,12 @@ deleted, and no service action occurs. A crash before new lock creation leaves a
 normal terminal state; incomplete recovery never enters this path because its
 guard/service marker blocks ordinary lock admission first.
 
+Receipt supersession adds the proof reader to the saved worker engine because
+`state.mjs` dynamically imports it. Initial implementation `859eb2a` exposed
+the independently pinned helper inventory in `deployment-saved-worker.test.mjs`;
+update that exact inventory, preserving the complete-manifest contract rather
+than removing the closure assertion.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
