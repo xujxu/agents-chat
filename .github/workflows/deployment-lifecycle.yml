@@ -34,6 +34,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  application-build:
+    name: Owned application build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build actual source with Linux native ownership
+        if: runner.os == 'Linux'
+        run: |
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo env DEPLOYMENT_TEST_REAL_BUILD=1 "DEPLOYMENT_TEST_GIT=$(command -v git)" "DEPLOYMENT_TEST_NPM_CLI=$(readlink -f "$(command -v npm)")" "$(command -v node)" --test --test-name-pattern="^actual application source installs and builds" tests/deployment-native-operation.test.mjs
+      - name: Build actual source with Windows native ownership
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
+          node --test --test-name-pattern="^actual application source installs and builds" tests/deployment-native-operation.test.mjs
+          exit $LASTEXITCODE
+
   database-admission:
     name: Database admission (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

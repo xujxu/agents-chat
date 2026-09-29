@@ -16,6 +16,7 @@ import { saveRecoveryEngine, retirementRecoveryInvocation } from '../scripts/dep
 import { prepareNpmCommand } from '../scripts/deployment/npm-command.mjs';
 import { readSourceCommandResult } from '../scripts/deployment/source-command.mjs';
 import { runStage } from '../scripts/deployment/stage-runner.mjs';
+import { inspectBuildArtifacts } from '../scripts/deployment/build-artifacts.mjs';
 
 const execute = promisify(execFile);
 const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
@@ -204,6 +205,44 @@ test('actual Git source selection runs through saved native ownership without re
   await writeFile(path.join(f.project, 'source.txt'), 'preserve dirty source\n');
   await assert.rejects(run('inspect'), { code: 'DEPLOYMENT_COMMAND_FAILED' });
   assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'preserve dirty source\n');
+  await f.operation.seal();
+});
+
+test('actual application source installs and builds inside native ownership', {
+  skip: process.env.DEPLOYMENT_TEST_REAL_BUILD !== '1',
+}, async t => {
+  const f = await fixture(t);
+  const repository = fileURLToPath(new URL('../', import.meta.url));
+  const git = process.env.DEPLOYMENT_TEST_GIT;
+  const npmCli = process.env.DEPLOYMENT_TEST_NPM_CLI;
+  assert.ok(git && npmCli, 'Actual application build requires explicit Git/npm paths.');
+  await execute(git, ['-c', `safe.directory=${repository}`, 'clone', '--no-hardlinks', repository, f.project],
+    { timeout: 120000, maxBuffer: 8192 });
+  const commit = (await execute(git, ['-C', f.project, 'rev-parse', 'HEAD'])).stdout.trim();
+  const environment = {};
+  const permitted = new Set(['PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA']);
+  for (const [key, value] of Object.entries(process.env)) if (permitted.has(key.toUpperCase())) environment[key] = value;
+  environment.HOME = path.dirname(f.project);
+  environment.NODE_ENV = 'production';
+  environment.NEXT_TELEMETRY_DISABLED = '1';
+  environment.NEXTAUTH_SECRET = 'actions-isolated-build-fixture-secret';
+  environment.NEXTAUTH_URL = 'http://localhost:3010';
+  environment.npm_config_cache = path.join(path.dirname(f.project), 'npm-cache');
+  for (const stage of ['dependencies', 'build']) {
+    await runStage(stage, async signal => f.operation.run({
+      workerId: randomUUID(), runtime: f.runtime, signal,
+      command: await prepareNpmCommand({ project: f.project, node: process.execPath, npmCli, stage, environment, signal }),
+    }), { timeoutMs: 600000 });
+  }
+  const artifacts = await inspectBuildArtifacts({ project: f.project });
+  assert.ok(artifacts.identity.buildId);
+  const { captureSourceCommands } = await import('../scripts/deployment/source-command.mjs');
+  const commands = await captureSourceCommands({ project: f.project, node: process.execPath, git, environment });
+  const inspected = readSourceCommandResult(await f.operation.run({
+    workerId: randomUUID(), runtime: f.runtime, command: commands.prepare({ action: 'inspect' }),
+  }), 'inspect', f.project);
+  assert.equal(inspected.commit, commit);
+  await artifacts.check();
   await f.operation.seal();
 });
 

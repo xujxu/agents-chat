@@ -4868,6 +4868,15 @@ exercise output/dependency/inventory/lock drift and allowed runtime cache writes
 Actual Next application builds and durable successful deployment receipts remain
 separate gates; fixture success must not be represented as those gates passing.
 
+Two dedicated Actions jobs now clone the current actual application source,
+run real npm ci and Next build through Linux cgroup/Windows Job ownership, hash
+complete build/dependency artifacts and require the tracked checkout still to
+match its selected commit. Each owned command has a ten-minute deadline; the
+job has a 25-minute ceiling. Only a small allowlist of OS environment variables
+plus explicit isolated build settings reaches the application; GitHub tokens
+are not passed to build subprocesses. These are actual application **build**
+gates, not first-install/update/restore or HTTP/data acceptance gates.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
