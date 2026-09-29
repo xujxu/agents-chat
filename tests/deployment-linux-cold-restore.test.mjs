@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
-import { cp, readFile, rename, writeFile } from 'node:fs/promises';
+import { cp, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -262,10 +262,10 @@ test('cold activation readiness survives controller death but never substitutes 
   await writeFile(readyPath, JSON.stringify({ ...receipt, activationSha256: '0'.repeat(64) }));
   await assert.rejects(inspectLinuxColdActivation(options), /receipt|intent|evidence/i);
   await writeFile(readyPath, evidence[4]);
-  const environment = await readFile(path.join(f.project, '.env'));
+  await assert.rejects(readFile(path.join(f.project, '.env')), { code: 'ENOENT' });
   await writeFile(path.join(f.project, '.env'), 'IGNORED_SETTING=drift\n');
   await assert.rejects(inspectLinuxColdActivation(options), /configuration|snapshot/i);
-  await writeFile(path.join(f.project, '.env'), environment);
+  await unlink(path.join(f.project, '.env'));
   const reentered = await inspectLinuxColdActivation(options);
   t.after(() => reentered.close());
   await systemctl('restart', f.unit);

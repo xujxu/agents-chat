@@ -4579,6 +4579,15 @@ responsibility: compare restored files with the snapshot under the caller's
 native service authority, which may be either stopped or freshly owned active.
 No stopped ownership check is relaxed in the file restoration path.
 
+Readiness receipt implementation `9cf48c3` / `36507440802` passed all nine jobs.
+Reentry implementation `cc393e9` / `36507681254` reached successful killed-owner
+admission and tampered-receipt refusal, then failed in the test's own `.env`
+read: this fixture intentionally configures auth in systemd and has no `.env`.
+The drift case must assert initial absence, create the unexpected file and
+unlink only that test-created file before testing generation replacement.
+The causal reentry run was superseded while pending (Actions concurrency),
+not a red test result; it was explicitly rerun after implementation started.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
