@@ -408,4 +408,17 @@ test('saved restore entry completes dead-controller cold restoration without che
   assert.equal(repeated.code, 0, repeated.stderr);
   assert.deepEqual(JSON.parse(repeated.stdout), JSON.parse(result.stdout));
   assert.equal((await systemctl('show', f.unit, '--property=InvocationID', '--value')).stdout.trim(), invocation);
+  await cp(fileURLToPath(new URL('../scripts/deployment/', import.meta.url)),
+    path.join(f.project, 'scripts', 'deployment'), { recursive: true });
+  const second = await interrupted(t, 'stopped', 'accepted', 'none', f);
+  await second.kill();
+  await assert.rejects(lstat(path.join(f.control, 'cold-restore-complete.json')), { code: 'ENOENT' });
+  await writeFile(path.join(f.project, 'saved-data'), 'second failed update data');
+  const restoredAgain = await execute(true);
+  assert.equal(restoredAgain.code, 0, restoredAgain.stderr);
+  assert.equal(JSON.parse(restoredAgain.stdout).operationId, second.lock.operationId);
+  assert.notEqual(JSON.parse(restoredAgain.stdout).operationId, JSON.parse(result.stdout).operationId);
+  assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'backup data');
+  assert.equal((await loadState(f.control)).phase, 'restored');
+  await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
 });

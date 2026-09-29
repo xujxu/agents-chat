@@ -4654,6 +4654,12 @@ the independently pinned helper inventory in `deployment-saved-worker.test.mjs`;
 update that exact inventory, preserving the complete-manifest contract rather
 than removing the closure assertion.
 
+Extend the saved-entry native case through a second stopped/killed deployment
+controller in the same project and control directory. Its next lock must
+supersede the first completion receipt; a second external restore must return
+the new operation ID, restore saved data, complete and unlock normally. This
+checks the actual repeated recovery route, not merely receipt absence.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
