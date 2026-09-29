@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, fork } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -125,3 +125,47 @@ test('Git restoration resets only saved HEAD/index/ref under stopped authority, 
   await restoreGitMetadata({ project: f.project, record: metadata.record,
     checkStopped: async () => ({ stopped: true, inhibited: true }) });
 });
+
+for (const pause of ['refs/heads/main', 'index', 'HEAD']) {
+  test(`Git metadata publication resumes after controller death following ${pause}`, async t => {
+    const f = await fixture(t);
+    const { record } = await inspectGitMetadata({ project: f.project, commit: f.commit });
+    const saved = path.join(f.root, 'git.json');
+    await writeFile(saved, JSON.stringify(record));
+    await writeFile(path.join(f.project, 'app.txt'), 'new version\n');
+    await git(f.project, 'commit', '-am', 'new');
+    const child = fork(new URL('./deployment-git-restore-child.mjs', import.meta.url),
+      [f.project, saved, pause], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    let diagnostic = '';
+    child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
+    const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+    t.after(async () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await exited;
+    });
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Git restore did not pause: ${diagnostic}`)), 30000);
+      child.once('message', value => { clearTimeout(timer); resolve(value); });
+      child.once('exit', code => { clearTimeout(timer); reject(new Error(`Git restore exited ${code}: ${diagnostic}`)); });
+      child.once('error', error => { clearTimeout(timer); reject(error); });
+    });
+    const options = { project: f.project, record, checkStopped: async () => ({ stopped: true, inhibited: true }) };
+    await assert.rejects(restoreGitMetadata(options), /alive/i);
+    child.kill('SIGKILL');
+    await exited;
+    if (pause === 'index') {
+      const target = path.join(f.project, '.git/index');
+      const bytes = await readFile(target);
+      await rename(target, `${target}.retained`);
+      await writeFile(target, bytes);
+      await assert.rejects(restoreGitMetadata(options), /changed|identity/i);
+      await unlink(target);
+      await rename(`${target}.retained`, target);
+    }
+    await restoreGitMetadata(options);
+    assert.equal(await git(f.project, 'rev-parse', 'HEAD'), f.commit);
+    assert.deepEqual(await readFile(path.join(f.project, '.git/index')), Buffer.from(record.index, 'base64'));
+    assert.equal(await readFile(path.join(f.project, 'app.txt'), 'utf8'), 'new version\n');
+    await assert.rejects(readFile(path.join(f.project, '.git/agents-chat-restore/intent.json')), { code: 'ENOENT' });
+  });
+}

@@ -52,7 +52,7 @@ export function validateGitMetadata(value, commit) {
   return Object.freeze(record);
 }
 
-async function readMetadata(file, maximum, optional = false) {
+export async function readGitMetadataFile(file, maximum, optional = false) {
   let named;
   try { named = await lstat(file); }
   catch (error) { if (optional && error.code === 'ENOENT') return null; throw error; }
@@ -74,7 +74,7 @@ async function readMetadata(file, maximum, optional = false) {
 }
 
 export async function inspectGitMetadata({ project, commit, signal }) {
-  if (!commitPattern.test(commit ?? '')) throw new Error('Git metadata requires an exact source commit.');
+  if (commit !== undefined && !commitPattern.test(commit)) throw new Error('Git metadata requires an exact source commit.');
   const { root } = await canonicalWorkerDirectory(project);
   const directory = path.join(root, '.git');
   const gitDirectory = await canonicalWorkerDirectory(directory);
@@ -88,9 +88,9 @@ export async function inspectGitMetadata({ project, commit, signal }) {
         'REVERT_HEAD', 'BISECT_LOG', 'shallow'].includes(name))) {
       throw new Error('Git metadata requires a standalone checkout without shared state, active writers or locks.');
     }
-    const head = await readMetadata(path.join(directory, 'HEAD'), 4096);
-    const index = await readMetadata(path.join(directory, 'index'), 16 * 1024 * 1024);
-    const config = await readMetadata(path.join(directory, 'config'), 1024 * 1024);
+    const head = await readGitMetadataFile(path.join(directory, 'HEAD'), 4096);
+    const index = await readGitMetadataFile(path.join(directory, 'index'), 16 * 1024 * 1024);
+    const config = await readGitMetadataFile(path.join(directory, 'config'), 1024 * 1024);
     const headValue = text(Buffer.from(head.bytes, 'base64')).trimEnd();
     let ref = null;
     let resolved = headValue;
@@ -109,21 +109,23 @@ export async function inspectGitMetadata({ project, commit, signal }) {
           break;
         }
       }
-      reference = await readMetadata(path.join(directory, ref), 4096, true);
+      reference = await readGitMetadataFile(path.join(directory, ref), 4096, true);
       if (reference) resolved = text(Buffer.from(reference.bytes, 'base64')).trimEnd();
       else {
-        packed = await readMetadata(path.join(directory, 'packed-refs'), 16 * 1024 * 1024);
+        packed = await readGitMetadataFile(path.join(directory, 'packed-refs'), 16 * 1024 * 1024);
         const matches = text(Buffer.from(packed.bytes, 'base64')).split('\n')
           .filter(line => line.endsWith(` ${ref}`));
         if (matches.length !== 1) throw new Error('Git HEAD reference is absent or ambiguous.');
         resolved = matches[0].slice(0, -(ref.length + 1));
       }
     }
-    if (resolved !== commit) throw new Error('Git metadata does not match the selected source commit.');
+    if (!commitPattern.test(resolved) || commit !== undefined && resolved !== commit) {
+      throw new Error('Git metadata does not match the selected source commit.');
+    }
     const indexBytes = Buffer.from(index.bytes, 'base64');
-    validateIndex(indexBytes, commit);
+    validateIndex(indexBytes, resolved);
     signal?.throwIfAborted();
-    return { head, index, config, ref, reference, packed };
+    return { head, index, config, ref, reference, packed, commit: resolved };
   };
   const original = await observe();
   const check = async () => {
@@ -132,8 +134,8 @@ export async function inspectGitMetadata({ project, commit, signal }) {
   await check();
   return Object.freeze({
     record: validateGitMetadata({
-      version: 1, commit, ref: original.ref, head: original.head.bytes, index: original.index.bytes,
-    }, commit),
+      version: 1, commit: original.commit, ref: original.ref, head: original.head.bytes, index: original.index.bytes,
+    }, original.commit),
     check,
   });
 }

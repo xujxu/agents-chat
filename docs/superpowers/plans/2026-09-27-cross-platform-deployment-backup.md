@@ -4702,6 +4702,23 @@ publishing completion. Legacy snapshots without this descriptor retain their
 current behavior; this change does not yet make native restore update Git.
 Include the two new modules in the saved recovery engine dependency closure.
 
+### Stopped Git metadata restoration
+
+The internal `restoreGitMetadata` primitive restores only the selected local
+branch ref, exact index and HEAD bytes. It does not run checkout, hooks, npm or a
+build and does not touch worktree files, objects or configuration. Require
+retained stopped/inhibited authority before staging and every publication.
+Use exclusive standard Git lockfiles and a private `.git/agents-chat-restore`
+intent binding original/staged file identities, saved-byte hashes, canonical
+parent directories and unchanged config/packed refs. Publish ref, index, HEAD
+in order; recover only a completed publication prefix. Reject identical-byte
+inode replacement, foreign locks, incomplete staging and target drift.
+
+Both platform tests kill the helper after each of the three renames and resume
+using the same saved record, asserting unchanged worktree contents and exact
+HEAD/index restoration. This primitive still needs wiring before native
+restoration can claim Git/source provenance.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

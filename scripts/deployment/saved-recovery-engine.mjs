@@ -24,7 +24,7 @@ const files = Object.freeze([...new Set([
   'restore-transaction.mjs', 'restore-project.mjs', 'restore-external.mjs',
   'linux-configuration.mjs', 'configuration-files.mjs', 'configuration-compatibility.mjs',
   'snapshot-configuration.mjs',
-  'git-metadata.mjs', 'snapshot-git.mjs',
+  'git-metadata.mjs', 'snapshot-git.mjs', 'restore-git.mjs',
   'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-scope.mjs', 'snapshot-external.mjs', 'snapshot-rotation.mjs',
   'linux-readiness.mjs', 'linux-listener.mjs',
 ])]);
