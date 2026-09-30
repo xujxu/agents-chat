@@ -85,6 +85,7 @@ export async function runLinuxUpdateCommand({ args, unit = 'agents-chat.service'
       HOME: installed.HOME ?? runtime.home,
       USER: installed.USER ?? runtime.user,
       LOGNAME: installed.LOGNAME ?? runtime.user,
+      NEXT_TELEMETRY_DISABLED: installed.NEXT_TELEMETRY_DISABLED ?? '1',
     };
     if (!existing) {
       await mkdir(control, { mode: 0o700 });
