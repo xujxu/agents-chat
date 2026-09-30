@@ -13,7 +13,7 @@ export const node = process.execPath;
 export const npm = path.join(path.dirname(node), 'npm');
 export const quote = value => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%')}"`;
 
-export async function fixture(t, { command = `${quote(npm)} start`, settings = '', dropIn = '', nonroot = false, server } = {}) {
+export async function fixture(t, { command = `${quote(npm)} start`, settings = '', dropIn = '', nonroot = false, server, unitName } = {}) {
   const root = await realpath(await mkdtemp(path.join(await realpath(tmpdir()), 'agents-deployment-test-')));
   const project = path.join(root, 'app with spaces');
   await mkdir(project);
@@ -22,7 +22,8 @@ export async function fixture(t, { command = `${quote(npm)} start`, settings = '
     await chmod(project, 0o755);
     await chown(project, 65534, 65534);
   }
-  const unit = `agents-service-test-${randomUUID()}.service`;
+  const unit = unitName ?? `agents-service-test-${randomUUID()}.service`;
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.service$/.test(unit)) throw new Error('Invalid fixture unit name.');
   const fragment = `/etc/systemd/system/${unit}`;
   const dropDirectory = `${fragment}.d`;
   const dropFile = path.join(dropDirectory, '10-test.conf');
@@ -52,6 +53,7 @@ SendSIGKILL=yes
 TimeoutStopSec=2s
 ${typeof settings === 'function' ? settings({ project }) : settings}
 `;
+  await writeFile(fragment, bytes, { flag: 'wx', mode: 0o644 });
   t.after(async () => {
     const state = (await systemctl('show', unit, '--property=ActiveState,SubState,Result')).stdout;
     if (/^Result=(?!success$).+/m.test(state)) {
@@ -66,7 +68,6 @@ ${typeof settings === 'function' ? settings({ project }) : settings}
     await systemctl('daemon-reload');
     await rm(root, { recursive: true });
   });
-  await writeFile(fragment, bytes, { flag: 'wx', mode: 0o644 });
   if (dropIn) {
     await mkdir(dropDirectory, { mode: 0o755 });
     await writeFile(dropFile, `[Service]\n${dropIn}\n`, { mode: 0o644 });

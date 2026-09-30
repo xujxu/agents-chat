@@ -26,6 +26,23 @@ Environment=NEXTAUTH_URL=http://localhost:3010
 Environment=ADMIN_USERNAME=fixture
 Environment=ADMIN_PASSWORD=private-fixture-password`;
 
+test('native deployment refuses unsupported public update flags with parseable JSON and no host changes', async () => {
+  const script = path.join(repository, 'scripts/update.sh');
+  const execution = { cwd: '/', timeout: 20000, maxBuffer: 8192,
+    env: { PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: '/root' } };
+  assert.equal(JSON.parse((await execute('/usr/bin/bash', [script, '--help', '--json'], execution)).stdout).status, 'help');
+  for (const flags of [['--wait', '0'], ['--dry-run'], ['--verify'], ['--unknown']]) {
+    await assert.rejects(execute('/usr/bin/bash', [script, '--json', ...flags], execution), error => {
+      assert.equal(error.code, 1);
+      const failure = JSON.parse(error.stdout);
+      assert.equal(failure.status, 'failed');
+      assert.match(failure.code, /^DEPLOYMENT_/);
+      assert.match(error.stderr, /failed|unsupported|inspect/i);
+      return true;
+    });
+  }
+});
+
 test('native deployment refuses unsupported command modes without creating control files', async t => {
   const f = await fixture(t);
   await ready(f);
@@ -74,8 +91,8 @@ test('native deployment refuses foreign command state and status never initializ
   assert.deepEqual((await readdir(control)).sort(), ['foreign-evidence', 'state.json']);
 });
 
-async function installation(t) {
-  const f = await fixture(t, { nonroot: true,
+async function installation(t, { unitName } = {}) {
+  const f = await fixture(t, { nonroot: true, unitName,
     settings: ({ project }) => `${settings}\nEnvironment=${quote(`npm_config_cache=${path.join(project, '.npm')}`)}`,
     server: `
 const fs = require('node:fs');
@@ -192,7 +209,16 @@ for (const scenario of ['synthetic', 'current', 'historical', 'rebuild', 'comman
 test(`native deployment composes real application acceptance and saved restoration (scenario=${scenario})`, {
   skip: process.env.DEPLOYMENT_TEST_REAL_DEPLOYMENT !== '1',
 }, async t => {
-  const f = await installation(t);
+  const f = await installation(t, { unitName: scenario === 'command' ? 'agents-chat.service' : undefined });
+  const command = async args => {
+    const { stdout } = await execute('/usr/bin/bash', [path.join(repository, 'scripts/update.sh'),
+      '--project-dir', f.project, '--json', ...args], {
+      cwd: '/', timeout: 660000, maxBuffer: 16384,
+      env: { PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: '/root',
+        NEXTAUTH_SECRET: 'ignored-controller-secret', NODE_ENV: 'development' },
+    });
+    return JSON.parse(stdout);
+  };
   const secondUpdate = scenario !== 'synthetic';
   const nextRevision = ['historical', 'rebuild'].includes(scenario) ? f.target : f.nextTarget;
   if (scenario === 'historical') f.target = '638c553c62406dbb7e6b5aeb41cdddf4cd6de179';
@@ -224,10 +250,7 @@ test(`native deployment composes real application acceptance and saved restorati
       t.after(() => service.close());
       let result;
       if (scenario === 'command') {
-        const { runLinuxUpdateCommand } = await import('../scripts/deployment/linux-update-command.mjs');
-        result = await runLinuxUpdateCommand({
-          args: ['--project-dir', f.project, '--revision', f.target, '--timeout', '600'], unit: f.unit,
-        });
+        result = await command(['--revision', f.target, '--timeout', '600']);
       } else {
         const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
         result = await runLinuxLiveDeployment({ ...f, service, lock, revision: f.target, timeoutSeconds: 600 });
@@ -249,13 +272,8 @@ test(`native deployment composes real application acceptance and saved restorati
       }
     }
     if (scenario === 'command') {
-      const { runLinuxUpdateCommand } = await import('../scripts/deployment/linux-update-command.mjs');
-      assert.equal((await runLinuxUpdateCommand({
-        args: ['--project-dir', f.project, '--revision', nextRevision, '--timeout', '600'], unit: f.unit,
-      })).status, 'accepted');
-      assert.equal((await runLinuxUpdateCommand({
-        args: ['--project-dir', f.project, '--status'], unit: f.unit,
-      })).phase, 'accepted');
+      assert.equal((await command(['--revision', nextRevision, '--timeout', '600'])).status, 'accepted');
+      assert.equal((await command(['--status'])).phase, 'accepted');
     } else {
       const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
       assert.equal((await runLinuxLiveDeployment({

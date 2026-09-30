@@ -5170,6 +5170,17 @@ not override its location: the latter correctly fails configuration admission
 before downtime and no longer tests dependency-stage recovery. Retain its
 original dependencies-phase, complete-backup and inhibition assertions.
 
+Public update wrapper slice: `scripts/update.sh` bootstraps the Node controller
+without inherited Node injection options; `linux-update-entry.mjs` renders
+human/JSON outcomes and nonzero, secret-free failures. Help documents only the
+currently supported running-service path and explicitly names unavailable
+first-install/dry-run/deferred-verification behavior. Test the actual shell
+entry from `/`, pointing newer tools at an external space-containing project,
+with deliberately conflicting controller auth/mode environment, twice for
+no-op and once for the distinct revision update plus status and saved restore.
+The isolated fixture owns the standard `agents-chat.service` name only after
+exclusive unit-file creation, so cleanup cannot overwrite a pre-existing unit.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
