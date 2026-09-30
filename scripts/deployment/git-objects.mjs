@@ -16,19 +16,22 @@ const totalBytes = entries => {
   return bytes;
 };
 
-function validateEntries(entries, commit) {
+function validateEntries(entries, commit, restoring) {
   const width = commit.length;
   const loose = new RegExp(`^[a-f0-9]{2}/[a-f0-9]{${width - 2}}$`);
   const packed = new RegExp(`^pack/pack-[a-f0-9]{${width}}\\.(pack|idx|rev|bitmap)$`);
-  if (!entries.length || !entries.some(entry => entry.kind === 'file')) throw new Error('Git object store is empty.');
+  if (!restoring && (!entries.length || !entries.some(entry => entry.kind === 'file'))) throw new Error('Git object store is empty.');
   for (const entry of entries) {
+    const name = restoring && entry.path.endsWith('.agents-chat-restore')
+      && restoring.has(entry.path.slice(0, -'.agents-chat-restore'.length))
+      ? entry.path.slice(0, -'.agents-chat-restore'.length) : entry.path;
     if (entry.kind === 'directory' ? !/^(info|pack|[a-f0-9]{2})$/.test(entry.path)
-      : entry.kind !== 'file' || !(loose.test(entry.path) || packed.test(entry.path))) {
+      : entry.kind !== 'file' || !(loose.test(name) || packed.test(name))) {
       throw new Error(`Unsupported Git object entry, alternate, promisor or writer state: ${entry.path}`);
     }
   }
   const files = new Set(entries.filter(entry => entry.kind === 'file').map(entry => entry.path));
-  for (const file of files) {
+  for (const file of restoring ? [] : files) {
     if (file.startsWith('pack/')) {
       const base = file.replace(/\.[^.]+$/, '');
       if (!files.has(`${base}.pack`) || !files.has(`${base}.idx`)) throw new Error('Incomplete Git object pack/index pair.');
@@ -116,6 +119,10 @@ export async function restoreGitObjects({ project, backup, manifest, checkStoppe
     }
   };
   await check();
+  const currentNames = await readdir(root);
+  const current = currentNames.length ? await inventorySnapshot(root, currentNames, { signal, excludedPaths }) : [];
+  validateEntries(current, manifest.source.commit,
+    new Set(saved.entries.filter(entry => entry.kind === 'file').map(entry => entry.path)));
   for (const entry of saved.entries.filter(entry => entry.kind === 'directory')) {
     const directory = path.join(root, entry.path);
     await check();
@@ -173,7 +180,12 @@ export async function restoreGitObjects({ project, backup, manifest, checkStoppe
       await unlink(stage);
       await syncWorkerDirectory(parent);
     }
+    if (!await matches(target, entry)) throw new Error('Restored Git object disappeared.');
   }
   await check();
+  for (const entry of saved.entries.filter(entry => entry.kind === 'file')) {
+    await realDirectory(path.dirname(path.join(root, entry.path)));
+    if (!await matches(path.join(root, entry.path), entry)) throw new Error('Restored Git object disappeared.');
+  }
   await syncWorkerDirectory(root);
 }

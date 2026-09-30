@@ -78,7 +78,7 @@ test('Linux source recovery restores missing packed objects offline while preser
   assert.deepEqual(await verifySnapshot(f.backup), manifest);
 });
 
-for (const boundary of ['staged', 'linked', 'partial', 'conflict']) {
+for (const boundary of ['staged', 'linked', 'partial', 'conflict', 'alternate']) {
   test(`Linux object publication reentry classifies ${boundary} evidence before restoring HEAD`, {
     skip: process.platform !== 'linux',
   }, async t => {
@@ -94,7 +94,8 @@ for (const boundary of ['staged', 'linked', 'partial', 'conflict']) {
     const name = (await readdir(saved)).find(name => name.endsWith('.pack'));
     const target = path.join(packed, name);
     const stage = `${target}.agents-chat-restore`;
-    if (boundary === 'partial') await writeFile(stage, 'partial');
+    if (boundary === 'alternate') await writeFile(path.join(f.project, '.git/objects/info/alternates'), '/foreign-store\n');
+    else if (boundary === 'partial') await writeFile(stage, 'partial');
     else if (boundary === 'conflict') await writeFile(target, 'foreign existing object');
     else {
       await copyFile(path.join(saved, name), stage);
@@ -104,11 +105,13 @@ for (const boundary of ['staged', 'linked', 'partial', 'conflict']) {
       project: f.project, backup: f.backup, acceptDataLoss: true, expectedSnapshot: manifest,
       checkStopped: async () => ({ stopped: true, inhibited: true }),
     });
-    if (boundary === 'partial' || boundary === 'conflict') {
+    if (['partial', 'conflict', 'alternate'].includes(boundary)) {
       await assert.rejects(restore(), /object|staged|publication/i);
       assert.equal(await f.git('rev-parse', 'HEAD'), later);
-      assert.equal(await readFile(boundary === 'partial' ? stage : target, 'utf8'),
-        boundary === 'partial' ? 'partial' : 'foreign existing object');
+      const evidence = boundary === 'alternate' ? path.join(f.project, '.git/objects/info/alternates')
+        : boundary === 'partial' ? stage : target;
+      assert.equal(await readFile(evidence, 'utf8'), boundary === 'alternate' ? '/foreign-store\n'
+        : boundary === 'partial' ? 'partial' : 'foreign existing object');
       assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'later source\n');
     } else {
       await restore();
