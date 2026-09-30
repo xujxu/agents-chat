@@ -43,6 +43,18 @@ test('native deployment refuses unsupported public update flags with parseable J
   }
 });
 
+test('native deployment refuses public restore without explicit data-loss acknowledgement', async () => {
+  const script = path.join(repository, 'scripts/restore.sh');
+  const execution = { cwd: '/', timeout: 20000, maxBuffer: 8192,
+    env: { PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: '/root' } };
+  assert.equal(JSON.parse((await execute('/usr/bin/bash', [script, '--help', '--json'], execution)).stdout).status, 'help');
+  await assert.rejects(execute('/usr/bin/bash', [script, '--json'], execution), error => {
+    assert.equal(error.code, 1);
+    assert.equal(JSON.parse(error.stdout).code, 'DEPLOYMENT_DATA_LOSS_ACKNOWLEDGEMENT_REQUIRED');
+    return true;
+  });
+});
+
 test('native deployment refuses unsupported command modes without creating control files', async t => {
   const f = await fixture(t);
   await ready(f);
@@ -312,7 +324,13 @@ test(`native deployment composes real application acceptance and saved restorati
     source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), control: f.control,
   });
   await rm(path.join(f.project, '.git/objects/pack'), { recursive: true });
-  const restored = await new Promise((resolve, reject) => {
+  const restored = publicCommand
+    ? (await execute('/usr/bin/bash', [path.join(repository, 'scripts/restore.sh'),
+      '--project-dir', f.project, '--accept-data-loss', '--json', '--timeout', '600'], {
+      cwd: '/', timeout: 660000, maxBuffer: 16384,
+      env: { PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: '/root' },
+    })).stdout
+    : await new Promise((resolve, reject) => {
     const child = execFile(node, [path.join(saved.directory, 'linux-restore-entry.mjs'),
       f.control, saved.manifestSha256, '--accept-data-loss'], {
       cwd: '/', timeout: 660000, maxBuffer: 16384, env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' },

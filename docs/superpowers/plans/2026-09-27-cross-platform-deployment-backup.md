@@ -5208,6 +5208,29 @@ that script and its controller modules. Require completed acceptance, unchanged
 chat data, no remaining worker lock and saved restoration to the prior current
 source. Read-only status/help must not capture or write temporary helpers.
 
+In-place checkpoint: `b3f9c50` / Actions `36744968548` passed all 17 jobs.
+The installed public script successfully selected exact historical source that
+removed itself and its deployment modules, finished acceptance, and restored the
+prior current application and chat data through the saved external engine.
+
+### Public Linux restore command
+
+Add `scripts/restore.sh` with the shared restore parser and mandatory explicit
+data-loss acknowledgement. Resolve the canonical project and sibling control,
+verify the saved recovery manifest and every declared helper without assuming
+the current checkout has the same helper version, then verify the complete
+backup and derive its native unit/Node/npm identity. Invoke that saved
+`linux-restore-entry.mjs` with its verified manifest digest and bounded JSON
+input, never a checkout restore implementation, Git fetch, install or build.
+Retain positive stage deadlines, secret-free JSON errors and the standard 3010
+readiness contract. Keep the original saved entry/manifest format unchanged,
+so this wrapper also works with previously created recovery engines.
+
+Actual external-tools and in-place update scenarios must restore using this
+public shell command after deleting live Git pack files, preserving their
+existing source/artifact/chat restoration assertions. Missing acknowledgement
+must fail before backup inspection or runtime changes.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
