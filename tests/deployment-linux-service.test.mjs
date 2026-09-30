@@ -98,6 +98,7 @@ test('rejects extra npm arguments and privileged command prefixes', async t => {
     const f = await fixture(t, { command });
     await ready(f);
     await assert.rejects(inspectLinuxService(f), /command|ExecStart|flags/i);
+    await assert.rejects(serviceInspection.inspectInstalledLinuxService({ unit: f.unit, project: f.project }), /command|ExecStart|flags/i);
   }
 });
 

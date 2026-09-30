@@ -110,6 +110,34 @@ export async function inspectLinuxServiceExecutable(file) {
   return { file, target, ...fileIdentity(info) };
 }
 
+export async function inspectInstalledLinuxService({ unit, project }) {
+  const runtime = await inspectLinuxRuntimeAccount({ unit, project });
+  if (runtime.mainPid <= 0 || runtime.activeState !== 'active') {
+    throw new Error('Installed executable discovery requires a running service.');
+  }
+  const object = await bus(['call', 'org.freedesktop.systemd1', '/org/freedesktop/systemd1',
+    'org.freedesktop.systemd1.Manager', 'LoadUnit', 's', unit], 'o');
+  if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
+    throw new Error('Invalid installed systemd unit object identity.');
+  }
+  const starts = await bus(['get-property', 'org.freedesktop.systemd1', object,
+    'org.freedesktop.systemd1.Service', 'ExecStartEx'], 'a(sasasttttuii)');
+  const npm = starts?.[0]?.[0];
+  if (!Array.isArray(starts) || starts.length !== 1 || !Array.isArray(starts[0])
+    || starts[0].length !== 10 || typeof npm !== 'string' || !path.isAbsolute(npm)
+    || !same(starts[0][1], [npm, 'start']) || !same(starts[0][2], [])
+    || path.basename(await realpath(npm)) !== 'npm-cli.js') {
+    throw new Error('Installed discovery requires a literal npm start command resolving to npm-cli.js.');
+  }
+  const node = await realpath(`/proc/${runtime.mainPid}/exe`);
+  const service = await inspectLinuxService({ unit, project, npm, node });
+  if (!same(service.identity.runtime, runtime)) {
+    await service.close();
+    throw new Error('Installed service generation changed during executable discovery.');
+  }
+  return service;
+}
+
 export async function inspectLinuxService({ unit, project, npm, node }) {
   const sources = [];
   let directory;

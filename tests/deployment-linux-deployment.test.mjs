@@ -9,7 +9,7 @@ import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import test from 'node:test';
 import { fixture, ready, node } from './deployment-linux-service-fixture.mjs';
-import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
+import { inspectInstalledLinuxService, inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { acquireLock, loadState } from '../scripts/deployment/state.mjs';
 import { runLinuxLiveDeployment } from '../scripts/deployment/linux-deployment.mjs';
 import { readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
@@ -60,7 +60,7 @@ require('node:http').createServer((req, res) => {
     }
   };
   await own(f.project);
-  const service = await inspectLinuxService(f);
+  const service = await inspectInstalledLinuxService({ unit: f.unit, project: f.project });
   t.after(() => service.close());
   const control = path.join(path.dirname(f.project), 'control');
   await mkdir(control, { mode: 0o700 });
