@@ -5017,6 +5017,13 @@ Exclude `objects/info/packs`, Git's derived dumb-HTTP pack listing, from the
 payload and restore. It is not an object and may change during repacking;
 restoring an old listing would incorrectly describe a newer additive store.
 Other auxiliary entries remain explicitly refused with their relative path.
+Restore also refuses newly introduced alternates/unsupported layouts before
+mutation. Boundary contracts cover complete staging, linked publication,
+partial staging and conflicting destination objects without changing HEAD or
+the worktree on refusal. Extend the real-application saved-entry case by
+removing its live `.git/objects/pack` before invoking the external restore;
+both the restored prior HEAD and the later target commit must then be readable
+from recovered local objects without a fetch.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
-import { chown, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { chown, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
@@ -143,6 +143,7 @@ test('native deployment composes real application acceptance and saved no-build 
   const saved = await saveRecoveryEngine({
     source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), control: f.control,
   });
+  await rm(path.join(f.project, '.git/objects/pack'), { recursive: true });
   const restored = await new Promise((resolve, reject) => {
     const child = execFile(node, [path.join(saved.directory, 'linux-restore-entry.mjs'),
       f.control, saved.manifestSha256, '--accept-data-loss'], {
@@ -159,6 +160,8 @@ test('native deployment composes real application acceptance and saved no-build 
   assert.equal((await loadState(f.control)).phase, 'restored');
   assert.equal((await execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project,
     'rev-parse', 'HEAD'])).stdout.trim(), f.prior);
+  assert.equal((await execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project,
+    'cat-file', '-t', f.target])).stdout.trim(), 'commit');
   const active = await inspectLinuxService(f);
   t.after(() => active.close());
   await waitLinuxReadiness({ service: active, port: 3010, providers: ['admin-login'] });
