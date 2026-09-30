@@ -5163,6 +5163,13 @@ without putting the complete project path in `sun_path`. Native lifecycle
 scenarios now cover this realistic long control path. Missing command-module
 failures remain separate expected causal evidence.
 
+The command fixture now configures its npm cache in the service so command
+execution needs no caller environment. Accordingly, the dependency-failure
+case must make that same installed cache inaccessible to the nonroot account,
+not override its location: the latter correctly fails configuration admission
+before downtime and no longer tests dependency-stage recovery. Retain its
+original dependencies-phase, complete-backup and inhibition assertions.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

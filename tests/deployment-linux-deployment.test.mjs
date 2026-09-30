@@ -172,8 +172,11 @@ test('native deployment restores prior owned runtime after pre-source snapshot r
 
 test('native deployment retains backup and inhibition after actual dependency installation fails', async t => {
   const f = await installation(t);
-  const environment = { ...f.environment, npm_config_cache: path.join(f.control, 'inaccessible-cache') };
-  await assert.rejects(runLinuxLiveDeployment({ ...f, environment, revision: f.target }), /worker|exit|command/i);
+  const cache = path.join(f.project, '.npm');
+  await mkdir(cache, { recursive: true });
+  await chown(cache, 0, 0);
+  await fs.chmod(cache, 0o700);
+  await assert.rejects(runLinuxLiveDeployment({ ...f, revision: f.target }), /worker|exit|command/i);
   const state = await loadState(f.control);
   assert.equal(state.phase, 'recovery-required');
   assert.equal(state.previousPhase, 'dependencies');
