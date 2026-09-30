@@ -5151,6 +5151,18 @@ dry-run, verify and wait=0 explicitly before side effects rather than pretending
 those unsupported native paths work. Keep this internal until public command
 help and supported-mode coverage are ready; first install remains a separate gate.
 
+Command causal run `1f3eca7` / `36735954695` exposed a second, real integration
+failure before source inspection: the specified sibling control name for the
+space-containing project exceeds the worker Unix socket pathname budget.
+Do not shorten the fixture or change the control naming contract. Bind/connect
+through a retained root-private control-directory fd at
+`/proc/<controller-pid>/fd/<fd>/w-<worker-id>.sock`; keep that fd until the server
+has closed and unlinked its socket. This retains filesystem access protection
+and socket placement inside control (unlike an unprotected abstract socket)
+without putting the complete project path in `sun_path`. Native lifecycle
+scenarios now cover this realistic long control path. Missing command-module
+failures remain separate expected causal evidence.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

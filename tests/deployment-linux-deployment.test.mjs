@@ -55,6 +55,23 @@ test('native deployment refuses foreign command state and status never initializ
     { code: 'DEPLOYMENT_CONTROL_UNBOUND' });
   assert.equal(await readFile(path.join(control, 'foreign-evidence'), 'utf8'), 'preserve');
   assert.deepEqual(await readdir(control), ['foreign-evidence']);
+  const state = {
+    version: 1, operationId: randomUUID(), project: path.dirname(f.project),
+    operation: 'update', phase: 'preflight', previousPhase: null,
+    sourceCommit: null, targetCommit: null, backupId: null, priorRuntime: 'running',
+    runtimeIdentity: 'fixture', startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(), errorCode: null,
+  };
+  const stateFile = path.join(control, 'state.json');
+  await writeFile(stateFile, JSON.stringify(state), { mode: 0o600 });
+  await assert.rejects(runLinuxUpdateCommand({ args, unit: f.unit }), { code: 'DEPLOYMENT_CONTROL_FOREIGN' });
+  state.project = f.project;
+  await writeFile(stateFile, JSON.stringify(state));
+  assert.equal((await runLinuxUpdateCommand({ args, unit: f.unit })).status, 'interrupted');
+  await assert.rejects(runLinuxUpdateCommand({ args: ['--project-dir', f.project], unit: f.unit }),
+    { code: 'DEPLOYMENT_RECOVERY_REQUIRED' });
+  assert.equal(await readFile(stateFile, 'utf8'), JSON.stringify(state));
+  assert.deepEqual((await readdir(control)).sort(), ['foreign-evidence', 'state.json']);
 });
 
 async function installation(t) {

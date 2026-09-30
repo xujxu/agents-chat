@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { open, readFile, readlink, statfs } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, open, readFile, readlink, statfs } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -39,8 +40,8 @@ export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command:
   if (verified.directory !== saved.directory) throw new Error('Saved engine identity changed.');
   const unit = `agents-deploy-${owner.workerId}.service`;
   if ((await properties(unit)).LoadState !== 'not-found') throw new Error('Native worker unit already exists.');
-  const socketPath = path.join(control, `w-${owner.workerId}.sock`);
-  if (Buffer.byteLength(socketPath) > 103) throw new Error('Native worker control socket path is too long.');
+  let socketPath;
+  let socketDirectory;
   const token = randomBytes(32).toString('hex');
   const boot = await bootId();
   let socket;
@@ -63,10 +64,14 @@ export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command:
   const closeTransport = () => {
     closed = true;
     socket?.destroy();
-    closeServer ??= new Promise((resolve, reject) => {
-      if (!server.listening) { resolve(); return; }
-      server.close(error => error ? reject(error) : resolve());
-    });
+    closeServer ??= (async () => {
+      await new Promise((resolve, reject) => {
+        if (!server.listening) { resolve(); return; }
+        server.close(error => error ? reject(error) : resolve());
+      });
+      await socketDirectory?.close();
+      socketDirectory = undefined;
+    })();
     return closeServer;
   };
   const matching = async () => {
@@ -95,6 +100,14 @@ export async function prepareLinuxWorker({ owner: suppliedOwner, saved, command:
     return values[1] === '1';
   };
   try {
+    socketDirectory = await open(control, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    const retained = await socketDirectory.stat();
+    const named = await lstat(control);
+    if (!named.isDirectory() || named.isSymbolicLink() || retained.dev !== named.dev || retained.ino !== named.ino
+      || retained.uid !== 0 || retained.mode & 0o077) throw new Error('Worker socket control directory changed.');
+    // Keep the socket inside the private control directory without sun_path's full-path limit.
+    socketPath = `/proc/${process.pid}/fd/${socketDirectory.fd}/w-${owner.workerId}.sock`;
+    if (Buffer.byteLength(socketPath) > 103) throw new Error('Native worker socket descriptor path is too long.');
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socketPath, resolve); });
     signal?.throwIfAborted();
     creationAttempted = true;
