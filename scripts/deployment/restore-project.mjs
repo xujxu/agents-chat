@@ -10,6 +10,7 @@ import { canonicalWorkerDirectory, closeWorkerFile, syncWorkerDirectory } from '
 import { readSnapshotGit } from './snapshot-git.mjs';
 import { restoreGitMetadata } from './restore-git.mjs';
 import { inspectGitMetadata } from './git-metadata.mjs';
+import { restoreGitObjects } from './git-objects.mjs';
 
 const inside = (parent, child) => child === parent || child.startsWith(parent + path.sep);
 const depth = entry => entry.path.split('/').length;
@@ -55,7 +56,7 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
   const names = await includedNames();
   // Inspect caches too: deletion must not traverse hidden mounts or nested worktrees.
   const current = names.length ? await inventorySnapshot(root, names, { signal }) : [];
-  const bytes = manifest.entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), 0);
+  const bytes = manifest.entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), manifest.gitObjects?.bytes ?? 0);
   if (!Number.isSafeInteger(bytes)) throw new Error('Restore capacity exceeds safe byte range.');
   const capacity = await statfs(root, { bigint: true });
   if (capacity.bavail * capacity.bsize < BigInt(bytes)) throw new Error('Insufficient space for project restoration.');
@@ -64,6 +65,9 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
     throw new Error('Restore backup or project scope changed before mutation.');
   }
   if (manifest.gitMetadata) {
+    if (manifest.gitObjects) await restoreGitObjects({
+      project: root, backup: saved, manifest, checkStopped, signal,
+    });
     const record = await readSnapshotGit(saved, manifest);
     await restoreGitMetadata({ project: root, record, checkStopped: async () => {
       await check();

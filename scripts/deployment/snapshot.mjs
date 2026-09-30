@@ -16,6 +16,7 @@ import { captureExternalSnapshot, validateExternalSnapshot, verifyExternalSnapsh
 import { syncWorkerDirectory } from './worker-files.mjs';
 import { projectSnapshotExclusions } from './snapshot-scope.mjs';
 import { captureSnapshotGit, readSnapshotGit, validateSnapshotGit } from './snapshot-git.mjs';
+import { prepareGitObjects, readGitObjectSnapshot, validateGitObjects } from './git-objects.mjs';
 
 const projectMetadata = info => ({ mode: info.mode & 0o777, uid: info.uid, gid: info.gid });
 
@@ -50,6 +51,10 @@ function validateManifest(manifest) {
   }
   validateExternalSnapshot(manifest.externalFiles ?? [], manifest.project);
   if (manifest.gitMetadata !== undefined) validateSnapshotGit(manifest.gitMetadata);
+  if (manifest.gitObjects !== undefined) {
+    if (!manifest.gitMetadata) throw new Error('Git objects require matching snapshot metadata.');
+    validateGitObjects(manifest.gitObjects);
+  }
   const seen = new Map();
   for (const entry of manifest.entries) {
     relativeSnapshotPath(entry.path);
@@ -103,6 +108,7 @@ export async function createSnapshot({
   if (runtime?.state !== 'stopped') throw new Error('Snapshot requires a stopped runtime.');
   const root = await realDirectory(project);
   const rootInfo = await lstat(root);
+  const objects = git ? await prepareGitObjects({ project: root, commit: source.commit, signal }) : null;
   if (rootInfo.mode & 0o7000 || typeof projectScope !== 'boolean') throw new Error('Unsupported project snapshot metadata.');
   const checkProject = async () => {
     signal?.throwIfAborted();
@@ -131,19 +137,24 @@ export async function createSnapshot({
     scope: projectScope ? 'project' : 'selected', projectMetadata: projectMetadata(rootInfo),
     externalFiles: external.entries,
     ...(git ? { gitMetadata: git.descriptor } : {}),
+    ...(objects ? { gitObjects: { version: 1, bytes: objects.bytes, sha256: '0'.repeat(64) } } : {}),
     entries: entries.map(entry => entry.kind === 'file' ? { ...entry, sha256: '0'.repeat(64) } : entry),
   };
   validateManifest(manifest);
   const manifestBytes = Buffer.byteLength(JSON.stringify(manifest));
   if (manifestBytes > 32 * 1024 * 1024) throw new Error('Snapshot manifest exceeds size limit.');
-  const snapshotBytes = entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), external.bytes + (git?.bytes.length ?? 0));
-  const required = estimateRequiredBytes({ snapshotBytes, metadataBytes: manifestBytes + 64 * 1024, deploymentBytes: 0 });
+  const snapshotBytes = entries.reduce((sum, entry) => sum + (entry.bytes ?? 0),
+    external.bytes + (git?.bytes.length ?? 0) + (objects?.bytes ?? 0));
+  const required = estimateRequiredBytes({
+    snapshotBytes, metadataBytes: manifestBytes + 64 * 1024 + (objects ? 32 * 1024 * 1024 : 0), deploymentBytes: 0,
+  });
   const space = await statfs(parent, { bigint: true });
   if (space.bavail * space.bsize < BigInt(required)) throw new Error('Insufficient space for snapshot bytes.');
   signal?.throwIfAborted();
   await mkdir(target, { mode: 0o700 });
   await writePrivateFile(path.join(target, 'owner.json'), JSON.stringify({ version: 1, project: root, id }));
   if (git) await writePrivateFile(path.join(target, 'git.json'), git.bytes);
+  if (objects) manifest.gitObjects = await objects.copy(path.join(target, 'git-objects'));
   const contents = path.join(target, 'files');
   await mkdir(contents, { mode: 0o700 });
   const ordered = [...manifest.entries].sort((a, b) => a.path.split('/').length - b.path.split('/').length);
@@ -185,6 +196,7 @@ export async function createSnapshot({
   signal?.throwIfAborted();
   await checkSource?.();
   if (git) await gitMetadata.check();
+  await objects?.check();
   await checkProject();
   await assertSnapshotAbsent(root, absentPaths);
   if (!same(entries, await captureSnapshotInventory(root, files, { signal, excludedPaths }))) {
@@ -209,6 +221,7 @@ export async function createSnapshot({
   if (external.entries.length) await syncWorkerDirectory(path.join(target, 'external'));
   await syncWorkerDirectory(target);
   if (git) await gitMetadata.check();
+  await objects?.check();
   signal?.throwIfAborted();
   await writePrivateFile(path.join(target, 'complete.json'), JSON.stringify({
     version: 1, id, sha256: manifestDigest,
@@ -242,12 +255,14 @@ async function verifySnapshotContents(root, manifest, { signal, complete = true 
   }
   const topLevel = (await readdir(root)).sort();
   const expectedTopLevel = [...(complete ? ['complete.json'] : []), 'files', 'manifest.json', 'owner.json',
-    ...(manifest.externalFiles?.length ? ['external'] : []), ...(manifest.gitMetadata ? ['git.json'] : [])].sort();
+    ...(manifest.externalFiles?.length ? ['external'] : []), ...(manifest.gitMetadata ? ['git.json'] : []),
+    ...(manifest.gitObjects ? ['git-objects'] : [])].sort();
   if (JSON.stringify(topLevel) !== JSON.stringify(expectedTopLevel)) {
     throw new Error('Unexpected snapshot files; inspection required.');
   }
   await verifyExternalSnapshot(root, manifest.externalFiles ?? [], signal);
   if (manifest.gitMetadata) await readSnapshotGit(root, manifest);
+  if (manifest.gitObjects) await readGitObjectSnapshot(root, manifest, { signal });
   const contents = await realDirectory(path.join(root, 'files'));
   await assertSnapshotAbsent(contents, manifest.absentPaths ?? []);
   const observed = await inventorySnapshot(contents, await readdir(contents), { signal });

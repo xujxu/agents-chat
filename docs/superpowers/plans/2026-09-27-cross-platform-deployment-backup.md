@@ -4986,6 +4986,34 @@ remains historical evidence while state becomes `restored`, not `accepted`.
 This tests the composition-to-recovery handoff; it still does not establish
 historical application/database continuity.
 
+### Self-contained Git object payload
+
+`65bf0bd` / `36600220171` passed all twelve jobs, including composed application
+deployment followed by saved external no-build restoration. Object causal
+`1deabdf` / `36602661062` then failed both contract platforms as intended:
+no object descriptor, accepted external alternates, and Linux restored HEAD
+without the deleted packed objects needed by `git show`.
+
+`git-objects.mjs` reuses the existing complete snapshot copy/hash/inventory
+implementation for a single nested `git-objects` payload. Its manifest digest
+and total bytes are bound into the application manifest; nested payloads cannot
+contain further Git payloads or external files. Capture accepts canonical loose
+objects and complete pack/index pairs (optional rev/bitmap), rejects links,
+alternates, promisor packs, writer files and unsupported auxiliary layouts,
+and rechecks original bytes before the outer completion marker. Both snapshot
+and deployment/restore capacity calculations include object storage. The saved
+recovery closure includes the helper, so offline recovery has no checkout import.
+
+Linux restore adds missing objects before publishing HEAD/index, preserves newer
+objects and refuses differing existing object bytes instead of overwriting them.
+Private staged copies are checked, metadata-restored, synced and exclusively
+linked into place. Reentry handles a complete staged file and the linked-but-not-
+unlinked publication window. Incomplete stages remain explicit recovery blockers;
+this is not yet automatic recovery from death at every byte of object copying.
+Existing metadata-only snapshots remain readable and retain their old object-
+availability limitation. This preserves the captured object store; it does not
+claim a new Git connectivity audit of arbitrary already-corrupt repositories.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

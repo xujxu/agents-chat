@@ -12,6 +12,7 @@ import { createWorkerOperation } from './worker-operation.mjs';
 import { prepareLinuxSourceBuild } from './linux-source-build.mjs';
 import { admitLinuxCompatibility } from './linux-compatibility.mjs';
 import { inspectSnapshotScope } from './snapshot-scope.mjs';
+import { prepareGitObjects } from './git-objects.mjs';
 import { createLinuxServiceSnapshot } from './linux-snapshot.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { reconcileSnapshotSlots, rotateSnapshot } from './snapshot-rotation.mjs';
@@ -115,7 +116,8 @@ export async function runLinuxLiveDeployment({
         const slots = await reconcileSnapshotSlots(control, { project });
         if (!['empty', 'retained'].includes(slots.status)) throw new Error('Unfinished snapshot rotation requires recovery before downtime.');
         const scope = await inspectSnapshotScope({ project, signal: stageSignal });
-        let bytes = BigInt(scope.snapshotBytes) + 48n * 1024n ** 2n;
+        const objects = await prepareGitObjects({ project, commit: source.commit, signal: stageSignal });
+        let bytes = BigInt(scope.snapshotBytes) + BigInt(objects.bytes) + 80n * 1024n ** 2n;
         const external = new Set([...service.identity.sources, ...admission.configuration.files]
           .filter(file => !file.path.startsWith(`${project}${path.sep}`)).map(file => file.path));
         for (const file of external) {

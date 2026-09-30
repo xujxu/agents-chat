@@ -71,7 +71,7 @@ export async function runLinuxLiveRestore({
           prior.bytes += BigInt(bytes);
           budgets.set(dev, prior);
         };
-        const bytes = snapshot.entries.reduce((total, entry) => total + (entry.bytes ?? 0), 0);
+        const bytes = snapshot.entries.reduce((total, entry) => total + (entry.bytes ?? 0), snapshot.gitObjects?.bytes ?? 0);
         if (!Number.isSafeInteger(bytes)) throw new Error('Restore capacity exceeds safe byte range.');
         await add(project, bytes);
         for (const entry of snapshot.externalFiles) await add(path.dirname(entry.path), entry.bytes ?? 0);
