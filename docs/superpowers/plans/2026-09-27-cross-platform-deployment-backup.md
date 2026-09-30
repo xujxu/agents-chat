@@ -5134,6 +5134,23 @@ Native tests cover nonroot service discovery, wrong project, a direct Node
 command and stopped service. Feed discovered authority to the existing native
 controller in actual lifecycle scenarios; this is not first-install support.
 
+Discovery checkpoint: `2bb223e` / Actions `36732150329` passed all 15 jobs.
+The causal `cbb35c1` / `36731984066` failed exactly the two missing discovery
+function tests. Actual source-based lifecycle scenarios now enter through
+discovered installed executables.
+
+Next command composition boundary: normalize update arguments before inspecting
+the host; derive a private sibling control directory from the canonical project;
+inspect status without creating that directory; reject foreign/incomplete state
+before acquiring a lock. Discover the running service and obtain npm environment
+from retained installed configuration plus account/home/executable-path defaults,
+never the controller environment. Use `/usr/bin/git` with a clear prerequisite
+refusal if unavailable. Invoke the existing controller under a caller-owned lock,
+closing only unchanged pre-transaction admission on failure. Initially refuse
+dry-run, verify and wait=0 explicitly before side effects rather than pretending
+those unsupported native paths work. Keep this internal until public command
+help and supported-mode coverage are ready; first install remains a separate gate.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

@@ -50,7 +50,7 @@ RestartSec=1s
 KillMode=control-group
 SendSIGKILL=yes
 TimeoutStopSec=2s
-${settings}
+${typeof settings === 'function' ? settings({ project }) : settings}
 `;
   t.after(async () => {
     const state = (await systemctl('show', unit, '--property=ActiveState,SubState,Result')).stdout;

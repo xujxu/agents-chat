@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import test from 'node:test';
-import { fixture, ready, node } from './deployment-linux-service-fixture.mjs';
+import { fixture, ready, node, quote } from './deployment-linux-service-fixture.mjs';
 import { inspectInstalledLinuxService, inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { acquireLock, loadState } from '../scripts/deployment/state.mjs';
 import { runLinuxLiveDeployment } from '../scripts/deployment/linux-deployment.mjs';
@@ -26,8 +26,41 @@ Environment=NEXTAUTH_URL=http://localhost:3010
 Environment=ADMIN_USERNAME=fixture
 Environment=ADMIN_PASSWORD=private-fixture-password`;
 
+test('native deployment refuses unsupported command modes without creating control files', async t => {
+  const f = await fixture(t);
+  await ready(f);
+  const { runLinuxUpdateCommand } = await import('../scripts/deployment/linux-update-command.mjs');
+  const before = (await readdir(path.dirname(f.project))).sort();
+  for (const flags of [['--dry-run'], ['--verify'], ['--wait', '0']]) {
+    await assert.rejects(runLinuxUpdateCommand({
+      args: ['--project-dir', f.project, ...flags], unit: f.unit,
+    }), { code: 'DEPLOYMENT_COMMAND_MODE_UNSUPPORTED' });
+  }
+  assert.deepEqual((await readdir(path.dirname(f.project))).sort(), before);
+});
+
+test('native deployment refuses foreign command state and status never initializes control', async t => {
+  const f = await fixture(t);
+  await ready(f);
+  const { runLinuxUpdateCommand } = await import('../scripts/deployment/linux-update-command.mjs');
+  const args = ['--project-dir', f.project, '--status'];
+  const control = path.join(path.dirname(f.project), `.${path.basename(f.project)}.deployment`);
+  assert.deepEqual(await runLinuxUpdateCommand({ args, unit: f.unit }), {
+    status: 'unmanaged', project: f.project, control, phase: null,
+  });
+  await assert.rejects(readdir(control), { code: 'ENOENT' });
+  await mkdir(control, { mode: 0o700 });
+  await writeFile(path.join(control, 'foreign-evidence'), 'preserve');
+  await assert.rejects(runLinuxUpdateCommand({ args: ['--project-dir', f.project], unit: f.unit }),
+    { code: 'DEPLOYMENT_CONTROL_UNBOUND' });
+  assert.equal(await readFile(path.join(control, 'foreign-evidence'), 'utf8'), 'preserve');
+  assert.deepEqual(await readdir(control), ['foreign-evidence']);
+});
+
 async function installation(t) {
-  const f = await fixture(t, { nonroot: true, settings, server: `
+  const f = await fixture(t, { nonroot: true,
+    settings: ({ project }) => `${settings}\nEnvironment=${quote(`npm_config_cache=${path.join(project, '.npm')}`)}`,
+    server: `
 const fs = require('node:fs');
 require('node:http').createServer((req, res) => {
   res.setHeader('Content-Type', 'application/json');
@@ -62,7 +95,7 @@ require('node:http').createServer((req, res) => {
   await own(f.project);
   const service = await inspectInstalledLinuxService({ unit: f.unit, project: f.project });
   t.after(() => service.close());
-  const control = path.join(path.dirname(f.project), 'control');
+  const control = path.join(path.dirname(f.project), `.${path.basename(f.project)}.deployment`);
   await mkdir(control, { mode: 0o700 });
   const lock = await acquireLock(control, { project: f.project, operationId: randomUUID() });
   const environment = {
@@ -135,7 +168,7 @@ test('native deployment retains backup and inhibition after actual dependency in
   await assert.rejects(inspectLinuxService(f), /running|inhibit|policy|start|service/i);
 });
 
-for (const scenario of ['synthetic', 'current', 'historical', 'rebuild']) {
+for (const scenario of ['synthetic', 'current', 'historical', 'rebuild', 'command']) {
 test(`native deployment composes real application acceptance and saved restoration (scenario=${scenario})`, {
   skip: process.env.DEPLOYMENT_TEST_REAL_DEPLOYMENT !== '1',
 }, async t => {
@@ -169,10 +202,17 @@ test(`native deployment composes real application acceptance and saved restorati
     for (let attempt = 0; attempt < 2; attempt++) {
       const service = await inspectLinuxService(f);
       t.after(() => service.close());
-      const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
-      assert.deepEqual(await runLinuxLiveDeployment({
-        ...f, service, lock, revision: f.target, timeoutSeconds: 600,
-      }), { status: 'already-current', backupCreated: false });
+      let result;
+      if (scenario === 'command') {
+        const { runLinuxUpdateCommand } = await import('../scripts/deployment/linux-update-command.mjs');
+        result = await runLinuxUpdateCommand({
+          args: ['--project-dir', f.project, '--revision', f.target, '--timeout', '600'], unit: f.unit,
+        });
+      } else {
+        const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+        result = await runLinuxLiveDeployment({ ...f, service, lock, revision: f.target, timeoutSeconds: 600 });
+      }
+      assert.deepEqual(result, { status: 'already-current', backupCreated: false });
       await service.check();
       assert.deepEqual(await readDeploymentReceipt(f.control, f.project), receipt);
       assert.deepEqual(await verifySnapshot(path.join(f.control, 'backup')), backup);
@@ -188,10 +228,20 @@ test(`native deployment composes real application acceptance and saved restorati
         await chown(file, 65534, 65534);
       }
     }
-    const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
-    assert.equal((await runLinuxLiveDeployment({
-      ...f, service, lock, revision: nextRevision, timeoutSeconds: 600,
-    })).status, 'accepted');
+    if (scenario === 'command') {
+      const { runLinuxUpdateCommand } = await import('../scripts/deployment/linux-update-command.mjs');
+      assert.equal((await runLinuxUpdateCommand({
+        args: ['--project-dir', f.project, '--revision', nextRevision, '--timeout', '600'], unit: f.unit,
+      })).status, 'accepted');
+      assert.equal((await runLinuxUpdateCommand({
+        args: ['--project-dir', f.project, '--status'], unit: f.unit,
+      })).phase, 'accepted');
+    } else {
+      const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+      assert.equal((await runLinuxLiveDeployment({
+        ...f, service, lock, revision: nextRevision, timeoutSeconds: 600,
+      })).status, 'accepted');
+    }
     assert.equal((await api(`/api/chats?id=${chatId}`)).chat.messages[0].content, 'Data before snapshot');
     const oldBackupId = backup.id;
     backup = await verifySnapshot(path.join(f.control, 'backup'));

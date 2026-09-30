@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [synthetic, current, historical, rebuild]
+        scenario: [synthetic, current, historical, rebuild, command]
     steps:
       - uses: actions/checkout@v4
         with:
