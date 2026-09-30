@@ -169,6 +169,14 @@ temporary directory, including modules needed by later dynamic imports and worke
 bootstraps. Completed commands remove this code-only copy; an abruptly killed
 controller may leave one under `/tmp/agents-chat-controller-*`. These directories
 contain neither application data nor configuration and are not recovery authority.
+To restore the retained backup, use
+`sudo bash scripts/restore.sh --project-dir /absolute/installed/checkout --accept-data-loss`.
+Export newer data first: restoration replaces application data with its backup
+version. The command verifies and invokes the saved external recovery engine;
+it does not fetch Git objects, install dependencies or build the application.
+It accepts `--json` and `--timeout SECONDS` (per-stage, default 1800); `--help`
+lists its requirements. If the selected historical source has no restore script,
+run this command from a separate tools checkout and specify the installed path.
 Use `--help` for supported flags, `--status --json` for read-only status, and
 `--json` for machine-readable outcomes (progress/errors remain on stderr).
 The controller requires Node.js 24+, `/usr/bin/git`, systemd, port 3010, and a
