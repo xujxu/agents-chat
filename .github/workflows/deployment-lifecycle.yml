@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [synthetic, current, historical]
+        scenario: [synthetic, current, historical, rebuild]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,7 +52,11 @@ jobs:
       - name: Update running fixture into actual application with owned source build
         run: |
           sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
-          sudo env DEPLOYMENT_TEST_REAL_DEPLOYMENT=1 "$(command -v node)" --test "--test-name-pattern=scenario=${{ matrix.scenario }}|^native deployment (refuses|restores prior|retains)" tests/deployment-linux-deployment.test.mjs
+          pattern='scenario=${{ matrix.scenario }}'
+          if [ '${{ matrix.scenario }}' = synthetic ]; then
+            pattern="$pattern|^native deployment (refuses|restores prior|retains)"
+          fi
+          sudo env DEPLOYMENT_TEST_REAL_DEPLOYMENT=1 "$(command -v node)" --test "--test-name-pattern=$pattern" tests/deployment-linux-deployment.test.mjs
 
   application-build:
     name: Owned application build (${{ matrix.os }})

@@ -135,13 +135,13 @@ test('native deployment retains backup and inhibition after actual dependency in
   await assert.rejects(inspectLinuxService(f), /running|inhibit|policy|start|service/i);
 });
 
-for (const scenario of ['synthetic', 'current', 'historical']) {
+for (const scenario of ['synthetic', 'current', 'historical', 'rebuild']) {
 test(`native deployment composes real application acceptance and saved restoration (scenario=${scenario})`, {
   skip: process.env.DEPLOYMENT_TEST_REAL_DEPLOYMENT !== '1',
 }, async t => {
   const f = await installation(t);
   const secondUpdate = scenario !== 'synthetic';
-  const nextRevision = scenario === 'historical' ? f.target : f.nextTarget;
+  const nextRevision = ['historical', 'rebuild'].includes(scenario) ? f.target : f.nextTarget;
   if (scenario === 'historical') f.target = '638c553c62406dbb7e6b5aeb41cdddf4cd6de179';
   const result = await runLinuxLiveDeployment({ ...f, revision: f.target, timeoutSeconds: 600 });
   assert.equal(result.status, 'accepted');
@@ -181,6 +181,13 @@ test(`native deployment composes real application acceptance and saved restorati
     }
     const service = await inspectLinuxService(f);
     t.after(() => service.close());
+    if (scenario === 'rebuild') {
+      for (const directory of ['.next', 'node_modules']) {
+        const file = path.join(f.project, directory, 'deployment-altered-artifact');
+        await writeFile(file, 'changed after accepted deployment\n');
+        await chown(file, 65534, 65534);
+      }
+    }
     const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
     assert.equal((await runLinuxLiveDeployment({
       ...f, service, lock, revision: nextRevision, timeoutSeconds: 600,
@@ -192,6 +199,14 @@ test(`native deployment composes real application acceptance and saved restorati
     assert.equal(backup.source.commit, f.target);
     receipt = await readDeploymentReceipt(f.control, f.project);
     assert.equal(receipt.identity.source, nextRevision);
+    if (scenario === 'rebuild') {
+      for (const directory of ['.next', 'node_modules']) {
+        await assert.rejects(readFile(path.join(f.project, directory, 'deployment-altered-artifact')), { code: 'ENOENT' });
+      }
+      const fresh = await inspectLinuxService(f);
+      t.after(() => fresh.close());
+      assert.notEqual(fresh.identity.runtime.invocationId, service.identity.runtime.invocationId);
+    }
     expectedCommit = f.target;
     assert.equal((await api('/api/chats', { action: 'rename', chatId, name: 'After snapshot' })).ok, true);
     assert.equal((await api(`/api/chats?id=${chatId}`)).chat.name, 'After snapshot');
@@ -226,6 +241,12 @@ test(`native deployment composes real application acceptance and saved restorati
     const restoredChat = (await api(`/api/chats?id=${chatId}`)).chat;
     assert.equal(restoredChat.name, 'Preserved before second update');
     assert.equal(restoredChat.messages[0].content, 'Data before snapshot');
+  }
+  if (scenario === 'rebuild') {
+    for (const directory of ['.next', 'node_modules']) {
+      assert.equal(await readFile(path.join(f.project, directory, 'deployment-altered-artifact'), 'utf8'),
+        'changed after accepted deployment\n');
+    }
   }
   assert.deepEqual(await verifySnapshot(path.join(f.control, 'backup')), backup);
   assert.deepEqual(await readDeploymentReceipt(f.control, f.project), receipt);

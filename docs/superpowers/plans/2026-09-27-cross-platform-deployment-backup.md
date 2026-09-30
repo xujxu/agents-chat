@@ -5105,6 +5105,21 @@ Observe their failures in Actions before implementation; rerun the full native
 current/historical composition afterward. This does not yet provide public
 bootstrap, first-install configuration or changed-service-policy support.
 
+Installed configuration checkpoint: `4e8e51c` / Actions `36719176508` passed
+all 14 jobs, including real historical/current upgrade and saved restoration.
+The causal run `26b11c8` / `36718886265` failed the missing configuration-method
+contracts and native conflicting-environment refusal (the old implementation
+completed deployment rather than rejecting). Watcher HTTP 502 responses were
+monitoring failures only; reconnecting did not rerun validation.
+
+Next native acceptance case: keep the accepted source commit unchanged, add
+nonfunctional files to both `.next` and `node_modules`, and require normal
+installation/build rather than `already-current`. Assert removal of both files,
+a new runtime generation, backup rotation and unchanged chat data; saved restore
+must restore the exact pre-update files and data without install/build. Run this
+as a separate `rebuild` matrix case under the same 25-minute bound. Keep lightweight
+failure cases on the synthetic runner only instead of repeating them per scenario.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
