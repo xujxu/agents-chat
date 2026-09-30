@@ -5013,6 +5013,10 @@ this is not yet automatic recovery from death at every byte of object copying.
 Existing metadata-only snapshots remain readable and retain their old object-
 availability limitation. This preserves the captured object store; it does not
 claim a new Git connectivity audit of arbitrary already-corrupt repositories.
+Exclude `objects/info/packs`, Git's derived dumb-HTTP pack listing, from the
+payload and restore. It is not an object and may change during repacking;
+restoring an old listing would incorrectly describe a newer additive store.
+Other auxiliary entries remain explicitly refused with their relative path.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

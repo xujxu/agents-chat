@@ -26,6 +26,7 @@ async function fixture(t) {
   await git('add', 'source.txt');
   await git('commit', '-m', 'original');
   await git('repack', '-ad');
+  t.diagnostic(`Git object auxiliary inventory: ${(await readdir(path.join(project, '.git/objects/info'))).join(', ')}`);
   const commit = await git('rev-parse', 'HEAD');
   const snapshot = () => createSnapshot({
     project, destination: backup, id: 'git-objects', source: { commit, provenance: 'observed' },

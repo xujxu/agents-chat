@@ -9,6 +9,7 @@ import { captureWorkerFields } from './worker-identity.mjs';
 import { syncWorkerDirectory } from './worker-files.mjs';
 
 const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
+const excludedPaths = ['info/packs'];
 const totalBytes = entries => {
   const bytes = entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), 0);
   if (!Number.isSafeInteger(bytes)) throw new Error('Git object byte count exceeds supported capacity.');
@@ -23,7 +24,7 @@ function validateEntries(entries, commit) {
   for (const entry of entries) {
     if (entry.kind === 'directory' ? !/^(info|pack|[a-f0-9]{2})$/.test(entry.path)
       : entry.kind !== 'file' || !(loose.test(entry.path) || packed.test(entry.path))) {
-      throw new Error('Unsupported Git object entry, alternate, promisor or writer state.');
+      throw new Error(`Unsupported Git object entry, alternate, promisor or writer state: ${entry.path}`);
     }
   }
   const files = new Set(entries.filter(entry => entry.kind === 'file').map(entry => entry.path));
@@ -46,7 +47,7 @@ export async function prepareGitObjects({ project, commit, signal }) {
   const root = await realDirectory(path.join(project, '.git/objects'));
   const original = identity(await lstat(root, { bigint: true }));
   const names = (await readdir(root)).sort();
-  const entries = await inventorySnapshot(root, names, { signal });
+  const entries = await inventorySnapshot(root, names, { signal, excludedPaths });
   validateEntries(entries, commit);
   const hashes = [];
   for (const entry of entries.filter(entry => entry.kind === 'file')) {
@@ -56,7 +57,7 @@ export async function prepareGitObjects({ project, commit, signal }) {
     signal?.throwIfAborted();
     if (await realDirectory(root) !== root || !same(identity(await lstat(root, { bigint: true })), original)
       || !same((await readdir(root)).sort(), names)
-      || !same(await inventorySnapshot(root, names, { signal }), entries)) {
+      || !same(await inventorySnapshot(root, names, { signal, excludedPaths }), entries)) {
       throw new Error('Git object inventory changed during snapshot.');
     }
     for (const entry of hashes) {
@@ -71,7 +72,7 @@ export async function prepareGitObjects({ project, commit, signal }) {
       await check();
       await createSnapshot({ project: root, destination, id: 'git-objects', files: names,
         source: { commit, provenance: 'observed' }, runtime: { platform: process.platform, state: 'stopped' },
-        signal, checkSource: check });
+        signal, excludedPaths, checkSource: check });
       await check();
       return validateGitObjects({ version: 1, bytes: totalBytes(entries),
         sha256: await fileDigest(path.join(destination, 'manifest.json'), { signal }) });
@@ -90,7 +91,7 @@ export async function readGitObjectSnapshot(backup, manifest, { signal } = {}) {
     || record.project !== path.join(manifest.project, '.git/objects')
     || record.source?.commit !== manifest.source.commit || record.runtime?.platform !== manifest.runtime.platform
     || record.id !== 'git-objects' || record.scope !== 'selected'
-    || record.externalFiles?.length || record.absentPaths?.length || record.excludedPaths?.length) {
+    || record.externalFiles?.length || record.absentPaths?.length || !same(record.excludedPaths, excludedPaths)) {
     throw new Error('Git object snapshot binding is invalid.');
   }
   validateEntries(record.entries, manifest.source.commit);
