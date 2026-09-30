@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [synthetic, current, historical, rebuild, command]
+        scenario: [synthetic, current, historical, rebuild, command, inplace]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -189,7 +189,7 @@ jobs:
       - name: Characterize retained cgroup observation
         run: sudo "$(command -v node)" tests/deployment-linux-domain-probe.mjs
       - name: Exercise actual saved-engine systemd workers
-        run: sudo env "DEPLOYMENT_TEST_GIT=$(command -v git)" "DEPLOYMENT_TEST_NPM_CLI=$(readlink -f "$(command -v npm)")" "$(command -v node)" --test tests/deployment-linux-worker.test.mjs tests/deployment-native-operation.test.mjs tests/deployment-linux-runtime.test.mjs tests/deployment-linux-service.test.mjs tests/deployment-linux-configuration.test.mjs
+        run: sudo env "DEPLOYMENT_TEST_GIT=$(command -v git)" "DEPLOYMENT_TEST_NPM_CLI=$(readlink -f "$(command -v npm)")" "$(command -v node)" --test tests/deployment-linux-worker.test.mjs tests/deployment-native-operation.test.mjs tests/deployment-linux-runtime.test.mjs tests/deployment-linux-service.test.mjs tests/deployment-linux-configuration.test.mjs tests/deployment-controller-capture.test.mjs
 
   linux-service-recovery:
     name: Native Linux service recovery

@@ -5188,6 +5188,26 @@ controller has an independently captured module closure. Status/help remain
 available without that restriction. Document and test the explicit refusal
 instead of allowing historical selection to remove a later-needed controller.
 
+### Removing the in-place controller restriction
+
+Capture the complete flat deployment-helper inventory plus its external
+`lib/workflow/workflowSchema.mjs` dependency into a root-private temporary
+directory before loading the controller or changing project/control state.
+Keep the original relative layout for dynamic imports and file-based worker
+bootstrap capture. Reject links, directories, unknown extensions, oversized
+files and changing source inventories; recheck all captured bytes before import.
+Bound capture memory to one helper file at a time. Run only the copied command
+module, retain it through cleanup, and delete only the same owned temporary
+directory afterward. An abruptly killed controller can leave this code-only
+temporary directory; it contains no config, data or credentials and is not
+recovery authority. Permanent recovery helpers remain in the control directory.
+
+An independent Actions case invokes the actual script inside the installed
+checkout (no --project-dir), then selects exact historical source that removes
+that script and its controller modules. Require completed acceptance, unchanged
+chat data, no remaining worker lock and saved restoration to the prior current
+source. Read-only status/help must not capture or write temporary helpers.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

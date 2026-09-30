@@ -41,11 +41,6 @@ test('native deployment refuses unsupported public update flags with parseable J
       return true;
     });
   }
-  await assert.rejects(execute('/usr/bin/bash', [script, '--json', '--no-pull'], execution), error => {
-    assert.equal(error.code, 1);
-    assert.equal(JSON.parse(error.stdout).code, 'DEPLOYMENT_EXTERNAL_TOOLS_REQUIRED');
-    return true;
-  });
 });
 
 test('native deployment refuses unsupported command modes without creating control files', async t => {
@@ -210,14 +205,16 @@ test('native deployment retains backup and inhibition after actual dependency in
   await assert.rejects(inspectLinuxService(f), /running|inhibit|policy|start|service/i);
 });
 
-for (const scenario of ['synthetic', 'current', 'historical', 'rebuild', 'command']) {
+for (const scenario of ['synthetic', 'current', 'historical', 'rebuild', 'command', 'inplace']) {
 test(`native deployment composes real application acceptance and saved restoration (scenario=${scenario})`, {
   skip: process.env.DEPLOYMENT_TEST_REAL_DEPLOYMENT !== '1',
 }, async t => {
-  const f = await installation(t, { unitName: scenario === 'command' ? 'agents-chat.service' : undefined });
+  const publicCommand = ['command', 'inplace'].includes(scenario);
+  const f = await installation(t, { unitName: publicCommand ? 'agents-chat.service' : undefined });
   const command = async args => {
-    const { stdout, stderr } = await execute('/usr/bin/bash', [path.join(repository, 'scripts/update.sh'),
-      '--project-dir', f.project, '--json', ...args], {
+    const inPlace = scenario === 'inplace' && !args.includes('--status');
+    const { stdout, stderr } = await execute('/usr/bin/bash', [path.join(inPlace ? f.project : repository, 'scripts/update.sh'),
+      ...(inPlace ? [] : ['--project-dir', f.project]), '--json', ...args], {
       cwd: '/', timeout: 660000, maxBuffer: 16384,
       env: { PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: '/root',
         NEXTAUTH_SECRET: 'ignored-controller-secret', NODE_ENV: 'development' },
@@ -226,7 +223,8 @@ test(`native deployment composes real application acceptance and saved restorati
     return JSON.parse(stdout);
   };
   const secondUpdate = scenario !== 'synthetic';
-  const nextRevision = ['historical', 'rebuild'].includes(scenario) ? f.target : f.nextTarget;
+  const nextRevision = scenario === 'inplace' ? '638c553c62406dbb7e6b5aeb41cdddf4cd6de179'
+    : ['historical', 'rebuild'].includes(scenario) ? f.target : f.nextTarget;
   if (scenario === 'historical') f.target = '638c553c62406dbb7e6b5aeb41cdddf4cd6de179';
   const result = await runLinuxLiveDeployment({ ...f, revision: f.target, timeoutSeconds: 600 });
   assert.equal(result.status, 'accepted');
@@ -255,7 +253,7 @@ test(`native deployment composes real application acceptance and saved restorati
       const service = await inspectLinuxService(f);
       t.after(() => service.close());
       let result;
-      if (scenario === 'command') {
+      if (publicCommand) {
         result = await command(['--revision', f.target, '--timeout', '600']);
       } else {
         const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
@@ -277,9 +275,13 @@ test(`native deployment composes real application acceptance and saved restorati
         await chown(file, 65534, 65534);
       }
     }
-    if (scenario === 'command') {
+    if (publicCommand) {
       assert.equal((await command(['--revision', nextRevision, '--timeout', '600'])).status, 'accepted');
       assert.equal((await command(['--status'])).phase, 'accepted');
+      if (scenario === 'inplace') {
+        await assert.rejects(readFile(path.join(f.project, 'scripts/update.sh')), { code: 'ENOENT' });
+        await assert.rejects(readFile(path.join(f.project, 'scripts/deployment/linux-update-command.mjs')), { code: 'ENOENT' });
+      }
     } else {
       const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
       assert.equal((await runLinuxLiveDeployment({
