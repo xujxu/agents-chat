@@ -5065,6 +5065,14 @@ retired, while service generation, backup and deployment receipt are untouched.
 Real application tests require two consecutive no-ops before the distinct
 revision update and subsequent chat-data restore.
 
+Historical run `42e7e92` / `36710043285` reached the 25-minute job limit:
+synthetic completed in 219 seconds and current-source data continuity in
+773 seconds, leaving insufficient time for historical acceptance. It is
+cancelled, not a passing historical gate. Separate the three independent
+scenarios into Actions matrix jobs, each retaining the same 25-minute ceiling
+and failure contracts. Do not raise stage deadlines or retry the interrupted
+scenario into an assumed success.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
