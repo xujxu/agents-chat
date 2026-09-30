@@ -5231,6 +5231,16 @@ public shell command after deleting live Git pack files, preserving their
 existing source/artifact/chat restoration assertions. Missing acknowledgement
 must fail before backup inspection or runtime changes.
 
+Public restore implementation `3281e87` is running in Actions `36749424798`.
+Causal `f17f07a` / `36749214388` completed with exactly the three expected
+missing-shell failures in the acknowledgement, external-command and in-place
+scenarios; the other 14 jobs passed.
+The saved engine format and helper closure remain unchanged. Additional focused
+native admission coverage uses a deliberately different saved helper inventory
+without importing it, and rejects checksum, inventory, symlink, permission and
+traversal failures plus foreign-project, partial-scope and Windows backups.
+Admission must leave control-directory contents unchanged in all these cases.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
