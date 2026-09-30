@@ -5034,6 +5034,13 @@ application revision. Rename the conversation after that snapshot, restore
 with the saved external entry, and require the old name/messages plus the
 first application commit. This exercises SQLite/API continuity and backup
 rotation but is not the exact historical-baseline or Windows lifecycle gate.
+Add the same API sequence using exact reviewed baseline
+`638c553c62406dbb7e6b5aeb41cdddf4cd6de179` as the first real application,
+then the current target, then saved no-build restoration to the baseline.
+The baseline's tracked `agents.json` blob matches the current target, so this
+does not bypass the deliberate tracked-runtime-configuration refusal.
+The initial service remains a synthetic bootstrap: first-install/public
+wrapper acceptance and all Windows lifecycle acceptance remain outstanding.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

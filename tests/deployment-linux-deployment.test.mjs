@@ -125,11 +125,14 @@ test('native deployment retains backup and inhibition after actual dependency in
   await assert.rejects(inspectLinuxService(f), /running|inhibit|policy|start|service/i);
 });
 
-for (const secondUpdate of [false, true]) {
-test(`native deployment composes real application acceptance and saved restoration (secondUpdate=${secondUpdate})`, {
+for (const scenario of ['synthetic', 'current', 'historical']) {
+test(`native deployment composes real application acceptance and saved restoration (scenario=${scenario})`, {
   skip: process.env.DEPLOYMENT_TEST_REAL_DEPLOYMENT !== '1',
 }, async t => {
   const f = await installation(t);
+  const secondUpdate = scenario !== 'synthetic';
+  const nextRevision = scenario === 'historical' ? f.target : f.nextTarget;
+  if (scenario === 'historical') f.target = '638c553c62406dbb7e6b5aeb41cdddf4cd6de179';
   const result = await runLinuxLiveDeployment({ ...f, revision: f.target, timeoutSeconds: 600 });
   assert.equal(result.status, 'accepted');
   assert.equal(result.backupCreated, true);
@@ -157,7 +160,7 @@ test(`native deployment composes real application acceptance and saved restorati
     t.after(() => service.close());
     const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
     assert.equal((await runLinuxLiveDeployment({
-      ...f, service, lock, revision: f.nextTarget, timeoutSeconds: 600,
+      ...f, service, lock, revision: nextRevision, timeoutSeconds: 600,
     })).status, 'accepted');
     assert.equal((await api(`/api/chats?id=${chatId}`)).chat.messages[0].content, 'Data before snapshot');
     const oldBackupId = backup.id;
@@ -165,7 +168,7 @@ test(`native deployment composes real application acceptance and saved restorati
     assert.notEqual(backup.id, oldBackupId);
     assert.equal(backup.source.commit, f.target);
     receipt = await readDeploymentReceipt(f.control, f.project);
-    assert.equal(receipt.identity.source, f.nextTarget);
+    assert.equal(receipt.identity.source, nextRevision);
     expectedCommit = f.target;
     assert.equal((await api('/api/chats', { action: 'rename', chatId, name: 'After snapshot' })).ok, true);
     assert.equal((await api(`/api/chats?id=${chatId}`)).chat.name, 'After snapshot');
