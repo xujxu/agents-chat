@@ -5073,6 +5073,20 @@ scenarios into Actions matrix jobs, each retaining the same 25-minute ceiling
 and failure contracts. Do not raise stage deadlines or retry the interrupted
 scenario into an assumed success.
 
+Acceptance checkpoint: `f41b4f5` / Actions `36713981704` passed all 14 jobs.
+The isolated historical scenario deployed exact
+`638c553c62406dbb7e6b5aeb41cdddf4cd6de179`, authenticated through real CSRF and
+credentials endpoints, preserved chat data across upgrade to current source,
+and restored the historical source and pre-snapshot chat data through the
+external saved entry. Historical and current scenarios both verified two
+consecutive no-op updates without service-generation, receipt or backup changes.
+The earlier causal run `319c984` / `36711326112` failed both no-op lifecycle
+assertions (accepted/new backup instead of already-current/no backup) and
+both state contract jobs; its Linux build job never acquired a runner after
+five attempts and is not application regression evidence.
+This accepts the existing-running Linux internal controller, not first install,
+public commands, no-wait verification, Windows lifecycle or physical delivery.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
