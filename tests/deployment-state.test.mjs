@@ -86,6 +86,25 @@ test('update cannot replace dependencies before a complete backup', () => {
   assert.throws(() => nextPhase('invented', 'accepted'), /phase/i);
 });
 
+test('already-current closes only a verified preflight with equal source and target', async t => {
+  const root = await temporaryDeployment(t);
+  const base = {
+    version: 1, operationId: 'noop', project: root, operation: 'update',
+    phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'a'.repeat(40),
+    backupId: 'retained', priorRuntime: 'running', runtimeIdentity: 'fixture',
+    startedAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z', errorCode: null,
+  };
+  await writeState(root, base);
+  const terminal = { ...base, phase: 'already-current', previousPhase: 'preflight' };
+  for (const patch of [{ operation: 'deploy' }, { targetCommit: 'b'.repeat(40) }, { sourceCommit: null },
+    { priorRuntime: 'stopped' }, { errorCode: 'FAILED' }, { previousPhase: 'building' }]) {
+    await assert.rejects(writeState(root, { ...terminal, ...patch }));
+  }
+  await writeState(root, terminal);
+  assert.equal((await reconcileInterruptedOperation(root)).status, 'already-current');
+  await writeState(root, { ...base, operationId: 'next' });
+});
+
 test('failure exposes a concrete recovery command without claiming rollback', () => {
   const command = "sudo bash '/srv/.chat.deployment/restore.sh'";
   const advice = recoveryAdvice({

@@ -156,6 +156,19 @@ test(`native deployment composes real application acceptance and saved restorati
     assert.equal((await api('/api/chats', { chat })).ok, true);
     const before = (await api(`/api/chats?id=${chatId}`)).chat;
     assert.equal(before.messages[0].content, 'Data before snapshot');
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const service = await inspectLinuxService(f);
+      t.after(() => service.close());
+      const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+      assert.deepEqual(await runLinuxLiveDeployment({
+        ...f, service, lock, revision: f.target, timeoutSeconds: 600,
+      }), { status: 'already-current', backupCreated: false });
+      await service.check();
+      assert.deepEqual(await readDeploymentReceipt(f.control, f.project), receipt);
+      assert.deepEqual(await verifySnapshot(path.join(f.control, 'backup')), backup);
+      assert.equal((await loadState(f.control)).phase, 'already-current');
+      assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'recovery-engine', 'state.json']);
+    }
     const service = await inspectLinuxService(f);
     t.after(() => service.close());
     const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
