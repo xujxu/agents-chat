@@ -163,9 +163,12 @@ Logs are written to `logs/service-watchdog.log` and `logs/start-service-child.lo
 `sudo bash scripts/update.sh --project-dir /absolute/installed/checkout` updates
 an **existing running** `agents-chat.service` using its installed account,
 Node/npm and configuration, rather than the invoking user's environment.
-Run these tools from a **separate checkout** outside the installed project:
-in-place controller capture is not yet wired, so updating the tools checkout
-itself is refused before mutation.
+It supports execution inside the installed checkout or from separate tools via
+`--project-dir`. Before source replacement it captures controller code in a private
+temporary directory, including modules needed by later dynamic imports and worker
+bootstraps. Completed commands remove this code-only copy; an abruptly killed
+controller may leave one under `/tmp/agents-chat-controller-*`. These directories
+contain neither application data nor configuration and are not recovery authority.
 Use `--help` for supported flags, `--status --json` for read-only status, and
 `--json` for machine-readable outcomes (progress/errors remain on stderr).
 The controller requires Node.js 24+, `/usr/bin/git`, systemd, port 3010, and a
