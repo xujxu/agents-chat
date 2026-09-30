@@ -6,6 +6,11 @@ import { authenticationEnvironmentNames, inspectConfigurationCompatibility } fro
 import { realDirectory } from './snapshot-files.mjs';
 
 const dotenvNames = ['.env.production.local', '.env.local', '.env.production', '.env'];
+const buildOperationalNames = new Set([
+  'PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'TMP', 'TEMP',
+  'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT',
+  'NPM_CONFIG_CACHE', 'NEXT_TELEMETRY_DISABLED', 'CI',
+]);
 const maxBytes = 1024 * 1024;
 const identity = info => ({
   dev: info.dev, ino: info.ino, size: info.size, mode: info.mode, nlink: info.nlink,
@@ -153,9 +158,23 @@ export async function inspectConfigurationFiles({
       }
     };
     await check();
+    const buildEnvironment = supplied => {
+      const overrides = copyEnvironment(supplied);
+      const installed = { ...effective, NODE_ENV: effective.NODE_ENV ?? 'production' };
+      if (installed.NODE_ENV !== 'production' || Object.keys(installed).some(name =>
+        ['NODE_OPTIONS', 'NODE_PATH', '__NEXT_PROCESSED_ENV'].includes(name.toUpperCase()))) {
+        throw refusal('build-environment-policy');
+      }
+      for (const [name, value] of Object.entries(overrides)) {
+        if (Object.hasOwn(installed, name)
+          ? installed[name] !== value
+          : !buildOperationalNames.has(name.toUpperCase())) throw refusal('build-environment-conflict');
+      }
+      return Object.freeze({ ...overrides, ...installed });
+    };
     return Object.freeze({ ...result, providers: Object.freeze(result.providers),
       files: Object.freeze(retained.map(({ source, observed }) =>
-        Object.freeze({ path: source.path, kind: source.kind, present: observed !== null }))), check });
+        Object.freeze({ path: source.path, kind: source.kind, present: observed !== null }))), check, buildEnvironment });
   } catch (error) {
     signal?.throwIfAborted();
     if (error?.code === 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED') throw error;

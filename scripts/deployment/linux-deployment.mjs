@@ -49,6 +49,7 @@ export async function runLinuxLiveDeployment({
   let source;
   let target;
   let admission;
+  let buildEnvironment;
   let workers;
   let stages;
   let stopped;
@@ -114,6 +115,7 @@ export async function runLinuxLiveDeployment({
       async admit({ signal: stageSignal }) {
         await authority();
         admission = await admitLinuxCompatibility({ service, operation: workers, commit: target.commit, signal: stageSignal });
+        buildEnvironment = admission.configuration.buildEnvironment(environment);
         if (kind === 'update' && source.commit === target.commit) {
           current = await inspectCurrentLinuxDeployment({
             state: previousState, service, configuration: admission.configuration, control,
@@ -180,11 +182,13 @@ export async function runLinuxLiveDeployment({
       },
       async dependencies({ signal: stageSignal }) {
         await authority();
-        await stages.npm({ stage: 'dependencies', commit: target.commit, stopped, signal: stageSignal });
+        await stages.npm({ stage: 'dependencies', commit: target.commit, stopped,
+          environment: buildEnvironment, signal: stageSignal });
       },
       async build({ signal: stageSignal }) {
         await authority();
-        built = await stages.npm({ stage: 'build', commit: target.commit, stopped, signal: stageSignal });
+        built = await stages.npm({ stage: 'build', commit: target.commit, stopped,
+          environment: buildEnvironment, signal: stageSignal });
       },
       async configure({ signal: stageSignal }) {
         await authority();

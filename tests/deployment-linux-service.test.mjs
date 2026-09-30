@@ -152,14 +152,15 @@ test('installed non-root service identity governs source selection and npm build
   pkg.name = 'installed-build-fixture';
   pkg.version = '1.0.0';
   pkg.scripts.build = 'node build.cjs';
+  pkg.scripts.preinstall = 'node -e "require(\'node:fs\').writeFileSync(\'dependency-environment\',process.env.DEPLOYMENT_BUILD_VALUE)"';
   await writeFile(path.join(f.project, 'package.json'), JSON.stringify(pkg));
   await writeFile(path.join(f.project, 'package-lock.json'), JSON.stringify({
     name: pkg.name, version: pkg.version, lockfileVersion: 3, packages: { '': { name: pkg.name, version: pkg.version } },
   }));
-  await writeFile(path.join(f.project, '.gitignore'), 'ready\nwrites\n.npm/\n.next/\nnode_modules/\nartifact\n');
+  await writeFile(path.join(f.project, '.gitignore'), 'ready\nwrites\n.npm/\n.next/\nnode_modules/\nartifact\ndependency-environment\n');
   await writeFile(path.join(f.project, 'build.cjs'),
     `const fs=require('node:fs');fs.mkdirSync('.next',{recursive:true});fs.mkdirSync('node_modules',{recursive:true});
-fs.writeFileSync('.next/BUILD_ID','installed-build');fs.writeFileSync('.next/app.js','compiled application');
+fs.writeFileSync('.next/BUILD_ID',process.env.DEPLOYMENT_BUILD_VALUE);fs.writeFileSync('.next/app.js','compiled application');
 fs.writeFileSync('artifact',String(process.getuid()));`);
   await writeFile(path.join(f.project, 'source.txt'), 'old source\n');
   await setup('init', '--initial-branch=main');
@@ -188,10 +189,12 @@ fs.writeFileSync('artifact',String(process.getuid()));`);
     source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)) });
   const operation = await createWorkerOperation({ control: f.control, lock: f.lock, saved });
   t.after(() => operation.close());
-  const stages = await prepareLinuxSourceBuild({ service, operation, git, environment: {
+  const environment = {
     PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: service.identity.runtime.home,
     USER: 'nobody', LOGNAME: 'nobody', NODE_ENV: 'production', npm_config_cache: path.join(f.project, '.npm'),
-  } });
+  };
+  const stages = await prepareLinuxSourceBuild({ service, operation, git, environment });
+  const buildEnvironment = { ...environment, DEPLOYMENT_BUILD_VALUE: 'installed-build' };
   assert.equal((await stages.inspect()).commit, old);
   const target = await stages.resolve({ options: { revision: next } });
   await assert.rejects(stages.select({ target }), /stopped/i);
@@ -200,12 +203,13 @@ fs.writeFileSync('artifact',String(process.getuid()));`);
   t.after(() => stopped.close());
   assert.equal((await stages.select({ target, stopped })).commit, next);
   await assert.rejects(stages.npm({ stage: 'dependencies', commit: old, stopped }), /commit/i);
-  await stages.npm({ stage: 'dependencies', commit: next, stopped });
-  const built = await stages.npm({ stage: 'build', commit: next, stopped });
+  await stages.npm({ stage: 'dependencies', commit: next, stopped, environment: buildEnvironment });
+  const built = await stages.npm({ stage: 'build', commit: next, stopped, environment: buildEnvironment });
   assert.equal(built.sourceCommit, next);
   assert.equal(built.source.record.commit, next);
   await built.source.check();
   assert.equal(built.artifacts.identity.buildId, 'installed-build');
+  assert.equal(await readFile(path.join(f.project, 'dependency-environment'), 'utf8'), 'installed-build');
   await built.artifacts.check();
   assert.equal(await readFile(path.join(f.project, 'artifact'), 'utf8'), '65534');
   assert.equal((await fs.lstat(path.join(f.project, 'artifact'))).uid, 65534);

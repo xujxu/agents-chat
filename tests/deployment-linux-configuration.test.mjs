@@ -33,6 +33,7 @@ test('inspect actual installed configuration without stopping the original servi
   const result = await inspectLinuxConfiguration({ service: f.service, profile });
   assert.equal(result.status, 'configuration-supported');
   assert.deepEqual(result.providers, ['admin-login']);
+  assert.equal(result.buildEnvironment({}).NEXTAUTH_SECRET, 'private-fixture-secret');
   assert.doesNotMatch(JSON.stringify(result), /private-fixture/);
   await result.check();
   assert.equal((await systemctl('show', f.unit, '--property=MainPID,InvocationID')).stdout, before);
@@ -48,6 +49,7 @@ test('actual EnvironmentFile overrides are observed and later mutations invalida
   const service = await inspectLinuxService(f);
   try {
     const result = await inspectLinuxConfiguration({ service, profile });
+    assert.equal(result.buildEnvironment({}).NEXTAUTH_URL, 'https://override.example');
     assert.ok(result.files.some(source => source.path === file && source.kind === 'systemd'));
     await writeFile(file, 'NEXTAUTH_URL=https://changed.example\n');
     await assert.rejects(result.check(), { code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED' });
@@ -63,6 +65,7 @@ test('Next dotenv-only credentials need not be present in the initial npm proces
   ].join('\n'));
   const result = await inspectLinuxConfiguration({ service: f.service, profile });
   assert.deepEqual(result.providers, ['admin-login']);
+  assert.equal(result.buildEnvironment({}).ADMIN_PASSWORD, 'private-fixture-password');
 });
 
 test('optional absent EnvironmentFile remains observed through admission', async t => {

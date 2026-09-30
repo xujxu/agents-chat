@@ -65,6 +65,18 @@ test('unsupported installed Node injection is refused before preparing a build',
   assert.throws(() => result.buildEnvironment({}), { check: 'build-environment-policy' });
 });
 
+test('build environment defaults an absent Node mode but refuses explicit empty or development mode', async t => {
+  const project = await temporaryDeployment(t);
+  const runtime = { ...environment };
+  delete runtime.NODE_ENV;
+  assert.equal((await inspect(project, { environment: runtime })).buildEnvironment({}).NODE_ENV, 'production');
+  await writeFile(path.join(project, '.env'), 'NODE_ENV=\n');
+  const result = await inspect(project, { environment: runtime });
+  assert.throws(() => result.buildEnvironment({}), { check: 'build-environment-policy' });
+  await writeFile(path.join(project, '.env'), 'NODE_ENV=development\n');
+  await assert.rejects(inspect(project, { environment: runtime }), { check: 'NODE_ENV' });
+});
+
 test('systemd ordered files override environment and Next files only fill missing keys', async t => {
   const project = await temporaryDeployment(t);
   const first = path.join(project, '.env.local');
@@ -76,6 +88,7 @@ test('systemd ordered files override environment and Next files only fill missin
   const result = await inspect(project, { systemdFiles: [
     { path: first, optional: true }, { path: machine, optional: false },
   ] });
+  assert.equal(result.buildEnvironment({}).NEXTAUTH_URL, 'https://machine.example');
   await result.check();
   assert.deepEqual(await readFile(first), before);
   await writeFile(machine, 'NEXTAUTH_URL=invalid\n');
@@ -89,7 +102,8 @@ test('production dotenv priority is deterministic, including an explicit empty s
   await writeFile(path.join(project, '.env.production'), 'NEXTAUTH_SECRET=lower\n');
   const runtime = { ...environment };
   delete runtime.NEXTAUTH_SECRET;
-  await inspect(project, { environment: runtime });
+  const result = await inspect(project, { environment: runtime });
+  assert.equal(result.buildEnvironment({}).NEXTAUTH_SECRET, 'valid');
   await assert.rejects(inspect(project, { environment: { ...runtime, NEXTAUTH_SECRET: '' } }),
     { check: 'NEXTAUTH_SECRET' });
 });

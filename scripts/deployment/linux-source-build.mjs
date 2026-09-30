@@ -53,7 +53,7 @@ export async function prepareLinuxSourceBuild({ service, operation, git, environ
       if (result.commit !== target.commit) throw new Error('Selected source differs from admitted target.');
       return result;
     },
-    async npm({ stage, commit, stopped, signal: stageSignal }) {
+    async npm({ stage, commit, stopped, environment: npmEnvironment = env, signal: stageSignal }) {
       await checkStopped(stopped, stageSignal);
       if (typeof commit !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) {
         throw new Error('Build requires the exact selected source commit.');
@@ -63,7 +63,7 @@ export async function prepareLinuxSourceBuild({ service, operation, git, environ
         file: path.join(project, name), bytes: await readWorkerFile(path.join(project, name), 16 * 1024 * 1024),
       })));
       const command = await prepareNpmCommand({
-        project, node, npmCli, stage, environment: env, signal: stageSignal,
+        project, node, npmCli, stage, environment: npmEnvironment, signal: stageSignal,
       });
       await before.check();
       await checkStopped(stopped, stageSignal);
