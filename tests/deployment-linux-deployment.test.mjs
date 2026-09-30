@@ -85,6 +85,16 @@ test('native deployment refuses unsupported target before downtime and releases 
   assert.deepEqual((await readdir(f.control)).sort(), ['state.json']);
 });
 
+test('native deployment refuses conflicting build environment before downtime', async t => {
+  const f = await installation(t);
+  await assert.rejects(runLinuxLiveDeployment({
+    ...f, revision: f.target, environment: { ...f.environment, NEXTAUTH_SECRET: 'different-private-secret' },
+  }), { code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED', check: 'build-environment-conflict' });
+  assert.equal((await loadState(f.control)).phase, 'preflight-refused');
+  await f.service.check();
+  assert.deepEqual((await readdir(f.control)).sort(), ['state.json']);
+});
+
 test('native deployment restores prior owned runtime after pre-source snapshot rotation failure', async t => {
   const f = await installation(t);
   const original = fs.rename;

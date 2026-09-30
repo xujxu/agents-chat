@@ -5087,6 +5087,24 @@ five attempts and is not application regression evidence.
 This accepts the existing-running Linux internal controller, not first install,
 public commands, no-wait verification, Windows lifecycle or physical delivery.
 
+### Installed build configuration, before public command wiring
+
+The native controller currently accepts caller-supplied npm environment while
+admitting the installed service configuration separately. Bind npm execution to
+the same effective systemd/EnvironmentFile/production-dotenv configuration:
+expose it through a non-serialized `buildEnvironment` function on the retained
+configuration observation. Accept only explicit operational caller settings
+(executable search, account/home/temp paths, npm cache and telemetry/CI switches)
+or identical installed settings. Refuse conflicting or unconfigured application
+settings and unsupported Node injection before downtime, without logging values.
+Capture the merged environment during admission, pass that immutable capture to
+both npm stages, and keep existing retained file/policy checks through activation.
+
+Add cross-platform configuration contracts and an actual Linux pre-stop refusal.
+Observe their failures in Actions before implementation; rerun the full native
+current/historical composition afterward. This does not yet provide public
+bootstrap, first-install configuration or changed-service-policy support.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

@@ -23,6 +23,48 @@ test('explicit runtime environment is inspected without consulting controller se
   await result.check();
 });
 
+test('build environment uses installed configuration without exposing it in reports', async t => {
+  const project = await temporaryDeployment(t);
+  await writeFile(path.join(project, '.env.production.local'),
+    'NEXT_PUBLIC_DEPLOYMENT_VALUE=installed\nADMIN_PASSWORD=lower-priority\n');
+  const result = await inspect(project);
+  const supplied = { PATH: '/installed/bin', HOME: '/installed/home', NEXT_TELEMETRY_DISABLED: '1' };
+  const build = result.buildEnvironment(supplied);
+  assert.equal(build.ADMIN_PASSWORD, environment.ADMIN_PASSWORD);
+  assert.equal(build.NEXT_PUBLIC_DEPLOYMENT_VALUE, 'installed');
+  assert.equal(build.PATH, supplied.PATH);
+  assert.equal(build.NEXT_TELEMETRY_DISABLED, '1');
+  assert.equal(Object.isFrozen(build), true);
+  supplied.PATH = '/changed';
+  assert.equal(build.PATH, '/installed/bin');
+  assert.doesNotMatch(JSON.stringify(result), /fixture-private|lower-priority|installed/);
+});
+
+test('build environment refuses conflicting or unconfigured controller settings without secrets', async t => {
+  const project = await temporaryDeployment(t);
+  const result = await inspect(project);
+  for (const supplied of [
+    { NEXTAUTH_SECRET: 'controller-private-secret' },
+    { NEXT_PUBLIC_DEPLOYMENT_VALUE: 'controller-private-setting' },
+    { NODE_OPTIONS: '--require=private-hook' },
+    { __NEXT_PROCESSED_ENV: 'true' },
+  ]) {
+    assert.throws(() => result.buildEnvironment(supplied), error => {
+      assert.equal(error.code, 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED');
+      assert.equal(error.check, 'build-environment-conflict');
+      assert.doesNotMatch(error.message + JSON.stringify(error), /private-|controller-/);
+      return true;
+    });
+  }
+  assert.equal(result.buildEnvironment({ ...environment }).NEXTAUTH_URL, environment.NEXTAUTH_URL);
+});
+
+test('unsupported installed Node injection is refused before preparing a build', async t => {
+  const project = await temporaryDeployment(t);
+  const result = await inspect(project, { environment: { ...environment, NODE_OPTIONS: '--require=private-hook' } });
+  assert.throws(() => result.buildEnvironment({}), { check: 'build-environment-policy' });
+});
+
 test('systemd ordered files override environment and Next files only fill missing keys', async t => {
   const project = await temporaryDeployment(t);
   const first = path.join(project, '.env.local');
