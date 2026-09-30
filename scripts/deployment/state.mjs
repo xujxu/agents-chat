@@ -6,7 +6,7 @@ import { captureWorkerFields } from './worker-identity.mjs';
 import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 
 const transitions = {
-  preflight: ['stopped', 'source-selected', 'preflight-refused'],
+  preflight: ['stopped', 'source-selected', 'preflight-refused', 'already-current'],
   stopped: ['copying', 'prior-runtime-restored'],
   copying: ['rotating', 'prior-runtime-restored'],
   rotating: ['backup-ready', 'prior-runtime-restored'],
@@ -24,12 +24,13 @@ const transitions = {
   restored: [],
   'prior-runtime-restored': [],
   'preflight-refused': [],
+  'already-current': [],
   'recovery-required': [],
   blocked: [],
 };
 
 export function completedDeploymentPhase(phase) {
-  return ['accepted', 'restored', 'prior-runtime-restored', 'preflight-refused'].includes(phase);
+  return ['accepted', 'restored', 'prior-runtime-restored', 'preflight-refused', 'already-current'].includes(phase);
 }
 
 export function nextPhase(from, to, { firstInstall = false } = {}) {
@@ -68,6 +69,11 @@ export function recoveryAdvice(details) {
   if (details.phase === 'preflight-refused') {
     if (details.restored || !nonempty(details.retryCommand) || !nonempty(details.diagnosticCommand)) {
       throw new Error('Refused preflight requires retry/diagnostic commands, not backup restoration.');
+    }
+    if (details.phase === 'already-current') {
+      if (details.restored || !nonempty(details.diagnosticCommand)) throw new Error('Already-current requires inspection, not restoration.');
+      return { status: 'already-current', message: 'The accepted deployment was reverified without downtime or a new backup.',
+        command: details.diagnosticCommand, diagnostics: details.diagnosticCommand };
     }
     return {
       status: 'preflight-refused',
@@ -143,6 +149,11 @@ export function validateState(state) {
   if (state.phase === 'preflight-refused'
     && (state.operation === 'restore' || state.previousPhase !== 'preflight' || state.errorCode === null)) {
     throw new Error('Refused preflight requires a failed admission before any downtime or source mutation.');
+  }
+  if (state.phase === 'already-current' && (state.operation !== 'update' || state.previousPhase !== 'preflight'
+    || state.priorRuntime !== 'running' || state.errorCode !== null || state.sourceCommit === null
+    || state.sourceCommit !== state.targetCommit)) {
+    throw new Error('Already-current requires a running update with equal verified source and target.');
   }
   return state;
 }
@@ -402,6 +413,10 @@ export async function reconcileInterruptedOperation(root) {
       status: 'preflight-refused', operationId: state.operationId, phase: state.phase,
       message: 'Deployment was refused before downtime or source mutation. Inspect the admission failure before retrying.',
     };
+  }
+  if (state?.phase === 'already-current') {
+    return { status: 'already-current', operationId: state.operationId, phase: state.phase,
+      message: 'The accepted deployment was reverified without downtime or a new backup.' };
   }
   if (state?.phase === 'prior-runtime-restored') {
     return {

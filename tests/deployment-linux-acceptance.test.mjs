@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { restoreCandidate } from './deployment-linux-restore-fixture.mjs';
 import { inspectGitMetadata } from '../scripts/deployment/git-metadata.mjs';
 import { inspectBuildArtifacts } from '../scripts/deployment/build-artifacts.mjs';
 import { captureLinuxDeploymentAcceptance } from '../scripts/deployment/linux-deployment-acceptance.mjs';
-import { writeState } from '../scripts/deployment/state.mjs';
+import { loadState, writeState } from '../scripts/deployment/state.mjs';
 import { publishDeploymentReceipt, readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
+import { inspectCurrentLinuxDeployment } from '../scripts/deployment/linux-current-deployment.mjs';
 
 for (const healthy of [true, false]) {
 test(`native acceptance binds source, artifacts and owned HTTP generation (healthy=${healthy})`, async t => {
@@ -46,9 +47,21 @@ test(`native acceptance binds source, artifacts and owned HTTP generation (healt
   }
   const receipt = await publishDeploymentReceipt({ control: f.control, lock: f.lock, ...accepted });
   assert.deepEqual((await readDeploymentReceipt(f.control, f.project)).identity, accepted.identity);
+  const currentOptions = { ...options, control: f.control, state: await loadState(f.control), commit: source.record.commit };
+  const current = await inspectCurrentLinuxDeployment(currentOptions);
+  assert.deepEqual(current.current.receipt, receipt);
+  await current.check();
+  for (const phase of ['restored', 'preflight-refused', 'activation-unverified', 'blocked']) {
+    assert.equal(await inspectCurrentLinuxDeployment({
+      ...currentOptions, state: { ...currentOptions.state, phase },
+    }), null);
+  }
   await writeFile(path.join(f.project, '.next/BUILD_ID'), 'replaced-build');
+  assert.equal(await inspectCurrentLinuxDeployment(currentOptions), null);
   await assert.rejects(accepted.checkAccepted(), /artifact|changed/i);
   await assert.rejects(publishDeploymentReceipt({ control: f.control, lock: f.lock, ...accepted }), /artifact|changed/i);
   assert.deepEqual(await readDeploymentReceipt(f.control, f.project), receipt);
+  await unlink(path.join(f.project, '.next/BUILD_ID'));
+  assert.equal(await inspectCurrentLinuxDeployment(currentOptions), null);
 });
 }

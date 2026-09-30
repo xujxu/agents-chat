@@ -5042,6 +5042,29 @@ does not bypass the deliberate tracked-runtime-configuration refusal.
 The initial service remains a synthetic bootstrap: first-install/public
 wrapper acceptance and all Windows lifecycle acceptance remain outstanding.
 
+`6133391` / `36709970036` passed all twelve jobs, including authenticated chat
+API continuity across a second current-source update and saved rollback. The
+exact historical variant is separately pending; do not infer its result.
+
+### Native artifact-aware already-current
+
+The native controller retains the previous terminal state before starting its
+owned inspection operation. Only update with equal resolved/current source,
+an accepted prior receipt, complete matching artifacts, configuration and
+owned runtime readiness can skip. Missing provenance/artifacts or changed
+artifact identities takes the ordinary update path; inspection failures remain
+errors. Recheck the acceptance and unchanged receipt after sealing workers.
+
+The native inspection itself has owned workers and needs a durable terminal
+outcome for safe retirement: add `already-current` only from preflight, for a
+running update with equal non-null source/target and no error. Keep the original
+accepted receipt and retained backup unchanged. Repeated no-ops can use that
+terminal state, but failed/restored/unverified states cannot. This differs from
+the pure transaction's no-write skip: native ownership evidence is recorded and
+retired, while service generation, backup and deployment receipt are untouched.
+Real application tests require two consecutive no-ops before the distinct
+revision update and subsequent chat-data restore.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

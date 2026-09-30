@@ -25,6 +25,7 @@ import { publishDeploymentReceipt } from './deployment-receipt.mjs';
 import { closeRejectedLinuxPreflight } from './linux-preflight-refusal.mjs';
 import { hasUnsettledWorker } from './worker-errors.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
+import { inspectCurrentLinuxDeployment } from './linux-current-deployment.mjs';
 
 export async function runLinuxLiveDeployment({
   service, control, lock: supplied, git, environment, port, deploymentBytes,
@@ -43,6 +44,8 @@ export async function runLinuxLiveDeployment({
   const native = { unit: service.identity.runtime.unit, project,
     npm: service.identity.executables[0].file, node: service.identity.executables[1].file };
   let state;
+  let previousState;
+  let current;
   let source;
   let target;
   let admission;
@@ -69,7 +72,8 @@ export async function runLinuxLiveDeployment({
     const next = {
       version: 1, operationId: lock.operationId, project, operation: kind, phase,
       previousPhase: state?.phase ?? null, sourceCommit: source?.commit ?? null,
-      targetCommit: target?.commit ?? null, backupId: context.snapshot?.id ?? state?.backupId ?? null,
+      targetCommit: target?.commit ?? null,
+      backupId: phase === 'already-current' ? previousState.backupId : context.snapshot?.id ?? state?.backupId ?? null,
       priorRuntime: 'running', runtimeIdentity: service.identity.runtime.invocationId,
       startedAt: lock.createdAt, updatedAt: new Date().toISOString(), errorCode: context.errorCode ?? null,
     };
@@ -89,6 +93,7 @@ export async function runLinuxLiveDeployment({
   try {
     await authority();
     await service.check();
+    previousState = await loadState(control);
     await record('preflight');
     const saved = await saveWorkerEngine({ control, project, operationId: lock.operationId,
       source: fileURLToPath(new URL('./', import.meta.url)) });
@@ -109,7 +114,13 @@ export async function runLinuxLiveDeployment({
       async admit({ signal: stageSignal }) {
         await authority();
         admission = await admitLinuxCompatibility({ service, operation: workers, commit: target.commit, signal: stageSignal });
-        return admission;
+        if (kind === 'update' && source.commit === target.commit) {
+          current = await inspectCurrentLinuxDeployment({
+            state: previousState, service, configuration: admission.configuration, control,
+            commit: target.commit, port, waitSeconds, signal: stageSignal,
+          });
+        }
+        return { ...admission, current: current?.current };
       },
       async capacity({ signal: stageSignal }) {
         await authority();
@@ -205,14 +216,25 @@ export async function runLinuxLiveDeployment({
         }
       },
     });
-    await runStage('publish-receipt', stageSignal => publishDeploymentReceipt({
-      control, lock, ...accepted, signal: stageSignal,
-    }), { timeoutMs: Math.min(timeoutSeconds * 1000, Number.MAX_SAFE_INTEGER), signal });
-    await retire();
+    if (result.status === 'already-current') {
+      await seal();
+      await runStage('verify-current', async stageSignal => {
+        await authority();
+        await current.check({ signal: stageSignal });
+        await record('already-current');
+      }, { timeoutMs: Math.min(timeoutSeconds * 1000, Number.MAX_SAFE_INTEGER), signal });
+      await workers.retire();
+      await releaseLock(control, lock);
+    } else {
+      await runStage('publish-receipt', stageSignal => publishDeploymentReceipt({
+        control, lock, ...accepted, signal: stageSignal,
+      }), { timeoutMs: Math.min(timeoutSeconds * 1000, Number.MAX_SAFE_INTEGER), signal });
+      await retire();
+    }
   } catch (error) {
     errors.push(error);
     try {
-      if (!hasUnsettledWorker(error) && state?.phase === 'preflight' && workers) {
+      if (!hasUnsettledWorker(error) && state?.phase === 'preflight' && workers && !sealed) {
         await closeRejectedLinuxPreflight({ control, lock, service, operation: workers });
       } else if (!hasUnsettledWorker(error) && state?.phase === 'prior-runtime-restored') {
         await retire();
