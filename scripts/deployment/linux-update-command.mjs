@@ -32,7 +32,7 @@ async function inspectControl(control, project) {
   return { state, names };
 }
 
-export async function runLinuxUpdateCommand({ args, unit = 'agents-chat.service', project: defaultProject, signal }) {
+export async function runLinuxUpdateCommand({ args, unit = 'agents-chat.service', project: defaultProject, signal, onProgress }) {
   const options = parseArguments('update', args);
   if (options.help) return { status: 'help', message: 'Linux update supports an existing running service, positive health waits and read-only status.' };
   if (options.dryRun || options.operation === 'verify' || options.waitSeconds === 0) {
@@ -99,7 +99,7 @@ export async function runLinuxUpdateCommand({ args, unit = 'agents-chat.service'
     }
     result = await runLinuxLiveDeployment({
       ...options, service, control, lock, git: '/usr/bin/git', environment, port: 3010,
-      deploymentBytes: 2 * 1024 ** 3, signal,
+      deploymentBytes: 2 * 1024 ** 3, signal, onProgress,
     });
     lock = undefined;
   } catch (error) {

@@ -41,6 +41,11 @@ test('native deployment refuses unsupported public update flags with parseable J
       return true;
     });
   }
+  await assert.rejects(execute('/usr/bin/bash', [script, '--json', '--no-pull'], execution), error => {
+    assert.equal(error.code, 1);
+    assert.equal(JSON.parse(error.stdout).code, 'DEPLOYMENT_EXTERNAL_TOOLS_REQUIRED');
+    return true;
+  });
 });
 
 test('native deployment refuses unsupported command modes without creating control files', async t => {
@@ -211,12 +216,13 @@ test(`native deployment composes real application acceptance and saved restorati
 }, async t => {
   const f = await installation(t, { unitName: scenario === 'command' ? 'agents-chat.service' : undefined });
   const command = async args => {
-    const { stdout } = await execute('/usr/bin/bash', [path.join(repository, 'scripts/update.sh'),
+    const { stdout, stderr } = await execute('/usr/bin/bash', [path.join(repository, 'scripts/update.sh'),
       '--project-dir', f.project, '--json', ...args], {
       cwd: '/', timeout: 660000, maxBuffer: 16384,
       env: { PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: '/root',
         NEXTAUTH_SECRET: 'ignored-controller-secret', NODE_ENV: 'development' },
     });
+    if (!args.includes('--status')) assert.match(stderr, /Deployment phase: (accepted|already-current)/);
     return JSON.parse(stdout);
   };
   const secondUpdate = scenario !== 'synthetic';

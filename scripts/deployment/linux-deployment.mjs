@@ -30,7 +30,7 @@ import { inspectCurrentLinuxDeployment } from './linux-current-deployment.mjs';
 export async function runLinuxLiveDeployment({
   service, control, lock: supplied, git, environment, port, deploymentBytes,
   operation: kind = 'update', revision, noPull = false, noInstall = false,
-  waitSeconds = 120, timeoutSeconds = 1800, signal,
+  waitSeconds = 120, timeoutSeconds = 1800, signal, onProgress,
 }) {
   if (process.platform !== 'linux' || process.getuid() !== 0) throw new Error('Live Linux deployment requires a root controller.');
   if (!['deploy', 'update'].includes(kind) || !Number.isSafeInteger(port) || port < 1 || port > 65535
@@ -81,6 +81,7 @@ export async function runLinuxLiveDeployment({
     await writeState(control, next);
     state = next;
     await syncWorkerDirectory(control);
+    onProgress?.({ phase });
   };
   const seal = async () => {
     if (!sealed) { await workers.seal(); sealed = true; }

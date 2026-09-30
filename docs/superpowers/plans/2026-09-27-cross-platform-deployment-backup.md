@@ -5181,6 +5181,13 @@ no-op and once for the distinct revision update plus status and saved restore.
 The isolated fixture owns the standard `agents-chat.service` name only after
 exclusive unit-file creation, so cleanup cannot overwrite a pre-existing unit.
 
+Do not yet admit in-place execution of this public wrapper: some retained
+controller modules still have dynamic imports after source replacement.
+Require a separate tools checkout outside the installed project until the full
+controller has an independently captured module closure. Status/help remain
+available without that restriction. Document and test the explicit refusal
+instead of allowing historical selection to remove a later-needed controller.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

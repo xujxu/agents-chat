@@ -159,6 +159,27 @@ Logs are written to `logs/service-watchdog.log` and `logs/start-service-child.lo
 
 ### Deployment (Linux systemd)
 
+**Deployment-backup branch: staged update command.** The new
+`sudo bash scripts/update.sh --project-dir /absolute/installed/checkout` updates
+an **existing running** `agents-chat.service` using its installed account,
+Node/npm and configuration, rather than the invoking user's environment.
+Run these tools from a **separate checkout** outside the installed project:
+in-place controller capture is not yet wired, so updating the tools checkout
+itself is refused before mutation.
+Use `--help` for supported flags, `--status --json` for read-only status, and
+`--json` for machine-readable outcomes (progress/errors remain on stderr).
+The controller requires Node.js 24+, `/usr/bin/git`, systemd, port 3010, and a
+minimum 2 GiB build-space budget in addition to backup space. It keeps one
+complete backup and independent recovery helpers in the private sibling
+`.<project-basename>.deployment` directory. Preserve that directory after failure.
+
+This command is **not yet the complete cross-platform deployment release**:
+first install, inactive services, dry-run and deferred verification/no-wait are
+not wired here and are refused rather than delegated to the legacy script.
+Do not use this branch on a live installation before the remaining platform
+acceptance gates. The `deploy.sh` commands below describe the legacy implementation,
+not the new backup/restore guarantees.
+
 For persistent deployment on Ubuntu/Debian, use `scripts/deploy.sh` — it installs the systemd unit on first run and updates the deployment on subsequent runs.
 
 ```bash
