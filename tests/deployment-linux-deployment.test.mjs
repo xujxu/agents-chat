@@ -16,6 +16,7 @@ import { readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { saveRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
 import { waitLinuxReadiness } from '../scripts/deployment/linux-readiness.mjs';
+import { loginDeploymentFixture } from './deployment-http-fixture.mjs';
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../', import.meta.url));
@@ -48,6 +49,7 @@ require('node:http').createServer((req, res) => {
   const prior = await git('rev-parse', 'HEAD');
   await git('fetch', '--quiet', repository, 'HEAD');
   const target = await git('rev-parse', 'FETCH_HEAD');
+  const nextTarget = await git('commit-tree', `${target}^{tree}`, '-p', target, '-m', 'next deployment fixture revision');
   const own = async directory => {
     await chown(directory, 65534, 65534);
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -71,7 +73,7 @@ require('node:http').createServer((req, res) => {
     npm_config_cache: path.join(f.project, '.npm'),
   };
   return { ...f, service, control, lock, git: '/usr/bin/git', environment,
-    port: 3010, prior, target, deploymentBytes: 2 * 1024 ** 3 };
+    port: 3010, prior, target, nextTarget, deploymentBytes: 2 * 1024 ** 3 };
 }
 
 test('native deployment refuses unsupported target before downtime and releases settled preflight', async t => {
@@ -123,7 +125,8 @@ test('native deployment retains backup and inhibition after actual dependency in
   await assert.rejects(inspectLinuxService(f), /running|inhibit|policy|start|service/i);
 });
 
-test('native deployment composes real application acceptance and saved no-build restoration', {
+for (const secondUpdate of [false, true]) {
+test(`native deployment composes real application acceptance and saved restoration (secondUpdate=${secondUpdate})`, {
   skip: process.env.DEPLOYMENT_TEST_REAL_DEPLOYMENT !== '1',
 }, async t => {
   const f = await installation(t);
@@ -132,14 +135,42 @@ test('native deployment composes real application acceptance and saved no-build 
   assert.equal(result.backupCreated, true);
   const state = await loadState(f.control);
   assert.equal(state.phase, 'accepted');
-  const receipt = await readDeploymentReceipt(f.control, f.project);
+  let receipt = await readDeploymentReceipt(f.control, f.project);
   assert.equal(receipt.identity.source, f.target);
-  const backup = await verifySnapshot(path.join(f.control, 'backup'));
+  let backup = await verifySnapshot(path.join(f.control, 'backup'));
   assert.equal(backup.source.commit, f.prior);
   assert.equal(await readFile(path.join(f.control, 'backup/files/server.cjs'), 'utf8'),
     (await execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project,
       'show', `${f.prior}:server.cjs`])).stdout);
   assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'recovery-engine', 'state.json']);
+  let expectedCommit = f.prior;
+  const chatId = `deployment-${randomUUID()}`;
+  let api;
+  if (secondUpdate) {
+    api = await loginDeploymentFixture();
+    const chat = { id: chatId, name: 'Preserved before second update', ts: Date.now(), agentSessions: {},
+      messages: [{ id: 'original', type: 'user', content: 'Data before snapshot', ts: Date.now() }] };
+    assert.equal((await api('/api/chats', { chat })).ok, true);
+    const before = (await api(`/api/chats?id=${chatId}`)).chat;
+    assert.equal(before.messages[0].content, 'Data before snapshot');
+    const service = await inspectLinuxService(f);
+    t.after(() => service.close());
+    const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
+    assert.equal((await runLinuxLiveDeployment({
+      ...f, service, lock, revision: f.nextTarget, timeoutSeconds: 600,
+    })).status, 'accepted');
+    assert.equal((await api(`/api/chats?id=${chatId}`)).chat.messages[0].content, 'Data before snapshot');
+    const oldBackupId = backup.id;
+    backup = await verifySnapshot(path.join(f.control, 'backup'));
+    assert.notEqual(backup.id, oldBackupId);
+    assert.equal(backup.source.commit, f.target);
+    receipt = await readDeploymentReceipt(f.control, f.project);
+    assert.equal(receipt.identity.source, f.nextTarget);
+    expectedCommit = f.target;
+    assert.equal((await api('/api/chats', { action: 'rename', chatId, name: 'After snapshot' })).ok, true);
+    assert.equal((await api(`/api/chats?id=${chatId}`)).chat.name, 'After snapshot');
+    assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'recovery-engine', 'state.json']);
+  }
   const saved = await saveRecoveryEngine({
     source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), control: f.control,
   });
@@ -147,25 +178,31 @@ test('native deployment composes real application acceptance and saved no-build 
   const restored = await new Promise((resolve, reject) => {
     const child = execFile(node, [path.join(saved.directory, 'linux-restore-entry.mjs'),
       f.control, saved.manifestSha256, '--accept-data-loss'], {
-      cwd: '/', timeout: 180000, maxBuffer: 16384, env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' },
+      cwd: '/', timeout: 660000, maxBuffer: 16384, env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' },
     }, (error, stdout, stderr) => {
       if (error) reject(new Error(`Saved restore failed: ${stderr}`, { cause: error }));
       else resolve(stdout);
     });
     child.stdin.on('error', reject);
     child.stdin.end(JSON.stringify({ project: f.project, unit: f.unit, npm: f.npm, node: f.node,
-      backup: path.join(f.control, 'backup'), port: 3010, waitSeconds: 30, timeoutSeconds: 120 }));
+      backup: path.join(f.control, 'backup'), port: 3010, waitSeconds: 30, timeoutSeconds: 600 }));
   });
   assert.deepEqual(JSON.parse(restored), { status: 'restored', backupId: backup.id });
   assert.equal((await loadState(f.control)).phase, 'restored');
   assert.equal((await execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project,
-    'rev-parse', 'HEAD'])).stdout.trim(), f.prior);
+    'rev-parse', 'HEAD'])).stdout.trim(), expectedCommit);
   assert.equal((await execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project,
     'cat-file', '-t', f.target])).stdout.trim(), 'commit');
   const active = await inspectLinuxService(f);
   t.after(() => active.close());
   await waitLinuxReadiness({ service: active, port: 3010, providers: ['admin-login'] });
+  if (secondUpdate) {
+    const restoredChat = (await api(`/api/chats?id=${chatId}`)).chat;
+    assert.equal(restoredChat.name, 'Preserved before second update');
+    assert.equal(restoredChat.messages[0].content, 'Data before snapshot');
+  }
   assert.deepEqual(await verifySnapshot(path.join(f.control, 'backup')), backup);
   assert.deepEqual(await readDeploymentReceipt(f.control, f.project), receipt);
   assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'recovery-engine', 'state.json']);
 });
+}

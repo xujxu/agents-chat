@@ -5025,6 +5025,16 @@ removing its live `.git/objects/pack` before invoking the external restore;
 both the restored prior HEAD and the later target commit must then be readable
 from recovered local objects without a fetch.
 
+`006b22e` / Actions `36688729210` passed all twelve jobs, including the real
+saved-entry missing-pack case. Add a second current-application update before
+restore: log in through real CSRF/credentials endpoints, persist and read a
+conversation, update to a distinct commit with the same reviewed source tree,
+verify data survives and the one retained backup now refers to the first
+application revision. Rename the conversation after that snapshot, restore
+with the saved external entry, and require the old name/messages plus the
+first application commit. This exercises SQLite/API continuity and backup
+rotation but is not the exact historical-baseline or Windows lifecycle gate.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
