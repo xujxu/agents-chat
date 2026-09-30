@@ -5120,6 +5120,20 @@ must restore the exact pre-update files and data without install/build. Run this
 as a separate `rebuild` matrix case under the same 25-minute bound. Keep lightweight
 failure cases on the synthetic runner only instead of repeating them per scenario.
 
+Artifact rebuild checkpoint: `96d86ef` / Actions `36729774272` passed all
+15 jobs, including same-source reinstall/build/new generation and exact saved
+artifact/data restoration. The matrix now executes failure contracts once.
+
+Public Linux command prerequisite: discover the installed npm command from
+typed systemd `ExecStartEx`, and Node from the observed main process executable,
+not the invoking user's PATH or a guessed version-manager directory. Require
+literal npm start, a resolved npm-cli.js, original account/project/generation,
+and the existing complete service inspection before returning authority.
+Reject inactive services at this running-only boundary without starting them.
+Native tests cover nonroot service discovery, wrong project, a direct Node
+command and stopped service. Feed discovered authority to the existing native
+controller in actual lifecycle scenarios; this is not first-install support.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

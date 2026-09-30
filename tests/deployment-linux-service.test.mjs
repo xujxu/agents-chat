@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
+import * as serviceInspection from '../scripts/deployment/linux-service-inspection.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 import { hasFailedLinuxActivation } from '../scripts/deployment/linux-service-activation.mjs';
 import { prepareLinuxSourceBuild } from '../scripts/deployment/linux-source-build.mjs';
@@ -57,7 +58,27 @@ test('does not mistake a Node service in the same directory for the expected npm
   const f = await fixture(t, { command: `${quote(node)} server.cjs` });
   await ready(f);
   await assert.rejects(inspectLinuxService(f), /command|ExecStart/i);
+  await assert.rejects(serviceInspection.inspectInstalledLinuxService({ unit: f.unit, project: f.project }), /npm|command|ExecStart/i);
   assert.equal((await systemctl('is-active', f.unit)).stdout.trim(), 'active');
+});
+
+test('discovers installed npm and actual Node without controller PATH or caller executable guesses', async t => {
+  const f = await fixture(t, { nonroot: true });
+  await ready(f);
+  const before = (await systemctl('show', f.unit, '--property=MainPID,InvocationID')).stdout;
+  const service = await serviceInspection.inspectInstalledLinuxService({ unit: f.unit, project: f.project });
+  try {
+    assert.equal(service.identity.runtime.uid, 65534);
+    assert.equal(service.identity.executables[0].file, f.npm);
+    assert.equal(service.identity.executables[1].target, await fs.realpath(f.node));
+    await service.check();
+    assert.equal((await systemctl('show', f.unit, '--property=MainPID,InvocationID')).stdout, before);
+  } finally { await service.close(); }
+  await assert.rejects(serviceInspection.inspectInstalledLinuxService({
+    unit: f.unit, project: path.dirname(f.project),
+  }), /project|directory/i);
+  await systemctl('stop', f.unit);
+  await assert.rejects(serviceInspection.inspectInstalledLinuxService({ unit: f.unit, project: f.project }), /running/i);
 });
 
 test('retains non-root installed npm identity and rejects a different expected Node executable', async t => {
