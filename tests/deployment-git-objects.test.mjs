@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { copyFile, link, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -76,3 +76,45 @@ test('Linux source recovery restores missing packed objects offline while preser
   await f.git('fsck', '--full', '--no-reflogs');
   assert.deepEqual(await verifySnapshot(f.backup), manifest);
 });
+
+for (const boundary of ['staged', 'linked', 'partial', 'conflict']) {
+  test(`Linux object publication reentry classifies ${boundary} evidence before restoring HEAD`, {
+    skip: process.platform !== 'linux',
+  }, async t => {
+    const f = await fixture(t);
+    const manifest = await f.snapshot();
+    await writeFile(path.join(f.project, 'source.txt'), 'later source\n');
+    await f.git('commit', '-am', 'later');
+    const later = await f.git('rev-parse', 'HEAD');
+    const packed = path.join(f.project, '.git/objects/pack');
+    await rm(packed, { recursive: true });
+    await mkdir(packed);
+    const saved = path.join(f.backup, 'git-objects/files/pack');
+    const name = (await readdir(saved)).find(name => name.endsWith('.pack'));
+    const target = path.join(packed, name);
+    const stage = `${target}.agents-chat-restore`;
+    if (boundary === 'partial') await writeFile(stage, 'partial');
+    else if (boundary === 'conflict') await writeFile(target, 'foreign existing object');
+    else {
+      await copyFile(path.join(saved, name), stage);
+      if (boundary === 'linked') await link(stage, target);
+    }
+    const restore = () => restoreProjectSnapshot({
+      project: f.project, backup: f.backup, acceptDataLoss: true, expectedSnapshot: manifest,
+      checkStopped: async () => ({ stopped: true, inhibited: true }),
+    });
+    if (boundary === 'partial' || boundary === 'conflict') {
+      await assert.rejects(restore(), /object|staged|publication/i);
+      assert.equal(await f.git('rev-parse', 'HEAD'), later);
+      assert.equal(await readFile(boundary === 'partial' ? stage : target, 'utf8'),
+        boundary === 'partial' ? 'partial' : 'foreign existing object');
+      assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'later source\n');
+    } else {
+      await restore();
+      assert.equal(await f.git('show', 'HEAD:source.txt'), 'original source');
+      assert.equal((await readdir(packed)).some(name => name.endsWith('.agents-chat-restore')), false);
+      await f.git('fsck', '--full', '--no-reflogs');
+    }
+    assert.deepEqual(await verifySnapshot(f.backup), manifest);
+  });
+}
