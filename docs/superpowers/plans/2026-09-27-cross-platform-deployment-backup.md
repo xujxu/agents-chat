@@ -6326,7 +6326,10 @@ Do not run the unsafe legacy deploy body or watchdog port cleanup as acceptance.
   Windows identity, explicit `-UserId` stays supported, optional `-NoTunnel`
   becomes a literal action argument; descriptions contain no fixed account.
 - Modify `scripts/deploy.ps1`: declare and forward these options when calling
-  the task installer. Existing-task default preservation is a subsequent slice.
+  the task installer. Resolve omitted account/logon/trigger/tunnel settings from
+  the actual existing task before comparison; otherwise a newly introduced
+  switch could be ignored or overwrite the installed default. Reject foreign
+  actions, unsupported principal modes or ambiguous triggers before mutation.
 - Modify `scripts/service-watchdog.ps1`: declare `-NoTunnel` and centralize
   child argument construction, preserving a quoted script path with spaces.
 - Add `tests/deployment-windows-task-options.ps1`: actual isolated task
@@ -6356,6 +6359,14 @@ Do not run the unsafe legacy deploy body or watchdog port cleanup as acceptance.
   & $InstallScript -TaskName $TaskName -ProjectDir $ProjectDir -UserId $UserId `
       -LogonType $TaskLogonType -TriggerType $TaskTriggerType -NoTunnel:$NoTunnel
   ```
+  `Resolve-AgentsChatTaskOptions` takes the native task, absolute watchdog/project
+  paths and explicitly bound parameters. Start with current user, Interactive,
+  AtLogOn and tunnel enabled for a fresh task. For an existing task, require one
+  exact PowerShell watchdog action (with optional literal `-NoTunnel`), one
+  AtStartup/AtLogOn trigger and Interactive/S4U principal, then copy all four
+  settings before applying explicit overrides. The causal native test registers
+  S4U/AtStartup/NoTunnel, proves omitted settings unchanged, proves explicit
+  switch-false reenables tunnels and confirms resolution did not rewrite XML.
 - [ ] Add and use the watchdog child-command builder:
   ```powershell
   function Get-StartScriptArguments {
@@ -6371,6 +6382,18 @@ Do not run the unsafe legacy deploy body or watchdog port cleanup as acceptance.
 - [ ] Push implementation, inspect the native job's actual task definitions and
   inert child results, then require all 23 gates. Document this as parameter
   portability, not as full Windows lifecycle acceptance.
+
+Causal `7e2208b` / `36875986837`, native Windows task-options job
+`110415425773`, failed all five initial cases as expected: the fixed principal
+could not resolve, both explicit registrations silently lost the unknown
+NoTunnel argument, deploy lacked UserId and watchdog lacked NoTunnel.
+The implementation adds declared switches, literal quoted action/child
+arguments, explicit forwarding and read-only existing-task mode resolution.
+The native tests additionally exercise preserved modes and foreign action
+refusal. The watchdog's current-account WinGet path replaces its fixed profile
+path; its touched child-stop calls use TargetPid rather than read-only `$PID`.
+Legacy port cleanup and full process containment are not accepted by these
+parameter tests and remain part of Windows lifecycle work.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

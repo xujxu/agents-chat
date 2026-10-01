@@ -78,6 +78,40 @@ try {
         }
     }
 
+    Invoke-Case 'omitted deploy options preserve the actual registered task modes and account' {
+        . ([scriptblock]::Create((Get-FunctionText $DeployAst 'Resolve-AgentsChatTaskOptions')))
+        $name = 'Agents-Chat-Test-' + [Guid]::NewGuid().ToString('N')
+        $TaskNames.Add($name)
+        $null = & $Installer -TaskName $name -ProjectDir $Project -UserId $Current.Name `
+            -LogonType S4U -TriggerType AtStartup -NoTunnel
+        $task = Get-ScheduledTask -TaskName $name -ErrorAction Stop
+        $watchdog = Join-Path $Scripts 'service-watchdog.ps1'
+        $before = Export-ScheduledTask -TaskName $name
+        $options = Resolve-AgentsChatTaskOptions -Task $task -ProjectDir $Project -WatchdogScript $watchdog -Explicit @{}
+        Assert-Equal $options.UserId $task.Principal.UserId 'retained account'
+        Assert-Equal $options.TaskLogonType 'S4U' 'retained S4U'
+        Assert-Equal $options.TaskTriggerType 'AtStartup' 'retained startup trigger'
+        Assert-Equal $options.NoTunnel $true 'retained NoTunnel'
+        $changed = Resolve-AgentsChatTaskOptions -Task $task -ProjectDir $Project -WatchdogScript $watchdog `
+            -Explicit @{ NoTunnel = $false; TaskLogonType = 'Interactive'; TaskTriggerType = 'AtLogOn'; UserId = $Current.Name }
+        Assert-Equal $changed.NoTunnel $false 'explicit tunnel reenablement'
+        Assert-Equal $changed.TaskLogonType 'Interactive' 'explicit logon'
+        Assert-Equal $changed.TaskTriggerType 'AtLogOn' 'explicit trigger'
+        Assert-Equal $changed.UserId $Current.Name 'explicit account'
+        Assert-Equal (Export-ScheduledTask -TaskName $name) $before 'resolution is read-only'
+        $foreign = New-ScheduledTaskAction -Execute $PowerShell -Argument "-NoProfile -Command `"exit 0`"" -WorkingDirectory $Project
+        $null = Set-ScheduledTask -TaskName $name -Action $foreign
+        $foreignTask = Get-ScheduledTask -TaskName $name -ErrorAction Stop
+        $rejected = $false
+        try {
+            $null = Resolve-AgentsChatTaskOptions -Task $foreignTask -ProjectDir $Project -WatchdogScript $watchdog -Explicit @{}
+        } catch {
+            if ($_.Exception.Message -notmatch 'action') { throw }
+            $rejected = $true
+        }
+        Assert-Equal $rejected $true 'foreign action refused rather than adopted'
+    }
+
     Invoke-Case 'deploy task installation forwards explicit identity and tunnel choice' {
         foreach ($name in @('UserId', 'NoTunnel')) {
             if ($DeployAst.ParamBlock.Parameters.Name.VariablePath.UserPath -notcontains $name) {

@@ -5,6 +5,8 @@
 param(
     [string]$TaskName = 'Agents-Chat-Startup',
     [string]$ProjectDir = (Split-Path -Parent $PSScriptRoot),
+    [string]$UserId = ([Security.Principal.WindowsIdentity]::GetCurrent().Name),
+    [switch]$NoTunnel,
     [switch]$SkipGitPull,
     [switch]$RemoveTask,
     [ValidateSet('Interactive', 'S4U')]
@@ -63,12 +65,15 @@ function Test-TaskMatchesExpectedConfiguration {
     param([Parameter(Mandatory=$true)]$Task)
 
     $hasExpectedLogon = $Task.Principal.LogonType.ToString() -eq $TaskLogonType
+    $hasExpectedUser = $Task.Principal.UserId -ieq $UserId
+    $expectedArguments = "-NoProfile -ExecutionPolicy Bypass -File `"$ExpectedWatchdogScript`""
+    if ($NoTunnel) { $expectedArguments += ' -NoTunnel' }
     $hasExpectedAction = $false
     foreach ($action in $Task.Actions) {
         $arguments = if ($action.Arguments) { $action.Arguments } else { '' }
         $workingDirectory = if ($action.WorkingDirectory) { $action.WorkingDirectory } else { '' }
         if ($action.Execute -ieq 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -and
-            $arguments.IndexOf($ExpectedWatchdogScript, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+            $arguments -ieq $expectedArguments -and
             $workingDirectory -ieq $ProjectDir) {
             $hasExpectedAction = $true
             break
@@ -80,7 +85,44 @@ function Test-TaskMatchesExpectedConfiguration {
         $Task.Triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' }
     }
 
-    return $hasExpectedLogon -and $hasExpectedAction -and [bool]$hasExpectedTrigger
+    return $hasExpectedLogon -and $hasExpectedUser -and $hasExpectedAction -and [bool]$hasExpectedTrigger
+}
+
+function Resolve-AgentsChatTaskOptions {
+    param($Task, [string]$ProjectDir, [string]$WatchdogScript, [Collections.IDictionary]$Explicit)
+
+    $options = @{
+        UserId = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+        TaskLogonType = 'Interactive'
+        TaskTriggerType = 'AtLogOn'
+        NoTunnel = $false
+    }
+    if ($Task) {
+        $actions = @($Task.Actions)
+        $triggers = @($Task.Triggers)
+        $expectedArguments = "-NoProfile -ExecutionPolicy Bypass -File `"$WatchdogScript`""
+        if ($actions.Count -ne 1 -or
+            $actions[0].Execute -ine (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -or
+            $actions[0].WorkingDirectory -ine $ProjectDir -or
+            ($actions[0].Arguments -ine $expectedArguments -and $actions[0].Arguments -ine "$expectedArguments -NoTunnel")) {
+            throw 'Existing task action is not the supported literal watchdog command; no task was changed.'
+        }
+        $logon = $Task.Principal.LogonType.ToString()
+        if ($logon -notin @('Interactive', 'S4U') -or [string]::IsNullOrWhiteSpace($Task.Principal.UserId)) {
+            throw 'Existing task principal requires unsupported credentials or identity; no task was changed.'
+        }
+        if ($triggers.Count -ne 1 -or $triggers[0].CimClass.CimClassName -notin @('MSFT_TaskBootTrigger', 'MSFT_TaskLogonTrigger')) {
+            throw 'Existing task trigger is unsupported or ambiguous; no task was changed.'
+        }
+        $options.UserId = $Task.Principal.UserId
+        $options.TaskLogonType = $logon
+        $options.TaskTriggerType = if ($triggers[0].CimClass.CimClassName -eq 'MSFT_TaskBootTrigger') { 'AtStartup' } else { 'AtLogOn' }
+        $options.NoTunnel = $actions[0].Arguments -ieq "$expectedArguments -NoTunnel"
+    }
+    foreach ($name in @('UserId', 'TaskLogonType', 'TaskTriggerType', 'NoTunnel')) {
+        if ($name -in $Explicit.Keys) { $options[$name] = $Explicit[$name] }
+    }
+    return $options
 }
 
 function Install-AgentsChatTask {
@@ -89,7 +131,8 @@ function Install-AgentsChatTask {
         throw "Install script not found: $InstallScript"
     }
 
-    & $InstallScript -TaskName $TaskName -ProjectDir $ProjectDir -LogonType $TaskLogonType -TriggerType $TaskTriggerType
+    & $InstallScript -TaskName $TaskName -ProjectDir $ProjectDir -UserId $UserId `
+        -LogonType $TaskLogonType -TriggerType $TaskTriggerType -NoTunnel:$NoTunnel
     if ($LASTEXITCODE -ne 0) { throw "Failed to install Scheduled Task via $InstallScript" }
 }
 
@@ -126,6 +169,12 @@ if (-not (Test-Path $ProjectDir)) {
 }
 
 $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+$taskOptions = Resolve-AgentsChatTaskOptions -Task $task -ProjectDir $ProjectDir `
+    -WatchdogScript $ExpectedWatchdogScript -Explicit $PSBoundParameters
+$UserId = $taskOptions.UserId
+$TaskLogonType = $taskOptions.TaskLogonType
+$TaskTriggerType = $taskOptions.TaskTriggerType
+$NoTunnel = $taskOptions.NoTunnel
 if (-not $task) {
     Write-Step "Scheduled Task '$TaskName' not found; installing it first..."
     Install-AgentsChatTask

@@ -135,6 +135,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-release.ps1
 
 For persistent deployment on a Windows machine, use `scripts\deploy.ps1` which manages a Scheduled Task that auto-starts the app on login/boot.
 
+On this development branch, Windows transaction/backup/recovery integration is
+still incomplete; do not use it as the final cross-platform deployment release.
+The task parameter changes below are awaiting native Actions acceptance.
+First registration defaults to the current Windows account, or accepts an
+explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
+options preserve the existing supported task settings. Foreign task actions and
+unsupported principal/trigger modes are refused before changing the task.
+
 ```powershell
 # Deploy (pulls latest code, restarts the service, waits for readiness)
 .\scripts\deploy.ps1
@@ -144,6 +152,12 @@ For persistent deployment on a Windows machine, use `scripts\deploy.ps1` which m
 
 # Deploy with AtStartup trigger (runs even without login)
 .\scripts\deploy.ps1 -TaskTriggerType AtStartup -TaskLogonType S4U
+
+# Local serving behind separately managed HTTPS; no tunnel or Azure AD changes
+.\scripts\deploy.ps1 -UserId 'MACHINE\appuser' -NoTunnel
+
+# Explicitly restore normal tunnel startup for a previously NoTunnel task
+.\scripts\deploy.ps1 -NoTunnel:$false
 
 # Remove the scheduled task entirely
 .\scripts\deploy.ps1 -RemoveTask
