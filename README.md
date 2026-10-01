@@ -142,7 +142,8 @@ PowerShell 5.1 acceptance. The full 23-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
 retained private configuration, direct native task-owner checks and the
 installed private runtime host, native restart inhibition and write-through
-private receipt publication, passed at `b1bffbe` (run `36919591641`).
+private receipt publication and durable native task-stop contexts, passed at
+`d973e20` (run `36924898739`).
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

@@ -245,10 +245,11 @@ test('actual application source installs and builds inside native ownership', {
   await artifacts.check();
   await f.operation.seal();
   if (process.platform === 'win32') {
-    await execute(f.runtime.pwsh, ['-NoProfile', '-NonInteractive', '-File',
+    const { stdout } = await execute(f.runtime.pwsh, ['-NoProfile', '-NonInteractive', '-File',
       path.join(repository, 'tests/deployment-windows-managed-application.ps1'),
       '-Project', f.project, '-Control', f.control, '-Node', process.execPath,
     ], { timeout: 240000, maxBuffer: 16384 });
+    console.log(stdout.trim());
     await artifacts.check();
   }
 });

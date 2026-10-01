@@ -7043,7 +7043,7 @@ inhibition, the task-side owner and on-disk evidence. Native acceptance pending.
 `d973e20` / `36924898739`, native job `110580256508`, passed the complete
 native suite including pre-mutation maintenance refusals, chained receipts,
 original-domain settlement, changed-policy refusal and inhibition after close.
-Preserve its full regression.
+The full regression passed **23/23** and is the accepted baseline.
 
 #### Task 5L: actual Windows application under managed runtime ownership
 
@@ -7058,7 +7058,7 @@ unchanged.
 `tests/deployment-windows-managed-application.ps1` and
 `tests/deployment-windows-application-api.mjs`.
 
-- [ ] After owned build and operation sealing, invoke the new PowerShell
+- [x] After owned build and operation sealing, invoke the new PowerShell
   fixture with explicit Project, Control and Node paths; capture the absent
   script causal failure in the existing Windows application-build job.
 - [ ] Create a private installed bundle, exact helper hashes and host config
@@ -7085,6 +7085,12 @@ unchanged.
 This proves actual Windows managed runtime/API/data continuity and prebuilt
 restart. It is not claimed as the still-unwired public Windows deploy/update/
 restore lifecycle or a production configuration/ACL snapshot implementation.
+
+The causal `9d567ba` / `36926708500` completed with exactly one failing job:
+Windows actual application `110588751658`, after its successful install/build,
+failed on the absent `deployment-windows-managed-application.ps1`. All other
+22 jobs passed. The new fixture implements the three native S4U starts and
+stopped data copy/restore sequence above; native acceptance is pending.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
