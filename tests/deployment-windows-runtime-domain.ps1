@@ -7,8 +7,8 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $source = if ($Server) { $HelperRoot } else { Join-Path $PSScriptRoot '../scripts/deployment' }
-Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'))
-Add-Type -Path (Join-Path $source 'WindowsRuntimePipe.cs')
+Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
+    (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'))
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
@@ -18,7 +18,7 @@ function Await($Task) {
 }
 if ($Server) {
     $domain = $null
-    $pipe = $null
+    $control = $null
     try {
         $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
         $environment.Add('SystemRoot', $env:SystemRoot)
@@ -31,7 +31,7 @@ if ($Server) {
         try { $domain.Retire() }
         catch { $refused = $_.Exception.GetBaseException().Message -eq 'Original runtime Job must settle before retirement.' }
         Assert $refused 'Runtime domain retired before explicit settlement'
-        $pipe = [Deployment.WindowsRuntimePipe]::Create($Generation)
+        $control = [Deployment.WindowsRuntimeControl]::new($domain, $Generation)
         @{
             pid=$PID
             identity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
@@ -39,48 +39,23 @@ if ($Server) {
             launcherPid=$domain.LauncherPid
             sessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId
         } | ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $HelperRoot 'ready.json')
-        $finished = $false
-        while (-not $finished) {
-            Await ($pipe.WaitForConnectionAsync())
-            $reader = [IO.StreamReader]::new($pipe, [Text.UTF8Encoding]::new($false), $false, 4096, $true)
-            $writer = $null
-            try {
-                $command = Await ($reader.ReadLineAsync())
-                if ($null -eq $command) { continue }
-                $writer = [IO.StreamWriter]::new($pipe, [Text.UTF8Encoding]::new($false), 4096, $true)
-                $writer.AutoFlush = $true
-                switch -CaseSensitive ($command) {
-                    'observe' { $writer.WriteLine(($domain.Observe() | ConvertTo-Json -Compress)) }
-                    'stop' {
-                        $domain.Stop()
-                        $writer.WriteLine(($domain.Observe() | ConvertTo-Json -Compress))
-                    }
-                    'retire' {
-                        $domain.Retire()
-                        $writer.WriteLine('retired')
-                        $finished = $true
-                    }
-                    default { throw 'Unexpected fixture control request' }
-                }
-            } finally {
-                $reader.Dispose()
-                if ($writer) { $writer.Dispose() }
-                $pipe.Disconnect()
-            }
-        }
+        $control.Run()
     } catch {
         $failure = $_.Exception.GetBaseException()
         "$($failure.GetType().FullName) at line $($_.InvocationInfo.ScriptLineNumber): $($failure.Message)" |
             Set-Content -LiteralPath (Join-Path $HelperRoot 'failure.txt')
         throw
     } finally {
-        if ($pipe) { $pipe.Dispose() }
+        if ($control) { $control.Dispose() }
         if ($domain) { $domain.Dispose() }
     }
     return
 }
 
 function Request($Identity, [guid]$Generation, [string]$Method) {
+    return [Deployment.WindowsRuntimeControl]::Exchange($Generation, $Identity.pid, $Identity.identity, $Method, 15000)
+}
+function Raw-Request($Identity, [guid]$Generation, [string]$Payload) {
     $client = [Deployment.WindowsRuntimePipe]::Connect($Generation, $Identity.pid, $Identity.identity, 5000)
     $reader = $null
     $writer = $null
@@ -88,7 +63,7 @@ function Request($Identity, [guid]$Generation, [string]$Method) {
         $reader = [IO.StreamReader]::new($client, [Text.UTF8Encoding]::new($false), $false, 4096, $true)
         $writer = [IO.StreamWriter]::new($client, [Text.UTF8Encoding]::new($false), 4096, $true)
         $writer.AutoFlush = $true
-        $writer.WriteLine($Method)
+        $writer.WriteLine($Payload)
         return Await ($reader.ReadLineAsync())
     } finally {
         if ($reader) { $reader.Dispose() }
@@ -114,7 +89,8 @@ foreach ($mode in @('stop', 'owner-death')) {
         $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl',
             'ContainerInherit, ObjectInherit', 'None', 'Allow'))
         Set-Acl -LiteralPath $root -AclObject $acl
-        foreach ($name in @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs', 'windows-worker-launcher.ps1')) {
+        foreach ($name in @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
+            'WindowsRuntimeControl.cs', 'windows-worker-launcher.ps1')) {
             Copy-Item -LiteralPath (Join-Path $source $name) -Destination $root
         }
         @'
@@ -166,6 +142,30 @@ if (process.argv[2] === 'child') {
         Assert ($observation.rootExitCode -eq 0 -and $observation.members -contains $member.Id) 'Detached writer escaped the retained Job'
         Assert ($observation.members -contains $identity.launcherPid) 'Original launcher is no longer retained'
         Assert (-not $observation.applicationHealthy -and -not $observation.quiescent) 'Job observation invented application health or quiescence'
+        if ($mode -eq 'stop') {
+            $request = @{
+                version=1; generation=$generation.ToString('D'); ownerPid=$identity.pid
+                ownerIdentity=$identity.identity; requestId=[guid]::NewGuid().ToString('D'); method='stop'
+            }
+            $request.ownerIdentity = "$($identity.pid):1"
+            Assert ((Raw-Request $identity $generation ($request | ConvertTo-Json -Compress)) -ceq 'refused') 'Stale owner request stopped the original runtime'
+            $request.ownerIdentity = $identity.identity
+            $request.generation = [guid]::NewGuid().ToString('D')
+            Assert ((Raw-Request $identity $generation ($request | ConvertTo-Json -Compress)) -ceq 'refused') 'Wrong generation request stopped the original runtime'
+            $request.generation = $generation.ToString('D')
+            $request.method = 'retire'
+            Assert ((Raw-Request $identity $generation ($request | ConvertTo-Json -Compress)) -ceq 'refused') 'Control protocol retired a running domain'
+            foreach ($payload in @('{"method":"stop","method":"observe"}', ('x' * 8193))) {
+                Assert ((Raw-Request $identity $generation $payload) -ceq 'refused') 'Malformed or oversized runtime request was accepted'
+            }
+            $idle = [Deployment.WindowsRuntimePipe]::Connect($generation, $identity.pid, $identity.identity, 5000)
+            $idleReader = [IO.StreamReader]::new($idle)
+            try { Assert ($null -eq (Await ($idleReader.ReadLineAsync()))) 'Idle peer was not closed at the request deadline' }
+            finally { $idleReader.Dispose(); $idle.Dispose() }
+            $observation = Request $identity $generation 'observe' | ConvertFrom-Json
+            Assert ($observation.phase -eq 'root-exited' -and $observation.members -contains $member.Id) 'Rejected requests changed original runtime ownership'
+            Write-Output 'PASS: scoped runtime protocol refuses stale, malformed and idle peers without stopping the domain'
+        }
         $length = (Get-Item -LiteralPath (Join-Path $root 'writes')).Length
         Start-Sleep -Milliseconds 300
         Assert ((Get-Item -LiteralPath (Join-Path $root 'writes')).Length -gt $length) 'A disconnected observer stopped the running service'

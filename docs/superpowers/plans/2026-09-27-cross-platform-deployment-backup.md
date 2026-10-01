@@ -6647,6 +6647,30 @@ The full regression is preserved. Added exact literal argv/environment,
 pre-settlement retirement refusal and repeated-stop evidence checks to protect
 the domain's additional serialization and state transitions.
 
+#### Task 5E: bounded identity-scoped runtime control protocol
+
+- [ ] Replace the actual-task fixture's unscoped line-command loop with
+  `WindowsRuntimeControl`. Preserve both Task 5D scenarios and their literal,
+  early-retirement and repeated-stop assertions.
+- [ ] Require exact request version, generation, original owner PID/start-time,
+  unique request ID and method. Send stale owner, different generation,
+  pre-settlement retirement, duplicate fields, oversized frames and idle peers
+  to the real S4U task. Each refusal must leave the retained Job running.
+- [ ] Capture the missing control helper causal failure in Actions.
+- [ ] Implement bounded UTF-8 newline frames (8192-byte requests, 131072-byte
+  replies), a five-second per-connection request deadline, explicit refusal
+  logging and safe disconnection. Unknown/malformed peer input must not dispose
+  the service's retained Job. Actual settlement failures remain errors.
+- [ ] Client exchanges use the accepted native server-identity check, an overall
+  bounded deadline and exact response-envelope binding before returning results.
+  The server admits only observe/stop/retire; no peer can submit a new executable
+  or command grant.
+- [ ] Require the actual-task native cases and preserve full regression.
+
+The future installed-runtime host must additionally bind the verified private
+configuration and Scheduled Task admission; protocol scope alone does not
+authorize snapshotting, task mutation or declaring the application healthy.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
