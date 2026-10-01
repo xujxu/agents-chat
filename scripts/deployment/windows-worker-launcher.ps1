@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory)][string]$JobName,
     [Parameter(Mandatory)][int]$OwnerPid,
-    [Parameter(Mandatory)][string]$OwnerIdentity
+    [Parameter(Mandatory)][string]$OwnerIdentity,
+    [switch]$PersistentRuntime
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -9,8 +10,17 @@ $watch = $null
 try {
     if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7) { throw 'Unsupported native launcher platform.' }
     Add-Type -Path (Join-Path $PSScriptRoot 'WindowsWorkerJob.cs')
-    $watch = [Deployment.WindowsWorkerLauncher]::WatchOwner($OwnerPid, $OwnerIdentity)
+    if ($PersistentRuntime) {
+        $watch = [Diagnostics.Process]::GetProcessById($OwnerPid)
+        $null = $watch.Handle
+        if ($watch.HasExited -or "$OwnerPid`:$($watch.StartTime.ToUniversalTime().Ticks)" -cne $OwnerIdentity) {
+            throw 'Original runtime owner changed before Job admission.'
+        }
+    } else {
+        $watch = [Deployment.WindowsWorkerLauncher]::WatchOwner($OwnerPid, $OwnerIdentity)
+    }
     [Deployment.WindowsWorkerJob]::JoinCurrent($JobName)
+    if ($PersistentRuntime -and $watch.HasExited) { throw 'Original runtime owner exited during Job admission.' }
     [Console]::Out.WriteLine((@{
         type='ready'; name=$JobName; pid=$PID
         processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)

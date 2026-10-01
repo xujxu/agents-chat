@@ -6626,6 +6626,19 @@ Configuration/ACL capture, identity publication, restart inhibition, installed
 task binding and recovery must still be connected before enabling the public
 Windows lifecycle.
 
+Full transport regression `f2b5a22` / `36889496744` completed **23/23**;
+it replaces `1292374` as the accepted baseline. Task 5D causal `f241a84` /
+`36890274445`, job `110471258768`, passed all existing native task/pipe gates
+then failed exactly at the missing `WindowsRuntimeDomain.cs` import.
+
+Implemented the original-handle runtime domain and explicit persistent launcher
+mode. Runtime admission validates bounded literal command fields, verifies gated
+launcher identity and original Job membership before sending the sole command,
+and distinguishes root exit from empty-Job settlement. Independent observers
+cannot acquire or release the Job handle. Stop/observe/retire retain it until
+confirmed empty; disposal and owner death use kill-on-close. Existing deployment
+worker mode keeps its original finite owner watcher.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

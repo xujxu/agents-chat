@@ -138,8 +138,8 @@ For persistent deployment on a Windows machine, use `scripts\deploy.ps1` which m
 On this development branch, Windows transaction/backup/recovery integration is
 still incomplete; do not use it as the final cross-platform deployment release.
 The task parameter and read-only definition changes below passed native
-PowerShell 5.1 acceptance and the full 23-job regression at `1292374`
-(run `36881067273`).
+PowerShell 5.1 acceptance. The full 23-job regression, including the private
+runtime-control transport, passed at `f2b5a22` (run `36889496744`).
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and
