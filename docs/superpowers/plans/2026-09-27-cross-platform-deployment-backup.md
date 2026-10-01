@@ -6227,6 +6227,15 @@ owned inhibition, real ExecSearchPath/manager PATH fallback and rejected
 relative/empty PATH components. Public inactive executable discovery and
 deployment/restore history wiring remain subsequent work.
 
+Configuration implementation `2d29ea8` / `36866688064` passed Linux
+contracts, but native job `110384020392` refused normal cases at the new
+global-environment boundary. The current logs intentionally contain no
+environment values and do not identify the offending variable names.
+Add a names-only diagnostic to the first native fixture before changing
+that policy; do not guess which runner defaults are present or relax
+authentication checks. Public inactive/failed lifecycle tests are being
+prepared separately and are not part of this diagnostic submission.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

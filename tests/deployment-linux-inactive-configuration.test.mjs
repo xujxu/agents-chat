@@ -36,6 +36,11 @@ async function managerUrl(t, value) {
 for (const state of ['inactive', 'failed']) {
   test(`configured ${state} credentials are admitted without a fictitious startup process`, native, async t => {
     const f = await configured(t, state);
+    if (state === 'inactive') {
+      const environment = await linuxSystemdBus(['get-property', 'org.freedesktop.systemd1',
+        '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'Environment'], 'as');
+      t.diagnostic(`System manager environment names: ${environment.map(entry => entry.split('=', 1)[0]).sort().join(', ')}`);
+    }
     const service = await inspectLinuxInactiveService(f);
     t.after(() => service.close());
     const properties = ['ActiveState', 'MainPID', 'InvocationID', 'ExecMainStatus'];
