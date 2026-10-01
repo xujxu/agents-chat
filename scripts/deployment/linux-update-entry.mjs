@@ -38,6 +38,20 @@ Readiness uses port 3010; admission reserves a minimum 2 GiB build-space budget.
 
 let options;
 let captured;
+function render(result) {
+  if (result.status !== 'preview') return `${result.message ?? result.status}${result.phase ? ` (phase=${result.phase})` : ''}\n`;
+  return [
+    'Preview only; no update or admission was performed.',
+    `Current: ${result.inspection.sourceCommit}`,
+    `Local target: ${result.target?.commit ?? 'unknown (pending)'}`,
+    `Backup: ${result.estimate.backupLocation}`,
+    `Estimated required bytes: ${result.estimate.requiredBytes}`,
+    `Planned steps: ${result.steps.join(' -> ')}`,
+    `Pending checks: ${result.pendingChecks.join(', ')}`,
+    'Remote refs were not refreshed.',
+    '',
+  ].join('\n');
+}
 try {
   options = parseArguments('update', args);
   if (options.help) {
@@ -60,8 +74,7 @@ try {
       },
     });
     await captured?.close();
-    process.stdout.write(json ? `${JSON.stringify(result)}\n`
-      : `${result.message ?? result.status}${result.phase ? ` (phase=${result.phase})` : ''}\n`);
+    process.stdout.write(json ? `${JSON.stringify(result)}\n` : render(result));
   }
 } catch (error) {
   const code = typeof error?.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(error.code)

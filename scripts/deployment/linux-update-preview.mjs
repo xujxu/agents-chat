@@ -38,7 +38,9 @@ export async function previewLinuxUpdate({ options, project, control, unit, exis
         statfs(project, { bigint: true }), statfs(backupParent, { bigint: true }),
         stat(project, { bigint: true }), stat(backupParent, { bigint: true }),
       ]);
-      const operation = existing ? await reconcileInterruptedOperation(control) : { status: 'unmanaged', phase: null };
+      const operation = !existing ? { status: 'unmanaged' }
+        : !existing.state && existing.names.length ? { status: 'unbound' }
+          : await reconcileInterruptedOperation(control);
       result = await previewUpdate(options, {
         inspect: async () => ({
           project, sourceCommit: source.record.commit, sourceRef: source.record.ref,

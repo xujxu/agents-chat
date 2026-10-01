@@ -195,6 +195,14 @@ test('native deployment refuses preview side effects while reporting local targe
   const missing = await preview(['--revision', 'b'.repeat(40)]);
   assert.equal(missing.target, null);
   assert.ok(missing.pendingChecks.includes('target'));
+  const human = await execute('/usr/bin/bash', [
+    path.join(repository, 'scripts/update.sh'), '--project-dir', f.project, '--dry-run', '--no-pull',
+  ], { cwd: '/', timeout: 90000, maxBuffer: 16384,
+    env: { PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: '/root' } });
+  assert.match(human.stdout, /Preview only; no update or admission was performed/);
+  assert.ok(human.stdout.includes(`Current: ${f.prior}`));
+  assert.match(human.stdout, /Estimated required bytes: [0-9]+/);
+  assert.match(human.stdout, /Pending checks:.*database-compatibility/);
   await f.service.check();
   assert.deepEqual((await readdir(path.dirname(f.project))).sort(), names);
   assert.deepEqual(await readFile(path.join(f.project, '.git/index')), index);
