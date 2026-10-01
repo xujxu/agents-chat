@@ -232,8 +232,8 @@ The continuous Linux gate also passes first deployment, an unchanged update,
 two source-content updates, and saved recovery of the original source, build
 and authenticated chat data after removing installed scripts and Git packs.
 
-Inactive/failed public lifecycle support is implemented but its expanded
-22-job Actions acceptance is still pending. Admission does not start the service
+Inactive/failed public lifecycle support passed all 22 Actions jobs at
+`5eb4d81` (run `36870898113`). Admission does not start the service
 to discover its executables or read a fictitious process environment. It requires
 literal `npm start`, npm's `#!/usr/bin/env node` interpreter, and an external Node
 selected from the retained startup PATH (unit/EnvironmentFile, then ExecSearchPath,

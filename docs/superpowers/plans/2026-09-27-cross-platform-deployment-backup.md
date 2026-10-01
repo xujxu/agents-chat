@@ -6308,6 +6308,70 @@ the terminal unit state is unchanged. Do not relax missing-authentication
 admission. The real inactive/failed lifecycle jobs are still running; retain
 them to collect their full public execution evidence before any cancellation.
 
+**Full public stopped lifecycle acceptance:** `5eb4d81ba967f2cff6be4e0b13192d335a77d455`
+/ Actions `36870898113` completed with **22/22 success**. The worker-domain
+regression, real inactive and failed public lifecycles, and fresh installation
+followed by two updates and saved restore all passed. This replaces `19c8ded`
+as the latest fully accepted baseline. No local validation or live deployment
+was used.
+
+### Task 5A: Portable Windows task registration parameters
+
+Continue inline under the existing execution approval. This bounded slice does
+not claim task process-tree ownership or complete Windows transactional recovery.
+Do not run the unsafe legacy deploy body or watchdog port cleanup as acceptance.
+
+**Files:**
+- Modify `scripts/install-scheduled-task.ps1`: default principal is the invoking
+  Windows identity, explicit `-UserId` stays supported, optional `-NoTunnel`
+  becomes a literal action argument; descriptions contain no fixed account.
+- Modify `scripts/deploy.ps1`: declare and forward these options when calling
+  the task installer. Existing-task default preservation is a subsequent slice.
+- Modify `scripts/service-watchdog.ps1`: declare `-NoTunnel` and centralize
+  child argument construction, preserving a quoted script path with spaces.
+- Add `tests/deployment-windows-task-options.ps1`: actual isolated task
+  registration with Interactive/logon and S4U/startup, the real deploy installer
+  function, and a real inert child launched with the watchdog argument builder.
+  AST extraction avoids executing unrelated legacy stop/build paths and is not
+  reported as full deploy/watchdog runtime acceptance.
+- Modify `.github/workflows/deployment-lifecycle.yml`: add one Windows
+  PowerShell 5.1 job (23 total); retain all previous jobs and deadlines.
+
+- [ ] Commit/push causal test and capture native failures for fixed principal,
+  unsupported `-NoTunnel`, missing deploy forwarding and missing child builder.
+  Run only in Actions:
+  ```powershell
+  ./tests/deployment-windows-task-options.ps1
+  ```
+- [ ] Replace the installer principal default and append the switch literally:
+  ```powershell
+  [string]$UserId = ([Security.Principal.WindowsIdentity]::GetCurrent().Name),
+  [switch]$NoTunnel
+  $ActionArguments = "-NoProfile -ExecutionPolicy Bypass -File `"$WatchdogScript`""
+  if ($NoTunnel) { $ActionArguments += ' -NoTunnel' }
+  ```
+- [ ] Forward the explicit/default identity and switch through deploy's existing
+  installer function:
+  ```powershell
+  & $InstallScript -TaskName $TaskName -ProjectDir $ProjectDir -UserId $UserId `
+      -LogonType $TaskLogonType -TriggerType $TaskTriggerType -NoTunnel:$NoTunnel
+  ```
+- [ ] Add and use the watchdog child-command builder:
+  ```powershell
+  function Get-StartScriptArguments {
+      param([string]$StartScript, [switch]$NoTunnel)
+      if (-not [IO.Path]::IsPathRooted($StartScript) -or $StartScript -match '["\r\n]') {
+          throw 'An absolute literal startup script path is required.'
+      }
+      $command = "-NoProfile -ExecutionPolicy Bypass -File `"$StartScript`""
+      if ($NoTunnel) { $command += ' -NoTunnel' }
+      return $command
+  }
+  ```
+- [ ] Push implementation, inspect the native job's actual task definitions and
+  inert child results, then require all 23 gates. Document this as parameter
+  portability, not as full Windows lifecycle acceptance.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

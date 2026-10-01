@@ -290,3 +290,13 @@ jobs:
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
           $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
           node --test tests/deployment-windows-worker.test.mjs tests/deployment-native-operation.test.mjs
+
+  windows-task-options:
+    name: Native Windows task options
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify portable Scheduled Task and child parameters with PowerShell 5.1
+        shell: powershell
+        run: ./tests/deployment-windows-task-options.ps1
