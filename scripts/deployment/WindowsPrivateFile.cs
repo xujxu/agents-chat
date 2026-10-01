@@ -42,6 +42,9 @@ namespace Deployment
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool GetFileInformationByHandle(SafeFileHandle file, out FileInformation information);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool MoveFileExW(string existing, string destination, uint flags);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         static extern uint GetFinalPathNameByHandleW(SafeFileHandle file, StringBuilder path, uint capacity, uint flags);
         [DllImport("advapi32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -206,7 +209,8 @@ namespace Deployment
                         stream.Flush(true);
                     }
                     parent.CheckPublicationDirectory();
-                    File.Move(pending, file);
+                    const uint writeThrough = 8;
+                    Native(MoveFileExW(pending, file, writeThrough), "Publish original private evidence");
                     published = Open(file, Digest(bytes));
                     parent.CheckPublicationDirectory();
                     return published;

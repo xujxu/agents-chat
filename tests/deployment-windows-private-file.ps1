@@ -10,6 +10,16 @@ function Refuses([scriptblock]$Action, [string]$Expected) {
     catch { $observed = $_.Exception.GetBaseException().Message }
     Assert ($observed -ceq $Expected) "Unexpected private configuration refusal: $observed"
 }
+function Refuses-ExistingPublication([string]$File, [string]$Expected) {
+    $collision = $false
+    try { [Deployment.WindowsPrivateFile]::Publish($File, '{"phase":"changed"}').Dispose() }
+    catch {
+        $failure = $_.Exception.GetBaseException()
+        $code = if ($failure -is [ComponentModel.Win32Exception]) { $failure.NativeErrorCode } else { $failure.HResult -band 0xffff }
+        $collision = $code -in @(80, 183)
+    }
+    Assert ($collision -and [IO.File]::ReadAllText($File) -ceq $Expected) 'Private publication overwrote existing evidence'
+}
 function Set-FixtureOwner([string]$File, [Security.Principal.SecurityIdentifier]$Sid) {
     $security = Get-Acl -LiteralPath $File
     Write-Output "Fixture initial owner SID: $($security.GetOwner([Security.Principal.SecurityIdentifier]).Value)"
@@ -36,15 +46,14 @@ try {
     try {
         Assert ($published.ReadText() -ceq '{"phase":"intent"}' -and $published.Sha256 -ceq
             (Get-FileHash -LiteralPath $publishedPath -Algorithm SHA256).Hash.ToLowerInvariant()) 'Published private receipt lost its exact bytes'
-        $collision = $false
-        try { [Deployment.WindowsPrivateFile]::Publish($publishedPath, '{"phase":"changed"}').Dispose() }
-        catch { $collision = ($_.Exception.GetBaseException().HResult -band 0xffff) -in @(80, 183) }
-        Assert ($collision -and $published.ReadText() -ceq '{"phase":"intent"}') 'Private publication overwrote existing evidence'
+        Refuses-ExistingPublication $publishedPath '{"phase":"intent"}'
+        $published.Check()
         $sharing = $false
         try { [IO.File]::WriteAllText($publishedPath, 'changed') }
         catch { $sharing = ($_.Exception.GetBaseException().HResult -band 0xffff) -eq 32 }
         Assert $sharing 'Private publication did not retain its original read-only handle'
     } finally { $published.Dispose() }
+    Refuses-ExistingPublication $publishedPath '{"phase":"intent"}'
     $before = @(Get-ChildItem -LiteralPath $root).Count
     Refuses { [Deployment.WindowsPrivateFile]::Publish((Join-Path $root 'oversized.json'), ('x' * 1048577)) } 'Private publication exceeds the size limit.'
     $encoding = $false

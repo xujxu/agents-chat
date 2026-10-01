@@ -6979,6 +6979,16 @@ handle/identity/security checks, atomic private creation and flush, non-replacin
 rename and retained final-file capability. The host now reuses this method
 without changing readiness fields or per-original-process filenames.
 
+`9c2c8eb` / `36918992259`, native job `110560511130`, passed the new
+publication cases and every installed-host scenario. Preserve its full
+regression. Before relying on publication for pre-mutation durable intent,
+replace ordinary `File.Move` with native `MoveFileExW` using only
+`MOVEFILE_WRITE_THROUGH` (8): flush the data first and require the move itself
+to complete on disk, without replace/copy/reboot flags. Require native existing-
+file refusal both while the receipt is retained and after its handle closes,
+so overwrite protection cannot pass merely because of a sharing violation.
+Reference: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
