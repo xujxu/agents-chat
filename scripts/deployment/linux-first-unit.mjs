@@ -39,7 +39,7 @@ export async function createLinuxFirstUnit({ installation, control, lock: suppli
   const inhibitorBytes = Buffer.from(`[Unit]\nRefuseManualStart=yes\nConditionPathExists=!${inhibition}\n[Service]\nRestart=no\n`);
   const unitBytes = Buffer.from([
     '[Unit]', 'Description=Agents Chat', 'After=network.target', '[Service]', 'Type=simple',
-    `User=${account.uid}`, `Group=${account.gid}`, `WorkingDirectory=${quote(project)}`,
+    `User=${account.uid}`, `Group=${account.gid}`, `WorkingDirectory=${project.replaceAll('%', '%%')}`,
     'Environment=NODE_ENV=production',
     `Environment=${quote(`PATH=${nodeDirectory}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`)}`,
     `Environment=${quote(`HOME=${account.home}`)}`, `ExecStart=${quote(npm)} start`,

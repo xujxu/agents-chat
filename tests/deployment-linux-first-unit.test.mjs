@@ -35,6 +35,11 @@ async function fixture(t, { phase = 'configuring' } = {}) {
   const fragment = `/etc/systemd/system/${f.unit}`;
   const inhibition = `${fragment}.d/90-agents-chat-deployment.conf`;
   t.after(async () => {
+    const state = await linuxSystemdProperties(f.unit, ['LoadState', 'ActiveState'], { allowMissing: true });
+    if (state.LoadState === 'bad-setting') {
+      const { stdout } = await linuxNative('/usr/bin/journalctl', ['-b', '--no-pager', '-n', '12', '-u', f.unit]);
+      t.diagnostic(`First unit load failure before cleanup:\n${stdout}`);
+    }
     for (const file of [inhibition, fragment]) {
       try { await unlink(file); }
       catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -53,6 +58,7 @@ test('first unit publication retains genuine inactive configuration and refuses 
   t.after(() => created.close());
   assert.equal(created.status, 'configured-inhibited');
   assert.equal(created.identity.configuration.state.WorkingDirectory, f.project);
+  assert.ok((await readFile(f.fragment, 'utf8')).includes(`WorkingDirectory=${f.project}\n`));
   assert.equal(created.identity.configuration.state.User, '65534');
   assert.equal(created.identity.configuration.state.Group, '65534');
   assert.equal(created.identity.configuration.state.Slice, 'system.slice');

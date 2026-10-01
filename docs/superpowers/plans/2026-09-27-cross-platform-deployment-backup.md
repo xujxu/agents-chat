@@ -5432,6 +5432,18 @@ attach only the non-secret policy fields involved in that gate. This preserves
 the strict gate and makes any remaining mismatch diagnosable; acceptance is
 still pending rather than assuming the cause has been proven.
 
+Correction `75cf5b2` / `36812487875` exposed `LoadState: bad-setting`,
+not merely an uninitialized slice. The generated WorkingDirectory had reused
+ExecStart-style quoting; existing accepted space-containing service fixtures
+use the raw path with escaped systemd percent specifiers for that directive.
+Publication now follows that form and retains the exact observed path check.
+Native fixture cleanup also records a bounded unit journal excerpt on
+bad-setting so a remaining parser failure cannot hide behind a generic gate.
+The new first-unit tests now run alongside the actual first-build test in the
+existing first-install job, rather than waiting for unrelated worker-domain
+tests to finish before their logs become available. All tests and eighteen
+jobs remain; the six existing lifecycle scenarios and their limits are unchanged.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
