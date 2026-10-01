@@ -5,12 +5,19 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { fixture, ready } from './deployment-linux-service-fixture.mjs';
 import { saveRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
+import { linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
 
 const execute = promisify(execFile);
 
-export async function interrupted(t, phase = 'retirement-unlink-0', outcome = 'accepted', workerMode = 'none', existing = null) {
+export async function interrupted(t, phase = 'retirement-unlink-0', outcome = 'accepted', workerMode = 'none', existing = null, priorRuntime = 'running') {
   const f = existing ?? await fixture(t);
-  await ready(f);
+  if (priorRuntime === 'running') await ready(f);
+  else {
+    const state = await linuxSystemdProperties(f.unit, ['ActiveState', 'MainPID']);
+    if (priorRuntime !== 'stopped' || !['inactive', 'failed'].includes(state.ActiveState) || state.MainPID !== '0') {
+      throw new Error('Interrupted stopped fixture requires an actually quiescent service.');
+    }
+  }
   const control = path.join(path.dirname(f.project), 'control');
   const source = path.join(f.project, 'scripts', 'deployment');
   if (!existing) {
@@ -21,7 +28,7 @@ export async function interrupted(t, phase = 'retirement-unlink-0', outcome = 'a
   }
   const saved = await saveRecoveryEngine({ source, control });
   const child = fork(new URL('./deployment-service-stop-child.mjs', import.meta.url),
-    [control, f.project, f.unit, f.npm, f.node, phase, outcome, workerMode],
+    [control, f.project, f.unit, f.npm, f.node, phase, outcome, workerMode, priorRuntime],
     { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   let diagnostic = '';
   child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-4096); });

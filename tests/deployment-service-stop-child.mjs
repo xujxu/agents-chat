@@ -7,8 +7,18 @@ import { acquireLock, loadState, releaseLock, writeState } from '../scripts/depl
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
+import { inspectLinuxInactiveService } from '../scripts/deployment/linux-inactive-service.mjs';
 
-const [control, project, unit, npm, node, phase, outcome = 'accepted', workerMode = 'none'] = process.argv.slice(2);
+const [control, project, unit, npm, node, phase, outcome = 'accepted', workerMode = 'none', priorRuntime = 'running'] = process.argv.slice(2);
+if (!['running', 'stopped'].includes(priorRuntime) || priorRuntime === 'stopped' && phase !== 'stopped') {
+  throw new Error('Unsupported interrupted fixture runtime or phase.');
+}
+let runtimeIdentity = unit;
+if (priorRuntime === 'stopped') {
+  const observed = await inspectLinuxInactiveService({ unit, project, npm, node });
+  try { runtimeIdentity = observed.runtimeIdentity; }
+  finally { await observed.close(); }
+}
 const activation = phase.startsWith('activation-');
 const activationStopping = phase.startsWith('activation-stop:');
 const receiptPhase = activationStopping ? phase.slice('activation-stop:'.length)
@@ -19,7 +29,7 @@ const state = {
   version: 1, operationId: lock.operationId, project, operation: restoring ? 'restore' : 'update',
   phase: restoring ? 'restore-preflight' : 'preflight', previousPhase: null,
   sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
-  backupId: null, priorRuntime: 'running', runtimeIdentity: unit,
+  backupId: null, priorRuntime, runtimeIdentity,
   startedAt: lock.createdAt, updatedAt: lock.createdAt, errorCode: null,
 };
 await writeState(control, state);

@@ -1,18 +1,23 @@
+import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fixture, ready } from './deployment-linux-service-fixture.mjs';
+import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
+import { fixture, ready, systemctl } from './deployment-linux-service-fixture.mjs';
+import { interrupted } from './deployment-linux-service-recovery-fixture.mjs';
 import { acquireLock, loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { inspectLinuxConfiguration } from '../scripts/deployment/linux-configuration.mjs';
 import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
 import { createLinuxServiceSnapshot } from '../scripts/deployment/linux-snapshot.mjs';
+import { linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
 
-export async function restoreCandidate(t, valid = true, { gitSource = false } = {}) {
+export async function restoreCandidate(t, valid = true, { gitSource = false, restartOnFailure = true } = {}) {
   const server = port => `
 const fs=require('node:fs');
 const server=require('node:http').createServer((req,res)=>{
@@ -27,7 +32,7 @@ server.listen(${port},'127.0.0.1',()=>{
 Environment=NEXTAUTH_SECRET=fixture-private-secret
 Environment=NEXTAUTH_URL=http://localhost:3010
 Environment=ADMIN_USERNAME=fixture
-Environment=ADMIN_PASSWORD=fixture-private-password` });
+Environment=ADMIN_PASSWORD=fixture-private-password${restartOnFailure ? '' : '\nRestart=no'}` });
   await ready(f);
   const port = Number(await readFile(path.join(f.project, 'port'), 'utf8'));
   await writeFile(path.join(f.project, 'server.cjs'), server(port));
@@ -84,4 +89,40 @@ Environment=ADMIN_PASSWORD=fixture-private-password` });
   const config = await inspectLinuxConfiguration({ service: current, profile: 'agents-chat-auth-638c553' });
   const owner = await acquireLock(control, { project: f.project, operationId: randomUUID() });
   return { ...f, service: current, configuration: config, control, lock: owner, backup, port, git, savedCommit, savedIndex };
+}
+
+export async function coldRestoreCandidate(t, phase = 'stopped', valid = true, { runtimeState = 'running', ...options } = {}) {
+  if (!['running', 'inactive', 'failed'].includes(runtimeState)) throw new Error('Unsupported cold fixture runtime state.');
+  const f = await restoreCandidate(t, valid, { ...options, ...(runtimeState === 'failed' ? { restartOnFailure: false } : {}) });
+  await releaseLock(f.control, f.lock);
+  if (runtimeState === 'inactive') await systemctl('stop', f.unit);
+  if (runtimeState === 'failed') {
+    await writeFile(path.join(f.project, 'server.cjs'), 'process.exit(42);');
+    try { await systemctl('restart', f.unit); }
+    catch (error) { assert.equal(error.code, 1); }
+    for (let attempt = 0; attempt < 200; attempt++) {
+      if ((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState === 'failed') break;
+      await delay(100);
+    }
+    assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, 'failed');
+    assert.equal((await linuxSystemdProperties(f.unit, ['ExecMainStatus'])).ExecMainStatus, '42');
+  }
+  await cp(fileURLToPath(new URL('../scripts/deployment/', import.meta.url)),
+    path.join(f.project, 'scripts', 'deployment'), { recursive: true });
+  return interrupted(t, phase, 'accepted', 'none', f, runtimeState === 'running' ? 'running' : 'stopped');
+}
+
+export function invokeSavedRestore(f, input, acknowledge = true) {
+  return new Promise((resolve, reject) => {
+    const child = execFile(process.execPath, [
+      path.join(f.saved.directory, 'linux-restore-entry.mjs'), f.control, f.saved.manifestSha256,
+      ...(acknowledge ? ['--accept-data-loss'] : []),
+    ], { cwd: '/', timeout: 120000, maxBuffer: 16384,
+      env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' } }, (error, stdout, stderr) => {
+      if (error && typeof error.code !== 'number') reject(error);
+      else resolve({ code: error?.code ?? 0, stdout, stderr });
+    });
+    child.stdin.on('error', error => { if (error.code !== 'EPIPE') reject(error); });
+    child.stdin.end(JSON.stringify(input));
+  });
 }

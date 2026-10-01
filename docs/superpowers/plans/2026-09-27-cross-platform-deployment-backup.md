@@ -6083,6 +6083,32 @@ inhibitor/journal was created. Also assert cold hierarchy mismatch and
 fictional-process refusal, and that successful activation does not rewrite
 the original stopped identity/history. No production error policy was relaxed.
 
+Corrected maintenance `4c1b31d` / `36860809839`, native job `110364552008`,
+passed all four maintenance cases and the full native worker job. The overall
+20-job regression remains running; 12 jobs had completed without failures.
+
+### Dead-controller recovery of originally stopped services
+
+Extend cold transaction admission to the version-2, three-phase stopped
+receipt, binding its full observation identifier to durable state. Preserve
+version-1 running receipts and their existing checks. Cold activation from
+an originally stopped identity needs a version-2 activation intent with
+`priorRuntime: stopped` and the original opaque identifier; never substitute
+an empty or old failed InvocationID or pretend the service was running.
+Keep running activation intents at version 1. Reentry, readiness, retirement,
+terminal state and repeated recovery must preserve this distinction.
+
+Add native tests before implementation: create an actual retained backup,
+begin maintenance while the service is inactive or has really exited 42,
+pause the controller after durable stopped evidence and kill that controller.
+Refuse recovery while its owner is alive. Then admit the dead-owner operation,
+restore files, activate, check the versioned intent and finish/replay without
+changing the backup or initial runtime history. A separate saved-entry test
+displaces installed helpers and checks Git HEAD/index and data restoration.
+These use the established lightweight HTTP/provider fixture, not a claim of
+new public Next.js deployment acceptance. Preserve running fixture defaults
+and share candidate/saved-entry helpers instead of duplicating them.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

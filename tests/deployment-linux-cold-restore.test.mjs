@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { execFile, fork } from 'node:child_process';
+import { fork } from 'node:child_process';
 import { cp, lstat, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { restoreCandidate } from './deployment-linux-restore-fixture.mjs';
+import { coldRestoreCandidate as candidate, invokeSavedRestore } from './deployment-linux-restore-fixture.mjs';
 import { interrupted } from './deployment-linux-service-recovery-fixture.mjs';
 import { acquireLock, loadState, releaseLock } from '../scripts/deployment/state.mjs';
 import { admitLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-admission.mjs';
@@ -14,14 +14,6 @@ import { systemctl } from './deployment-linux-service-fixture.mjs';
 import { activateLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-activation.mjs';
 import { inspectLinuxColdActivation } from '../scripts/deployment/linux-cold-activation-recovery.mjs';
 import { completeLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-completion.mjs';
-
-async function candidate(t, phase = 'stopped', valid = true, options) {
-  const f = await restoreCandidate(t, valid, options);
-  await releaseLock(f.control, f.lock);
-  await cp(fileURLToPath(new URL('../scripts/deployment/', import.meta.url)),
-    path.join(f.project, 'scripts', 'deployment'), { recursive: true });
-  return interrupted(t, phase, 'accepted', 'none', f);
-}
 
 test('cold restore admission rejects a live controller and binds dead-owner evidence without replacing its lock', async t => {
   const f = await candidate(t);
@@ -379,18 +371,7 @@ test('saved restore entry completes dead-controller cold restoration without che
     project: f.project, unit: f.unit, npm: f.npm, node: f.node, backup: f.backup,
     port: f.port, waitSeconds: 10, timeoutSeconds: 90,
   };
-  const execute = acknowledge => new Promise((resolve, reject) => {
-    const child = execFile(process.execPath, [
-      path.join(f.saved.directory, 'linux-restore-entry.mjs'), f.control, f.saved.manifestSha256,
-      ...(acknowledge ? ['--accept-data-loss'] : []),
-    ], { cwd: '/', timeout: 120000, maxBuffer: 16384,
-      env: { PATH: '/usr/bin:/bin', HOME: '/root', LANG: 'C' } }, (error, stdout, stderr) => {
-      if (error && typeof error.code !== 'number') reject(error);
-      else resolve({ code: error?.code ?? 0, stdout, stderr });
-    });
-    child.stdin.on('error', error => { if (error.code !== 'EPIPE') reject(error); });
-    child.stdin.end(JSON.stringify(input));
-  });
+  const execute = acknowledge => invokeSavedRestore(f, input, acknowledge);
   assert.equal((await execute(false)).code, 1);
   assert.deepEqual(await readFile(path.join(f.control, 'lock/owner.json')), oldLock);
   input.unit = 'unrelated-cold-restore.service';
