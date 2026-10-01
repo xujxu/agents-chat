@@ -6109,6 +6109,33 @@ These use the established lightweight HTTP/provider fixture, not a claim of
 new public Next.js deployment acceptance. Preserve running fixture defaults
 and share candidate/saved-entry helpers instead of duplicating them.
 
+Implementation sequence for this existing approved recovery scope:
+
+- [x] Push causal native coverage: `55ba1d1` / `36861965468`, queued behind
+  the full maintenance regression. Production cold admission is unchanged.
+- [ ] Observe its native stopped-service admission failure before changing
+  production. Also exercise a killed restorer after durable readiness, reject
+  downgraded intent versions/roles and foreign stopped identifiers, and
+  reenter completion without replacing the newly activated generation.
+- [ ] Share the versioned stop profile/complete-journal reader in
+  `scripts/deployment/linux-service-stop-evidence.mjs`; use it in the stop
+  owner and both cold decoders. Version 2 must bind
+  `linuxInactiveObservationId(service)` to the original state's marker.
+- [ ] Share cold activation state construction and exact intent decoding in
+  `scripts/deployment/linux-cold-activation-state.mjs`. Use it in the lease
+  publisher/reader and terminal proof parser. Version 1 retains a 32-hex
+  InvocationID; version 2 retains the parent's exact stopped marker.
+- [ ] Update `linux-cold-restore-admission.mjs` and
+  `linux-cold-activation-recovery.mjs` to admit only running/stopped originals
+  with their corresponding complete receipts. An originally stopped service
+  cannot have a prior-runtime activation purpose. Existing previous-activation
+  reactivation refusal remains unchanged.
+- [ ] Add both new helpers to `saved-worker-engine.mjs` and the exact
+  `tests/deployment-saved-worker.test.mjs` inventory. Recovery inherits that
+  closure; terminal proof parsing is already a saved-worker dependency.
+- [ ] Push implementation; require the native cold gate and all 20 workflow
+  jobs to pass without extending deadlines or dropping existing cases.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

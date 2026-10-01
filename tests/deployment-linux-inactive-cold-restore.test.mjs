@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { lstat, readFile, rename } from 'node:fs/promises';
+import { fork } from 'node:child_process';
+import { lstat, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { coldRestoreCandidate, invokeSavedRestore } from './deployment-linux-restore-fixture.mjs';
@@ -7,6 +8,7 @@ import { admitLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-
 import { restoreLinuxColdFiles } from '../scripts/deployment/linux-cold-restore-files.mjs';
 import { activateLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-activation.mjs';
 import { completeLinuxColdRestore } from '../scripts/deployment/linux-cold-restore-completion.mjs';
+import { inspectLinuxColdActivation } from '../scripts/deployment/linux-cold-activation-recovery.mjs';
 import { loadState } from '../scripts/deployment/state.mjs';
 import { linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
 
@@ -22,6 +24,12 @@ for (const runtimeState of ['inactive', 'failed']) {
     assert.match(original.runtimeIdentity, /^stopped:[a-f0-9]{64}$/);
     await assert.rejects(admitLinuxColdRestore({ ...f, acceptDataLoss: true }), /alive|owner/i);
     await f.kill();
+    const statePath = path.join(f.control, 'state.json');
+    const stateBytes = await readFile(statePath);
+    await writeFile(statePath, JSON.stringify({ ...original, runtimeIdentity: `stopped:${'0'.repeat(64)}` }));
+    await assert.rejects(admitLinuxColdRestore({ ...f, acceptDataLoss: true }), /identity|original|stop|state/i);
+    await writeFile(statePath, stateBytes);
+    await assert.rejects(lstat(path.join(f.control, 'recovery-lock')), { code: 'ENOENT' });
     const admitted = await admitLinuxColdRestore({ ...f, acceptDataLoss: true });
     try {
       assert.equal(admitted.service.identity.runtime.mainPid, 0);
@@ -53,6 +61,57 @@ for (const runtimeState of ['inactive', 'failed']) {
     assert.deepEqual(await completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 }), result);
   });
 }
+
+test('failed-service cold readiness survives restorer death without rewriting stopped history', native, async t => {
+  const f = await coldRestoreCandidate(t, 'stopped', true, { runtimeState: 'failed' });
+  const original = await loadState(f.control);
+  await f.kill();
+  const child = fork(new URL('./deployment-cold-activation-child.mjs', import.meta.url),
+    [f.control, f.project, f.backup, String(f.port)], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  let diagnostic = '';
+  child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
+  const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
+  });
+  const ready = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Cold activation did not pause: ${diagnostic}`)), 90000);
+    child.once('message', value => { clearTimeout(timer); resolve(value); });
+    child.once('exit', code => { clearTimeout(timer); reject(new Error(`Cold activation exited ${code}: ${diagnostic}`)); });
+    child.once('error', error => { clearTimeout(timer); reject(error); });
+  });
+  const options = { ...f, waitSeconds: 10, timeoutSeconds: 90 };
+  await assert.rejects(inspectLinuxColdActivation(options), /admission|locking|alive/i);
+  child.kill('SIGKILL');
+  await exited;
+  const intentPath = path.join(f.control, 'recovery-lock/activation-intent.json');
+  const intentBytes = await readFile(intentPath);
+  const intent = JSON.parse(intentBytes);
+  assert.equal(intent.version, 2);
+  assert.equal(intent.state.runtimeIdentity, original.runtimeIdentity);
+  for (const changed of [
+    { ...intent, version: 1 },
+    { ...intent, state: { ...intent.state, priorRuntime: 'running' } },
+    { ...intent, state: { ...intent.state, runtimeIdentity: `stopped:${'0'.repeat(64)}` } },
+  ]) {
+    await writeFile(intentPath, JSON.stringify(changed));
+    await assert.rejects(inspectLinuxColdActivation(options), /activation|intent|identity/i);
+    await writeFile(intentPath, intentBytes);
+    assert.deepEqual(await loadState(f.control), original);
+  }
+  const admitted = await inspectLinuxColdActivation(options);
+  try {
+    assert.equal(admitted.status, 'ready-to-commit');
+    assert.deepEqual(admitted.identity, ready.identity);
+    await admitted.check();
+  } finally { await admitted.close(); }
+  assert.equal((await completeLinuxColdRestore(options)).status, 'restored');
+  const final = await loadState(f.control);
+  assert.equal(final.priorRuntime, 'stopped');
+  assert.equal(final.runtimeIdentity, original.runtimeIdentity);
+  assert.equal((await linuxSystemdProperties(f.unit, ['InvocationID'])).InvocationID, ready.identity.runtime.invocationId);
+});
 
 test('saved cold entry restores an initially stopped source checkout without installed helpers', native, async t => {
   const f = await coldRestoreCandidate(t, 'stopped', true, { runtimeState: 'inactive', gitSource: true });
