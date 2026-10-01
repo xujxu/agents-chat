@@ -45,6 +45,13 @@ function Get-FunctionText($Ast, [string]$Name) {
 
 try {
     New-Item -ItemType Directory -Path $Scripts -Force | Out-Null
+    $canonicalScripts = & node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" $Scripts
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($canonicalScripts)) {
+        throw 'Could not canonicalize the generated Windows fixture path'
+    }
+    $Scripts = $canonicalScripts
+    $Project = Split-Path -Parent $Scripts
+    $Root = Split-Path -Parent $Project
     Copy-Item -LiteralPath (Join-Path $Repository 'scripts\install-scheduled-task.ps1') -Destination $Scripts
     Set-Content -LiteralPath (Join-Path $Scripts 'service-watchdog.ps1') -Value 'param([switch]$NoTunnel)' -Encoding UTF8
     $Installer = Join-Path $Scripts 'install-scheduled-task.ps1'

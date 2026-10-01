@@ -6405,6 +6405,16 @@ from an anonymous scriptblock. Materialize just that real function in a fixture
 script under its scripts directory and dot-source it, retaining its real script
 context without executing the legacy deploy body.
 
+Diagnostic `7b75cd8` / `36876650020`, job `110418185042`, showed the exact
+cause: runner TEMP uses a DOS short-name path, while PowerShell's
+`$PSScriptRoot`/`$PSCommandPath` expand it to the long account-directory path.
+NoTunnel is present in both registered task modes, and the real child receives
+the correct switch. Canonicalize the generated fixture scripts directory using
+Node's native realpath (already installed by this Actions job), then derive the
+fixture project/root and retain all exact path assertions. Production literal
+task matching stays unchanged. The extracted function context correction now
+reaches real registration; its remaining mismatch is the same path spelling.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
