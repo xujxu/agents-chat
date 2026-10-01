@@ -279,8 +279,8 @@ test('public deploy installs and accepts an actual fresh application from its ow
   skip: process.env.DEPLOYMENT_TEST_REAL_FIRST_BUILD !== '1',
 }, async t => {
   await import('../scripts/deployment/linux-deploy-command.mjs');
-  const uid = Number((await execute('/usr/bin/id', ['-u', 'runner'])).stdout.trim());
-  const gid = Number((await execute('/usr/bin/id', ['-g', 'runner'])).stdout.trim());
+  const uid = Number((await execute('/usr/bin/id', ['-u', 'agents-chat-test'])).stdout.trim());
+  const gid = Number((await execute('/usr/bin/id', ['-g', 'agents-chat-test'])).stdout.trim());
   assert.ok(Number.isSafeInteger(uid) && uid > 0 && Number.isSafeInteger(gid) && gid > 0);
   const f = await freshSourceInstallationFixture(t, { unit: 'agents-chat.service', uid, gid });
   const script = path.join(f.project, 'scripts/deploy.sh');

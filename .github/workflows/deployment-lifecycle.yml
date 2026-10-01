@@ -45,10 +45,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Create isolated first-install runtime account
+        id: first_runtime_account
+        run: sudo useradd --create-home --user-group --shell /usr/sbin/nologin agents-chat-test
       - name: Verify fresh build, activation and retirement recovery
         run: |
           sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
           sudo env DEPLOYMENT_TEST_REAL_FIRST_BUILD=1 "$(command -v node)" --test tests/deployment-linux-first-build.test.mjs tests/deployment-linux-first-unit.test.mjs tests/deployment-linux-first-recovery.test.mjs
+      - name: Remove isolated first-install runtime account
+        if: always() && steps.first_runtime_account.outcome == 'success'
+        run: sudo userdel --remove agents-chat-test
 
   linux-deployment:
     name: Native Linux deployment (${{ matrix.scenario }})

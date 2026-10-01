@@ -218,9 +218,10 @@ The staged native command supports a fresh installation or redeployment of an
 existing running service; inactive/failed services, deferred verification,
 `--wait 0` and deploy `--dry-run` are explicitly refused.
 
-For first installation, prepare a clean source checkout owned by its non-root
-runtime account and private production authentication configuration, such as
-`.env.local`. The account needs a writable npm cache, normally under its home.
+For first installation, prepare a clean source checkout owned by its non-root,
+primary-group-only runtime account and private production authentication
+configuration, such as `.env.local`. The account needs a writable npm cache,
+normally under its home.
 The service must be absent, without prior `.data`, `.next`, `node_modules` or
 operation evidence. Existing artifacts/evidence require inspection, not deletion
 to force a fresh install. The controller requires Node.js 24, `/usr/bin/git`

@@ -5755,7 +5755,7 @@ and failed only the new public case at the missing deploy-command module.
 The public implementation now uses a shared command/entry boundary, explicit
 captured entry selection and the native shell wrapper. Preserve the update
 entry's existing minimum-version behavior; deploy requires Node 24, matching
-fresh inspection. The first public fixture uses the runner's real non-root NSS account and home,
+fresh inspection. The first public fixture uses an isolated real non-root NSS account and home,
 with isolated npm cache supplied through private admitted dotenv, never by
 inheriting the root controller environment. The internal fixtures retain
 their existing uid/gid 65534 and explicit build-home overrides.
@@ -5770,6 +5770,13 @@ API/data assertions unchanged, and assert that the initial state operation is
 Add capture tests for explicit deploy selection, missing entry and unsupported
 operation rejection. No matrix cases or timeouts are removed or relaxed.
 Full public implementation acceptance remains pending.
+
+Implementation `a6d12b5` / `36840741829` exposed the fixture's unsupported
+supplementary groups when using GitHub's runner account. Preserve the existing
+account policy. The first-install Actions job now creates and removes a
+dedicated `agents-chat-test` account with its own primary group and real home;
+the public fixture uses its inspected numeric uid/gid. This is CI setup only,
+not permission for the production command to alter accounts.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
