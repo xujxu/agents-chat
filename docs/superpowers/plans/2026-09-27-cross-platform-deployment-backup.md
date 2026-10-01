@@ -5391,12 +5391,33 @@ and seal all settled workers while leaving the truthful building state. This is
 a build boundary test, not a fabricated successful first deployment. Owned new
 unit creation/activation, recovery and public deploy wiring remain next.
 
-**Build execution:** causal `a095b5c` / Actions `36806930830` has admitted
-all eighteen jobs; the new first-build job failed with the expected missing
-`linux-first-build.mjs` module. Its other jobs are still running. Implementation
+**Build evidence:** causal `a095b5c` / Actions `36806930830` finished with
+seventeen successful jobs and the expected missing `linux-first-build.mjs`
+failure in the new first-build job. Implementation
 `7a37aa1` plus the absent-unit recheck regression `1c7c242` were pushed only
-after causal admission; implementation run `36808073595` is queued. This build
-boundary is not yet accepted.
+after causal admission; implementation run `36808073595` passed all eighteen
+jobs. The genuine first-build job completed in 52 seconds, including non-root
+source selection, dependencies/build and truthful no-service/no-backup state.
+
+### First-install inhibited unit publication
+
+Create the new root-owned unit only from the matching configuring-phase fresh
+deployment and sealed worker evidence. Retain a private `service-install.ndjson`
+journal before mutation, create the known startup inhibitor before the unit
+fragment, and use exclusive creation rather than replacing any existing file
+or drop-in directory. Keep root-source handles and exact bytes/identities.
+After daemon reload, inspect actual systemd policy, numeric account,
+WorkingDirectory, literal npm start, sole inhibitor, zero MainPID and absent
+control group. Every recheck must retain project/account/toolchain/configuration,
+lock/state, worker evidence and file identities. No startup, enablement or
+deployment acceptance is part of this publication boundary.
+
+Native tests exercise actual unit creation/inhibition and manual-start refusal,
+changed source detection, configuring-phase admission and preservation of a
+foreign fragment that appears after initial inspection. Interrupted publication
+keeps inhibition and journal evidence rather than deleting unknown authority.
+Activation/enablement, recovery and public deploy wiring remain subsequent
+boundaries; do not present a configured inactive unit as a successful deploy.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

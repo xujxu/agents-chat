@@ -1,27 +1,9 @@
 import assert from 'node:assert/strict';
-import { chmod, chown, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { chown, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
-import { temporaryDeployment } from './deployment-fixture.mjs';
+import { freshInstallationFixture as fixture } from './deployment-linux-first-fixture.mjs';
 import { fixture as runningFixture, ready } from './deployment-linux-service-fixture.mjs';
-
-async function fixture(t) {
-  const root = await temporaryDeployment(t);
-  await chmod(root, 0o755);
-  const project = path.join(root, 'fresh app');
-  await mkdir(project, { mode: 0o755 });
-  await chown(project, 65534, 65534);
-  const env = path.join(project, '.env.local');
-  await writeFile(env, [
-    'NEXTAUTH_SECRET=first-install-private-secret',
-    'NEXTAUTH_URL=http://localhost:3010',
-    'ADMIN_USERNAME=fixture', 'ADMIN_PASSWORD=first-install-private-password', '',
-  ].join('\n'), { mode: 0o600 });
-  await chown(env, 65534, 65534);
-  return { root, project, unit: `agents-first-${randomUUID()}.service`,
-    control: path.join(root, '.fresh app.deployment'), env };
-}
 
 test('fresh installation inspection binds an absent unit, nonroot account and external controller toolchain without mutation', async t => {
   const { inspectLinuxFirstInstall } = await import('../scripts/deployment/linux-first-install.mjs');
