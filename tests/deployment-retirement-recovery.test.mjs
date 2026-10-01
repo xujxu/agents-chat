@@ -41,6 +41,39 @@ test('changed recovery controllers publish an immutable generation without repla
   ]);
 });
 
+test('interrupted engine publication preserves legacy bytes and refuses unclassified staging on retry', async t => {
+  const root = await temporaryDeployment(t);
+  const source = path.join(root, 'source');
+  const control = path.join(root, 'control');
+  await cp(sourceTree, source, { recursive: true });
+  await mkdir(control, { mode: 0o700 });
+  const legacy = await saveRecoveryEngine({ source, control });
+  const helper = path.join(source, 'linux-readiness.mjs');
+  await writeFile(helper, `${await readFile(helper, 'utf8')}\n// Interrupted generation.\n`);
+  const original = fs.rename;
+  let staging;
+  fs.rename = async (...args) => {
+    if (String(args[0]).startsWith(`${control}${path.sep}recovery-engine-`)) {
+      staging = args[0];
+      throw new Error('publication interrupted before rename');
+    }
+    return original(...args);
+  };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(saveRecoveryEngine({ source, control, allowVersionChange: true }), /publication interrupted/);
+  } finally {
+    fs.rename = original;
+    syncBuiltinESMExports();
+  }
+  assert.ok(staging);
+  const retained = await readFile(path.join(staging, 'manifest.json'));
+  await assert.rejects(saveRecoveryEngine({ source, control, allowVersionChange: true }), { code: 'EEXIST' });
+  assert.deepEqual(await readFile(path.join(staging, 'manifest.json')), retained);
+  assert.deepEqual(await verifyRecoveryEngine({ control, manifestSha256: legacy.manifestSha256 }), legacy);
+  assert.deepEqual((await readdir(control)).sort(), ['recovery-engine', path.basename(staging)]);
+});
+
 test('saved recovery bundle closes module dependencies after its source disappears', async t => {
   const root = await temporaryDeployment(t);
   const source = path.join(root, 'source');
