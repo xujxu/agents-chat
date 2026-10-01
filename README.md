@@ -139,8 +139,8 @@ On this development branch, Windows transaction/backup/recovery integration is
 still incomplete; do not use it as the final cross-platform deployment release.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 23-job regression, including private
-runtime-control transport and task-held Job primitives, passed at `4267c9d`
-(run `36893550797`).
+runtime-control transport, task-held Job primitives and scoped control protocol,
+passed at `aa7afa4` (run `36899837236`).
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

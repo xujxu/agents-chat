@@ -6724,6 +6724,18 @@ This prepares private managed startup configuration admission. It does not yet
 claim arbitrary application-file ACL backup/restoration, immutable parent ACLs,
 or a complete installed task/runtime configuration contract.
 
+Full scoped-control regression `aa7afa4` / `36899837236` passed **23/23**.
+Task 5F causal `9544619` / `36900623467`, job `110505189075`, passed prior
+Windows gates and failed exactly at the missing `WindowsPrivateFile.cs`.
+
+Implemented the retained file capability using read-only sharing, explicit
+final-reparse handling, original-handle metadata/canonical-path checks and
+bounded owner/group/DACL admission. Checks reread and hash original-handle bytes
+as well as metadata/permissions; read sharing alone is not treated as proof
+against every possible pre-existing mapped writer. Ordinary concurrent write
+and replacement opens are denied. EFS, redirected paths, non-single-linked
+files and foreign-read ACLs remain unsupported rather than silently accepted.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
