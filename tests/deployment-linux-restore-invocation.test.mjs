@@ -4,13 +4,13 @@ import { chmod, mkdir, readFile, readdir, symlink, unlink, writeFile } from 'nod
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
-import { createSnapshot } from '../scripts/deployment/snapshot.mjs';
+import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { projectSnapshotExclusions } from '../scripts/deployment/snapshot-scope.mjs';
 import { prepareLinuxRestoreInvocation } from '../scripts/deployment/linux-restore-invocation.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
-async function fixture(t, { foreign = false, projectScope = true, platform = 'linux' } = {}) {
+async function fixture(t, { foreign = false, projectScope = true, platform = 'linux', versioned = false } = {}) {
   const root = await temporaryDeployment(t);
   const project = path.join(root, 'installed app');
   const control = path.join(root, '.installed app.deployment');
@@ -27,6 +27,7 @@ async function fixture(t, { foreign = false, projectScope = true, platform = 'li
   const manifest = { version: 1, files };
   const manifestFile = path.join(engine, 'manifest.json');
   await writeFile(manifestFile, JSON.stringify(manifest), { mode: 0o600 });
+  const recoveryEngine = versioned ? hash(await readFile(manifestFile)) : undefined;
   const source = foreign ? path.join(root, 'different app') : project;
   if (foreign) await mkdir(source);
   await writeFile(path.join(source, 'fixture.db'), 'retained data');
@@ -39,10 +40,21 @@ async function fixture(t, { foreign = false, projectScope = true, platform = 'li
     project: source, destination: backup, id: 'historical-engine', files: ['fixture.db'],
     source: { commit: 'a'.repeat(40), provenance: 'observed' },
     runtime: { platform, state: 'stopped', unit: 'agents-chat.service', executables },
-    projectScope, excludedPaths: projectScope ? projectSnapshotExclusions : [],
+    projectScope, excludedPaths: projectScope ? projectSnapshotExclusions : [], recoveryEngine,
   });
-  return { project, control, engine, backup, manifest, manifestFile, executables };
+  return { project, control, engine, backup, manifest, manifestFile, executables, recoveryEngine };
 }
+
+test('public restore requires the exact engine digest bound into a version-two backup', async t => {
+  const f = await fixture(t, { versioned: true });
+  const snapshot = await verifySnapshot(f.backup);
+  assert.equal(snapshot.version, 2);
+  assert.equal(snapshot.recoveryEngine, f.recoveryEngine);
+  assert.equal((await prepareLinuxRestoreInvocation({ project: f.project })).args[2], f.recoveryEngine);
+  f.manifest.files.reverse();
+  await writeFile(f.manifestFile, JSON.stringify(f.manifest));
+  await assert.rejects(prepareLinuxRestoreInvocation({ project: f.project }), /engine.*digest|engine.*backup/i);
+});
 
 test('public restore admission uses the saved inventory rather than importing or imposing the current engine', async t => {
   const f = await fixture(t);

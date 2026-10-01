@@ -9,11 +9,37 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { acquireLock, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
-import { saveRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
+import { saveRecoveryEngine, verifyRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
 import { recoverRetirement } from '../scripts/deployment/retirement-recovery.mjs';
 
 const sourceTree = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
 const execute = promisify(execFile);
+
+test('changed recovery controllers publish an immutable generation without replacing the legacy engine', async t => {
+  const root = await temporaryDeployment(t);
+  const source = path.join(root, 'source');
+  const control = path.join(root, 'control');
+  await cp(sourceTree, source, { recursive: true });
+  await mkdir(control, { mode: 0o700 });
+  const legacy = await saveRecoveryEngine({ source, control });
+  const original = await readFile(path.join(legacy.directory, 'manifest.json'));
+  const helper = path.join(source, 'linux-readiness.mjs');
+  await writeFile(helper, `${await readFile(helper, 'utf8')}\n// Next controller generation.\n`);
+  await assert.rejects(saveRecoveryEngine({ source, control }));
+  const changed = await saveRecoveryEngine({ source, control, allowVersionChange: true });
+  assert.notEqual(changed.manifestSha256, legacy.manifestSha256);
+  assert.equal(changed.directory, path.join(control, `recovery-engine-${changed.manifestSha256}`));
+  assert.deepEqual(await readFile(path.join(legacy.directory, 'manifest.json')), original);
+  assert.deepEqual(await verifyRecoveryEngine({ control, manifestSha256: legacy.manifestSha256 }), legacy);
+  assert.deepEqual(await verifyRecoveryEngine({ control, manifestSha256: changed.manifestSha256 }), changed);
+  assert.deepEqual(await saveRecoveryEngine({ source, control, allowVersionChange: true }), changed);
+  assert.equal(retirementRecoveryInvocation(changed, {
+    control, project: path.join(root, 'app'), operationId: 'version-change',
+  }).args[0], changed.entrypoint);
+  assert.deepEqual((await readdir(control)).sort(), [
+    'recovery-engine', `recovery-engine-${changed.manifestSha256}`,
+  ]);
+});
 
 test('saved recovery bundle closes module dependencies after its source disappears', async t => {
   const root = await temporaryDeployment(t);

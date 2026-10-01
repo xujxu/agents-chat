@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
-import { chown, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chown, cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
@@ -223,9 +223,11 @@ test(`native deployment composes real application acceptance and saved restorati
 }, async t => {
   const publicCommand = ['command', 'inplace'].includes(scenario);
   const f = await installation(t, { unitName: publicCommand ? 'agents-chat.service' : undefined });
+  let tools = repository;
+  const controlNames = ['backup', 'deployment.json', 'recovery-engine', 'state.json'];
   const command = async args => {
     const inPlace = scenario === 'inplace' && !args.includes('--status');
-    const { stdout, stderr } = await execute('/usr/bin/bash', [path.join(inPlace ? f.project : repository, 'scripts/update.sh'),
+    const { stdout, stderr } = await execute('/usr/bin/bash', [path.join(inPlace ? f.project : tools, 'scripts/update.sh'),
       ...(inPlace ? [] : ['--project-dir', f.project]), '--json', ...args], {
       cwd: '/', timeout: 660000, maxBuffer: 16384,
       env: { PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: '/root',
@@ -250,7 +252,8 @@ test(`native deployment composes real application acceptance and saved restorati
   assert.equal(await readFile(path.join(f.control, 'backup/files/server.cjs'), 'utf8'),
     (await execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project,
       'show', `${f.prior}:server.cjs`])).stdout);
-  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'recovery-engine', 'state.json']);
+  assert.deepEqual((await readdir(f.control)).sort(), controlNames);
+  const originalEngine = await readFile(path.join(f.control, 'recovery-engine/manifest.json'));
   let expectedCommit = f.prior;
   const chatId = `deployment-${randomUUID()}`;
   let api;
@@ -276,7 +279,7 @@ test(`native deployment composes real application acceptance and saved restorati
       assert.deepEqual(await readDeploymentReceipt(f.control, f.project), receipt);
       assert.deepEqual(await verifySnapshot(path.join(f.control, 'backup')), backup);
       assert.equal((await loadState(f.control)).phase, 'already-current');
-      assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'recovery-engine', 'state.json']);
+      assert.deepEqual((await readdir(f.control)).sort(), controlNames);
     }
     const service = await inspectLinuxService(f);
     t.after(() => service.close());
@@ -288,6 +291,14 @@ test(`native deployment composes real application acceptance and saved restorati
       }
     }
     if (publicCommand) {
+      if (scenario === 'command') {
+        tools = path.join(path.dirname(f.project), 'new controller tools');
+        await cp(path.join(repository, 'scripts'), path.join(tools, 'scripts'), { recursive: true });
+        await mkdir(path.join(tools, 'lib/workflow'), { recursive: true });
+        await cp(path.join(repository, 'lib/workflow/workflowSchema.mjs'), path.join(tools, 'lib/workflow/workflowSchema.mjs'));
+        const helper = path.join(tools, 'scripts/deployment/linux-readiness.mjs');
+        await writeFile(helper, `${await readFile(helper, 'utf8')}\n// Next controller generation.\n`);
+      }
       assert.equal((await command(['--revision', nextRevision, '--timeout', '600'])).status, 'accepted');
       assert.equal((await command(['--status'])).phase, 'accepted');
       if (scenario === 'inplace') {
@@ -303,6 +314,13 @@ test(`native deployment composes real application acceptance and saved restorati
     assert.equal((await api(`/api/chats?id=${chatId}`)).chat.messages[0].content, 'Data before snapshot');
     const oldBackupId = backup.id;
     backup = await verifySnapshot(path.join(f.control, 'backup'));
+    if (scenario === 'command') {
+      assert.equal(backup.version, 2);
+      assert.match(backup.recoveryEngine, /^[a-f0-9]{64}$/);
+      controlNames.push(`recovery-engine-${backup.recoveryEngine}`);
+      controlNames.sort();
+      assert.deepEqual(await readFile(path.join(f.control, 'recovery-engine/manifest.json')), originalEngine);
+    }
     assert.notEqual(backup.id, oldBackupId);
     assert.equal(backup.source.commit, f.target);
     receipt = await readDeploymentReceipt(f.control, f.project);
@@ -318,7 +336,7 @@ test(`native deployment composes real application acceptance and saved restorati
     expectedCommit = f.target;
     assert.equal((await api('/api/chats', { action: 'rename', chatId, name: 'After snapshot' })).ok, true);
     assert.equal((await api(`/api/chats?id=${chatId}`)).chat.name, 'After snapshot');
-    assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'recovery-engine', 'state.json']);
+    assert.deepEqual((await readdir(f.control)).sort(), controlNames);
   }
   const saved = await saveRecoveryEngine({
     source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), control: f.control,
@@ -364,6 +382,6 @@ test(`native deployment composes real application acceptance and saved restorati
   }
   assert.deepEqual(await verifySnapshot(path.join(f.control, 'backup')), backup);
   assert.deepEqual(await readDeploymentReceipt(f.control, f.project), receipt);
-  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'deployment.json', 'recovery-engine', 'state.json']);
+  assert.deepEqual((await readdir(f.control)).sort(), controlNames);
 });
 }

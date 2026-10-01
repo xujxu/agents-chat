@@ -5241,6 +5241,36 @@ without importing it, and rejects checksum, inventory, symlink, permission and
 traversal failures plus foreign-project, partial-scope and Windows backups.
 Admission must leave control-directory contents unchanged in all these cases.
 
+Public restore checkpoint: `3281e87` / `36749424798` passed all 17 jobs.
+Additional admission coverage `b639f6c` / `36751227818` is running.
+
+### Recovery engine generations across real controller upgrades
+
+The next public command test changes the executing tools' recovery-helper bytes
+before the second update. This exposes the existing refusal to save a different
+controller over `control/recovery-engine`; same-controller revision tests did
+not cover that transition.
+
+- Keep the initial legacy directory intact. Explicit version-change publication
+  saves differing helpers in `recovery-engine-<manifest-sha256>`, staged privately
+  and atomically renamed only after full verification. Never replace a working
+  engine directory or leave the retained backup without its old engine.
+- Bind new native snapshots to their engine digest through snapshot version 2
+  and a `recoveryEngine` SHA-256 field. Continue reading version 1 snapshots;
+  older readers must reject version 2 rather than silently use the wrong engine.
+- Public restore verifies the snapshot before choosing its digest-bound engine.
+  Version 1 remains attached to the preserved legacy engine. The selected saved
+  entry still verifies its own helper closure; current helper inventories cannot
+  be imposed on older saved generations.
+- Wire native capacity/snapshot capture and retained retirement invocation to
+  these directories. Cover changed-controller publication, unchanged legacy
+  bytes, repeat publication, digest mismatch refusal, and actual public
+  update/restore with source and application-data continuity.
+- Before completing this scope, bound obsolete generated-engine retention under
+  operation authority while retaining the legacy engine and every engine needed
+  by the current backup or active operation. Do not delete unknown staging
+  evidence or infer that an unclassified controller has settled.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
