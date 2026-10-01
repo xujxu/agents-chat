@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { lstat, mkdir, readdir, rmdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, rmdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
@@ -9,19 +9,24 @@ import { linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs'
 
 const native = { skip: process.platform !== 'linux' || process.getuid() !== 0 };
 
+async function quiescentFixture(t, state) {
+  const f = await fixture(t, { nonroot: true, start: false, settings: state === 'failed' ? 'Restart=no' : '',
+    ...(state === 'failed' ? { server: 'process.exit(42);' } : {}) });
+  if (state === 'failed') {
+    try { await systemctl('start', f.unit); }
+    catch (error) { assert.equal(error.code, 1); }
+    for (let attempt = 0; attempt < 200; attempt++) {
+      if ((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState === 'failed') break;
+      await delay(100);
+    }
+  }
+  assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, state);
+  return f;
+}
+
 for (const state of ['inactive', 'failed']) {
   test(`native ${state} service observation preserves configured identity without activation`, native, async t => {
-    const f = await fixture(t, { nonroot: true, start: false, settings: 'Restart=no',
-      ...(state === 'failed' ? { server: 'process.exit(42);' } : {}) });
-    if (state === 'failed') {
-      try { await systemctl('start', f.unit); }
-      catch (error) { assert.equal(error.code, 1); }
-      for (let attempt = 0; attempt < 200; attempt++) {
-        if ((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState === 'failed') break;
-        await delay(100);
-      }
-    }
-    assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, state);
+    const f = await quiescentFixture(t, state);
     const before = (await readdir(f.project)).sort();
     const control = path.join(path.dirname(f.project), `.${path.basename(f.project)}.deployment`);
     const observed = await inspectLinuxInactiveService(f);
@@ -108,3 +113,33 @@ test('inactive observation cancellation retains no activation authority', native
     assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, 'inactive');
   } finally { await observed.close(); }
 });
+
+for (const state of ['inactive', 'failed']) {
+  test(`initially ${state} authority observes only the expected inhibition transition`, native, async t => {
+    const f = await quiescentFixture(t, state);
+    const observed = await inspectLinuxInactiveService(f);
+    try {
+      await observed.checkPolicy({ stopped: true });
+      await assert.rejects(observed.checkInhibited({ stopped: true }), /inhibit|policy/i);
+      const inhibition = `${f.fragment}.d/90-agents-chat-deployment.conf`;
+      await mkdir(path.dirname(inhibition), { mode: 0o755 });
+      await writeFile(inhibition,
+        `[Unit]\nRefuseManualStart=yes\nConditionPathExists=!${inhibition}\n[Service]\nRestart=no\n`,
+        { flag: 'wx', mode: 0o600 });
+      await systemctl('daemon-reload');
+      await assert.rejects(observed.check(), /changed/i);
+      assert.deepEqual(await observed.checkInhibited({ stopped: true }), { stopped: true, inhibited: true });
+      await observed.checkPolicy({ inhibited: true, stopped: true });
+      await assert.rejects(observed.checkInhibited({ stopped: false }), /stopped|inactive/i);
+      await assert.rejects(systemctl('start', f.unit), { code: 1 });
+      assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, state);
+      await unlink(inhibition);
+      await systemctl('daemon-reload');
+      await observed.checkPolicy({ stopped: true });
+      await observed.check();
+      await assert.rejects(observed.checkInhibited({ stopped: true }), /inhibit|policy/i);
+      await writeFile(f.fragment, `${f.bytes}\n# changed source after inhibition\n`);
+      await assert.rejects(observed.checkPolicy({ stopped: true }), /changed|stale/i);
+    } finally { await observed.close(); }
+  });
+}

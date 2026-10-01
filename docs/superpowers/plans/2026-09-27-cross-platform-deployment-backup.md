@@ -5980,6 +5980,32 @@ hook, and cancellation before capture or during retained observation. Cgroup
 test cleanup checks its own directory identity and only removes that exact
 empty fixture directory.
 
+Observer baseline `63affab` / `36854273069` is now accepted: all 20 jobs
+passed, including continuous fresh lifecycle job `110343224439`. Expanded
+coverage `9982bd0` / `36854856441`, native job `110350857124`, passed its
+10-case observation step; remaining regression steps are still running.
+
+### Initially inactive inhibition-policy boundary
+
+Before adding a mutating controller, extend the distinct observer with
+`checkInhibited({ stopped: true })` and `checkPolicy({ inhibited, stopped })`.
+Keep `check()` strict against the original uninhibited observation. The new
+policy checks may recognize only the established owned inhibitor path and
+exact expected systemd policy delta; the eventual maintenance owner must
+independently retain and verify the inhibitor bytes, lock and journal. Do not
+equate a matching policy alone with ownership of that file or transaction.
+Stopped checks must retain empty-domain, no-job/no-process, original boot,
+account, executable and source proofs. No running original identity may be
+manufactured. Static policy-only checks do not authorize stopped work.
+
+Add real inactive/failed inhibition and removal transitions first, including
+manual start refusal, ordinary observation refusing the changed policy,
+missing-inhibition refusal and original source mutation refusal. The inactive
+fixture preserves default Restart=on-failure so the transition exercises its
+temporary override as well as the failed fixture's Restart=no policy.
+Do not enable public deployment admission or saved cold-recovery decoding
+until the corresponding mutating ownership and durable evidence are complete.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
