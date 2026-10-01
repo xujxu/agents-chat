@@ -6270,6 +6270,24 @@ process executable identity.
 
 Implementation surfaces after configuration is accepted:
 
+Public causal `394a5b6` / `36868239162` reached the original running-only
+discovery guard at `linux-service-inspection.mjs:97` in both actual public
+entries: inactive job `110389896844` (`update.sh`) and failed job
+`110389896868` (`deploy.sh`). Both failed before source replacement. The
+configuration fixture correction `41f308d` / `36868715355` remains a separate
+required run. Retire the characterized public causal run to admit that correction.
+
+The implementation extracts retained inactive configuration-file inspection so
+executable discovery can read startup PATH before creating a complete native
+observation, without inventing a service object or PID. It then wraps every
+observation authority with configuration and first-candidate rechecks. The saved
+recovery closure includes the discovery helper; worker-only paths do not invoke
+installed discovery. Running process-image binding was already implemented in
+the observed code and is retained rather than duplicated. Public history uses
+one validated helper, and saved live restore verifies discovered native fields
+against its supplied snapshot-bound input. Read-only stopped preview and
+history downgrade refusal gain coverage. Full 22-job acceptance remains pending.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

@@ -13,6 +13,21 @@ export function linuxServiceStopProfile(priorRuntime) {
   return profiles[priorRuntime];
 }
 
+export function linuxOriginalServiceHistory(service) {
+  const { runtime } = service.identity;
+  if (service.kind === 'inactive') {
+    const runtimeIdentity = linuxInactiveObservationId(service.identity);
+    if (runtimeIdentity !== service.runtimeIdentity) throw new Error('Original stopped service identity changed.');
+    return Object.freeze({ priorRuntime: 'stopped', runtimeIdentity });
+  }
+  if (!Number.isSafeInteger(runtime.mainPid) || runtime.mainPid <= 0 || runtime.activeState !== 'active'
+    || typeof runtime.processIdentity !== 'string' || !runtime.processIdentity
+    || !/^[a-f0-9]{32}$/.test(runtime.invocationId)) {
+    throw new Error('Original running service identity is unavailable.');
+  }
+  return Object.freeze({ priorRuntime: 'running', runtimeIdentity: runtime.invocationId });
+}
+
 export async function readLinuxServiceStopEvidence({ root, project, lock, state }) {
   const { version, phases } = linuxServiceStopProfile(state.priorRuntime);
   const records = await readEvidenceJournal({

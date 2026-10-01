@@ -40,14 +40,9 @@ function runtimePath(startup, manager) {
   return Object.freeze(entries);
 }
 
-export async function inspectLinuxInactiveConfiguration({ service, profile, signal }) {
+export async function inspectLinuxInactiveConfigurationFiles({ unit, project, profile, signal }) {
   try {
     signal?.throwIfAborted();
-    if (service.kind !== 'inactive' || service.identity.runtime.mainPid !== 0) {
-      throw refusal('inactive-runtime');
-    }
-    await service.check();
-    const { unit, project } = service.identity.runtime;
     const config = await inspectLinuxConfigurationPolicy(unit);
     const manager = await managerPolicy(unit);
     const files = await inspectConfigurationFiles({ project, profile, ...config, signal });
@@ -71,11 +66,28 @@ export async function inspectLinuxInactiveConfiguration({ service, profile, sign
         throw refusal('inactive-configuration-changed');
       }
     };
+    await checkFiles();
+    return Object.freeze({ ...files, checkFiles, runtimePath: () => searchPath });
+  } catch (error) {
+    signal?.throwIfAborted();
+    if (error?.code === 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED') throw error;
+    throw refusal('inactive-configuration-inspection');
+  }
+}
+
+export async function inspectLinuxInactiveConfiguration({ service, profile, signal }) {
+  try {
+    signal?.throwIfAborted();
+    if (service.kind !== 'inactive' || service.identity.runtime.mainPid !== 0) {
+      throw refusal('inactive-runtime');
+    }
+    await service.check();
+    const files = await inspectLinuxInactiveConfigurationFiles({ ...service.identity.runtime, profile, signal });
     const check = async ({ signal: checkSignal = signal } = {}) => {
       try {
         checkSignal?.throwIfAborted();
         await service.check();
-        await checkFiles({ signal: checkSignal });
+        await files.checkFiles({ signal: checkSignal });
         await service.check();
       } catch (error) {
         checkSignal?.throwIfAborted();
@@ -84,7 +96,7 @@ export async function inspectLinuxInactiveConfiguration({ service, profile, sign
       }
     };
     await check();
-    return Object.freeze({ ...files, checkFiles, check, runtimePath: () => searchPath });
+    return Object.freeze({ ...files, check });
   } catch (error) {
     signal?.throwIfAborted();
     if (error?.code === 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED') throw error;

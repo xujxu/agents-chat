@@ -2,6 +2,7 @@ import {
   assertLockOwner, loadState, releaseLock, requireNoServiceMaintenance, writeState,
 } from './state.mjs';
 import { hasUnsettledWorker } from './worker-errors.mjs';
+import { linuxOriginalServiceHistory } from './linux-service-stop-evidence.mjs';
 
 function refusal(blocked = false) {
   return Object.assign(new Error('Refused preflight closeout did not establish safe completion; retain the operation evidence.'), {
@@ -18,10 +19,11 @@ export async function closeRejectedLinuxPreflight({ control, lock, service, oper
     await requireNoServiceMaintenance(control);
     const state = await loadState(control);
     const runtime = service.identity.runtime;
+    const history = linuxOriginalServiceHistory(service);
     if (!state || state.phase !== 'preflight' || state.operation === 'restore'
       || state.operationId !== lock.operationId || state.project !== lock.project
-      || runtime.project !== state.project || state.priorRuntime !== 'running'
-      || state.runtimeIdentity !== runtime.invocationId) throw refusal();
+      || runtime.project !== state.project || state.priorRuntime !== history.priorRuntime
+      || state.runtimeIdentity !== history.runtimeIdentity) throw refusal();
     await service.check();
     await operation.seal();
     await service.check();

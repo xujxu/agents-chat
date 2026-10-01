@@ -91,11 +91,9 @@ export async function inspectLinuxServiceExecutable(file) {
   return { file, target, ...fileIdentity(info) };
 }
 
-export async function inspectInstalledLinuxService({ unit, project }) {
+export async function inspectInstalledLinuxService({ unit, project, signal }) {
+  signal?.throwIfAborted();
   const runtime = await inspectLinuxRuntimeAccount({ unit, project });
-  if (runtime.mainPid <= 0 || runtime.activeState !== 'active') {
-    throw new Error('Installed executable discovery requires a running service.');
-  }
   const object = await bus(['call', 'org.freedesktop.systemd1', '/org/freedesktop/systemd1',
     'org.freedesktop.systemd1.Manager', 'LoadUnit', 's', unit], 'o');
   if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
@@ -109,6 +107,13 @@ export async function inspectInstalledLinuxService({ unit, project }) {
     || !same(starts[0][1], [npm, 'start']) || !same(starts[0][2], [])
     || path.basename(await realpath(npm)) !== 'npm-cli.js') {
     throw new Error('Installed discovery requires a literal npm start command resolving to npm-cli.js.');
+  }
+  if (runtime.mainPid === 0 && ['inactive', 'failed'].includes(runtime.activeState)) {
+    const { inspectInstalledLinuxInactiveService } = await import('./linux-inactive-discovery.mjs');
+    return inspectInstalledLinuxInactiveService({ runtime, npm, signal });
+  }
+  if (runtime.mainPid <= 0 || runtime.activeState !== 'active') {
+    throw new Error('Installed executable discovery requires a stable running or inactive service.');
   }
   const node = await realpath(`/proc/${runtime.mainPid}/exe`);
   const service = await inspectLinuxService({ unit, project, npm, node });

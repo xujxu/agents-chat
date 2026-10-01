@@ -8,22 +8,22 @@ function helpText(operation) {
   return `Usage: sudo bash scripts/${operation}.sh [options]
 
 ${update
-    ? 'Update an existing running agents-chat.service using its installed account,\nNode/npm executables and configuration. Requires a Node.js 24+ controller,'
-    : 'Deploy a fresh non-root-owned checkout or redeploy an existing running\nagents-chat.service with its installed account and configuration. Requires Node.js 24,'}
+    ? 'Update an existing agents-chat.service using its installed account,\nNode/npm executables and configuration. Requires a Node.js 24+ controller,'
+    : 'Deploy a fresh non-root-owned checkout or redeploy an existing\nagents-chat.service with its installed account and configuration. Requires Node.js 24,'}
 /usr/bin/git, systemd and a supported clean source checkout.
 
   --project-dir PATH  Absolute installed checkout (default: this tools checkout)
   --revision SHA      Full locally available commit; conflicts with --no-pull
   --no-pull           Keep the current source revision
-  --no-install        Skip npm ci ${update ? '' : 'for an existing running installation '}but still build and verify
+  --no-install        Skip npm ci ${update ? '' : 'for an existing installation '}but still build and verify
   --wait SECONDS     Positive readiness wait (default: 120)
   --timeout SECONDS  Positive per-stage deadline (default: 1800)
   --status           Read-only operation status; does not create control files
 ${update ? '  --dry-run          Read-only local preview; no fetch, lock, backup or build\n' : ''}  --json             Emit one JSON result on stdout; progress/errors on stderr
   --help             Show this help
 
-${update ? `This staged implementation supports running-service updates only.
-First installation, inactive services, --verify and --wait 0 are not
+${update ? `This staged implementation supports running, inactive and failed services.
+First installation, --verify and --wait 0 are not
 yet supported here. It does not fall back to the legacy deploy script.
 Preview reports local revisions, estimated space and pending checks; it is not
 admission. Source cleanliness, database compatibility and remote freshness
@@ -32,10 +32,13 @@ require the real update. No target code, Git filters or hooks run in preview.`
 operation evidence, and prepared private production authentication configuration.
 Prepare the source checkout as its non-root runtime owner before using sudo.
 Packages, accounts and configuration are not automatically installed or changed.
-Existing running deployments are backed up before source replacement. A failed
+Existing running, inactive and failed deployments are backed up before source replacement. A failed
 first installation has no previous backup; preserve its operation evidence.
-Inactive/failed services, --verify, --wait 0 and deploy --dry-run are not yet
+--verify, --wait 0 and deploy --dry-run are not yet
 supported. There is no fallback to the legacy root build/install procedure.`}
+Inactive/failed services require retained configuration and an external Node selected
+by the literal npm interpreter and startup PATH. A stopped same-commit update still builds.
+Pre-source failure never starts an originally stopped runtime; explicit restore does.
 In-place deployment operations capture controller code outside the installed checkout before
 source replacement. Status/help${update ? '/preview' : ''} are read-only and do not capture helpers.
 Backup and recovery evidence live in the private sibling .<project>.deployment

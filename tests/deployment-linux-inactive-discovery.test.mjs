@@ -5,6 +5,7 @@ import test from 'node:test';
 import { quiescentFixture, quote, ready, systemctl } from './deployment-linux-service-fixture.mjs';
 import { inspectInstalledLinuxService, inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
+import { linuxOriginalServiceHistory } from '../scripts/deployment/linux-service-stop-evidence.mjs';
 
 const native = { skip: process.platform !== 'linux' || process.getuid() !== 0 };
 
@@ -25,6 +26,12 @@ for (const state of ['inactive', 'failed']) {
     try {
       assert.equal(service.kind, 'inactive');
       assert.match(service.runtimeIdentity, /^stopped:[a-f0-9]{64}$/);
+      assert.deepEqual(linuxOriginalServiceHistory(service), {
+        priorRuntime: 'stopped', runtimeIdentity: service.runtimeIdentity,
+      });
+      assert.throws(() => linuxOriginalServiceHistory({ ...service, kind: undefined }), /running.*identity/i);
+      assert.throws(() => linuxOriginalServiceHistory({ ...service, runtimeIdentity: `stopped:${'0'.repeat(64)}` }),
+        /stopped.*identity/i);
       assert.equal(service.identity.executables[0].file, f.npm);
       assert.equal(service.identity.executables[1].file, f.node);
       await service.check();
@@ -54,6 +61,7 @@ test('inactive discovery rechecks higher-priority executable appearance before g
     await symlink('/usr/bin/false', path.join(priority, 'node'));
     await assert.rejects(service.check(), /changed|runtime|executable/i);
     await assert.rejects(service.checkPolicy(), /changed|runtime|executable/i);
+    await assert.rejects(service.checkInhibited({ stopped: true }), /changed|runtime|executable/i);
   } finally { await service.close(); }
 });
 

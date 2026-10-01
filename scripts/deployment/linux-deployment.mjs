@@ -28,6 +28,7 @@ import { hasUnsettledWorker } from './worker-errors.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
 import { inspectCurrentLinuxDeployment } from './linux-current-deployment.mjs';
 import { requireLinuxDeploymentSpace } from './linux-deployment-capacity.mjs';
+import { linuxOriginalServiceHistory } from './linux-service-stop-evidence.mjs';
 
 export async function runLinuxLiveDeployment({
   service, control, lock: supplied, git, environment, port, deploymentBytes,
@@ -43,6 +44,7 @@ export async function runLinuxLiveDeployment({
   }
   const lock = captureLockOwner(supplied);
   const project = service.identity.runtime.project;
+  const history = linuxOriginalServiceHistory(service);
   const native = { unit: service.identity.runtime.unit, project,
     npm: service.identity.executables[0].file, node: service.identity.executables[1].file };
   let state;
@@ -77,7 +79,7 @@ export async function runLinuxLiveDeployment({
       previousPhase: state?.phase ?? null, sourceCommit: source?.commit ?? null,
       targetCommit: target?.commit ?? null,
       backupId: phase === 'already-current' ? previousState.backupId : context.snapshot?.id ?? state?.backupId ?? null,
-      priorRuntime: 'running', runtimeIdentity: service.identity.runtime.invocationId,
+      ...history,
       startedAt: lock.createdAt, updatedAt: new Date().toISOString(), errorCode: context.errorCode ?? null,
     };
     await writeState(control, next);
@@ -113,7 +115,7 @@ export async function runLinuxLiveDeployment({
         await authority();
         stages = await prepareLinuxSourceBuild({ service, operation: workers, git, environment, signal: stageSignal });
         source = await stages.inspect({ signal: stageSignal });
-        return { exists: true, running: true, owned: true };
+        return { exists: true, running: history.priorRuntime === 'running', owned: true };
       },
       async resolveTarget({ signal: stageSignal }) {
         await authority();
@@ -124,7 +126,7 @@ export async function runLinuxLiveDeployment({
         await authority();
         admission = await admitLinuxCompatibility({ service, operation: workers, commit: target.commit, signal: stageSignal });
         buildEnvironment = admission.configuration.buildEnvironment(environment);
-        if (kind === 'update' && source.commit === target.commit) {
+        if (kind === 'update' && history.priorRuntime === 'running' && source.commit === target.commit) {
           current = await inspectCurrentLinuxDeployment({
             state: previousState, service, configuration: admission.configuration, control,
             commit: target.commit, port, waitSeconds, signal: stageSignal,

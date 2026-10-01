@@ -59,11 +59,13 @@ try {
     const { runLinuxColdRestore } = await import('./linux-cold-restore.mjs');
     result = await runLinuxColdRestore({ ...input, control, acceptDataLoss: true });
   } else {
-    const { inspectLinuxService } = await import('./linux-service-inspection.mjs');
+    const { inspectInstalledLinuxService } = await import('./linux-service-inspection.mjs');
+    const { assertColdRestoreNative } = await import('./linux-restore-compatibility.mjs');
     const { inspectLinuxConfiguration } = await import('./linux-configuration.mjs');
     const { runLinuxLiveRestore } = await import('./linux-restore.mjs');
     stage = 'service-inspection';
-    service = await inspectLinuxService(input);
+    service = await inspectInstalledLinuxService(input);
+    assertColdRestoreNative(service.identity, input);
     const configuration = await inspectLinuxConfiguration({ service, profile: 'agents-chat-auth-638c553' });
     stage = 'lock-admission';
     lock = await operations.acquireLock(control, { project: input.project, operationId: randomUUID() });

@@ -16,7 +16,7 @@ export async function previewLinuxUpdate({ options, project, control, unit, exis
     let result;
     const errors = [];
     try {
-      service = await inspectInstalledLinuxService({ unit, project });
+      service = await inspectInstalledLinuxService({ unit, project, signal: stageSignal });
       const configuration = await inspectLinuxConfiguration({ service, profile: 'agents-chat-auth-638c553', signal: stageSignal });
       const { source, target } = await inspectLinuxPreviewSource({ project, options, signal: stageSignal });
       const scope = await inspectSnapshotScope({ project, signal: stageSignal });

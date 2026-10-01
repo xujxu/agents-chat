@@ -12,6 +12,7 @@ import { waitLinuxReadiness } from './linux-readiness.mjs';
 import { assertLockOwner, captureLockOwner, loadState, releaseLock, writeState } from './state.mjs';
 import { externalWorkerDirectory, syncWorkerDirectory } from './worker-files.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
+import { linuxOriginalServiceHistory } from './linux-service-stop-evidence.mjs';
 
 export async function runLinuxLiveRestore({
   service, configuration, control, lock: suppliedLock, backup, port, acceptDataLoss,
@@ -21,6 +22,7 @@ export async function runLinuxLiveRestore({
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Restore readiness requires a valid explicit port.');
   const lock = captureLockOwner(suppliedLock);
   const project = service.identity.runtime.project;
+  const history = linuxOriginalServiceHistory(service);
   const native = {
     unit: service.identity.runtime.unit, project,
     npm: service.identity.executables[0].file, node: service.identity.executables[1].file,
@@ -53,7 +55,7 @@ export async function runLinuxLiveRestore({
         await authority();
         initialState = await loadState(control);
         await service.check();
-        return { exists: true, running: true, owned: true };
+        return { exists: true, running: history.priorRuntime === 'running', owned: true };
       },
       async inspectBackup({ signal: stageSignal }) {
         await authority();
@@ -83,8 +85,7 @@ export async function runLinuxLiveRestore({
           version: 1, operationId: lock.operationId, project, operation: 'restore',
           phase, previousPhase: state?.phase ?? null,
           sourceCommit: null, targetCommit: context.snapshot?.source.commit ?? null,
-          backupId: context.snapshot?.id ?? null, priorRuntime: 'running',
-          runtimeIdentity: service.identity.runtime.invocationId,
+          backupId: context.snapshot?.id ?? null, ...history,
           startedAt: lock.createdAt, updatedAt: new Date().toISOString(), errorCode: context.errorCode ?? null,
         };
         await writeState(control, next);

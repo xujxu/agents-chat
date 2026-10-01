@@ -42,8 +42,8 @@ export async function runLinuxDeploymentCommand({
   if (!['deploy', 'update'].includes(operation)) throw new Error('Unsupported Linux deployment command.');
   const options = parseArguments(operation, args);
   if (options.help) return { status: 'help', message: operation === 'update'
-    ? 'Linux update supports an existing running service, positive health waits and read-only status.'
-    : 'Linux deploy supports fresh installations and existing running services, positive health waits and read-only status.' };
+    ? 'Linux update supports an existing running, inactive or failed service, positive health waits and read-only status.'
+    : 'Linux deploy supports fresh installations and existing running, inactive or failed services, positive health waits and read-only status.' };
   if (options.operation === 'verify' || options.waitSeconds === 0 || operation === 'deploy' && options.dryRun) {
     throw refusal('DEPLOYMENT_COMMAND_MODE_UNSUPPORTED',
       'This verification, no-wait or deploy-preview mode is not yet supported; no operation was started.');
@@ -90,7 +90,7 @@ export async function runLinuxDeploymentCommand({
       if (options.noInstall) throw refusal('DEPLOYMENT_COMMAND_MODE_UNSUPPORTED', 'First deployment requires dependency installation.');
       installation = await inspectLinuxFirstInstall({ unit, project, signal });
     } else {
-      service = await inspectInstalledLinuxService({ unit, project });
+      service = await inspectInstalledLinuxService({ unit, project, signal });
     }
     const configuration = installation?.configuration
       ?? await inspectLinuxConfiguration({ service, profile: 'agents-chat-auth-638c553', signal });

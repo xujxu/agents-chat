@@ -3,6 +3,21 @@ import test from 'node:test';
 import {
   createColdActivationState, captureColdActivationIntent,
 } from '../scripts/deployment/linux-cold-activation-state.mjs';
+import { linuxOriginalServiceHistory } from '../scripts/deployment/linux-service-stop-evidence.mjs';
+
+test('original running history requires a real positive process and invocation identity', () => {
+  const runtime = { mainPid: 7, activeState: 'active', processIdentity: 'retained-process', invocationId: 'a'.repeat(32) };
+  assert.deepEqual(linuxOriginalServiceHistory({ identity: { runtime } }), {
+    priorRuntime: 'running', runtimeIdentity: runtime.invocationId,
+  });
+  for (const changed of [
+    { mainPid: 0 }, { mainPid: -1 }, { mainPid: 1.5 }, { activeState: 'failed' },
+    { processIdentity: null }, { invocationId: '' }, { invocationId: 'legacy-unit.service' },
+  ]) {
+    assert.throws(() => linuxOriginalServiceHistory({ identity: { runtime: { ...runtime, ...changed } } }),
+      /running.*identity/i);
+  }
+});
 
 const record = priorRuntime => ({
   project: '/application', lock: { operationId: 'original-operation' },

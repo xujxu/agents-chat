@@ -161,7 +161,7 @@ Logs are written to `logs/service-watchdog.log` and `logs/start-service-child.lo
 
 **Deployment-backup branch: staged update command.** The new
 `sudo bash scripts/update.sh --project-dir /absolute/installed/checkout` updates
-an **existing running** `agents-chat.service` using its installed account,
+an **existing running, inactive or failed** `agents-chat.service` using its installed account,
 Node/npm and configuration, rather than the invoking user's environment.
 It supports execution inside the installed checkout or from separate tools via
 `--project-dir`. Before source replacement it captures controller code in a private
@@ -215,7 +215,7 @@ complete backup and independent recovery helpers in the private sibling
 `.<project-basename>.deployment` directory. Preserve that directory after failure.
 
 This command is **not yet the complete cross-platform deployment release**:
-first install, inactive services and deferred verification/no-wait are
+first install and deferred verification/no-wait are
 not supported by `update.sh` and are refused rather than delegated to another
 installer. The first-install controller and its version-4 live/cold retirement
 have passed Actions acceptance, including real source builds, application
@@ -226,11 +226,27 @@ acceptance. Do not use this branch on a live installation before the remaining
 runtime-mode and platform gates.** The old
 root build/install procedure has been replaced, not retained as a fallback.
 The staged native command supports a fresh installation or redeployment of an
-existing running service; inactive/failed services, deferred verification,
+existing running, inactive or failed service; deferred verification,
 `--wait 0` and deploy `--dry-run` are explicitly refused.
 The continuous Linux gate also passes first deployment, an unchanged update,
 two source-content updates, and saved recovery of the original source, build
 and authenticated chat data after removing installed scripts and Git packs.
+
+Inactive/failed public lifecycle support is implemented but its expanded
+22-job Actions acceptance is still pending. Admission does not start the service
+to discover its executables or read a fictitious process environment. It requires
+literal `npm start`, npm's `#!/usr/bin/env node` interpreter, and an external Node
+selected from the retained startup PATH (unit/EnvironmentFile, then ExecSearchPath,
+then manager PATH), not the controller or Next dotenv PATH. Project-local candidates
+are refused, and earlier PATH candidates are rechecked throughout the operation.
+Non-locale manager-global environment assignments must be explicitly overridden in
+the retained unit/EnvironmentFile; dotenv does not mask those startup assignments.
+For example, a host-global `SGX_AESM_ADDR` needs a deliberate per-service assignment
+if present. Do not remove host-wide settings just to admit an update.
+A stopped same-commit update still builds and verifies. Pre-source failure never
+starts an originally stopped service; explicit restore starts and verifies the
+restored application. Status and preview preserve the stopped/failed state and
+do not claim that readiness passed.
 
 For first installation, prepare a clean source checkout owned by its non-root,
 primary-group-only runtime account and private production authentication
@@ -250,17 +266,17 @@ sudo ./scripts/deploy.sh --project-dir /absolute/checkout --status --json
 # Fresh source build, owned service publication, enablement and readiness
 sudo ./scripts/deploy.sh --project-dir /absolute/checkout --no-pull
 
-# Existing running installation: redeploy, or update with already-current checks
+# Existing installation: redeploy, or update (running services can be already-current)
 sudo ./scripts/deploy.sh --project-dir /absolute/checkout --no-pull
 sudo ./scripts/update.sh --project-dir /absolute/checkout
 ```
 
 Root controls systemd and private transaction evidence; fresh source-changing
 Git operations, npm/build and application processes use the non-root checkout owner, not the sudo
-caller. Existing running installations retain their admitted account, Node/npm
+caller. Existing installations retain their admitted account, Node/npm
 executables and configuration. Redeploy uses `operation: deploy` and does not
 skip merely because its source is already current. `--no-install` is supported
-only for an existing running installation; fresh installation always installs
+only for an existing installation; fresh installation always installs
 dependencies. Positive `--wait`, `--timeout`, `--revision`, `--json` and
 `--project-dir` follow the update command's conventions.
 

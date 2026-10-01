@@ -279,6 +279,15 @@ for (const runtimeState of ['inactive', 'failed']) {
     await quiesceInstallation(f, runtimeState);
     const before = await linuxSystemdProperties(f.unit, ['ActiveState', 'MainPID', 'ExecMainStatus']);
     const { runLinuxUpdateCommand } = await import('../scripts/deployment/linux-update-command.mjs');
+    const names = await readdir(f.control);
+    const preview = await runLinuxUpdateCommand({
+      args: ['--project-dir', f.project, '--dry-run', '--no-pull', '--timeout', '90'], unit: f.unit,
+    });
+    assert.equal(preview.status, 'preview');
+    assert.equal(preview.inspection.runtime.state, runtimeState);
+    assert.ok(preview.pendingChecks.includes('readiness'));
+    assert.deepEqual(await readdir(f.control), names);
+    assert.deepEqual(await linuxSystemdProperties(f.unit, ['ActiveState', 'MainPID', 'ExecMainStatus']), before);
     await assert.rejects(runLinuxUpdateCommand({
       args: ['--project-dir', f.project, '--revision', f.prior, '--timeout', '90'], unit: f.unit,
     }), { code: 'DEPLOYMENT_TARGET_UNSUPPORTED' });
