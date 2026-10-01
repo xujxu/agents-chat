@@ -169,6 +169,13 @@ temporary directory, including modules needed by later dynamic imports and worke
 bootstraps. Completed commands remove this code-only copy; an abruptly killed
 controller may leave one under `/tmp/agents-chat-controller-*`. These directories
 contain neither application data nor configuration and are not recovery authority.
+`--dry-run --json` reports local revisions, estimated backup/build space, planned
+steps and pending checks without fetching, creating control files, launching
+workers or executing target code. It does not run Git status/filters/fsmonitor,
+so source cleanliness remains pending, along with target/database admission,
+capacity rechecks and readiness. An unavailable local target is explicitly
+unknown; a tracking ref is never presented as remotely refreshed. Preview does
+not replace the last operation result or authorize an update.
 To restore the retained backup, use
 `sudo bash scripts/restore.sh --project-dir /absolute/installed/checkout --accept-data-loss`.
 Export newer data first: restoration replaces application data with its backup
@@ -198,7 +205,7 @@ complete backup and independent recovery helpers in the private sibling
 `.<project-basename>.deployment` directory. Preserve that directory after failure.
 
 This command is **not yet the complete cross-platform deployment release**:
-first install, inactive services, dry-run and deferred verification/no-wait are
+first install, inactive services and deferred verification/no-wait are
 not wired here and are refused rather than delegated to the legacy script.
 Do not use this branch on a live installation before the remaining platform
 acceptance gates. The `deploy.sh` commands below describe the legacy implementation,

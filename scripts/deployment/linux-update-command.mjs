@@ -11,6 +11,7 @@ import { acquireLock, loadState, reconcileInterruptedOperation, releaseLock } fr
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory } from './worker-files.mjs';
 import { readDeploymentReceipt } from './deployment-receipt.mjs';
 import { hasUnsettledWorker } from './worker-errors.mjs';
+import { previewLinuxUpdate } from './linux-update-preview.mjs';
 
 function refusal(code, message) {
   return Object.assign(new Error(message), { code });
@@ -35,9 +36,9 @@ async function inspectControl(control, project) {
 export async function runLinuxUpdateCommand({ args, unit = 'agents-chat.service', project: defaultProject, signal, onProgress }) {
   const options = parseArguments('update', args);
   if (options.help) return { status: 'help', message: 'Linux update supports an existing running service, positive health waits and read-only status.' };
-  if (options.dryRun || options.operation === 'verify' || options.waitSeconds === 0) {
+  if (options.operation === 'verify' || options.waitSeconds === 0) {
     throw refusal('DEPLOYMENT_COMMAND_MODE_UNSUPPORTED',
-      'Native dry-run, deferred verification and no-wait activation are not yet supported; no operation was started.');
+      'Deferred verification and no-wait activation are not yet supported; no operation was started.');
   }
   if (process.platform !== 'linux' || process.getuid() !== 0) {
     throw refusal('DEPLOYMENT_PRIVILEGE_REQUIRED', 'Linux update requires the root system-manager controller.');
@@ -55,6 +56,7 @@ export async function runLinuxUpdateCommand({ args, unit = 'agents-chat.service'
     return { ...await reconcileInterruptedOperation(control), project, control,
       targetCommit: existing.state?.targetCommit ?? null };
   }
+  if (options.dryRun) return previewLinuxUpdate({ options, project, control, unit, existing, signal });
   if (existing) {
     if (!existing.state && existing.names.length) {
       throw refusal('DEPLOYMENT_CONTROL_UNBOUND', 'Nonempty control directory has no project-bound state; retain and inspect it.');

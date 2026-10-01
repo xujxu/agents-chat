@@ -19,14 +19,18 @@ Node/npm executables and configuration. Requires a Node.js 24+ controller,
   --wait SECONDS     Positive readiness wait (default: 120)
   --timeout SECONDS  Positive per-stage deadline (default: 1800)
   --status           Read-only operation status; does not create control files
+  --dry-run          Read-only local preview; no fetch, lock, backup or build
   --json             Emit one JSON result on stdout; progress/errors on stderr
   --help             Show this help
 
 This staged implementation supports running-service updates only.
-First installation, inactive services, --dry-run, --verify and --wait 0 are not
+First installation, inactive services, --verify and --wait 0 are not
 yet supported here. It does not fall back to the legacy deploy script.
 In-place updates capture controller code outside the installed checkout before
-source replacement. Status/help are read-only and do not capture helpers.
+source replacement. Status/help/preview are read-only and do not capture helpers.
+Preview reports local revisions, estimated space and pending checks; it is not
+admission. Source cleanliness, database compatibility and remote freshness
+require the real update. No target code, Git filters or hooks run in preview.
 Backup and recovery evidence live in the private sibling .<project>.deployment
 directory. Preserve it after failure; never manually remove a lock.
 Readiness uses port 3010; admission reserves a minimum 2 GiB build-space budget.
