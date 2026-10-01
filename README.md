@@ -214,6 +214,9 @@ The separate first-unit publication stage reserves a new unit name and writes
 startup-inhibited configuration under the operation lock; it does not enable or
 start the service. Preserve its `service-install.ndjson` and unit evidence after
 interruption.
+First-unit enablement separately journals and retains the exact persistent
+startup symlink. It refuses existing links and leaves startup inhibited;
+enablement alone is not a running or accepted deployment.
 Do not use this branch on a live installation before the remaining platform
 acceptance gates. The `deploy.sh` commands below describe the legacy implementation,
 not the new backup/restore guarantees.

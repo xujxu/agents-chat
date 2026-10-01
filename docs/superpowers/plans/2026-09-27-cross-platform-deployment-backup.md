@@ -5476,7 +5476,10 @@ inhibitor still refuses startup. Keep all evidence after interruption.
 
 Native tests require real persistent enablement without a main process or
 acceptance receipt, the exact journal phases, same-target replacement detection
-and preservation of foreign startup links. First activation and retirement
+preservation of foreign startup links and retained inhibition/receipt on
+cancellation after link publication. The live link uses an O_PATH/no-follow
+descriptor so same-target unlink/recreate cannot recycle its retained inode.
+First activation and retirement
 must subsequently account for this journal; this helper alone is not deploy
 acceptance and does not start the application.
 

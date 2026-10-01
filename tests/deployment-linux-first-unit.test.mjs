@@ -35,6 +35,10 @@ async function fixture(t, { phase = 'configuring' } = {}) {
   const fragment = `/etc/systemd/system/${f.unit}`;
   const inhibition = `${fragment}.d/90-agents-chat-deployment.conf`;
   const startupLink = `/etc/systemd/system/multi-user.target.wants/${f.unit}`;
+  try {
+    await readlink(startupLink);
+    throw new Error('Unexpected preexisting fixture startup link.');
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
   t.after(async () => {
     const state = await linuxSystemdProperties(f.unit, ['LoadState', 'ActiveState'], { allowMissing: true });
     if (state.LoadState === 'bad-setting') {
@@ -165,4 +169,31 @@ test('first-unit enablement preserves an existing foreign startup link', async t
   await assert.rejects(enableLinuxFirstUnit({ ...f, publication }));
   assert.equal(await readlink(f.startupLink), target);
   await assert.rejects(readFile(path.join(f.control, 'service-enablement.ndjson')), { code: 'ENOENT' });
+});
+
+test('first-unit enablement cancellation retains its linked receipt and startup inhibition', async t => {
+  const { createLinuxFirstUnit } = await import('../scripts/deployment/linux-first-unit.mjs');
+  const { enableLinuxFirstUnit } = await import('../scripts/deployment/linux-first-enablement.mjs');
+  const f = await fixture(t);
+  const publication = await createLinuxFirstUnit(f);
+  t.after(() => publication.close());
+  const controller = new AbortController();
+  const journal = path.join(f.control, 'service-enablement.ndjson');
+  const observed = {
+    ...publication,
+    async check() {
+      await publication.check();
+      let content;
+      try { content = await readFile(journal, 'utf8'); }
+      catch (error) { if (error.code === 'ENOENT') return; throw error; }
+      if (content.trim().split('\n').filter(Boolean).map(JSON.parse).at(-1)?.phase === 'linked') controller.abort();
+    },
+  };
+  await assert.rejects(enableLinuxFirstUnit({ ...f, publication: observed, signal: controller.signal }), { name: 'AbortError' });
+  const records = (await readFile(journal, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(records.map(record => record.phase), ['intent', 'linked']);
+  assert.equal(await readlink(f.startupLink), f.fragment);
+  assert.match(await readFile(f.inhibition, 'utf8'), /RefuseManualStart=yes/);
+  await assert.rejects(linuxNative('/usr/bin/systemctl', ['--system', 'start', f.unit]));
+  await assert.rejects(readFile(path.join(f.control, 'deployment.json')), { code: 'ENOENT' });
 });
