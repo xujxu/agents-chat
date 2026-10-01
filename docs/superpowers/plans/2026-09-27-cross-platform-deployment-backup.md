@@ -5954,6 +5954,16 @@ The failed fixture runs a real exit-42 process with Restart disabled, not a
 mocked systemd response. Run these in Actions before the native worker suite;
 confirm the missing-module causal failure before implementation.
 
+Retained source extraction `10dc4f0` / run `36851831279` passed all 20 jobs,
+including fresh continuous recovery and rebuild. Observer characterization
+`c983eb0` / run `36852962320`, native job `110341292269`, passed the seven
+source-identity tests and failed precisely on missing `linux-inactive-service.mjs`.
+The characterized failing run was cancelled after that evidence was retained,
+not counted as full acceptance. Implemented the separate read-only observer
+with repeated policy/account/boot/job/process checks and absent-or-retained-empty
+cgroup authority. It has no public/controller imports yet, so no saved-engine
+closure entry is necessary until a captured entry point consumes it.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

@@ -17,7 +17,7 @@ const properties = [
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const bootId = async () => (await readFile('/proc/sys/kernel/random/boot_id', 'utf8')).trim();
 
-function freezeEvidence(value) {
+export function freezeEvidence(value) {
   if (value && typeof value === 'object') {
     for (const child of Object.values(value)) freezeEvidence(child);
     Object.freeze(value);
