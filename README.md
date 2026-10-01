@@ -144,6 +144,11 @@ retained private configuration, direct native task-owner checks and the
 installed private runtime host, native restart inhibition and write-through
 private receipt publication and durable native task-stop contexts, passed at
 `d973e20` (run `36924898739`).
+The isolated real Windows application job also passed at `8a9de5f`
+(run `36943041386`): three prebuilt managed starts, authenticated chat
+persistence, stopped-database restoration, original-Job listener ownership and
+unchanged build artifacts. This is not yet acceptance of the public Windows
+deploy/update/restore transaction.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

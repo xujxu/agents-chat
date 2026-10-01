@@ -7092,6 +7092,14 @@ failed on the absent `deployment-windows-managed-application.ps1`. All other
 22 jobs passed. The new fixture implements the three native S4U starts and
 stopped data copy/restore sequence above; native acceptance is pending.
 
+`8a9de5f` / `36943041386`, Windows application job `110638737414`, passed:
+actual authentication and chat creation, a second prebuilt start and API rename,
+stopped-data restoration, a third prebuilt start with the original chat,
+original-Job TCP ownership around every API phase, durable stopped maintenance,
+and final unchanged build/dependency artifact identity. The job completed in
+298 seconds including the one existing source install/build. Full regression
+is still running; do not promote it before all 23 jobs complete.
+
 #### Task 5M: Node-controlled native task maintenance lifetime
 
 Connect the existing admitted stop context to its actual Node controller before
@@ -7128,6 +7136,13 @@ host fixture and native Windows task job.
   inspect original stopped/empty Job, and require all four durable receipts.
 - [ ] Preserve the full ongoing actual-application regression, then run the
   causal and implementation through Actions without local validation.
+
+The Node causal is `bdb649b` / `36943394041`, queued behind the preserved actual
+application run. Implementation adds the bounded native bridge and original
+Node identity checks, includes the complete native dependency closure in the
+saved worker engine, and retains its independent expected manifest test.
+Native acceptance remains pending; generic Windows control-file ACL creation
+and lock/state transaction authority are still not provided by this API.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
