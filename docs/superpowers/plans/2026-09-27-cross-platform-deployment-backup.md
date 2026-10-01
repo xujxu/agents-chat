@@ -6015,6 +6015,15 @@ passed the existing coverage and failed both added cases exactly on missing
 inhibition checks without changing strict original observation or adding
 public admission, maintenance mutation, or cold-recovery dispatch.
 
+Implementation `9f83c8f` / `36857300060`, native job `110353224732`, passed
+the original coverage and reached both expected inhibited-policy proofs.
+Both new cases then exposed an incorrect test expectation: real systemctl
+manual-start refusal exits 4, not 1, with the explicit configured-refusal
+diagnostic. Assert both that exit code and diagnostic, not any generic failure.
+Also check closed/cancelled/invalid-flag behavior for both new methods, and
+verify that static policy checks after an actual activation return no stopped
+authority while an explicit stopped check refuses the running service.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

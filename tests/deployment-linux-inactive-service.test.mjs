@@ -41,12 +41,16 @@ for (const state of ['inactive', 'failed']) {
       assert.equal(Object.isFrozen(observed.identity), true);
       assert.equal(Object.isFrozen(observed.identity.runtime), true);
       await observed.check();
+      await assert.rejects(observed.checkPolicy({ stopped: 'yes' }), /Invalid inactive/);
+      await assert.rejects(observed.checkPolicy({ inhibited: 'yes' }), /Invalid inactive/);
       assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, state);
       assert.deepEqual((await readdir(f.project)).sort(), before);
       await assert.rejects(lstat(control), { code: 'ENOENT' });
     } finally { await observed.close(); }
     await observed.close();
     await assert.rejects(observed.check(), /closed/i);
+    await assert.rejects(observed.checkPolicy(), /closed/i);
+    await assert.rejects(observed.checkInhibited(), /closed/i);
   });
 }
 
@@ -67,6 +71,10 @@ for (const change of ['activation', 'source']) {
         await ready(f);
       } else await writeFile(f.fragment, `${f.bytes}\n# changed source\n`);
       await assert.rejects(observed.check(), /changed|inactive|quiescent|stale/i);
+      if (change === 'activation') {
+        assert.equal(await observed.checkPolicy(), undefined);
+        await assert.rejects(observed.checkPolicy({ stopped: true }), /stopped/i);
+      }
     } finally { await observed.close(); }
   });
 }
@@ -109,6 +117,8 @@ test('inactive observation cancellation retains no activation authority', native
   try {
     controller.abort(new Error('Inactive observation cancelled for test.'));
     await assert.rejects(observed.check(), /cancelled for test/);
+    await assert.rejects(observed.checkPolicy(), /cancelled for test/);
+    await assert.rejects(observed.checkInhibited(), /cancelled for test/);
     await assert.rejects(inspectLinuxInactiveService({ ...f, signal: controller.signal }), /cancelled for test/);
     assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, 'inactive');
   } finally { await observed.close(); }
@@ -131,7 +141,11 @@ for (const state of ['inactive', 'failed']) {
       assert.deepEqual(await observed.checkInhibited({ stopped: true }), { stopped: true, inhibited: true });
       await observed.checkPolicy({ inhibited: true, stopped: true });
       await assert.rejects(observed.checkInhibited({ stopped: false }), /stopped|inactive/i);
-      await assert.rejects(systemctl('start', f.unit), { code: 1 });
+      await assert.rejects(systemctl('start', f.unit), error => {
+        assert.equal(error.code, 4);
+        assert.match(error.stderr, /configured to refuse manual start\/stop/);
+        return true;
+      });
       assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, state);
       await unlink(inhibition);
       await systemctl('daemon-reload');
