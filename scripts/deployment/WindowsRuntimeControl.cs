@@ -101,7 +101,7 @@ namespace Deployment
                     }
                 }
                 catch (OperationCanceledException) { Log("reply-deadline"); }
-                catch (IOException error) when (!(error is InvalidDataException)) { Log("reply-disconnected"); }
+                catch (IOException) { Log("reply-disconnected"); }
             }
         }
         async Task Refuse(string reason)

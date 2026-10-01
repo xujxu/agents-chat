@@ -6693,6 +6693,12 @@ deliberately delayed reader to require reply retention, and keep internal
 oversized-reply errors distinct from expected peer transport failures.
 Reference: https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-disconnectnamedpipe
 
+`678bf65` / `36899487674`, native job `110495229277`, stopped at C# compilation:
+`InvalidDataException` is not an `IOException`, making the defensive catch
+filter statically impossible. Remove that redundant filter; internal frame-size
+errors already propagate separately from the expected transport exception type.
+The bounded reply-retention behavior still requires native acceptance.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
