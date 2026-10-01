@@ -7,6 +7,7 @@ import { createSnapshot, verifySnapshot } from './snapshot.mjs';
 import { fileDigest, inventorySnapshot, readSnapshotJson, realDirectory } from './snapshot-files.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { syncWorkerDirectory } from './worker-files.mjs';
+import { isGitGraphMetadata, restoreGitGraphMetadata } from './git-graph-metadata.mjs';
 
 const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
 const excludedPaths = ['info/packs'];
@@ -20,13 +21,15 @@ function validateEntries(entries, commit, restoring) {
   const width = commit.length;
   const loose = new RegExp(`^[a-f0-9]{2}/[a-f0-9]{${width - 2}}$`);
   const packed = new RegExp(`^pack/pack-[a-f0-9]{${width}}\\.(pack|idx|rev|bitmap)$`);
+  const graph = new RegExp(`^info/commit-graphs/graph-[a-f0-9]{${width}}\\.graph$`);
   if (!restoring && (!entries.length || !entries.some(entry => entry.kind === 'file'))) throw new Error('Git object store is empty.');
   for (const entry of entries) {
     const name = restoring && entry.path.endsWith('.agents-chat-restore')
       && restoring.has(entry.path.slice(0, -'.agents-chat-restore'.length))
+      && !isGitGraphMetadata(entry.path.slice(0, -'.agents-chat-restore'.length))
       ? entry.path.slice(0, -'.agents-chat-restore'.length) : entry.path;
-    if (entry.kind === 'directory' ? !/^(info|pack|[a-f0-9]{2})$/.test(entry.path)
-      : entry.kind !== 'file' || !(loose.test(name) || packed.test(name))) {
+    if (entry.kind === 'directory' ? !/^(info(?:\/commit-graphs)?|pack|[a-f0-9]{2})$/.test(entry.path)
+      : entry.kind !== 'file' || !(loose.test(name) || packed.test(name) || graph.test(name) || isGitGraphMetadata(name))) {
       throw new Error(`Unsupported Git object entry, alternate, promisor or writer state: ${entry.path}`);
     }
   }
@@ -142,7 +145,7 @@ export async function restoreGitObjects({ project, backup, manifest, checkStoppe
     }
     return true;
   };
-  for (const entry of saved.entries.filter(entry => entry.kind === 'file')
+  for (const entry of saved.entries.filter(entry => entry.kind === 'file' && !isGitGraphMetadata(entry.path))
     .sort((a, b) => Number(b.path.endsWith('.pack')) - Number(a.path.endsWith('.pack')) || a.path.localeCompare(b.path))) {
     await check();
     const target = path.join(root, entry.path);
@@ -182,6 +185,7 @@ export async function restoreGitObjects({ project, backup, manifest, checkStoppe
     }
     if (!await matches(target, entry)) throw new Error('Restored Git object disappeared.');
   }
+  await restoreGitGraphMetadata({ root, backup, entries: saved.entries, check, signal });
   await check();
   for (const entry of saved.entries.filter(entry => entry.kind === 'file')) {
     await realDirectory(path.dirname(path.join(root, entry.path)));

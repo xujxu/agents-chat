@@ -229,6 +229,8 @@ jobs:
           node-version: 24
       - name: Characterize retained cgroup observation
         run: sudo "$(command -v node)" tests/deployment-linux-domain-probe.mjs
+      - name: Restore actual Git commit-graph layouts with privileged file ownership
+        run: sudo "$(command -v node)" --test tests/deployment-git-objects.test.mjs
       - name: Exercise actual saved-engine systemd workers
         run: sudo env "DEPLOYMENT_TEST_GIT=$(command -v git)" "DEPLOYMENT_TEST_NPM_CLI=$(readlink -f "$(command -v npm)")" "$(command -v node)" --test tests/deployment-linux-worker.test.mjs tests/deployment-native-operation.test.mjs tests/deployment-linux-runtime.test.mjs tests/deployment-linux-service.test.mjs tests/deployment-linux-configuration.test.mjs tests/deployment-controller-capture.test.mjs tests/deployment-linux-restore-invocation.test.mjs tests/deployment-recovery-engine-retention.test.mjs tests/deployment-linux-first-install.test.mjs
 

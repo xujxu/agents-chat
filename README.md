@@ -206,6 +206,9 @@ If the retained backup directory is absent, restore refuses with
 `DEPLOYMENT_BACKUP_MISSING` (`backupAvailable: false` in JSON); it cannot recover
 a failed first installation without a previous backup. Existing but incomplete
 backup contents are reported as errors, not reclassified as a missing backup.
+Git object backups include single-file and split commit graphs. Restoration
+preserves newer immutable objects while restoring the saved graph pointer layout;
+alternate object stores, unknown entries and writer locks remain unsupported.
 The controller requires Node.js 24+, `/usr/bin/git`, systemd, port 3010, and a
 minimum 2 GiB build-space budget in addition to backup space. It keeps one
 complete backup and independent recovery helpers in the private sibling
