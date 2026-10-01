@@ -23,9 +23,14 @@ if ($Server) {
         $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
         $environment.Add('SystemRoot', $env:SystemRoot)
         $environment.Add('PATH', $env:PATH)
+        $environment.Add('RUNTIME_LITERAL', 'literal %n $HOME " space')
         $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
         $domain = [Deployment.WindowsRuntimeDomain]::Start($Generation, $pwsh, $HelperRoot,
-            $Node, [string[]]@((Join-Path $HelperRoot 'writer.cjs')), $HelperRoot, $environment)
+            $Node, [string[]]@((Join-Path $HelperRoot 'writer.cjs'), 'literal %n $HOME " space'), $HelperRoot, $environment)
+        $refused = $false
+        try { $domain.Retire() }
+        catch { $refused = $_.Exception.GetBaseException().Message -eq 'Original runtime Job must settle before retirement.' }
+        Assert $refused 'Runtime domain retired before explicit settlement'
         $pipe = [Deployment.WindowsRuntimePipe]::Create($Generation)
         @{
             pid=$PID
@@ -119,6 +124,7 @@ if (process.argv[2] === 'child') {
   fs.writeFileSync('writes', 'x');
   setInterval(() => fs.appendFileSync('writes', 'x'), 10);
 } else {
+  fs.writeFileSync('literal.json', JSON.stringify([process.env.RUNTIME_LITERAL, process.argv[2]]));
   const { spawn } = require('node:child_process');
   const child = spawn(process.execPath, [__filename, 'child'], { detached: true, stdio: 'ignore' });
   child.unref();
@@ -150,6 +156,9 @@ if (process.argv[2] === 'child') {
         Assert ($identity.sessionId -eq 0) 'Expected actual S4U session-zero runtime'
         $member = [Diagnostics.Process]::GetProcessById([int](Get-Content -LiteralPath (Join-Path $root 'writer-pid') -Raw))
         $null = $member.Handle
+        $literal = Get-Content -LiteralPath (Join-Path $root 'literal.json') -Raw | ConvertFrom-Json
+        Assert ($literal.Count -eq 2 -and $literal[0] -ceq 'literal %n $HOME " space' -and
+            $literal[1] -ceq 'literal %n $HOME " space') 'Runtime command arguments or environment were reinterpreted'
         do {
             $observation = Request $identity $generation 'observe' | ConvertFrom-Json
             Assert ([DateTime]::UtcNow -lt $deadline) 'Original command root did not exit'
@@ -168,6 +177,8 @@ if (process.argv[2] === 'child') {
             Assert (-not $owner.HasExited) 'Owner exited before final settlement could be observed'
             $again = Request $identity $generation 'observe' | ConvertFrom-Json
             Assert ($again.phase -eq 'stopped' -and $again.members.Count -eq 0) 'Original empty Job evidence was lost'
+            $again = Request $identity $generation 'stop' | ConvertFrom-Json
+            Assert ($again.phase -eq 'stopped' -and $again.members.Count -eq 0) 'Repeated stop lost original settled evidence'
             Assert ((Request $identity $generation 'retire') -ceq 'retired') 'Original Job could not retire after settlement'
         } else {
             $owner.Kill()

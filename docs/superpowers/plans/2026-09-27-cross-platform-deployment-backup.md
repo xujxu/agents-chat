@@ -6639,6 +6639,14 @@ cannot acquire or release the Job handle. Stop/observe/retire retain it until
 confirmed empty; disposal and owner death use kill-on-close. Existing deployment
 worker mode keeps its original finite owner watcher.
 
+`d87d02a` / `36892813217`, native job `110472974310`, passed the complete
+task/pipe gates and both real task-side runtime scenarios. Detached writers
+survived their root and observer disconnection, remained in the original Job,
+and stopped after both explicit retained-Job settlement and abrupt owner death.
+The full regression is preserved. Added exact literal argv/environment,
+pre-settlement retirement refusal and repeated-stop evidence checks to protect
+the domain's additional serialization and state transitions.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
