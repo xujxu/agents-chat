@@ -88,9 +88,9 @@ test('fresh build rechecks preserve absent-unit and identity policy after claimi
   await mkdir(path.join(f.project, 'node_modules'));
   await assert.rejects(inspected.checkFreshRuntime(), /existing|fresh/i);
   await inspected.checkUninstalled();
+  const running = await runningFixture(t, { unitName: f.unit });
+  await ready(running);
+  await assert.rejects(inspected.checkUninstalled(), /absent|existing|installed/i);
   await writeFile(f.env, 'NEXTAUTH_SECRET=changed\n');
   await assert.rejects(inspected.checkUninstalled(), /configuration/i);
-  const running = await runningFixture(t);
-  await ready(running);
-  await assert.rejects(inspectLinuxFirstInstall({ ...f, unit: running.unit }), /absent|existing|installed/i);
 });
