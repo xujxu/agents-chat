@@ -5645,10 +5645,15 @@ deployment receipt bytes must refuse cleanup at those same boundaries.
 Activation/readiness correction `b2c0655` / Actions `36826279155` and runtime
 environment refinement `167b65a` / `36827782744` both passed all eighteen jobs.
 Retirement causal `9cc5351` / `36829349378` reached the actual ready-application
-case and failed only on the missing `active.retire` method. The shared startup
-retention, version 4 producer/readers and native cold fault cases now await
-implementation validation. No public first deploy or real-host acceptance is
-implied by these internal boundaries.
+case and failed only on the missing `active.retire` method; its other seventeen
+jobs passed. Implementation `ddcb071` / `36831858995` passed twenty-two of
+twenty-three native cases, including all ten cold recovery/refusal cases.
+The remaining real-application retirement failed because Node streams reject
+`signal: null`; `a6e0587` uses the acceptance API's existing signal-free recheck.
+The saved-worker contract also needs the new startup helper in its exact
+expected manifest, preserving the closed dependency-set assertion. Full
+corrected implementation validation remains pending. No public first deploy
+or real-host acceptance is implied by these internal boundaries.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

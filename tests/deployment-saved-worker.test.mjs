@@ -27,6 +27,7 @@ const files = [
   'linux-service-retirement.mjs',
   'linux-recovery-admission.mjs',
   'linux-live-retirement.mjs',
+  'linux-startup-link.mjs',
   'linux-cold-retirement-proof.mjs',
 ];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
