@@ -5,10 +5,12 @@ import { promisify } from 'node:util';
 import { chown, cp, mkdir, readdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import test from 'node:test';
-import { fixture, ready, node, quote } from './deployment-linux-service-fixture.mjs';
+import { fixture, ready, node, quote, systemctl } from './deployment-linux-service-fixture.mjs';
+import { linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
 import { inspectInstalledLinuxService, inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { acquireLock, loadState, releaseLock } from '../scripts/deployment/state.mjs';
 import { runLinuxLiveDeployment } from '../scripts/deployment/linux-deployment.mjs';
@@ -103,9 +105,9 @@ test('native deployment refuses foreign command state and status never initializ
   assert.deepEqual((await readdir(control)).sort(), ['foreign-evidence', 'state.json']);
 });
 
-async function installation(t, { unitName } = {}) {
+async function installation(t, { unitName, restartOnFailure = true } = {}) {
   const f = await fixture(t, { nonroot: true, unitName,
-    settings: ({ project }) => `${settings}\nEnvironment=${quote(`npm_config_cache=${path.join(project, '.npm')}`)}`,
+    settings: ({ project }) => `${settings}\nEnvironment=${quote(`npm_config_cache=${path.join(project, '.npm')}`)}${restartOnFailure ? '' : '\nRestart=no'}`,
     server: `
 const fs = require('node:fs');
 require('node:http').createServer((req, res) => {
@@ -153,6 +155,19 @@ require('node:http').createServer((req, res) => {
   };
   return { ...f, service, control, lock, git: '/usr/bin/git', environment,
     port: 3010, prior, target, nextTarget, deploymentBytes: 2 * 1024 ** 3 };
+}
+
+async function quiesceInstallation(f, state) {
+  if (state === 'failed') await systemctl('kill', '--kill-whom=all', '--signal=KILL', f.unit);
+  else await systemctl('stop', f.unit);
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if ((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState === state) break;
+    await delay(100);
+  }
+  const observed = await linuxSystemdProperties(f.unit, ['ActiveState', 'MainPID', 'ExecMainStatus']);
+  assert.equal(observed.ActiveState, state);
+  assert.equal(observed.MainPID, '0');
+  if (state === 'failed') assert.equal(observed.ExecMainStatus, '9');
 }
 
 test('native deployment refuses preview side effects while reporting local targets and pending admission', async t => {
@@ -256,6 +271,56 @@ test('native deployment refuses conflicting build environment before downtime', 
   assert.deepEqual((await readdir(f.control)).sort(), ['state.json']);
 });
 
+for (const runtimeState of ['inactive', 'failed']) {
+  test(`native deployment refuses an unsupported ${runtimeState} target and closes settled preflight`, async t => {
+    const f = await installation(t, { restartOnFailure: runtimeState !== 'failed' });
+    await releaseLock(f.control, f.lock);
+    await quiesceInstallation(f, runtimeState);
+    const before = await linuxSystemdProperties(f.unit, ['ActiveState', 'MainPID', 'ExecMainStatus']);
+    const { runLinuxUpdateCommand } = await import('../scripts/deployment/linux-update-command.mjs');
+    await assert.rejects(runLinuxUpdateCommand({
+      args: ['--project-dir', f.project, '--revision', f.prior, '--timeout', '90'], unit: f.unit,
+    }), { code: 'DEPLOYMENT_TARGET_UNSUPPORTED' });
+    const state = await loadState(f.control);
+    assert.equal(state.phase, 'preflight-refused');
+    assert.equal(state.priorRuntime, 'stopped');
+    assert.match(state.runtimeIdentity, /^stopped:[a-f0-9]{64}$/);
+    assert.deepEqual(await linuxSystemdProperties(f.unit, ['ActiveState', 'MainPID', 'ExecMainStatus']), before);
+    assert.deepEqual((await readdir(f.control)).sort(), ['state.json']);
+  });
+
+  test(`native deployment retains originally ${runtimeState} maintenance after pre-source failure without restarting`, async t => {
+    const f = await installation(t, { restartOnFailure: runtimeState !== 'failed' });
+    await quiesceInstallation(f, runtimeState);
+    const service = await inspectInstalledLinuxService({ unit: f.unit, project: f.project });
+    t.after(() => service.close());
+    const original = fs.rename;
+    t.mock.method(fs, 'rename', async (from, to) => {
+      if (from === path.join(f.control, 'staging') && to === path.join(f.control, 'backup')) {
+        throw new Error('fixture stopped rotation publication failure');
+      }
+      return original(from, to);
+    });
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(runLinuxLiveDeployment({ ...f, service, revision: f.target }),
+        /fixture stopped rotation publication failure/);
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    }
+    const state = await loadState(f.control);
+    assert.equal(state.phase, 'recovery-required');
+    assert.equal(state.previousPhase, 'rotating');
+    assert.equal(state.priorRuntime, 'stopped');
+    assert.equal((await linuxSystemdProperties(f.unit, ['MainPID'])).MainPID, '0');
+    assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, runtimeState);
+    await assert.rejects(readFile(path.join(f.control, 'service-activation.ndjson')), { code: 'ENOENT' });
+    assert.equal((await verifySnapshot(path.join(f.control, 'staging'))).source.commit, f.prior);
+    assert.ok((await readdir(f.control)).includes('lock'));
+  });
+}
+
 test('native deployment restores prior owned runtime after pre-source snapshot rotation failure', async t => {
   const f = await installation(t);
   const original = fs.rename;
@@ -299,12 +364,16 @@ test('native deployment retains backup and inhibition after actual dependency in
   await assert.rejects(inspectLinuxService(f), /running|inhibit|policy|start|service/i);
 });
 
-for (const scenario of ['synthetic', 'current', 'historical', 'rebuild', 'command', 'inplace']) {
+for (const scenario of ['synthetic', 'current', 'historical', 'rebuild', 'command', 'inplace', 'inactive', 'failed']) {
 test(`native deployment composes real application acceptance and saved restoration (scenario=${scenario})`, {
   skip: process.env.DEPLOYMENT_TEST_REAL_DEPLOYMENT !== '1',
 }, async t => {
-  const publicCommand = ['command', 'inplace'].includes(scenario);
-  const f = await installation(t, { unitName: publicCommand ? 'agents-chat.service' : undefined });
+  const stoppedScenario = ['inactive', 'failed'].includes(scenario);
+  const publicCommand = stoppedScenario || ['command', 'inplace'].includes(scenario);
+  const f = await installation(t, {
+    unitName: publicCommand ? 'agents-chat.service' : undefined, restartOnFailure: scenario !== 'failed',
+  });
+  const quiesce = () => quiesceInstallation(f, scenario);
   let tools = repository;
   let obsoleteEngine;
   const controlNames = ['backup', 'deployment.json', 'recovery-engine', 'state.json'];
@@ -321,12 +390,14 @@ test(`native deployment composes real application acceptance and saved restorati
   };
   const secondUpdate = scenario !== 'synthetic';
   const nextRevision = scenario === 'inplace' ? '638c553c62406dbb7e6b5aeb41cdddf4cd6de179'
-    : ['historical', 'rebuild'].includes(scenario) ? f.target : f.nextTarget;
+    : ['historical', 'rebuild', 'inactive'].includes(scenario) ? f.target : f.nextTarget;
   if (scenario === 'historical') f.target = '638c553c62406dbb7e6b5aeb41cdddf4cd6de179';
   let result;
-  if (scenario === 'command') {
+  const initialOperation = ['command', 'failed'].includes(scenario) ? 'deploy' : 'update';
+  if (scenario === 'command' || stoppedScenario) {
     await releaseLock(f.control, f.lock);
-    result = await command(['--revision', f.target, '--timeout', '600'], 'deploy');
+    if (stoppedScenario) await quiesce();
+    result = await command(['--revision', f.target, '--timeout', '600'], initialOperation);
   } else {
     result = await runLinuxLiveDeployment({ ...f, revision: f.target, timeoutSeconds: 600 });
   }
@@ -334,7 +405,11 @@ test(`native deployment composes real application acceptance and saved restorati
   assert.equal(result.backupCreated, true);
   const state = await loadState(f.control);
   assert.equal(state.phase, 'accepted');
-  assert.equal(state.operation, scenario === 'command' ? 'deploy' : 'update');
+  assert.equal(state.operation, initialOperation);
+  if (stoppedScenario) {
+    assert.equal(state.priorRuntime, 'stopped');
+    assert.match(state.runtimeIdentity, /^stopped:[a-f0-9]{64}$/);
+  }
   let receipt = await readDeploymentReceipt(f.control, f.project);
   assert.equal(receipt.identity.source, f.target);
   let backup = await verifySnapshot(path.join(f.control, 'backup'));
@@ -373,6 +448,7 @@ test(`native deployment composes real application acceptance and saved restorati
     }
     const service = await inspectLinuxService(f);
     t.after(() => service.close());
+    if (stoppedScenario) await quiesce();
     if (scenario === 'rebuild') {
       for (const directory of ['.next', 'node_modules']) {
         const file = path.join(f.project, directory, 'deployment-altered-artifact');
@@ -395,6 +471,13 @@ test(`native deployment composes real application acceptance and saved restorati
       }
       assert.equal((await command(['--revision', nextRevision, '--timeout', '600'])).status, 'accepted');
       assert.equal((await command(['--status'])).phase, 'accepted');
+      if (stoppedScenario) {
+        const state = await loadState(f.control);
+        assert.equal(state.priorRuntime, 'stopped');
+        assert.match(state.runtimeIdentity, /^stopped:[a-f0-9]{64}$/);
+        assert.notEqual((await linuxSystemdProperties(f.unit, ['InvocationID'])).InvocationID,
+          service.identity.runtime.invocationId);
+      }
       if (scenario === 'inplace') {
         await assert.rejects(readFile(path.join(f.project, 'scripts/update.sh')), { code: 'ENOENT' });
         await assert.rejects(readFile(path.join(f.project, 'scripts/deployment/linux-update-command.mjs')), { code: 'ENOENT' });
@@ -436,6 +519,7 @@ test(`native deployment composes real application acceptance and saved restorati
   const saved = await saveRecoveryEngine({
     source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), control: f.control,
   });
+  if (stoppedScenario) await quiesce();
   await rm(path.join(f.project, '.git/objects/pack'), { recursive: true });
   const restored = publicCommand
     ? (await execute('/usr/bin/bash', [path.join(repository, 'scripts/restore.sh'),
@@ -457,6 +541,10 @@ test(`native deployment composes real application acceptance and saved restorati
   });
   assert.deepEqual(JSON.parse(restored), { status: 'restored', backupId: backup.id });
   assert.equal((await loadState(f.control)).phase, 'restored');
+  if (stoppedScenario) {
+    assert.equal((await loadState(f.control)).priorRuntime, 'stopped');
+    assert.match((await loadState(f.control)).runtimeIdentity, /^stopped:[a-f0-9]{64}$/);
+  }
   assert.equal((await execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project,
     'rev-parse', 'HEAD'])).stdout.trim(), expectedCommit);
   assert.equal((await execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project,

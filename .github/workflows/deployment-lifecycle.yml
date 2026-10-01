@@ -63,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [synthetic, current, historical, rebuild, command, inplace, fresh, first-failure]
+        scenario: [synthetic, current, historical, rebuild, command, inplace, fresh, first-failure, inactive, failed]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -240,6 +240,8 @@ jobs:
         run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-cold-restore.test.mjs
       - name: Inspect configuration without a running service process
         run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-configuration.test.mjs
+      - name: Discover retained inactive runtime executables
+        run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-discovery.test.mjs
       - name: Restore actual Git commit-graph layouts with privileged file ownership
         run: sudo "$(command -v node)" --test tests/deployment-git-objects.test.mjs
       - name: Exercise actual saved-engine systemd workers

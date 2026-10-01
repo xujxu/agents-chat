@@ -6236,6 +6236,60 @@ that policy; do not guess which runner defaults are present or relax
 authentication checks. Public inactive/failed lifecycle tests are being
 prepared separately and are not part of this diagnostic submission.
 
+### Public initially stopped lifecycle integration
+
+Prepared tests preserve every existing matrix scenario and add two native
+`linux-deployment` scenarios (`inactive`, `failed`), bringing this later
+acceptance matrix to 22 jobs without changing deadlines. They exercise public
+deploy/update from a genuinely stopped/crashed service, two running no-op
+checks, another initially stopped update, and saved public restore while the
+service is stopped. The inactive second update uses the same accepted commit
+and must rebuild instead of reporting already-current; the failed second
+update selects a different source commit. Both preserve real chat data and
+check data restoration after removing Git packs. Failure is induced with
+actual SIGKILL and Restart=no from initial unit creation, not by corrupting the
+backup's healthy source.
+
+Additional existing synthetic-gate tests require unsupported-target preflight
+to release settled ownership without starting inactive/failed services.
+Pre-source rotation failure must leave truthful stopped maintenance evidence,
+not try a prior-runtime restart. The separate inactive discovery fixture
+checks supported PATH discovery, higher-priority candidate appearance,
+project-local candidate refusal, npm interpreter refusal and actual main
+process executable identity.
+
+Implementation surfaces after configuration is accepted:
+
+- [ ] Share installed literal npm command discovery in
+  `linux-service-inspection.mjs`; keep running discovery intact and dispatch
+  inactive/failed runtime accounts to a focused inactive discovery helper.
+  Read the supported npm interpreter and resolve the first executable Node
+  using the retained startup PATH. Check both the named candidate and its
+  canonical target are outside the project before returning the canonical
+  Node path (matching running discovery/snapshot identity).
+- [ ] Recheck executable resolution and configuration-file policy alongside
+  every returned inactive authority method. Do not lose higher-priority PATH
+  appearance checks when consumers request policy-only or inhibited checks.
+  Running service observation must also bind `/proc/MainPID/exe` to the
+  declared Node target, including post-activation checks.
+- [ ] Use one validated original-history helper in `linux-deployment.mjs`,
+  `linux-restore.mjs` and `linux-preflight-refusal.mjs`: running keeps its
+  original InvocationID, stopped keeps the opaque full-observation marker.
+  Report `running: false` to the transaction engine and do not invoke current
+  deployment/no-op admission for an originally stopped service.
+- [ ] Preserve snapshot/build/stopped authority and ordinary source/account
+  privilege fences; reuse existing transaction recovery behavior, which only
+  restarts a prior runtime when it was actually running.
+- [ ] Wire `linux-restore-entry.mjs` live-owner recovery through installed
+  discovery and verify supplied saved native fields against the discovered
+  service. Cold dispatch remains separately journal-bound. Update the explicit
+  saved dependency closure for new discovery imports.
+- [ ] Update public help/README for the newly accepted installed states only
+  after their actual entry paths are wired. Read-only preview must preserve
+  the original stopped state and not claim liveness.
+- [ ] Run the two additional real lifecycle jobs and all 20 original gates;
+  do not substitute the lightweight fixtures for public Next.js acceptance.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
