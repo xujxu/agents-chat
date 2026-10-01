@@ -6783,6 +6783,14 @@ Preserve its full regression.
   whole-service quiescence or permission to modify the task.
 - [ ] Preserve all native scenarios and the full platform regression.
 
+Full direct-binding run `1307d76` / `36904398034` passed **23/23**.
+Task 5G causal `3edc057` / `36906940343`, native job `110524249072`, failed
+exactly when importing the missing `windows-task-owner-binding.ps1` after prior
+task/pipe gates passed. Implemented the bounded-stage read-only helper with two
+stable native observations, retained process handle, exact XML/SDDL, instance
+GUID/direct engine PID, executable and actual process SID/session checks.
+No task or process mutation is performed by the helper.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
