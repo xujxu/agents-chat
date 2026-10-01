@@ -97,3 +97,35 @@ test('first unit publication preserves a newly appeared foreign fragment', async
   assert.deepEqual((await readdir(f.control)).sort(), before);
   assert.equal(await readFile(f.fragment, 'utf8'), '# foreign configuration\n');
 });
+
+for (const phase of ['reserved', 'created']) {
+  test(`first unit cancellation after ${phase} preserves inert or inhibited ownership evidence`, async t => {
+    const { createLinuxFirstUnit } = await import('../scripts/deployment/linux-first-unit.mjs');
+    const f = await fixture(t);
+    const controller = new AbortController();
+    const journal = path.join(f.control, 'service-install.ndjson');
+    const installation = {
+      ...f.installation,
+      async checkIdentity() {
+        await f.installation.checkIdentity();
+        let content;
+        try { content = await readFile(journal, 'utf8'); }
+        catch (error) { if (error.code === 'ENOENT') return; throw error; }
+        const records = content.trim().split('\n').filter(Boolean).map(JSON.parse);
+        if (records.at(-1)?.phase === phase) controller.abort();
+      },
+    };
+    await assert.rejects(createLinuxFirstUnit({ ...f, installation, signal: controller.signal }), { name: 'AbortError' });
+    const records = (await readFile(journal, 'utf8')).trim().split('\n').map(JSON.parse);
+    assert.equal(records.at(-1).phase, phase);
+    const fragment = await readFile(f.fragment);
+    assert.equal(fragment.length === 0, phase === 'reserved');
+    if (phase === 'reserved') await assert.rejects(readFile(f.inhibition), { code: 'ENOENT' });
+    if (phase === 'created') assert.match(await readFile(f.inhibition, 'utf8'), /RefuseManualStart=yes/);
+    await linuxNative('/usr/bin/systemctl', ['--system', 'daemon-reload']);
+    await assert.rejects(linuxNative('/usr/bin/systemctl', ['--system', 'start', f.unit]));
+    assert.equal((await linuxSystemdProperties(f.unit, ['MainPID'])).MainPID, '0');
+    await assert.rejects(readFile(path.join(f.control, 'deployment.json')), { code: 'ENOENT' });
+    assert.ok((await readdir(f.control)).includes('worker-operation.ndjson'));
+  });
+}

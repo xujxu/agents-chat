@@ -5444,6 +5444,16 @@ existing first-install job, rather than waiting for unrelated worker-domain
 tests to finish before their logs become available. All tests and eighteen
 jobs remain; the six existing lifecycle scenarios and their limits are unchanged.
 
+The corrected first-install job in `c92669b` / `36813690734` passed its real
+build and all three unit-publication cases. The complete matrix is still
+running. Added cancellation coverage aborts after durable reserved/created
+receipts using the genuine inspection recheck, then verifies that the empty
+reservation or inhibited configuration, journal and worker evidence survive,
+manual startup remains refused and no acceptance receipt appears. Cancellation
+observed after reservation must also prevent the subsequent inhibitor-file
+write, not merely stop before filling the fragment. Authority rechecks must
+observe cancellation both before and after asynchronous inspection.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
