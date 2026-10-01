@@ -6593,6 +6593,39 @@ until a real handshake; do not flush a deliberately closed rejected connection.
 Also surface any task-side synthetic failure before cleanup, rather than losing
 the diagnostic file when a controller-side operation fails.
 
+Native `f2b5a22` / `36889496744`, job `110461697683`, passed all existing
+task options/definition gates and the complete runtime pipe fixture: private
+exclusive S4U server, stale/different-live-server refusal, reconnect and
+identification-only exchange, bounded absent-server timeout. Full regression is
+preserved in progress.
+
+#### Task 5D: task-side retained runtime Job
+
+- [ ] Add `deployment-windows-runtime-domain.ps1` to the same native job.
+  Its real S4U task hosts the production domain and accepted pipe transport.
+  A Node command exits after spawning a detached file writer. Independent
+  controller connections observe the original Job; disconnect must not stop it.
+  Explicit stop must join the original launcher and establish an empty original
+  Job before retirement. Abrupt task-owner death must stop the detached writer
+  through kill-on-close without catch/finally, port killing or PID-tree killing.
+- [ ] Capture the missing `WindowsRuntimeDomain.cs` causal failure in Actions.
+- [ ] Implement a focused disposable domain using existing `WindowsWorkerJob`,
+  a gated launcher and original process handles. Add a persistent-runtime
+  launcher mode that verifies its original live owner across joining the Job,
+  without inheriting the deployment worker's 30-minute deadline. Leave the
+  existing worker mode unchanged.
+- [ ] Domain observations distinguish command-root exit from domain settlement
+  and never claim application health. Stop closes command admission, terminates
+  the retained Job, joins the launcher and confirms no remaining Job members.
+  Retirement requires that explicit settled state.
+- [ ] Require native actual-task acceptance and retain full platform regression.
+
+This is the runtime containment primitive, not public task admission or
+transaction wiring. The test host is deliberately not the legacy watchdog.
+Configuration/ACL capture, identity publication, restart inhibition, installed
+task binding and recovery must still be connected before enabling the public
+Windows lifecycle.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

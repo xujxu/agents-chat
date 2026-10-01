@@ -316,3 +316,6 @@ jobs:
       - name: Bind runtime control transport to the actual Scheduled Task owner
         shell: pwsh
         run: ./tests/deployment-windows-runtime-pipe.ps1
+      - name: Retain original task-side runtime Job across controller connections
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-domain.ps1
