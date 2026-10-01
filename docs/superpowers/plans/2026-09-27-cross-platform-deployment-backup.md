@@ -5587,6 +5587,44 @@ environment policy and the main process's startup environment, not only the
 original dotenv files. Require matching admitted providers and recheck the
 original dotenv identity around acceptance as well.
 
+### First-install accepted retirement and versioned recovery inventory
+
+Add `active.retire({ acceptance })` only for the original live first activation,
+matching accepted state and published deployment receipt. Check its captured
+application acceptance before handing service authority to retirement. Preserve
+the existing owned-stop case and add a separate actual source-build case that
+publishes acceptance, retires service/worker evidence and releases the lock
+while the same application remains ready and persistently enabled.
+
+Extend the shared service retirement writer with an explicit version 4 first
+installation inventory: held inhibitor, activation journal, installation
+journal and enablement journal. Do not manufacture or rename a stop journal.
+Version 4 binds the persistent startup-link identity as `startup` and requires
+the genuine sealed worker inventory. Existing version 2/3 inventories and
+restore-specific retirement proofs keep their current contracts.
+
+Extract startup-link retention into `linux-startup-link.mjs`, shared by first
+enablement, retirement and its readers. Retain its O_PATH/no-follow descriptor,
+root-owned parent identity, exact target and original symlink metadata. The
+startup link is a persistent prerequisite, never a deletion-inventory entry.
+Verify it throughout service retirement, live unlock, cold service recovery
+and final recovery completion; a replaced/missing link must block cleanup.
+
+Wire version 4 through `linux-service-retirement.mjs`,
+`linux-service-recovery.mjs`, `linux-live-retirement.mjs`,
+`linux-recovery-completion.mjs` and `linux-worker-retirement-handoff.mjs`.
+Include the new shared helper in `saved-recovery-engine.mjs` so a saved external
+entry remains self-contained. The first activation's retiring authority must
+retain the original lock and accepted receipt without re-reading journals
+after their authorized deletion; the shared retirement inventory retains those
+journals independently until deletion.
+
+The Actions first-install gate requires an exact version 4 live handoff, its
+four allowlisted files and startup identity, successful native worker retirement
+and live unlock, retained deployment provenance, and continued same-generation
+readiness. Add cold/replaced-link interruption coverage before treating the
+new recovery path or public first deploy as accepted.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

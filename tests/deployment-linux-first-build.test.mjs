@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { chown, chmod, lstat, mkdir, readdir, readFile, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { chown, chmod, lstat, mkdir, readdir, readFile, readlink, rmdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectLinuxFirstInstall } from '../scripts/deployment/linux-first-install.mjs';
-import { acquireLock, loadState, writeState } from '../scripts/deployment/state.mjs';
+import { acquireLock, loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation, readWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { inspectTargetCompatibility } from '../scripts/deployment/target-compatibility.mjs';
@@ -16,13 +16,13 @@ import { linuxNative, linuxSystemdProperties } from '../scripts/deployment/linux
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { captureLinuxDeploymentAcceptance } from '../scripts/deployment/linux-deployment-acceptance.mjs';
 import { inspectLinuxConfiguration } from '../scripts/deployment/linux-configuration.mjs';
+import { publishDeploymentReceipt, readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
+import { waitLinuxReadiness } from '../scripts/deployment/linux-readiness.mjs';
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../', import.meta.url));
 
-test('fresh installation builds actual source, activates a new generation and stops that owned generation', {
-  skip: process.env.DEPLOYMENT_TEST_REAL_FIRST_BUILD !== '1',
-}, async t => {
+async function firstDeployment(t, completion) {
   const { prepareLinuxFirstBuild } = await import('../scripts/deployment/linux-first-build.mjs');
   const root = await temporaryDeployment(t);
   await chmod(root, 0o755);
@@ -142,6 +142,29 @@ test('fresh installation builds actual source, activates a new generation and st
     assert.deepEqual(await acceptance.checkAccepted(), acceptance.identity);
     await installation.configuration.check();
     await assert.rejects(readFile(path.join(control, 'deployment.json')), { code: 'ENOENT' });
+    if (completion === 'retirement') {
+      await record('accepted');
+      await publishDeploymentReceipt({ control, lock, ...acceptance });
+      await active.retire({ acceptance });
+      const handoff = JSON.parse(await readFile(path.join(control, 'live-retirement.json'), 'utf8'));
+      assert.equal(handoff.version, 4);
+      assert.deepEqual(handoff.startup, enabled.identity);
+      assert.deepEqual(handoff.files.map(entry => entry.file), [
+        `${inhibition}.${lock.token}.held`, path.join(control, 'service-activation.ndjson'),
+        path.join(control, 'service-install.ndjson'), path.join(control, 'service-enablement.ndjson'),
+      ]);
+      assert.equal(await readlink(startupLink), fragment);
+      await operation.retire();
+      await releaseLock(control, lock);
+      assert.equal((await loadState(control)).phase, 'accepted');
+      assert.deepEqual((await readDeploymentReceipt(control, project)).identity, acceptance.identity);
+      const remaining = await readdir(control);
+      assert.equal(remaining.some(name => /^(?:service-|worker-)/.test(name)
+        || ['lock', 'live-retirement.json'].includes(name)), false);
+      await service.check();
+      await waitLinuxReadiness({ service, port: 3010, providers: configuration.providers });
+      return;
+    }
     controller.abort();
     assert.deepEqual(await active.stopActivated(), { stopped: true, inhibited: true });
     assert.deepEqual(await active.stopActivated(), { stopped: true, inhibited: true });
@@ -168,4 +191,10 @@ test('fresh installation builds actual source, activates a new generation and st
       await linuxNative('/usr/bin/systemctl', ['--system', 'daemon-reload']);
     }
   }
-});
+}
+
+for (const completion of ['owned-stop', 'retirement']) {
+  test(`fresh installation builds actual source and verifies ${completion} of its ready generation`, {
+    skip: process.env.DEPLOYMENT_TEST_REAL_FIRST_BUILD !== '1',
+  }, t => firstDeployment(t, completion));
+}
