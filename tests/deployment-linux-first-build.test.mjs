@@ -15,6 +15,7 @@ import { inspectTargetCompatibility } from '../scripts/deployment/target-compati
 import { linuxNative, linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
 import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
 import { captureLinuxDeploymentAcceptance } from '../scripts/deployment/linux-deployment-acceptance.mjs';
+import { inspectLinuxConfiguration } from '../scripts/deployment/linux-configuration.mjs';
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../', import.meta.url));
@@ -125,8 +126,13 @@ test('fresh installation builds actual source, activates a new generation and st
       unit, project, npm: installation.identity.executables[0].file, node: installation.identity.executables[1].file,
     });
     assert.deepEqual(service.identity, active.identity);
+    const configuration = await inspectLinuxConfiguration({
+      service, profile: installation.configuration.profile, signal: controller.signal,
+    });
+    assert.deepEqual(configuration.providers, installation.configuration.providers);
+    await installation.configuration.check();
     const acceptance = await captureLinuxDeploymentAcceptance({
-      service, configuration: installation.configuration, source: built.source, artifacts: built.artifacts,
+      service, configuration, source: built.source, artifacts: built.artifacts,
       port: 3010, signal: controller.signal,
     });
     assert.equal(acceptance.identity.source, target.commit);
@@ -134,6 +140,7 @@ test('fresh installation builds actual source, activates a new generation and st
       assert.match(acceptance.identity[key], /^[a-f0-9]{64}$/);
     }
     assert.deepEqual(await acceptance.checkAccepted(), acceptance.identity);
+    await installation.configuration.check();
     await assert.rejects(readFile(path.join(control, 'deployment.json')), { code: 'ENOENT' });
     controller.abort();
     assert.deepEqual(await active.stopActivated(), { stopped: true, inhibited: true });

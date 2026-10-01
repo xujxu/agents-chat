@@ -5581,6 +5581,12 @@ exists, and leave accepted-state publication and retirement for their complete
 transaction boundary. The additional gate runs in the same Actions job and
 reuses its actual source build.
 
+Use `inspectLinuxConfiguration` on that exact running service before capture,
+as the existing deployment controller does. This checks actual systemd
+environment policy and the main process's startup environment, not only the
+original dotenv files. Require matching admitted providers and recheck the
+original dotenv identity around acceptance as well.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
