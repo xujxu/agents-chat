@@ -6522,6 +6522,38 @@ specific process handle, validates the start-time identity, stops only the
 generated task and waits for that process to exit before deleting the directory.
 Do not guess the application PID from EnginePID or silently ignore cleanup.
 
+The corrected `1292374` / `36881067273` native task job `110433256546`
+passed all six parameter cases, existing deployment/startup regressions and all
+six definition-observation cases. Full regression is retained in progress.
+
+#### Task 5C: original Windows runtime-owner control transport
+
+The existing worker Job owner is tied to a transient CLI and its 30-minute
+watchdog; it is not a persistent application service. Keep that worker behavior.
+For a service, the original task-side owner must retain the original Job handle,
+while later controllers connect to that same owner rather than reopening a Job
+by name. Begin with the transport seam, not an unsafe public lifecycle switch.
+
+- [ ] Add native `deployment-windows-runtime-pipe.ps1` to the existing Windows
+  task job. Register an isolated S4U task that creates a private first-instance
+  pipe; inspect its protected SYSTEM/current-account DACL, reject duplicate
+  servers, changed process start-times and a different live server PID, then
+  exchange messages with the original task process and join its actual handle.
+- [ ] Capture the Actions-only missing `WindowsRuntimePipe.cs` causal failure.
+- [ ] Implement `Create(Guid)`, `SecurityDescriptor(PipeStream)` and
+  `Connect(Guid, int, string, int)` in `WindowsRuntimePipe.cs`. Use a
+  non-inherited, local-only first-instance pipe; identification-only client
+  impersonation level; retain the expected process handle across connection and
+  compare the native pipe server PID before returning the connected stream.
+  Reject empty generations, invalid owners and timeouts outside 1..30000 ms.
+- [ ] Require native task acceptance and preserve all 23 regression jobs.
+
+This transport grants no application-runtime/quiescence authority by itself.
+Its initial ACL intentionally supports the task account and SYSTEM only; it does
+not claim arbitrary cross-account administrator deployment support. Subsequent
+Job-owner, inhibition, configuration/ACL and transaction wiring must establish
+those separate contracts before changing the public Windows deployment path.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

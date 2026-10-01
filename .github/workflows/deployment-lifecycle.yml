@@ -313,3 +313,6 @@ jobs:
       - name: Observe real task definitions without adopting process ownership
         shell: powershell
         run: node --test tests/deployment-windows-task-inspection.test.mjs
+      - name: Bind runtime control transport to the actual Scheduled Task owner
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-pipe.ps1
