@@ -5403,9 +5403,11 @@ source selection, dependencies/build and truthful no-service/no-backup state.
 
 Create the new root-owned unit only from the matching configuring-phase fresh
 deployment and sealed worker evidence. Retain a private `service-install.ndjson`
-journal before mutation, create the known startup inhibitor before the unit
-fragment, and use exclusive creation rather than replacing any existing file
-or drop-in directory. Keep root-source handles and exact bytes/identities.
+journal before mutation. Exclusively reserve the unit name with an inert empty
+fragment, then create the known startup inhibitor before filling that retained
+fragment. This avoids inhibiting a foreign unit that wins a name race between
+inspection and publication. Never replace an existing file or drop-in directory.
+Keep root-source handles and exact bytes/identities.
 After daemon reload, inspect actual systemd policy, numeric account,
 WorkingDirectory, literal npm start, sole inhibitor, zero MainPID and absent
 control group. Every recheck must retain project/account/toolchain/configuration,

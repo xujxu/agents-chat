@@ -65,7 +65,8 @@ test('first unit publication retains genuine inactive configuration and refuses 
   await assert.rejects(readFile(path.join(f.control, 'deployment.json')), { code: 'ENOENT' });
   await assert.rejects(readdir(path.join(f.control, 'backup')), { code: 'ENOENT' });
   const records = (await readFile(path.join(f.control, 'service-install.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
-  assert.deepEqual(records.map(record => record.phase), ['intent', 'inhibited', 'created', 'configured']);
+  assert.deepEqual(records.map(record => record.phase), ['intent', 'reserved', 'inhibited', 'created', 'configured']);
+  assert.equal(records[1].files[0].size, 0);
   await writeFile(f.fragment, `${await readFile(f.fragment, 'utf8')}\n# changed\n`);
   await assert.rejects(created.check(), /changed|replaced|identity/i);
 });

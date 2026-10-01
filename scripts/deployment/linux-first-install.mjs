@@ -22,11 +22,13 @@ export async function inspectLinuxFirstInstall({ project, unit = 'agents-chat.se
     throw new Error('Fresh installation requires a non-root-owned project without shared write or special permissions.');
   }
   const control = path.join(path.dirname(root.root), `.${path.basename(root.root)}.deployment`);
-  const absent = async ({ runtimePaths = true, controlEvidence = true } = {}) => {
+  const absent = async ({ unitAbsent = true, runtimePaths = true, controlEvidence = true } = {}) => {
     signal?.throwIfAborted();
-    const state = await linuxSystemdProperties(unit, unitFields, { allowMissing: true });
-    if (state.LoadState !== 'not-found' || state.ActiveState !== 'inactive' || state.MainPID !== '0'
-      || state.ControlGroup || state.FragmentPath) throw new Error('Fresh installation requires an absent systemd service.');
+    if (unitAbsent) {
+      const state = await linuxSystemdProperties(unit, unitFields, { allowMissing: true });
+      if (state.LoadState !== 'not-found' || state.ActiveState !== 'inactive' || state.MainPID !== '0'
+        || state.ControlGroup || state.FragmentPath) throw new Error('Fresh installation requires an absent systemd service.');
+    }
     for (const name of runtimePaths ? ['.data', '.next', 'node_modules'] : []) {
       try { await lstat(path.join(root.root, name)); }
       catch (error) { if (error.code === 'ENOENT') continue; throw error; }
@@ -75,5 +77,6 @@ export async function inspectLinuxFirstInstall({ project, unit = 'agents-chat.se
     identity, configuration, check,
     checkFreshRuntime: () => recheck({ controlEvidence: false }),
     checkUninstalled: () => recheck({ runtimePaths: false, controlEvidence: false }),
+    checkIdentity: () => recheck({ unitAbsent: false, runtimePaths: false, controlEvidence: false }),
   });
 }

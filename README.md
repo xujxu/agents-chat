@@ -210,6 +210,10 @@ not wired here and are refused rather than delegated to the legacy script.
 The separate native first-install inspection/build helpers require a genuinely
 absent unit and a non-root-owned fresh source checkout. They do not yet create
 or activate a service, or claim an accepted deployment.
+The separate first-unit publication stage reserves a new unit name and writes
+startup-inhibited configuration under the operation lock; it does not enable or
+start the service. Preserve its `service-install.ndjson` and unit evidence after
+interruption.
 Do not use this branch on a live installation before the remaining platform
 acceptance gates. The `deploy.sh` commands below describe the legacy implementation,
 not the new backup/restore guarantees.
