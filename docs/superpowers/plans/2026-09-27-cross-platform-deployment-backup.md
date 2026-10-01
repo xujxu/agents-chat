@@ -6791,6 +6791,70 @@ stable native observations, retained process handle, exact XML/SDDL, instance
 GUID/direct engine PID, executable and actual process SID/session checks.
 No task or process mutation is performed by the helper.
 
+Implementation `d696ffd` / `36908786873`, native job `110526485454`,
+passed all retained policy/owner checks and earlier Windows gates. The complete
+23-job regression is preserved while preparing the next integration step.
+
+#### Task 5H: installed private runtime host
+
+**Files:** add `scripts/deployment/WindowsRuntimeHost.cs`,
+`scripts/deployment/windows-runtime-host.ps1` and
+`tests/deployment-windows-runtime-host.ps1`; update `WindowsRuntimeControl.cs`
+and the existing native Windows task job.
+
+The deployment-owned bootstrap bundle must already be trusted and protected
+before its PowerShell/C# loader executes. A self-reported helper hash is not a
+code-signing boundary. This step combines retained private configuration with
+the accepted task-side Job and control protocol; task policy admission,
+restart inhibition, application readiness and public transaction wiring remain
+separate requirements.
+
+- [ ] Commit the actual-task test and capture the missing
+  `WindowsRuntimeHost.cs` copy failure in Actions. The fixture rejects wrong
+  config hashes, duplicate JSON fields and changed helper digests without a
+  target write or readiness record. Then it starts a real installed S4U host,
+  binds the native instance, and exercises literal argv/environment, blocked
+  config/helper/readiness writes, detached ownership, stop and retirement.
+  ```powershell
+  ./tests/deployment-windows-runtime-host.ps1
+  ```
+- [ ] Implement one strict private startup configuration:
+  ```javascript
+  {
+    version: 1,
+    helpers: {
+      "WindowsWorkerJob.cs": sha256,
+      "WindowsRuntimeDomain.cs": sha256,
+      "WindowsRuntimePipe.cs": sha256,
+      "WindowsRuntimeControl.cs": sha256,
+      "WindowsPrivateFile.cs": sha256,
+      "WindowsRuntimeHost.cs": sha256,
+      "windows-worker-launcher.ps1": sha256,
+      "windows-runtime-host.ps1": sha256
+    },
+    command: { file: absoluteExecutable, args: literalArguments,
+      cwd: absoluteWorkingDirectory, environment: literalEnvironment }
+  }
+  ```
+  Retain the configuration and all exact bundle files with `WindowsPrivateFile`.
+  Derive the bundle root and current PowerShell image from the actual bootstrap,
+  not untrusted JSON. Reject missing/extra/duplicate fields and case-colliding
+  environment names. Reuse `WindowsRuntimeDomain.Start` for command bounds.
+- [ ] Generate a fresh Job/pipe generation for each actual host start. Publish
+  `runtime-<PID>-<UTC-start-ticks>.json` alongside the retained configuration,
+  using a new private owner/SYSTEM file, flush-to-disk and non-overwriting rename.
+  Retain the published file until owner retirement; never overwrite a prior
+  instance's evidence. The record includes version, generation, original
+  PID/start-time, session, config digest, Job name and launcher PID, not health.
+- [ ] Add an optional native `Action` admission check to the control listener.
+  The managed host checks retained configuration/helpers/readiness before and
+  after each admitted request; existing domain callers remain unchanged.
+  Actual admission failures propagate and dispose only the original owned Job.
+  Startup logs contain only `Managed runtime startup refused: <stage>.`.
+- [ ] Require native host acceptance and preserve the complete regression.
+  Keep public Windows deploy/update/restore unchanged until their full authority
+  and recovery composition is present.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

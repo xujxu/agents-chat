@@ -322,3 +322,6 @@ jobs:
       - name: Retain private runtime configuration files and permissions
         shell: pwsh
         run: ./tests/deployment-windows-private-file.ps1
+      - name: Run installed private runtime host under an actual Scheduled Task
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1
