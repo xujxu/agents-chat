@@ -6744,6 +6744,20 @@ initial synthetic owner SID to distinguish elevated-token default ownership
 from a production policy defect. Do not allow the entire Administrators group
 as a substitute for the declared private-file owner.
 
+`50423d5` / `36903793075`, native job `110509665189`, passed all private
+configuration cases. The initial synthetic owner was **S-1-5-32-544
+(Administrators)**, confirming elevated-token default ownership rather than a
+reason to relax production policy. The full regression remains in progress.
+
+Before selecting the managed-host/task binding implementation, add an actual
+native instance identity gate to both S4U runtime scenarios. Capture the one
+running Scheduler instance and compare its engine PID to the independently
+retained task-side owner process, recording the owner's parent PID for bounded
+diagnosis. EnginePID is not assumed to be the application; this gate checks
+whether the proposed **direct task-owner** binding is actually available on the
+native runner. If it differs, retain the failure and design a supported binding
+instead of adopting an arbitrary descendant or accepting a name-only match.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

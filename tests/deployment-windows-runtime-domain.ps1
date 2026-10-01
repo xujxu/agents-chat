@@ -131,6 +131,16 @@ if (process.argv[2] === 'child') {
         $null = $owner.Handle
         Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($owner.Id) -ceq $identity.identity) 'Original task owner changed'
         Assert ($identity.sessionId -eq 0) 'Expected actual S4U session-zero runtime'
+        $scheduler = New-Object -ComObject 'Schedule.Service'
+        $scheduler.Connect()
+        $instances = $scheduler.GetFolder('\').GetTask($taskName).GetInstances(0)
+        Assert ($instances.Count -eq 1) 'Expected one original native task instance'
+        $instance = $instances.Item(1)
+        $instance.Refresh()
+        $nativeEnginePid = [int]$instance.EnginePID
+        $parentPid = (Get-CimInstance Win32_Process -Filter "ProcessId=$($owner.Id)").ParentProcessId
+        Write-Output "TASK-OWNER-PROBE: owner=$($owner.Id) engine=$nativeEnginePid parent=$parentPid"
+        Assert ($nativeEnginePid -eq $owner.Id) 'Native task instance engine does not directly identify the retained runtime owner'
         $member = [Diagnostics.Process]::GetProcessById([int](Get-Content -LiteralPath (Join-Path $root 'writer-pid') -Raw))
         $null = $member.Handle
         $literal = Get-Content -LiteralPath (Join-Path $root 'literal.json') -Raw | ConvertFrom-Json
