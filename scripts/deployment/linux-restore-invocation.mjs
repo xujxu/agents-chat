@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { lstat } from 'node:fs/promises';
 import { canonicalWorkerDirectory } from './worker-files.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { runStage } from './stage-runner.mjs';
@@ -18,6 +19,13 @@ export async function prepareLinuxRestoreInvocation({ project, timeoutSeconds = 
     const control = path.join(path.dirname(root), `.${path.basename(root)}.deployment`);
     await canonicalWorkerDirectory(control, { privateMode: true });
     const backup = path.join(control, 'backup');
+    try { await lstat(backup); }
+    catch (cause) {
+      if (cause.code !== 'ENOENT') throw cause;
+      throw Object.assign(new Error('No retained backup directory is available for restoration.', { cause }), {
+        code: 'DEPLOYMENT_BACKUP_MISSING',
+      });
+    }
     const snapshot = await verifySnapshot(backup, { signal: stageSignal });
     const runtime = snapshot.runtime;
     if (snapshot.project !== root || snapshot.scope !== 'project' || runtime?.platform !== 'linux'

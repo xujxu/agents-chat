@@ -5836,6 +5836,13 @@ present availability, not an unsupported claim that an older backup never
 existed. Push these causal tests before implementing the focused admission and
 CLI rendering change; verify the exact failures in Actions.
 
+Causal `a8610aa` / `36844611479` first-failure job `110316555154`
+reached every deployment/status/replay assertion and failed at restore's raw
+`ENOENT` instead of the required missing-backup code. Implement a separate
+`lstat(backup)` admission check that translates only that lookup's `ENOENT`;
+leave snapshot verification errors untouched. Render the stable refusal and
+`backupAvailable: false` without running saved recovery.
+
 The continuous gate `1d0029c` / `36844406939` reached accepted fresh deployment
 and a verified no-op update, then failed the first explicit source update during
 preflight with only a generic public error. Add bounded diagnostic locations to

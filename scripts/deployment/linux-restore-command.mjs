@@ -68,8 +68,11 @@ try {
   const message = code === 'DEPLOYMENT_DATA_LOSS_ACKNOWLEDGEMENT_REQUIRED'
     ? 'Export post-backup data, then provide --accept-data-loss to authorize restoration.'
     : code === 'DEPLOYMENT_NODE_REQUIRED' ? 'Install Node.js 24 or newer for the restore controller.'
+      : code === 'DEPLOYMENT_BACKUP_MISSING'
+        ? 'No retained backup is available; restore cannot recover this installation. Preserve all operation and recovery evidence; inspect before retrying.'
       : 'Restore failed. Preserve the backup and all lock/recovery evidence; inspect before retrying.';
-  if (json) process.stdout.write(`${JSON.stringify({ status: 'failed', code, message })}\n`);
+  if (json) process.stdout.write(`${JSON.stringify({ status: 'failed', code, message,
+    ...(code === 'DEPLOYMENT_BACKUP_MISSING' ? { backupAvailable: false } : {}) })}\n`);
   process.stderr.write(`${message} (${code})\n`);
   process.exitCode = 1;
 }
