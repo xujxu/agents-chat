@@ -12,24 +12,34 @@ import { quiescentFixture, ready } from './deployment-linux-service-fixture.mjs'
 
 const native = { skip: process.platform !== 'linux' || process.getuid() !== 0 };
 
-async function maintenanceFixture(t, runtimeState) {
+async function maintenanceFixture(t, runtimeState, { wrongIdentity = false } = {}) {
   const f = await quiescentFixture(t, runtimeState);
   const observation = await inspectLinuxInactiveService(f);
   t.after(() => observation.close());
   assert.match(observation.runtimeIdentity, /^stopped:[a-f0-9]{64}$/);
+  let runtimeIdentity = observation.runtimeIdentity;
+  if (wrongIdentity) runtimeIdentity = `${runtimeIdentity.slice(0, -1)}${runtimeIdentity.at(-1) === '0' ? '1' : '0'}`;
   const control = path.join(path.dirname(f.project), 'control');
   await mkdir(control, { mode: 0o700 });
   const lock = await acquireLock(control, { project: f.project, operationId: randomUUID() });
   const state = {
     version: 1, operationId: lock.operationId, project: f.project, operation: 'update',
     phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
-    backupId: null, priorRuntime: 'stopped', runtimeIdentity: observation.runtimeIdentity,
+    backupId: null, priorRuntime: 'stopped', runtimeIdentity,
     startedAt: lock.createdAt, updatedAt: lock.createdAt, errorCode: null,
   };
   await writeState(control, state);
   await writeState(control, { ...state, phase: 'stopped', previousPhase: 'preflight' });
   return { ...f, control, lock, observation };
 }
+
+test('inactive maintenance refuses a different observation identity before creating inhibition', native, async t => {
+  const f = await maintenanceFixture(t, 'inactive', { wrongIdentity: true });
+  await assert.rejects(stopLinuxService(f), /observation identity/i);
+  await f.observation.check();
+  await assert.rejects(lstat(`${f.fragment}.d/90-agents-chat-deployment.conf`), { code: 'ENOENT' });
+  assert.deepEqual((await readdir(f.control)).sort(), ['lock', 'state.json']);
+});
 
 for (const state of ['inactive', 'failed']) {
   test(`native initially ${state} maintenance retains truthful stopped evidence and cold inspection`, native, async t => {

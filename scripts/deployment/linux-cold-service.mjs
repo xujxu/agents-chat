@@ -1,12 +1,14 @@
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { lstat, open, readFile, statfs } from 'node:fs/promises';
+import { lstat, open, readFile, realpath, statfs } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
 import {
   inspectLinuxServiceExecutable, inspectLinuxServicePolicy, inspectLinuxServiceSource,
 } from './linux-service-inspection.mjs';
 import { inspectLinuxRuntimeAccount } from './linux-runtime.mjs';
+import { checkLinuxInactiveProcesses, linuxInactiveObservationId } from './linux-inactive-service.mjs';
+import { linuxServiceFileIdentity } from './linux-service-sources.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 
@@ -19,16 +21,20 @@ export async function inspectLinuxColdService({ original: supplied, held = null 
   if (process.platform !== 'linux' || process.getuid() !== 0) throw new Error('Cold service inspection requires Linux root.');
   const original = structuredClone(supplied);
   const { runtime, configuration, executables, sources, bootId, controlGroup } = original ?? {};
+  const initiallyStopped = runtime?.mainPid === 0;
   if (!runtime || !configuration?.state || !Array.isArray(executables) || executables.length !== 2
     || !Array.isArray(sources) || !sources.length || sources.length > 33
     || !/^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,180}\.service$/.test(runtime.unit)
     || controlGroup !== `/system.slice/${runtime.unit}`
-    || configuration.state.ControlGroup !== controlGroup || configuration.state.ActiveState !== 'active'
-    || configuration.state.SubState !== 'running' || configuration.state.MainPID !== String(runtime.mainPid)
-    || !/^[a-f0-9]{32}$/.test(runtime.invocationId) || configuration.state.InvocationID !== runtime.invocationId
+    || !initiallyStopped && (!Number.isSafeInteger(runtime.mainPid) || runtime.mainPid <= 0
+      || configuration.state.ControlGroup !== controlGroup || configuration.state.ActiveState !== 'active'
+      || configuration.state.SubState !== 'running' || configuration.state.MainPID !== String(runtime.mainPid)
+      || !/^[a-f0-9]{32}$/.test(runtime.invocationId) || configuration.state.InvocationID !== runtime.invocationId)
     || configuration.state.RefuseManualStart !== 'no' || !same(configuration.conditions, [])) {
     throw new Error('Invalid original cold service identity.');
   }
+  const inactiveIdentity = initiallyStopped ? linuxInactiveObservationId(original) : null;
+  const domainIdentity = initiallyStopped ? linuxServiceFileIdentity : fileIdentity;
   const inhibition = `/etc/systemd/system/${runtime.unit}.d/90-agents-chat-deployment.conf`;
   if (held !== null && (typeof held !== 'string' || !held.startsWith(`${inhibition}.`)
     || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.held$/.test(held.slice(inhibition.length + 1)))) {
@@ -55,6 +61,15 @@ export async function inspectLinuxColdService({ original: supplied, held = null 
       const info = await lstat(parent);
       if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== 0 || info.mode & 0o022
         || !same(fileIdentity(info), fileIdentity(parentInfo))) throw new Error('Cold service inhibitor directory changed.');
+      if (initiallyStopped) {
+        const base = '/sys/fs/cgroup';
+        const current = await lstat(base);
+        if (!current.isDirectory() || current.isSymbolicLink() || current.uid !== 0 || current.mode & 0o022
+          || await realpath(base) !== base || (await statfs(base)).type !== 0x63677270
+          || !same(fileIdentity(current), original.domain.base)) {
+          throw new Error('Original inactive cgroup hierarchy changed.');
+        }
+      }
     };
     const checkPolicy = async ({ inhibited = true, stopped = true } = {}) => {
       if (typeof inhibited !== 'boolean' || typeof stopped !== 'boolean') throw new Error('Invalid cold service policy observation.');
@@ -77,10 +92,12 @@ export async function inspectLinuxColdService({ original: supplied, held = null 
       }
       const account = await inspectLinuxRuntimeAccount({ unit: runtime.unit, project: runtime.project });
       if (accountKeys.some(key => account[key] !== runtime[key])
-        || stopped && (account.mainPid !== 0 || await processIdentity(runtime.mainPid) === runtime.processIdentity)
+        || stopped && (account.mainPid !== 0
+          || !initiallyStopped && await processIdentity(runtime.mainPid) === runtime.processIdentity)
         || !same(await Promise.all(executables.map(entry => inspectLinuxServiceExecutable(entry.file))), executables)) {
         throw new Error('Cold service account or executable identity changed.');
       }
+      if (initiallyStopped && stopped) await checkLinuxInactiveProcesses(runtime.unit);
     };
     await checkParent();
     await checkPolicy();
@@ -100,11 +117,15 @@ export async function inspectLinuxColdService({ original: supplied, held = null 
     const groupPath = `/sys/fs/cgroup${controlGroup}`;
     try {
       await lstat(groupPath);
+      if (initiallyStopped && !original.domain.present) throw new Error('Absent inactive service domain was recreated.');
       if ((await statfs(groupPath)).type !== 0x63677270) throw new Error('Cold service requires cgroup v2.');
       group = await open(groupPath, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
       events = await open(`${groupPath}/cgroup.events`, constants.O_RDONLY | constants.O_NOFOLLOW);
-      groupInfo = fileIdentity(await group.stat());
-      eventsInfo = fileIdentity(await events.stat());
+      groupInfo = domainIdentity(await group.stat());
+      eventsInfo = domainIdentity(await events.stat());
+      if (initiallyStopped && (!same(groupInfo, original.domain.directory) || !same(eventsInfo, original.domain.events))) {
+        throw new Error('Original inactive service domain was replaced.');
+      }
     } catch (error) {
       // Absence is acceptable only before acquiring either handle; partial observation is not extinction.
       if (error.code !== 'ENOENT' || group || events) throw error;
@@ -142,8 +163,8 @@ export async function inspectLinuxColdService({ original: supplied, held = null 
       for (const [file, handle, expected] of [[groupPath, group, groupInfo],
         [`${groupPath}/cgroup.events`, events, eventsInfo]]) {
         const named = await lstat(file);
-        if (named.isSymbolicLink() || !same(fileIdentity(named), expected)
-          || !same(fileIdentity(await handle.stat()), expected)) throw new Error('Cold service domain changed.');
+        if (named.isSymbolicLink() || !same(domainIdentity(named), expected)
+          || !same(domainIdentity(await handle.stat()), expected)) throw new Error('Cold service domain changed.');
       }
       const buffer = Buffer.alloc(4096);
       const { bytesRead } = await events.read(buffer, 0, buffer.length, 0);
@@ -161,7 +182,7 @@ export async function inspectLinuxColdService({ original: supplied, held = null 
     };
     await check();
     return Object.freeze({
-      identity: structuredClone(original), check, close,
+      identity: structuredClone(original), ...(initiallyStopped ? { runtimeIdentity: inactiveIdentity } : {}), check, close,
       async checkInhibited({ stopped = true } = {}) {
         if (stopped !== true) throw new Error('Cold inspection does not authorize an original running generation.');
         return check();

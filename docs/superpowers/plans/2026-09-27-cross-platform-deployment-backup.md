@@ -6056,6 +6056,23 @@ cold transaction/lease dispatch remain gated until their own integration is
 complete. Add the inactive helper to the saved worker/recovery closure when
 the maintenance module begins importing it.
 
+Inhibition baseline `537f273` / `36857706177` passed all 20 jobs.
+Maintenance characterization `0e9f3c2` / `36858987878`, native job
+`110360283434`, passed the existing observation gate and failed all three
+maintenance cases on the missing stopped observation identifier.
+
+Implemented internal version-2 maintenance, its bound opaque observation ID,
+prior-restart refusal before activation is consumed, and originally-inactive
+cold inspection. The observation now also records the cgroup hierarchy's
+device/inode. Cold inactive proof rechecks that hierarchy, rejects adoption of
+an originally absent domain, verifies retained domain metadata when present,
+and uses the same no-job/no-process query as live inactive observation. It does
+not call processIdentity(0) and mistake null equality for a historical process.
+The saved worker inventory and its exact test expectation explicitly include
+the newly imported inactive helper; recovery inherits that closure. Added a
+native mismatched-observation refusal before any inhibitor/journal creation.
+Public command admission and cold transaction/lease decoders remain gated.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

@@ -1,4 +1,5 @@
 import { constants } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { lstat, open, readFile, realpath, statfs } from 'node:fs/promises';
 import path from 'node:path';
 import { inspectLinuxRuntimeAccount } from './linux-runtime.mjs';
@@ -15,6 +16,40 @@ const outside = (root, file) => {
   const relative = path.relative(root, file);
   return relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
 };
+
+export function linuxInactiveObservationId(identity) {
+  const { runtime, configuration, domain, bootId, controlGroup } = identity ?? {};
+  const state = configuration?.state;
+  if (!runtime || !state || runtime.mainPid !== 0 || runtime.processIdentity !== null
+    || !['inactive', 'failed'].includes(runtime.activeState) || state.ActiveState !== runtime.activeState
+    || state.SubState !== (runtime.activeState === 'inactive' ? 'dead' : 'failed')
+    || state.MainPID !== '0' || state.InvocationID !== runtime.invocationId
+    || runtime.invocationId !== '' && !/^[a-f0-9]{32}$/.test(runtime.invocationId)
+    || !/^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,180}\.service$/.test(runtime.unit) || state.Id !== runtime.unit
+    || controlGroup !== `/system.slice/${runtime.unit}` || state.ControlGroup && state.ControlGroup !== controlGroup
+    || !/^[a-f0-9-]{36}$/.test(bootId) || typeof domain?.present !== 'boolean'
+    || ![domain?.base?.dev, domain?.base?.ino].every(value => Number.isSafeInteger(value) && value >= 0)
+    || (domain.present ? state.ControlGroup !== controlGroup || !domain.directory || !domain.events
+      : domain.directory !== null || domain.events !== null)) {
+    throw new Error('Invalid originally inactive service observation identity.');
+  }
+  return `stopped:${createHash('sha256').update(JSON.stringify(identity)).digest('hex')}`;
+}
+
+export async function checkLinuxInactiveProcesses(unit) {
+  if ((await linuxSystemdProperties(unit, ['Job'])).Job !== '') {
+    throw new Error('Inactive service has a pending systemd job.');
+  }
+  const object = await linuxSystemdBus(['call', 'org.freedesktop.systemd1',
+    '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'LoadUnit', 's', unit], 'o');
+  if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
+    throw new Error('Invalid inactive systemd unit object identity.');
+  }
+  // Unlike Manager.GetUnitProcesses, the service object can reload a garbage-collected inactive unit.
+  const processes = await linuxSystemdBus(['call', 'org.freedesktop.systemd1', object,
+    'org.freedesktop.systemd1.Service', 'GetProcesses'], 'a(sus)');
+  if (!Array.isArray(processes) || processes.length) throw new Error('Inactive service is not quiescent.');
+}
 
 export async function inspectLinuxInactiveService({ unit, project, npm, node, signal }) {
   let sources;
@@ -73,6 +108,7 @@ export async function inspectLinuxInactiveService({ unit, project, npm, node, si
     const checkDomain = async () => {
       const currentBase = await lstat(basePath);
       if (!currentBase.isDirectory() || currentBase.dev !== base.dev || currentBase.ino !== base.ino
+        || currentBase.uid !== 0 || currentBase.mode & 0o022
         || await realpath(basePath) !== basePath || (await statfs(basePath)).type !== 0x63677270) {
         throw new Error('Inactive service cgroup hierarchy changed.');
       }
@@ -118,19 +154,10 @@ export async function inspectLinuxInactiveService({ unit, project, npm, node, si
           || current.state.MainPID !== '0' || !['inactive', 'failed'].includes(current.state.ActiveState)
           || current.state.SubState !== (current.state.ActiveState === 'inactive' ? 'dead' : 'failed')
           || current.state.InvocationID && current.state.InvocationID !== runtime.invocationId
-          || current.state.ControlGroup && current.state.ControlGroup !== controlGroup
-          || (await linuxSystemdProperties(unit, ['Job'])).Job !== '') {
+          || current.state.ControlGroup && current.state.ControlGroup !== controlGroup) {
           throw new Error('Inactive service is not in its original stopped domain.');
         }
-        const object = await linuxSystemdBus(['call', 'org.freedesktop.systemd1',
-          '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'LoadUnit', 's', unit], 'o');
-        if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
-          throw new Error('Invalid inactive systemd unit object identity.');
-        }
-        // Unlike Manager.GetUnitProcesses, the service object can reload a garbage-collected inactive unit.
-        const processes = await linuxSystemdBus(['call', 'org.freedesktop.systemd1', object,
-          'org.freedesktop.systemd1.Service', 'GetProcesses'], 'a(sus)');
-        if (!Array.isArray(processes) || processes.length) throw new Error('Inactive service is not quiescent.');
+        await checkLinuxInactiveProcesses(unit);
       }
       if (!same(await Promise.all(executables.map(entry => inspectLinuxServiceExecutable(entry.file))), executables)) {
         throw new Error('Inactive service runtime executables changed.');
@@ -157,8 +184,10 @@ export async function inspectLinuxInactiveService({ unit, project, npm, node, si
     await check();
     const identity = freezeEvidence({ runtime, configuration, executables, bootId: boot,
       controlGroup, sources: sources.identity,
-      domain: { present: Boolean(directory), directory: groupInfo ?? null, events: eventsInfo ?? null } });
-    return Object.freeze({ kind: 'inactive', identity, check, checkPolicy, checkInhibited, close });
+      domain: { base: { dev: base.dev, ino: base.ino }, present: Boolean(directory),
+        directory: groupInfo ?? null, events: eventsInfo ?? null } });
+    return Object.freeze({ kind: 'inactive', identity, runtimeIdentity: linuxInactiveObservationId(identity),
+      check, checkPolicy, checkInhibited, close });
   } catch (error) {
     try { await close(); }
     catch (cleanupError) {

@@ -3,6 +3,7 @@ import { lstat, mkdir, open } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { inspectLinuxService } from './linux-service-inspection.mjs';
+import { inspectLinuxInactiveService } from './linux-inactive-service.mjs';
 import { activateLinuxService } from './linux-service-activation.mjs';
 import { linuxNative } from './linux-systemd.mjs';
 import { assertLockOwner, captureLockOwner, loadState, requireNoServiceMaintenance } from './state.mjs';
@@ -11,7 +12,6 @@ import { canonicalWorkerDirectory, externalWorkerDirectory, readWorkerFile, sync
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const identity = info => ({ dev: info.dev, ino: info.ino });
-const phases = ['intent', 'inhibited', 'stop-requested', 'stopped'];
 
 export async function stopLinuxService({ control, lock: suppliedLock, unit, project, npm, node }) {
   let service;
@@ -51,9 +51,12 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
     const initial = await loadState(root);
     const restoring = initial?.operation === 'restore';
     if (!initial || initial.phase !== (restoring ? 'restoring' : 'stopped') || initial.project !== project
-      || initial.operationId !== lock.operationId || initial.priorRuntime !== 'running') {
+      || initial.operationId !== lock.operationId || !['running', 'stopped'].includes(initial.priorRuntime)) {
       throw new Error('Service stop requires matching stopped-phase transaction admission.');
     }
+    const initiallyStopped = initial.priorRuntime === 'stopped';
+    const phases = initiallyStopped ? ['intent', 'inhibited', 'stopped']
+      : ['intent', 'inhibited', 'stop-requested', 'stopped'];
     const checkAuthority = async ({ retiring = false } = {}) => {
       if (closed || poisoned) throw new Error('Service stop authority is closed or poisoned.');
       await assertLockOwner(root, lock);
@@ -77,11 +80,14 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
       return state;
     };
     await checkAuthority();
-    service = await inspectLinuxService({ unit, project, npm, node });
+    service = await (initiallyStopped ? inspectLinuxInactiveService : inspectLinuxService)({ unit, project, npm, node });
+    if (initiallyStopped && initial.runtimeIdentity !== service.runtimeIdentity) {
+      throw new Error('Initially stopped maintenance state does not bind the original observation identity.');
+    }
     const inhibition = `/etc/systemd/system/${unit}.d/90-agents-chat-deployment.conf`;
     const parent = path.dirname(inhibition);
     const bytes = Buffer.from(`[Unit]\nRefuseManualStart=yes\nConditionPathExists=!${inhibition}\n[Service]\nRestart=no\n`);
-    const base = Object.freeze({ version: 1, lock, service: service.identity, inhibition });
+    const base = Object.freeze({ version: initiallyStopped ? 2 : 1, lock, service: service.identity, inhibition });
     journal = await createEvidenceJournal({
       root, project, name: 'service-stop.ndjson', maximumBytes: 256 * 1024, maximumRecords: 4,
       validate(value, records) {
@@ -127,10 +133,12 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
     await checkInhibition();
     await service.checkInhibited();
     await record('inhibited');
-    await record('stop-requested');
-    await checkInhibition();
-    await service.checkInhibited();
-    await linuxNative('/usr/bin/systemctl', ['--system', 'stop', '--no-block', unit]);
+    if (!initiallyStopped) {
+      await record('stop-requested');
+      await checkInhibition();
+      await service.checkInhibited();
+      await linuxNative('/usr/bin/systemctl', ['--system', 'stop', '--no-block', unit]);
+    }
     let stopped = false;
     const deadline = performance.now() + 60000;
     while (performance.now() < deadline) {
@@ -155,6 +163,9 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
         } finally { busy = false; }
       },
       async activate({ purpose }) {
+        if (initiallyStopped && purpose === 'prior-runtime') {
+          throw new Error('An originally stopped service has no previously running runtime to restart.');
+        }
         if (busy || activationAttempted || closed || poisoned) {
           throw journalUncertain(new Error('Service activation authority is unavailable or already used.'));
         }
