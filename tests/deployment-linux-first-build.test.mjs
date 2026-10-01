@@ -279,7 +279,10 @@ test('public deploy installs and accepts an actual fresh application from its ow
   skip: process.env.DEPLOYMENT_TEST_REAL_FIRST_BUILD !== '1',
 }, async t => {
   await import('../scripts/deployment/linux-deploy-command.mjs');
-  const f = await freshSourceInstallationFixture(t, { unit: 'agents-chat.service' });
+  const uid = Number((await execute('/usr/bin/id', ['-u', 'runner'])).stdout.trim());
+  const gid = Number((await execute('/usr/bin/id', ['-g', 'runner'])).stdout.trim());
+  assert.ok(Number.isSafeInteger(uid) && uid > 0 && Number.isSafeInteger(gid) && gid > 0);
+  const f = await freshSourceInstallationFixture(t, { unit: 'agents-chat.service', uid, gid });
   const script = path.join(f.project, 'scripts/deploy.sh');
   await releaseLock(f.control, f.lock);
   await rmdir(f.control);
@@ -316,7 +319,7 @@ test('public deploy installs and accepts an actual fresh application from its ow
     const receipt = await readDeploymentReceipt(f.control, f.project);
     assert.equal(receipt.identity.service, createHash('sha256').update(JSON.stringify(service.identity)).digest('hex'));
     assert.equal(receipt.identity.source, state.targetCommit);
-    assert.equal(service.identity.runtime.uid, 65534);
+    assert.equal(service.identity.runtime.uid, uid);
     const configuration = await inspectLinuxConfiguration({ service, profile: f.installation.configuration.profile });
     await waitLinuxReadiness({ service, port: 3010, providers: configuration.providers });
     assert.equal((await linuxSystemdProperties(unit, ['UnitFileState'])).UnitFileState, 'enabled');

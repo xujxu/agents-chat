@@ -206,52 +206,56 @@ complete backup and independent recovery helpers in the private sibling
 
 This command is **not yet the complete cross-platform deployment release**:
 first install, inactive services and deferred verification/no-wait are
-not wired here and are refused rather than delegated to the legacy script.
-The separate native first-install inspection/build helpers require a genuinely
-absent unit and a non-root-owned fresh source checkout. They do not yet create
-or activate a service, or claim an accepted deployment.
-The separate first-unit publication stage reserves a new unit name and writes
-startup-inhibited configuration under the operation lock; it does not enable or
-start the service. Preserve its `service-install.ndjson` and unit evidence after
-interruption.
-First-unit enablement separately journals and retains the exact persistent
-startup symlink. It refuses existing links and leaves startup inhibited;
-enablement alone is not a running or accepted deployment.
-Publication also exposes separate read-only source/inhibitor checks for later
-activation and cancellation cleanup. A cleanup signal override never bypasses
-the original operation, target, account, toolchain or configuration identity.
-The separate first-activation adapter inspects a genuine inactive unit and
-retains the newly started generation for owned stop, including cancellation
-cleanup. Its `active-unverified` result is not readiness or deployment acceptance;
-public deploy integration remains pending.
-First-retirement implementation uses a version 4 inventory for its actual
-installation/enablement journals, not a fabricated stop journal. Its persistent
-startup link and published deployment receipt remain outside the deletion
-inventory and are checked during live and saved cold cleanup. Actions has
-accepted these retirement gates, including real application readiness and
-interruption/tampering recovery coverage; public deploy is not yet wired to
-this path.
-The internal first-deployment controller has also passed actual source-build,
-readiness, retirement and cancellation acceptance. Failed first deployments
-explicitly report that no previous backup exists and retain operation evidence.
-Do not use this branch on a live installation before the remaining platform
-acceptance gates. The `deploy.sh` commands below describe the legacy implementation,
-not the new backup/restore guarantees.
+not supported by `update.sh` and are refused rather than delegated to another
+installer. The first-install controller and its version-4 live/cold retirement
+have passed Actions acceptance, including real source builds, application
+readiness, cancellation and interruption/tampering recovery.
 
-For persistent deployment on Ubuntu/Debian, use `scripts/deploy.sh` — it installs the systemd unit on first run and updates the deployment on subsequent runs.
+**Public `deploy.sh` wiring is undergoing Actions acceptance. Do not use this
+branch on a live installation before the remaining platform gates.** The old
+root build/install procedure has been replaced, not retained as a fallback.
+The staged native command supports a fresh installation or redeployment of an
+existing running service; inactive/failed services, deferred verification,
+`--wait 0` and deploy `--dry-run` are explicitly refused.
+
+For first installation, prepare a clean source checkout owned by its non-root
+runtime account and private production authentication configuration, such as
+`.env.local`. The account needs a writable npm cache, normally under its home.
+The service must be absent, without prior `.data`, `.next`, `node_modules` or
+operation evidence. Existing artifacts/evidence require inspection, not deletion
+to force a fresh install. The controller requires Node.js 24, `/usr/bin/git`
+and systemd; it does not automatically install packages, change account ownership
+or generate configuration.
 
 ```bash
-# First time on a machine (installs the unit, builds, enables auto-start, starts)
-sudo ./scripts/deploy.sh
+# Read-only help/status
+sudo ./scripts/deploy.sh --help
+sudo ./scripts/deploy.sh --project-dir /absolute/checkout --status --json
 
-# Subsequent updates: git pull + npm ci + build + restart + health check
-sudo ./scripts/deploy.sh
-sudo ./scripts/deploy.sh --no-pull          # rebuild + restart without git pull
-sudo ./scripts/deploy.sh --no-install       # skip npm ci (no dep changes)
-sudo ./scripts/deploy.sh --wait 0           # don't wait for health check (default 120s)
+# Fresh source build, owned service publication, enablement and readiness
+sudo ./scripts/deploy.sh --project-dir /absolute/checkout --no-pull
+
+# Existing running installation: redeploy, or update with already-current checks
+sudo ./scripts/deploy.sh --project-dir /absolute/checkout --no-pull
+sudo ./scripts/update.sh --project-dir /absolute/checkout
 ```
 
-The service runs as whoever invoked the script — `sudo ./scripts/deploy.sh` means everything (git, npm, the Node process) runs as `root`. If you want a different user, run the script directly as that user (you'll still need a separate path to grant systemctl access, e.g. polkit).
+Root controls systemd and private transaction evidence; fresh source-changing
+Git operations, npm/build and application processes use the non-root checkout owner, not the sudo
+caller. Existing running installations retain their admitted account, Node/npm
+executables and configuration. Redeploy uses `operation: deploy` and does not
+skip merely because its source is already current. `--no-install` is supported
+only for an existing running installation; fresh installation always installs
+dependencies. Positive `--wait`, `--timeout`, `--revision`, `--json` and
+`--project-dir` follow the update command's conventions.
+
+First deployment creates no prior backup. On failure it explicitly reports this
+and retains the lock and worker/service evidence for inspection. First-unit
+publication and enablement are separately journaled and initially inhibited;
+startup alone is not application acceptance. Version-4 accepted retirement
+binds the real installation/enablement journals, persistent startup link and
+published deployment receipt. The link and receipt are never deletion targets
+and remain prerequisites throughout live and saved cold cleanup.
 
 Manage the service:
 
@@ -262,21 +266,14 @@ sudo systemctl stop     agents-chat
 sudo journalctl -u agents-chat -f          # live log stream
 ```
 
-Environment variables are loaded from two files (later wins):
-
-1. **`.env.local`** in the project root — the same file Next.js reads. systemd loads it into the unit's environment so `npm start` sees `PORT`, `LOG_*`, etc. before Node starts.
-2. **`/etc/agents-chat.env`** (optional) — machine-level overrides that take precedence over `.env.local`.
-
-> systemd's `EnvironmentFile` parser accepts `KEY=value` or `KEY="value"` per line. It does **not** support `export KEY=...`, single quotes, or `${VAR}` interpolation. Keep `.env.local` to plain `KEY=VALUE` lines if you want the unit to read them.
-
-```bash
-sudo tee /etc/agents-chat.env > /dev/null <<EOF
-PORT=8080
-LOG_LEVEL=debug
-LOG_DIR=/var/log/agents-chat
-EOF
-sudo systemctl restart agents-chat
-```
+Fresh units set production mode and their inspected executable path/home.
+Next.js reads the admitted project dotenv files in production precedence order:
+`.env.production.local`, `.env.local`, `.env.production`, then `.env`.
+Use supported literal values and keep authentication configuration private.
+Fresh units do not automatically load `/etc/agents-chat.env` or inherit the
+root controller's environment. Existing services retain their admitted systemd
+environment and `EnvironmentFile` settings. Native readiness currently uses
+port 3010; changing an arbitrary `PORT` value does not change that contract.
 
 ### Logging
 

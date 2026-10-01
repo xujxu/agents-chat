@@ -41,3 +41,18 @@ test('controller capture refuses linked and unknown helper inventory before exec
     await assert.rejects(captureLinuxController({ source, project: source }), /controller|file|inventory|link/i);
   }
 });
+
+test('controller capture selects only an explicit deploy or update entry', async t => {
+  const { captureLinuxController } = await import('../scripts/deployment/linux-controller-capture.mjs');
+  const source = await sourceFixture(t);
+  for (const operation of ['restore', '../linux-update-command', '']) {
+    await assert.rejects(captureLinuxController({ source, project: source, operation }), /Unsupported controller command/);
+  }
+  await assert.rejects(captureLinuxController({ source, project: source, operation: 'deploy' }), /entry is missing/);
+  await writeFile(path.join(source, 'scripts/deployment/linux-deploy-command.mjs'), 'export const operation = "deploy";\n');
+  const captured = await captureLinuxController({ source, project: source, operation: 'deploy' });
+  t.after(() => captured.close());
+  assert.equal(path.basename(captured.entrypoint), 'linux-deploy-command.mjs');
+  await rename(path.join(source, 'scripts'), path.join(source, 'old-scripts'));
+  assert.equal((await import(pathToFileURL(captured.entrypoint).href)).operation, 'deploy');
+});

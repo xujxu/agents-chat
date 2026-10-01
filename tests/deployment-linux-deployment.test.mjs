@@ -308,9 +308,9 @@ test(`native deployment composes real application acceptance and saved restorati
   let tools = repository;
   let obsoleteEngine;
   const controlNames = ['backup', 'deployment.json', 'recovery-engine', 'state.json'];
-  const command = async args => {
+  const command = async (args, operation = 'update') => {
     const inPlace = scenario === 'inplace' && !args.includes('--status');
-    const { stdout, stderr } = await execute('/usr/bin/bash', [path.join(inPlace ? f.project : tools, 'scripts/update.sh'),
+    const { stdout, stderr } = await execute('/usr/bin/bash', [path.join(inPlace ? f.project : tools, `scripts/${operation}.sh`),
       ...(inPlace ? [] : ['--project-dir', f.project]), '--json', ...args], {
       cwd: '/', timeout: 660000, maxBuffer: 16384,
       env: { PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: '/root',
@@ -323,11 +323,18 @@ test(`native deployment composes real application acceptance and saved restorati
   const nextRevision = scenario === 'inplace' ? '638c553c62406dbb7e6b5aeb41cdddf4cd6de179'
     : ['historical', 'rebuild'].includes(scenario) ? f.target : f.nextTarget;
   if (scenario === 'historical') f.target = '638c553c62406dbb7e6b5aeb41cdddf4cd6de179';
-  const result = await runLinuxLiveDeployment({ ...f, revision: f.target, timeoutSeconds: 600 });
+  let result;
+  if (scenario === 'command') {
+    await releaseLock(f.control, f.lock);
+    result = await command(['--revision', f.target, '--timeout', '600'], 'deploy');
+  } else {
+    result = await runLinuxLiveDeployment({ ...f, revision: f.target, timeoutSeconds: 600 });
+  }
   assert.equal(result.status, 'accepted');
   assert.equal(result.backupCreated, true);
   const state = await loadState(f.control);
   assert.equal(state.phase, 'accepted');
+  assert.equal(state.operation, scenario === 'command' ? 'deploy' : 'update');
   let receipt = await readDeploymentReceipt(f.control, f.project);
   assert.equal(receipt.identity.source, f.target);
   let backup = await verifySnapshot(path.join(f.control, 'backup'));

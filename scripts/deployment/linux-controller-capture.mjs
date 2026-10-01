@@ -6,10 +6,12 @@ import { canonicalWorkerDirectory, readWorkerFile, writeWorkerFile } from './wor
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const sameDirectory = (a, b) => a.dev === b.dev && a.ino === b.ino;
 
-export async function captureLinuxController({ source, project, signal }) {
+export async function captureLinuxController({ source, project, operation = 'update', signal }) {
   if (process.platform !== 'linux' || process.getuid() !== 0) {
     throw new Error('Controller capture requires the Linux root controller.');
   }
+  if (!['deploy', 'update'].includes(operation)) throw new Error('Unsupported controller command.');
+  const entrypoint = `linux-${operation}-command.mjs`;
   const origin = await canonicalWorkerDirectory(source);
   const target = await canonicalWorkerDirectory(project);
   const temporary = await canonicalWorkerDirectory('/tmp');
@@ -28,7 +30,7 @@ export async function captureLinuxController({ source, project, signal }) {
     return entries.map(entry => entry.name).sort();
   };
   const names = await inventory();
-  if (!names.includes('linux-update-command.mjs')) throw new Error('Controller command entry is missing.');
+  if (!names.includes(entrypoint)) throw new Error('Controller command entry is missing.');
   const files = [...names.map(name => `scripts/deployment/${name}`), 'lib/workflow/workflowSchema.mjs'];
   let directory;
   let identity;
@@ -69,7 +71,7 @@ export async function captureLinuxController({ source, project, signal }) {
         throw new Error('Controller helper changed during capture.');
       }
     }
-    return Object.freeze({ directory, entrypoint: path.join(directory, 'scripts/deployment/linux-update-command.mjs'), close });
+    return Object.freeze({ directory, entrypoint: path.join(directory, 'scripts/deployment', entrypoint), close });
   } catch (error) {
     try { await close(); }
     catch (cleanup) { throw new AggregateError([error, cleanup], 'Controller capture and cleanup failed.'); }

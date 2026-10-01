@@ -5750,6 +5750,27 @@ Public fresh-to-update/second-update/restore data continuity, remaining runtime
 modes, prerequisite assistance and genuine Windows lifecycle acceptance remain
 subsequent gates, not claims made by this initial public-command case.
 
+Causal `765cfff` / `36838567962` passed the previous twenty-five native cases
+and failed only the new public case at the missing deploy-command module.
+The public implementation now uses a shared command/entry boundary, explicit
+captured entry selection and the native shell wrapper. Preserve the update
+entry's existing minimum-version behavior; deploy requires Node 24, matching
+fresh inspection. The first public fixture uses the runner's real non-root NSS account and home,
+with isolated npm cache supplied through private admitted dotenv, never by
+inheriting the root controller environment. The internal fixtures retain
+their existing uid/gid 65534 and explicit build-home overrides.
+First-failure JSON preserves the no-previous-backup diagnostic without exposing
+raw exception details.
+
+Strengthen the existing `scenario=command` real lifecycle gate by entering its
+initial running-service deployment through public `deploy.sh` instead of the
+direct controller. Keep its subsequent update/already-current/restoration and
+API/data assertions unchanged, and assert that the initial state operation is
+`deploy`. Other scenarios continue exercising direct running-service admission.
+Add capture tests for explicit deploy selection, missing entry and unsupported
+operation rejection. No matrix cases or timeouts are removed or relaxed.
+Full public implementation acceptance remains pending.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
