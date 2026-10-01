@@ -1,4 +1,4 @@
-param([ValidateSet('stop', 'configuration-change', 'task-inhibition')][string]$Scenario = 'stop')
+param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-stop')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -140,6 +140,10 @@ if (process.argv[2] === 'child') {
     $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'observe', 15000) | ConvertFrom-Json
     Assert ($observation.members -contains $member.Id -and -not $observation.quiescent -and
         -not $observation.applicationHealthy) 'Managed host lost detached ownership or invented application health'
+    if ($Scenario -eq 'durable-stop') {
+        & (Join-Path $PSScriptRoot 'deployment-windows-task-maintenance-cases.ps1') -Root $root -TaskName $taskName `
+            -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding
+    }
     if ($Scenario -eq 'task-inhibition') {
         $expected = [xml]$task.Xml
         $descriptor = [string]$task.GetSecurityDescriptor(7)

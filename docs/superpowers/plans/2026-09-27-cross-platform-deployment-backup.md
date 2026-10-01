@@ -6989,6 +6989,48 @@ file refusal both while the receipt is retained and after its handle closes,
 so overwrite protection cannot pass merely because of a sharing violation.
 Reference: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw
 
+Both publication runs `9c2c8eb` / `36918992259` and `b1bffbe` /
+`36919591641` passed **23/23**. The latter is the accepted baseline.
+
+#### Task 5K: retained native managed-task stop context
+
+**Files:** add `scripts/deployment/windows-task-maintenance.ps1` and
+`tests/deployment-windows-task-maintenance-cases.ps1`; extend the installed-host
+fixture with `durable-stop` and add its native job step.
+
+- [ ] Capture a native missing-module causal failure before implementation.
+- [ ] Implement `Stop-AgentsChatManagedTask -Admission <private-json> -Sha256
+  <digest>`. Strict admission fields are version, operationId, controllerPid,
+  controllerIdentity, taskName, definition, securityDescriptor, configuration,
+  configurationSha256, readySha256, ownerPid, ownerIdentity, generation and
+  instanceGuid. Retain the admission, actual config/readiness and original
+  controller/owner process handles. Bind the exact managed bootstrap action
+  and working directory as well as the native task-owner policy.
+- [ ] Refuse stale controller, wrong configuration/generation and changed
+  definition before writing any stop receipt or changing the task. Prove the
+  original private control endpoint with an observation before inhibition.
+- [ ] Publish `task-stop-intent.json`, then disable only the admitted task;
+  require the same native instance/SDDL and only an enabled-setting XML change.
+  Publish `task-stop-inhibited.json` and `task-stop-stop-requested.json` before
+  scoped stop. Require the empty stopped original domain and unchanged disabled
+  policy, then publish `task-stop-stopped.json`.
+  Each immutable private receipt contains version, phase, operationId,
+  admissionSha256, previousSha256, instanceGuid and the applicable task
+  definition/security descriptor. The first previous hash is the admission
+  digest; later records chain the preceding retained receipt.
+- [ ] Return a retained native context. `Assert-AgentsChatTaskStopped -Context`
+  rechecks original files, controller/owner, exact disabled policy and original
+  scoped empty domain; return `{ stopped=true; inhibited=true }` only after all
+  checks. Policy or evidence change poisons the context rather than refreshing
+  its baseline. `Close-AgentsChatTaskMaintenance -Context` releases its handles
+  but never enables/starts/retires the task or removes receipts.
+- [ ] Require native positive/negative cases and retain full regression.
+
+This context establishes native task/domain stop evidence, not the complete
+public transaction state machine. The Node adapter still must bind deployment
+lock/state and native control-file ACLs, and recovery/activation must separately
+authorize any later task definition change or inhibition release.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

@@ -331,3 +331,6 @@ jobs:
       - name: Verify native restart inhibition around original managed owner settlement
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition
+      - name: Retain durable original task stop authority and private receipts
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario durable-stop
