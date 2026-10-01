@@ -5655,6 +5655,50 @@ expected manifest, preserving the closed dependency-set assertion. Full
 corrected implementation validation remains pending. No public first deploy
 or real-host acceptance is implied by these internal boundaries.
 
+### Fresh Linux deployment controller
+
+Compose the admitted first-install primitives in
+`scripts/deployment/linux-first-deployment.mjs`; keep the running-installation
+controller unchanged. Reuse `runDeployment` with genuine
+`{ exists: false, running: false, owned: true }`, so no stop journal or backup
+is manufactured. Require an empty transaction before recording preflight,
+the original absent installation, explicit build-space budget, Git source
+selection, admitted target/configuration profile and Node 24. Save recovery
+before source mutation. Seal owned workers before publishing/enabling the unit.
+Verify the actual activated service, runtime environment and captured
+application acceptance before publishing the receipt, retiring service/worker
+evidence and releasing the lock. Keep saved recovery provenance.
+
+First add two causal native cases to
+`tests/deployment-linux-first-build.test.mjs`, sharing the genuine non-root
+clone fixture in `tests/deployment-linux-first-source-fixture.mjs`. Keep all
+real application cases in the same test file so their fixed port 3010 is not
+used concurrently. The successful call is:
+
+```js
+await runLinuxFirstDeployment({
+  installation, control, lock, git: '/usr/bin/git',
+  environment, port: 3010, deploymentBytes: 2 * 1024 ** 3,
+  noPull: true, signal, onProgress,
+});
+```
+
+Require accepted/no-backup output, all seven phases, non-root built artifacts,
+matching deployment receipt/native generation, persistent enablement, real
+readiness and only state/receipt/recovery-engine after unlock. The second case
+cancels on the dependencies phase: require no runtime/artifacts/backup/receipt,
+retained original lock and recovery-required state, cancellation code and an
+explicit no-previous-backup diagnostic. Cleanup must use independent inspection
+after cancellation; never claim a prior runtime was restored. Publication or
+activation uncertainty retains its journals and lock. No-wait and skipped
+first dependency installation remain rejected, not silently accepted.
+
+Run the unchanged eighteen-job lifecycle workflow in Actions after pushing the
+causal tests, then implement the controller after the missing-module failure.
+Require the corrected full matrix before calling this internal controller
+accepted. Public deploy/bootstrap and failed-first-install recovery commands
+remain separate unfinished integrations, not implied by this controller gate.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

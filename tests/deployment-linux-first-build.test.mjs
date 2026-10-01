@@ -1,14 +1,11 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
-import { chown, chmod, lstat, mkdir, readdir, readFile, readlink, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { lstat, readdir, readFile, readlink, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
-import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { temporaryDeployment } from './deployment-fixture.mjs';
-import { inspectLinuxFirstInstall } from '../scripts/deployment/linux-first-install.mjs';
-import { acquireLock, loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
+import { freshSourceInstallationFixture } from './deployment-linux-first-source-fixture.mjs';
+import { loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation, readWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { inspectTargetCompatibility } from '../scripts/deployment/target-compatibility.mjs';
@@ -19,40 +16,9 @@ import { inspectLinuxConfiguration } from '../scripts/deployment/linux-configura
 import { publishDeploymentReceipt, readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
 import { waitLinuxReadiness } from '../scripts/deployment/linux-readiness.mjs';
 
-const execute = promisify(execFile);
-const repository = fileURLToPath(new URL('../', import.meta.url));
-
 async function firstDeployment(t, completion) {
   const { prepareLinuxFirstBuild } = await import('../scripts/deployment/linux-first-build.mjs');
-  const root = await temporaryDeployment(t);
-  await chmod(root, 0o755);
-  const project = path.join(root, 'fresh app');
-  await execute('/usr/bin/git', ['clone', '--quiet', '--no-hardlinks', repository, project],
-    { timeout: 60000, maxBuffer: 16384 });
-  await writeFile(path.join(project, '.env.local'), [
-    'NEXTAUTH_SECRET=fresh-build-private-secret', 'NEXTAUTH_URL=http://localhost:3010',
-    'ADMIN_USERNAME=fixture', 'ADMIN_PASSWORD=fresh-build-private-password', '',
-  ].join('\n'), { mode: 0o600 });
-  const own = async directory => {
-    await chown(directory, 65534, 65534);
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const file = path.join(directory, entry.name);
-      if (entry.isDirectory()) await own(file);
-      else if (entry.isFile()) await chown(file, 65534, 65534);
-      else throw new Error('Unexpected fresh-source fixture link.');
-    }
-  };
-  await own(project);
-  const home = path.join(root, 'home');
-  await mkdir(home, { mode: 0o700 });
-  await chown(home, 65534, 65534);
-  const controller = new AbortController();
-  const installation = await inspectLinuxFirstInstall({
-    project, unit: `agents-first-${randomUUID()}.service`, signal: controller.signal,
-  });
-  const control = path.join(root, '.fresh app.deployment');
-  await mkdir(control, { mode: 0o700 });
-  const lock = await acquireLock(control, { project, operationId: randomUUID() });
+  const { project, home, controller, installation, control, lock } = await freshSourceInstallationFixture(t);
   let state = {
     version: 1, operationId: lock.operationId, project, operation: 'deploy', phase: 'preflight',
     previousPhase: null, sourceCommit: null, targetCommit: null, backupId: null, priorRuntime: 'absent',
@@ -197,4 +163,91 @@ for (const completion of ['owned-stop', 'retirement']) {
   test(`fresh installation builds actual source and verifies ${completion} of its ready generation`, {
     skip: process.env.DEPLOYMENT_TEST_REAL_FIRST_BUILD !== '1',
   }, t => firstDeployment(t, completion));
+}
+
+async function firstController(t, cancelled) {
+  const { runLinuxFirstDeployment } = await import('../scripts/deployment/linux-first-deployment.mjs');
+  const f = await freshSourceInstallationFixture(t);
+  const { unit, executables } = f.installation.identity;
+  const fragment = `/etc/systemd/system/${unit}`;
+  const inhibition = `${fragment}.d/90-agents-chat-deployment.conf`;
+  const startupLink = `/etc/systemd/system/multi-user.target.wants/${unit}`;
+  const phases = [];
+  let service;
+  try {
+    const deploy = () => runLinuxFirstDeployment({
+      installation: f.installation, control: f.control, lock: f.lock, git: '/usr/bin/git',
+      environment: { HOME: f.home, npm_config_cache: path.join(f.home, '.npm') },
+      port: 3010, deploymentBytes: 2 * 1024 ** 3, noPull: true,
+      signal: f.controller.signal,
+      onProgress({ phase }) {
+        phases.push(phase);
+        if (cancelled && phase === 'dependencies') f.controller.abort();
+      },
+    });
+    if (cancelled) {
+      await assert.rejects(deploy, error => {
+        assert.equal(error.code, 'DEPLOYMENT_STAGE_CANCELLED');
+        assert.equal(error.backupCreated, false);
+        assert.match(error.message, /no previous backup/i);
+        return true;
+      });
+      const state = await loadState(f.control);
+      assert.equal(state.phase, 'recovery-required');
+      assert.equal(state.priorRuntime, 'absent');
+      assert.equal(state.backupId, null);
+      assert.equal(state.errorCode, 'DEPLOYMENT_STAGE_CANCELLED');
+      await f.installation.checkUninstalled({ signal: null });
+      assert.deepEqual(JSON.parse(await readFile(path.join(f.control, 'lock/owner.json'), 'utf8')), f.lock);
+      for (const name of ['deployment.json', 'backup', 'service-install.ndjson']) {
+        await assert.rejects(lstat(path.join(f.control, name)), { code: 'ENOENT' });
+      }
+      for (const name of ['.data', '.next', 'node_modules']) {
+        await assert.rejects(lstat(path.join(f.project, name)), { code: 'ENOENT' });
+      }
+      return;
+    }
+    assert.deepEqual(await deploy(), { status: 'accepted', backupCreated: false });
+    assert.deepEqual(phases, ['preflight', 'source-selected', 'dependencies', 'building',
+      'configuring', 'activating', 'accepted']);
+    const state = await loadState(f.control);
+    assert.equal(state.phase, 'accepted');
+    assert.equal(state.priorRuntime, 'absent');
+    assert.equal(state.backupId, null);
+    assert.deepEqual((await readdir(f.control)).sort(), ['deployment.json', 'recovery-engine', 'state.json']);
+    const receipt = await readDeploymentReceipt(f.control, f.project);
+    assert.equal(receipt.identity.source, state.targetCommit);
+    assert.equal(receipt.operationId, f.lock.operationId);
+    assert.equal((await lstat(path.join(f.project, 'node_modules'))).uid, 65534);
+    assert.equal((await lstat(path.join(f.project, '.next/BUILD_ID'))).uid, 65534);
+    assert.ok((await readFile(path.join(f.project, '.next/BUILD_ID'), 'utf8')).trim());
+    assert.equal(await readlink(startupLink), fragment);
+    assert.equal((await linuxSystemdProperties(unit, ['UnitFileState'])).UnitFileState, 'enabled');
+    service = await inspectLinuxService({ unit, project: f.project, npm: executables[0].file, node: executables[1].file });
+    assert.equal(receipt.identity.service, createHash('sha256').update(JSON.stringify(service.identity)).digest('hex'));
+    const configuration = await inspectLinuxConfiguration({ service, profile: f.installation.configuration.profile });
+    assert.deepEqual(configuration.providers, f.installation.configuration.providers);
+    await waitLinuxReadiness({ service, port: 3010, providers: configuration.providers });
+    await service.check();
+  } finally {
+    await service?.close();
+    const current = await linuxSystemdProperties(unit, ['LoadState', 'FragmentPath'], { allowMissing: true });
+    if (current.LoadState !== 'not-found') {
+      assert.equal(current.FragmentPath, fragment);
+      await linuxNative('/usr/bin/systemctl', ['--system', 'stop', unit]);
+    }
+    for (const file of [startupLink, `${inhibition}.${f.lock.token}.held`, inhibition, fragment]) {
+      try { await unlink(file); }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
+    try { await rmdir(path.dirname(inhibition)); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    await linuxNative('/usr/bin/systemctl', ['--system', 'daemon-reload']);
+  }
+}
+
+for (const cancelled of [false, true]) {
+  test(`fresh deployment controller ${cancelled ? 'retains truthful cancellation evidence' : 'accepts the actual ready application'}`, {
+    skip: process.env.DEPLOYMENT_TEST_REAL_FIRST_BUILD !== '1',
+  }, t => firstController(t, cancelled));
 }
