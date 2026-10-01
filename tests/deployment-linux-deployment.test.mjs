@@ -201,6 +201,32 @@ test('native deployment refuses preview side effects while reporting local targe
   assert.deepEqual(await readFile(path.join(f.project, '.git/config')), config);
   await assert.rejects(readFile(marker), { code: 'ENOENT' });
   await assert.rejects(readdir(f.control), { code: 'ENOENT' });
+  await git('config', 'remote.origin.url', 'https://fixture:preview-private-token@example.invalid/repo');
+  await git('config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*');
+  await git('config', 'branch.fixture.remote', 'origin');
+  await git('config', 'branch.fixture.merge', 'refs/heads/preview-upstream');
+  await git('update-ref', 'refs/remotes/origin/preview-upstream', f.prior);
+  const tracked = await preview([]);
+  assert.equal(tracked.target.commit, f.prior);
+  assert.equal(tracked.remoteRefreshed, false);
+  assert.ok(tracked.pendingChecks.includes('remote-freshness'));
+  assert.equal(JSON.stringify(tracked).includes('preview-private-token'), false);
+  await assert.rejects(readFile(marker), { code: 'ENOENT' });
+  await mkdir(f.control, { mode: 0o700 });
+  const interrupted = {
+    version: 1, operationId: randomUUID(), project: f.project, operation: 'update',
+    phase: 'building', previousPhase: 'dependencies', sourceCommit: f.prior, targetCommit: f.target,
+    backupId: 'preserve', priorRuntime: 'running', runtimeIdentity: f.service.identity.runtime.invocationId,
+    startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), errorCode: null,
+  };
+  const stateFile = path.join(f.control, 'state.json');
+  await writeFile(stateFile, JSON.stringify(interrupted), { mode: 0o600 });
+  const pending = await preview(['--no-pull', '--no-install']);
+  assert.equal(pending.inspection.operation.phase, 'building');
+  assert.ok(pending.pendingChecks.includes('operation-recovery'));
+  assert.ok(!pending.steps.includes('dependencies'));
+  assert.equal(await readFile(stateFile, 'utf8'), JSON.stringify(interrupted));
+  assert.deepEqual(await readdir(f.control), ['state.json']);
 });
 
 test('native deployment refuses unsupported target before downtime and releases settled preflight', async t => {
