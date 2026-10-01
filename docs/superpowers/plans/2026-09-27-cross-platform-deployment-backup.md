@@ -5333,6 +5333,36 @@ never invokes credentials, never prints its token, preserves interrupted state,
 omits dependency installation from `--no-install` planned steps, and renders
 useful human-readable estimates and pending checks without `--json`.
 
+Preview acceptance: `305884b` / `36802800135` passed all 17 jobs. Causal
+`d688103` / `36801369943` had only the expected unsupported-preview failure.
+
+### First-install native inspection boundary
+
+Introduce a real absent-installation inspection, not an object impersonating
+a running service. It binds a canonical non-root-owned fresh project, exact
+NSS uid/gid/user/home, an absent systemd unit, the external Node-24 controller
+and its sibling npm executable, and compatible source dotenv configuration.
+Extract the existing NSS account checks from runtime inspection so fresh and
+running installations retain the same supplementary-group restrictions.
+Read-only missing-unit inspection accepts only a fully parsed not-found
+systemd result; other command errors are not evidence of absence.
+
+An existing service, populated control directory, or preexisting `.data`,
+`.next` or `node_modules` requires existing-installation/recovery handling,
+not a first-install path without a backup. This initial supported first-install
+profile intentionally requires a clean non-root-owned source checkout; it does
+not chown an existing tree, invent credentials, install tools or execute source
+code during inspection. The returned recheck verifies ownership, executable
+identity, NSS account, configuration and continued unit/runtime-path absence.
+Source/target compatibility and native worker build/activation are subsequent
+boundaries; this helper alone does not publish deployment acceptance.
+
+Native Actions regressions cover mutation-free inspection, private-value
+redaction, existing runtime/control/service refusal, and ownership/configuration
+or runtime paths changing after inspection. Public `deploy.sh` remains legacy
+until the absent-runtime build and owned activation paths are fully wired and
+accepted; do not expose this helper as a completed deploy implementation.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
