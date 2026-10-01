@@ -6570,6 +6570,12 @@ Relevant API contracts (not paused research):
 - https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-createnamedpipew
 - https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getnamedpipeserverprocessid
 
+Implementation `35e9810` / `36887827299`, native job `110455546759`,
+passed parameter and definition gates, created the actual task-side pipe, then
+failed in the DACL inspection expression. The fixture recorded only a PowerShell
+wrapper exception, so retain the base exception type/message for this synthetic
+fixture before changing production behavior. No application task was run.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

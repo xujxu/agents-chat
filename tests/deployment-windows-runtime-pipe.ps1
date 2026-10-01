@@ -65,7 +65,8 @@ if ($Server) {
             }
         }
     } catch {
-        "$($_.Exception.GetType().FullName) at line $($_.InvocationInfo.ScriptLineNumber)" |
+        $failure = $_.Exception.GetBaseException()
+        "$($failure.GetType().FullName) at line $($_.InvocationInfo.ScriptLineNumber): $($failure.Message)" |
             Set-Content -LiteralPath ($ReadyFile + '.failure')
         throw
     } finally {
