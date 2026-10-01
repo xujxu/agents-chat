@@ -34,6 +34,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  linux-first-build:
+    name: Native Linux first-install build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build fresh source without an installed service or invented backup
+        run: |
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo env DEPLOYMENT_TEST_REAL_FIRST_BUILD=1 "$(command -v node)" --test tests/deployment-linux-first-build.test.mjs
+
   linux-deployment:
     name: Native Linux deployment (${{ matrix.scenario }})
     runs-on: ubuntu-24.04

@@ -5363,6 +5363,28 @@ or runtime paths changing after inspection. Public `deploy.sh` remains legacy
 until the absent-runtime build and owned activation paths are fully wired and
 accepted; do not expose this helper as a completed deploy implementation.
 
+### First-install owned source/build boundary
+
+Extract the shared source/npm stage implementation behind explicit read and
+mutation authority callbacks. Keep the running-service adapter's stopped and
+inhibited checks unchanged. A distinct first-install adapter binds the freshly
+inspected project/account/toolchain to the current native lock and `deploy`
+state with `priorRuntime: absent`; read stages require preflight, selection
+requires source-selected, and npm stages require their corresponding phase and
+exact target commit. Continued unit absence, account/toolchain/config identity
+are rechecked without incorrectly requiring owned node_modules/.next to remain
+absent after the first admitted mutation. Initial fresh runtime-path checks
+still run before preparing any source command.
+
+The real Actions build fixture clones actual source into a non-root-owned
+space-containing directory, creates private auth configuration, validates the
+target profile, selects source and runs npm ci/build in existing native owned
+workers. It must remain without a systemd service, backup or acceptance receipt,
+produce non-root-owned dependencies and BUILD_ID, reject selection in preflight,
+and seal all settled workers while leaving the truthful building state. This is
+a build boundary test, not a fabricated successful first deployment. Owned new
+unit creation/activation, recovery and public deploy wiring remain next.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
