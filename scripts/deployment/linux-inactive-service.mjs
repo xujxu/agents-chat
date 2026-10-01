@@ -101,8 +101,14 @@ export async function inspectLinuxInactiveService({ unit, project, npm, node, si
         || (await linuxSystemdProperties(unit, ['Job'])).Job !== '') {
         throw new Error('Inactive service account, runtime or policy changed.');
       }
-      const processes = await linuxSystemdBus(['call', 'org.freedesktop.systemd1',
-        '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'GetUnitProcesses', 's', unit], 'a(sus)');
+      const object = await linuxSystemdBus(['call', 'org.freedesktop.systemd1',
+        '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'LoadUnit', 's', unit], 'o');
+      if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
+        throw new Error('Invalid inactive systemd unit object identity.');
+      }
+      // Unlike Manager.GetUnitProcesses, the service object can reload a garbage-collected inactive unit.
+      const processes = await linuxSystemdBus(['call', 'org.freedesktop.systemd1', object,
+        'org.freedesktop.systemd1.Service', 'GetProcesses'], 'a(sus)');
       if (!Array.isArray(processes) || processes.length) {
         throw new Error('Inactive service is not quiescent.');
       }

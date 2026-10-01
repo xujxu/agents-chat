@@ -5964,6 +5964,14 @@ with repeated policy/account/boot/job/process checks and absent-or-retained-empt
 cgroup authority. It has no public/controller imports yet, so no saved-engine
 closure entry is necessary until a captured entry point consumes it.
 
+Observer implementation `c161b89` / run `36853986228`, native job
+`110342266388`, passed the real failed-service and running-service refusal
+cases. Never-started cases exposed systemd garbage collection between bus
+calls: Manager.GetUnitProcesses refuses an unloaded unit. Use the read-only
+Service.GetProcesses object method after validated LoadUnit, matching the
+existing policy lookup's lazy-loading semantics. Do not treat a failed query
+as an empty process list. That known-failing run is superseded, not acceptance.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
