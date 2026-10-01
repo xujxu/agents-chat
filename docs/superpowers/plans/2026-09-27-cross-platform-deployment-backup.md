@@ -6855,6 +6855,18 @@ separate requirements.
   Keep public Windows deploy/update/restore unchanged until their full authority
   and recovery composition is present.
 
+Task-owner binding `d696ffd` / `36908786873` completed **23/23** and is the
+new accepted baseline. Host causal `254ace0` / `36909630133`, native job
+`110533977651`, passed all earlier Windows gates then failed exactly at copying
+the missing `WindowsRuntimeHost.cs`. Implemented the strict configuration,
+retained bundle, original-instance private readiness publication and native
+control admission callback. Bootstrap trust and public task/inhibition authority
+are not inferred from the configuration's helper hashes.
+
+Private readiness creation uses the atomic-security overload, not create-then-
+restrict permissions:
+https://learn.microsoft.com/en-us/dotnet/api/system.io.filesystemaclextensions.create
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

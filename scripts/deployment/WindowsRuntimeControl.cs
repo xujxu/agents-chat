@@ -18,15 +18,20 @@ namespace Deployment
         readonly NamedPipeServerStream pipe;
         readonly string generation, ownerIdentity;
         readonly int ownerPid;
+        readonly Action check;
         bool running, disposed;
 
         public WindowsRuntimeControl(WindowsRuntimeDomain domain, Guid generation)
+            : this(domain, generation, null) { }
+
+        public WindowsRuntimeControl(WindowsRuntimeDomain domain, Guid generation, Action check)
         {
             if (domain == null || generation == Guid.Empty ||
                 domain.Name != @"Local\agents-deploy-" + generation.ToString("D"))
                 throw new ArgumentException("Control requires the original runtime domain generation.");
             this.domain = domain;
             this.generation = generation.ToString("D");
+            this.check = check;
             ownerPid = Environment.ProcessId;
             ownerIdentity = WindowsWorkerJob.ProcessIdentity(ownerPid);
             pipe = WindowsRuntimePipe.Create(generation);
@@ -141,6 +146,7 @@ namespace Deployment
             catch (JsonException) { await Refuse("request-json").ConfigureAwait(false); return false; }
             catch (InvalidDataException) { await Refuse("request-scope").ConfigureAwait(false); return false; }
 
+            if (check != null) check();
             object result;
             if (method == "retire")
             {
@@ -157,6 +163,7 @@ namespace Deployment
                 if (method == "stop") domain.Stop();
                 result = domain.Observe();
             }
+            if (check != null) check();
             await Send(JsonSerializer.Serialize(new {
                 version = 1, generation, ownerPid, ownerIdentity, requestId, result
             })).ConfigureAwait(false);

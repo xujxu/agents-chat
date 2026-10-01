@@ -141,7 +141,7 @@ The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 23-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
 retained private configuration and direct native task-owner checks,
-passed at `1307d76` (run `36904398034`).
+passed at `d696ffd` (run `36908786873`).
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and
