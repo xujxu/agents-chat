@@ -5292,6 +5292,34 @@ it while the digest-bound backup generation still restores source and data.
 The public target declaration advertises snapshot version 2; compatibility
 inspection explicitly supports both version-1 and version-2 declarations.
 
+Generation implementation `6dc25d8` / `36797701490` passed all 17 jobs.
+Retention causal `2b7afe2` / `36798962857` is running; implementation
+`6ae1da8` / `36800072826` is queued.
+
+### Native public Linux read-only preview
+
+Wire `--dry-run` to the existing `previewUpdate` result contract before any
+control creation, lock acquisition, controller capture or worker launch.
+Use retained source metadata and bounded read-only Git builtins to inspect
+HEAD, locally available explicit commits and local upstream refs. Never call
+`git status`, fetch, checkout, filters, fsmonitor, credential helpers or target
+code; sanitize Git environment and disable configured fsmonitor/pagers.
+Missing local targets remain `null`/pending, and default upstream freshness
+always remains pending. Do not represent this as admission or already-current.
+
+Inspect the running installed service/configuration read-only, estimate source,
+artifact, data and Git-object backup bytes plus metadata and build headroom,
+and report planned steps. Database compatibility, dirty-source detection,
+target admission, capacity recheck and readiness stay explicit pending checks.
+Preserve existing state and receipts, even when previewing an interrupted
+operation; never clear or initialize them. Errors remain errors, not previews.
+
+The native regression invokes the public shell from `/` against a non-root
+space-containing fixture with no control directory. It checks unchanged Git
+index/config and parent inventory, unchanged service generation, no marker
+from configured fsmonitor/credential hooks, current/no-pull and explicit local
+targets, and unknown default/missing targets with pending checks.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

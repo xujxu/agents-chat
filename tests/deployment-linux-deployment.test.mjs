@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
-import { chown, cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chown, cp, mkdir, readdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
@@ -10,7 +10,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import test from 'node:test';
 import { fixture, ready, node, quote } from './deployment-linux-service-fixture.mjs';
 import { inspectInstalledLinuxService, inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
-import { acquireLock, loadState } from '../scripts/deployment/state.mjs';
+import { acquireLock, loadState, releaseLock } from '../scripts/deployment/state.mjs';
 import { runLinuxLiveDeployment } from '../scripts/deployment/linux-deployment.mjs';
 import { readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
@@ -31,7 +31,7 @@ test('native deployment refuses unsupported public update flags with parseable J
   const execution = { cwd: '/', timeout: 20000, maxBuffer: 8192,
     env: { PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: '/root' } };
   assert.equal(JSON.parse((await execute('/usr/bin/bash', [script, '--help', '--json'], execution)).stdout).status, 'help');
-  for (const flags of [['--wait', '0'], ['--dry-run'], ['--verify'], ['--unknown']]) {
+  for (const flags of [['--wait', '0'], ['--verify'], ['--unknown']]) {
     await assert.rejects(execute('/usr/bin/bash', [script, '--json', ...flags], execution), error => {
       assert.equal(error.code, 1);
       const failure = JSON.parse(error.stdout);
@@ -60,7 +60,7 @@ test('native deployment refuses unsupported command modes without creating contr
   await ready(f);
   const { runLinuxUpdateCommand } = await import('../scripts/deployment/linux-update-command.mjs');
   const before = (await readdir(path.dirname(f.project))).sort();
-  for (const flags of [['--dry-run'], ['--verify'], ['--wait', '0']]) {
+  for (const flags of [['--verify'], ['--wait', '0']]) {
     await assert.rejects(runLinuxUpdateCommand({
       args: ['--project-dir', f.project, ...flags], unit: f.unit,
     }), { code: 'DEPLOYMENT_COMMAND_MODE_UNSUPPORTED' });
@@ -154,6 +154,54 @@ require('node:http').createServer((req, res) => {
   return { ...f, service, control, lock, git: '/usr/bin/git', environment,
     port: 3010, prior, target, nextTarget, deploymentBytes: 2 * 1024 ** 3 };
 }
+
+test('native deployment refuses preview side effects while reporting local targets and pending admission', async t => {
+  const f = await installation(t, { unitName: 'agents-chat.service' });
+  await releaseLock(f.control, f.lock);
+  await rmdir(f.control);
+  const marker = path.join(f.project, 'preview-executed-code');
+  const hook = path.join(f.project, '.git', 'preview-hook.sh');
+  await writeFile(hook, `#!/bin/sh\ntouch '${marker}'\n`, { mode: 0o755 });
+  const git = (...args) => execute('/usr/bin/git', ['-c', `safe.directory=${f.project}`, '-C', f.project, ...args]);
+  await git('config', 'core.fsmonitor', hook);
+  await git('config', 'credential.helper', `!${hook}`);
+  const index = await readFile(path.join(f.project, '.git/index'));
+  const config = await readFile(path.join(f.project, '.git/config'));
+  const names = (await readdir(path.dirname(f.project))).sort();
+  const preview = async args => {
+    const result = await execute('/usr/bin/bash', [
+      path.join(repository, 'scripts/update.sh'), '--project-dir', f.project, '--dry-run', '--json', ...args,
+    ], { cwd: '/', timeout: 90000, maxBuffer: 16384,
+      env: { PATH: `${path.dirname(node)}:/usr/bin:/bin`, HOME: '/root', NODE_ENV: 'development',
+        GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.fsmonitor', GIT_CONFIG_VALUE_0: hook } });
+    assert.doesNotMatch(result.stderr, /Deployment phase:/);
+    return JSON.parse(result.stdout);
+  };
+  const local = await preview(['--no-pull']);
+  assert.equal(local.status, 'preview');
+  assert.equal(local.inspection.sourceCommit, f.prior);
+  assert.equal(local.target.commit, f.prior);
+  assert.equal(local.remoteRefreshed, false);
+  assert.ok(local.pendingChecks.includes('source-cleanliness'));
+  assert.ok(local.pendingChecks.includes('database-compatibility'));
+  assert.equal(local.estimate.backupLocation, path.join(f.control, 'backup'));
+  assert.ok(local.estimate.requiredBytes >= 2 * 1024 ** 3);
+  assert.deepEqual(local.steps, ['admission', 'stop', 'snapshot', 'select-source', 'dependencies', 'build', 'activate', 'verify']);
+  const remote = await preview([]);
+  assert.equal(remote.target, null);
+  assert.ok(remote.pendingChecks.includes('remote-freshness'));
+  const explicit = await preview(['--revision', f.target]);
+  assert.equal(explicit.target.commit, f.target);
+  const missing = await preview(['--revision', 'b'.repeat(40)]);
+  assert.equal(missing.target, null);
+  assert.ok(missing.pendingChecks.includes('target'));
+  await f.service.check();
+  assert.deepEqual((await readdir(path.dirname(f.project))).sort(), names);
+  assert.deepEqual(await readFile(path.join(f.project, '.git/index')), index);
+  assert.deepEqual(await readFile(path.join(f.project, '.git/config')), config);
+  await assert.rejects(readFile(marker), { code: 'ENOENT' });
+  await assert.rejects(readdir(f.control), { code: 'ENOENT' });
+});
 
 test('native deployment refuses unsupported target before downtime and releases settled preflight', async t => {
   const f = await installation(t);
