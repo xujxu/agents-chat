@@ -6877,6 +6877,39 @@ case-colliding environment names and a second actual host scenario that changes
 the retained configuration ACL: the next control request must fail, the owner
 must exit nonzero and the original detached member must settle.
 
+`9447c36` / `36912341006`, native job `110538391487`, passed all prior
+Windows gates and both installed-host scenarios, including exact refusal stages,
+case-colliding environment input and actual configuration-ACL mutation. Preserve
+its full regression before promoting the accepted baseline.
+
+#### Task 5I: native restart-inhibition premise
+
+Before composing durable task inhibition, extend the real installed-host fixture
+with `-Scenario task-inhibition`. Do not infer Scheduler behavior from a mock.
+
+- [ ] While the original writer and owner are alive, set native task `Enabled`
+  false. Parse the before/after XML and require that only
+  `Task.Settings.Enabled` changed; require identical task SDDL.
+- [ ] Capture actual registered-task and running-instance states. Rebind the
+  same original PID/start-time and instance GUID using the retained disabled
+  definition, not the old enabled XML.
+- [ ] Stop and retire the original Job through its bound private control pipe.
+  After the owner exits and native instance inventory becomes empty, attempt
+  explicit native `Run(null)` and require HRESULT `80041326`
+  (`SCHED_E_TASK_DISABLED`), rather than interpreting an arbitrary failure as
+  inhibition. Keep task disabled and verify zero native instances.
+- [ ] Record native evidence and preserve full regression. If the manager uses
+  a distinct registered-task state for a still-running disabled instance,
+  support only that observed combination while retaining all original process,
+  instance, account and exact policy checks.
+
+This is a premise test, not the complete durable inhibition authority. The
+production stop adapter still must retain verified managed configuration and
+task policy, durably journal intent before disabling, bind the scoped stop
+reply, recheck inhibition before/after mutation and authorize any later release.
+No public task is changed by these fixtures.
+Reference: https://learn.microsoft.com/en-us/windows/win32/taskschd/task-scheduler-error-and-success-constants
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

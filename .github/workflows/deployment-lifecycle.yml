@@ -328,3 +328,6 @@ jobs:
       - name: Refuse changed installed runtime configuration and settle original ownership
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario configuration-change
+      - name: Verify native restart inhibition around original managed owner settlement
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition

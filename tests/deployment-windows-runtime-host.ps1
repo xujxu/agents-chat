@@ -1,4 +1,4 @@
-param([ValidateSet('stop', 'configuration-change')][string]$Scenario = 'stop')
+param([ValidateSet('stop', 'configuration-change', 'task-inhibition')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -27,6 +27,7 @@ $root = Join-Path ([IO.Path]::GetTempPath()) "$taskName space"
 $registered = $false
 $owner = $null
 $member = $null
+$unexpectedOwner = $null
 New-Item -ItemType Directory -Path $root | Out-Null
 try {
     $root = & $node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" $root
@@ -139,6 +140,25 @@ if (process.argv[2] === 'child') {
     $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'observe', 15000) | ConvertFrom-Json
     Assert ($observation.members -contains $member.Id -and -not $observation.quiescent -and
         -not $observation.applicationHealthy) 'Managed host lost detached ownership or invented application health'
+    if ($Scenario -eq 'task-inhibition') {
+        $expected = [xml]$task.Xml
+        $descriptor = [string]$task.GetSecurityDescriptor(7)
+        Assert ($expected.Task.Settings.Enabled -ceq 'true') 'Expected an explicitly enabled fixture task'
+        $expected.Task.Settings.Enabled = 'false'
+        $task.Enabled = $false
+        $task = $scheduler.GetFolder('\').GetTask($taskName)
+        $actual = [xml]$task.Xml
+        Assert (-not $task.Enabled -and $actual.OuterXml -ceq $expected.OuterXml -and
+            [string]$task.GetSecurityDescriptor(7) -ceq $descriptor) 'Native task inhibition changed unrelated policy'
+        $instances = $task.GetInstances(0)
+        Assert ($instances.Count -eq 1) 'Disabling the task lost the original running instance'
+        $instance = $instances.Item(1)
+        $instance.Refresh()
+        Write-Output "TASK-INHIBITION-PROBE: task-state=$($task.State) instance-state=$($instance.State) enabled=$($task.Enabled)"
+        $inhibited = Get-AgentsChatTaskOwnerBinding -TaskName $taskName -OwnerPid $owner.Id -OwnerIdentity $ownerIdentity `
+            -Definition ([string]$task.Xml) -SecurityDescriptor $descriptor
+        Assert (-not $inhibited.enabled -and $inhibited.instanceGuid -ceq $binding.instanceGuid) 'Inhibition lost original owner binding'
+    }
     if ($Scenario -eq 'configuration-change') {
         $changed = Get-Acl -LiteralPath $configFile
         $changed.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
@@ -155,6 +175,34 @@ if (process.argv[2] === 'child') {
         Assert ($stopped.quiescent -and $stopped.members.Count -eq 0 -and $member.WaitForExit(10000)) 'Managed host did not settle the original Job'
         $retired = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'retire', 15000)
         Assert ($retired -ceq 'retired' -and $owner.WaitForExit(15000) -and $owner.ExitCode -eq 0) 'Managed host did not retire cleanly'
+        if ($Scenario -eq 'task-inhibition') {
+            $deadline = [DateTime]::UtcNow.AddSeconds(15)
+            do {
+                $task = $scheduler.GetFolder('\').GetTask($taskName)
+                $instances = $task.GetInstances(0)
+                Assert ([DateTime]::UtcNow -lt $deadline) 'Retired inhibited task retained a native instance'
+                if ($instances.Count) { Start-Sleep -Milliseconds 100 }
+            } while ($instances.Count)
+            $unexpected = $null
+            $code = $null
+            try { $unexpected = $task.Run($null) }
+            catch { $code = '{0:X8}' -f $_.Exception.GetBaseException().HResult }
+            if ($unexpected) {
+                $deadline = [DateTime]::UtcNow.AddSeconds(10)
+                do {
+                    $unexpected.Refresh()
+                    if ([int]$unexpected.EnginePID -gt 0) {
+                        $unexpectedOwner = [Diagnostics.Process]::GetProcessById([int]$unexpected.EnginePID)
+                        $null = $unexpectedOwner.Handle
+                        break
+                    }
+                    Start-Sleep -Milliseconds 100
+                } while ([DateTime]::UtcNow -lt $deadline)
+            }
+            Assert ($code -ceq '80041326') "Disabled native task did not refuse explicit restart with SCHED_E_TASK_DISABLED: $code"
+            Assert (-not $task.Enabled -and $task.GetInstances(0).Count -eq 0) 'Disabled task restarted after original owner retirement'
+            Write-Output 'PASS: native inhibition preserves original owner settlement and refuses restart after retirement'
+        }
     }
     Assert (Test-Path -LiteralPath $readyFile) 'Host silently deleted durable original-instance evidence'
     Write-Output "PASS: $Scenario actual installed S4U host binds private configuration, retained helpers and readiness, literal command and original Job settlement"
@@ -163,6 +211,10 @@ if (process.argv[2] === 'child') {
     if ($owner) {
         Assert ($owner.WaitForExit(15000)) 'Installed task owner did not exit during cleanup'
         $owner.Dispose()
+    }
+    if ($unexpectedOwner) {
+        Assert ($unexpectedOwner.WaitForExit(15000)) 'Unexpected generated task owner did not exit during cleanup'
+        $unexpectedOwner.Dispose()
     }
     if ($member) {
         Assert ($member.WaitForExit(15000)) 'Installed detached member survived original owner cleanup'
