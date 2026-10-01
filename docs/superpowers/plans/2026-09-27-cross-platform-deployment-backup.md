@@ -5363,6 +5363,12 @@ or runtime paths changing after inspection. Public `deploy.sh` remains legacy
 until the absent-runtime build and owned activation paths are fully wired and
 accepted; do not expose this helper as a completed deploy implementation.
 
+**Inspection evidence:** causal `691b35d` / Actions `36805437720` completed
+with the expected missing-module native-domain failure and sixteen successful
+jobs. Implementation `3ecc60c` / `36805525881` passed all seventeen jobs,
+including actual missing-unit inspection and existing live-service regression
+coverage. The extracted NSS checks did not change accepted runtime behavior.
+
 ### First-install owned source/build boundary
 
 Extract the shared source/npm stage implementation behind explicit read and
@@ -5384,6 +5390,13 @@ produce non-root-owned dependencies and BUILD_ID, reject selection in preflight,
 and seal all settled workers while leaving the truthful building state. This is
 a build boundary test, not a fabricated successful first deployment. Owned new
 unit creation/activation, recovery and public deploy wiring remain next.
+
+**Build execution:** causal `a095b5c` / Actions `36806930830` has admitted
+all eighteen jobs; the new first-build job failed with the expected missing
+`linux-first-build.mjs` module. Its other jobs are still running. Implementation
+`7a37aa1` plus the absent-unit recheck regression `1c7c242` were pushed only
+after causal admission; implementation run `36808073595` is queued. This build
+boundary is not yet accepted.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
