@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
 
@@ -96,16 +97,17 @@ namespace Deployment
         public static byte[] SecurityDescriptor(PipeStream pipe)
         {
             if (pipe == null) throw new ArgumentNullException("pipe");
+            byte[] buffer = new byte[4096];
             uint needed;
-            bool success = GetKernelObjectSecurity(pipe.SafePipeHandle, 4, null, 0, out needed);
-            int error = Marshal.GetLastWin32Error();
-            if (success || error != 122 || needed < 20 || needed > 4096)
-                throw new InvalidDataException("Invalid runtime pipe DACL size.");
-            byte[] descriptor = new byte[needed];
-            uint returned;
-            Check(GetKernelObjectSecurity(pipe.SafePipeHandle, 4, descriptor, needed, out returned),
+            Check(GetKernelObjectSecurity(pipe.SafePipeHandle, 4, buffer, (uint)buffer.Length, out needed),
                 "Read runtime pipe DACL");
-            if (returned != needed) throw new InvalidDataException("Runtime pipe DACL changed during query.");
+            if (needed > buffer.Length)
+                throw new InvalidDataException("Invalid runtime pipe DACL size.");
+            var security = new RawSecurityDescriptor(buffer, 0);
+            if (security.BinaryLength < 20 || security.BinaryLength > buffer.Length)
+                throw new InvalidDataException("Invalid runtime pipe DACL length.");
+            byte[] descriptor = new byte[security.BinaryLength];
+            security.GetBinaryForm(descriptor, 0);
             return descriptor;
         }
 

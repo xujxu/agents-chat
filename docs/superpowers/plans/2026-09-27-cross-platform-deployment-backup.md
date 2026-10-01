@@ -6576,6 +6576,15 @@ failed in the DACL inspection expression. The fixture recorded only a PowerShell
 wrapper exception, so retain the base exception type/message for this synthetic
 fixture before changing production behavior. No application task was run.
 
+Diagnostic `4a38d4b` / `36888280568`, native job `110457724701`, identified
+`Runtime pipe DACL changed during query`: the size-only query and successful
+copy returned different required-size values. Buffer-size equality is not a
+security-descriptor identity check. Read this bounded descriptor in one native
+call into the supported 4096-byte buffer, require success, then parse and return
+the validated self-relative descriptor rather than inferring ACL mutation from
+two size values. The actual task test still requires the exact protected
+SYSTEM/current-account allow-list; that assertion is not weakened.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
