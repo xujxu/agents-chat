@@ -177,6 +177,12 @@ it does not fetch Git objects, install dependencies or build the application.
 It accepts `--json` and `--timeout SECONDS` (per-stage, default 1800); `--help`
 lists its requirements. If the selected historical source has no restore script,
 run this command from a separate tools checkout and specify the installed path.
+New native backups bind the exact recovery-engine digest in a version-2 snapshot.
+When controller helpers change, the update saves an immutable
+`recovery-engine-<sha256>` generation rather than replacing the original
+`recovery-engine` directory. Version-1 backups continue to use that original
+engine. Do not remove these directories or unpublished `.staging` evidence;
+older restore tools that cannot read version-2 snapshots must not be used.
 Use `--help` for supported flags, `--status --json` for read-only status, and
 `--json` for machine-readable outcomes (progress/errors remain on stderr).
 The controller requires Node.js 24+, `/usr/bin/git`, systemd, port 3010, and a

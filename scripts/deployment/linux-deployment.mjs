@@ -150,7 +150,7 @@ export async function runLinuxLiveDeployment({
         if ([...budgets.values()].some(value => value.required > value.available)) {
           throw new Error('Insufficient space for complete backup and declared build budget.');
         }
-        recovery = await saveRecoveryEngine({ control, source: fileURLToPath(new URL('./', import.meta.url)) });
+        recovery = await saveRecoveryEngine({ control, source: fileURLToPath(new URL('./', import.meta.url)), allowVersionChange: true });
       },
       async stop({ recovering }) {
         await authority();
@@ -165,7 +165,8 @@ export async function runLinuxLiveDeployment({
         await authority();
         return createLinuxServiceSnapshot({ service, stopped, configuration: admission.configuration,
           destination: path.join(control, 'staging'), id: lock.operationId,
-          source: { commit: source.commit, provenance: 'observed' }, signal: stageSignal });
+          source: { commit: source.commit, provenance: 'observed' }, signal: stageSignal,
+          recoveryEngine: recovery.manifestSha256 });
       },
       async verifySnapshot({ snapshot, signal: stageSignal }) {
         await authority();

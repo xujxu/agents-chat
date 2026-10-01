@@ -1,12 +1,13 @@
-import { createHash } from 'node:crypto';
-import { lstat, mkdir, readdir } from 'node:fs/promises';
+import { lstat, mkdir, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { workerEngineFiles } from './saved-worker-engine.mjs';
+import { recoveryDigest as digest, inspectRecoveryEngineFiles, locateRecoveryEngine } from './recovery-engine-files.mjs';
 
 const files = Object.freeze([...new Set([
   'saved-recovery-engine.mjs', 'retirement-recovery-entry.mjs', 'retirement-recovery.mjs',
+  'recovery-engine-files.mjs',
   'saved-worker-engine.mjs', 'worker-files.mjs', 'worker-identity.mjs', 'process-identity.mjs', 'state.mjs',
   'linux-service-recovery.mjs', 'linux-service-inspection.mjs', 'linux-runtime.mjs', 'linux-systemd.mjs',
   'linux-recovery-admission.mjs', 'linux-recovery-completion.mjs',
@@ -28,7 +29,6 @@ const files = Object.freeze([...new Set([
   'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-scope.mjs', 'snapshot-external.mjs', 'snapshot-rotation.mjs',
   'linux-readiness.mjs', 'linux-listener.mjs',
 ])]);
-const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const descriptor = (directory, manifestSha256) => Object.freeze({
   directory, entrypoint: path.join(directory, 'retirement-recovery-entry.mjs'), manifestSha256,
 });
@@ -37,59 +37,66 @@ export async function verifyRecoveryEngine({ control, manifestSha256 }) {
   if (typeof manifestSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(manifestSha256)) {
     throw new Error('Invalid recovery manifest digest.');
   }
-  const { root } = await canonicalWorkerDirectory(control, { privateMode: true });
-  const { root: directory } = await canonicalWorkerDirectory(path.join(root, 'recovery-engine'), { privateMode: true });
-  if (JSON.stringify((await readdir(directory)).sort()) !== JSON.stringify([...files, 'manifest.json'].sort())) {
+  const directory = await locateRecoveryEngine({ control, manifestSha256 });
+  const { manifest } = await inspectRecoveryEngineFiles({ directory, manifestSha256 });
+  if (JSON.stringify(manifest.files.map(entry => entry.name)) !== JSON.stringify(files)) {
     throw new Error('Incomplete or unexpected recovery engine files.');
-  }
-  const bytes = await readWorkerFile(path.join(directory, 'manifest.json'), 32768, { privateMode: true });
-  if (digest(bytes) !== manifestSha256) throw new Error('Recovery manifest changed.');
-  const manifest = captureWorkerFields(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)),
-    ['version', 'files'], 'recovery manifest');
-  if (manifest.version !== 1 || !Array.isArray(manifest.files) || manifest.files.length !== files.length) {
-    throw new Error('Unsupported recovery engine manifest.');
-  }
-  for (let index = 0; index < files.length; index++) {
-    const entry = captureWorkerFields(manifest.files[index], ['name', 'bytes', 'sha256'], 'recovery entry');
-    const content = await readWorkerFile(path.join(directory, files[index]), 1024 * 1024, { privateMode: true });
-    if (entry.name !== files[index] || entry.bytes !== content.length || entry.sha256 !== digest(content)) {
-      throw new Error('Recovery engine file changed.');
-    }
   }
   return descriptor(directory, manifestSha256);
 }
 
-export async function saveRecoveryEngine({ source, control }) {
+export async function saveRecoveryEngine({ source, control, allowVersionChange = false }) {
   const { root: origin } = await canonicalWorkerDirectory(source);
   const { root } = await canonicalWorkerDirectory(control, { privateMode: true });
-  const directory = path.join(root, 'recovery-engine');
-  const contents = [];
-  for (const name of files) contents.push(await readWorkerFile(path.join(origin, name), 1024 * 1024));
-  const manifest = Buffer.from(`${JSON.stringify({ version: 1, files: files.map((name, index) => ({
-    name, bytes: contents[index].length, sha256: digest(contents[index]),
-  })) })}\n`);
+  let directory = path.join(root, 'recovery-engine');
+  const entries = [];
+  let total = 0;
+  for (const name of files) {
+    const bytes = await readWorkerFile(path.join(origin, name), 1024 * 1024);
+    total += bytes.length;
+    if (total > 16 * 1024 * 1024) throw new Error('Recovery source exceeds the supported byte budget.');
+    entries.push({ name, bytes: bytes.length, sha256: digest(bytes) });
+  }
+  const manifest = Buffer.from(`${JSON.stringify({ version: 1, files: entries })}\n`);
+  const manifestSha256 = digest(manifest);
   let exists = true;
   try { await lstat(directory); }
   catch (error) {
     if (error.code !== 'ENOENT') throw error;
     exists = false;
   }
-  if (!exists) {
-    await mkdir(directory, { mode: 0o700 });
-    await syncWorkerDirectory(root);
-    for (let index = 0; index < files.length; index++) {
-      await writeWorkerFile(path.join(directory, files[index]), contents[index]);
+  if (exists) {
+    const legacy = await inspectRecoveryEngineFiles({ directory });
+    if (legacy.manifestSha256 === manifestSha256) return verifyRecoveryEngine({ control: root, manifestSha256 });
+    if (!allowVersionChange) throw new Error('Recovery source differs from the retained engine.');
+    directory = path.join(root, `recovery-engine-${manifestSha256}`);
+    try { await lstat(directory); }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      exists = false;
     }
-    for (let index = 0; index < files.length; index++) {
-      if (!(await readWorkerFile(path.join(origin, files[index]), 1024 * 1024)).equals(contents[index])) {
+  }
+  if (!exists) {
+    const staging = `${directory}.staging`;
+    await mkdir(staging, { mode: 0o700 });
+    await syncWorkerDirectory(root);
+    for (const entry of entries) {
+      const content = await readWorkerFile(path.join(origin, entry.name), 1024 * 1024);
+      if (content.length !== entry.bytes || digest(content) !== entry.sha256) throw new Error('Recovery source changed while saving.');
+      await writeWorkerFile(path.join(staging, entry.name), content);
+    }
+    for (const entry of entries) {
+      if (digest(await readWorkerFile(path.join(origin, entry.name), 1024 * 1024)) !== entry.sha256) {
         throw new Error('Recovery source changed while saving.');
       }
     }
-    await syncWorkerDirectory(directory);
-    await writeWorkerFile(path.join(directory, 'manifest.json'), manifest);
-    await syncWorkerDirectory(directory);
+    await writeWorkerFile(path.join(staging, 'manifest.json'), manifest);
+    await syncWorkerDirectory(staging);
+    await inspectRecoveryEngineFiles({ directory: staging, manifestSha256 });
+    await rename(staging, directory);
+    await syncWorkerDirectory(root);
   }
-  return verifyRecoveryEngine({ control: root, manifestSha256: digest(manifest) });
+  return verifyRecoveryEngine({ control: root, manifestSha256 });
 }
 
 export function retirementRecoveryInvocation(saved, { control, project, operationId, kind = 'worker' }) {
@@ -97,7 +104,7 @@ export function retirementRecoveryInvocation(saved, { control, project, operatio
   if (!['worker', 'service'].includes(kind) || !path.isAbsolute(control) || path.resolve(control) !== control
     || !path.isAbsolute(project) || path.resolve(project) !== project
     || typeof operationId !== 'string' || !operationId || operationId.length > 4096 || /[\0\r\n]/.test(operationId)
-    || fields.directory !== path.join(control, 'recovery-engine')
+    || !['recovery-engine', `recovery-engine-${fields.manifestSha256}`].some(name => fields.directory === path.join(control, name))
     || fields.entrypoint !== path.join(fields.directory, 'retirement-recovery-entry.mjs')
     || !/^[a-f0-9]{64}$/.test(fields.manifestSha256)) throw new Error('Invalid saved recovery invocation.');
   return {

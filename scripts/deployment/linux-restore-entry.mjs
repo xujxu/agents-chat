@@ -42,6 +42,12 @@ try {
     || !Number.isInteger(input.port) || input.port < 1 || input.port > 65535) {
     throw new Error('Saved restore requires positive deadlines and an explicit valid port.');
   }
+  stage = 'backup-engine-binding';
+  const { verifySnapshot } = await import('./snapshot.mjs');
+  const snapshot = await verifySnapshot(input.backup);
+  if (snapshot.version === 2 && snapshot.recoveryEngine !== manifestSha256) {
+    throw new Error('Saved backup requires a different recovery engine digest.');
+  }
   operations = await import('./state.mjs');
   const names = await readdir(control);
   const cold = names.includes('lock') || names.includes('recovery-lock')

@@ -30,12 +30,15 @@ export function estimateRequiredBytes({ snapshotBytes, metadataBytes, deployment
 }
 
 function validateManifest(manifest) {
-  if (manifest?.version !== 1 || !/^[a-zA-Z0-9_-]+$/.test(manifest.id ?? '')
+  if (![1, 2].includes(manifest?.version) || !/^[a-zA-Z0-9_-]+$/.test(manifest.id ?? '')
     || typeof manifest.project !== 'string' || !path.isAbsolute(manifest.project)
     || !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(manifest.source?.commit ?? '')
     || !['observed', 'verified'].includes(manifest.source?.provenance)
     || manifest.runtime?.state !== 'stopped' || !['linux', 'win32'].includes(manifest.runtime?.platform)
     || !Array.isArray(manifest.entries)) throw new Error('Invalid snapshot manifest.');
+  if (manifest.version === 2
+    ? typeof manifest.recoveryEngine !== 'string' || !/^[a-f0-9]{64}$/.test(manifest.recoveryEngine)
+    : Object.hasOwn(manifest, 'recoveryEngine')) throw new Error('Invalid snapshot recovery engine binding.');
   if (manifest.scope !== undefined && !['project', 'selected'].includes(manifest.scope)) {
     throw new Error('Invalid snapshot scope.');
   }
@@ -99,7 +102,7 @@ function validateManifest(manifest) {
 
 export async function createSnapshot({
   project, destination, id, files, source, runtime, signal, absentPaths = [], excludedPaths = [],
-  externalFiles = [], checkSource, projectScope = false, gitMetadata,
+  externalFiles = [], checkSource, projectScope = false, gitMetadata, recoveryEngine,
 }) {
   signal?.throwIfAborted();
   if (checkSource !== undefined && typeof checkSource !== 'function') throw new Error('Snapshot source check must be callable.');
@@ -133,7 +136,9 @@ export async function createSnapshot({
   await assertSnapshotAbsent(root, absentPaths);
   const entries = await captureSnapshotInventory(root, files, { signal, excludedPaths });
   const manifest = {
-    version: 1, id, project: root, createdAt: new Date().toISOString(), source, runtime, absentPaths, excludedPaths,
+    version: recoveryEngine === undefined ? 1 : 2,
+    ...(recoveryEngine === undefined ? {} : { recoveryEngine }),
+    id, project: root, createdAt: new Date().toISOString(), source, runtime, absentPaths, excludedPaths,
     scope: projectScope ? 'project' : 'selected', projectMetadata: projectMetadata(rootInfo),
     externalFiles: external.entries,
     ...(git ? { gitMetadata: git.descriptor } : {}),
