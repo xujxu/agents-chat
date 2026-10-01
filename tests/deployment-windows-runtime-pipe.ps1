@@ -45,6 +45,12 @@ if ($Server) {
                 $command = $line.GetAwaiter().GetResult()
                 if ($null -ne $command) {
                     Assert ($command -ceq 'hello') 'Unexpected runtime fixture handshake'
+                    $pipe.RunAsClient([IO.Pipes.PipeStreamImpersonationWorker]{
+                        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+                        try {
+                            Assert ($identity.ImpersonationLevel -eq [Security.Principal.TokenImpersonationLevel]::Identification) 'Client allowed more than identification'
+                        } finally { $identity.Dispose() }
+                    })
                     $writer.WriteLine('original-server')
                     $line = $reader.ReadLineAsync()
                     Assert ($line.Wait(5000)) 'Runtime fixture finish timed out'
@@ -75,6 +81,19 @@ $ready = Join-Path $root 'ready.json'
 $registered = $false
 $owner = $null
 $client = $null
+$current = [Diagnostics.Process]::GetCurrentProcess()
+$ownIdentity = "$PID`:$($current.StartTime.ToUniversalTime().Ticks)"
+foreach ($timeout in @(0, 30001)) {
+    $invalid = $false
+    try {
+        $unexpected = [Deployment.WindowsRuntimePipe]::Connect([guid]::NewGuid(), $PID, $ownIdentity, $timeout)
+        $unexpected.Dispose()
+    } catch {
+        $errorValue = $_.Exception.GetBaseException()
+        $invalid = $errorValue -is [ArgumentOutOfRangeException] -and $errorValue.ParamName -eq 'timeoutMilliseconds'
+    }
+    Assert $invalid 'Unsupported connection timeout was accepted'
+}
 New-Item -ItemType Directory -Path $root | Out-Null
 try {
     $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
@@ -113,8 +132,6 @@ try {
     } catch { $changed = $_.Exception.GetBaseException().Message -eq 'Runtime pipe owner identity changed.' }
     Assert $changed 'Changed owner start-time was accepted'
 
-    $current = [Diagnostics.Process]::GetCurrentProcess()
-    $ownIdentity = "$PID`:$($current.StartTime.ToUniversalTime().Ticks)"
     $foreign = $false
     try {
         $unexpected = [Deployment.WindowsRuntimePipe]::Connect($generation, $PID, $ownIdentity, 1000)

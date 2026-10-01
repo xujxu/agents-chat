@@ -6554,6 +6554,22 @@ not claim arbitrary cross-account administrator deployment support. Subsequent
 Job-owner, inhibition, configuration/ACL and transaction wiring must establish
 those separate contracts before changing the public Windows deployment path.
 
+Full `1292374` / `36881067273` regression completed successfully: **23/23**.
+This replaces `86cead5` as the accepted baseline.
+
+Task 5C causal `827dbcd` / `36883653509`, native job `110443492278`, passed
+the existing parameter, startup and definition gates, then failed exactly at
+the absent `WindowsRuntimePipe.cs` import. Implemented the bounded native
+transport using `CreateNamedPipeW` first-instance/overlapped/local-only flags
+and explicit non-inherited private security attributes. Client admission pins
+the expected live process across the native server-PID check and never allows
+more than identification-level impersonation. Extended the actual-task fixture
+to inspect that token level and reject timeout values outside the supported bound.
+
+Relevant API contracts (not paused research):
+- https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-createnamedpipew
+- https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getnamedpipeserverprocessid
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
