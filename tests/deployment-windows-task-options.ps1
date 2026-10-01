@@ -58,6 +58,8 @@ try {
     $Current = [Security.Principal.WindowsIdentity]::GetCurrent()
     $WatchdogAst = Read-ScriptAst (Join-Path $Repository 'scripts\service-watchdog.ps1')
     $DeployAst = Read-ScriptAst (Join-Path $Repository 'scripts\deploy.ps1')
+    $PolicyFile = Join-Path $Repository 'scripts\deployment\windows-task-policy.ps1'
+    $null = Read-ScriptAst $PolicyFile
     $null = Read-ScriptAst $Installer
 
     Invoke-Case 'default task principal is the current Windows account' {
@@ -91,7 +93,7 @@ try {
     }
 
     Invoke-Case 'omitted deploy options preserve the actual registered task modes and account' {
-        . ([scriptblock]::Create((Get-FunctionText $DeployAst 'Resolve-AgentsChatTaskOptions')))
+        . $PolicyFile
         $name = 'Agents-Chat-Test-' + [Guid]::NewGuid().ToString('N')
         $TaskNames.Add($name)
         $null = & $Installer -TaskName $name -ProjectDir $Project -UserId $Current.Name `

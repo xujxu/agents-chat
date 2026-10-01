@@ -137,11 +137,18 @@ For persistent deployment on a Windows machine, use `scripts\deploy.ps1` which m
 
 On this development branch, Windows transaction/backup/recovery integration is
 still incomplete; do not use it as the final cross-platform deployment release.
-The task parameter changes below are awaiting native Actions acceptance.
+The task parameter changes below passed native PowerShell 5.1 acceptance and
+the full 23-job regression at `86cead5` (run `36877088856`).
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and
 unsupported principal/trigger modes are refused before changing the task.
+The in-development native task-definition inspector records and rechecks XML,
+task permissions, principal/mode settings and Scheduler instances. It is
+read-only and explicitly returns no runtime authority: a Scheduler engine PID
+is not proof of ownership of the watchdog or its descendants, and Ready or
+Disabled is not proof that application processes are stopped. Full Windows
+process containment, artifact/configuration binding and recovery remain pending.
 
 ```powershell
 # Deploy (pulls latest code, restarts the service, waits for readiness)

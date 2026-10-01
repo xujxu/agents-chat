@@ -6476,6 +6476,35 @@ ownership adapter.
   comparison binds a definition, not an immutable task registration identity;
   byte-identical task recreation cannot grant runtime ownership.
 
+Native collector references:
+- `https://learn.microsoft.com/en-us/windows/win32/taskschd/registeredtask-getinstances`
+  requires flags zero and documents security-context filtering. Require an
+  elevated administrator observer; an unprivileged empty list cannot stand in
+  for an authoritative task-instance inventory.
+- `https://learn.microsoft.com/en-us/windows/win32/taskschd/registeredtask-getsecuritydescriptor`
+  supplies task SDDL; request owner/group/DACL (securityInformation 7), not SACL.
+- `https://learn.microsoft.com/en-us/windows/win32/taskschd/runningtask`
+  identifies EnginePID as the task **engine**, not necessarily the watchdog or
+  all its descendants. Capture instance GUID/name/path/state for comparison;
+  never use EnginePID alone as a process-kill or backup-safety capability.
+
+**Full Task 5A acceptance:** `86cead5` / `36877088856` completed successfully
+with all **23 jobs passed**, including native Windows task options, all original
+Linux public lifecycle gates and actual builds on both operating systems.
+This is the new fully accepted baseline. Task-definition causal tests
+`20c2baf` / `36877649151` were queued without cancelling that regression and
+are now admitted.
+
+Task 5B causal job `110429429782` (`20c2baf` / `36877649151`) passed all
+existing parameter/regression gates and failed precisely on missing
+`windows-task-inspection.mjs`. Implement the shared unchanged task-options
+policy, elevated local Scheduler/CIM collector and bounded Node observation.
+Freeze nested options and instance records; compare fresh observations without
+refreshing the retained baseline. Preserve abort reasons and expose only a
+bounded native failure stage, never task XML/SDDL or arbitrary native stderr.
+These definitions are read-only evidence, not process, file-content or
+immutable-registration authority. Full native acceptance is pending.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

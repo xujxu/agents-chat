@@ -104,6 +104,13 @@ test('Windows task observation detects actual task startup and never equates sch
     }
   `, [input.taskName]);
   await assert.rejects(observed.check(), { code: 'DEPLOYMENT_WINDOWS_TASK_CHANGED' });
+  const running = await inspectWindowsTaskDefinition(input);
+  assert.equal(running.runtimeAuthority, false);
+  assert.equal(running.identity.state, 'Running');
+  assert.equal(running.identity.instances.length, 1);
+  assert.ok(Number.isSafeInteger(running.identity.instances[0].enginePid));
+  assert.ok(running.identity.instances[0].enginePid > 0);
+  assert.match(running.identity.instances[0].instanceGuid, /^[a-f0-9-]{36}$/);
 });
 
 test('cancelled Windows task observation preserves the supplied reason before native work', native, async t => {
