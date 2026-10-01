@@ -232,6 +232,13 @@ test('first-unit source authority remains distinct from the original inhibitor n
     await unlink(held);
   }
   await publication.checkInhibition();
+  const inhibitorBytes = await readFile(f.inhibition);
+  await writeFile(f.inhibition, Buffer.concat([inhibitorBytes, Buffer.from('\n# changed\n')]));
+  await assert.rejects(publication.checkInhibition(), /changed/i);
+  await unlink(f.inhibition);
+  await writeFile(f.inhibition, inhibitorBytes, { flag: 'wx', mode: 0o600 });
+  await assert.rejects(publication.checkInhibition(), /changed/i);
+  await publication.checkSources();
   await writeState(f.control, {
     ...await loadState(f.control), phase: 'activating', previousPhase: 'configuring', targetCommit: 'b'.repeat(40),
   });

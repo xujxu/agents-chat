@@ -22,8 +22,10 @@ export async function inspectLinuxFirstInstall({ project, unit = 'agents-chat.se
     throw new Error('Fresh installation requires a non-root-owned project without shared write or special permissions.');
   }
   const control = path.join(path.dirname(root.root), `.${path.basename(root.root)}.deployment`);
-  const absent = async ({ unitAbsent = true, runtimePaths = true, controlEvidence = true } = {}) => {
-    signal?.throwIfAborted();
+  const absent = async ({
+    unitAbsent = true, runtimePaths = true, controlEvidence = true, signal: checkSignal = signal,
+  } = {}) => {
+    checkSignal?.throwIfAborted();
     if (unitAbsent) {
       const state = await linuxSystemdProperties(unit, unitFields, { allowMissing: true });
       if (state.LoadState !== 'not-found' || state.ActiveState !== 'inactive' || state.MainPID !== '0'
@@ -58,8 +60,8 @@ export async function inspectLinuxFirstInstall({ project, unit = 'agents-chat.se
     project: root.root, unit, runtime: 'absent', account,
     executables: Object.freeze(executables.map(entry => Object.freeze(entry))),
   });
-  const recheck = async options => {
-    signal?.throwIfAborted();
+  const recheck = async ({ signal: checkSignal = signal, ...options } = {}) => {
+    checkSignal?.throwIfAborted();
     const current = await canonicalWorkerDirectory(root.root);
     if (!same(directoryIdentity(current.info), directoryIdentity(root.info))
       || !same(await inspectLinuxAccount({ user: String(root.info.uid), group: String(root.info.gid) }), account)) {
@@ -68,15 +70,19 @@ export async function inspectLinuxFirstInstall({ project, unit = 'agents-chat.se
     if (!same(await Promise.all([inspectLinuxServiceExecutable(npm), inspectLinuxServiceExecutable(node)]), executables)) {
       throw new Error('Fresh installation toolchain changed.');
     }
-    await configuration.check({ signal });
-    await absent(options);
+    await configuration.check({ signal: checkSignal });
+    await absent({ ...options, signal: checkSignal });
+    checkSignal?.throwIfAborted();
   };
-  const check = () => recheck();
+  const check = ({ signal: checkSignal = signal } = {}) => recheck({ signal: checkSignal });
   await check();
   return Object.freeze({
     identity, configuration, check,
-    checkFreshRuntime: () => recheck({ controlEvidence: false }),
-    checkUninstalled: () => recheck({ runtimePaths: false, controlEvidence: false }),
-    checkIdentity: () => recheck({ unitAbsent: false, runtimePaths: false, controlEvidence: false }),
+    checkFreshRuntime: ({ signal: checkSignal = signal } = {}) =>
+      recheck({ controlEvidence: false, signal: checkSignal }),
+    checkUninstalled: ({ signal: checkSignal = signal } = {}) =>
+      recheck({ runtimePaths: false, controlEvidence: false, signal: checkSignal }),
+    checkIdentity: ({ signal: checkSignal = signal } = {}) =>
+      recheck({ unitAbsent: false, runtimePaths: false, controlEvidence: false, signal: checkSignal }),
   });
 }

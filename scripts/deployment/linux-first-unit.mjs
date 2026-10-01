@@ -29,6 +29,8 @@ export async function createLinuxFirstUnit({ installation, control, lock: suppli
     || !state.targetCommit || state.errorCode !== null) {
     throw new Error('First unit publication requires matching fresh configuring-phase admission.');
   }
+  const binding = Object.fromEntries(Object.entries(state)
+    .filter(([name]) => !['phase', 'previousPhase', 'updatedAt', 'errorCode'].includes(name)));
   const root = '/etc/systemd/system';
   const fragment = path.join(root, unit);
   const parent = `${fragment}.d`;
@@ -70,17 +72,21 @@ export async function createLinuxFirstUnit({ installation, control, lock: suppli
         throw new Error('First unit source directory identity or permissions changed.');
       }
     };
-    const authority = async () => {
-      signal?.throwIfAborted();
+    const authority = async ({ signal: checkSignal = signal, configuring = true } = {}) => {
+      checkSignal?.throwIfAborted();
       if (closed) throw new Error('First unit authority is closed.');
       await assertLockOwner(control, lock);
-      if (!same(await loadState(control), state)) throw new Error('First unit configuring state changed.');
-      await installation.checkIdentity();
+      const current = await loadState(control);
+      if (configuring && !same(current, state)) throw new Error('First unit configuring state changed.');
+      if (!current || Object.entries(binding).some(([name, value]) => current[name] !== value)) {
+        throw new Error('First unit operation identity changed.');
+      }
+      await installation.checkIdentity({ signal: checkSignal });
       await checkDirectory(root, rootInfo);
       if (parentInfo) await checkDirectory(parent, parentInfo);
       await workers?.check();
       await journal?.check();
-      signal?.throwIfAborted();
+      checkSignal?.throwIfAborted();
     };
     await authority();
     await installation.checkUninstalled();
@@ -109,15 +115,16 @@ export async function createLinuxFirstUnit({ installation, control, lock: suppli
         return Object.freeze(value);
       },
     });
+    const checkSource = async entry => {
+      if (!entry.info || !same(await inspectLinuxServiceSource(entry.file), entry.info)
+        || !same(directoryIdentity(await entry.handle.stat()), directoryIdentity(entry.info))
+        || !(await readWorkerFile(entry.file, 32768, { privateMode: true })).equals(entry.bytes)) {
+        throw new Error('Original first unit source identity or bytes changed.');
+      }
+    };
     const checkFiles = async () => {
       await authority();
-      for (const entry of retained) {
-        if (!entry.info || !same(await inspectLinuxServiceSource(entry.file), entry.info)
-          || !same(directoryIdentity(await entry.handle.stat()), directoryIdentity(entry.info))
-          || !(await readWorkerFile(entry.file, 32768, { privateMode: true })).equals(entry.bytes)) {
-          throw new Error('Original first unit source identity or bytes changed.');
-        }
-      }
+      for (const entry of retained) await checkSource(entry);
     };
     const record = async phase => {
       await checkFiles();
@@ -173,9 +180,30 @@ export async function createLinuxFirstUnit({ installation, control, lock: suppli
     };
     await check();
     await record('configured');
+    const checkSources = async ({ signal: checkSignal = signal } = {}) => {
+      await authority({ signal: checkSignal, configuring: false });
+      await checkSource(reserved);
+      await authority({ signal: checkSignal, configuring: false });
+    };
+    const checkInhibition = async ({ signal: checkSignal = signal } = {}) => {
+      await checkSources({ signal: checkSignal });
+      const entry = retained[1];
+      const named = await inspectLinuxServiceSource(inhibition);
+      const opened = await entry.handle.stat();
+      const bytes = Buffer.alloc(entry.bytes.length);
+      const { bytesRead } = await entry.handle.read(bytes, 0, bytes.length, 0);
+      if (!same(directoryIdentity(named), directoryIdentity(entry.info))
+        || !same(directoryIdentity(opened), directoryIdentity(entry.info))
+        || opened.nlink !== 1 || opened.size !== bytes.length || named.size !== bytes.length
+        || bytesRead !== bytes.length || !bytes.equals(entry.bytes)
+        || !(await readWorkerFile(inhibition, 32768, { privateMode: true })).equals(entry.bytes)) {
+        throw new Error('Original first unit inhibitor identity or bytes changed.');
+      }
+      await checkSources({ signal: checkSignal });
+    };
     return Object.freeze({
       status: 'configured-inhibited', identity: structuredClone({ project, unit, configuration, files: fileRecords() }),
-      check, close,
+      check, checkSources, checkInhibition, close,
     });
   } catch (error) {
     try { await close(); }

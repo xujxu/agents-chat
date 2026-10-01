@@ -217,6 +217,9 @@ interruption.
 First-unit enablement separately journals and retains the exact persistent
 startup symlink. It refuses existing links and leaves startup inhibited;
 enablement alone is not a running or accepted deployment.
+Publication also exposes separate read-only source/inhibitor checks for later
+activation and cancellation cleanup. A cleanup signal override never bypasses
+the original operation, target, account, toolchain or configuration identity.
 Do not use this branch on a live installation before the remaining platform
 acceptance gates. The `deploy.sh` commands below describe the legacy implementation,
 not the new backup/restore guarantees.

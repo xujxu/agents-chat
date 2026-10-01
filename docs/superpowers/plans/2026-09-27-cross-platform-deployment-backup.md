@@ -5483,6 +5483,13 @@ First activation and retirement
 must subsequently account for this journal; this helper alone is not deploy
 acceptance and does not start the application.
 
+Enablement causal `25e595f` / Actions `36819160595` completed with seventeen
+successful jobs and exactly the two expected missing-module failures in the
+first-install job. Implementation `2ad949a` / `36819553491` passed all eighteen
+jobs, including all nine first-install cases. Native execution confirmed
+O_PATH/no-follow symlink retention, genuine persistent enablement, same-target
+replacement refusal and linked-cancellation evidence without starting a service.
+
 ### First-unit activation handoff authority
 
 Preserve the strict configuring-phase `publication.check()` contract. Add
@@ -5508,6 +5515,12 @@ changed configuration refusal, original held/name round-trip and changed target
 refusal. They create neither an activation journal nor acceptance evidence.
 Run through the existing Actions first-install job, followed by the full
 eighteen-job matrix; do not run these root/systemd fixtures locally.
+
+Handoff causal `2082d51` / Actions `36820627760` reached the native first-install
+job with exactly the two expected `publication.checkSources is not a function`
+failures. The implementation preserves strict configuring checks and separates
+read-only fragment/inhibitor inspection; full implementation acceptance remains
+pending.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
