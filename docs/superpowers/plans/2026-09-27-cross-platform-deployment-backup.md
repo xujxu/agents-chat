@@ -6585,6 +6585,14 @@ the validated self-relative descriptor rather than inferring ACL mutation from
 two size values. The actual task test still requires the exact protected
 SYSTEM/current-account allow-list; that assertion is not weakened.
 
+`82f5034` / `36888882975`, native job `110459647310`, passed the private
+exclusive S4U pipe and stale/different-live-owner refusals, then timed out
+reconnecting to the fixture server. The fixture created an auto-flushing writer
+even for rejected peers that close without a command. Delay writer construction
+until a real handshake; do not flush a deliberately closed rejected connection.
+Also surface any task-side synthetic failure before cleanup, rather than losing
+the diagnostic file when a controller-side operation fails.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

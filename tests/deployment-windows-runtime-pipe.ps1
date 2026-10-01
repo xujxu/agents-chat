@@ -37,14 +37,15 @@ if ($Server) {
             Assert ($waiting.Wait(20000)) 'Runtime fixture connection timed out'
             $waiting.GetAwaiter().GetResult()
             $reader = [IO.StreamReader]::new($pipe, [Text.UTF8Encoding]::new($false), $false, 4096, $true)
-            $writer = [IO.StreamWriter]::new($pipe, [Text.UTF8Encoding]::new($false), 4096, $true)
-            $writer.AutoFlush = $true
+            $writer = $null
             try {
                 $line = $reader.ReadLineAsync()
                 Assert ($line.Wait(5000)) 'Runtime fixture command timed out'
                 $command = $line.GetAwaiter().GetResult()
                 if ($null -ne $command) {
                     Assert ($command -ceq 'hello') 'Unexpected runtime fixture handshake'
+                    $writer = [IO.StreamWriter]::new($pipe, [Text.UTF8Encoding]::new($false), 4096, $true)
+                    $writer.AutoFlush = $true
                     $pipe.RunAsClient([IO.Pipes.PipeStreamImpersonationWorker]{
                         $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
                         try {
@@ -60,7 +61,7 @@ if ($Server) {
                 }
             } finally {
                 $reader.Dispose()
-                $writer.Dispose()
+                if ($writer) { $writer.Dispose() }
                 $pipe.Disconnect()
             }
         }
@@ -167,6 +168,11 @@ try {
     } catch { $missing = $_.Exception.GetBaseException() -is [TimeoutException] }
     Assert ($missing -and $timer.Elapsed.TotalSeconds -lt 5) 'Missing runtime pipe did not fail within its bound'
     Write-Output 'PASS: missing runtime connection fails with a bounded timeout'
+} catch {
+    if (Test-Path -LiteralPath ($ready + '.failure')) {
+        Write-Warning (Get-Content -LiteralPath ($ready + '.failure') -Raw)
+    }
+    throw
 } finally {
     if ($client) { $client.Dispose() }
     if ($registered) {
