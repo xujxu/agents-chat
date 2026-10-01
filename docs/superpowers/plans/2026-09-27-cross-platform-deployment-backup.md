@@ -6736,6 +6736,14 @@ against every possible pre-existing mapped writer. Ordinary concurrent write
 and replacement opens are denied. EFS, redirected paths, non-single-linked
 files and foreign-read ACLs remain unsupported rather than silently accepted.
 
+`cb63e4b` / `36903126842`, native job `110507417742`, passed existing
+Windows gates then refused the positive fixture's permissions. The fixture set
+the DACL but never assigned the declared runtime principal as owner. Set its
+root and admitted files' owner explicitly to that principal and record the
+initial synthetic owner SID to distinguish elevated-token default ownership
+from a production policy defect. Do not allow the entire Administrators group
+as a substitute for the declared private-file owner.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

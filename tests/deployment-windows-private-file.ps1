@@ -10,6 +10,12 @@ function Refuses([scriptblock]$Action, [string]$Expected) {
     catch { $observed = $_.Exception.GetBaseException().Message }
     Assert ($observed -ceq $Expected) "Unexpected private configuration refusal: $observed"
 }
+function Set-FixtureOwner([string]$File, [Security.Principal.SecurityIdentifier]$Sid) {
+    $security = Get-Acl -LiteralPath $File
+    Write-Output "Fixture initial owner SID: $($security.GetOwner([Security.Principal.SecurityIdentifier]).Value)"
+    $security.SetOwner($Sid)
+    Set-Acl -LiteralPath $File -AclObject $security
+}
 $root = Join-Path ([IO.Path]::GetTempPath()) "agents-private-file-$([guid]::NewGuid()) space"
 $retained = $null
 New-Item -ItemType Directory -Path $root | Out-Null
@@ -18,6 +24,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot canonicalize the private configuration fixture directory' }
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
     $acl = Get-Acl -LiteralPath $root
+    $acl.SetOwner($sid)
     $acl.SetAccessRuleProtection($true, $false)
     foreach ($principal in @($sid, [Security.Principal.SecurityIdentifier]::new('S-1-5-18'))) {
         $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($principal, 'FullControl',
@@ -27,6 +34,7 @@ try {
     $file = Join-Path $root 'runtime.json'
     $text = '{"version":1,"literal":"%n $HOME \" space"}'
     [IO.File]::WriteAllText($file, $text, [Text.UTF8Encoding]::new($false))
+    Set-FixtureOwner $file $sid
     $digest = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
     $retained = [Deployment.WindowsPrivateFile]::Open($file, $digest)
     Assert ($retained.ReadText() -ceq $text -and $retained.Sha256 -ceq $digest) 'Private file content or digest changed'
@@ -79,6 +87,7 @@ try {
     Refuses { [Deployment.WindowsPrivateFile]::Open($large, ('0' * 64)) } 'Private configuration file exceeds the size limit.'
     $invalid = Join-Path $root 'invalid.json'
     [IO.File]::WriteAllBytes($invalid, [byte[]]@(0xc3, 0x28))
+    Set-FixtureOwner $invalid $sid
     $invalidDigest = (Get-FileHash -LiteralPath $invalid -Algorithm SHA256).Hash.ToLowerInvariant()
     $retained = [Deployment.WindowsPrivateFile]::Open($invalid, $invalidDigest)
     $invalidUtf8 = $false
