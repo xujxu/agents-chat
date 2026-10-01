@@ -5296,6 +5296,12 @@ Generation implementation `6dc25d8` / `36797701490` passed all 17 jobs.
 Retention causal `2b7afe2` / `36798962857` is running; implementation
 `6ae1da8` / `36800072826` is queued.
 
+Retention acceptance: causal `2b7afe2` / `36798962857` completed with only
+the expected missing-retention-module native job failure; 16 other jobs passed.
+Implementation `6ae1da8` / `36800072826` passed all 17 jobs, including interrupted
+publication/deletion and actual changed-controller update, obsolete engine
+retirement, and saved source/data restoration.
+
 ### Native public Linux read-only preview
 
 Wire `--dry-run` to the existing `previewUpdate` result contract before any
@@ -5319,6 +5325,13 @@ space-containing fixture with no control directory. It checks unchanged Git
 index/config and parent inventory, unchanged service generation, no marker
 from configured fsmonitor/credential hooks, current/no-pull and explicit local
 targets, and unknown default/missing targets with pending checks.
+
+Preview causal `d688103` / `36801369943` is running; implementation `305884b` /
+`36802800135` is queued. Additional implementation coverage checks an existing
+upstream with an unreachable authenticated fixture URL remains local-only,
+never invokes credentials, never prints its token, preserves interrupted state,
+omits dependency installation from `--no-install` planned steps, and renders
+useful human-readable estimates and pending checks without `--json`.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
