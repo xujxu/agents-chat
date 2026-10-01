@@ -6920,6 +6920,56 @@ remove only that exact namespaced setting from each comparison copy, and compare
 all remaining XML plus exact SDDL. Do not inject an arbitrary element ordering
 or interpret a missing default as unsupported task policy.
 
+Corrected `413113a` / `36915717577`, native job `110549602153`, passed the
+complete native suite. A disabled task with its original owner still running
+reported registered state **4**, instance state **4**, enabled **false**, so the
+existing exact owner-binding helper required no relaxation. Stop/retire settled
+the original Job, and explicit restart after retirement failed with exactly
+`SCHED_E_TASK_DISABLED`. Preserve the full 23-job regression.
+
+The next production integration is durable managed-task stop authority, not a
+public enablement flag. Reuse the verified host/configuration, original task
+binding and scoped stop exchange. Persist exact original policy and operation
+intent before disabling; confirm only the enabled setting changed; retain the
+disabled policy and stop evidence while source/data work occurs. Re-enabling or
+retiring that authority must be separately state-authorized. Generic Node
+`requirePrivateMode` checks ownership/mode only on Linux, so Windows control
+receipts additionally need native ACL/file admission; do not reuse that helper
+as proof of Windows privacy. The existing installed host already creates its
+readiness with atomic private security, flush and non-overwriting publication.
+
+#### Task 5J: shared immutable native private receipt publication
+
+Use immutable per-phase receipts for Windows task maintenance rather than
+letting a Node writer append to a file retained read-only by native authority.
+First extract the installed host's already-tested publication mechanism into
+`WindowsPrivateFile.Publish(file, text)` and strengthen its parent admission.
+This also keeps readiness and later stop-intent receipts on one mechanism.
+
+- [ ] Add native `deployment-windows-private-file.ps1` cases and capture the
+  absent `Publish` method in Actions. Require exact bytes/hash and a retained
+  read-only capability; an existing receipt must never be replaced.
+  Oversized or invalid UTF-16 input must create no artifact. Foreign-access
+  and junction parents must be refused before writing any file into them.
+- [ ] Reuse the existing canonical-path, native handle metadata, final-path
+  and private owner/DACL helpers. Retain the original parent directory handle
+  without delete sharing across publication. Require a local canonical,
+  non-reparse private directory before creating the new file, and recheck
+  parent identity/path/security after publication. Directory last-write time
+  changes caused by adding the receipt are not identity changes.
+- [ ] Create a new randomized sibling with an explicit owner/SYSTEM protected
+  DACL at creation, write bounded strict UTF-8, flush to disk, then perform a
+  non-overwriting rename. Return the ordinary retained `WindowsPrivateFile`
+  after checking its expected digest and parent binding. Do not remove a
+  pre-existing target or silently discard failed-publication evidence.
+- [ ] Replace only the host's duplicate publication body with this shared API:
+  ```csharp
+  retained.Add(WindowsPrivateFile.Publish(file, JsonSerializer.Serialize(record)));
+  ```
+  Keep the same per-original-process readiness filename and exact record fields.
+- [ ] Require native file/publication and all installed-host scenarios, then
+  preserve full regression before composing durable task-stop phase receipts.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

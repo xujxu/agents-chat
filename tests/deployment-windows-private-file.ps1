@@ -31,6 +31,41 @@ try {
             'ContainerInherit, ObjectInherit', 'None', 'Allow'))
     }
     Set-Acl -LiteralPath $root -AclObject $acl
+    $publishedPath = Join-Path $root 'published.json'
+    $published = [Deployment.WindowsPrivateFile]::Publish($publishedPath, '{"phase":"intent"}')
+    try {
+        Assert ($published.ReadText() -ceq '{"phase":"intent"}' -and $published.Sha256 -ceq
+            (Get-FileHash -LiteralPath $publishedPath -Algorithm SHA256).Hash.ToLowerInvariant()) 'Published private receipt lost its exact bytes'
+        $collision = $false
+        try { [Deployment.WindowsPrivateFile]::Publish($publishedPath, '{"phase":"changed"}').Dispose() }
+        catch { $collision = ($_.Exception.GetBaseException().HResult -band 0xffff) -in @(80, 183) }
+        Assert ($collision -and $published.ReadText() -ceq '{"phase":"intent"}') 'Private publication overwrote existing evidence'
+        $sharing = $false
+        try { [IO.File]::WriteAllText($publishedPath, 'changed') }
+        catch { $sharing = ($_.Exception.GetBaseException().HResult -band 0xffff) -eq 32 }
+        Assert $sharing 'Private publication did not retain its original read-only handle'
+    } finally { $published.Dispose() }
+    $before = @(Get-ChildItem -LiteralPath $root).Count
+    Refuses { [Deployment.WindowsPrivateFile]::Publish((Join-Path $root 'oversized.json'), ('x' * 1048577)) } 'Private publication exceeds the size limit.'
+    $encoding = $false
+    try { [Deployment.WindowsPrivateFile]::Publish((Join-Path $root 'invalid.json'), [string][char]0xd800).Dispose() }
+    catch { $encoding = $_.Exception.GetBaseException() -is [Text.EncoderFallbackException] }
+    Assert ($encoding -and @(Get-ChildItem -LiteralPath $root).Count -eq $before) 'Invalid publication content created filesystem artifacts'
+    $publicDirectory = Join-Path $root 'public'
+    New-Item -ItemType Directory -Path $publicDirectory | Out-Null
+    $publicAcl = Get-Acl -LiteralPath $publicDirectory
+    $publicAcl.SetOwner($sid)
+    $publicAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+        [Security.Principal.SecurityIdentifier]::new('S-1-1-0'), 'Read', 'Allow'))
+    Set-Acl -LiteralPath $publicDirectory -AclObject $publicAcl
+    Refuses { [Deployment.WindowsPrivateFile]::Publish((Join-Path $publicDirectory 'intent.json'), '{}') } 'Private configuration permissions are unsupported.'
+    Assert (@(Get-ChildItem -LiteralPath $publicDirectory).Count -eq 0) 'Private publication wrote into an unsupported directory'
+    $publicationLink = Join-Path $root 'publication-link'
+    New-Item -ItemType Junction -Path $publicationLink -Target $publicDirectory | Out-Null
+    Refuses { [Deployment.WindowsPrivateFile]::Publish((Join-Path $publicationLink 'intent.json'), '{}') } 'Private publication directory is redirected.'
+    Assert (@(Get-ChildItem -LiteralPath $publicDirectory).Count -eq 0) 'Redirected publication admitted a write'
+    Remove-Item -LiteralPath $publicationLink -Force
+    Write-Output 'PASS: atomic private publication retains exact evidence, refuses replacement and validates content and parent before writing'
     $file = Join-Path $root 'runtime.json'
     $text = '{"version":1,"literal":"%n $HOME \" space"}'
     [IO.File]::WriteAllText($file, $text, [Text.UTF8Encoding]::new($false))
