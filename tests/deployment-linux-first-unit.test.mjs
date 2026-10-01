@@ -1,19 +1,19 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, readlink, rmdir, symlink, unlink, writeFile } from 'node:fs/promises';
+import { link, mkdir, readFile, readdir, readlink, rmdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { freshInstallationFixture } from './deployment-linux-first-fixture.mjs';
 import { inspectLinuxFirstInstall } from '../scripts/deployment/linux-first-install.mjs';
-import { acquireLock, writeState } from '../scripts/deployment/state.mjs';
+import { acquireLock, loadState, writeState } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { linuxNative, linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
 
-async function fixture(t, { phase = 'configuring' } = {}) {
+async function fixture(t, { phase = 'configuring', signal } = {}) {
   const f = await freshInstallationFixture(t);
-  const installation = await inspectLinuxFirstInstall(f);
+  const installation = await inspectLinuxFirstInstall({ ...f, signal });
   await mkdir(f.control, { mode: 0o700 });
   const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
   let previousPhase = null;
@@ -196,4 +196,44 @@ test('first-unit enablement cancellation retains its linked receipt and startup 
   assert.match(await readFile(f.inhibition, 'utf8'), /RefuseManualStart=yes/);
   await assert.rejects(linuxNative('/usr/bin/systemctl', ['--system', 'start', f.unit]));
   await assert.rejects(readFile(path.join(f.control, 'deployment.json')), { code: 'ENOENT' });
+});
+
+test('first-unit cleanup rechecks survive cancellation and phase changes without bypassing configuration identity', async t => {
+  const { createLinuxFirstUnit } = await import('../scripts/deployment/linux-first-unit.mjs');
+  const controller = new AbortController();
+  const f = await fixture(t, { signal: controller.signal });
+  const publication = await createLinuxFirstUnit({ ...f, signal: controller.signal });
+  t.after(() => publication.close());
+  await writeState(f.control, { ...await loadState(f.control), phase: 'activating', previousPhase: 'configuring' });
+  controller.abort();
+  await assert.rejects(publication.check(), { name: 'AbortError' });
+  await publication.checkSources({ signal: null });
+  await publication.checkInhibition({ signal: null });
+  await assert.rejects(publication.checkSources(), { name: 'AbortError' });
+  await writeFile(f.env, `${await readFile(f.env, 'utf8')}\n# changed configuration\n`);
+  await assert.rejects(publication.checkSources({ signal: null }), /configuration/i);
+  await assert.rejects(readFile(path.join(f.control, 'service-activation.ndjson')), { code: 'ENOENT' });
+  await assert.rejects(readFile(path.join(f.control, 'deployment.json')), { code: 'ENOENT' });
+});
+
+test('first-unit source authority remains distinct from the original inhibitor name during handoff', async t => {
+  const { createLinuxFirstUnit } = await import('../scripts/deployment/linux-first-unit.mjs');
+  const f = await fixture(t);
+  const publication = await createLinuxFirstUnit(f);
+  t.after(() => publication.close());
+  const held = `${f.inhibition}.${f.lock.token}.held`;
+  await link(f.inhibition, held);
+  await unlink(f.inhibition);
+  try {
+    await publication.checkSources();
+    await assert.rejects(publication.checkInhibition());
+  } finally {
+    await link(held, f.inhibition);
+    await unlink(held);
+  }
+  await publication.checkInhibition();
+  await writeState(f.control, {
+    ...await loadState(f.control), phase: 'activating', previousPhase: 'configuring', targetCommit: 'b'.repeat(40),
+  });
+  await assert.rejects(publication.checkSources(), /identity|changed/i);
 });

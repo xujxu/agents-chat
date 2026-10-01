@@ -5483,6 +5483,32 @@ First activation and retirement
 must subsequently account for this journal; this helper alone is not deploy
 acceptance and does not start the application.
 
+### First-unit activation handoff authority
+
+Preserve the strict configuring-phase `publication.check()` contract. Add
+separate read-only `checkSources({ signal })` and `checkInhibition({ signal })`
+methods for activation/cleanup: the former retains the original fragment,
+configuration, account, executables, operation binding, directories and worker
+evidence; the latter additionally requires the original inhibitor at its
+canonical name with identical private bytes and retained inode. Moving that
+inhibitor to the activation helper's held name must not invalidate the fragment
+authority. Restoring its original name may legitimately change link timestamps,
+but cannot substitute another inode or change its bytes.
+
+Fresh inspection rechecks accept a call-specific signal, retaining the original
+signal by default. Explicit `signal: null` permits ownership inspection during
+cleanup after cancellation; it does not waive any identity/configuration check
+or authorize service mutation. Read-only handoff checks accept later phases only
+within the original operation/target binding. The future activation adapter must
+still enforce the specific activation/retirement phase at every mutation.
+
+Native causal cases in `tests/deployment-linux-first-unit.test.mjs` cover an
+activating-phase recheck after abort, continued default cancellation refusal,
+changed configuration refusal, original held/name round-trip and changed target
+refusal. They create neither an activation journal nor acceptance evidence.
+Run through the existing Actions first-install job, followed by the full
+eighteen-job matrix; do not run these root/systemd fixtures locally.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
