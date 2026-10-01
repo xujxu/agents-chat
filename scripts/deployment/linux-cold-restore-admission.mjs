@@ -10,6 +10,7 @@ import { captureLockOwner, completedDeploymentPhase, loadState } from './state.m
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { readEvidenceJournal } from './evidence-journal.mjs';
+import { readLinuxServiceStopEvidence } from './linux-service-stop-evidence.mjs';
 import { retainActivationWorkers } from './service-activation-workers.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { canonicalWorkerDirectory, externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
@@ -18,7 +19,6 @@ import { coldRestoreLeaseNames, coldRestoreSnapshotDigest, inspectColdRestoreLea
 const identity = info => ({ dev: info.dev, ino: info.ino });
 const inside = (parent, file) => file === parent || file.startsWith(parent + path.sep);
 const parse = bytes => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-const stopPhases = ['intent', 'inhibited', 'stop-requested', 'stopped'];
 const activationPhases = ['intent', 'staged', 'uninhibited', 'start-requested', 'started',
   'activation-stop-intent', 'activation-stop-inhibited', 'activation-stop-requested', 'activation-stopped'];
 
@@ -60,7 +60,8 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
     await deadOwner();
     await retain(path.join(root, 'state.json'), 65536);
     const state = await loadState(root);
-    if (!state || state.project !== project || state.operationId !== lock.operationId || state.priorRuntime !== 'running'
+    if (!state || state.project !== project || state.operationId !== lock.operationId
+      || !['running', 'stopped'].includes(state.priorRuntime)
       || completedDeploymentPhase(state.phase) || ['preflight', 'restore-preflight'].includes(state.phase)) {
       throw new Error('Cold restore requires matching incomplete stopped-operation state.');
     }
@@ -80,20 +81,7 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
       throw new Error('Cold restore service evidence inventory is incomplete or foreign.');
     }
     await retain(path.join(root, 'service-stop.ndjson'), 256 * 1024);
-    const stops = await readEvidenceJournal({
-      root, project, name: 'service-stop.ndjson', maximumBytes: 256 * 1024, maximumRecords: 4,
-      validate(value, records) {
-        const { phase, ...base } = captureWorkerFields(value, ['version', 'lock', 'service', 'inhibition', 'phase'], 'cold stop receipt');
-        if (base.version !== 1 || !same(base.lock, lock) || phase !== stopPhases[records.length]
-          || base.service?.runtime?.project !== project
-          || base.inhibition !== `/etc/systemd/system/${base.service?.runtime?.unit}.d/90-agents-chat-deployment.conf`
-          || records.length && !same(base, {
-            version: records[0].version, lock, service: records[0].service, inhibition: records[0].inhibition,
-          })) throw new Error('Cold restore stop evidence does not bind the original lock and service.');
-        return value;
-      },
-    });
-    if (stops.length !== stopPhases.length) throw new Error('Cold restore requires a complete original stop receipt.');
+    const stops = await readLinuxServiceStopEvidence({ root, project, lock, state });
     assertColdRestoreNative(stops[0].service, expectedNative);
     let original = stops[0].service;
     let held = null;
@@ -109,6 +97,7 @@ export async function admitLinuxColdRestore({ control, project, backup, acceptDa
           if (base.version !== 1 || !same(base.lock, lock) || !same(base.prior, stops[0].service)
             || base.inhibition !== stops[0].inhibition || base.held !== `${base.inhibition}.${lock.token}.held`
             || !['deployment', 'prior-runtime', 'restore'].includes(base.purpose)
+            || state.priorRuntime === 'stopped' && base.purpose === 'prior-runtime'
             || base.state?.operationId !== lock.operationId || base.state?.project !== project
             || Object.keys(state).filter(key => !['phase', 'previousPhase', 'updatedAt', 'errorCode'].includes(key))
               .some(key => !same(state[key], base.state[key]))

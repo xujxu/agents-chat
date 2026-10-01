@@ -5,6 +5,7 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { captureLockOwner, loadState, validateState } from './state.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { workerEngineFiles } from './saved-worker-engine.mjs';
+import { captureColdActivationIntent } from './linux-cold-activation-state.mjs';
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory } from './worker-files.mjs';
 
 export const coldRetirementMarker = 'service-cold-retirement.json';
@@ -52,6 +53,7 @@ export function parseColdRetirement(bytes, control, project, backup) {
   validateState(oldState);
   validateState(intent?.state);
   validateState(state);
+  captureColdActivationIntent(intent, lease);
   const unit = ready?.runtime?.runtime?.unit;
   const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
   if (proof.version !== 1 || proof.project !== project || proof.backup !== path.resolve(backup)

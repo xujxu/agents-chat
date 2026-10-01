@@ -23,13 +23,13 @@ const files = [
   'linux-systemd.mjs', 'linux-runtime.mjs',
   'linux-service-inspection.mjs', 'linux-service-sources.mjs',
   'linux-inactive-service.mjs',
-  'linux-service-stop.mjs',
+  'linux-service-stop.mjs', 'linux-service-stop-evidence.mjs',
   'linux-service-activation.mjs', 'linux-activation-stop.mjs', 'service-activation-workers.mjs',
   'linux-service-retirement.mjs',
   'linux-recovery-admission.mjs',
   'linux-live-retirement.mjs',
   'linux-startup-link.mjs',
-  'linux-cold-retirement-proof.mjs',
+  'linux-cold-retirement-proof.mjs', 'linux-cold-activation-state.mjs',
 ];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 

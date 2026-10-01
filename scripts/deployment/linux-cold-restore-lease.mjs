@@ -6,6 +6,7 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { captureLockOwner } from './state.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
+import { createColdActivationState, captureColdActivationIntent } from './linux-cold-activation-state.mjs';
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
 
 export const coldRestoreLeaseNames = Object.freeze(['recovery-lock', 'cold-restore-staging']);
@@ -18,13 +19,6 @@ const filesReceipt = record => ({
   version: 1, phase: 'files-restored', project: record.project,
   operationId: record.lock.operationId, token: record.lock.token,
   backupId: record.backupId, snapshotSha256: record.snapshotSha256,
-});
-const activationState = record => ({
-  version: 1, operationId: record.lock.operationId, project: record.project, operation: 'restore',
-  phase: 'restore-activating', previousPhase: 'restoring', sourceCommit: record.state.sourceCommit,
-  targetCommit: record.targetCommit, backupId: record.backupId, priorRuntime: 'running',
-  runtimeIdentity: record.runtimeIdentity,
-  startedAt: record.owner.createdAt, updatedAt: record.owner.createdAt, errorCode: null,
 });
 
 export async function inspectColdRestoreLease({ control, project, backup, lock, state, retain, activation = false }) {
@@ -79,13 +73,7 @@ export async function inspectColdRestoreLease({ control, project, backup, lock, 
     if (hasActivation) {
       if (!receipt) throw new Error('Cold activation intent requires restored-file evidence.');
       const intentBytes = await read(path.join(directory, 'activation-intent.json'));
-      intent = captureWorkerFields(parse(intentBytes), ['version', 'owner', 'lock', 'state'], 'cold activation intent');
-      if (intent.version !== 1 || !same(intent.owner, owner) || !same(intent.lock, lock)
-        || !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(intent.state?.targetCommit ?? '')
-        || typeof intent.state?.runtimeIdentity !== 'string' || !/^[a-f0-9]{32}$/.test(intent.state.runtimeIdentity)
-        || !same(intent.state, activationState({
-          ...record, targetCommit: intent.state.targetCommit, runtimeIdentity: intent.state.runtimeIdentity,
-        }))) throw new Error('Cold activation intent does not match the retained lease.');
+      intent = captureColdActivationIntent(parse(intentBytes), { ...record, owner });
       if (hasReady) {
         ready = captureWorkerFields(parse(await read(path.join(directory, 'activation-ready.json'))),
           ['version', 'phase', 'owner', 'lock', 'backupId', 'snapshotSha256',
@@ -281,10 +269,11 @@ export async function claimLinuxColdRestore({ control: suppliedControl, project,
         await check(options);
         await admitted.armActivation(options);
         activationAttempted = true;
-        const state = activationState({ ...record, targetCommit: admitted.snapshot.source.commit,
-          runtimeIdentity: admitted.service.identity.runtime.invocationId });
+        const { version, state } = createColdActivationState({ ...record, targetCommit: admitted.snapshot.source.commit,
+          runtimeIdentity: record.state.priorRuntime === 'stopped' ? admitted.service.runtimeIdentity
+            : admitted.service.identity.runtime.invocationId });
         const file = path.join(guard, 'activation-intent.json');
-        const bytes = Buffer.from(`${JSON.stringify({ version: 1, owner, lock: admitted.lock, state })}\n`);
+        const bytes = Buffer.from(`${JSON.stringify({ version, owner, lock: admitted.lock, state })}\n`);
         await writeWorkerFile(file, bytes);
         await syncWorkerDirectory(guard);
         activationHandle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { lstat, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
@@ -28,6 +29,15 @@ for (const runtimeState of ['inactive', 'failed']) {
     const stateBytes = await readFile(statePath);
     await writeFile(statePath, JSON.stringify({ ...original, runtimeIdentity: `stopped:${'0'.repeat(64)}` }));
     await assert.rejects(admitLinuxColdRestore({ ...f, acceptDataLoss: true }), /identity|original|stop|state/i);
+    await writeFile(statePath, stateBytes);
+    const stopPath = path.join(f.control, 'service-stop.ndjson');
+    const stopBytes = await readFile(stopPath);
+    const running = stopBytes.toString().trim().split('\n').map(line => ({ ...JSON.parse(line), version: 1 }));
+    running.splice(2, 0, { ...running[0], phase: 'stop-requested' });
+    await writeFile(statePath, JSON.stringify({ ...original, priorRuntime: 'running', runtimeIdentity: f.unit }));
+    await writeFile(stopPath, running.map(value => JSON.stringify(value)).join('\n') + '\n');
+    await assert.rejects(admitLinuxColdRestore({ ...f, acceptDataLoss: true }), /original|running|stop/i);
+    await writeFile(stopPath, stopBytes);
     await writeFile(statePath, stateBytes);
     await assert.rejects(lstat(path.join(f.control, 'recovery-lock')), { code: 'ENOENT' });
     const admitted = await admitLinuxColdRestore({ ...f, acceptDataLoss: true });
@@ -58,6 +68,16 @@ for (const runtimeState of ['inactive', 'failed']) {
     assert.deepEqual(await readFile(path.join(f.backup, 'manifest.json')), backup);
     await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
     await assert.rejects(lstat(path.join(f.control, 'recovery-lock')), { code: 'ENOENT' });
+    assert.deepEqual(await completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 }), result);
+    const proofPath = path.join(f.control, 'cold-restore-complete.json');
+    const proofBytes = await readFile(proofPath);
+    const proof = JSON.parse(proofBytes);
+    proof.intent.version = 1;
+    proof.ready.activationSha256 = createHash('sha256').update(`${JSON.stringify(proof.intent)}\n`).digest('hex');
+    await writeFile(proofPath, JSON.stringify(proof));
+    await assert.rejects(completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 }), /activation|intent/i);
+    assert.deepEqual(await loadState(f.control), final);
+    await writeFile(proofPath, proofBytes);
     assert.deepEqual(await completeLinuxColdRestore({ ...f, waitSeconds: 10, timeoutSeconds: 90 }), result);
   });
 }

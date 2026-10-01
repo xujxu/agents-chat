@@ -6136,6 +6136,32 @@ Implementation sequence for this existing approved recovery scope:
 - [ ] Push implementation; require the native cold gate and all 20 workflow
   jobs to pass without extending deadlines or dropping existing cases.
 
+Maintenance baseline `4c1b31d` / `36860809839` finished all 20 jobs
+successfully. Cold causal `55ba1d1` / `36861965468`, native job
+`110372329251`, passed observer/maintenance gates and failed all three new
+cold scenarios. Both inline cases reached the actual running-only admission
+guard after controller death; the saved entry refused recovery as expected.
+That characterized run was cancelled, not counted as full acceptance.
+Additional test-first `312e1e4` / `36863374044` was pushed only after the
+preceding causal run started.
+
+The implementation now shares stop receipt profiles and exact versioned cold
+activation intent construction/decoding. Both dead-owner entry paths accept
+the matching stopped history, while a fabricated four-phase version-1 receipt
+cannot reinterpret a zero-PID observation as originally running. Terminal
+proof parsing also validates the intent against its lease, including after
+service journals have been retired. Both new helpers are included in the
+saved worker inventory, which supplies the recovery inventory transitively.
+Native tests additionally cover coherent intent-version downgrades in final
+proofs, without relying on a stale checksum alone to reject the change.
+Production acceptance remains pending Actions.
+
+Additional causal `312e1e4` / `36863374044` confirmed the missing activation
+state helper in Linux contracts (`110373394322`) and the same running-only
+admission in all four native cases (`110373394436`), including the killed
+restorer child. Cancel this known-failing run after capturing those results;
+its cancellation is not a regression success.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

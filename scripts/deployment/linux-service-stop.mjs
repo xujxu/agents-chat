@@ -4,6 +4,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { inspectLinuxService } from './linux-service-inspection.mjs';
 import { inspectLinuxInactiveService } from './linux-inactive-service.mjs';
+import { linuxServiceStopProfile } from './linux-service-stop-evidence.mjs';
 import { activateLinuxService } from './linux-service-activation.mjs';
 import { linuxNative } from './linux-systemd.mjs';
 import { assertLockOwner, captureLockOwner, loadState, requireNoServiceMaintenance } from './state.mjs';
@@ -55,8 +56,7 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
       throw new Error('Service stop requires matching stopped-phase transaction admission.');
     }
     const initiallyStopped = initial.priorRuntime === 'stopped';
-    const phases = initiallyStopped ? ['intent', 'inhibited', 'stopped']
-      : ['intent', 'inhibited', 'stop-requested', 'stopped'];
+    const { version, phases } = linuxServiceStopProfile(initial.priorRuntime);
     const checkAuthority = async ({ retiring = false } = {}) => {
       if (closed || poisoned) throw new Error('Service stop authority is closed or poisoned.');
       await assertLockOwner(root, lock);
@@ -87,7 +87,7 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
     const inhibition = `/etc/systemd/system/${unit}.d/90-agents-chat-deployment.conf`;
     const parent = path.dirname(inhibition);
     const bytes = Buffer.from(`[Unit]\nRefuseManualStart=yes\nConditionPathExists=!${inhibition}\n[Service]\nRestart=no\n`);
-    const base = Object.freeze({ version: initiallyStopped ? 2 : 1, lock, service: service.identity, inhibition });
+    const base = Object.freeze({ version, lock, service: service.identity, inhibition });
     journal = await createEvidenceJournal({
       root, project, name: 'service-stop.ndjson', maximumBytes: 256 * 1024, maximumRecords: 4,
       validate(value, records) {

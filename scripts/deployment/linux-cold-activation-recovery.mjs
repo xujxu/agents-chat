@@ -9,6 +9,8 @@ import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { canonicalWorkerDirectory, externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 import { readEvidenceJournal } from './evidence-journal.mjs';
+import { readLinuxServiceStopEvidence } from './linux-service-stop-evidence.mjs';
+import { linuxInactiveObservationId } from './linux-inactive-service.mjs';
 import { retainActivationWorkers } from './service-activation-workers.mjs';
 import { inspectLinuxService } from './linux-service-inspection.mjs';
 import { inspectLinuxConfiguration, inspectLinuxRestoredConfiguration, inspectLinuxRestoreConfiguration } from './linux-configuration.mjs';
@@ -20,7 +22,6 @@ import { runStage } from './stage-runner.mjs';
 const identity = info => ({ dev: info.dev, ino: info.ino });
 const parse = bytes => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
 const inside = (parent, file) => file === parent || file.startsWith(parent + path.sep);
-const stopPhases = ['intent', 'inhibited', 'stop-requested', 'stopped'];
 const activationPhases = ['intent', 'staged', 'uninhibited', 'start-requested', 'started'];
 
 export async function inspectLinuxColdActivation({ control, project, backup, waitSeconds = 120, timeoutSeconds = 1800, signal }) {
@@ -64,7 +65,7 @@ export async function inspectLinuxColdActivation({ control, project, backup, wai
       await retain(path.join(root, 'state.json'));
       const state = await loadState(root);
       if (lock.project !== project || state?.project !== project || state?.operationId !== lock.operationId
-        || state.priorRuntime !== 'running' || completedDeploymentPhase(state.phase)
+        || !['running', 'stopped'].includes(state.priorRuntime) || completedDeploymentPhase(state.phase)
         || ['preflight', 'restore-preflight'].includes(state.phase)) {
         throw new Error('Cold activation recovery state does not bind the original incomplete operation.');
       }
@@ -78,21 +79,7 @@ export async function inspectLinuxColdActivation({ control, project, backup, wai
       };
       await deadOwners();
       await retain(path.join(root, 'service-stop.ndjson'));
-      const stops = await readEvidenceJournal({
-        root, project, name: 'service-stop.ndjson', maximumBytes: 256 * 1024, maximumRecords: 4,
-        validate(value, records) {
-          const fields = captureWorkerFields(value, ['version', 'lock', 'service', 'inhibition', 'phase'], 'cold original stop');
-          const { phase, ...base } = fields;
-          if (base.version !== 1 || !same(base.lock, lock) || base.service?.runtime?.project !== project
-            || phase !== stopPhases[records.length]
-            || base.inhibition !== `/etc/systemd/system/${base.service?.runtime?.unit}.d/90-agents-chat-deployment.conf`
-            || records.length && !same(base, { version: 1, lock, service: records[0].service, inhibition: records[0].inhibition })) {
-            throw new Error('Cold original stop evidence changed.');
-          }
-          return fields;
-        },
-      });
-      if (stops.length !== stopPhases.length) throw new Error('Cold activation requires complete original stop evidence.');
+      const stops = await readLinuxServiceStopEvidence({ root, project, lock, state });
       const prior = stops[0].service;
       const inhibition = stops[0].inhibition;
       const held = `${inhibition}.${lock.token}.held`;
@@ -111,7 +98,8 @@ export async function inspectLinuxColdActivation({ control, project, backup, wai
           return fields;
         },
       });
-      if (started.length !== activationPhases.length || intent.state.runtimeIdentity !== prior.runtime.invocationId) {
+      const originalIdentity = state.priorRuntime === 'stopped' ? linuxInactiveObservationId(prior) : prior.runtime.invocationId;
+      if (started.length !== activationPhases.length || intent.state.runtimeIdentity !== originalIdentity) {
         throw new Error('Cold activation journal is incomplete or binds another generation.');
       }
       const inhibitor = Buffer.from(`[Unit]\nRefuseManualStart=yes\nConditionPathExists=!${inhibition}\n[Service]\nRestart=no\n`);
