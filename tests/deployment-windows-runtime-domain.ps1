@@ -9,12 +9,19 @@ Set-StrictMode -Version Latest
 $source = if ($Server) { $HelperRoot } else { Join-Path $PSScriptRoot '../scripts/deployment' }
 Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
     (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'))
+if (-not $Server) { . (Join-Path $source 'windows-task-owner-binding.ps1') }
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
 function Await($Task) {
     Assert ($Task.Wait(15000)) 'Native runtime operation timed out'
     return $Task.GetAwaiter().GetResult()
+}
+function Refuses-Binding([hashtable]$Arguments) {
+    $refused = $false
+    try { Get-AgentsChatTaskOwnerBinding @Arguments | Out-Null }
+    catch { $refused = $_.Exception.Message -match '^Task owner binding refused: [a-z-]+\.$' }
+    Assert $refused 'Changed or unrelated task owner binding was accepted'
 }
 if ($Server) {
     $domain = $null
@@ -141,6 +148,33 @@ if (process.argv[2] === 'child') {
         $parentPid = (Get-CimInstance Win32_Process -Filter "ProcessId=$($owner.Id)").ParentProcessId
         Write-Output "TASK-OWNER-PROBE: owner=$($owner.Id) engine=$nativeEnginePid parent=$parentPid"
         Assert ($nativeEnginePid -eq $owner.Id) 'Native task instance engine does not directly identify the retained runtime owner'
+        $registeredTask = $scheduler.GetFolder('\').GetTask($taskName)
+        $bindingInput = @{
+            TaskName=$taskName; OwnerPid=$owner.Id; OwnerIdentity=$identity.identity
+            Definition=[string]$registeredTask.Xml
+            SecurityDescriptor=[string]$registeredTask.GetSecurityDescriptor(7)
+        }
+        $binding = Get-AgentsChatTaskOwnerBinding @bindingInput
+        Assert ($binding.status -eq 'task-owner-bound' -and -not $binding.runtimeAuthority -and
+            $binding.instanceGuid -ceq ([guid]$instance.InstanceGuid).ToString('D') -and
+            $binding.ownerPid -eq $owner.Id -and $binding.ownerIdentity -ceq $identity.identity -and
+            $binding.principalSid -ceq $sid.Value -and $binding.sessionId -eq 0) 'Native binding lost the original task, account or process identity'
+        if ($mode -eq 'stop') {
+            $changed = $bindingInput.Clone()
+            $changed.OwnerIdentity = "$($owner.Id):1"
+            Refuses-Binding $changed
+            $changed = $bindingInput.Clone()
+            $changed.OwnerPid = $PID
+            $changed.OwnerIdentity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            Refuses-Binding $changed
+            $changed = $bindingInput.Clone()
+            $changed.Definition += ' '
+            Refuses-Binding $changed
+            $changed = $bindingInput.Clone()
+            $changed.SecurityDescriptor += ' '
+            Refuses-Binding $changed
+            Write-Output 'PASS: native task-owner binding refuses stale processes, unrelated live owners and changed policy'
+        }
         $member = [Diagnostics.Process]::GetProcessById([int](Get-Content -LiteralPath (Join-Path $root 'writer-pid') -Raw))
         $null = $member.Handle
         $literal = Get-Content -LiteralPath (Join-Path $root 'literal.json') -Raw | ConvertFrom-Json
@@ -193,11 +227,18 @@ if (process.argv[2] === 'child') {
             Assert ($again.phase -eq 'stopped' -and $again.members.Count -eq 0) 'Original empty Job evidence was lost'
             $again = Request $identity $generation 'stop' | ConvertFrom-Json
             Assert ($again.phase -eq 'stopped' -and $again.members.Count -eq 0) 'Repeated stop lost original settled evidence'
+            $stoppedBinding = Get-AgentsChatTaskOwnerBinding @bindingInput
+            Assert ($stoppedBinding.instanceGuid -ceq $binding.instanceGuid) 'Domain stop lost the original task-owner instance'
+            $changedTask = Get-ScheduledTask -TaskName $taskName
+            $changedTask.Description = 'changed task-owner fixture policy'
+            Set-ScheduledTask -InputObject $changedTask | Out-Null
+            Refuses-Binding $bindingInput
             Assert ((Request $identity $generation 'retire') -ceq 'retired') 'Original Job could not retire after settlement'
         } else {
             $owner.Kill()
         }
         Assert ($owner.WaitForExit(15000)) 'Task-side original owner did not exit'
+        Refuses-Binding $bindingInput
         Assert ($member.WaitForExit(15000)) 'Detached writer survived original Job settlement or owner death'
         $length = (Get-Item -LiteralPath (Join-Path $root 'writes')).Length
         Start-Sleep -Milliseconds 300

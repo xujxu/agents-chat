@@ -6758,6 +6758,31 @@ whether the proposed **direct task-owner** binding is actually available on the
 native runner. If it differs, retain the failure and design a supported binding
 instead of adopting an arbitrary descendant or accepting a name-only match.
 
+Full private-file run `50423d5` / `36903793075` completed **23/23**.
+Native owner-binding gate `1307d76` / `36904398034`, job `110517588772`,
+passed both scenarios: owner/engine were **7228/7228** and **5208/5208**,
+with parent 1908 in both. Thus direct task-instance-to-original-owner binding is
+available on this runner; parent PID alone would not distinguish the owners.
+Preserve its full regression.
+
+#### Task 5G: read-only retained task-owner binding
+
+- [ ] Extend the same actual S4U scenarios to call
+  `Get-AgentsChatTaskOwnerBinding` from `windows-task-owner-binding.ps1`.
+  Bind exact retained task XML/SDDL to the one running instance, retained owner
+  PID/start-time, actual process account/session and declared executable.
+- [ ] Require stale identity, unrelated live process, changed expected XML/SDDL,
+  actual task-definition mutation and exited-owner refusals. A stopped Job with
+  its owner still alive must retain the same task instance binding.
+- [ ] Capture the missing helper causal failure in Actions before implementation.
+- [ ] Implement two stable read-only native observations while retaining the
+  original process handle. Require elevation, exact root-folder task identity,
+  one direct Exec action, supported S4U/Interactive principal, exactly one running
+  instance, direct engine/owner PID equality and actual account/image agreement.
+  Return explicit `runtimeAuthority:false`: this binding is not app health,
+  whole-service quiescence or permission to modify the task.
+- [ ] Preserve all native scenarios and the full platform regression.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
