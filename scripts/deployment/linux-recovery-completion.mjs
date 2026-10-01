@@ -7,6 +7,7 @@ import { captureLockOwner, loadState } from './state.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { inspectLinuxService } from './linux-service-inspection.mjs';
+import { retainLinuxStartupLink } from './linux-startup-link.mjs';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
@@ -86,8 +87,12 @@ export async function finishServiceRecovery({ control, project, operationId, par
   };
   const service = await inspectLinuxService({ unit: original.runtime.runtime.unit, project,
     npm: original.runtime.executables[0].file, node: original.runtime.executables[1].file });
+  let startup;
   try {
     if (!same(service.identity, original.runtime)) throw new Error('Completed service generation changed.');
+    if (original.version === 4) {
+      startup = await retainLinuxStartupLink({ unit: original.runtime.runtime.unit, expected: original.startup });
+    }
     const lockSteps = [
       { file: original.lockFile.file, entry: original.lockFile },
       { file: lockDirectory, directory: original.lockIdentity },
@@ -110,6 +115,8 @@ export async function finishServiceRecovery({ control, project, operationId, par
       if (observed === leaseOwner.controllerIdentity
         && !(ownLease && leaseOwner.pid === process.pid)) throw new Error('Recovery lease owner still alive.');
       await service.check();
+      await startup?.check();
+      if (original.version === 4) await checkFile(original.deploymentFile);
       const parent = await canonicalWorkerDirectory(path.dirname(original.inhibition));
       if (!same(identity(parent.info), original.heldParentIdentity) || parent.info.uid !== 0 || parent.info.mode & 0o022) {
         throw new Error('Completed service maintenance directory changed.');
@@ -153,5 +160,9 @@ export async function finishServiceRecovery({ control, project, operationId, par
     }
     await check();
     return { status: 'service-retired', operationId, restored: false };
-  } finally { await service.close(); }
+  } finally {
+    const results = await Promise.allSettled([service.close(), startup?.close()]);
+    const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+    if (errors.length) throw new AggregateError(errors, 'Service completion authority cleanup failed.');
+  }
 }

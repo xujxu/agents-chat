@@ -5,17 +5,22 @@ import path from 'node:path';
 import { loadState } from './state.mjs';
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
+import { retainLinuxStartupLink } from './linux-startup-link.mjs';
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // Only live activation authority may authorize this one-shot deletion inventory.
-export async function retireLinuxService({ control, lock, held, runtime, verify, verifyEvidence, workerInventory, closeAuthority }) {
+export async function retireLinuxService({ control, lock, held, runtime, verify, verifyEvidence, workerInventory, closeAuthority, startup }) {
   const handles = [];
   const errors = [];
+  let retainedStartup;
   try {
     const state = await verify();
+    const fresh = state.operation === 'deploy' && state.priorRuntime === 'absent' && state.phase === 'accepted';
+    if (fresh !== (startup !== undefined)) throw new Error('First retirement requires its persistent startup identity.');
+    if (fresh) retainedStartup = await retainLinuxStartupLink({ unit: runtime.runtime.unit, expected: startup });
     const root = await canonicalWorkerDirectory(control, { privateMode: true });
     const lockDirectory = await canonicalWorkerDirectory(path.join(control, 'lock'), { privateMode: true });
     const parent = path.dirname(held);
@@ -45,11 +50,15 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
     };
     const stateFile = await capture(path.join(control, 'state.json'));
     const lockFile = await capture(path.join(control, 'lock', 'owner.json'));
+    const deploymentFile = fresh ? await capture(path.join(control, 'deployment.json')) : null;
     const entries = [];
-    for (const file of [held, path.join(control, 'service-activation.ndjson'), path.join(control, 'service-stop.ndjson')]) {
+    for (const file of [held, path.join(control, 'service-activation.ndjson'),
+      ...(fresh ? ['service-install.ndjson', 'service-enablement.ndjson'] : ['service-stop.ndjson'])
+        .map(name => path.join(control, name))]) {
       entries.push(await capture(file));
     }
     const workerSet = await workerInventory();
+    if (fresh && !workerSet) throw new Error('First retirement requires its sealed worker inventory.');
     const workerEntries = [];
     if (workerSet) {
       for (const file of workerSet.files) workerEntries.push(await capture(file));
@@ -59,6 +68,7 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
     const remaining = new Map(entries.map(entry => [entry.file, entry]));
     let marker;
     const check = async () => {
+      await retainedStartup?.check();
       if (!same(await verify(), state) || !same(await loadState(control), state)) {
         throw new Error('Application acceptance changed during service retirement.');
       }
@@ -73,6 +83,7 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
       }
       await checkFile(stateFile);
       await checkFile(lockFile);
+      if (deploymentFile) await checkFile(deploymentFile);
       for (const entry of workerEntries) await checkFile(entry);
       if (workerSet) {
         const engine = path.join(control, 'worker-engine');
@@ -96,10 +107,11 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
     await check();
     const serialize = ({ handle, ...entry }) => entry;
     await writeWorkerFile(markerPath, Buffer.from(`${JSON.stringify({
-      version: 3, lock, runtime, state, stateFile: serialize(stateFile), lockFile: serialize(lockFile),
+      version: fresh ? 4 : 3, lock, runtime, state, stateFile: serialize(stateFile), lockFile: serialize(lockFile),
       controlIdentity: identity(root.info), lockIdentity: identity(lockDirectory.info),
       heldParentIdentity: identity(parentInfo), files: entries.map(serialize),
       workers: workerSet && { ...workerSet, files: workerEntries.map(serialize) },
+      ...(fresh ? { startup: retainedStartup.identity, deploymentFile: serialize(deploymentFile) } : {}),
     })}\n`));
     await syncWorkerDirectory(control);
     marker = await capture(markerPath);
@@ -120,7 +132,7 @@ export async function retireLinuxService({ control, lock, held, runtime, verify,
     await rename(markerPath, livePath);
     await syncWorkerDirectory(control);
   } catch (error) { errors.push(error); }
-  const closed = await Promise.allSettled(handles.map(handle => handle.close()));
+  const closed = await Promise.allSettled([...handles.map(handle => handle.close()), retainedStartup?.close()]);
   errors.push(...closed.filter(result => result.status === 'rejected').map(result => result.reason));
   if (errors.length) throw journalUncertain(errors.length === 1 ? errors[0] : new AggregateError(errors));
 }

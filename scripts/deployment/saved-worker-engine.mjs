@@ -22,6 +22,7 @@ export const workerEngineFiles = Object.freeze([
   'linux-service-retirement.mjs',
   'linux-recovery-admission.mjs',
   'linux-live-retirement.mjs',
+  'linux-startup-link.mjs',
   'linux-cold-retirement-proof.mjs',
 ]);
 const files = workerEngineFiles;

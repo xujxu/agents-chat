@@ -113,16 +113,24 @@ for (const phase of ['service-intent', 'service-unlink-1', 'worker-intent', 'liv
   });
 }
 
-for (const phase of ['service-intent', 'live-lock-owner']) {
-  test(`first-install recovery refuses a same-target replacement startup link at ${phase}`, async t => {
-    const f = await interruptedFirst(t, phase);
-    await f.kill();
-    const target = await readlink(f.startupLink);
-    await unlink(f.startupLink);
-    await symlink(target, f.startupLink);
-    const before = (await readdir(f.control)).sort();
-    await assert.rejects(f.recover());
-    assert.deepEqual((await readdir(f.control)).sort(), before);
-    assert.equal(await readlink(f.startupLink), target);
-  });
+for (const phase of ['service-intent', 'live-lock-owner', 'completion']) {
+  for (const change of ['startup-link', 'deployment-receipt']) {
+    test(`first-install recovery refuses changed ${change} at ${phase}`, async t => {
+      const f = await interruptedFirst(t, phase === 'completion' ? 'live-lock-owner' : phase);
+      await f.kill();
+      if (phase === 'completion') await f.recover();
+      const target = await readlink(f.startupLink);
+      if (change === 'startup-link') {
+        await unlink(f.startupLink);
+        await symlink(target, f.startupLink);
+      } else {
+        const receipt = path.join(f.control, 'deployment.json');
+        await writeFile(receipt, Buffer.concat([await readFile(receipt), Buffer.from('\n')]));
+      }
+      const before = (await readdir(f.control)).sort();
+      await assert.rejects(f.recover());
+      assert.deepEqual((await readdir(f.control)).sort(), before);
+      assert.equal(await readlink(f.startupLink), target);
+    });
+  }
 }

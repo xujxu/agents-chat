@@ -183,7 +183,7 @@ export async function activateLinuxService(context, purpose) {
               return accepted;
             };
             const verifyEvidence = async () => {
-              await context.checkStopJournal();
+              await context.checkMaintenanceEvidence();
               await journal.check();
               const current = await lstat(held);
               if (current.dev !== initial.dev || current.ino !== initial.ino || current.nlink !== 1
@@ -196,7 +196,7 @@ export async function activateLinuxService(context, purpose) {
               await verifyEvidence();
               await retireLinuxService({ control, lock, held, runtime: active.identity, verify, verifyEvidence,
                 workerInventory: workers.retirementInventory,
-                closeAuthority: context.closeForRetirement });
+                closeAuthority: context.closeForRetirement, startup: context.startup });
             } catch (error) { throw journalUncertain(error); }
           },
         });

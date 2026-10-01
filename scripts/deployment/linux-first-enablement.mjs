@@ -1,18 +1,13 @@
-import { constants } from 'node:fs';
-import { lstat, mkdir, open, readlink, symlink } from 'node:fs/promises';
+import { lstat, mkdir, symlink } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
 import { assertLockOwner, captureLockOwner, loadState } from './state.mjs';
 import { createEvidenceJournal } from './evidence-journal.mjs';
 import { canonicalWorkerDirectory, syncWorkerDirectory } from './worker-files.mjs';
 import { linuxNative, linuxSystemdProperties } from './linux-systemd.mjs';
+import { retainLinuxStartupLink } from './linux-startup-link.mjs';
 
-// Linux O_PATH retains the symlink itself with O_NOFOLLOW, preventing inode reuse.
-const pathOnly = 0x200000;
 const directoryIdentity = info => ({ dev: info.dev, ino: info.ino, uid: info.uid, gid: info.gid, mode: info.mode });
-const linkIdentity = info => Object.fromEntries([
-  'dev', 'ino', 'uid', 'gid', 'mode', 'nlink', 'size', 'mtimeNs', 'ctimeNs', 'birthtimeNs',
-].map(name => [name, String(info[name])]));
 const phases = ['intent', 'linked', 'enabled'];
 
 export async function enableLinuxFirstUnit({ publication, control, lock: supplied, signal }) {
@@ -38,13 +33,13 @@ export async function enableLinuxFirstUnit({ publication, control, lock: supplie
   const target = path.join(root, unit);
   let parentInfo;
   let journal;
-  let linkHandle;
+  let startup;
   let originalLink;
   let closed = false;
   const close = async () => {
     if (closed) return;
     closed = true;
-    const results = await Promise.allSettled([linkHandle?.close(), journal?.close()]);
+    const results = await Promise.allSettled([startup?.close(), journal?.close()]);
     const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
     if (errors.length) throw new AggregateError(errors, 'First-unit enablement cleanup failed; retain evidence.');
   };
@@ -68,16 +63,7 @@ export async function enableLinuxFirstUnit({ publication, control, lock: supplie
       }
       await checkDirectory(root, rootInfo);
       if (parentInfo) await checkDirectory(parent, parentInfo);
-      if (originalLink) {
-        const named = await lstat(startupLink, { bigint: true });
-        const retained = await linkHandle.stat({ bigint: true });
-        if (!named.isSymbolicLink() || named.uid !== 0n || named.nlink !== 1n || retained.nlink !== 1n
-          || !same(linkIdentity(named), originalLink) || !same(linkIdentity(retained), originalLink)
-          || await readlink(startupLink) !== target
-          || !same(linkIdentity(await lstat(startupLink, { bigint: true })), originalLink)) {
-          throw new Error('Original first-unit startup link changed or was replaced.');
-        }
-      }
+      await startup?.check();
       await journal?.check();
       checkSignal?.throwIfAborted();
     };
@@ -118,9 +104,8 @@ export async function enableLinuxFirstUnit({ publication, control, lock: supplie
     }
     await check();
     await symlink(target, startupLink);
-    const named = await lstat(startupLink, { bigint: true });
-    linkHandle = await open(startupLink, pathOnly | constants.O_NOFOLLOW);
-    originalLink = linkIdentity(named);
+    startup = await retainLinuxStartupLink({ unit });
+    originalLink = startup.identity.link;
     await syncWorkerDirectory(parent);
     await record('linked');
     await check();

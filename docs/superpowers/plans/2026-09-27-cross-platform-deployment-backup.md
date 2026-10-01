@@ -5547,7 +5547,8 @@ receipts. A separate native case cancels after the staged inhibitor receipt and
 requires intent/staged/reinhibited evidence with no startup or acceptance.
 Both run only in Actions. Application readiness, acceptance receipts and the
 fresh-install retirement/recovery inventory remain separate follow-on gates;
-this adapter returns only `active-unverified` and does not expose retirement.
+this initial boundary returns `active-unverified`; accepted retirement is
+implemented in the separate boundary below.
 
 Handoff implementation `8fc4368` / Actions `36822115316` passed all eighteen
 jobs, including eleven native first-install cases. Activation causal `2e68f32` /
@@ -5600,7 +5601,9 @@ Extend the shared service retirement writer with an explicit version 4 first
 installation inventory: held inhibitor, activation journal, installation
 journal and enablement journal. Do not manufacture or rename a stop journal.
 Version 4 binds the persistent startup-link identity as `startup` and requires
-the genuine sealed worker inventory. Existing version 2/3 inventories and
+the genuine sealed worker inventory. It also retains a non-deletion
+`deploymentFile` descriptor binding the original published receipt bytes and
+inode across live/cold cleanup. Existing version 2/3 inventories and
 restore-specific retirement proofs keep their current contracts.
 
 Extract startup-link retention into `linux-startup-link.mjs`, shared by first
@@ -5636,7 +5639,16 @@ recover with the saved external entry. Require unchanged accepted state and
 deployment receipt, the same enabled runtime generation, idempotent completion
 and only the expected remaining control files. Same-target startup-link
 replacement must refuse recovery without deleting evidence, both before
-service deletion and during live unlock.
+service deletion, during live unlock and at final recovery completion. Changed
+deployment receipt bytes must refuse cleanup at those same boundaries.
+
+Activation/readiness correction `b2c0655` / Actions `36826279155` and runtime
+environment refinement `167b65a` / `36827782744` both passed all eighteen jobs.
+Retirement causal `9cc5351` / `36829349378` reached the actual ready-application
+case and failed only on the missing `active.retire` method. The shared startup
+retention, version 4 producer/readers and native cold fault cases now await
+implementation validation. No public first deploy or real-host acceptance is
+implied by these internal boundaries.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

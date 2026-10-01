@@ -7,6 +7,7 @@ import { captureLockOwner, loadState } from './state.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { inspectLinuxService } from './linux-service-inspection.mjs';
+import { captureLinuxStartupIdentity, retainLinuxStartupLink } from './linux-startup-link.mjs';
 import { workerEngineFiles } from './saved-worker-engine.mjs';
 import { acquireRecoveryAdmission } from './linux-recovery-admission.mjs';
 import { validateWorkerRetirementHandoff } from './linux-worker-retirement-handoff.mjs';
@@ -41,22 +42,28 @@ function intent(bytes, control, project, operationId) {
   const parsed = parse(bytes);
   const value = captureWorkerFields(parsed, [
     'version', 'lock', 'runtime', 'state', 'stateFile', 'lockFile',
-    'controlIdentity', 'lockIdentity', 'heldParentIdentity', 'files', ...(parsed?.version === 3 ? ['workers'] : []),
+    'controlIdentity', 'lockIdentity', 'heldParentIdentity', 'files', ...([3, 4].includes(parsed?.version) ? ['workers'] : []),
+    ...(parsed?.version === 4 ? ['startup', 'deploymentFile'] : []),
   ], 'service retirement intent');
   const lock = captureLockOwner(value.lock);
   const unit = value.runtime?.runtime?.unit;
-  if (![2, 3].includes(value.version) || lock.project !== project || lock.operationId !== operationId
+  const fresh = value.version === 4;
+  if (![2, 3, 4].includes(value.version) || lock.project !== project || lock.operationId !== operationId
     || typeof unit !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,180}\.service$/.test(unit)
     || value.runtime.runtime.project !== project || !Array.isArray(value.runtime.executables)
     || value.runtime.executables.length !== 2 || !value.runtime.configuration
-    || !Array.isArray(value.files) || value.files.length !== 3) {
+    || !Array.isArray(value.files) || value.files.length !== (fresh ? 4 : 3)
+    || fresh && (value.state?.operation !== 'deploy' || value.state.priorRuntime !== 'absent'
+      || value.state.phase !== 'accepted' || value.workers === null)) {
     throw new Error('Unsupported or foreign service retirement intent.');
   }
   const inhibition = `/etc/systemd/system/${unit}.d/90-agents-chat-deployment.conf`;
   const files = [`${inhibition}.${lock.token}.held`,
-    path.join(control, 'service-activation.ndjson'), path.join(control, 'service-stop.ndjson')];
+    path.join(control, 'service-activation.ndjson'),
+    ...(fresh ? ['service-install.ndjson', 'service-enablement.ndjson'] : ['service-stop.ndjson'])
+      .map(name => path.join(control, name))];
   let workers = null;
-  if (value.version === 3 && value.workers !== null) {
+  if ([3, 4].includes(value.version) && value.workers !== null) {
     const fields = captureWorkerFields(value.workers, ['manifestSha256', 'engineIdentity', 'files'], 'service worker handoff');
     if (typeof fields.manifestSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(fields.manifestSha256)
       || !Array.isArray(fields.files) || fields.files.length > workerEngineFiles.length + 34) {
@@ -80,6 +87,8 @@ function intent(bytes, control, project, operationId) {
     controlIdentity: directoryIdentity(value.controlIdentity),
     lockIdentity: directoryIdentity(value.lockIdentity),
     heldParentIdentity: directoryIdentity(value.heldParentIdentity),
+    ...(fresh ? { startup: captureLinuxStartupIdentity(value.startup, unit),
+      deploymentFile: fileEntry(value.deploymentFile, path.join(control, 'deployment.json')) } : {}),
   };
 }
 
@@ -97,6 +106,7 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
   const handles = [];
   const errors = [];
   let service;
+  let startup;
   let result;
   try {
     if (process.platform !== 'linux' || process.getuid() !== 0) throw new Error('Service recovery requires a Linux root controller.');
@@ -166,6 +176,7 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
     }
     await retain(marker);
     await retain(original.stateFile);
+    if (original.version === 4) await retain(original.deploymentFile);
     const lockPresent = await recoveryPathExists(path.join(root, 'lock'));
     const ownerPresent = await recoveryPathExists(original.lockFile.file);
     if (!live || ownerPresent) await retain(original.lockFile);
@@ -210,6 +221,9 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
     service = await inspectLinuxService({ unit: original.runtime.runtime.unit, project,
       npm: original.runtime.executables[0].file, node: original.runtime.executables[1].file });
     if (!same(service.identity, original.runtime)) throw new Error('Original verified service generation or policy changed.');
+    if (original.version === 4) {
+      startup = await retainLinuxStartupLink({ unit: original.runtime.runtime.unit, expected: original.startup });
+    }
     let guard;
     let lease;
     let leaseOwner;
@@ -240,6 +254,8 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
       await admission.check();
       await deadOwner();
       await service.check();
+      await startup?.check();
+      if (original.version === 4) await checkFile(original.deploymentFile);
       await checkDirectory(root, original.controlIdentity);
       if (!live || lockPresent) await checkDirectory(path.join(root, 'lock'), original.lockIdentity);
       else await absent(path.join(root, 'lock'));
@@ -348,7 +364,7 @@ async function recoverAdmitted({ control, project, operationId, admission }) {
     retained.clear();
     result = await finishServiceRecovery({ control: root, project, operationId, parseIntent: intent, admission, ownLease });
   } catch (error) { errors.push(error); }
-  const closed = await Promise.allSettled([...handles.map(handle => handle.close()), service?.close()]);
+  const closed = await Promise.allSettled([...handles.map(handle => handle.close()), service?.close(), startup?.close()]);
   errors.push(...closed.filter(value => value.status === 'rejected').map(value => value.reason));
   if (errors.length) throw Object.assign(new Error('Service retirement recovery remains blocked; retain lock and evidence.', {
     cause: errors.length === 1 ? errors[0] : new AggregateError(errors),

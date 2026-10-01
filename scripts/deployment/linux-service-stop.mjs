@@ -163,7 +163,7 @@ export async function stopLinuxService({ control, lock: suppliedLock, unit, proj
         try {
           activated = await activateLinuxService({
             control: root, lock, unit, project, npm, node, service, inhibition, checkAuthority, checkInhibition,
-            checkStopJournal: () => journal.check(),
+            checkMaintenanceEvidence: () => journal.check(),
             closeForRetirement: closeHandles,
           }, purpose);
           return Object.freeze({ status: activated.status, identity: activated.identity });

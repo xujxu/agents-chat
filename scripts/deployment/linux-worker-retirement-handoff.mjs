@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 // Both intents describe the same retained files, but worker paths are relative.
 export function validateWorkerRetirementHandoff(bytes, control, service) {
-  if (service.version !== 3 || !service.workers) {
+  if (![3, 4].includes(service.version) || !service.workers) {
     throw new Error('Worker retirement requires the original combined service inventory.');
   }
   const relative = ({ file, ...entry }) => ({ path: path.relative(control, file), ...entry });

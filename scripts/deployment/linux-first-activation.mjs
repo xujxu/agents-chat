@@ -1,4 +1,5 @@
 import { constants } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { lstat, open } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
@@ -9,22 +10,31 @@ import { inspectLinuxRuntimeAccount } from './linux-runtime.mjs';
 import { inspectLinuxServicePolicy } from './linux-service-inspection.mjs';
 import { linuxSystemdProperties } from './linux-systemd.mjs';
 import { activateLinuxService } from './linux-service-activation.mjs';
+import { readDeploymentReceipt } from './deployment-receipt.mjs';
 
 const identity = info => ({ dev: info.dev, ino: info.ino, uid: info.uid, gid: info.gid, mode: info.mode });
 const runtimeKeys = ['MainPID', 'ActiveState', 'SubState', 'ControlGroup', 'InvocationID'];
+const receiptIdentity = info => ({ ...identity(info), size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs });
 
 export async function activateLinuxFirstUnit({ installation, publication, enabled, control, lock: supplied, signal }) {
   let lockHandle;
   let activated;
+  let receiptHandle;
+  let receiptInfo;
+  let retirementReceipt;
+  let retirementAttempted = false;
   let closed = false;
   let busy = false;
-  const close = async () => {
-    if (busy) throw journalUncertain(new Error('Cannot close first activation while checking its owned generation.'));
+  const closeHandles = async () => {
     if (closed) return;
     closed = true;
-    const results = await Promise.allSettled([activated?.close(), lockHandle?.close()]);
+    const results = await Promise.allSettled([activated?.close(), lockHandle?.close(), receiptHandle?.close()]);
     const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
     if (errors.length) throw journalUncertain(new AggregateError(errors, 'First activation handle cleanup failed.'));
+  };
+  const close = async () => {
+    if (busy) throw journalUncertain(new Error('Cannot close first activation while checking its owned generation.'));
+    await closeHandles();
   };
   try {
     signal?.throwIfAborted();
@@ -52,7 +62,7 @@ export async function activateLinuxFirstUnit({ installation, publication, enable
     const lockFile = path.join(lockDirectory, 'owner.json');
     lockHandle = await open(lockFile, constants.O_RDONLY | constants.O_NOFOLLOW);
     const originalLock = await lockHandle.stat();
-    const checkAuthority = async () => {
+    const checkAuthority = async ({ retiring = false } = {}) => {
       if (closed) throw new Error('First activation authority is closed.');
       await assertLockOwner(control, lock);
       const root = await canonicalWorkerDirectory(control, { privateMode: true });
@@ -60,13 +70,28 @@ export async function activateLinuxFirstUnit({ installation, publication, enable
       const retained = await lockHandle.stat();
       if (!same(identity(root.info), identity(rootInfo)) || !same(identity(directory.info), identity(lockInfo))
         || !same(identity(retained), identity(originalLock))
-        || !same(identity(await lstat(lockFile)), identity(originalLock)) || retained.nlink !== 1
-        || !same(await loadState(control), state)) {
+        || !same(identity(await lstat(lockFile)), identity(originalLock)) || retained.nlink !== 1) {
         throw new Error('Original first activation lock or transaction changed.');
       }
-      await publication.checkSources({ signal: null });
-      await enabled.checkFiles();
-      return state;
+      const current = await loadState(control);
+      if (retiring) {
+        if (!retirementReceipt || current?.phase !== 'accepted'
+          || !['activating', 'activation-unverified'].includes(current.previousPhase)
+          || Object.keys(state).filter(key => !['phase', 'previousPhase', 'updatedAt'].includes(key))
+            .some(key => current[key] !== state[key])
+          || !same(await readDeploymentReceipt(control, project), retirementReceipt)
+          || !same(receiptIdentity(await lstat(path.join(control, 'deployment.json'))), receiptInfo)
+          || !same(receiptIdentity(await receiptHandle.stat()), receiptInfo)
+          || (await receiptHandle.stat()).nlink !== 1) {
+          throw new Error('First retirement acceptance or original deployment receipt changed.');
+        }
+        await installation.checkIdentity({ signal: null });
+      } else {
+        if (!same(current, state)) throw new Error('Original first activation transaction changed.');
+        await publication.checkSources({ signal: null });
+        await enabled.checkFiles();
+      }
+      return current;
     };
     const checkInhibition = async () => {
       await checkAuthority();
@@ -92,7 +117,7 @@ export async function activateLinuxFirstUnit({ installation, publication, enable
       throw new Error('First unit does not retain its genuine inactive runtime account.');
     }
     const checkPolicy = async ({ inhibited = false, stopped = false } = {}) => {
-      await checkAuthority();
+      await installation.checkIdentity({ signal: null });
       const current = await inspectLinuxServicePolicy(unit, npm);
       if (Object.entries(configuration.state).some(([name, value]) => !runtimeKeys.includes(name)
         && current.state[name] !== (name === 'RefuseManualStart' ? inhibited ? 'yes' : 'no'
@@ -118,6 +143,16 @@ export async function activateLinuxFirstUnit({ installation, publication, enable
     });
     activated = await activateLinuxService({
       control, lock, unit, project, npm, node, service, inhibition, checkAuthority, checkInhibition, signal,
+      startup: enabled.identity,
+      async checkMaintenanceEvidence() {
+        await publication.checkSources({ signal: null });
+        await enabled.checkFiles();
+      },
+      async closeForRetirement() {
+        const results = await Promise.allSettled([closeHandles(), publication.close(), enabled.close()]);
+        const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+        if (errors.length) throw new AggregateError(errors, 'First retirement authority cleanup failed.');
+      },
     }, 'deployment');
     if (signal?.aborted) {
       await activated.stop();
@@ -126,9 +161,31 @@ export async function activateLinuxFirstUnit({ installation, publication, enable
     return Object.freeze({
       status: activated.status, identity: activated.identity, close,
       async stopActivated() {
-        if (closed || busy) throw journalUncertain(new Error('First activation stop requires available live authority.'));
+        if (closed || busy || retirementAttempted) throw journalUncertain(new Error('First activation stop requires available live authority.'));
         busy = true;
         try { return await activated.stop(); }
+        finally { busy = false; }
+      },
+      async retire({ acceptance } = {}) {
+        if (closed || busy || retirementAttempted || typeof acceptance?.checkAccepted !== 'function') {
+          throw journalUncertain(new Error('First retirement requires original live authority and captured acceptance.'));
+        }
+        busy = true;
+        retirementAttempted = true;
+        try {
+          retirementReceipt = await readDeploymentReceipt(control, project);
+          if (!retirementReceipt || retirementReceipt.operationId !== lock.operationId
+            || retirementReceipt.identity.source !== state.targetCommit
+            || retirementReceipt.identity.service !== createHash('sha256').update(JSON.stringify(activated.identity)).digest('hex')
+            || !same(retirementReceipt.identity, acceptance.identity)
+            || !same(await acceptance.checkAccepted({ signal: null }), retirementReceipt.identity)) {
+            throw new Error('First retirement requires its published, still-verified deployment receipt.');
+          }
+          receiptHandle = await open(path.join(control, 'deployment.json'), constants.O_RDONLY | constants.O_NOFOLLOW);
+          receiptInfo = receiptIdentity(await receiptHandle.stat());
+          await checkAuthority({ retiring: true });
+          await activated.retire();
+        } catch (error) { throw journalUncertain(error); }
         finally { busy = false; }
       },
     });

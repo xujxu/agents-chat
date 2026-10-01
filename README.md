@@ -224,6 +224,12 @@ The separate first-activation adapter inspects a genuine inactive unit and
 retains the newly started generation for owned stop, including cancellation
 cleanup. Its `active-unverified` result is not readiness or deployment acceptance;
 first-install retirement/recovery and public deploy integration remain pending.
+First-retirement implementation uses a version 4 inventory for its actual
+installation/enablement journals, not a fabricated stop journal. Its persistent
+startup link and published deployment receipt remain outside the deletion
+inventory and are checked during live and saved cold cleanup. These new
+retirement gates are still undergoing Actions acceptance; public deploy is not
+yet wired to this path.
 Do not use this branch on a live installation before the remaining platform
 acceptance gates. The `deploy.sh` commands below describe the legacy implementation,
 not the new backup/restore guarantees.
