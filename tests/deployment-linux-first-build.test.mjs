@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { chown, chmod, lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { chown, chmod, lstat, mkdir, readdir, readFile, rmdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -12,11 +12,12 @@ import { acquireLock, loadState, writeState } from '../scripts/deployment/state.
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation, readWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { inspectTargetCompatibility } from '../scripts/deployment/target-compatibility.mjs';
+import { linuxNative, linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../', import.meta.url));
 
-test('fresh installation builds actual source with owned workers while its systemd unit remains absent', {
+test('fresh installation builds actual source, activates a new generation and stops that owned generation', {
   skip: process.env.DEPLOYMENT_TEST_REAL_FIRST_BUILD !== '1',
 }, async t => {
   const { prepareLinuxFirstBuild } = await import('../scripts/deployment/linux-first-build.mjs');
@@ -42,7 +43,10 @@ test('fresh installation builds actual source with owned workers while its syste
   const home = path.join(root, 'home');
   await mkdir(home, { mode: 0o700 });
   await chown(home, 65534, 65534);
-  const installation = await inspectLinuxFirstInstall({ project, unit: `agents-first-${randomUUID()}.service` });
+  const controller = new AbortController();
+  const installation = await inspectLinuxFirstInstall({
+    project, unit: `agents-first-${randomUUID()}.service`, signal: controller.signal,
+  });
   const control = path.join(root, '.fresh app.deployment');
   await mkdir(control, { mode: 0o700 });
   const lock = await acquireLock(control, { project, operationId: randomUUID() });
@@ -91,4 +95,53 @@ test('fresh installation builds actual source with owned workers while its syste
   assert.equal((await loadState(control)).phase, 'building');
   await operation.seal();
   assert.equal((await readWorkerOperation(control)).at(-1).phase, 'sealed');
+  const { createLinuxFirstUnit } = await import('../scripts/deployment/linux-first-unit.mjs');
+  const { enableLinuxFirstUnit } = await import('../scripts/deployment/linux-first-enablement.mjs');
+  const { activateLinuxFirstUnit } = await import('../scripts/deployment/linux-first-activation.mjs');
+  const { unit } = installation.identity;
+  const fragment = `/etc/systemd/system/${unit}`;
+  const inhibition = `${fragment}.d/90-agents-chat-deployment.conf`;
+  const startupLink = `/etc/systemd/system/multi-user.target.wants/${unit}`;
+  let publication;
+  let enabled;
+  let active;
+  try {
+    await record('configuring');
+    const context = { installation, control, lock, signal: controller.signal };
+    publication = await createLinuxFirstUnit(context);
+    enabled = await enableLinuxFirstUnit({ ...context, publication });
+    await record('activating');
+    active = await activateLinuxFirstUnit({ ...context, publication, enabled });
+    assert.equal(active.status, 'active-unverified');
+    assert.equal(active.identity.runtime.unit, unit);
+    assert.equal(active.identity.runtime.uid, 65534);
+    assert.ok(active.identity.runtime.mainPid > 0);
+    assert.match(active.identity.runtime.invocationId, /^[a-f0-9]{32}$/);
+    assert.equal((await linuxSystemdProperties(unit, ['UnitFileState'])).UnitFileState, 'enabled');
+    await assert.rejects(readFile(path.join(control, 'deployment.json')), { code: 'ENOENT' });
+    controller.abort();
+    assert.deepEqual(await active.stopActivated(), { stopped: true, inhibited: true });
+    assert.deepEqual(await active.stopActivated(), { stopped: true, inhibited: true });
+    const observed = await linuxSystemdProperties(unit, ['MainPID', 'RefuseManualStart']);
+    assert.equal(observed.MainPID, '0');
+    assert.equal(observed.RefuseManualStart, 'yes');
+    const records = (await readFile(path.join(control, 'service-activation.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+    assert.equal(records[0].prior.runtime.mainPid, 0);
+    assert.equal(records[0].prior.runtime.invocationId, '');
+    assert.deepEqual(records.slice(-4).map(entry => entry.phase),
+      ['activation-stop-intent', 'activation-stop-inhibited', 'activation-stop-requested', 'activation-stopped']);
+  } finally {
+    await active?.close();
+    await enabled?.close();
+    await publication?.close();
+    if (publication) {
+      await linuxNative('/usr/bin/systemctl', ['--system', 'stop', unit]);
+      for (const file of [startupLink, `${inhibition}.${lock.token}.held`, inhibition, fragment]) {
+        try { await unlink(file); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+      }
+      await rmdir(path.dirname(inhibition));
+      await linuxNative('/usr/bin/systemctl', ['--system', 'daemon-reload']);
+    }
+  }
 });

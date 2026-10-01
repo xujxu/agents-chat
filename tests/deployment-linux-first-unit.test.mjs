@@ -244,3 +244,36 @@ test('first-unit source authority remains distinct from the original inhibitor n
   });
   await assert.rejects(publication.checkSources(), /identity|changed/i);
 });
+
+test('first activation cancellation after staging restores its original inhibitor without starting', async t => {
+  const { createLinuxFirstUnit } = await import('../scripts/deployment/linux-first-unit.mjs');
+  const { enableLinuxFirstUnit } = await import('../scripts/deployment/linux-first-enablement.mjs');
+  const { activateLinuxFirstUnit } = await import('../scripts/deployment/linux-first-activation.mjs');
+  const controller = new AbortController();
+  const f = await fixture(t, { signal: controller.signal });
+  const publication = await createLinuxFirstUnit({ ...f, signal: controller.signal });
+  t.after(() => publication.close());
+  const enabled = await enableLinuxFirstUnit({ ...f, publication, signal: controller.signal });
+  t.after(() => enabled.close());
+  await writeState(f.control, { ...await loadState(f.control), phase: 'activating', previousPhase: 'configuring' });
+  const journal = path.join(f.control, 'service-activation.ndjson');
+  const observed = {
+    ...publication,
+    async checkSources(options) {
+      await publication.checkSources(options);
+      let content;
+      try { content = await readFile(journal, 'utf8'); }
+      catch (error) { if (error.code === 'ENOENT') return; throw error; }
+      if (content.trim().split('\n').filter(Boolean).map(JSON.parse).at(-1)?.phase === 'staged') controller.abort();
+    },
+  };
+  await assert.rejects(activateLinuxFirstUnit({
+    ...f, publication: observed, enabled, signal: controller.signal,
+  }), { code: 'DEPLOYMENT_WORKER_UNSETTLED' });
+  const records = (await readFile(journal, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(records.map(record => record.phase), ['intent', 'staged', 'reinhibited']);
+  await publication.checkInhibition({ signal: null });
+  assert.equal((await linuxSystemdProperties(f.unit, ['MainPID'])).MainPID, '0');
+  await assert.rejects(linuxNative('/usr/bin/systemctl', ['--system', 'start', f.unit]));
+  await assert.rejects(readFile(path.join(f.control, 'deployment.json')), { code: 'ENOENT' });
+});

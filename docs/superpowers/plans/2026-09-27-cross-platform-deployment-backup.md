@@ -5522,6 +5522,33 @@ failures. The implementation preserves strict configuring checks and separates
 read-only fragment/inhibitor inspection; full implementation acceptance remains
 pending.
 
+### Genuine first-unit activation and owned stop
+
+Add `linux-first-activation.mjs` as an adapter from the original publication and
+enablement handles to the shared activation/owned-stop engine. Inspect the
+actual inactive systemd runtime account: zero main PID, empty invocation/domain,
+and the original project/account/toolchain. Do not manufacture a previously
+running generation or stop receipt. Preserve the original lock file/directory
+identities, stable operation/target binding, installed fragment, configuration,
+startup link and actual inhibited/uninhibited policies.
+
+Only the matching fresh activating-phase operation may begin. Forward
+cancellation checks occur before activation filesystem/systemd mutations;
+ownership checks used to restore inhibition and stop the captured generation
+must not inherit an already-aborted caller signal. Once a start request has
+been submitted, settle its bounded activation observation before handling
+cancellation through the captured generation's owned stop.
+
+Extend the existing actual source-build test through publication, enablement,
+activation and owned stop, preserving its pre-publication absence/build
+assertions. Require a real non-root running generation, then stop it after
+cancelling the original inspection signal and verify the four durable stop
+receipts. A separate native case cancels after the staged inhibitor receipt and
+requires intent/staged/reinhibited evidence with no startup or acceptance.
+Both run only in Actions. Application readiness, acceptance receipts and the
+fresh-install retirement/recovery inventory remain separate follow-on gates;
+this adapter returns only `active-unverified` and does not expose retirement.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
