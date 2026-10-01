@@ -19,14 +19,21 @@ export async function linuxSystemdBus(args, signature) {
   return args[0] === 'call' ? result.data[0] : result.data;
 }
 
-export async function linuxSystemdProperties(unit, names) {
+export async function linuxSystemdProperties(unit, names, { allowMissing = false } = {}) {
   if (typeof unit !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,180}\.service$/.test(unit)
     || !Array.isArray(names) || !names.length || new Set(names).size !== names.length
     || names.some(name => !/^[A-Za-z][A-Za-z0-9]*$/.test(name))) {
     throw new Error('Unsupported systemd unit or property request.');
   }
-  const { stdout } = await linuxNative('/usr/bin/systemctl',
-    ['--system', 'show', unit, '--all', `--property=${names.join(',')}`]);
+  let stdout;
+  try {
+    ({ stdout } = await linuxNative('/usr/bin/systemctl',
+      ['--system', 'show', unit, '--all', `--property=${names.join(',')}`]));
+  } catch (error) {
+    if (!allowMissing || !names.includes('LoadState') || ![1, 4].includes(error.code)
+      || typeof error.stdout !== 'string' || !/^LoadState=not-found$/m.test(error.stdout)) throw error;
+    stdout = error.stdout;
+  }
   const result = {};
   for (const line of stdout.trimEnd().split('\n')) {
     const end = line.indexOf('=');

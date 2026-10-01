@@ -17,6 +17,37 @@ const id = value => {
   return number;
 };
 
+export async function inspectLinuxAccount({ user: userKey = '0', group: groupKey }) {
+  if (process.platform !== 'linux' || process.getuid() !== 0) {
+    throw new Error('Linux account inspection requires the privileged system manager controller.');
+  }
+  if (!accountKey(userKey) || groupKey && !accountKey(groupKey)) throw new Error('Unsupported systemd account name.');
+  const { stdout: passwd } = await linuxNative('/usr/bin/getent', ['passwd', userKey]);
+  const user = passwd.trimEnd().split(':');
+  if (user.length !== 7 || !accountKey(user[0]) || !path.isAbsolute(user[5])
+    || /[\0\r\n]/.test(user.join('')) || user[5].length > 4096) throw new Error('Invalid NSS user record.');
+  const uid = id(user[2]);
+  if (/^[0-9]+$/.test(userKey) ? uid !== id(userKey) : user[0] !== userKey) {
+    throw new Error('NSS user identity changed.');
+  }
+  let gid = id(user[3]);
+  if (groupKey) {
+    const { stdout } = await linuxNative('/usr/bin/getent', ['group', groupKey]);
+    const group = stdout.trimEnd().split(':');
+    if (group.length !== 4 || !accountKey(group[0]) || /[\0\r\n]/.test(group.join(''))) throw new Error('Invalid NSS group record.');
+    gid = id(group[2]);
+    if (/^[0-9]+$/.test(groupKey) ? gid !== id(groupKey) : group[0] !== groupKey) {
+      throw new Error('NSS group identity changed.');
+    }
+  }
+  const { stdout: groups } = await linuxNative('/usr/bin/id', ['-G', '--', user[0]]);
+  if (groups.trim().split(/\s+/).map(id).some(group => group !== gid)) {
+    throw new Error('Supplementary NSS groups require an explicit supported runtime group policy.');
+  }
+  const account = captureLinuxAccount({ uid, gid });
+  return Object.freeze({ user: user[0], ...account, home: user[5] });
+}
+
 export async function inspectLinuxRuntimeAccount({ unit, project }) {
   if (process.platform !== 'linux' || process.getuid() !== 0) {
     throw new Error('Linux runtime inspection requires the privileged system manager controller.');
@@ -31,31 +62,8 @@ export async function inspectLinuxRuntimeAccount({ unit, project }) {
     || (await canonicalWorkerDirectory(initial.WorkingDirectory)).root !== root) {
     throw new Error('Systemd service working directory does not match this project.');
   }
-  const userKey = initial.User || '0';
-  if (!accountKey(userKey) || initial.Group && !accountKey(initial.Group)) throw new Error('Unsupported systemd account name.');
-  const { stdout: passwd } = await linuxNative('/usr/bin/getent', ['passwd', userKey]);
-  const user = passwd.trimEnd().split(':');
-  if (user.length !== 7 || !accountKey(user[0]) || !path.isAbsolute(user[5])
-    || /[\0\r\n]/.test(user.join('')) || user[5].length > 4096) throw new Error('Invalid NSS user record.');
-  const uid = id(user[2]);
-  if (/^[0-9]+$/.test(userKey) ? uid !== id(userKey) : user[0] !== userKey) {
-    throw new Error('NSS user identity changed.');
-  }
-  let gid = id(user[3]);
-  if (initial.Group) {
-    const { stdout } = await linuxNative('/usr/bin/getent', ['group', initial.Group]);
-    const group = stdout.trimEnd().split(':');
-    if (group.length !== 4 || !accountKey(group[0]) || /[\0\r\n]/.test(group.join(''))) throw new Error('Invalid NSS group record.');
-    gid = id(group[2]);
-    if (/^[0-9]+$/.test(initial.Group) ? gid !== id(initial.Group) : group[0] !== initial.Group) {
-      throw new Error('NSS group identity changed.');
-    }
-  }
-  const { stdout: groups } = await linuxNative('/usr/bin/id', ['-G', '--', user[0]]);
-  if (groups.trim().split(/\s+/).map(id).some(group => group !== gid)) {
-    throw new Error('Supplementary NSS groups require an explicit supported runtime group policy.');
-  }
-  const account = captureLinuxAccount({ uid, gid });
+  const account = await inspectLinuxAccount({ user: initial.User || '0', group: initial.Group });
+  const { uid, gid } = account;
   const mainPid = id(initial.MainPID);
   let controllerIdentity = null;
   if (mainPid) {
@@ -81,7 +89,7 @@ export async function inspectLinuxRuntimeAccount({ unit, project }) {
     throw new Error('Service identity changed during account inspection.');
   }
   return Object.freeze({
-    unit, project: root, user: user[0], ...account, home: user[5],
+    unit, project: root, ...account,
     mainPid, processIdentity: controllerIdentity, invocationId: initial.InvocationID,
     activeState: initial.ActiveState,
   });
