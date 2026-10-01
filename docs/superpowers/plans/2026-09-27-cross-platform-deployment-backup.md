@@ -7031,6 +7031,15 @@ public transaction state machine. The Node adapter still must bind deployment
 lock/state and native control-file ACLs, and recovery/activation must separately
 authorize any later task definition change or inhibition release.
 
+Task 5K causal `eec2fe7` / `36924121652`, native job `110577099152`,
+passed all preceding native cases, then failed exactly while importing the
+missing `windows-task-maintenance.ps1`. Implemented the retained context with
+strict admission/readiness fields, original process/file handles, exact literal
+managed action, native binding and scoped pre-inhibition observation. Stop
+publishes four chained immutable receipts around enabled-only policy mutation
+and original-domain settlement. Rechecks poison on change; close retains task
+inhibition, the task-side owner and on-disk evidence. Native acceptance pending.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
