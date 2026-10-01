@@ -1,10 +1,12 @@
 import { constants } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { lstat, open, readFile, readlink, realpath, statfs } from 'node:fs/promises';
 import path from 'node:path';
 import { linuxSystemdBus as bus, linuxSystemdProperties } from './linux-systemd.mjs';
 import { inspectLinuxRuntimeAccount } from './linux-runtime.mjs';
 import { processIdentity } from './process-identity.mjs';
+import { captureLinuxServiceSources, linuxServiceFileIdentity as fileIdentity } from './linux-service-sources.mjs';
+
+export { inspectLinuxServiceSource } from './linux-service-sources.mjs';
 
 const properties = [
   'Id', 'LoadState', 'Transient', 'NeedDaemonReload', 'FragmentPath', 'Type',
@@ -13,11 +15,6 @@ const properties = [
   'User', 'Group', 'DynamicUser', 'SupplementaryGroups', 'WorkingDirectory', 'RootDirectory', 'RootImage',
 ];
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
-const fileIdentity = info => ({
-  dev: info.dev, ino: info.ino, size: info.size, mode: info.mode,
-  uid: info.uid, gid: info.gid, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs,
-});
-const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const bootId = async () => (await readFile('/proc/sys/kernel/random/boot_id', 'utf8')).trim();
 
 function freezeEvidence(value) {
@@ -85,26 +82,6 @@ export async function inspectLinuxServicePolicy(unit, npm) {
     command: { file: npm, args: ['start'] } };
 }
 
-async function sourceDirectory(directory) {
-  for (let current = directory; ; current = path.dirname(current)) {
-    const info = await lstat(current);
-    if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== 0 || info.mode & 0o022) {
-      throw new Error('Service source directory is writable, linked or not root-owned.');
-    }
-    if (current === '/') break;
-  }
-}
-
-export async function inspectLinuxServiceSource(file) {
-  await sourceDirectory(path.dirname(file));
-  const info = await lstat(file);
-  if (!info.isFile() || info.isSymbolicLink() || info.uid !== 0 || info.mode & 0o022
-    || info.nlink !== 1 || info.size > 256 * 1024) {
-    throw new Error('Service source file has unsupported type, permissions or size.');
-  }
-  return fileIdentity(info);
-}
-
 export async function inspectLinuxServiceExecutable(file) {
   if (typeof file !== 'string' || !path.isAbsolute(file) || path.resolve(file) !== file
     || /[\0\r\n]/.test(file)) throw new Error('An explicit absolute runtime executable is required.');
@@ -143,7 +120,7 @@ export async function inspectInstalledLinuxService({ unit, project }) {
 }
 
 export async function inspectLinuxService({ unit, project, npm, node }) {
-  const sources = [];
+  let sources;
   let directory;
   let events;
   let closed = false;
@@ -151,7 +128,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
     if (closed) return;
     closed = true;
     const results = await Promise.allSettled([
-      ...sources.map(source => source.handle.close()), directory?.close(), events?.close(),
+      sources?.close(), directory?.close(), events?.close(),
     ]);
     const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
     if (errors.length) throw new AggregateError(errors, 'Service inspection handles could not all be closed.');
@@ -171,20 +148,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
     }
     const files = [state.FragmentPath, ...config.drops];
     if (new Set(files).size !== files.length) throw new Error('Duplicate service source files.');
-    for (const file of files) {
-      if (!path.isAbsolute(file) || path.resolve(file) !== file || /[\0\r\n]/.test(file)) {
-        throw new Error('Noncanonical service source path.');
-      }
-      const original = await inspectLinuxServiceSource(file);
-      const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
-      const source = { file, handle, original };
-      sources.push(source);
-      const bytes = Buffer.alloc(original.size);
-      const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
-      if (bytesRead !== bytes.length || !same(fileIdentity(await handle.stat()), original)
-        || !same(await inspectLinuxServiceSource(file), original)) throw new Error('Service source file changed while reading.');
-      source.sha256 = hash(bytes);
-    }
+    sources = await captureLinuxServiceSources(files);
     const group = `/system.slice/${unit}`;
     if (runtime.mainPid <= 0 || state.MainPID !== String(runtime.mainPid)
       || state.ActiveState !== 'active' || state.SubState !== 'running'
@@ -197,17 +161,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
     events = await open(`${groupPath}/cgroup.events`, constants.O_RDONLY | constants.O_NOFOLLOW);
     const groupIdentity = fileIdentity(await directory.stat());
     const eventIdentity = fileIdentity(await events.stat());
-    const checkSources = async () => {
-      for (const source of sources) {
-        const bytes = Buffer.alloc(source.original.size);
-        const { bytesRead } = await source.handle.read(bytes, 0, bytes.length, 0);
-        if (bytesRead !== bytes.length || hash(bytes) !== source.sha256
-          || !same(fileIdentity(await source.handle.stat()), source.original)
-          || !same(await inspectLinuxServiceSource(source.file), source.original)) {
-          throw new Error('Retained service source file was changed or replaced.');
-        }
-      }
-    };
+    const checkSources = sources.check;
     const checkDomain = async () => {
       for (const [file, handle, original] of [[groupPath, directory, groupIdentity],
         [`${groupPath}/cgroup.events`, events, eventIdentity]]) {
@@ -311,9 +265,7 @@ export async function inspectLinuxService({ unit, project, npm, node }) {
     await check();
     const identity = freezeEvidence({
       runtime, bootId: boot, controlGroup: group, configuration: config, executables,
-      sources: Object.freeze(sources.map(source => Object.freeze({
-        path: source.file, ...source.original, sha256: source.sha256,
-      }))),
+      sources: sources.identity,
     });
     return Object.freeze({ identity, check, checkInhibited, checkPolicy, close });
   } catch (error) {

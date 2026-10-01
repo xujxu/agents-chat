@@ -5918,6 +5918,13 @@ Public inactive/failed commands remain refused until their distinct empty-domain
 authority, source/runtime admission, snapshot/activation and cold recovery
 surfaces have been implemented and accepted.
 
+Causal `a5ca5c8` / `36851632603` native job `110334402057` failed on the
+missing `linux-service-sources.mjs` import as intended. The extraction now keeps
+the old metadata field ordering, source hashing, retained-FD checks and export,
+with source handles closed by their own idempotent owner. Add the module to
+`workerEngineFiles` and the exact saved-worker test inventory; saved recovery
+inherits the dependency. No public inactive-service behavior is enabled yet.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
