@@ -8,7 +8,12 @@ $TaskNames = [Collections.Generic.List[string]]::new()
 $Failures = [Collections.Generic.List[string]]::new()
 
 function Assert-Equal($Actual, $Expected, [string]$Label) {
-    if ($Actual -cne $Expected) { throw "Assertion failed: $Label" }
+    if ($Actual -cne $Expected) {
+        if ($Label -match 'arguments|script path') {
+            Write-Host (@{ label = $Label; actual = $Actual; expected = $Expected } | ConvertTo-Json -Compress)
+        }
+        throw "Assertion failed: $Label"
+    }
 }
 
 function Invoke-Case([string]$Name, [scriptblock]$Body) {
@@ -118,8 +123,9 @@ try {
                 throw "deploy.ps1 does not declare $name"
             }
         }
-        . ([scriptblock]::Create((Get-FunctionText $DeployAst 'Install-AgentsChatTask')))
-        $PSScriptRoot = $Scripts
+        $extracted = Join-Path $Scripts 'installer-function.ps1'
+        Set-Content -LiteralPath $extracted -Encoding UTF8 -Value (Get-FunctionText $DeployAst 'Install-AgentsChatTask')
+        . $extracted
         $TaskName = 'Agents-Chat-Test-' + [Guid]::NewGuid().ToString('N')
         $TaskNames.Add($TaskName)
         $ProjectDir = $Project

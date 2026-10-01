@@ -6395,6 +6395,16 @@ path; its touched child-stop calls use TargetPid rather than read-only `$PID`.
 Legacy port cleanup and full process containment are not accepted by these
 parameter tests and remain part of Windows lifecycle work.
 
+Implementation `7d15008` / `36876306151`, task-options job `110416921219`,
+successfully registered the default account but failed exact task-path and
+inert-child path comparisons. The read-only resolver also rejected the fixture
+action. Capture actual/expected generated fixture paths before deciding whether
+this is path spelling or product behavior; do not weaken action matching.
+The extracted installer function additionally lost `$PSScriptRoot` when created
+from an anonymous scriptblock. Materialize just that real function in a fixture
+script under its scripts directory and dot-source it, retaining its real script
+context without executing the legacy deploy body.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
