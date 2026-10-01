@@ -71,7 +71,8 @@ test('inactive discovery refuses an unreviewed npm interpreter before executing 
   await writeFile(npm, '#!/bin/sh\nexit 99\n', { mode: 0o755 });
   await writeFile(f.fragment, `${f.bytes}\nExecStart=\nExecStart=${quote(npm)} start\n`);
   await systemctl('daemon-reload');
-  await assert.rejects(inspectInstalledLinuxService({ unit: f.unit, project: f.project }), /npm|interpreter|executable/i);
+  await assert.rejects(inspectInstalledLinuxService({ unit: f.unit, project: f.project }),
+    /requires the supported npm Node interpreter/);
   assert.equal((await linuxSystemdProperties(f.unit, ['MainPID'])).MainPID, '0');
 });
 

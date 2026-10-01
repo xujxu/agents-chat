@@ -6288,6 +6288,26 @@ one validated helper, and saved live restore verifies discovered native fields
 against its supplied snapshot-bound input. Read-only stopped preview and
 history downgrade refusal gain coverage. Full 22-job acceptance remains pending.
 
+Configuration correction `41f308d` / `36868715355`, native job
+`110392090922`, passed all eleven configuration cases, including actual
+manager authentication precedence, EnvironmentFile masking, PATH fallback,
+owned inhibition and cancellation. Its next discovery gate failed four of six
+cases at the characterized running-only guard; the running image-binding
+negative passed. The npm-interpreter negative's earlier regex also matched that
+guard, so tighten it to require the actual supported-interpreter refusal rather
+than counting the earlier pass as interpreter-policy evidence. Retire this
+characterized run to admit implementation `dc690ac` / `36869213575`.
+The last fully accepted baseline remains `19c8ded` until the full regression
+finishes; neither partial success nor cancelled runs replace that baseline.
+
+Integration native job `110393980497` failed one old discovery assertion in
+`tests/deployment-linux-service.test.mjs:81`: its unauthenticated stopped
+fixture now correctly refuses `NEXTAUTH_SECRET`, not the removed running-only
+guard. Update the assertion to that precise configuration refusal and prove
+the terminal unit state is unchanged. Do not relax missing-authentication
+admission. The real inactive/failed lifecycle jobs are still running; retain
+them to collect their full public execution evidence before any cancellation.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

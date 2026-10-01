@@ -78,7 +78,11 @@ test('discovers installed npm and actual Node without controller PATH or caller 
     unit: f.unit, project: path.dirname(f.project),
   }), /project|directory/i);
   await systemctl('stop', f.unit);
-  await assert.rejects(serviceInspection.inspectInstalledLinuxService({ unit: f.unit, project: f.project }), /running/i);
+  const stopped = (await systemctl('show', f.unit, '--property=ActiveState,MainPID,InvocationID')).stdout;
+  await assert.rejects(serviceInspection.inspectInstalledLinuxService({ unit: f.unit, project: f.project }), {
+    code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED', check: 'NEXTAUTH_SECRET',
+  });
+  assert.equal((await systemctl('show', f.unit, '--property=ActiveState,MainPID,InvocationID')).stdout, stopped);
 });
 
 test('retains non-root installed npm identity and rejects a different expected Node executable', async t => {
