@@ -1,3 +1,4 @@
+param([ValidateSet('stop', 'configuration-change')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -74,16 +75,20 @@ if (process.argv[2] === 'child') {
     $configFile = Join-Path $root 'configuration.json'
     $hostFile = Join-Path $root 'windows-runtime-host.ps1'
     $text = $configuration | ConvertTo-Json -Depth 8 -Compress
-    foreach ($mode in @('digest', 'duplicate', 'helper')) {
+    foreach ($mode in @('digest', 'duplicate', 'unknown', 'environment', 'helper')) {
         $candidate = $text
         if ($mode -eq 'duplicate') { $candidate = $text.Replace('"version":1', '"version":1,"version":1') }
+        if ($mode -eq 'unknown') { $candidate = $text.Replace('"version":1', '"version":1,"unknown":true') }
+        if ($mode -eq 'environment') { $candidate = $text.Replace('"RUNTIME_LITERAL":', '"path":"unexpected","RUNTIME_LITERAL":') }
         if ($mode -eq 'helper') { $candidate = $text.Replace($hashes['windows-worker-launcher.ps1'], ('0' * 64)) }
         $digest = Save-Configuration $configFile $candidate
         if ($mode -eq 'digest') { $digest = '0' * 64 }
+        $stage = switch ($mode) { 'helper' { 'helpers' } 'environment' { 'command' } default { 'configuration' } }
         $output = & $pwsh -NoProfile -NonInteractive -File $hostFile -Configuration $configFile -Sha256 $digest 2>&1
-        Assert ($LASTEXITCODE -ne 0 -and ($output -join "`n") -match 'Managed runtime startup refused: [a-z-]+\.') "Unsupported $mode configuration was not explicitly refused"
+        Assert ($LASTEXITCODE -ne 0 -and ($output -join "`n") -match "Managed runtime startup refused: $stage\.") "Unsupported $mode configuration was not explicitly refused"
         Assert (-not (Test-Path -LiteralPath (Join-Path $root 'writes')) -and
             @(Get-ChildItem -LiteralPath $root -Filter 'runtime-*.json').Count -eq 0) 'Refused startup published readiness or admitted target work'
+        $global:LASTEXITCODE = 0
     }
     Write-Output 'PASS: installed host rejects wrong configuration digest, duplicate fields and changed helper content before admission'
     $digest = Save-Configuration $configFile $text
@@ -134,12 +139,25 @@ if (process.argv[2] === 'child') {
     $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'observe', 15000) | ConvertFrom-Json
     Assert ($observation.members -contains $member.Id -and -not $observation.quiescent -and
         -not $observation.applicationHealthy) 'Managed host lost detached ownership or invented application health'
-    $stopped = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'stop', 15000) | ConvertFrom-Json
-    Assert ($stopped.quiescent -and $stopped.members.Count -eq 0 -and $member.WaitForExit(10000)) 'Managed host did not settle the original Job'
-    $retired = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'retire', 15000)
-    Assert ($retired -ceq 'retired' -and $owner.WaitForExit(15000) -and $owner.ExitCode -eq 0) 'Managed host did not retire cleanly'
+    if ($Scenario -eq 'configuration-change') {
+        $changed = Get-Acl -LiteralPath $configFile
+        $changed.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+            [Security.Principal.SecurityIdentifier]::new('S-1-1-0'), 'Read', 'Allow'))
+        Set-Acl -LiteralPath $configFile -AclObject $changed
+        $refused = $false
+        try { [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'observe', 15000) | Out-Null }
+        catch { $refused = $true }
+        Assert ($refused -and $owner.WaitForExit(15000) -and $owner.ExitCode -eq 1 -and
+            $member.WaitForExit(10000)) 'Changed private configuration retained command authority or leaked original Job members'
+        Write-Output 'PASS: changed installed configuration refuses control and settles only the original owned Job'
+    } else {
+        $stopped = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'stop', 15000) | ConvertFrom-Json
+        Assert ($stopped.quiescent -and $stopped.members.Count -eq 0 -and $member.WaitForExit(10000)) 'Managed host did not settle the original Job'
+        $retired = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'retire', 15000)
+        Assert ($retired -ceq 'retired' -and $owner.WaitForExit(15000) -and $owner.ExitCode -eq 0) 'Managed host did not retire cleanly'
+    }
     Assert (Test-Path -LiteralPath $readyFile) 'Host silently deleted durable original-instance evidence'
-    Write-Output 'PASS: actual installed S4U host binds private configuration, retained helpers and readiness, literal command and original Job settlement'
+    Write-Output "PASS: $Scenario actual installed S4U host binds private configuration, retained helpers and readiness, literal command and original Job settlement"
 } finally {
     if ($registered) { Stop-ScheduledTask -TaskName $taskName }
     if ($owner) {

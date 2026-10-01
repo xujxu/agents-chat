@@ -6867,6 +6867,16 @@ Private readiness creation uses the atomic-security overload, not create-then-
 restrict permissions:
 https://learn.microsoft.com/en-us/dotnet/api/system.io.filesystemaclextensions.create
 
+`c7d6d62` / `36911686641`, native job `110536177007`, passed every host
+assertion, including actual S4U readiness, private file sharing, native task
+binding and explicit Job settlement. The step still exited 1 because the last
+deliberately rejected native child left PowerShell's global `LASTEXITCODE` at 1.
+Clear that code only after asserting the expected native refusal, following the
+existing task-options fixture. Add exact refusal-stage checks, unknown fields,
+case-colliding environment names and a second actual host scenario that changes
+the retained configuration ACL: the next control request must fail, the owner
+must exit nonzero and the original detached member must settle.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

@@ -325,3 +325,6 @@ jobs:
       - name: Run installed private runtime host under an actual Scheduled Task
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1
+      - name: Refuse changed installed runtime configuration and settle original ownership
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario configuration-change
