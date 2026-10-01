@@ -80,6 +80,7 @@ export async function createLinuxFirstUnit({ installation, control, lock: suppli
       if (parentInfo) await checkDirectory(parent, parentInfo);
       await workers?.check();
       await journal?.check();
+      signal?.throwIfAborted();
     };
     await authority();
     await installation.checkUninstalled();
