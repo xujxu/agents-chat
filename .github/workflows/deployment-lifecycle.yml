@@ -45,10 +45,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Build fresh source and exercise inhibited first-unit publication
+      - name: Verify fresh build, activation and retirement recovery
         run: |
           sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
-          sudo env DEPLOYMENT_TEST_REAL_FIRST_BUILD=1 "$(command -v node)" --test tests/deployment-linux-first-build.test.mjs tests/deployment-linux-first-unit.test.mjs
+          sudo env DEPLOYMENT_TEST_REAL_FIRST_BUILD=1 "$(command -v node)" --test tests/deployment-linux-first-build.test.mjs tests/deployment-linux-first-unit.test.mjs tests/deployment-linux-first-recovery.test.mjs
 
   linux-deployment:
     name: Native Linux deployment (${{ matrix.scenario }})

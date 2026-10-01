@@ -5614,7 +5614,9 @@ Wire version 4 through `linux-service-retirement.mjs`,
 `linux-service-recovery.mjs`, `linux-live-retirement.mjs`,
 `linux-recovery-completion.mjs` and `linux-worker-retirement-handoff.mjs`.
 Include the new shared helper in `saved-recovery-engine.mjs` so a saved external
-entry remains self-contained. The first activation's retiring authority must
+entry remains self-contained through its inherited `workerEngineFiles` list:
+`saved-worker-engine.mjs` must include it because service/live retirement are
+also worker-engine dependencies. The first activation's retiring authority must
 retain the original lock and accepted receipt without re-reading journals
 after their authorized deletion; the shared retirement inventory retains those
 journals independently until deletion.
@@ -5624,6 +5626,17 @@ four allowlisted files and startup identity, successful native worker retirement
 and live unlock, retained deployment provenance, and continued same-generation
 readiness. Add cold/replaced-link interruption coverage before treating the
 new recovery path or public first deploy as accepted.
+
+Cold fault fixtures use a real fresh non-root systemd/npm process with a small
+synthetic provider endpoint on an ephemeral port; they are not a substitute
+for the actual application build/readiness tests above. A child controller
+pauses after the service intent, second service deletion, worker intent or live
+lock-owner deletion. Kill that exact child, displace the source helper copy and
+recover with the saved external entry. Require unchanged accepted state and
+deployment receipt, the same enabled runtime generation, idempotent completion
+and only the expected remaining control files. Same-target startup-link
+replacement must refuse recovery without deleting evidence, both before
+service deletion and during live unlock.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
