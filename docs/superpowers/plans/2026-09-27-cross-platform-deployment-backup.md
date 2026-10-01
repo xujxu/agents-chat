@@ -5769,7 +5769,9 @@ API/data assertions unchanged, and assert that the initial state operation is
 `deploy`. Other scenarios continue exercising direct running-service admission.
 Add capture tests for explicit deploy selection, missing entry and unsupported
 operation rejection. No matrix cases or timeouts are removed or relaxed.
-Full public implementation acceptance remains pending.
+The corrected public implementation passed all eighteen jobs in
+`f821039` / `36841936755`, including all twenty-six first-install cases and the
+existing public running-service deployment/update/restoration/data gate.
 
 Implementation `a6d12b5` / `36840741829` exposed the fixture's unsupported
 supplementary groups when using GitHub's runner account. Preserve the existing
@@ -5807,6 +5809,32 @@ This verifies the same installation across the version-4 fresh handoff and
 subsequent running-service updates/restoration, not just separate fixtures.
 Reuse first-source setup/owned cleanup and extend the HTTP login fixture with
 an optional password while preserving its existing default.
+
+### Public first-install failure and missing-backup diagnostics
+
+Add a separate `scenario=first-failure` native cell with its own isolated runtime
+account, preserving every existing gate and deadline. Use an actual fresh source
+checkout with private authentication configuration and an empty private npm
+cache. Set `npm_config_offline=true` in its admitted dotenv to cause real
+dependency installation to fail without package downloads or application
+startup. Invoke the actual public deploy entry; require a failed JSON result
+with no previous backup, no leaked fixture credentials, dependencies reached but
+no build/activation, absent service/receipt/backup/data, retained recovery engine
+and original operation lock, and `recovery-required` state.
+
+Read public status and attempt a second deploy; require the interrupted status
+and explicit recovery-required refusal without changing state, lock or control
+inventory. Invoke public restore with acknowledgement and require
+`DEPLOYMENT_BACKUP_MISSING`, `backupAvailable: false`, and a clear no-retained-backup
+diagnostic without launching saved restoration or altering evidence.
+
+Add native restore-admission coverage that distinguishes a missing backup
+directory from an existing backup with a missing manifest. Only the former may
+use the missing-backup code; corruption and access errors must remain failures,
+not be reclassified as an innocent first install. The diagnostic describes
+present availability, not an unsupported claim that an older backup never
+existed. Push these causal tests before implementing the focused admission and
+CLI rendering change; verify the exact failures in Actions.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, readFile, readdir, symlink, unlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, readdir, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -9,6 +9,21 @@ import { projectSnapshotExclusions } from '../scripts/deployment/snapshot-scope.
 import { prepareLinuxRestoreInvocation } from '../scripts/deployment/linux-restore-invocation.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+
+test('public restore distinguishes an absent backup from incomplete retained evidence', async t => {
+  const f = await fixture(t);
+  await unlink(path.join(f.backup, 'manifest.json'));
+  await assert.rejects(prepareLinuxRestoreInvocation({ project: f.project }), error => {
+    assert.notEqual(error.code, 'DEPLOYMENT_BACKUP_MISSING');
+    return true;
+  });
+  await rm(f.backup, { recursive: true });
+  const before = (await readdir(f.control)).sort();
+  await assert.rejects(prepareLinuxRestoreInvocation({ project: f.project }), {
+    code: 'DEPLOYMENT_BACKUP_MISSING',
+  });
+  assert.deepEqual((await readdir(f.control)).sort(), before);
+});
 
 async function fixture(t, { foreign = false, projectScope = true, platform = 'linux', versioned = false } = {}) {
   const root = await temporaryDeployment(t);

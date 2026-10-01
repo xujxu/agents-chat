@@ -211,8 +211,9 @@ installer. The first-install controller and its version-4 live/cold retirement
 have passed Actions acceptance, including real source builds, application
 readiness, cancellation and interruption/tampering recovery.
 
-**Public `deploy.sh` wiring is undergoing Actions acceptance. Do not use this
-branch on a live installation before the remaining platform gates.** The old
+**Public `deploy.sh` has passed fresh-install and running-service Actions
+acceptance. Do not use this branch on a live installation before the remaining
+continuous-lifecycle and platform gates.** The old
 root build/install procedure has been replaced, not retained as a fallback.
 The staged native command supports a fresh installation or redeployment of an
 existing running service; inactive/failed services, deferred verification,

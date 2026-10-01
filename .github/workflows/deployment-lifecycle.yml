@@ -63,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [synthetic, current, historical, rebuild, command, inplace, fresh]
+        scenario: [synthetic, current, historical, rebuild, command, inplace, fresh, first-failure]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,7 +72,7 @@ jobs:
         with:
           node-version: 24
       - name: Update running fixture into actual application with owned source build
-        if: matrix.scenario != 'fresh'
+        if: matrix.scenario != 'fresh' && matrix.scenario != 'first-failure'
         run: |
           sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
           pattern='scenario=${{ matrix.scenario }}'
@@ -81,7 +81,7 @@ jobs:
           fi
           sudo env DEPLOYMENT_TEST_REAL_DEPLOYMENT=1 "$(command -v node)" --test "--test-name-pattern=$pattern" tests/deployment-linux-deployment.test.mjs
       - name: Create isolated public-lifecycle runtime account
-        if: matrix.scenario == 'fresh'
+        if: matrix.scenario == 'fresh' || matrix.scenario == 'first-failure'
         id: fresh_runtime_account
         run: sudo useradd --create-home --user-group --shell /usr/sbin/nologin agents-chat-test
       - name: Verify public first install, two updates and saved restoration
@@ -89,6 +89,11 @@ jobs:
         run: |
           sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
           sudo env DEPLOYMENT_TEST_REAL_FIRST_LIFECYCLE=1 "$(command -v node)" --test tests/deployment-linux-first-lifecycle.test.mjs
+      - name: Verify public first-install failure and no-backup recovery refusal
+        if: matrix.scenario == 'first-failure'
+        run: |
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo env DEPLOYMENT_TEST_REAL_FIRST_FAILURE=1 "$(command -v node)" --test tests/deployment-linux-first-failure.test.mjs
       - name: Remove isolated public-lifecycle runtime account
         if: always() && steps.fresh_runtime_account.outcome == 'success'
         run: sudo userdel --remove agents-chat-test
