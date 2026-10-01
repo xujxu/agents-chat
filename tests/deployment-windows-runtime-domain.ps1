@@ -55,7 +55,7 @@ if ($Server) {
 function Request($Identity, [guid]$Generation, [string]$Method) {
     return [Deployment.WindowsRuntimeControl]::Exchange($Generation, $Identity.pid, $Identity.identity, $Method, 15000)
 }
-function Raw-Request($Identity, [guid]$Generation, [string]$Payload) {
+function Raw-Request($Identity, [guid]$Generation, [string]$Payload, [int]$ReadDelay = 0) {
     $client = [Deployment.WindowsRuntimePipe]::Connect($Generation, $Identity.pid, $Identity.identity, 5000)
     $reader = $null
     $writer = $null
@@ -64,6 +64,7 @@ function Raw-Request($Identity, [guid]$Generation, [string]$Payload) {
         $writer = [IO.StreamWriter]::new($client, [Text.UTF8Encoding]::new($false), 4096, $true)
         $writer.AutoFlush = $true
         $writer.WriteLine($Payload)
+        if ($ReadDelay) { Start-Sleep -Milliseconds $ReadDelay }
         return Await ($reader.ReadLineAsync())
     } finally {
         if ($reader) { $reader.Dispose() }
@@ -155,6 +156,9 @@ if (process.argv[2] === 'child') {
             $request.generation = $generation.ToString('D')
             $request.method = 'retire'
             Assert ((Raw-Request $identity $generation ($request | ConvertTo-Json -Compress)) -ceq 'refused') 'Control protocol retired a running domain'
+            $request.method = 'observe'
+            $delayed = Raw-Request $identity $generation ($request | ConvertTo-Json -Compress) 500 | ConvertFrom-Json
+            Assert ($delayed.result.phase -eq 'root-exited' -and $delayed.requestId -ceq $request.requestId) 'Control server discarded a reply before the client read it'
             foreach ($payload in @('{"method":"stop","method":"observe"}', ('x' * 8193))) {
                 Assert ((Raw-Request $identity $generation $payload) -ceq 'refused') 'Malformed or oversized runtime request was accepted'
             }

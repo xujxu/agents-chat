@@ -6683,6 +6683,16 @@ without closing the Job. Stop/retire operate only after exact scope admission.
 Clients bind response IDs and strictly validate phase, exit code, members and
 the explicit absence of application-health authority within an overall deadline.
 
+`ef56a46` / `36898949657`, native job `110493522572`, passed prior task and
+pipe cases, then the first scoped exchange received EOF. The server disconnected
+immediately after writing; Windows explicitly discards unread data on
+`DisconnectNamedPipe`. Keep the reply connection until the client closes after
+reading, within the existing five-second deadline and bounded trailing-data
+budget. Do not use unbounded `FlushFileBuffers`/`WaitForPipeDrain`. Add a
+deliberately delayed reader to require reply retention, and keep internal
+oversized-reply errors distinct from expected peer transport failures.
+Reference: https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-disconnectnamedpipe
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

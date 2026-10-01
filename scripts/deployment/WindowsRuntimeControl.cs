@@ -87,9 +87,21 @@ namespace Deployment
         {
             using (var timeout = new CancellationTokenSource(PeerTimeout))
             {
-                try { await WriteFrame(pipe, frame, ReplyLimit, timeout.Token).ConfigureAwait(false); }
+                try
+                {
+                    await WriteFrame(pipe, frame, ReplyLimit, timeout.Token).ConfigureAwait(false);
+                    // DisconnectNamedPipe discards unread replies; let the receiving client close first.
+                    byte[] trailing = new byte[1024];
+                    int total = 0, count;
+                    while ((count = await pipe.ReadAsync(trailing.AsMemory(), timeout.Token).ConfigureAwait(false)) != 0)
+                    {
+                        if (total == 0) Log("trailing-data");
+                        total += count;
+                        if (total > RequestLimit) { Log("trailing-size"); return; }
+                    }
+                }
                 catch (OperationCanceledException) { Log("reply-deadline"); }
-                catch (IOException) { Log("reply-disconnected"); }
+                catch (IOException error) when (!(error is InvalidDataException)) { Log("reply-disconnected"); }
             }
         }
         async Task Refuse(string reason)
