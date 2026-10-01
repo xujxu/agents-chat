@@ -199,6 +199,9 @@ staging directories or unsettled worker evidence block cleanup rather than
 being silently discarded.
 Use `--help` for supported flags, `--status --json` for read-only status, and
 `--json` for machine-readable outcomes (progress/errors remain on stderr).
+Failed deploy/update results include bounded diagnostic codes and controller
+module line/column locations, without raw exceptions, private paths or native
+command output.
 The controller requires Node.js 24+, `/usr/bin/git`, systemd, port 3010, and a
 minimum 2 GiB build-space budget in addition to backup space. It keeps one
 complete backup and independent recovery helpers in the private sibling

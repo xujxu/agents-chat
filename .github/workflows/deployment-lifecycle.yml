@@ -207,6 +207,7 @@ jobs:
           tests/deployment-configuration-files.test.mjs
           tests/deployment-snapshot-configuration.test.mjs
           tests/deployment-runtime-version.test.mjs
+          tests/deployment-diagnostics.test.mjs
       - name: Probe Windows cold retirement stability
         if: runner.os == 'Windows'
         shell: pwsh

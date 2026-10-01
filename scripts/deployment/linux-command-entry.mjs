@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArguments, quoteArgument } from './cli.mjs';
+import { deploymentDiagnostics } from './deployment-diagnostics.mjs';
 
 function helpText(operation) {
   const update = operation === 'update';
@@ -107,10 +108,19 @@ export async function runLinuxCommandEntry({ operation, entryUrl, args = process
             : `Linux ${operation} failed. Preserve backup, lock and recovery evidence; inspect status before retrying.`;
     const status = `sudo bash ${quoteArgument(script, 'linux')} --project-dir ${quoteArgument(options?.project ?? project, 'linux')} --status --json`;
     const logs = 'sudo journalctl --no-pager -u agents-chat.service -n 40';
+    const roots = [new URL('./', entryUrl).href];
+    if (captured) roots.push(new URL('./', pathToFileURL(captured.entrypoint)).href);
+    const diagnostics = deploymentDiagnostics(error, roots);
     const result = { status: 'failed', code, check, message, nextActions: { status, logs },
+      diagnostics,
       ...(error?.backupCreated === false ? { backupCreated: false } : {}) };
     if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
     process.stderr.write(`${message} (${code}${check ? `; ${check}` : ''})\nStatus: ${status}\nLogs: ${logs}\n`);
+    for (const diagnostic of diagnostics) {
+      for (const location of diagnostic.locations) {
+        process.stderr.write(`Diagnostic: ${diagnostic.code} ${location.module}:${location.line}:${location.column}\n`);
+      }
+    }
     process.exitCode = 1;
   }
   if (captured) {

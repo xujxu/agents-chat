@@ -5836,6 +5836,17 @@ present availability, not an unsupported claim that an older backup never
 existed. Push these causal tests before implementing the focused admission and
 CLI rendering change; verify the exact failures in Actions.
 
+The continuous gate `1d0029c` / `36844406939` reached accepted fresh deployment
+and a verified no-op update, then failed the first explicit source update during
+preflight with only a generic public error. Add bounded diagnostic locations to
+the public deploy/update error boundary before changing admission. Report only
+validated error codes and module basename/line/column from the original or
+captured controller directory. Never print exception messages, absolute paths,
+native stdout/stderr, or environment values. Bound cause/aggregate traversal to
+eight distinct errors and three distinct locations per error; cover cycles,
+redaction and lookalike paths in both contract jobs. Keep normal outcomes and
+all admission/ownership checks unchanged.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
