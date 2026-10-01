@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstat, readdir, readFile, readlink, rmdir, unlink } from 'node:fs/promises';
+import { lstat, readdir, readFile, readlink, rmdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import test from 'node:test';
 import { freshSourceInstallationFixture } from './deployment-linux-first-source-fixture.mjs';
-import { loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
+import { captureLockOwner, loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation, readWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { inspectTargetCompatibility } from '../scripts/deployment/target-compatibility.mjs';
@@ -15,6 +17,31 @@ import { captureLinuxDeploymentAcceptance } from '../scripts/deployment/linux-de
 import { inspectLinuxConfiguration } from '../scripts/deployment/linux-configuration.mjs';
 import { publishDeploymentReceipt, readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
 import { waitLinuxReadiness } from '../scripts/deployment/linux-readiness.mjs';
+
+const execute = promisify(execFile);
+
+async function removeFirstSourceUnit(f) {
+  const { unit } = f.installation.identity;
+  const fragment = `/etc/systemd/system/${unit}`;
+  const inhibition = `${fragment}.d/90-agents-chat-deployment.conf`;
+  let owner = f.lock;
+  try { owner = captureLockOwner(JSON.parse(await readFile(path.join(f.control, 'lock/owner.json'), 'utf8'))); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  assert.equal(owner.project, f.project);
+  const current = await linuxSystemdProperties(unit, ['LoadState', 'FragmentPath'], { allowMissing: true });
+  if (current.LoadState !== 'not-found') {
+    assert.equal(current.FragmentPath, fragment);
+    await linuxNative('/usr/bin/systemctl', ['--system', 'stop', unit]);
+  }
+  for (const file of [`/etc/systemd/system/multi-user.target.wants/${unit}`,
+    `${inhibition}.${owner.token}.held`, inhibition, fragment]) {
+    try { await unlink(file); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  try { await rmdir(path.dirname(inhibition)); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  await linuxNative('/usr/bin/systemctl', ['--system', 'daemon-reload']);
+}
 
 async function firstDeployment(t, completion) {
   const { prepareLinuxFirstBuild } = await import('../scripts/deployment/linux-first-build.mjs');
@@ -170,7 +197,6 @@ async function firstController(t, cancelled) {
   const f = await freshSourceInstallationFixture(t);
   const { unit, executables } = f.installation.identity;
   const fragment = `/etc/systemd/system/${unit}`;
-  const inhibition = `${fragment}.d/90-agents-chat-deployment.conf`;
   const startupLink = `/etc/systemd/system/multi-user.target.wants/${unit}`;
   const phases = [];
   let service;
@@ -239,18 +265,7 @@ async function firstController(t, cancelled) {
     await service.check();
   } finally {
     await service?.close();
-    const current = await linuxSystemdProperties(unit, ['LoadState', 'FragmentPath'], { allowMissing: true });
-    if (current.LoadState !== 'not-found') {
-      assert.equal(current.FragmentPath, fragment);
-      await linuxNative('/usr/bin/systemctl', ['--system', 'stop', unit]);
-    }
-    for (const file of [startupLink, `${inhibition}.${f.lock.token}.held`, inhibition, fragment]) {
-      try { await unlink(file); }
-      catch (error) { if (error.code !== 'ENOENT') throw error; }
-    }
-    try { await rmdir(path.dirname(inhibition)); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
-    await linuxNative('/usr/bin/systemctl', ['--system', 'daemon-reload']);
+    await removeFirstSourceUnit(f);
   }
 }
 
@@ -259,3 +274,54 @@ for (const cancelled of [false, true]) {
     skip: process.env.DEPLOYMENT_TEST_REAL_FIRST_BUILD !== '1',
   }, t => firstController(t, cancelled));
 }
+
+test('public deploy installs and accepts an actual fresh application from its own checkout', {
+  skip: process.env.DEPLOYMENT_TEST_REAL_FIRST_BUILD !== '1',
+}, async t => {
+  await import('../scripts/deployment/linux-deploy-command.mjs');
+  const f = await freshSourceInstallationFixture(t, { unit: 'agents-chat.service' });
+  const script = path.join(f.project, 'scripts/deploy.sh');
+  await releaseLock(f.control, f.lock);
+  await rmdir(f.control);
+  const dotenv = path.join(f.project, '.env.local');
+  await writeFile(dotenv, `${await readFile(dotenv, 'utf8')}npm_config_cache=${path.join(f.home, '.npm')}\n`);
+  const options = { cwd: '/', timeout: 1200000, maxBuffer: 16384,
+    env: { PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin`, HOME: '/root', NODE_ENV: 'development' } };
+  const invoke = async flags => execute('/usr/bin/bash', [script, '--project-dir', f.project, '--json', ...flags], options);
+  let service;
+  try {
+    assert.equal(JSON.parse((await invoke(['--help'])).stdout).status, 'help');
+    assert.deepEqual(JSON.parse((await invoke(['--status'])).stdout),
+      { status: 'unmanaged', project: f.project, control: f.control, phase: null });
+    for (const flags of [['--wait', '0'], ['--verify'], ['--unknown']]) {
+      await assert.rejects(invoke(flags), error => {
+        assert.equal(error.code, 1);
+        assert.equal(JSON.parse(error.stdout).status, 'failed');
+        return true;
+      });
+      await assert.rejects(lstat(f.control), { code: 'ENOENT' });
+    }
+    const result = await invoke(['--no-pull']);
+    assert.deepEqual(JSON.parse(result.stdout), { status: 'accepted', backupCreated: false });
+    assert.match(result.stderr, /Deployment phase: accepted/);
+    const state = await loadState(f.control);
+    assert.equal(state.operation, 'deploy');
+    assert.equal(state.phase, 'accepted');
+    assert.equal(state.priorRuntime, 'absent');
+    assert.equal(state.backupId, null);
+    assert.deepEqual((await readdir(f.control)).sort(), ['deployment.json', 'recovery-engine', 'state.json']);
+    assert.equal(JSON.parse((await invoke(['--status'])).stdout).status, 'idle');
+    const { unit, executables } = f.installation.identity;
+    service = await inspectLinuxService({ unit, project: f.project, npm: executables[0].file, node: executables[1].file });
+    const receipt = await readDeploymentReceipt(f.control, f.project);
+    assert.equal(receipt.identity.service, createHash('sha256').update(JSON.stringify(service.identity)).digest('hex'));
+    assert.equal(receipt.identity.source, state.targetCommit);
+    assert.equal(service.identity.runtime.uid, 65534);
+    const configuration = await inspectLinuxConfiguration({ service, profile: f.installation.configuration.profile });
+    await waitLinuxReadiness({ service, port: 3010, providers: configuration.providers });
+    assert.equal((await linuxSystemdProperties(unit, ['UnitFileState'])).UnitFileState, 'enabled');
+  } finally {
+    await service?.close();
+    await removeFirstSourceUnit(f);
+  }
+});

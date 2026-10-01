@@ -223,7 +223,7 @@ the original operation, target, account, toolchain or configuration identity.
 The separate first-activation adapter inspects a genuine inactive unit and
 retains the newly started generation for owned stop, including cancellation
 cleanup. Its `active-unverified` result is not readiness or deployment acceptance;
-first-install orchestration and public deploy integration remain pending.
+public deploy integration remains pending.
 First-retirement implementation uses a version 4 inventory for its actual
 installation/enablement journals, not a fabricated stop journal. Its persistent
 startup link and published deployment receipt remain outside the deletion
@@ -231,6 +231,9 @@ inventory and are checked during live and saved cold cleanup. Actions has
 accepted these retirement gates, including real application readiness and
 interruption/tampering recovery coverage; public deploy is not yet wired to
 this path.
+The internal first-deployment controller has also passed actual source-build,
+readiness, retirement and cancellation acceptance. Failed first deployments
+explicitly report that no previous backup exists and retain operation evidence.
 Do not use this branch on a live installation before the remaining platform
 acceptance gates. The `deploy.sh` commands below describe the legacy implementation,
 not the new backup/restore guarantees.

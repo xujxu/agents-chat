@@ -11,7 +11,7 @@ import { acquireLock } from '../scripts/deployment/state.mjs';
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../', import.meta.url));
 
-export async function freshSourceInstallationFixture(t) {
+export async function freshSourceInstallationFixture(t, { unit = `agents-first-${randomUUID()}.service` } = {}) {
   const root = await temporaryDeployment(t);
   await chmod(root, 0o755);
   const project = path.join(root, 'fresh app');
@@ -36,7 +36,7 @@ export async function freshSourceInstallationFixture(t) {
   await chown(home, 65534, 65534);
   const controller = new AbortController();
   const installation = await inspectLinuxFirstInstall({
-    project, unit: `agents-first-${randomUUID()}.service`, signal: controller.signal,
+    project, unit, signal: controller.signal,
   });
   const control = path.join(root, '.fresh app.deployment');
   await mkdir(control, { mode: 0o700 });

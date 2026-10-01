@@ -5708,7 +5708,47 @@ accounting is extracted to `linux-deployment-capacity.mjs` for both controllers;
 same-device requirements remain summed rather than independently admitted.
 Invalid zero space/no-wait/skipped-install options must leave even preflight
 state unwritten. First-deploy errors retain the original evidence and explicitly
-report that no previous backup exists. Full implementation validation is pending.
+report that no previous backup exists. Implementation `811c6d2` / `36835461914`
+passed all eighteen jobs and all twenty-five native first-install cases.
+
+### Public Linux deploy entry
+
+Preserve the accepted update command behavior while sharing its control
+admission and CLI presentation with deploy. Move common admission into
+`linux-deployment-command.mjs` and leave named update/deploy wrappers in
+`linux-update-command.mjs` and `linux-deploy-command.mjs`. A deploy with a
+genuinely absent unit uses `inspectLinuxFirstInstall` before creating control
+files, then the accepted `runLinuxFirstDeployment`; an existing running unit
+uses `runLinuxLiveDeployment` with `operation: 'deploy'`. Never treat an inactive,
+failed or conflicting existing unit as a fresh installation. Keep update's
+already-current semantics exclusive to update.
+
+Share entry rendering and sanitized diagnostics in `linux-command-entry.mjs`,
+called by thin update/deploy entry modules. Extend controller capture with an
+explicit allowlisted deploy/update command choice while preserving its default
+update entry and complete source-inventory checks. Replace legacy `deploy.sh`
+with the same Node-checked, environment-scrubbed shell boundary as `update.sh`.
+Help/status remain read-only. Deferred verification/no-wait remain explicitly
+unsupported; reject fresh skipped dependencies and unsupported deploy preview
+before creating operation files. Do not bootstrap packages or infer permission
+to alter accounts/configuration in this command layer.
+
+Add a native public-command case to the existing first-build test file, after
+the three sequential real builds. Require the deploy module before executing
+the legacy script so the causal test cannot invoke an unsafe legacy deployment.
+Use a fresh non-root source checkout, the public default unit, and a private
+dotenv npm cache for the fixture's NSS account. Invoke the checkout's actual
+`deploy.sh` from `/`, testing read-only help/status and invalid flags before
+deployment. Require one JSON accepted/no-backup result, durable accepted state,
+retired evidence, persistent enablement, actual owned application readiness,
+matching receipt and idle public status. Cleanup binds the fixture unit and
+the original or current validated lock owner; never remove unrelated units.
+
+Push this causal test and require its missing-module failure in Actions before
+implementing the public layer. Preserve all existing native and contract gates.
+Public fresh-to-update/second-update/restore data continuity, remaining runtime
+modes, prerequisite assistance and genuine Windows lifecycle acceptance remain
+subsequent gates, not claims made by this initial public-command case.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
