@@ -1,28 +1,12 @@
 import assert from 'node:assert/strict';
 import { lstat, mkdir, readdir, rmdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
-import { fixture, ready, systemctl } from './deployment-linux-service-fixture.mjs';
+import { fixture, quiescentFixture, ready, systemctl } from './deployment-linux-service-fixture.mjs';
 import { inspectLinuxInactiveService } from '../scripts/deployment/linux-inactive-service.mjs';
 import { linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
 
 const native = { skip: process.platform !== 'linux' || process.getuid() !== 0 };
-
-async function quiescentFixture(t, state) {
-  const f = await fixture(t, { nonroot: true, start: false, settings: state === 'failed' ? 'Restart=no' : '',
-    ...(state === 'failed' ? { server: 'process.exit(42);' } : {}) });
-  if (state === 'failed') {
-    try { await systemctl('start', f.unit); }
-    catch (error) { assert.equal(error.code, 1); }
-    for (let attempt = 0; attempt < 200; attempt++) {
-      if ((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState === 'failed') break;
-      await delay(100);
-    }
-  }
-  assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, state);
-  return f;
-}
 
 for (const state of ['inactive', 'failed']) {
   test(`native ${state} service observation preserves configured identity without activation`, native, async t => {

@@ -233,6 +233,8 @@ jobs:
         run: sudo "$(command -v node)" --test tests/deployment-linux-service-sources.test.mjs
       - name: Observe initially inactive and failed service identities
         run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-service.test.mjs
+      - name: Maintain initially stopped service authority
+        run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-maintenance.test.mjs
       - name: Restore actual Git commit-graph layouts with privileged file ownership
         run: sudo "$(command -v node)" --test tests/deployment-git-objects.test.mjs
       - name: Exercise actual saved-engine systemd workers

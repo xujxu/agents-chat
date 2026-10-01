@@ -6024,6 +6024,38 @@ Also check closed/cancelled/invalid-flag behavior for both new methods, and
 verify that static policy checks after an actual activation return no stopped
 authority while an explicit stopped check refuses the running service.
 
+Corrected `537f273` / run `36857706177`, native job `110354363493`, passed
+the 12-case observation/policy gate and the entire native worker job. Full
+regression is still running (14 jobs complete, no failures at this checkpoint).
+
+### Initially stopped maintenance ownership
+
+Next add an internal maintenance boundary using durable `priorRuntime: stopped`,
+not a caller flag or a fabricated running generation. The observer supplies a
+`stopped:<sha256>` identifier of its complete immutable observation, distinct
+from both an absent installation and a last failed process's InvocationID.
+Require the maintenance state to bind that observation before creating any
+inhibition evidence.
+
+Preserve version-1 running-service receipts. Version 2 for an originally
+stopped service records `intent`, `inhibited`, `stopped`, without pretending to
+issue a stop command or changing an existing failed state. Reject prior-runtime
+restart before consuming activation authority. Permit the new deployment to
+use the existing owned activation and retirement path. Re-establish read-only
+cold inspection of this explicit originally-inactive identity after closing
+the original handles; retain all boot/source/account/executable/inhibitor and
+empty-domain checks, without interpreting PID zero as a historical process.
+
+Native tests first cover actual inactive and exit-42 failed services, durable
+truthful receipts, no invented backup, forbidden prior restart, cold inspection,
+and new-generation activation/retirement. The quiescent fixture is shared with
+the existing observation tests and now asserts real ExecMainStatus=42, already
+confirmed in prior native logs. These are service-maintenance tests, not full
+source builds or dead-owner restore acceptance. Public inactive admission and
+cold transaction/lease dispatch remain gated until their own integration is
+complete. Add the inactive helper to the saved worker/recovery closure when
+the maintenance module begins importing it.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

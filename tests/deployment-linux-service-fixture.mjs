@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chmod, chown, mkdir, mkdtemp, readFile, realpath, rm, unlink, writeFile } from 'node:fs/promises';
@@ -5,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
+import { linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
 
 const execute = promisify(execFile);
 const native = (file, args) => execute(file, args, { timeout: 20000, maxBuffer: 8192 });
@@ -90,4 +92,21 @@ export async function ready(f) {
     await delay(25);
   }
   throw new Error('npm service fixture did not become ready.');
+}
+
+export async function quiescentFixture(t, state) {
+  if (!['inactive', 'failed'].includes(state)) throw new Error('Unsupported quiescent service fixture state.');
+  const f = await fixture(t, { nonroot: true, start: false, settings: state === 'failed' ? 'Restart=no' : '',
+    ...(state === 'failed' ? { server: 'process.exit(42);' } : {}) });
+  if (state === 'failed') {
+    try { await systemctl('start', f.unit); }
+    catch (error) { assert.equal(error.code, 1); }
+    for (let attempt = 0; attempt < 200; attempt++) {
+      if ((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState === 'failed') break;
+      await delay(100);
+    }
+    assert.equal((await linuxSystemdProperties(f.unit, ['ExecMainStatus'])).ExecMainStatus, '42');
+  }
+  assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, state);
+  return f;
 }
