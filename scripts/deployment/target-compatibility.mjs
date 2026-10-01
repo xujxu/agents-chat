@@ -24,7 +24,7 @@ const bindings = Object.freeze({
   'lib/auth.ts': '25a7f2115d53976733bdbdbec093e902852b41e4',
   'app/api/auth/[...nextauth]/route.ts': 'f5ae0ae509725efc21923232fa114d90c80489ac',
 });
-const protocol = Object.freeze({ version: 1, snapshotVersion: 1 });
+const protocols = Object.freeze([1, 2].map(snapshotVersion => Object.freeze({ version: 1, snapshotVersion })));
 function refusal(check) {
   return Object.assign(new Error(`Target compatibility refused: ${check}.`), {
     code: 'DEPLOYMENT_TARGET_UNSUPPORTED', check,
@@ -76,10 +76,10 @@ export async function inspectTargetCompatibility({ project, commit, nodeVersion,
     const declaredProfile = await json('scripts/deployment/compatibility.json');
     const historical = commit === baseline;
     if (historical ? declaredProtocol !== null || declaredProfile !== null
-      : !same(declaredProtocol, protocol) || !same(declaredProfile, profile)) throw refusal('target-declaration');
+      : !protocols.some(protocol => same(declaredProtocol, protocol)) || !same(declaredProfile, profile)) throw refusal('target-declaration');
     return {
       status: 'target-supported', commit, mode: historical ? 'historical' : 'declared',
-      protocol: historical ? null : { ...protocol },
+      protocol: historical ? null : { ...declaredProtocol },
       databaseProfile: profile.databaseProfile, configurationProfile: profile.configurationProfile,
       runtimeProfile: profile.runtimeProfile,
       pendingChecks: [...(historical ? ['historical-adapter'] : []),

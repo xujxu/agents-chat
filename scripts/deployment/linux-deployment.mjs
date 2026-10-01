@@ -8,6 +8,7 @@ import { assertLockOwner, captureLockOwner, loadState, releaseLock, writeState }
 import { externalWorkerDirectory, syncWorkerDirectory } from './worker-files.mjs';
 import { saveWorkerEngine } from './saved-worker-engine.mjs';
 import { saveRecoveryEngine, verifyRecoveryEngine } from './saved-recovery-engine.mjs';
+import { retireRecoveryEngines } from './recovery-engine-retention.mjs';
 import { createWorkerOperation } from './worker-operation.mjs';
 import { prepareLinuxSourceBuild } from './linux-source-build.mjs';
 import { admitLinuxCompatibility } from './linux-compatibility.mjs';
@@ -90,6 +91,11 @@ export async function runLinuxLiveDeployment({
     await authority();
     await stopped.retire();
     await workers.retire();
+    if (state.phase === 'accepted') {
+      await runStage('retire-engines', stageSignal => retireRecoveryEngines({
+        control, lock, current: recovery, signal: stageSignal,
+      }), { timeoutMs: Math.min(timeoutSeconds * 1000, Number.MAX_SAFE_INTEGER), signal });
+    }
     await releaseLock(control, lock);
   };
   try {

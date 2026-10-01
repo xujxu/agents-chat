@@ -5242,7 +5242,7 @@ traversal failures plus foreign-project, partial-scope and Windows backups.
 Admission must leave control-directory contents unchanged in all these cases.
 
 Public restore checkpoint: `3281e87` / `36749424798` passed all 17 jobs.
-Additional admission coverage `b639f6c` / `36751227818` is running.
+Additional admission coverage `b639f6c` / `36751227818` passed all 17 jobs.
 
 ### Recovery engine generations across real controller upgrades
 
@@ -5270,6 +5270,27 @@ not cover that transition.
   operation authority while retaining the legacy engine and every engine needed
   by the current backup or active operation. Do not delete unknown staging
   evidence or infer that an unclassified controller has settled.
+
+Generation causal `e07d1f6` / `36797546742` is running; both OS contract
+jobs have confirmed the original `Recovery manifest changed` failure.
+Implementation `6dc25d8` / `36797701490` is queued. It uses one-file-at-a-time
+capture, immutable publication and version-2 snapshot binding; original
+version-1 engines remain usable without current inventory assumptions.
+
+Retention causal `2b7afe2` is committed locally, waiting for the pending
+implementation to be admitted before push. Its seven focused native tests
+require retaining the legacy/current backup engines, resumable unlink, and
+refusal of workers, staging evidence, foreign files, symlinks and backup
+corruption. The implementation runs only after accepted receipt publication
+and service/worker retirement under the current lock. It verifies every
+candidate before any rename; a root-private `retired-recovery-engine-<digest>`
+directory is the durable deletion intent, its checked manifest is removed last,
+and only individually verified flat helper files are unlinked. No recursive
+deletion of an unknown helper directory is allowed. The actual command scenario
+also creates an obsolete generation and requires native retirement to remove
+it while the digest-bound backup generation still restores source and data.
+The public target declaration advertises snapshot version 2; compatibility
+inspection explicitly supports both version-1 and version-2 declarations.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

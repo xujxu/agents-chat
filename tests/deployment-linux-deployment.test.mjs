@@ -224,6 +224,7 @@ test(`native deployment composes real application acceptance and saved restorati
   const publicCommand = ['command', 'inplace'].includes(scenario);
   const f = await installation(t, { unitName: publicCommand ? 'agents-chat.service' : undefined });
   let tools = repository;
+  let obsoleteEngine;
   const controlNames = ['backup', 'deployment.json', 'recovery-engine', 'state.json'];
   const command = async args => {
     const inPlace = scenario === 'inplace' && !args.includes('--status');
@@ -297,6 +298,10 @@ test(`native deployment composes real application acceptance and saved restorati
         await mkdir(path.join(tools, 'lib/workflow'), { recursive: true });
         await cp(path.join(repository, 'lib/workflow/workflowSchema.mjs'), path.join(tools, 'lib/workflow/workflowSchema.mjs'));
         const helper = path.join(tools, 'scripts/deployment/linux-readiness.mjs');
+        await writeFile(helper, `${await readFile(helper, 'utf8')}\n// Obsolete controller generation.\n`);
+        obsoleteEngine = await saveRecoveryEngine({
+          source: path.join(tools, 'scripts/deployment'), control: f.control, allowVersionChange: true,
+        });
         await writeFile(helper, `${await readFile(helper, 'utf8')}\n// Next controller generation.\n`);
       }
       assert.equal((await command(['--revision', nextRevision, '--timeout', '600'])).status, 'accepted');
@@ -320,6 +325,7 @@ test(`native deployment composes real application acceptance and saved restorati
       controlNames.push(`recovery-engine-${backup.recoveryEngine}`);
       controlNames.sort();
       assert.deepEqual(await readFile(path.join(f.control, 'recovery-engine/manifest.json')), originalEngine);
+      await assert.rejects(readdir(obsoleteEngine.directory), { code: 'ENOENT' });
     }
     assert.notEqual(backup.id, oldBackupId);
     assert.equal(backup.source.commit, f.target);

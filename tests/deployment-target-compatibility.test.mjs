@@ -71,6 +71,12 @@ test('current candidate commit carries a usable reviewed declaration', async () 
   assert.equal(result.mode, 'declared');
 });
 
+test('generation-bound snapshot targets advertise version two without rejecting version-one targets', async t => {
+  const f = await targetFixture(t, async p =>
+    writeFile(path.join(p, 'scripts/deployment/protocol.json'), '{"version":1,"snapshotVersion":2}'));
+  assert.deepEqual((await inspect(f)).protocol, { version: 1, snapshotVersion: 2 });
+});
+
 test('Git replacement objects cannot disguise a changed source profile', async t => {
   const f = await targetFixture(t, async p => writeFile(path.join(p, 'lib/chatStore.ts'), 'changed'));
   await git(f.project, ['replace', f.commit, baseline]);

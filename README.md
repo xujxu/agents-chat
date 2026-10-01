@@ -183,6 +183,13 @@ When controller helpers change, the update saves an immutable
 `recovery-engine` directory. Version-1 backups continue to use that original
 engine. Do not remove these directories or unpublished `.staging` evidence;
 older restore tools that cannot read version-2 snapshots must not be used.
+After a successful update and verified worker retirement, obsolete generated
+engines are removed while preserving the original engine and the generation
+required by the retained backup/current operation. Cleanup first renames a
+verified unused generation to `retired-recovery-engine-<sha256>` and removes its
+manifest last, allowing interrupted file deletion to resume. Unknown files,
+staging directories or unsettled worker evidence block cleanup rather than
+being silently discarded.
 Use `--help` for supported flags, `--status --json` for read-only status, and
 `--json` for machine-readable outcomes (progress/errors remain on stderr).
 The controller requires Node.js 24+, `/usr/bin/git`, systemd, port 3010, and a

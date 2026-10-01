@@ -22,9 +22,9 @@ export async function locateRecoveryEngine({ control, manifestSha256 }) {
   return legacy;
 }
 
-export async function inspectRecoveryEngineFiles({ directory, manifestSha256, signal }) {
-  const engine = await canonicalWorkerDirectory(directory, { privateMode: true });
-  const file = path.join(engine.root, 'manifest.json');
+export async function readRecoveryEngineManifest({ directory, manifestSha256 }) {
+  await canonicalWorkerDirectory(directory, { privateMode: true });
+  const file = path.join(directory, 'manifest.json');
   const bytes = await readWorkerFile(file, 32768, { privateMode: true });
   const digest = recoveryDigest(bytes);
   if (manifestSha256 !== undefined && digest !== manifestSha256) throw new Error('Recovery engine digest changed.');
@@ -35,7 +35,6 @@ export async function inspectRecoveryEngineFiles({ directory, manifestSha256, si
   const names = new Set();
   let total = 0;
   for (const item of manifest.files) {
-    signal?.throwIfAborted();
     const entry = captureWorkerFields(item, ['name', 'bytes', 'sha256'], 'saved restore helper');
     if (typeof entry.name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:mjs|ps1|cs)$/.test(entry.name)
       || names.has(entry.name) || !Number.isSafeInteger(entry.bytes) || entry.bytes < 0 || entry.bytes > 1024 * 1024
@@ -45,14 +44,25 @@ export async function inspectRecoveryEngineFiles({ directory, manifestSha256, si
     names.add(entry.name);
     total += entry.bytes;
     if (total > 16 * 1024 * 1024) throw new Error('Saved recovery helpers exceed the supported byte budget.');
-    const content = await readWorkerFile(path.join(engine.root, entry.name), 1024 * 1024, { privateMode: true });
+  }
+  if (!names.has('linux-restore-entry.mjs') || !names.has('saved-recovery-engine.mjs')) {
+    throw new Error('Saved recovery engine inventory is incomplete.');
+  }
+  return { manifestSha256: digest, manifest, bytes };
+}
+
+export async function inspectRecoveryEngineFiles({ directory, manifestSha256, signal }) {
+  const engine = await canonicalWorkerDirectory(directory, { privateMode: true });
+  const { manifest, bytes, manifestSha256: digest } = await readRecoveryEngineManifest({ directory, manifestSha256 });
+  for (const entry of manifest.files) {
+    signal?.throwIfAborted();
+    const content = await readWorkerFile(path.join(directory, entry.name), 1024 * 1024, { privateMode: true });
     if (content.length !== entry.bytes || recoveryDigest(content) !== entry.sha256) {
       throw new Error('Saved recovery helper integrity failure.');
     }
   }
-  if (!names.has('linux-restore-entry.mjs') || !names.has('saved-recovery-engine.mjs')
-    || JSON.stringify((await readdir(engine.root)).sort()) !== JSON.stringify([...names, 'manifest.json'].sort())
-    || !(await readWorkerFile(file, 32768, { privateMode: true })).equals(bytes)) {
+  if (JSON.stringify((await readdir(engine.root)).sort()) !== JSON.stringify([...manifest.files.map(entry => entry.name), 'manifest.json'].sort())
+    || !(await readWorkerFile(path.join(directory, 'manifest.json'), 32768, { privateMode: true })).equals(bytes)) {
     throw new Error('Saved recovery engine inventory or manifest changed.');
   }
   const current = await canonicalWorkerDirectory(engine.root, { privateMode: true });
