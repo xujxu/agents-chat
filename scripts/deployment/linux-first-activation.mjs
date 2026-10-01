@@ -102,8 +102,9 @@ export async function activateLinuxFirstUnit({ installation, publication, enable
         throw new Error('Original first-unit activation policy changed.');
       }
       const enablement = await linuxSystemdProperties(unit, ['UnitFileState', 'Job']);
-      if (enablement.UnitFileState !== 'enabled' || stopped && enablement.Job !== '0') {
-        throw new Error('First-unit enablement or pending job changed.');
+      // systemctl show renders a zero job ID as an empty property value.
+      if (enablement.UnitFileState !== 'enabled' || stopped && enablement.Job !== '') {
+        throw Object.assign(new Error('First-unit enablement or pending job changed.'), { observed: enablement });
       }
       if (stopped) await unstarted(current.state);
     };

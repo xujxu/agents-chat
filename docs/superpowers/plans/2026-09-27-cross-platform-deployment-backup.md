@@ -5556,6 +5556,17 @@ jobs, including eleven native first-install cases. Activation causal `2e68f32` /
 publication/handoff cases. The new adapter and shared forward cancellation
 checks now await native and full-matrix implementation acceptance.
 
+Activation causal `2e68f32` / `36823356982` finished with seventeen successful
+jobs and only the two expected missing-module failures. Implementation
+`be9d913` / `36824967343` reached native execution but refused the idle-job gate
+before creating an activation journal. The check incorrectly expected textual
+`Job=0`; systemd v255's `src/systemctl/systemctl-show.c` prints an absent job as
+an empty property value (while positive IDs are printed numerically).
+The correction requires an explicitly present empty Job value, not a missing
+field or fallback, and adds non-secret enablement/job observations on refusal.
+The original parser still rejects missing properties. Full acceptance remains
+pending, including the added real application-readiness gate below.
+
 ### First-install application readiness evidence
 
 Extend the actual first-build/activation case with the existing
