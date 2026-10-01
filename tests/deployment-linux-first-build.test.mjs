@@ -6,8 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { freshSourceInstallationFixture } from './deployment-linux-first-source-fixture.mjs';
-import { captureLockOwner, loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
+import { freshSourceInstallationFixture, removeFirstSourceUnit } from './deployment-linux-first-source-fixture.mjs';
+import { loadState, releaseLock, writeState } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation, readWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { inspectTargetCompatibility } from '../scripts/deployment/target-compatibility.mjs';
@@ -19,29 +19,6 @@ import { publishDeploymentReceipt, readDeploymentReceipt } from '../scripts/depl
 import { waitLinuxReadiness } from '../scripts/deployment/linux-readiness.mjs';
 
 const execute = promisify(execFile);
-
-async function removeFirstSourceUnit(f) {
-  const { unit } = f.installation.identity;
-  const fragment = `/etc/systemd/system/${unit}`;
-  const inhibition = `${fragment}.d/90-agents-chat-deployment.conf`;
-  let owner = f.lock;
-  try { owner = captureLockOwner(JSON.parse(await readFile(path.join(f.control, 'lock/owner.json'), 'utf8'))); }
-  catch (error) { if (error.code !== 'ENOENT') throw error; }
-  assert.equal(owner.project, f.project);
-  const current = await linuxSystemdProperties(unit, ['LoadState', 'FragmentPath'], { allowMissing: true });
-  if (current.LoadState !== 'not-found') {
-    assert.equal(current.FragmentPath, fragment);
-    await linuxNative('/usr/bin/systemctl', ['--system', 'stop', unit]);
-  }
-  for (const file of [`/etc/systemd/system/multi-user.target.wants/${unit}`,
-    `${inhibition}.${owner.token}.held`, inhibition, fragment]) {
-    try { await unlink(file); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
-  }
-  try { await rmdir(path.dirname(inhibition)); }
-  catch (error) { if (error.code !== 'ENOENT') throw error; }
-  await linuxNative('/usr/bin/systemctl', ['--system', 'daemon-reload']);
-}
 
 async function firstDeployment(t, completion) {
   const { prepareLinuxFirstBuild } = await import('../scripts/deployment/linux-first-build.mjs');

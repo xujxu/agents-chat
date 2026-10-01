@@ -5778,6 +5778,36 @@ dedicated `agents-chat-test` account with its own primary group and real home;
 the public fixture uses its inspected numeric uid/gid. This is CI setup only,
 not permission for the production command to alter accounts.
 
+### Continuous public first-install lifecycle gate
+
+Add `tests/deployment-linux-first-lifecycle.test.mjs` and a separate native
+`scenario=fresh` matrix cell so its three real source builds and snapshot/restore
+operations do not compete for port 3010 or the existing first-build job's budget.
+Keep all eighteen existing jobs and their timeouts; the additional cell uses
+the same twenty-five-minute deadline. Provision and remove its isolated
+primary-group-only account in Actions, with cleanup conditional on successful
+creation.
+
+Use a genuine fresh checkout and three distinct real Git commits with different
+README fixture markers while preserving reviewed application bindings; create
+the two child commits as the runtime uid/gid, without hooks or signing.
+Invoke public `deploy.sh --no-pull`, verify actual owned readiness, write a chat
+through the authenticated API, and require `update.sh --no-pull` to preserve the
+same accepted generation without creating a backup. Then invoke public update
+with each child revision, requiring real source builds and replacement of the
+single retained backup. Rename the chat before and after the second update to
+distinguish current data from retained snapshot data.
+
+Displace the installed checkout's scripts and remove its Git object pack
+directory before invoking public restore from independent tools with explicit
+data-loss acknowledgement. Require the second revision, README bytes and original
+build ID, pre-second-update chat name/message, unchanged retained backup/last deployment
+receipt, restored state, clean control inventory and enabled owned service.
+This verifies the same installation across the version-4 fresh handoff and
+subsequent running-service updates/restoration, not just separate fixtures.
+Reuse first-source setup/owned cleanup and extend the HTTP login fixture with
+an optional password while preserving its existing default.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function loginDeploymentFixture() {
+export async function loginDeploymentFixture({ password = 'private-fixture-password' } = {}) {
   const cookies = new Map();
   const request = async (resource, options = {}) => {
     const response = await fetch(`http://127.0.0.1:3010${resource}`, {
@@ -19,7 +19,7 @@ export async function loginDeploymentFixture() {
   assert.equal(typeof csrfToken, 'string');
   await request('/api/auth/callback/admin-login', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ csrfToken, username: 'fixture', password: 'private-fixture-password',
+    body: new URLSearchParams({ csrfToken, username: 'fixture', password,
       callbackUrl: 'http://localhost:3010', json: 'true' }),
   });
   assert.equal((await request('/api/auth/session')).user.email, 'admin@local');
