@@ -6162,6 +6162,51 @@ admission in all four native cases (`110373394436`), including the killed
 restorer child. Cancel this known-failing run after capturing those results;
 its cancellation is not a regression success.
 
+Implementation `19c8ded` / `36863844868` passed both platform contracts and
+all four native cold tests. Native worker job `110374457135` also completed
+its legacy suite successfully; 13 of 20 jobs had completed without failures.
+The full regression remains required.
+
+### Configuration admission without a live process
+
+Keep existing running and saved-restore configuration behavior unchanged.
+Add an explicit inactive branch to `inspectLinuxConfiguration`, implemented
+in `scripts/deployment/linux-inactive-configuration.mjs`, and reuse the typed
+unit environment parser/policy from `linux-configuration.mjs`.
+
+- [ ] Expose `startupEnvironment()` from `inspectConfigurationFiles`: a frozen
+  copy after EnvironmentFiles but before Next dotenv. Keep it a method, not
+  serializable credential data. Add a contract proving that dotenv-only PATH
+  does not become startup PATH.
+- [ ] Characterize real inactive/exit-42 configuration admission, file and
+  global environment changes, unsupported policy and cancellation in
+  `tests/deployment-linux-inactive-configuration.test.mjs`.
+- [ ] Preserve a bounded supported manager policy: permit default PATH and
+  locale names, but require every other global setting to be explicitly
+  masked by retained unit/EnvironmentFile assignments. Global authentication
+  may override dotenv; do not claim that dotenv masks it, or treat it as a
+  backed-up per-service source. Keep PassEnvironment, UnsetEnvironment and PAM
+  refusal unchanged.
+- [ ] Retain and recheck the typed manager Environment and unit ExecSearchPath.
+  Resolve `runtimePath()` from actual startup PATH, then ExecSearchPath, then
+  manager PATH; refuse missing, relative or empty-component paths rather than
+  borrowing the controller's environment.
+- [ ] Preserve `checkFiles()` for post-inhibition work: recheck configuration
+  sources/policy without claiming original runtime liveness. Full `check()`
+  also rechecks the original inactive service. Add the new module to saved
+  recovery closure because `inspectLinuxConfiguration` dispatches to it.
+- [ ] Push causal tests, observe precise failures, implement and run the
+  unchanged 20-job Actions matrix before accepting public integration.
+
+The v255 source confirms manager-global settings are distinct from the
+manager process's inherited environment: `src/core/dbus-manager.c:211-231`
+uses `manager_get_effective_environment`; `src/core/manager.c:4138-4149`
+merges transient/client environments. `man/systemd.exec.xml:3558-3596`
+places DefaultEnvironment/set-environment before unit Environment and
+EnvironmentFile. `src/core/exec-invoke.c:4486-4510` inserts ExecSearchPath
+before explicit unit/file PATH. These are upstream `systemd/systemd` tag
+`v255` references, not assumptions based on the controller shell.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

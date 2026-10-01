@@ -40,6 +40,21 @@ test('build environment uses installed configuration without exposing it in repo
   assert.doesNotMatch(JSON.stringify(result), /fixture-private|lower-priority|installed/);
 });
 
+test('startup environment excludes Next dotenv values but retains ordered systemd assignments', async t => {
+  const project = await temporaryDeployment(t);
+  const machine = path.join(project, 'runtime.env');
+  await writeFile(machine, 'NEXTAUTH_URL=https://runtime.example\n');
+  await writeFile(path.join(project, '.env.production.local'),
+    'PATH=/dotenv-only/bin\nNEXT_PUBLIC_DEPLOYMENT_VALUE=dotenv-only\n');
+  const result = await inspect(project, { systemdFiles: [{ path: machine, optional: false }] });
+  const startup = result.startupEnvironment();
+  assert.deepEqual(startup, { ...environment, NEXTAUTH_URL: 'https://runtime.example' });
+  assert.equal(Object.isFrozen(startup), true);
+  assert.equal(result.buildEnvironment({}).PATH, '/dotenv-only/bin');
+  assert.doesNotMatch(JSON.stringify(result), /fixture-private|runtime\.example|dotenv-only/);
+  await result.check();
+});
+
 test('build environment refuses conflicting or unconfigured controller settings without secrets', async t => {
   const project = await temporaryDeployment(t);
   const result = await inspect(project);

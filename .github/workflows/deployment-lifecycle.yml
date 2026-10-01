@@ -238,6 +238,8 @@ jobs:
         run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-maintenance.test.mjs
       - name: Restore initially stopped services after controller death
         run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-cold-restore.test.mjs
+      - name: Inspect configuration without a running service process
+        run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-configuration.test.mjs
       - name: Restore actual Git commit-graph layouts with privileged file ownership
         run: sudo "$(command -v node)" --test tests/deployment-git-objects.test.mjs
       - name: Exercise actual saved-engine systemd workers
