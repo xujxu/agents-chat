@@ -6671,6 +6671,18 @@ The future installed-runtime host must additionally bind the verified private
 configuration and Scheduled Task admission; protocol scope alone does not
 authorize snapshotting, task mutation or declaring the application healthy.
 
+Full domain runs `d87d02a` / `36892813217` and strengthened `4267c9d` /
+`36893550797` both passed **23/23**. The latter is the accepted baseline.
+Task 5E causal `f3ced0e` / `36895889911`, job `110491595995`, passed earlier
+native gates and failed exactly at the missing `WindowsRuntimeControl.cs`.
+
+Implemented the scoped control listener/client. Peer request parsing and
+transport refusals are separated from actual domain operations: malformed,
+oversized, disconnected and timed-out peers produce bounded diagnostic reasons
+without closing the Job. Stop/retire operate only after exact scope admission.
+Clients bind response IDs and strictly validate phase, exit code, members and
+the explicit absence of application-health authority within an overall deadline.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
