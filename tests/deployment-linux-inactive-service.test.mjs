@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { lstat, readdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, rmdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
@@ -65,3 +65,46 @@ for (const change of ['activation', 'source']) {
     } finally { await observed.close(); }
   });
 }
+
+for (const timing of ['before', 'after']) {
+  test(`inactive service refuses an unreported cgroup created ${timing} capture`, native, async t => {
+    const f = await fixture(t, { nonroot: true, start: false });
+    const observed = timing === 'after' ? await inspectLinuxInactiveService(f) : undefined;
+    try {
+      const group = `/sys/fs/cgroup/system.slice/${f.unit}`;
+      await mkdir(group);
+      const original = await lstat(group);
+      t.after(async () => {
+        let current;
+        try { current = await lstat(group); }
+        catch (error) { if (error.code === 'ENOENT') return; throw error; }
+        assert.equal(current.dev, original.dev);
+        assert.equal(current.ino, original.ino);
+        await rmdir(group);
+      });
+      assert.equal((await linuxSystemdProperties(f.unit, ['ControlGroup'])).ControlGroup, '');
+      await assert.rejects(observed ? observed.check() : inspectLinuxInactiveService(f), /unreported|recreated/i);
+      assert.equal((await lstat(group)).ino, original.ino);
+    } finally { await observed?.close(); }
+  });
+}
+
+for (const settings of ['[Unit]\nRefuseManualStart=yes', 'ExecStartPre=/usr/bin/true']) {
+  test(`inactive service refuses preexisting policy: ${settings.replaceAll('\n', ' ')}`, native, async t => {
+    const f = await fixture(t, { nonroot: true, start: false, settings });
+    await assert.rejects(inspectLinuxInactiveService(f), /uninhibited|hooks/i);
+    assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, 'inactive');
+  });
+}
+
+test('inactive observation cancellation retains no activation authority', native, async t => {
+  const f = await fixture(t, { nonroot: true, start: false });
+  const controller = new AbortController();
+  const observed = await inspectLinuxInactiveService({ ...f, signal: controller.signal });
+  try {
+    controller.abort(new Error('Inactive observation cancelled for test.'));
+    await assert.rejects(observed.check(), /cancelled for test/);
+    await assert.rejects(inspectLinuxInactiveService({ ...f, signal: controller.signal }), /cancelled for test/);
+    assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, 'inactive');
+  } finally { await observed.close(); }
+});

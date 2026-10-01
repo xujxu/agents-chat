@@ -5972,6 +5972,14 @@ Service.GetProcesses object method after validated LoadUnit, matching the
 existing policy lookup's lazy-loading semantics. Do not treat a failed query
 as an empty process list. That known-failing run is superseded, not acceptance.
 
+Correction `63affab` / run `36854273069`, native job `110343224482`, passed
+the initially inactive/failed observation step; the full regression remains
+running. Added native refusal coverage for an unreported real cgroup created
+before or after capture, preexisting manual-start inhibition, an ExecStartPre
+hook, and cancellation before capture or during retained observation. Cgroup
+test cleanup checks its own directory identity and only removes that exact
+empty fixture directory.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
