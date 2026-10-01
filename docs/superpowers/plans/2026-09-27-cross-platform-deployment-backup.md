@@ -6006,6 +6006,15 @@ temporary override as well as the failed fixture's Restart=no policy.
 Do not enable public deployment admission or saved cold-recovery decoding
 until the corresponding mutating ownership and durable evidence are complete.
 
+The expanded coverage-only run `36854856441` was superseded after its native
+observation step passed 10/10 with zero skips; it is cancelled, not a full
+acceptance. Production baseline remains the accepted 20/20 `63affab`.
+Causal transition `798699a` / run `36856831992`, native job `110351829785`,
+passed the existing coverage and failed both added cases exactly on missing
+`observed.checkPolicy`. Implemented the separate static-policy and stopped
+inhibition checks without changing strict original observation or adding
+public admission, maintenance mutation, or cold-recovery dispatch.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

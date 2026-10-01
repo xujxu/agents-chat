@@ -9,6 +9,8 @@ import { linuxSystemdBus, linuxSystemdProperties } from './linux-systemd.mjs';
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const bootId = async () => (await readFile('/proc/sys/kernel/random/boot_id', 'utf8')).trim();
 const basePath = '/sys/fs/cgroup';
+const stateRuntimeKeys = ['MainPID', 'ActiveState', 'SubState', 'ControlGroup', 'InvocationID'];
+const accountRuntimeKeys = ['mainPid', 'processIdentity', 'invocationId', 'activeState'];
 const outside = (root, file) => {
   const relative = path.relative(root, file);
   return relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
@@ -94,43 +96,69 @@ export async function inspectLinuxInactiveService({ unit, project, npm, node, si
         throw new Error('Inactive service domain is not verifiably empty.');
       }
     };
-    const checkPolicy = async () => {
-      if (await bootId() !== boot
-        || !same(await inspectLinuxRuntimeAccount({ unit, project }), runtime)
-        || !same(await inspectLinuxServicePolicy(unit, npm), configuration)
-        || (await linuxSystemdProperties(unit, ['Job'])).Job !== '') {
-        throw new Error('Inactive service account, runtime or policy changed.');
+    const inhibition = `/etc/systemd/system/${unit}.d/90-agents-chat-deployment.conf`;
+    const observePolicy = async ({ original, inhibited, stopped }) => {
+      const account = await inspectLinuxRuntimeAccount({ unit, project });
+      const current = await inspectLinuxServicePolicy(unit, npm);
+      const accountMatches = original ? same(account, runtime) : Object.keys(runtime).every(key =>
+        accountRuntimeKeys.includes(key) || same(account[key], runtime[key]));
+      const policyMatches = original ? same(current, configuration)
+        : Object.keys(state).every(key => stateRuntimeKeys.includes(key) || current.state[key] === (
+          inhibited && key === 'RefuseManualStart' ? 'yes' : inhibited && key === 'Restart' ? 'no' : state[key]))
+          && same([...current.drops].sort(), [...configuration.drops, ...(inhibited ? [inhibition] : [])].sort())
+          && same(current.conditions, inhibited ? [['ConditionPathExists', false, true, inhibition]] : [])
+          && same(current.command, configuration.command);
+      if (await bootId() !== boot || !accountMatches || !policyMatches) {
+        throw new Error('Inactive service account, runtime or inhibition policy changed.');
       }
-      const object = await linuxSystemdBus(['call', 'org.freedesktop.systemd1',
-        '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'LoadUnit', 's', unit], 'o');
-      if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
-        throw new Error('Invalid inactive systemd unit object identity.');
-      }
-      // Unlike Manager.GetUnitProcesses, the service object can reload a garbage-collected inactive unit.
-      const processes = await linuxSystemdBus(['call', 'org.freedesktop.systemd1', object,
-        'org.freedesktop.systemd1.Service', 'GetProcesses'], 'a(sus)');
-      if (!Array.isArray(processes) || processes.length) {
-        throw new Error('Inactive service is not quiescent.');
+      if (stopped) {
+        if (account.mainPid !== 0 || account.processIdentity !== null
+          || !['inactive', 'failed'].includes(account.activeState)
+          || account.invocationId && account.invocationId !== runtime.invocationId
+          || current.state.MainPID !== '0' || !['inactive', 'failed'].includes(current.state.ActiveState)
+          || current.state.SubState !== (current.state.ActiveState === 'inactive' ? 'dead' : 'failed')
+          || current.state.InvocationID && current.state.InvocationID !== runtime.invocationId
+          || current.state.ControlGroup && current.state.ControlGroup !== controlGroup
+          || (await linuxSystemdProperties(unit, ['Job'])).Job !== '') {
+          throw new Error('Inactive service is not in its original stopped domain.');
+        }
+        const object = await linuxSystemdBus(['call', 'org.freedesktop.systemd1',
+          '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'LoadUnit', 's', unit], 'o');
+        if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
+          throw new Error('Invalid inactive systemd unit object identity.');
+        }
+        // Unlike Manager.GetUnitProcesses, the service object can reload a garbage-collected inactive unit.
+        const processes = await linuxSystemdBus(['call', 'org.freedesktop.systemd1', object,
+          'org.freedesktop.systemd1.Service', 'GetProcesses'], 'a(sus)');
+        if (!Array.isArray(processes) || processes.length) throw new Error('Inactive service is not quiescent.');
       }
       if (!same(await Promise.all(executables.map(entry => inspectLinuxServiceExecutable(entry.file))), executables)) {
         throw new Error('Inactive service runtime executables changed.');
       }
     };
-    const check = async () => {
+    const checkEvidence = async ({ original = false, inhibited = false, stopped = false }) => {
       if (closed) throw new Error('Inactive service inspection is closed.');
+      if (typeof inhibited !== 'boolean' || typeof stopped !== 'boolean') throw new Error('Invalid inactive service policy observation.');
       signal?.throwIfAborted();
       await sources.check();
-      await checkPolicy();
-      await checkDomain();
-      await checkPolicy();
+      await observePolicy({ original, inhibited, stopped });
+      if (stopped) await checkDomain();
+      await observePolicy({ original, inhibited, stopped });
       await sources.check();
       signal?.throwIfAborted();
+    };
+    const check = () => checkEvidence({ original: true, stopped: true });
+    const checkPolicy = ({ inhibited = false, stopped = false } = {}) => checkEvidence({ inhibited, stopped });
+    const checkInhibited = async ({ stopped = true } = {}) => {
+      if (stopped !== true) throw new Error('Inactive service inspection only proves an originally stopped domain.');
+      await checkEvidence({ inhibited: true, stopped: true });
+      return Object.freeze({ stopped: true, inhibited: true });
     };
     await check();
     const identity = freezeEvidence({ runtime, configuration, executables, bootId: boot,
       controlGroup, sources: sources.identity,
       domain: { present: Boolean(directory), directory: groupInfo ?? null, events: eventsInfo ?? null } });
-    return Object.freeze({ kind: 'inactive', identity, check, close });
+    return Object.freeze({ kind: 'inactive', identity, check, checkPolicy, checkInhibited, close });
   } catch (error) {
     try { await close(); }
     catch (cleanupError) {
