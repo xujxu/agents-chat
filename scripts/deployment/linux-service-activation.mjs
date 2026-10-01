@@ -26,9 +26,9 @@ export function hasFailedLinuxActivation(observed, priorInvocationId) {
   return (observed.ActiveState === 'failed' || observed.SubState === 'auto-restart') && !pendingPriorFailure;
 }
 
-// Only the original live stop handle supplies this internal authority.
+// Only original live stopped-service or fresh-unit authority supplies this context.
 export async function activateLinuxService(context, purpose) {
-  const { control, lock, unit, project, npm, node, service, inhibition, checkAuthority, checkInhibition } = context;
+  const { control, lock, unit, project, npm, node, service, inhibition, checkAuthority, checkInhibition, signal } = context;
   let workers;
   let journal;
   let active;
@@ -49,6 +49,7 @@ export async function activateLinuxService(context, purpose) {
   };
   let checkHeld;
   try {
+    signal?.throwIfAborted();
     if (!Object.hasOwn(allowed, purpose)) throw new Error('Unsupported service activation purpose.');
     const state = await checkAuthority();
     if (!allowed[purpose].includes(state.phase)) throw new Error('Transaction phase does not authorize this activation purpose.');
@@ -108,25 +109,30 @@ export async function activateLinuxService(context, purpose) {
         throw new Error('Held original service inhibitor changed.');
       }
     };
+    signal?.throwIfAborted();
     await record('intent');
     await checkInhibition();
     await service.checkInhibited({ stopped: true });
+    signal?.throwIfAborted();
     await link(inhibition, held);
     heldCreated = true;
     await syncWorkerDirectory(parent);
     await checkHeld(true);
     await record('staged');
     await checkHeld(true);
+    signal?.throwIfAborted();
     await unlink(inhibition);
     inhibitorRemoved = true;
     await syncWorkerDirectory(parent);
     await checkHeld();
+    signal?.throwIfAborted();
     await linuxNative('/usr/bin/systemctl', ['--system', 'daemon-reload']);
     await service.checkPolicy({ stopped: true });
     await record('uninhibited');
     await record('start-requested');
     await checkHeld();
     await service.checkPolicy({ stopped: true });
+    signal?.throwIfAborted();
     await linuxNative('/usr/bin/systemctl', ['--system', 'start', '--no-block', unit]);
     const deadline = performance.now() + 30000;
     while (performance.now() < deadline) {

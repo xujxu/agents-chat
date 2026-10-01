@@ -220,6 +220,10 @@ enablement alone is not a running or accepted deployment.
 Publication also exposes separate read-only source/inhibitor checks for later
 activation and cancellation cleanup. A cleanup signal override never bypasses
 the original operation, target, account, toolchain or configuration identity.
+The separate first-activation adapter inspects a genuine inactive unit and
+retains the newly started generation for owned stop, including cancellation
+cleanup. Its `active-unverified` result is not readiness or deployment acceptance;
+first-install retirement/recovery and public deploy integration remain pending.
 Do not use this branch on a live installation before the remaining platform
 acceptance gates. The `deploy.sh` commands below describe the legacy implementation,
 not the new backup/restore guarantees.

@@ -5549,6 +5549,13 @@ Both run only in Actions. Application readiness, acceptance receipts and the
 fresh-install retirement/recovery inventory remain separate follow-on gates;
 this adapter returns only `active-unverified` and does not expose retirement.
 
+Handoff implementation `8fc4368` / Actions `36822115316` passed all eighteen
+jobs, including eleven native first-install cases. Activation causal `2e68f32` /
+`36823356982` reached exactly the two expected missing
+`linux-first-activation.mjs` failures after the actual build and existing
+publication/handoff cases. The new adapter and shared forward cancellation
+checks now await native and full-matrix implementation acceptance.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
