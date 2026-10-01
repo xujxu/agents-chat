@@ -7040,6 +7040,52 @@ publishes four chained immutable receipts around enabled-only policy mutation
 and original-domain settlement. Rechecks poison on change; close retains task
 inhibition, the task-side owner and on-disk evidence. Native acceptance pending.
 
+`d973e20` / `36924898739`, native job `110580256508`, passed the complete
+native suite including pre-mutation maintenance refusals, chained receipts,
+original-domain settlement, changed-policy refusal and inhibition after close.
+Preserve its full regression.
+
+#### Task 5L: actual Windows application under managed runtime ownership
+
+Before further public integration, exercise the real built application through
+the new host and native stop context, rather than relying only on inert writers.
+Reuse the existing Windows owned-application build job and its artifacts; do not
+perform another install/build or add a longer deadline. Linux behavior stays
+unchanged.
+
+**Files:** extend the Windows branch of the actual source build case in
+`tests/deployment-native-operation.test.mjs`; add
+`tests/deployment-windows-managed-application.ps1` and
+`tests/deployment-windows-application-api.mjs`.
+
+- [ ] After owned build and operation sealing, invoke the new PowerShell
+  fixture with explicit Project, Control and Node paths; capture the absent
+  script causal failure in the existing Windows application-build job.
+- [ ] Create a private installed bundle, exact helper hashes and host config
+  for literal `node <project>/node_modules/next/dist/bin/next start --hostname
+  127.0.0.1 --port 3010`. Use synthetic local-admin credentials and a filtered
+  runtime environment. Refuse an existing listener; never kill it.
+- [ ] Register only uniquely named fixture S4U tasks. Bind actual native task
+  owner and private readiness. Wait for a TCP listener whose PID is a member of
+  the observed original Job before probing the real authentication provider.
+  Recheck native ownership around API operations.
+- [ ] First startup: log in through the shared HTTP fixture and create a chat.
+  Stop through `Stop-AgentsChatManagedTask`, check original empty domain and
+  inhibition, and copy the stopped `.data` into a fixture backup. Retire only
+  the generated original owner after closing its maintenance context.
+- [ ] Second startup from the same built artifacts: verify the chat survived
+  restart, mutate its name through the API, stop/settle and restore the copied
+  stopped data. Third startup: require the original chat name/content again.
+  All three starts use prebuilt `next start`, no npm/network install/build.
+- [ ] After final settlement, require the original full build/dependency
+  artifact identity to remain unchanged. Every generated task is stopped,
+  original process handles joined, and task registration removed before the
+  outer fixture directory cleanup.
+
+This proves actual Windows managed runtime/API/data continuity and prebuilt
+restart. It is not claimed as the still-unwired public Windows deploy/update/
+restore lifecycle or a production configuration/ACL snapshot implementation.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

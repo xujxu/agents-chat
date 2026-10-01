@@ -244,6 +244,13 @@ test('actual application source installs and builds inside native ownership', {
   assert.equal(inspected.commit, commit);
   await artifacts.check();
   await f.operation.seal();
+  if (process.platform === 'win32') {
+    await execute(f.runtime.pwsh, ['-NoProfile', '-NonInteractive', '-File',
+      path.join(repository, 'tests/deployment-windows-managed-application.ps1'),
+      '-Project', f.project, '-Control', f.control, '-Node', process.execPath,
+    ], { timeout: 240000, maxBuffer: 16384 });
+    await artifacts.check();
+  }
 });
 
 test('a reused enrollment cannot recreate the original native domain', async t => {
