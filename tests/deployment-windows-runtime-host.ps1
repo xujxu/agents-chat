@@ -143,11 +143,21 @@ if (process.argv[2] === 'child') {
     if ($Scenario -eq 'task-inhibition') {
         $expected = [xml]$task.Xml
         $descriptor = [string]$task.GetSecurityDescriptor(7)
-        Assert ($expected.Task.Settings.Enabled -ceq 'true') 'Expected an explicitly enabled fixture task'
-        $expected.Task.Settings.Enabled = 'false'
+        Assert ([bool]$task.Enabled) 'Expected an enabled fixture task'
+        $namespaces = [Xml.XmlNamespaceManager]::new($expected.NameTable)
+        $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+        $enabledBefore = $expected.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
+        Assert ($enabledBefore.Count -le 1) 'Ambiguous original enabled policy'
+        if ($enabledBefore.Count) {
+            Assert ($enabledBefore[0].InnerText -ceq 'true') 'Original enabled XML differs from native state'
+            $null = $enabledBefore[0].ParentNode.RemoveChild($enabledBefore[0])
+        }
         $task.Enabled = $false
         $task = $scheduler.GetFolder('\').GetTask($taskName)
         $actual = [xml]$task.Xml
+        $enabledAfter = $actual.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
+        Assert ($enabledAfter.Count -eq 1 -and $enabledAfter[0].InnerText -ceq 'false') 'Disabled task did not persist explicit inhibition'
+        $null = $enabledAfter[0].ParentNode.RemoveChild($enabledAfter[0])
         Assert (-not $task.Enabled -and $actual.OuterXml -ceq $expected.OuterXml -and
             [string]$task.GetSecurityDescriptor(7) -ceq $descriptor) 'Native task inhibition changed unrelated policy'
         $instances = $task.GetInstances(0)

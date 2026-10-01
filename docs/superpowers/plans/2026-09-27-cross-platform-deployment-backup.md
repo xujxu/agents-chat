@@ -6910,6 +6910,16 @@ reply, recheck inhibition before/after mutation and authorize any later release.
 No public task is changed by these fixtures.
 Reference: https://learn.microsoft.com/en-us/windows/win32/taskschd/task-scheduler-error-and-success-constants
 
+Full installed-host regression `9447c36` / `36912341006` passed **23/23**,
+replacing `d696ffd` as the accepted baseline. Inhibition probe `963e63e` /
+`36913183494`, native job `110547426391`, passed earlier gates but revealed
+that native XML omits the default `Settings.Enabled=true` element. Require
+effective native enabled state; permit an absent default or one explicit true
+element before mutation. After disabling require one explicit false element,
+remove only that exact namespaced setting from each comparison copy, and compare
+all remaining XML plus exact SDDL. Do not inject an arbitrary element ordering
+or interpret a missing default as unsupported task policy.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
