@@ -5854,6 +5854,13 @@ eight distinct errors and three distinct locations per error; cover cycles,
 redaction and lookalike paths in both contract jobs. Keep normal outcomes and
 all admission/ownership checks unchanged.
 
+`79ec9e8` / `36846315109` identifies `git-objects.mjs:30` from the first
+explicit update's capacity admission: its object inventory rejects an entry.
+Before another full build, exercise that same read-only inventory directly on
+the prepared fresh Git checkout in the continuous test. Native test failure
+will identify the Git-generated relative entry without relaxing production
+admission or exposing raw command errors to users.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

@@ -14,6 +14,7 @@ import { inspectLinuxService } from '../scripts/deployment/linux-service-inspect
 import { linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
 import { waitLinuxReadiness } from '../scripts/deployment/linux-readiness.mjs';
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
+import { prepareGitObjects } from '../scripts/deployment/git-objects.mjs';
 
 const execute = promisify(execFile);
 const tools = fileURLToPath(new URL('../', import.meta.url));
@@ -70,6 +71,7 @@ test('public fresh installation survives two updates and restores the retained s
     assert.equal(new Set([initial, second, third]).size, 3);
     await git('checkout', '--quiet', '--detach', initial);
     assert.equal(await readFile(readme, 'utf8'), originalReadme);
+    await prepareGitObjects({ project: f.project, commit: initial });
 
     assert.deepEqual(await invoke('deploy', ['--no-pull', '--timeout', '600']),
       { status: 'accepted', backupCreated: false });
