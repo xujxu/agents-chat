@@ -44,7 +44,9 @@ try {
   }
   stage = 'backup-engine-binding';
   const { verifySnapshot } = await import('./snapshot.mjs');
-  const snapshot = await verifySnapshot(input.backup);
+  const { runStage } = await import('./stage-runner.mjs');
+  const snapshot = await runStage(stage, signal => verifySnapshot(input.backup, { signal }),
+    { timeoutMs: Math.min(input.timeoutSeconds * 1000, Number.MAX_SAFE_INTEGER) });
   if (snapshot.version === 2 && snapshot.recoveryEngine !== manifestSha256) {
     throw new Error('Saved backup requires a different recovery engine digest.');
   }

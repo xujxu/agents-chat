@@ -11,6 +11,7 @@ const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
 const fileIdentity = info => ({ ...identity(info), size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs });
 
 export async function retireRecoveryEngines({ control, lock: supplied, current, signal }) {
+  if (process.platform !== 'linux' || process.getuid() !== 0) throw new Error('Engine retirement requires the Linux root controller.');
   const lock = captureLockOwner(supplied);
   const root = await canonicalWorkerDirectory(control, { privateMode: true });
   const state = await loadState(control);
