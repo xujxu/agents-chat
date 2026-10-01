@@ -55,6 +55,8 @@ test('first unit publication retains genuine inactive configuration and refuses 
   assert.equal(created.identity.configuration.state.WorkingDirectory, f.project);
   assert.equal(created.identity.configuration.state.User, '65534');
   assert.equal(created.identity.configuration.state.Group, '65534');
+  assert.equal(created.identity.configuration.state.Slice, 'system.slice');
+  assert.equal(created.identity.configuration.state.Delegate, 'no');
   assert.equal(created.identity.configuration.state.MainPID, '0');
   assert.equal(created.identity.configuration.state.ControlGroup, '');
   assert.equal(JSON.stringify(created).includes('first-install-private'), false);

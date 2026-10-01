@@ -43,7 +43,8 @@ export async function createLinuxFirstUnit({ installation, control, lock: suppli
     'Environment=NODE_ENV=production',
     `Environment=${quote(`PATH=${nodeDirectory}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`)}`,
     `Environment=${quote(`HOME=${account.home}`)}`, `ExecStart=${quote(npm)} start`,
-    'Restart=on-failure', 'RestartSec=3s', 'KillMode=control-group', 'SendSIGKILL=yes', 'TimeoutStopSec=30s',
+    'Restart=on-failure', 'RestartSec=3s', 'Slice=system.slice', 'Delegate=no',
+    'KillMode=control-group', 'SendSIGKILL=yes', 'TimeoutStopSec=30s',
     '[Install]', 'WantedBy=multi-user.target', '',
   ].join('\n'));
   if (unitBytes.length > 32768 || inhibitorBytes.length > 32768) throw new Error('First unit source exceeds its publication budget.');

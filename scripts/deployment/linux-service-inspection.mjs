@@ -34,7 +34,11 @@ export async function inspectLinuxServicePolicy(unit, npm) {
     || state.NeedDaemonReload !== 'no' || !['simple', 'exec'].includes(state.Type)
     || state.Slice !== 'system.slice' || state.Delegate !== 'no'
     || state.KillMode !== 'control-group' || state.SendSIGKILL !== 'yes') {
-    throw new Error('Unsupported or stale installed service configuration/stop policy.');
+    throw Object.assign(new Error('Unsupported or stale installed service configuration/stop policy.'), {
+      observed: Object.fromEntries([
+        'Id', 'LoadState', 'Transient', 'NeedDaemonReload', 'Type', 'Slice', 'Delegate', 'KillMode', 'SendSIGKILL',
+      ].map(name => [name, state[name]])),
+    });
   }
   // A cleanly stopped unit may be garbage-collected between observations.
   // LoadUnit loads its policy without starting it; typed property lookups also reload it.

@@ -5421,6 +5421,17 @@ keeps inhibition and journal evidence rather than deleting unknown authority.
 Activation/enablement, recovery and public deploy wiring remain subsequent
 boundaries; do not present a configured inactive unit as a successful deploy.
 
+**Publication execution:** causal `827c042` / Actions `36810713930` completed
+with seventeen successful jobs and the three expected missing-module failures
+in the native worker-domain job. Implementation `365433b` / `36810961365`
+reached actual publication, but its first positive native test was refused by
+the installed-service policy gate; the phase/foreign-fragment cases passed.
+The initial error did not expose which policy field differed. The new unit now
+explicitly declares `Slice=system.slice` and `Delegate=no`, and policy refusals
+attach only the non-secret policy fields involved in that gate. This preserves
+the strict gate and makes any remaining mismatch diagnosable; acceptance is
+still pending rather than assuming the cause has been proven.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
