@@ -5925,6 +5925,35 @@ with source handles closed by their own idempotent owner. Add the module to
 `workerEngineFiles` and the exact saved-worker test inventory; saved recovery
 inherits the dependency. No public inactive-service behavior is enabled yet.
 
+### Read-only initially inactive/failed service observation
+
+Add `inspectLinuxInactiveService({ unit, project, npm, node, signal })` in
+`linux-inactive-service.mjs`. This internal boundary takes explicit executables;
+public executable discovery and mutating deployment admission remain separate.
+Require a loaded supported persistent policy, configured NSS/project identity,
+zero main PID, inactive/dead or failed/failed state, no pending systemd job or
+reported unit processes, no existing inhibition/conditions, unchanged external
+executables and retained unit/drop-in sources. Bind the boot and original
+runtime/configuration observations. A reported cgroup must be either absent or
+retained and provably empty; an unreported but existing canonical unit cgroup
+is not adoptable. Recheck sources, runtime/policy, empty domain and executables
+before returning and on every check. Close all retained handles on failure.
+
+Return a distinct `kind: 'inactive'` with frozen identity and check/close, never
+a fabricated running-service generation. Observation must not start, stop,
+reload, rewrite, create control state or change runtime account. Read-only
+systemd property loading is allowed, as in existing inspection. Keep public
+inactive/failed commands refused until mutation and cold-recovery authority
+are implemented.
+
+Extend the existing service fixture with `start = true`, preserving every
+existing caller; new tests may request an installed never-started unit. Add
+actual non-root inactive and failed service observations, running-service
+refusal, later activation/source-change refusal and closed-handle checks.
+The failed fixture runs a real exit-42 process with Restart disabled, not a
+mocked systemd response. Run these in Actions before the native worker suite;
+confirm the missing-module causal failure before implementation.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

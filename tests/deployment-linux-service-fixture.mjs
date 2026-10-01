@@ -13,7 +13,7 @@ export const node = process.execPath;
 export const npm = path.join(path.dirname(node), 'npm');
 export const quote = value => `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%')}"`;
 
-export async function fixture(t, { command = `${quote(npm)} start`, settings = '', dropIn = '', nonroot = false, server, unitName } = {}) {
+export async function fixture(t, { command = `${quote(npm)} start`, settings = '', dropIn = '', nonroot = false, server, unitName, start = true } = {}) {
   const root = await realpath(await mkdtemp(path.join(await realpath(tmpdir()), 'agents-deployment-test-')));
   const project = path.join(root, 'app with spaces');
   await mkdir(project);
@@ -73,10 +73,12 @@ ${typeof settings === 'function' ? settings({ project }) : settings}
     await writeFile(dropFile, `[Service]\n${dropIn}\n`, { mode: 0o644 });
   }
   await systemctl('daemon-reload');
-  try { await systemctl('start', unit); }
-  catch (error) {
-    const { stdout } = await native('/usr/bin/journalctl', ['-b', '--no-pager', '-n', '8', `--grep=${unit}`]);
-    throw new Error(`Installed service fixture could not start: ${stdout}`, { cause: error });
+  if (start) {
+    try { await systemctl('start', unit); }
+    catch (error) {
+      const { stdout } = await native('/usr/bin/journalctl', ['-b', '--no-pager', '-n', '8', `--grep=${unit}`]);
+      throw new Error(`Installed service fixture could not start: ${stdout}`, { cause: error });
+    }
   }
   return { unit, project, npm, node, fragment, dropFile, bytes };
 }
