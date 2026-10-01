@@ -178,7 +178,7 @@ export async function activateLinuxFirstUnit({ installation, publication, enable
             || retirementReceipt.identity.source !== state.targetCommit
             || retirementReceipt.identity.service !== createHash('sha256').update(JSON.stringify(activated.identity)).digest('hex')
             || !same(retirementReceipt.identity, acceptance.identity)
-            || !same(await acceptance.checkAccepted({ signal: null }), retirementReceipt.identity)) {
+            || !same(await acceptance.checkAccepted(), retirementReceipt.identity)) {
             throw new Error('First retirement requires its published, still-verified deployment receipt.');
           }
           receiptHandle = await open(path.join(control, 'deployment.json'), constants.O_RDONLY | constants.O_NOFOLLOW);
