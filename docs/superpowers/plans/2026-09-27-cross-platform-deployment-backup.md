@@ -5885,6 +5885,39 @@ HEAD/content, preserved newer commit objects, `git commit-graph verify` and
 Keep the continuous public test's early read-only inventory check as regression
 coverage, then require its entire deployment/update/restore/data sequence.
 
+**Accepted:** `d68e139` / Actions `36848961317` passed all twenty jobs.
+The continuous native case `110326034349` passed in 1,150,079 ms: fresh public
+deployment, verified no-op, two README-content revisions, independent saved
+restoration after checkout-script displacement/Git-pack removal, original
+BUILD_ID/source/chat contents, preserved receipt/backup and enabled service.
+The privileged Git graph layout/partial-write/hardlink cases, first-install
+failure/no-backup/replay refusal, both platform contracts and all eighteen
+pre-existing jobs passed. This is Linux continuous lifecycle acceptance, not
+Windows installed-task or physical-host/voice acceptance.
+
+### Initially inactive service foundation: retained unit sources
+
+Before adding a distinct inactive/failed-service observation, extract the
+existing root-owned unit/drop-in source capture from
+`linux-service-inspection.mjs` into `linux-service-sources.mjs`. Running-service
+inspection and the later inactive inspector must share the same canonical
+parent, regular single-link file, metadata/hash and retained-descriptor checks;
+do not duplicate or weaken them. Preserve the existing public
+`inspectLinuxServiceSource` export and serialized service identity byte-for-byte.
+The new helper owns only retained source handles, check and idempotent close;
+it does not load, stop, start or modify a service.
+
+Add native file-proof tests under a uniquely owned `/run` fixture directory:
+valid capture, same-inode content change, named-file replacement, links and
+writable ancestors, plus refusal after close. Run these before the existing
+native worker suite. Confirm a causal missing-module failure in Actions,
+then extract the implementation and add the helper to the saved worker
+inventory and its exact manifest assertion; saved recovery inherits that list.
+Require all existing native live/cold/first/continuous gates afterward.
+Public inactive/failed commands remain refused until their distinct empty-domain
+authority, source/runtime admission, snapshot/activation and cold recovery
+surfaces have been implemented and accepted.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

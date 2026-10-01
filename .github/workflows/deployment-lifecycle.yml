@@ -229,6 +229,8 @@ jobs:
           node-version: 24
       - name: Characterize retained cgroup observation
         run: sudo "$(command -v node)" tests/deployment-linux-domain-probe.mjs
+      - name: Retain installed unit source identities
+        run: sudo "$(command -v node)" --test tests/deployment-linux-service-sources.test.mjs
       - name: Restore actual Git commit-graph layouts with privileged file ownership
         run: sudo "$(command -v node)" --test tests/deployment-git-objects.test.mjs
       - name: Exercise actual saved-engine systemd workers

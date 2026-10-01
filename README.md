@@ -223,11 +223,14 @@ readiness, cancellation and interruption/tampering recovery.
 
 **Public `deploy.sh` has passed fresh-install and running-service Actions
 acceptance. Do not use this branch on a live installation before the remaining
-continuous-lifecycle and platform gates.** The old
+runtime-mode and platform gates.** The old
 root build/install procedure has been replaced, not retained as a fallback.
 The staged native command supports a fresh installation or redeployment of an
 existing running service; inactive/failed services, deferred verification,
 `--wait 0` and deploy `--dry-run` are explicitly refused.
+The continuous Linux gate also passes first deployment, an unchanged update,
+two source-content updates, and saved recovery of the original source, build
+and authenticated chat data after removing installed scripts and Git packs.
 
 For first installation, prepare a clean source checkout owned by its non-root,
 primary-group-only runtime account and private production authentication
