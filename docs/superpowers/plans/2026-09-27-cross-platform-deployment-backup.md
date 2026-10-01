@@ -6415,6 +6415,67 @@ fixture project/root and retain all exact path assertions. Production literal
 task matching stays unchanged. The extracted function context correction now
 reaches real registration; its remaining mismatch is the same path spelling.
 
+Parameter implementation `86cead5` / `36877088856` passed native Windows
+task-options job `110419687837`: all six real registration/forwarding/child
+cases and the existing deployment/startup regressions. Preserve the full
+23-job run; it remains in progress.
+
+### Task 5B: Read-only native Windows task-definition observation
+
+Do not infer application process ownership or quiescence from Scheduled Task
+Ready/Disabled/Running alone. This collector returns `runtimeAuthority: false`;
+transaction stop, snapshot and activation still require a later native process
+ownership adapter.
+
+**Files:**
+- Add `scripts/deployment/windows-task-policy.ps1`: move the accepted
+  `Resolve-AgentsChatTaskOptions` function unchanged out of deploy so both the
+  command and native inspector use one literal action/account/mode policy.
+- Modify `scripts/deploy.ps1`: dot-source that helper after privilege admission.
+- Add `scripts/deployment/windows-task-inspect.ps1`: read one root-folder task
+  via the local scheduler and CIM. Capture exact XML/security descriptor,
+  enabled/state/last-run-result, principal SID and current instance records;
+  require stable repeated reads, never register/start/stop a task.
+- Add `scripts/deployment/windows-task-inspection.mjs`: validate explicit task
+  name/project/watchdog, invoke Windows PowerShell 5.1 with bounded output and
+  deadline, freeze the captured evidence and compare fresh observations.
+- Add `tests/deployment-windows-task-inspection.test.mjs`: actual Ready and
+  Disabled registrations, definition mutation, foreign action, missing task,
+  actual inert task startup and cancellation. Stop/unregister only the generated
+  task before deleting its fixture directory.
+- Modify the existing Windows task-options job to run this native Node test
+  after the existing PowerShell 5.1 and script regression gates (still 23 jobs).
+
+- [ ] Commit/push causal tests; expected native failure is missing
+  `windows-task-inspection.mjs`, not a task-manager permission fallback.
+  ```powershell
+  node --test tests/deployment-windows-task-inspection.test.mjs
+  ```
+- [ ] Implement `inspectWindowsTaskDefinition({taskName, project, watchdog,
+  signal})`. Root-task names must match
+  `/^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/`; path arguments must be canonical and
+  outside shell evaluation. Use explicit native PowerShell, no user profile.
+  Return the exact observation result shape:
+  ```javascript
+  Object.freeze({
+    status: 'definition-observed',
+    runtimeAuthority: false,
+    identity: frozenEvidence,
+    async check({ signal: checkSignal } = {}) {
+      // Re-read the same task through the same native collector.
+      if (!same(await observe(checkSignal), frozenEvidence)) throw changed();
+    },
+  });
+  ```
+  Native admission failures use `DEPLOYMENT_WINDOWS_TASK_UNSUPPORTED`;
+  failed rechecks use `DEPLOYMENT_WINDOWS_TASK_CHANGED`; an aborted signal
+  retains its original reason. Neither absent tasks nor denied reads become
+  successful empty/default observations.
+- [ ] Push implementation, require the native cases and full regression.
+  XML/ACL/config values must not be printed in ordinary diagnostics. This
+  comparison binds a definition, not an immutable task registration identity;
+  byte-identical task recreation cannot grant runtime ownership.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

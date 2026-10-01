@@ -310,3 +310,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node tests/start-script-healthcheck.test.js
           exit $LASTEXITCODE
+      - name: Observe real task definitions without adopting process ownership
+        shell: powershell
+        run: node --test tests/deployment-windows-task-inspection.test.mjs
