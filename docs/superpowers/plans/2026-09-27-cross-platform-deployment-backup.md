@@ -6699,6 +6699,31 @@ filter statically impossible. Remove that redundant filter; internal frame-size
 errors already propagate separately from the expected transport exception type.
 The bounded reply-retention behavior still requires native acceptance.
 
+`aa7afa4` / `36899837236`, native job `110496482115`, passed all task, pipe
+and original-domain cases including scoped malformed/idle refusals and delayed
+reply retention. The full 23-job regression is preserved in progress.
+
+#### Task 5F: retained private runtime configuration file
+
+- [ ] Add native file cases in `deployment-windows-private-file.ps1`: exact
+  bytes/digest, read-only retained handle preventing write/replacement, changed
+  ACL detection, foreign-reader ACL refusal, hard/final-symbolic/ancestor-junction
+  refusal, 1 MiB bound, strict UTF-8 and disposed-handle refusal.
+- [ ] Capture missing `WindowsPrivateFile.cs` in Actions.
+- [ ] Implement a focused native file capability: open the literal final file
+  with reparse-point handling and read-only sharing; validate original-handle
+  type/link count, canonical final path and private owner/DACL; hold the handle
+  through checks and expose only validated exact content. Use the existing
+  bounded single-read security-descriptor pattern, not size-query equality.
+- [ ] Rechecks compare original handle metadata, resolved path and owner/group/
+  DACL metadata. A changed permission policy is a refusal even while bytes remain
+  locked. Require matching SHA-256 before returning the retained object.
+- [ ] Run native permission/link cases and preserve full regression.
+
+This prepares private managed startup configuration admission. It does not yet
+claim arbitrary application-file ACL backup/restoration, immutable parent ACLs,
+or a complete installed task/runtime configuration contract.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

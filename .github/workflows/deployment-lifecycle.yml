@@ -319,3 +319,6 @@ jobs:
       - name: Retain original task-side runtime Job across controller connections
         shell: pwsh
         run: ./tests/deployment-windows-runtime-domain.ps1
+      - name: Retain private runtime configuration files and permissions
+        shell: pwsh
+        run: ./tests/deployment-windows-private-file.ps1
