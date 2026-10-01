@@ -6207,6 +6207,26 @@ EnvironmentFile. `src/core/exec-invoke.c:4486-4510` inserts ExecSearchPath
 before explicit unit/file PATH. These are upstream `systemd/systemd` tag
 `v255` references, not assumptions based on the controller shell.
 
+Cold recovery `19c8ded` / `36863844868` completed all 20 jobs successfully.
+Configuration causal `d5cbdd4` / `36865031458` failed the new startup method
+contract on both platforms; Linux contract job `110381636449` reported
+`result.startupEnvironment is not a function`. Native job `110381636163`
+passed all preceding maintenance/cold gates, then reached `runtime-process`
+refusal in both inactive/failed positives and the masked EnvironmentFile case.
+Its global-default negative also failed on that earlier guard instead of the
+requested specific policy refusal. Existing unsupported-policy/cancellation
+coverage passed. Cancel the characterized causal run, not the accepted cold
+regression.
+
+The implementation adds the method without serializing its captured values,
+exports the existing typed parser/policy without changing running behavior,
+and dispatches only retained `kind: inactive` observations to the new helper.
+Saved recovery explicitly includes `linux-inactive-configuration.mjs`.
+The native configuration gate now has eleven cases, additionally exercising
+owned inhibition, real ExecSearchPath/manager PATH fallback and rejected
+relative/empty PATH components. Public inactive executable discovery and
+deployment/restore history wiring remain subsequent work.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.

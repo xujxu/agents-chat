@@ -106,6 +106,7 @@ export async function inspectConfigurationFiles({
     const rootIdentity = identity(await lstat(root, { bigint: true }));
     const effective = copyEnvironment(environment);
     const observedRuntime = observedEnvironment === undefined ? null : copyEnvironment(observedEnvironment);
+    let startup;
     const checkRuntime = () => {
       if (effective.__NEXT_PROCESSED_ENV || effective.NODE_ENV && effective.NODE_ENV !== 'production') {
         throw refusal('runtime-environment-policy');
@@ -114,6 +115,7 @@ export async function inspectConfigurationFiles({
         ...authenticationEnvironmentNames, '__NEXT_PROCESSED_ENV', ...Object.keys(effective),
       ])]
         .some(name => effective[name] !== observedRuntime[name])) throw refusal('runtime-environment-changed');
+      startup = Object.freeze({ ...effective });
     };
     if (!Array.isArray(systemdFiles) || systemdFiles.length > 32 || systemdFiles.some(file =>
       !file || typeof file.path !== 'string' || !path.isAbsolute(file.path)
@@ -174,7 +176,8 @@ export async function inspectConfigurationFiles({
     };
     return Object.freeze({ ...result, providers: Object.freeze(result.providers),
       files: Object.freeze(retained.map(({ source, observed }) =>
-        Object.freeze({ path: source.path, kind: source.kind, present: observed !== null }))), check, buildEnvironment });
+        Object.freeze({ path: source.path, kind: source.kind, present: observed !== null }))), check, buildEnvironment,
+      startupEnvironment: () => startup });
   } catch (error) {
     signal?.throwIfAborted();
     if (error?.code === 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED') throw error;

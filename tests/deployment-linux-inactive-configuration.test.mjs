@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { quiescentFixture, systemctl } from './deployment-linux-service-fixture.mjs';
 import { inspectLinuxInactiveService } from '../scripts/deployment/linux-inactive-service.mjs';
 import { inspectLinuxConfiguration } from '../scripts/deployment/linux-configuration.mjs';
+import { stopLinuxService } from '../scripts/deployment/linux-service-stop.mjs';
+import { acquireLock, writeState } from '../scripts/deployment/state.mjs';
 import { linuxSystemdBus, linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
 
 const native = { skip: process.platform !== 'linux' || process.getuid() !== 0 };
@@ -48,6 +51,62 @@ for (const state of ['inactive', 'failed']) {
     assert.deepEqual(await linuxSystemdProperties(f.unit, properties), before);
     await writeFile(path.join(f.project, '.env.production.local'), credentials + 'NEXT_PUBLIC_CHANGED=1\n');
     await assert.rejects(result.checkFiles(), { code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED' });
+  });
+}
+
+test('inactive configuration file authority remains usable under owned inhibition', native, async t => {
+  const f = await configured(t);
+  const service = await inspectLinuxInactiveService(f);
+  t.after(() => service.close());
+  const result = await inspectLinuxConfiguration({ service, profile });
+  const control = path.join(path.dirname(f.project), 'control');
+  await mkdir(control, { mode: 0o700 });
+  const lock = await acquireLock(control, { project: f.project, operationId: randomUUID() });
+  const state = {
+    version: 1, operationId: lock.operationId, project: f.project, operation: 'update',
+    phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
+    backupId: null, priorRuntime: 'stopped', runtimeIdentity: service.runtimeIdentity,
+    startedAt: lock.createdAt, updatedAt: lock.createdAt, errorCode: null,
+  };
+  await writeState(control, state);
+  await writeState(control, { ...state, phase: 'stopped', previousPhase: 'preflight' });
+  const stopped = await stopLinuxService({ ...f, control, lock });
+  t.after(() => stopped.close());
+  await result.checkFiles();
+  await assert.rejects(result.check(), { check: 'inactive-configuration-changed' });
+  assert.deepEqual(await stopped.checkStopped(), { stopped: true, inhibited: true });
+});
+
+for (const source of ['exec-search', 'manager']) {
+  test(`inactive PATH comes from ${source} rather than Next dotenv or the controller`, native, async t => {
+    const f = await configured(t);
+    const settings = `Environment=\n${source === 'exec-search' ? 'ExecSearchPath=/opt/fixture-node:/usr/bin\n' : ''}`;
+    await writeFile(f.fragment, f.bytes + settings);
+    await writeFile(path.join(f.project, '.env.production.local'), credentials + 'PATH=/dotenv-only/bin\n');
+    await systemctl('daemon-reload');
+    const service = await inspectLinuxInactiveService(f);
+    t.after(() => service.close());
+    const result = await inspectLinuxConfiguration({ service, profile });
+    const manager = await linuxSystemdBus(['get-property', 'org.freedesktop.systemd1',
+      '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager', 'Environment'], 'as');
+    const expected = source === 'exec-search' ? ['/opt/fixture-node', '/usr/bin']
+      : manager.find(entry => entry.startsWith('PATH=')).slice(5).split(':');
+    assert.equal(result.startupEnvironment().PATH, undefined);
+    assert.equal(result.buildEnvironment({}).PATH, '/dotenv-only/bin');
+    assert.deepEqual(result.runtimePath(), expected);
+    await result.check();
+  });
+}
+
+for (const value of [':/usr/bin', '/usr/bin:', './bin:/usr/bin']) {
+  test(`inactive PATH refuses ambiguous components: ${value}`, native, async t => {
+    const f = await configured(t);
+    await writeFile(f.fragment, f.bytes + `Environment=PATH=${value}\n`);
+    await systemctl('daemon-reload');
+    const service = await inspectLinuxInactiveService(f);
+    t.after(() => service.close());
+    await assert.rejects(inspectLinuxConfiguration({ service, profile }), { check: 'inactive-runtime-path' });
+    assert.equal((await linuxSystemdProperties(f.unit, ['MainPID'])).MainPID, '0');
   });
 }
 

@@ -14,7 +14,7 @@ function refusal(check) {
   });
 }
 
-function environment(entries) {
+export function parseLinuxEnvironment(entries) {
   if (!Array.isArray(entries) || entries.length > 4096) throw refusal('runtime-environment');
   const result = Object.create(null);
   for (const entry of entries) {
@@ -41,12 +41,12 @@ async function startupEnvironment(pid, signal) {
       total += bytesRead;
     }
     if (!total || total === bytes.length || bytes[total - 1] !== 0) throw refusal('runtime-environment');
-    return environment(new TextDecoder('utf-8', { fatal: true })
+    return parseLinuxEnvironment(new TextDecoder('utf-8', { fatal: true })
       .decode(bytes.subarray(0, total - 1)).split('\0'));
   } finally { await handle.close(); }
 }
 
-async function configuration(unit) {
+export async function inspectLinuxConfigurationPolicy(unit) {
   const object = await bus(['call', 'org.freedesktop.systemd1', '/org/freedesktop/systemd1',
     'org.freedesktop.systemd1.Manager', 'LoadUnit', 's', unit], 'o');
   if (typeof object !== 'string' || !/^\/org\/freedesktop\/systemd1\/unit\/[A-Za-z0-9_]+$/.test(object)) {
@@ -65,16 +65,16 @@ async function configuration(unit) {
     || /[\0\r\n*?[\]]/.test(file[0]) || typeof file[1] !== 'boolean')) {
     throw refusal('runtime-environment-files');
   }
-  return { environment: environment(values), systemdFiles: files.map(([file, optional]) => ({ path: file, optional })) };
+  return { environment: parseLinuxEnvironment(values), systemdFiles: files.map(([file, optional]) => ({ path: file, optional })) };
 }
 
 export async function inspectLinuxRestoreConfiguration({ service, backup, snapshot, profile, signal }) {
   signal?.throwIfAborted();
   await service.check();
-  const config = await configuration(service.identity.runtime.unit);
+  const config = await inspectLinuxConfigurationPolicy(service.identity.runtime.unit);
   const saved = await inspectSnapshotConfiguration({ backup, snapshot, profile, ...config, signal });
   await service.check();
-  if (!same(await configuration(service.identity.runtime.unit), config)) throw refusal('runtime-configuration-changed');
+  if (!same(await inspectLinuxConfigurationPolicy(service.identity.runtime.unit), config)) throw refusal('runtime-configuration-changed');
   await saved.check({ signal });
   return Object.freeze({ ...saved, sourcePaths: Object.freeze(config.systemdFiles.map(file => file.path)) });
 }
@@ -82,7 +82,7 @@ export async function inspectLinuxRestoreConfiguration({ service, backup, snapsh
 export async function inspectLinuxRestoredConfiguration({ service, snapshot, profile, signal }) {
   await service.check();
   const { unit, project } = service.identity.runtime;
-  const config = await configuration(unit);
+  const config = await inspectLinuxConfigurationPolicy(unit);
   const files = await inspectConfigurationFiles({ project, profile, ...config, signal });
   for (const source of files.files) {
     signal?.throwIfAborted();
@@ -101,7 +101,7 @@ export async function inspectLinuxRestoredConfiguration({ service, snapshot, pro
   }
   const check = async ({ signal: checkSignal = signal } = {}) => {
     checkSignal?.throwIfAborted();
-    if (!same(await configuration(unit), config)) throw refusal('restored-configuration-policy');
+    if (!same(await inspectLinuxConfigurationPolicy(unit), config)) throw refusal('restored-configuration-policy');
     await files.check({ signal: checkSignal });
   };
   await check();
@@ -111,16 +111,20 @@ export async function inspectLinuxRestoredConfiguration({ service, snapshot, pro
 export async function inspectLinuxConfiguration({ service, profile, signal }) {
   try {
     signal?.throwIfAborted();
+    if (service.kind === 'inactive') {
+      const { inspectLinuxInactiveConfiguration } = await import('./linux-inactive-configuration.mjs');
+      return await inspectLinuxInactiveConfiguration({ service, profile, signal });
+    }
     await service.check();
     const { unit, project, mainPid } = service.identity.runtime;
-    const config = await configuration(unit);
+    const config = await inspectLinuxConfigurationPolicy(unit);
     const observedEnvironment = await startupEnvironment(mainPid, signal);
     const files = await inspectConfigurationFiles({ project, profile, ...config, observedEnvironment, signal });
     const check = async ({ signal: checkSignal = signal } = {}) => {
       try {
         checkSignal?.throwIfAborted();
         await service.check();
-        if (!same(await configuration(unit), config)
+        if (!same(await inspectLinuxConfigurationPolicy(unit), config)
           || !same(await startupEnvironment(mainPid, checkSignal), observedEnvironment)) {
           throw refusal('runtime-environment-changed');
         }
