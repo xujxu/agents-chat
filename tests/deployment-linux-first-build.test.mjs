@@ -175,6 +175,14 @@ async function firstController(t, cancelled) {
   const phases = [];
   let service;
   try {
+    for (const invalid of [{ noInstall: true }, { waitSeconds: 0 }, { deploymentBytes: 0 }]) {
+      await assert.rejects(runLinuxFirstDeployment({
+        installation: f.installation, control: f.control, lock: f.lock, git: '/usr/bin/git',
+        port: 3010, deploymentBytes: 2 * 1024 ** 3, ...invalid,
+      }), /Fresh Linux deployment requires/);
+      assert.equal(await loadState(f.control), null);
+      assert.deepEqual(await readdir(f.control), ['lock']);
+    }
     const deploy = () => runLinuxFirstDeployment({
       installation: f.installation, control: f.control, lock: f.lock, git: '/usr/bin/git',
       environment: { HOME: f.home, npm_config_cache: path.join(f.home, '.npm') },

@@ -5651,9 +5651,10 @@ twenty-three native cases, including all ten cold recovery/refusal cases.
 The remaining real-application retirement failed because Node streams reject
 `signal: null`; `a6e0587` uses the acceptance API's existing signal-free recheck.
 The saved-worker contract also needs the new startup helper in its exact
-expected manifest, preserving the closed dependency-set assertion. Full
-corrected implementation validation remains pending. No public first deploy
-or real-host acceptance is implied by these internal boundaries.
+expected manifest, preserving the closed dependency-set assertion. Corrected
+`b37f037` / `36832899983` passed all eighteen jobs and all twenty-three native
+first-install cases. No public first deploy or real-host acceptance is implied
+by these internal boundaries.
 
 ### Fresh Linux deployment controller
 
@@ -5698,6 +5699,16 @@ causal tests, then implement the controller after the missing-module failure.
 Require the corrected full matrix before calling this internal controller
 accepted. Public deploy/bootstrap and failed-first-install recovery commands
 remain separate unfinished integrations, not implied by this controller gate.
+
+Causal `702bc54` / `36833848806` passed the original twenty-three native cases
+and failed only the two new controller cases with the missing controller module.
+The implementation composes the existing transaction, real source workers,
+first-unit lifecycle and version 4 retirement. Shared filesystem budget
+accounting is extracted to `linux-deployment-capacity.mjs` for both controllers;
+same-device requirements remain summed rather than independently admitted.
+Invalid zero space/no-wait/skipped-install options must leave even preflight
+state unwritten. First-deploy errors retain the original evidence and explicitly
+report that no previous backup exists. Full implementation validation is pending.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

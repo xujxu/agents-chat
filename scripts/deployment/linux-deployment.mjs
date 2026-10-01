@@ -1,4 +1,4 @@
-import { lstat, stat, statfs } from 'node:fs/promises';
+import { lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual as same } from 'node:util';
@@ -27,6 +27,7 @@ import { closeRejectedLinuxPreflight } from './linux-preflight-refusal.mjs';
 import { hasUnsettledWorker } from './worker-errors.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
 import { inspectCurrentLinuxDeployment } from './linux-current-deployment.mjs';
+import { requireLinuxDeploymentSpace } from './linux-deployment-capacity.mjs';
 
 export async function runLinuxLiveDeployment({
   service, control, lock: supplied, git, environment, port, deploymentBytes,
@@ -145,17 +146,7 @@ export async function runLinuxLiveDeployment({
           try { bytes += (await lstat(file, { bigint: true })).size; }
           catch (error) { if (error.code !== 'ENOENT') throw error; }
         }
-        const budgets = new Map();
-        for (const [directory, required] of [[control, bytes], [project, BigInt(deploymentBytes)]]) {
-          const { dev } = await stat(directory, { bigint: true });
-          const space = await statfs(directory, { bigint: true });
-          const prior = budgets.get(dev) ?? { required: 0n, available: space.bavail * space.bsize };
-          prior.required += required;
-          budgets.set(dev, prior);
-        }
-        if ([...budgets.values()].some(value => value.required > value.available)) {
-          throw new Error('Insufficient space for complete backup and declared build budget.');
-        }
+        await requireLinuxDeploymentSpace([[control, bytes], [project, BigInt(deploymentBytes)]]);
         recovery = await saveRecoveryEngine({ control, source: fileURLToPath(new URL('./', import.meta.url)), allowVersionChange: true });
       },
       async stop({ recovering }) {
