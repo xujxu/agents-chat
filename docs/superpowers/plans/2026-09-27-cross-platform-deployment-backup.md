@@ -5457,10 +5457,28 @@ observe cancellation both before and after asynchronous inspection.
 Cancellation causal `921478f` / `36814709618` completed with seventeen
 successful jobs and exactly the expected reserved-boundary failure: the old
 implementation still wrote the inhibitor after cancellation. Correction
-`cf5a6a2` / `36815720071` has passed all six first-install cases (real build,
-three publication cases and both cancellation boundaries); the complete
-matrix is still running. No activation, enablement or public deploy acceptance
+`cf5a6a2` / `36815720071` passed all eighteen jobs, including all six
+first-install cases (real build, three publication cases and both cancellation
+boundaries). No activation, enablement or public deploy acceptance
 is implied by these publication-only gates.
+
+### First-install persistent enablement ownership
+
+Enable the generated first unit only through its retained publication handle
+and the same configuring-phase lock/state. Persist `service-enablement.ndjson`
+before exclusively creating the canonical multi-user.target.wants symlink;
+never replace or silently adopt an existing link, even one with the same target.
+Bind root directory identities, symlink inode/ownership/timestamps and its exact
+target. A metadata-only recheck remains separate from the initial inhibited
+configuration check so later activation can retain startup-link evidence.
+Reload the manager and require actual `UnitFileState=enabled` while the existing
+inhibitor still refuses startup. Keep all evidence after interruption.
+
+Native tests require real persistent enablement without a main process or
+acceptance receipt, the exact journal phases, same-target replacement detection
+and preservation of foreign startup links. First activation and retirement
+must subsequently account for this journal; this helper alone is not deploy
+acceptance and does not start the application.
 
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed

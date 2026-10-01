@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, readlink, rmdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -34,13 +34,14 @@ async function fixture(t, { phase = 'configuring' } = {}) {
   t.after(() => operation.close());
   const fragment = `/etc/systemd/system/${f.unit}`;
   const inhibition = `${fragment}.d/90-agents-chat-deployment.conf`;
+  const startupLink = `/etc/systemd/system/multi-user.target.wants/${f.unit}`;
   t.after(async () => {
     const state = await linuxSystemdProperties(f.unit, ['LoadState', 'ActiveState'], { allowMissing: true });
     if (state.LoadState === 'bad-setting') {
       const { stdout } = await linuxNative('/usr/bin/journalctl', ['-b', '--no-pager', '-n', '12', '-u', f.unit]);
       t.diagnostic(`First unit load failure before cleanup:\n${stdout}`);
     }
-    for (const file of [inhibition, fragment]) {
+    for (const file of [startupLink, inhibition, fragment]) {
       try { await unlink(file); }
       catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
@@ -48,7 +49,7 @@ async function fixture(t, { phase = 'configuring' } = {}) {
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     await linuxNative('/usr/bin/systemctl', ['--system', 'daemon-reload']);
   });
-  return { ...f, installation, lock, fragment, inhibition };
+  return { ...f, installation, lock, fragment, inhibition, startupLink };
 }
 
 test('first unit publication retains genuine inactive configuration and refuses manual startup', async t => {
@@ -129,3 +130,39 @@ for (const phase of ['reserved', 'created']) {
     assert.ok((await readdir(f.control)).includes('worker-operation.ndjson'));
   });
 }
+
+test('first-unit enablement owns its persistent startup link without starting the inhibited service', async t => {
+  const { createLinuxFirstUnit } = await import('../scripts/deployment/linux-first-unit.mjs');
+  const { enableLinuxFirstUnit } = await import('../scripts/deployment/linux-first-enablement.mjs');
+  const f = await fixture(t);
+  const publication = await createLinuxFirstUnit(f);
+  t.after(() => publication.close());
+  const enabled = await enableLinuxFirstUnit({ ...f, publication });
+  t.after(() => enabled.close());
+  assert.equal(enabled.status, 'enabled-inhibited');
+  assert.equal(await readlink(f.startupLink), f.fragment);
+  assert.equal((await linuxSystemdProperties(f.unit, ['UnitFileState'])).UnitFileState, 'enabled');
+  await enabled.check();
+  await assert.rejects(linuxNative('/usr/bin/systemctl', ['--system', 'start', f.unit]));
+  assert.equal((await linuxSystemdProperties(f.unit, ['MainPID'])).MainPID, '0');
+  await assert.rejects(readFile(path.join(f.control, 'deployment.json')), { code: 'ENOENT' });
+  const records = (await readFile(path.join(f.control, 'service-enablement.ndjson'), 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(records.map(record => record.phase), ['intent', 'linked', 'enabled']);
+  await unlink(f.startupLink);
+  await symlink(f.fragment, f.startupLink);
+  await assert.rejects(enabled.checkFiles(), /changed|replaced/i);
+});
+
+test('first-unit enablement preserves an existing foreign startup link', async t => {
+  const { createLinuxFirstUnit } = await import('../scripts/deployment/linux-first-unit.mjs');
+  const { enableLinuxFirstUnit } = await import('../scripts/deployment/linux-first-enablement.mjs');
+  const f = await fixture(t);
+  const publication = await createLinuxFirstUnit(f);
+  t.after(() => publication.close());
+  await mkdir(path.dirname(f.startupLink), { recursive: true, mode: 0o755 });
+  const target = '/usr/lib/systemd/system/foreign-first-unit.service';
+  await symlink(target, f.startupLink);
+  await assert.rejects(enableLinuxFirstUnit({ ...f, publication }));
+  assert.equal(await readlink(f.startupLink), target);
+  await assert.rejects(readFile(path.join(f.control, 'service-enablement.ndjson')), { code: 'ENOENT' });
+});
