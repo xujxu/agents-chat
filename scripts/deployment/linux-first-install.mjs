@@ -22,16 +22,17 @@ export async function inspectLinuxFirstInstall({ project, unit = 'agents-chat.se
     throw new Error('Fresh installation requires a non-root-owned project without shared write or special permissions.');
   }
   const control = path.join(path.dirname(root.root), `.${path.basename(root.root)}.deployment`);
-  const absent = async () => {
+  const absent = async ({ runtimePaths = true, controlEvidence = true } = {}) => {
     signal?.throwIfAborted();
     const state = await linuxSystemdProperties(unit, unitFields, { allowMissing: true });
     if (state.LoadState !== 'not-found' || state.ActiveState !== 'inactive' || state.MainPID !== '0'
       || state.ControlGroup || state.FragmentPath) throw new Error('Fresh installation requires an absent systemd service.');
-    for (const name of ['.data', '.next', 'node_modules']) {
+    for (const name of runtimePaths ? ['.data', '.next', 'node_modules'] : []) {
       try { await lstat(path.join(root.root, name)); }
       catch (error) { if (error.code === 'ENOENT') continue; throw error; }
       throw new Error(`Existing ${name} requires existing-installation inspection, not a fresh deployment.`);
     }
+    if (!controlEvidence) return;
     try { await lstat(control); }
     catch (error) { if (error.code === 'ENOENT') return; throw error; }
     await canonicalWorkerDirectory(control, { privateMode: true });
@@ -55,7 +56,7 @@ export async function inspectLinuxFirstInstall({ project, unit = 'agents-chat.se
     project: root.root, unit, runtime: 'absent', account,
     executables: Object.freeze(executables.map(entry => Object.freeze(entry))),
   });
-  const check = async () => {
+  const recheck = async options => {
     signal?.throwIfAborted();
     const current = await canonicalWorkerDirectory(root.root);
     if (!same(directoryIdentity(current.info), directoryIdentity(root.info))
@@ -66,8 +67,13 @@ export async function inspectLinuxFirstInstall({ project, unit = 'agents-chat.se
       throw new Error('Fresh installation toolchain changed.');
     }
     await configuration.check({ signal });
-    await absent();
+    await absent(options);
   };
+  const check = () => recheck();
   await check();
-  return Object.freeze({ identity, configuration, check });
+  return Object.freeze({
+    identity, configuration, check,
+    checkFreshRuntime: () => recheck({ controlEvidence: false }),
+    checkUninstalled: () => recheck({ runtimePaths: false, controlEvidence: false }),
+  });
 }

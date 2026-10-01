@@ -9,52 +9,64 @@ import { inspectBuildArtifacts } from './build-artifacts.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 
 export async function prepareLinuxSourceBuild({ service, operation, git, environment, signal }) {
-  signal?.throwIfAborted();
-  if (process.platform !== 'linux' || typeof operation?.run !== 'function') {
-    throw new Error('Linux source/build stages require an enrolled native operation.');
-  }
   await service.check();
   const { project, uid, gid } = service.identity.runtime;
-  const node = service.identity.executables[1].file;
-  const npmCli = await realpath(service.identity.executables[0].file);
+  return prepareLinuxOwnedSourceBuild({
+    project, uid, gid, node: service.identity.executables[1].file,
+    npmCli: await realpath(service.identity.executables[0].file), operation, git, environment, signal,
+    checkRead: () => service.check(),
+    checkMutation: async ({ stopped, signal: stageSignal }) => {
+      stageSignal?.throwIfAborted();
+      if (typeof stopped?.checkStopped !== 'function') throw new Error('Source/build mutation requires stopped service authority.');
+      const state = await stopped.checkStopped();
+      if (state?.stopped !== true || state.inhibited !== true) throw new Error('Source/build mutation requires stopped and inhibited service.');
+      await service.checkPolicy({ stopped: true, inhibited: true });
+    },
+  });
+}
+
+export async function prepareLinuxOwnedSourceBuild({
+  project, uid, gid, node, npmCli, operation, git, environment, signal, checkRead, checkMutation,
+}) {
+  signal?.throwIfAborted();
+  if (process.platform !== 'linux' || typeof operation?.run !== 'function'
+    || typeof checkRead !== 'function' || typeof checkMutation !== 'function') {
+    throw new Error('Linux source/build stages require an enrolled native operation.');
+  }
+  await checkRead({ signal });
   const env = captureWorkerCommand({ file: node, args: [], cwd: project, env: environment }).env;
   const source = await captureSourceCommands({ project, node, git, environment: env, signal });
-  await service.check();
-  const checkStopped = async (stopped, stageSignal) => {
-    stageSignal?.throwIfAborted();
-    if (typeof stopped?.checkStopped !== 'function') throw new Error('Source/build mutation requires stopped service authority.');
-    const state = await stopped.checkStopped();
-    if (state?.stopped !== true || state.inhibited !== true) throw new Error('Source/build mutation requires stopped and inhibited service.');
-    await service.checkPolicy({ stopped: true, inhibited: true });
-  };
+  await checkRead({ signal });
   const run = (command, stageSignal) => operation.run({
     workerId: randomUUID(), runtime: { uid, gid }, command, signal: stageSignal,
   });
   return Object.freeze({
     async inspect({ signal: stageSignal } = {}) {
-      await service.check();
+      await checkRead({ signal: stageSignal });
       const output = await run(source.prepare({ action: 'inspect', signal: stageSignal }), stageSignal);
-      await service.check();
+      await checkRead({ signal: stageSignal });
       return readSourceCommandResult(output, 'inspect', project);
     },
     async resolve({ options = {}, signal: stageSignal } = {}) {
-      await service.check();
+      await checkRead({ signal: stageSignal });
       const output = await run(source.prepare({ action: 'resolve', options, signal: stageSignal }), stageSignal);
-      await service.check();
+      await checkRead({ signal: stageSignal });
       return readSourceCommandResult(output, 'resolve', project);
     },
     async select({ target, stopped, signal: stageSignal }) {
-      await checkStopped(stopped, stageSignal);
+      const check = () => checkMutation({ stopped, signal: stageSignal, stage: 'select', commit: target.commit });
+      await check();
       const command = source.prepare({ action: 'select', options: target, signal: stageSignal });
-      await checkStopped(stopped, stageSignal);
+      await check();
       const output = await run(command, stageSignal);
-      await checkStopped(stopped, stageSignal);
+      await check();
       const result = readSourceCommandResult(output, 'select', project);
       if (result.commit !== target.commit) throw new Error('Selected source differs from admitted target.');
       return result;
     },
     async npm({ stage, commit, stopped, environment: npmEnvironment = env, signal: stageSignal }) {
-      await checkStopped(stopped, stageSignal);
+      const check = () => checkMutation({ stopped, signal: stageSignal, stage, commit });
+      await check();
       if (typeof commit !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) {
         throw new Error('Build requires the exact selected source commit.');
       }
@@ -66,10 +78,10 @@ export async function prepareLinuxSourceBuild({ service, operation, git, environ
         project, node, npmCli, stage, environment: npmEnvironment, signal: stageSignal,
       });
       await before.check();
-      await checkStopped(stopped, stageSignal);
+      await check();
       const output = await run(command, stageSignal);
       await before.check();
-      await checkStopped(stopped, stageSignal);
+      await check();
       const inspected = readSourceCommandResult(await run(source.prepare({
         action: 'inspect', signal: stageSignal,
       }), stageSignal), 'inspect', project);
@@ -80,7 +92,7 @@ export async function prepareLinuxSourceBuild({ service, operation, git, environ
         }
       }
       const artifacts = stage === 'build' ? await inspectBuildArtifacts({ project, signal: stageSignal }) : undefined;
-      await checkStopped(stopped, stageSignal);
+      await check();
       return stage === 'build' ? Object.freeze({ output, sourceCommit: commit, source: before, artifacts }) : output;
     },
   });

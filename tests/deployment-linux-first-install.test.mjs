@@ -76,3 +76,21 @@ test('fresh installation rechecks configuration and newly created runtime paths'
   await writeFile(other.env, 'NEXTAUTH_SECRET=changed\n');
   await assert.rejects(configuration.check(), /configuration/i);
 });
+
+test('fresh build rechecks preserve absent-unit and identity policy after claiming control and runtime paths', async t => {
+  const { inspectLinuxFirstInstall } = await import('../scripts/deployment/linux-first-install.mjs');
+  const f = await fixture(t);
+  const inspected = await inspectLinuxFirstInstall(f);
+  await mkdir(f.control, { mode: 0o700 });
+  await writeFile(path.join(f.control, 'state.json'), 'owned build evidence');
+  await assert.rejects(inspected.check(), /control|evidence|recovery/i);
+  await inspected.checkFreshRuntime();
+  await mkdir(path.join(f.project, 'node_modules'));
+  await assert.rejects(inspected.checkFreshRuntime(), /existing|fresh/i);
+  await inspected.checkUninstalled();
+  await writeFile(f.env, 'NEXTAUTH_SECRET=changed\n');
+  await assert.rejects(inspected.checkUninstalled(), /configuration/i);
+  const running = await runningFixture(t);
+  await ready(running);
+  await assert.rejects(inspectLinuxFirstInstall({ ...f, unit: running.unit }), /absent|existing|installed/i);
+});

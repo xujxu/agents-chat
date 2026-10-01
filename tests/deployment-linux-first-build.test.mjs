@@ -70,8 +70,13 @@ test('fresh installation builds actual source with owned workers while its syste
   };
   await assert.rejects(stages.select({ target }), /phase|source-selected/i);
   await record('source-selected');
+  await assert.rejects(stages.select({ target: { ...target, commit: 'f'.repeat(40) } }), /exact target/i);
   await stages.select({ target });
   await record('dependencies');
+  await assert.rejects(stages.npm({ stage: 'build', commit: target.commit }), /phase/i);
+  await assert.rejects(stages.npm({
+    stage: 'dependencies', commit: target.commit, environment: { NEXTAUTH_SECRET: 'changed' },
+  }), /configuration/i);
   await stages.npm({ stage: 'dependencies', commit: target.commit });
   await record('building');
   const built = await stages.npm({ stage: 'build', commit: target.commit });
