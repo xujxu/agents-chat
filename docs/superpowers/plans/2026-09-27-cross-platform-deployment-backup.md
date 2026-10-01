@@ -6238,6 +6238,16 @@ prepared separately and are not part of this diagnostic submission.
 
 ### Public initially stopped lifecycle integration
 
+Diagnostic `4814a5a` / `36867948288`, native job `110388287835`,
+identified precisely `LANG`, `PATH`, `SGX_AESM_ADDR`. Keep the production
+global-environment policy unchanged. Configuration/discovery/public lifecycle
+fixtures explicitly mask `SGX_AESM_ADDR` in their retained unit assignments;
+PATH fallback fixtures reapply that mask after resetting Environment.
+Do not modify the host manager environment or exempt arbitrary global names.
+The shared quiescent fixture accepts optional settings while preserving default
+unit bytes. Public causal coverage `394a5b6` / `36868239162` is queued after
+retiring the characterized diagnostic. Configuration acceptance remains pending.
+
 Prepared tests preserve every existing matrix scenario and add two native
 `linux-deployment` scenarios (`inactive`, `failed`), bringing this later
 acceptance matrix to 22 jobs without changing deadlines. They exercise public

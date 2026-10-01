@@ -9,7 +9,7 @@ import { linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs'
 const native = { skip: process.platform !== 'linux' || process.getuid() !== 0 };
 
 async function configured(t, state = 'inactive') {
-  const f = await quiescentFixture(t, state);
+  const f = await quiescentFixture(t, state, { settings: 'Environment=SGX_AESM_ADDR=' });
   await writeFile(path.join(f.project, '.env.production.local'), [
     'NODE_ENV=production', 'NEXTAUTH_SECRET=private-discovery-fixture-secret',
     'NEXTAUTH_URL=http://localhost:3010', 'ADMIN_USERNAME=fixture', 'ADMIN_PASSWORD=private-discovery-fixture-password',

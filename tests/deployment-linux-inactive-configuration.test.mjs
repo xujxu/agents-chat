@@ -18,7 +18,7 @@ const credentials = [
 ].join('\n') + '\n';
 
 async function configured(t, state = 'inactive') {
-  const f = await quiescentFixture(t, state);
+  const f = await quiescentFixture(t, state, { settings: 'Environment=SGX_AESM_ADDR=' });
   await writeFile(path.join(f.project, '.env.production.local'), credentials);
   return f;
 }
@@ -85,7 +85,7 @@ test('inactive configuration file authority remains usable under owned inhibitio
 for (const source of ['exec-search', 'manager']) {
   test(`inactive PATH comes from ${source} rather than Next dotenv or the controller`, native, async t => {
     const f = await configured(t);
-    const settings = `Environment=\n${source === 'exec-search' ? 'ExecSearchPath=/opt/fixture-node:/usr/bin\n' : ''}`;
+    const settings = `Environment=\nEnvironment=SGX_AESM_ADDR=\n${source === 'exec-search' ? 'ExecSearchPath=/opt/fixture-node:/usr/bin\n' : ''}`;
     await writeFile(f.fragment, f.bytes + settings);
     await writeFile(path.join(f.project, '.env.production.local'), credentials + 'PATH=/dotenv-only/bin\n');
     await systemctl('daemon-reload');

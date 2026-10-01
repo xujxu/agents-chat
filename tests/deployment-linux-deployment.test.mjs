@@ -23,6 +23,7 @@ import { loginDeploymentFixture } from './deployment-http-fixture.mjs';
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const settings = `Environment=NODE_ENV=production
+Environment=SGX_AESM_ADDR=
 Environment=NEXTAUTH_SECRET=private-fixture-secret
 Environment=NEXTAUTH_URL=http://localhost:3010
 Environment=ADMIN_USERNAME=fixture

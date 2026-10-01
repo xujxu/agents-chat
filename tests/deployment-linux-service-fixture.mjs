@@ -94,9 +94,10 @@ export async function ready(f) {
   throw new Error('npm service fixture did not become ready.');
 }
 
-export async function quiescentFixture(t, state) {
+export async function quiescentFixture(t, state, { settings = '' } = {}) {
   if (!['inactive', 'failed'].includes(state)) throw new Error('Unsupported quiescent service fixture state.');
-  const f = await fixture(t, { nonroot: true, start: false, settings: state === 'failed' ? 'Restart=no' : '',
+  const f = await fixture(t, { nonroot: true, start: false,
+    settings: [state === 'failed' ? 'Restart=no' : '', settings].filter(Boolean).join('\n'),
     ...(state === 'failed' ? { server: 'process.exit(42);' } : {}) });
   if (state === 'failed') {
     try { await systemctl('start', f.unit); }
