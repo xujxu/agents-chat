@@ -13,6 +13,8 @@ import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs'
 import { createWorkerOperation, readWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { inspectTargetCompatibility } from '../scripts/deployment/target-compatibility.mjs';
 import { linuxNative, linuxSystemdProperties } from '../scripts/deployment/linux-systemd.mjs';
+import { inspectLinuxService } from '../scripts/deployment/linux-service-inspection.mjs';
+import { captureLinuxDeploymentAcceptance } from '../scripts/deployment/linux-deployment-acceptance.mjs';
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../', import.meta.url));
@@ -105,6 +107,7 @@ test('fresh installation builds actual source, activates a new generation and st
   let publication;
   let enabled;
   let active;
+  let service;
   try {
     await record('configuring');
     const context = { installation, control, lock, signal: controller.signal };
@@ -118,6 +121,19 @@ test('fresh installation builds actual source, activates a new generation and st
     assert.ok(active.identity.runtime.mainPid > 0);
     assert.match(active.identity.runtime.invocationId, /^[a-f0-9]{32}$/);
     assert.equal((await linuxSystemdProperties(unit, ['UnitFileState'])).UnitFileState, 'enabled');
+    service = await inspectLinuxService({
+      unit, project, npm: installation.identity.executables[0].file, node: installation.identity.executables[1].file,
+    });
+    assert.deepEqual(service.identity, active.identity);
+    const acceptance = await captureLinuxDeploymentAcceptance({
+      service, configuration: installation.configuration, source: built.source, artifacts: built.artifacts,
+      port: 3010, signal: controller.signal,
+    });
+    assert.equal(acceptance.identity.source, target.commit);
+    for (const key of ['build', 'dependencies', 'config', 'service']) {
+      assert.match(acceptance.identity[key], /^[a-f0-9]{64}$/);
+    }
+    assert.deepEqual(await acceptance.checkAccepted(), acceptance.identity);
     await assert.rejects(readFile(path.join(control, 'deployment.json')), { code: 'ENOENT' });
     controller.abort();
     assert.deepEqual(await active.stopActivated(), { stopped: true, inhibited: true });
@@ -131,6 +147,7 @@ test('fresh installation builds actual source, activates a new generation and st
     assert.deepEqual(records.slice(-4).map(entry => entry.phase),
       ['activation-stop-intent', 'activation-stop-inhibited', 'activation-stop-requested', 'activation-stopped']);
   } finally {
+    await service?.close();
     await active?.close();
     await enabled?.close();
     await publication?.close();

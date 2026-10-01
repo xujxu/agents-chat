@@ -5556,6 +5556,20 @@ jobs, including eleven native first-install cases. Activation causal `2e68f32` /
 publication/handoff cases. The new adapter and shared forward cancellation
 checks now await native and full-matrix implementation acceptance.
 
+### First-install application readiness evidence
+
+Extend the actual first-build/activation case with the existing
+`captureLinuxDeploymentAcceptance` helper, not an unowned HTTP probe or a
+synthetic server. Reinspect the live service and require its full identity to
+match the activation result. Verify the real `/api/auth/providers` endpoint
+through retained native listener ownership and the originally admitted dotenv
+configuration. Bind the selected commit, dependencies, build, configuration and
+running generation, then repeat the accepted-identity check before owned stop.
+This captures readiness evidence only: assert that no `deployment.json` receipt
+exists, and leave accepted-state publication and retirement for their complete
+transaction boundary. The additional gate runs in the same Actions job and
+reuses its actual source build.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
