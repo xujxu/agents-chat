@@ -2,10 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Security.AccessControl;
-using System.Security.Cryptography;
-using System.Security.Principal;
-using System.Text;
 using System.Text.Json;
 
 namespace Deployment
@@ -52,31 +48,13 @@ namespace Deployment
             string identity = WindowsWorkerJob.ProcessIdentity(pid);
             int session;
             using (Process process = Process.GetCurrentProcess()) session = process.SessionId;
-            byte[] bytes = new UTF8Encoding(false, true).GetBytes(JsonSerializer.Serialize(new {
+            string text = JsonSerializer.Serialize(new {
                 version = 1, generation = generation.ToString("D"), pid, identity,
                 configurationSha256, sessionId = session, job = domain.Name,
                 launcherPid = domain.LauncherPid
-            }));
+            });
             string file = Path.Combine(directory, "runtime-" + identity.Replace(':', '-') + ".json");
-            string pending = file + ".pending-" + Guid.NewGuid().ToString("D");
-            var security = new FileSecurity();
-            using (WindowsIdentity account = WindowsIdentity.GetCurrent())
-            {
-                security.SetOwner(account.User);
-                security.SetAccessRuleProtection(true, false);
-                foreach (SecurityIdentifier sid in new[] {
-                    account.User, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null)
-                })
-                    security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, AccessControlType.Allow));
-            }
-            using (FileStream stream = FileSystemAclExtensions.Create(new FileInfo(pending), FileMode.CreateNew,
-                FileSystemRights.FullControl, FileShare.None, 4096, FileOptions.WriteThrough, security))
-            {
-                stream.Write(bytes, 0, bytes.Length);
-                stream.Flush(true);
-            }
-            File.Move(pending, file);
-            Retain(file, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
+            retained.Add(WindowsPrivateFile.Publish(file, text));
         }
         public static void Run(string configuration, string sha256, string helpers, string pwsh)
         {

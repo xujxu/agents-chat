@@ -6970,6 +6970,15 @@ This also keeps readiness and later stop-intent receipts on one mechanism.
 - [ ] Require native file/publication and all installed-host scenarios, then
   preserve full regression before composing durable task-stop phase receipts.
 
+Full inhibition run `413113a` / `36915717577` completed **23/23** and is
+the accepted baseline. Publication causal `2988c8c` / `36916848677`, native
+job `110558839913`, passed the earlier task/domain gates then failed precisely
+on the missing `WindowsPrivateFile.Publish` method. Implemented shared
+publication with strict bounded encoding, original private non-reparse parent
+handle/identity/security checks, atomic private creation and flush, non-replacing
+rename and retained final-file capability. The host now reuses this method
+without changing readiness fields or per-original-process filenames.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

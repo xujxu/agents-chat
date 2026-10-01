@@ -30,6 +30,10 @@ namespace Deployment
                 return String.Join(":", Attributes, CreationLow, CreationHigh, WriteLow, WriteHigh,
                     Volume, SizeHigh, SizeLow, Links, IndexHigh, IndexLow);
             }
+            public string DirectoryIdentity()
+            {
+                return String.Join(":", Attributes, CreationLow, CreationHigh, Volume, IndexHigh, IndexLow);
+            }
         }
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr attributes,
@@ -124,7 +128,7 @@ namespace Deployment
                 throw;
             }
         }
-        public static WindowsPrivateFile Open(string file, string expectedSha256)
+        static void RequirePath(string file)
         {
             if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                 throw new PlatformNotSupportedException("Private Windows configuration requires Windows.");
@@ -134,6 +138,90 @@ namespace Deployment
                 file.IndexOfAny(new[] { '\0', '\r', '\n' }) >= 0 ||
                 !String.Equals(Path.GetFullPath(file), file, StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("A canonical local configuration file path is required.");
+        }
+        static WindowsPrivateFile PublicationDirectory(string directory)
+        {
+            var parent = new WindowsPrivateFile { file = directory };
+            try
+            {
+                const uint readAttributes = 0x80, readControl = 0x20000, shareReadWrite = 3;
+                const uint openExisting = 3, backupSemantics = 0x2000000, openReparsePoint = 0x200000;
+                parent.handle = CreateFileW(directory, readAttributes | readControl, shareReadWrite,
+                    IntPtr.Zero, openExisting, backupSemantics | openReparsePoint, IntPtr.Zero);
+                if (parent.handle.IsInvalid)
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Open original private publication directory");
+                FileInformation information = parent.Information();
+                const uint directoryAttribute = 0x10, reparsePoint = 0x400, encrypted = 0x4000;
+                if ((information.Attributes & directoryAttribute) == 0 ||
+                    (information.Attributes & (reparsePoint | encrypted)) != 0 ||
+                    !String.Equals(parent.FinalPath(), directory, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Private publication directory is redirected.");
+                RawSecurityDescriptor security = parent.Security();
+                RequirePrivate(security);
+                parent.metadata = information.DirectoryIdentity();
+                parent.security = Descriptor(security);
+                return parent;
+            }
+            catch
+            {
+                parent.Dispose();
+                throw;
+            }
+        }
+        void CheckPublicationDirectory()
+        {
+            if (Information().DirectoryIdentity() != metadata ||
+                !String.Equals(FinalPath(), file, StringComparison.OrdinalIgnoreCase) || Descriptor(Security()) != security)
+                throw new InvalidDataException("Private publication directory changed.");
+        }
+        public static WindowsPrivateFile Publish(string file, string text)
+        {
+            RequirePath(file);
+            if (text == null) throw new ArgumentNullException("text");
+            if (text.Length > MaximumBytes) throw new ArgumentException("Private publication exceeds the size limit.");
+            byte[] bytes = new UTF8Encoding(false, true).GetBytes(text);
+            WindowsPrivateFile published = null;
+            try
+            {
+                if (bytes.Length > MaximumBytes) throw new ArgumentException("Private publication exceeds the size limit.");
+                using (WindowsPrivateFile parent = PublicationDirectory(Path.GetDirectoryName(file)))
+                {
+                    parent.CheckPublicationDirectory();
+                    var security = new FileSecurity();
+                    using (WindowsIdentity account = WindowsIdentity.GetCurrent())
+                    {
+                        security.SetOwner(account.User);
+                        security.SetAccessRuleProtection(true, false);
+                        foreach (SecurityIdentifier sid in new[] {
+                            account.User, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null)
+                        })
+                            security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, AccessControlType.Allow));
+                    }
+                    string pending = file + ".pending-" + Guid.NewGuid().ToString("D");
+                    using (FileStream stream = FileSystemAclExtensions.Create(new FileInfo(pending), FileMode.CreateNew,
+                        FileSystemRights.FullControl, FileShare.None, 4096, FileOptions.WriteThrough, security))
+                    {
+                        parent.CheckPublicationDirectory();
+                        stream.Write(bytes, 0, bytes.Length);
+                        stream.Flush(true);
+                    }
+                    parent.CheckPublicationDirectory();
+                    File.Move(pending, file);
+                    published = Open(file, Digest(bytes));
+                    parent.CheckPublicationDirectory();
+                    return published;
+                }
+            }
+            catch
+            {
+                if (published != null) published.Dispose();
+                throw;
+            }
+            finally { CryptographicOperations.ZeroMemory(bytes); }
+        }
+        public static WindowsPrivateFile Open(string file, string expectedSha256)
+        {
+            RequirePath(file);
             if (expectedSha256 == null || expectedSha256.Length != 64)
                 throw new ArgumentException("An exact configuration SHA-256 is required.");
             foreach (char value in expectedSha256)
