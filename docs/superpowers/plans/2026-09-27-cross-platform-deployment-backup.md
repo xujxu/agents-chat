@@ -6505,6 +6505,23 @@ bounded native failure stage, never task XML/SDDL or arbitrary native stderr.
 These definitions are read-only evidence, not process, file-content or
 immutable-registration authority. Full native acceptance is pending.
 
+Before the next fixture submission, correct description mutation to modify the
+returned CIM object's `Description` and call `Set-ScheduledTask -InputObject`.
+The documented cmdlet has no `-Description` parameter:
+`https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/set-scheduledtask`.
+The first implementation run can still characterize all other native cases;
+do not replace its required pending slot with this fixture correction.
+
+Implementation `ebb4ea3` / `36880555805`, native job `110431385023`,
+passed Ready, Disabled, foreign/missing/invalid task and initial cancellation.
+Description mutation hit the already-identified unsupported fixture parameter.
+The actual running-instance assertions completed but teardown reached EBUSY:
+`Stop-ScheduledTask` returns before the task process necessarily exits.
+The inert fixture now writes its own PID/start-time; teardown retains that
+specific process handle, validates the start-time identity, stops only the
+generated task and waits for that process to exit before deleting the directory.
+Do not guess the application PID from EnginePID or silently ignore cleanup.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

@@ -19,20 +19,43 @@ const ps = async (code, args = []) => {
 
 async function fixture(t, { disabled = false } = {}) {
   const taskName = `Agents-Chat-Test-${randomUUID()}`;
+  let project;
   t.after(async () => {
     await ps(`
       $task=Get-ScheduledTask -TaskName $args[0] -ErrorAction SilentlyContinue
       if ($task) {
-        Stop-ScheduledTask -TaskName $args[0] -ErrorAction Stop
-        Unregister-ScheduledTask -TaskName $args[0] -Confirm:$false -ErrorAction Stop
+        $process=$null
+        $marker=Join-Path $args[1] 'watchdog-process.json'
+        if (Test-Path -LiteralPath $marker) {
+          $identity=Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+          try { $process=[Diagnostics.Process]::GetProcessById([int]$identity.pid) }
+          catch [ArgumentException] { $process=$null }
+          if ($process) {
+            $null=$process.Handle
+            if ($process.StartTime.ToUniversalTime().Ticks.ToString() -cne $identity.started) {
+              $process.Dispose()
+              throw 'Generated fixture process identity changed'
+            }
+          }
+        }
+        try {
+          Stop-ScheduledTask -TaskName $args[0] -ErrorAction Stop
+          if ($process -and -not $process.WaitForExit(15000)) { throw 'Generated fixture process did not exit after task stop' }
+          Unregister-ScheduledTask -TaskName $args[0] -Confirm:$false -ErrorAction Stop
+        } finally { if ($process) { $process.Dispose() } }
       }
-    `, [taskName]);
+    `, [taskName, project ?? '']);
   });
   const root = await temporaryDeployment(t);
-  const project = path.join(root, 'project with spaces');
+  project = path.join(root, 'project with spaces');
   await mkdir(path.join(project, 'scripts'), { recursive: true });
   const watchdog = path.join(project, 'scripts', 'service-watchdog.ps1');
-  await writeFile(watchdog, 'param([switch]$NoTunnel)\nStart-Sleep -Seconds 30\n');
+  await writeFile(watchdog, `param([switch]$NoTunnel)
+$current=[Diagnostics.Process]::GetCurrentProcess()
+@{ pid=$PID; started=$current.StartTime.ToUniversalTime().Ticks.ToString() } | ConvertTo-Json -Compress |
+  Set-Content -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'watchdog-process.json')
+Start-Sleep -Seconds 30
+`);
   const input = { taskName, project: await realpath(project), watchdog: await realpath(watchdog) };
   await ps(`
     $exe=Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe'
@@ -71,7 +94,11 @@ for (const disabled of [false, true]) {
 test('Windows definition authority refuses description changes instead of silently refreshing', native, async t => {
   const input = await fixture(t);
   const observed = await inspectWindowsTaskDefinition(input);
-  await ps('Set-ScheduledTask -TaskName $args[0] -Description "changed fixture definition" | Out-Null', [input.taskName]);
+  await ps(`
+    $task=Get-ScheduledTask -TaskName $args[0]
+    $task.Description='changed fixture definition'
+    Set-ScheduledTask -InputObject $task | Out-Null
+  `, [input.taskName]);
   await assert.rejects(observed.check(), { code: 'DEPLOYMENT_WINDOWS_TASK_CHANGED' });
 });
 
@@ -98,11 +125,12 @@ test('Windows task observation detects actual task startup and never equates sch
   await ps(`
     Start-ScheduledTask -TaskName $args[0]
     $deadline=[DateTime]::UtcNow.AddSeconds(15)
-    while ((Get-ScheduledTask -TaskName $args[0]).State -ne 'Running') {
+    while ((Get-ScheduledTask -TaskName $args[0]).State -ne 'Running' -or
+      -not (Test-Path -LiteralPath (Join-Path $args[1] 'watchdog-process.json'))) {
       if ([DateTime]::UtcNow -ge $deadline) { throw 'Inert Scheduled Task did not start' }
       Start-Sleep -Milliseconds 100
     }
-  `, [input.taskName]);
+  `, [input.taskName, input.project]);
   await assert.rejects(observed.check(), { code: 'DEPLOYMENT_WINDOWS_TASK_CHANGED' });
   const running = await inspectWindowsTaskDefinition(input);
   assert.equal(running.runtimeAuthority, false);
