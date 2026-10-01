@@ -7092,6 +7092,43 @@ failed on the absent `deployment-windows-managed-application.ps1`. All other
 22 jobs passed. The new fixture implements the three native S4U starts and
 stopped data copy/restore sequence above; native acceptance is pending.
 
+#### Task 5M: Node-controlled native task maintenance lifetime
+
+Connect the existing admitted stop context to its actual Node controller before
+adding public transaction authority. Preserve the exact original-controller
+PID/start-time admission; never substitute the short-lived PowerShell bridge.
+This is transport/lifetime integration only, not generic lock/state/ACL admission.
+
+**Files:** add `scripts/deployment/windows-task-controller.mjs` and
+`scripts/deployment/windows-task-controller.ps1`; use the existing bounded
+`workerWire`, process identity and native owner watch. Include both entrypoints
+and all native runtime/maintenance dependencies in `saved-worker-engine.mjs`.
+Add `tests/deployment-windows-task-controller.mjs` and
+`tests/deployment-windows-task-node-cases.ps1`; extend only the existing native
+host fixture and native Windows task job.
+
+- [ ] Run the causal `node-close` host fixture in Actions: the real Node child
+  must fail on the absent controller module before native task mutation.
+- [ ] Implement `stopWindowsTask({ pwsh, admission, sha256, signal })` returning
+  frozen native bridge identity and `check()` / idempotent `close()`. Require
+  native bridge readiness to match actual child identity and admission digest.
+  Serialize bounded requests; reject concurrent calls rather than race them.
+- [ ] Native bridge retains the original private admission, verifies that its
+  controller is the actual parent Node process, then opens the accepted stop
+  context. Strict requests are `{ id, method }` with monotonic integer IDs and
+  only `check` or `close`. Check original stop authority before acknowledgements.
+- [ ] Use original-controller watch and bounded input. EOF, malformed input,
+  controller death, timeout or cancellation closes the bridge and retained
+  capabilities, never the independent task-side owner, never inhibition and
+  never durable records. Failure surfaces as uncertain stopped authority.
+- [ ] Actual Node fixture checks successful stop, rejected duplicate stop,
+  repeated close and refused check after close. A second real task uses abrupt
+  Node `process.exit()` without close. In both cases join the bridge's original
+  process handle, require the original task owner still alive and inhibited,
+  inspect original stopped/empty Job, and require all four durable receipts.
+- [ ] Preserve the full ongoing actual-application regression, then run the
+  causal and implementation through Actions without local validation.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

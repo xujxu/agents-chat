@@ -1,4 +1,4 @@
-param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-stop')][string]$Scenario = 'stop')
+param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-stop', 'node-close', 'node-exit')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -143,6 +143,11 @@ if (process.argv[2] === 'child') {
     if ($Scenario -eq 'durable-stop') {
         & (Join-Path $PSScriptRoot 'deployment-windows-task-maintenance-cases.ps1') -Root $root -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding
+    }
+    if ($Scenario -in @('node-close', 'node-exit')) {
+        & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $root -TaskName $taskName `
+            -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
+            -Action $Scenario.Substring(5)
     }
     if ($Scenario -eq 'task-inhibition') {
         $expected = [xml]$task.Xml

@@ -334,3 +334,9 @@ jobs:
       - name: Retain durable original task stop authority and private receipts
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario durable-stop
+      - name: Close Node task maintenance without releasing inhibition
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario node-close
+      - name: Preserve stopped task evidence after original Node controller exits
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario node-exit
