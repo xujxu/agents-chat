@@ -35,7 +35,12 @@ async function maintenanceFixture(t, runtimeState, { wrongIdentity = false } = {
 
 test('inactive maintenance refuses a different observation identity before creating inhibition', native, async t => {
   const f = await maintenanceFixture(t, 'inactive', { wrongIdentity: true });
-  await assert.rejects(stopLinuxService(f), /observation identity/i);
+  await assert.rejects(stopLinuxService(f), error => {
+    assert.equal(error.code, 'DEPLOYMENT_WORKER_UNSETTLED');
+    assert.equal(error.recoveryAllowed, false);
+    assert.match(error.cause?.message, /observation identity/i);
+    return true;
+  });
   await f.observation.check();
   await assert.rejects(lstat(`${f.fragment}.d/90-agents-chat-deployment.conf`), { code: 'ENOENT' });
   assert.deepEqual((await readdir(f.control)).sort(), ['lock', 'state.json']);
@@ -62,6 +67,13 @@ for (const state of ['inactive', 'failed']) {
     try {
       assert.deepEqual(await cold.check(), { stopped: true, inhibited: true });
       assert.deepEqual(cold.identity, records[0].service);
+      assert.equal(cold.runtimeIdentity, f.observation.runtimeIdentity);
+      const wrongHierarchy = structuredClone(records[0].service);
+      wrongHierarchy.domain.base.ino++;
+      await assert.rejects(inspectLinuxColdService({ original: wrongHierarchy }), /hierarchy/i);
+      const fictionalProcess = structuredClone(records[0].service);
+      fictionalProcess.runtime.processIdentity = 'fictional-running-process';
+      await assert.rejects(inspectLinuxColdService({ original: fictionalProcess }), /inactive.*identity/i);
       await writeFile(records[0].inhibition, `${await readFile(records[0].inhibition, 'utf8')}\n`);
       await assert.rejects(cold.check(), /inhibit|changed/i);
     } finally { await cold.close(); }
@@ -87,5 +99,7 @@ test('native initially stopped maintenance activates only the new deployment and
   await stopped.retire();
   await releaseLock(f.control, f.lock);
   assert.equal((await linuxSystemdProperties(f.unit, ['ActiveState'])).ActiveState, 'active');
+  assert.equal((await loadState(f.control)).priorRuntime, 'stopped');
+  assert.equal((await loadState(f.control)).runtimeIdentity, f.observation.runtimeIdentity);
   assert.deepEqual((await readdir(f.control)).sort(), ['state.json']);
 });

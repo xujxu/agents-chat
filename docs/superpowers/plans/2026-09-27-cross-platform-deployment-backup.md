@@ -6073,6 +6073,16 @@ the newly imported inactive helper; recovery inherits that closure. Added a
 native mismatched-observation refusal before any inhibitor/journal creation.
 Public command admission and cold transaction/lease decoders remain gated.
 
+Implementation `35097a2` / `36860250623`, native job `110362606413`,
+passed actual inactive maintenance/cold proof, failed-state maintenance/cold
+proof, and new activation/retirement. Its one failure was the negative test
+expecting an unwrapped message: the existing maintenance API correctly uses
+`DEPLOYMENT_WORKER_UNSETTLED`, recoveryAllowed=false, with the observation
+mismatch as its cause. Assert that complete contract and then verify no
+inhibitor/journal was created. Also assert cold hierarchy mismatch and
+fictional-process refusal, and that successful activation does not rewrite
+the original stopped identity/history. No production error policy was relaxed.
+
 **Readiness acceptance:** `be135a564e0a15fe0fc52b18eff9f61f0f36ec1f` /
 Actions `36423061540` passed all nine jobs. Real non-root HTTP listeners passed
 IPv4 and dual-stack checks; the foreign listener received no probe.
