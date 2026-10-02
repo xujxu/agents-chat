@@ -6,6 +6,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     'transaction-activate', 'transaction-activate-restore', 'transaction-activate-exit', 'transaction-activate-early',
     'transaction-activate-state-change', 'transaction-activate-readiness',
     'transaction-activate-complete', 'transaction-activate-complete-restore', 'transaction-activate-complete-changed-state',
+    'transaction-activate-complete-disabled',
     'guarded-owner-exit', 'guarded-release', 'listener-v4', 'listener-v6', 'listener-independent-pair')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -162,6 +163,10 @@ if (process.argv[2] === 'child') {
     finally { $retained.Dispose() }
     Assert ($ready.version -eq 1 -and $ready.pid -eq $owner.Id -and $ready.identity -ceq $ownerIdentity -and
         $ready.configurationSha256 -ceq $digest -and $ready.sessionId -eq 0) 'Managed readiness lost configuration or original task-owner identity'
+    if ($Scenario -ceq 'transaction-activate-complete-disabled') {
+        $task.Enabled = $false
+        $task = $scheduler.GetFolder('\').GetTask($taskName)
+    }
     $binding = Get-AgentsChatTaskOwnerBinding -TaskName $taskName -OwnerPid $owner.Id -OwnerIdentity $ownerIdentity `
         -Definition ([string]$task.Xml) -SecurityDescriptor ([string]$task.GetSecurityDescriptor(7))
     Assert ($binding.ownerPid -eq $ready.pid) 'Managed host is not the declared native task owner'
@@ -238,7 +243,7 @@ if (process.argv[2] === 'child') {
             elseif ($Scenario -eq 'transaction-retire-restore') { 'retire' } `
             elseif ($Scenario -eq 'transaction-replace-restore') { 'replace' } `
             elseif ($Scenario -eq 'transaction-activate-restore') { 'activate' } `
-            elseif ($Scenario -eq 'transaction-activate-complete-restore') { 'activate-complete' } else { $Scenario.Substring(12) }
+            elseif ($Scenario -in @('transaction-activate-complete-restore', 'transaction-activate-complete-disabled')) { 'activate-complete' } else { $Scenario.Substring(12) }
         & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $root -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
             -Action $transactionAction -Transactional -Restore:$restoreTransaction

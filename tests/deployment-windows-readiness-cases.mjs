@@ -4,7 +4,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { verifyWindowsReadiness, waitWindowsReadiness } from '../scripts/deployment/windows-readiness.mjs';
 
-export async function runWindowsReadinessCases({ context, runtime, project }) {
+export async function readWindowsReadinessEndpoint(project) {
   const writer = Number(await readFile(path.join(project, 'writer-pid'), 'utf8'));
   const deadline = performance.now() + 5000;
   let endpoint;
@@ -13,6 +13,11 @@ export async function runWindowsReadinessCases({ context, runtime, project }) {
     assert.ok(performance.now() < deadline, 'Replacement listener did not publish its original identity');
     if (endpoint.pid !== writer) await delay(100);
   } while (endpoint.pid !== writer);
+  return endpoint;
+}
+
+export async function runWindowsReadinessCases({ context, runtime, project }) {
+  const endpoint = await readWindowsReadinessEndpoint(project);
   const options = { context, port: endpoint.port, providers: ['admin-login'] };
   const modeFile = path.join(project, 'health-mode');
   const requestsFile = path.join(project, 'health-requests');

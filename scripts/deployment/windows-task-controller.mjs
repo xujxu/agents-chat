@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { workerWire } from './worker-wire.mjs';
+import { validateReadinessProviders } from './http-readiness.mjs';
 
 const script = fileURLToPath(new URL('./windows-task-controller.ps1', import.meta.url));
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
@@ -127,8 +128,14 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
       busy = true;
       try {
         requestSignal?.throwIfAborted();
-        if (method === 'listener' && (!activeRuntime || !Number.isInteger(payload.port) || payload.port < 1 || payload.port > 65535)) {
+        if (['listener', 'prepare-completion'].includes(method)
+          && (!activeRuntime || !Number.isInteger(payload.port) || payload.port < 1 || payload.port > 65535)) {
           throw new Error('Listener observation requires active runtime authority and an explicit port.');
+        }
+        if (method === 'prepare-completion') validateReadinessProviders(payload.providers);
+        if (method === 'complete' && (!activeRuntime || typeof payload.stateSha256 !== 'string'
+          || !/^[a-f0-9]{64}$/.test(payload.stateSha256))) {
+          throw new Error('Completion requires original runtime and explicit state digest.');
         }
         if (method === 'replace' && (typeof payload.configuration !== 'string'
           || !path.isAbsolute(payload.configuration) || /[\0\r\n]/.test(payload.configuration)
@@ -145,7 +152,7 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
         if (Buffer.byteLength(JSON.stringify(frame)) > 4096) throw new Error('Task controller request exceeds its bound.');
         await wire.send(frame);
         const reply = captureWorkerFields(await wire.receive({
-          signal: requestSignal, timeoutMs: method === 'activate' ? 90000 : method === 'retire' ? 60000 : 30000,
+          signal: requestSignal, timeoutMs: ['activate', 'complete'].includes(method) ? 90000 : method === 'retire' ? 60000 : 30000,
         }),
           ['id', 'type', 'value', ...(method === 'activate' ? ['runtime'] : method === 'listener' ? ['listener'] : [])], 'task controller reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.value !== method) {
@@ -173,6 +180,10 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
         request('replace', replaceSignal, { configuration, sha256 }),
       activate: ({ signal: activateSignal } = {}) => request('activate', activateSignal),
       listener: ({ port, signal: listenerSignal } = {}) => request('listener', listenerSignal, { port }),
+      prepareCompletion: ({ port, providers, signal: completionSignal } = {}) =>
+        request('prepare-completion', completionSignal, { port, providers }),
+      complete: ({ stateSha256, signal: completionSignal } = {}) =>
+        request('complete', completionSignal, { stateSha256 }),
       async close() {
         if (busy) throw uncertain(new Error('Cannot close an active task controller request.'));
         if (failure) throw failure;

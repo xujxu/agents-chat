@@ -8134,13 +8134,15 @@ activation fixture and new completion scenarios in the native workflow.
   terminal state. Compare every prior field except phase/previousPhase and
   monotonic updatedAt; bind the explicit digest and keep checking it afterward.
   Ordinary checks must still reject unannounced state changes.
-- [ ] Publish disabled permanent replacement XML without the temporary guard
-  arguments, retaining original triggers/restart/account/security. Journal
+- [ ] Publish disabled staged XML without the temporary guard arguments,
+  still suppressing triggers/restart and retaining account/security. Journal
   intent before registration; recheck original running instance/owner/Job/
   listener and exact registered policy after registration.
 - [ ] Persist release intent while still disabled, require authenticated
-  original-peer `released` acknowledgement, then restore the prior enabled
-  setting. Check all retained identities around each step and persist
+  original-peer `released` acknowledgement, then restore the full original
+  triggers/restart policy while disabled and finally the prior enabled
+  setting. Never assume disabling alone suppresses every restart mechanism.
+  Check all retained identities around each step and persist
   completion. Controller loss before release still settles the guarded Job;
   after release, the same original runtime must survive. Do not enable
   automatic restart before release or treat a release acknowledgement as
@@ -8152,6 +8154,18 @@ activation fixture and new completion scenarios in the native workflow.
   workflow only; require native success and preserve full regression.
 - [ ] Reopening/cold completion, cross-account permissions and complete
   source/artifact acceptance remain separately required before public wiring.
+
+Task 5AB causal `a6a1636` / `37007154332` is queued behind the preserved
+Task 5AA full regression. The local implementation is not yet published or
+accepted. Its nine immutable completion receipts retain the activating state,
+terminal digest, original runtime and listener, staged no-automation action,
+original permanent task definition and enabled/security policy. Automation
+stays suppressed until the authenticated lease release has completed.
+Native scenarios include update, restore with custom security, preservation
+of an originally disabled running task, and changed target-commit refusal
+after preparation. Contract tests cover HTTP/preparation/state/release ordering
+and preserving both publication and cleanup errors; these do not substitute
+for native acceptance.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

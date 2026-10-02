@@ -26,6 +26,7 @@ try {
     . (Join-Path $PSScriptRoot 'windows-task-replacement.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-activation.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-listener.ps1')
+    . (Join-Path $PSScriptRoot 'windows-task-completion.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwner($ControllerPid, $ControllerIdentity)
     $retained = [Deployment.WindowsPrivateFile]::Open($Admission, $Sha256)
@@ -64,14 +65,21 @@ try {
         $fields = @('id', 'method')
         if ($method -ceq 'replace') { $fields += @('configuration', 'sha256') }
         if ($method -ceq 'listener') { $fields += @('port') }
+        if ($method -ceq 'prepare-completion') { $fields += @('port', 'providers') }
+        if ($method -ceq 'complete') { $fields += @('stateSha256') }
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire', 'replace', 'activate', 'listener')) { throw 'Invalid controller request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire', 'replace', 'activate', 'listener',
+            'prepare-completion', 'complete')) { throw 'Invalid controller request.' }
         $sequence = $id
         $stage = 'check'
         $retained.Check()
-        if ($context.Activated) { $null = Assert-AgentsChatTaskActive -Context $context }
+        if ($method -ceq 'complete') {
+            $stage = 'complete'
+            Complete-AgentsChatTaskActivation -Context $context -StateSha256 $request.stateSha256.GetString()
+        }
+        elseif ($context.Activated) { $null = Assert-AgentsChatTaskActive -Context $context }
         elseif ($context.Retired) { $null = Assert-AgentsChatTaskRetired -Context $context }
         else { $null = Assert-AgentsChatTaskStopped -Context $context }
         if ($method -ceq 'retire') {
@@ -91,6 +99,11 @@ try {
         if ($method -ceq 'listener') {
             $stage = 'listener'
             $reply.listener = Open-AgentsChatTaskListener -Context $context -Port $request.port.GetInt32()
+        }
+        if ($method -ceq 'prepare-completion') {
+            $stage = 'prepare-completion'
+            $providers = @($request.providers.EnumerateArray() | ForEach-Object { $_.GetString() })
+            Prepare-AgentsChatTaskCompletion -Context $context -Port $request.port.GetInt32() -Providers $providers
         }
         if ($method -ceq 'close') {
             $stage = 'close'

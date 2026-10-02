@@ -57,7 +57,14 @@ function Assert-AgentsChatTaskTransaction([hashtable]$Transaction) {
             restoring=@('restore-activating'); 'restore-activating'=@()
         }
         $Transaction.Stage = 'transaction-phase'
-        if ($state.operation -cne $Transaction.Operation -or
+        if ($Transaction.CompletionStateSha256) {
+            $terminal = if ($Transaction.Operation -ceq 'restore') { 'restored' } else { 'accepted' }
+            $previous = if ($Transaction.Operation -ceq 'restore') { 'restore-activating' } else { 'activating' }
+            if ($Transaction.StateSha256 -cne $Transaction.CompletionStateSha256 -or $state.phase -cne $terminal -or
+                $state.previousPhase -cne $previous -or $state.operation -cne $Transaction.Operation) {
+                throw 'Original completion state changed.'
+            }
+        } elseif ($state.operation -cne $Transaction.Operation -or
             -not $next.ContainsKey($state.phase) -or
             ($state.phase -ceq $Transaction.Phase -and $state.previousPhase -cne $Transaction.PreviousPhase) -or
             ($state.phase -cne $Transaction.Phase -and
@@ -107,6 +114,7 @@ function Open-AgentsChatTaskTransaction {
         StateFile=(Join-Path $Control 'state.json'); Phase=$null; PreviousPhase=$null; Operation=$null
         InitialStateSha256=$StateSha256; StateSha256=$null; ReceiptSha256=$null
         InitialState=$null; Control=$Control; Stage='transaction-admission'
+        CompletionStateSha256=$null
     }
     try {
         $transaction.Lock = [Deployment.WindowsPrivateFile]::Open((Join-Path $Control 'lock/owner.json'), $LockSha256)

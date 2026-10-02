@@ -117,8 +117,9 @@ if (action === 'activate-early') {
       if (action.startsWith('activate-complete')) {
         assert.equal(next.action, 'complete');
         const { completeWindowsTaskActivation } = await import('../scripts/deployment/windows-task-completion.mjs');
-        const endpoint = JSON.parse(await readFile(path.join(project, 'listener.json'), 'utf8'));
-        assert.equal(endpoint.pid, Number(await readFile(path.join(project, 'writer-pid'), 'utf8')));
+        const { readWindowsReadinessEndpoint } = await import('./deployment-windows-readiness-cases.mjs');
+        const endpoint = await readWindowsReadinessEndpoint(project);
+        await writeFile(path.join(project, 'health-mode'), 'ready');
         const completion = () => completeWindowsTaskActivation({
           context, port: endpoint.port, providers: ['admin-login'],
           recordAcceptance: async () => {

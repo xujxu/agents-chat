@@ -155,6 +155,9 @@ function Stop-AgentsChatManagedTask {
         Activated=$false; ActivationOwner=$null; ActivationInstance=$null; ActivationRuntime=$null; ActivationSha256=$null; Listener=$null
         ActivationDefinition=$null; ActivationEnabledDefinition=$null; ActivationDemandDefinition=$null
         ActivationLeasePid=0; ActivationLeaseIdentity=$null
+        CompletionPrepared=$false; Completed=$false; CompletionPriorState=$null; CompletionStateSha256=$null
+        CompletionSha256=$null; CompletionPort=0; CompletionProviders=$null
+        CompletionDefinition=$null; CompletionStagedDefinition=$null; CompletionEnabled=$false; CompletionTargetEnabled=$false
         AdmissionSha256=$Sha256; PreviousSha256=$Sha256; Definition=$null; LauncherPid=0
         Transaction=$Transaction
         Directory=[IO.Path]::GetDirectoryName($Admission)

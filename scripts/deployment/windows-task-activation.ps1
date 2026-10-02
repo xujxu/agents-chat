@@ -8,7 +8,11 @@ function Test-AgentsChatActivationAuthority([hashtable]$Context) {
         -not $Context.Owner.HasExited -or $Context.Owner.ExitCode -ne 0) {
         throw 'Original activation authority changed.'
     }
-    Test-AgentsChatRetirementTransaction $Context
+    if ($Context.CompletionStateSha256) {
+        $Context.Stage = 'completion-state'
+        Assert-AgentsChatTaskTransaction $Context.Transaction
+        if ($Context.Transaction.StateSha256 -cne $Context.CompletionStateSha256) { throw 'Original completion state differs.' }
+    } else { Test-AgentsChatRetirementTransaction $Context }
     $Context.Stage = 'activation-evidence'
     foreach ($file in $Context.Files) { $file.Check() }
 }
@@ -61,12 +65,17 @@ function Test-AgentsChatActiveTaskContext([hashtable]$Context) {
         $Context.ActivationInstance.Path -cne "\$($Context.Data.taskName)") {
         throw 'Original activated Scheduler instance changed.'
     }
-    $null = Test-AgentsChatActivationPolicy $Context $false
+    $definition = if ($Context.CompletionDefinition) { $Context.CompletionDefinition } else { $Context.ActivationDefinition }
+    $enabled = [bool]$Context.CompletionEnabled
+    $Context.Stage = 'activation-policy'
+    $task = $Context.Folder.GetTask($Context.Data.taskName)
+    if ([bool]$task.Enabled -ne $enabled -or [string]$task.Xml -cne $definition -or
+        [string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor) { throw 'Original active policy changed.' }
     $Context.Stage = 'activation-binding'
     $binding = Get-AgentsChatTaskOwnerBinding -TaskName $Context.Data.taskName -OwnerPid $runtime.pid `
-        -OwnerIdentity $runtime.identity -Definition $Context.ActivationDefinition `
+        -OwnerIdentity $runtime.identity -Definition $definition `
         -SecurityDescriptor $Context.Data.securityDescriptor
-    if ($binding.enabled -or $binding.instanceGuid -cne $runtime.instanceGuid -or
+    if ($binding.enabled -ne $enabled -or $binding.instanceGuid -cne $runtime.instanceGuid -or
         $binding.sessionId -ne $runtime.sessionId) { throw 'Original activated task binding differs.' }
     $Context.Stage = 'activation-domain'
     $observation = [Deployment.WindowsRuntimeControl]::Exchange(
@@ -76,7 +85,9 @@ function Test-AgentsChatActiveTaskContext([hashtable]$Context) {
         throw 'Activated original runtime domain differs.'
     }
     Test-AgentsChatActivationAuthority $Context
-    $null = Test-AgentsChatActivationPolicy $Context $false
+    $task = $Context.Folder.GetTask($Context.Data.taskName)
+    if ([bool]$task.Enabled -ne $enabled -or [string]$task.Xml -cne $definition -or
+        [string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor) { throw 'Original active policy changed.' }
     if ($Context.ActivationOwner.HasExited) { throw 'Activated owner exited during observation.' }
 }
 

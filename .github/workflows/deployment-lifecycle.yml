@@ -426,6 +426,9 @@ jobs:
       - name: Complete healthy native restore with retained task permissions
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-restore
+      - name: Preserve originally disabled policy after healthy native completion
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-disabled
       - name: Refuse changed terminal state before permanent task policy
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-changed-state

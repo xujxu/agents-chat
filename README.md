@@ -182,7 +182,9 @@ deploy/update/restore transaction.
 Native listener checks now retain original process/Job ownership and kernel
 bind time, including the exact dual-stack wildcard pair. Foreign listeners,
 same-process rebinds and independently created same-process wildcard pairs
-are refused. Controller-side HTTP readiness integration remains pending.
+are refused. Controller-side HTTP readiness passed its native Windows gate at
+`839ac62`; its full shared-readiness regression is pending. Health-gated
+permanent task-policy restoration and lease release are not yet accepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

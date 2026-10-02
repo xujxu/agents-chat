@@ -129,14 +129,19 @@ try {
         Assert ($terminal.Data.phase -ceq $(if ($terminal.Data.operation -ceq 'restore') { 'restored' } else { 'accepted' })) `
             'Completion did not bind the expected terminal state'
         $permanent = [xml]$published.Data.definition
-        $permanent.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces).InnerText = 'true'
+        $admitted = Read-Receipt (Join-Path $Directory 'admission.json')
+        $originalTask = [xml]$admitted.Data.definition
+        $originalEnabled = $originalTask.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces)
+        $expectedEnabled = $null -eq $originalEnabled -or $originalEnabled.InnerText -ceq 'true'
+        $permanent.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces).InnerText = $expectedEnabled.ToString().ToLowerInvariant()
         $task = $scheduler.GetFolder('\').GetTask($TaskName)
-        Assert ($task.Enabled -and ([xml][string]$task.Xml).OuterXml -ceq $permanent.OuterXml -and
+        Assert ([bool]$task.Enabled -eq $expectedEnabled -and ([xml][string]$task.Xml).OuterXml -ceq $permanent.OuterXml -and
             [string]$task.GetSecurityDescriptor(7) -ceq $SecurityDescriptor -and
             $task.Definition.Triggers.Count -gt 0 -and $task.Definition.Settings.RestartCount -gt 0 -and
             [string]$task.Definition.Actions.Item(1).Arguments -cnotmatch '-ControllerPid|-ControllerIdentity') `
             'Completion did not restore the exact permanent task policy'
-        foreach ($phase in @('prepared', 'policy-requested', 'policy-restored', 'release-requested', 'released', 'enable-requested', 'complete')) {
+        foreach ($phase in @('prepared', 'policy-requested', 'policy-staged', 'release-requested', 'released',
+            'policy-restore-requested', 'policy-restored', 'enable-requested', 'complete')) {
             $receipt = Read-Receipt (Join-Path $Directory "task-complete-$phase.json")
             Assert ($receipt.Data.version -eq 1 -and $receipt.Data.phase -ceq $phase -and
                 $receipt.Data.previousSha256 -ceq $previous -and $receipt.Data.operationId -ceq $OperationId -and
@@ -149,9 +154,16 @@ try {
             if ($phase -cne 'prepared') {
                 Assert ($receipt.Data.stateSha256 -ceq $terminal.Sha256) 'Completion receipt terminal digest differs'
             }
+            $staged = [xml]$receipt.Data.stagedDefinition
+            Assert ($staged.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces).InnerText -ceq 'false' -and
+                $staged.SelectNodes('/t:Task/t:Triggers/*', $namespaces).Count -eq 0 -and
+                $staged.SelectNodes('/t:Task/t:Settings/t:RestartOnFailure', $namespaces).Count -eq 0 -and
+                $staged.SelectSingleNode('/t:Task/t:Actions/t:Exec/t:Arguments', $namespaces).InnerText -cnotmatch '-ControllerPid|-ControllerIdentity' -and
+                $receipt.Data.enabled -eq $expectedEnabled -and
+                $receipt.Data.securityDescriptor -ceq $SecurityDescriptor) 'Completion enabled automation before original lease release'
             $previous = $receipt.Sha256
         }
-        Assert (@(Get-ChildItem -LiteralPath $Directory -Filter 'task-complete-*.json').Count -eq 7) 'Repeated completion duplicated receipts'
+        Assert (@(Get-ChildItem -LiteralPath $Directory -Filter 'task-complete-*.json').Count -eq 9) 'Repeated completion duplicated receipts'
         $Controller.StandardInput.WriteLine('{"action":"close"}')
         Assert ((Receive).phase -ceq 'closed') 'Completed controller close was not acknowledged'
         Assert ($Controller.WaitForExit(15000) -and $Controller.ExitCode -eq 0 -and

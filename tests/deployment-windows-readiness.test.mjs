@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import test from 'node:test';
 import { verifyWindowsReadiness, waitWindowsReadiness } from '../scripts/deployment/windows-readiness.mjs';
+import { completeWindowsTaskActivation } from '../scripts/deployment/windows-task-completion.mjs';
 
 async function serving(t, respond) {
   let requests = 0;
@@ -86,4 +87,64 @@ test('Windows readiness overall deadline closes an unfinished HTTP response', as
   await assert.rejects(waitWindowsReadiness({ context, port: server.port, providers: ['admin-login'], waitSeconds: 1 }),
     { code: 'DEPLOYMENT_STAGE_TIMEOUT', recoveryAllowed: true });
   assert.equal(server.requests(), 1);
+});
+
+test('Windows completion publishes state only after native-bound HTTP and preparation', async t => {
+  const server = await serving(t);
+  const calls = [];
+  const stateSha256 = 'a'.repeat(64);
+  const context = {
+    async listener({ port }) {
+      calls.push('listener');
+      return { status: 'retained', generation: randomUUID(), port };
+    },
+    async check() { assert.equal(server.requests(), 1); calls.push('checked'); },
+    async prepareCompletion({ port, providers }) {
+      assert.equal(port, server.port);
+      assert.deepEqual(providers, ['admin-login']);
+      calls.push('prepared');
+    },
+    async complete(value) { assert.equal(value.stateSha256, stateSha256); calls.push('completed'); },
+    async close() { assert.fail('Successful completion does not close its authority'); },
+  };
+  const result = await completeWindowsTaskActivation({
+    context, port: server.port, providers: ['admin-login'],
+    async recordAcceptance() { calls.push('recorded'); return stateSha256; },
+  });
+  assert.deepEqual(result, { status: 'completed', stateSha256 });
+  assert.deepEqual(calls, ['listener', 'checked', 'prepared', 'recorded', 'completed']);
+});
+
+test('Windows completion preserves refusal and settles prepared authority on publication failure', async t => {
+  const server = await serving(t);
+  const failure = new Error('acceptance publication failed');
+  let closed = false;
+  const context = {
+    async listener({ port }) { return { status: 'retained', generation: randomUUID(), port }; },
+    async check() {},
+    async prepareCompletion() {},
+    async complete() { assert.fail('Unpublished acceptance cannot release runtime'); },
+    async close() { closed = true; },
+  };
+  await assert.rejects(completeWindowsTaskActivation({
+    context, port: server.port, providers: ['admin-login'],
+    async recordAcceptance() { throw failure; },
+  }), error => error === failure);
+  assert.equal(closed, true);
+});
+
+test('Windows completion exposes both publication and authority cleanup failures', async t => {
+  const server = await serving(t);
+  const failure = new Error('acceptance publication failed');
+  const cleanup = new Error('authority cleanup uncertain');
+  const context = {
+    async listener({ port }) { return { status: 'retained', generation: randomUUID(), port }; },
+    async check() {},
+    async prepareCompletion() {},
+    async close() { throw cleanup; },
+  };
+  await assert.rejects(completeWindowsTaskActivation({
+    context, port: server.port, providers: ['admin-login'],
+    async recordAcceptance() { throw failure; },
+  }), error => error instanceof AggregateError && error.errors[0] === failure && error.errors[1] === cleanup);
 });
