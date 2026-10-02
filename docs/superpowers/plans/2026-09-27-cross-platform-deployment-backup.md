@@ -7951,22 +7951,22 @@ is running; its native activation job is `110819509658`.
 fixture, actual prebuilt application fixture, native activation job and saved
 helper inventory.
 
-- [ ] Require `WindowsRuntimeListener.Retain(generation, ownerPid,
+- [x] Require `WindowsRuntimeListener.Retain(generation, ownerPid,
   ownerIdentity, launcherPid, port)` and `Check()` on actual S4U-owned IPv4 and
   dual-stack listeners. Retain the original host and listener process handles,
   their creation identities, original Job membership and kernel TCP binding
   timestamp; releasing the observation must not stop the application.
-- [ ] Use `GetExtendedTcpTable` with `TCP_TABLE_OWNER_MODULE_LISTENER` for
+- [x] Use `GetExtendedTcpTable` with `TCP_TABLE_OWNER_MODULE_LISTENER` for
   both address families. Bound allocations, row counts and table-growth
-  retries; validate struct alignment and lengths. Require exactly one
-  loopback-accessible listener across both families and explicit nonzero
-  bind timestamp. Only absent listener is retryable, never wrong ownership,
+  retries; validate struct alignment and lengths. Require one
+  loopback-accessible record or the exact two-family wildcard pair with
+  shared PID/nonzero bind timestamp. Only absent listener is retryable, never wrong ownership,
   ambiguous port, changed PID/bind time or invalid native observations.
-- [ ] Exercise unrelated listener refusal, cross-family ambiguity, wrong host
+- [x] Exercise unrelated listener refusal, cross-family ambiguity, wrong host
   identity, same-process close/rebind and stopped original Job. Use the
   actual Node listener rather than a mocked table and verify that refusals
   do not stop unrelated work.
-- [ ] Wire this observation around the existing real application/API fixture
+- [x] Wire this observation around the existing real application/API fixture
   and retain its complete saved helper closure. Capture the missing-helper
   causal failure in Actions, then require native and full acceptance.
 - [ ] Subsequent health composition must reuse the existing bounded HTTP and
@@ -8081,6 +8081,17 @@ overall deadline could instead interrupt a native ownership request, whose
 existing contract correctly abandons uncertain authority; it must not be
 misrepresented as HTTP-only cancellation. The shared overall-stage deadline
 is covered by the isolated Node contract and existing native Linux tests.
+
+Task 5Z `19e577f` / `37003698264` completed **24/24 success** at 12:20 UTC,
+including actual application data continuity and all public Linux lifecycle
+gates. This is the latest full accepted baseline.
+Task 5AA causal `49d334a` / `37004758607` native `110834527500` failed at
+12:22:43 UTC with `ERR_MODULE_NOT_FOUND` for `windows-readiness.mjs`,
+imported by `deployment-windows-readiness-cases.mjs` after actual guarded
+activation and independent receipt checks. The earlier listener and guarded
+activation cases passed. Captured this causal failure before cancelling the
+run and publishing implementation `469a38c`; implementation acceptance is
+pending Actions.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

@@ -146,7 +146,7 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `99a985e` (run `37000065119`). This also accepts the
+creation, passed at `19e577f` (run `37003698264`). This also accepts the
 production native controller process: literal arguments and bidirectional
 stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
@@ -179,6 +179,10 @@ three prebuilt managed starts, authenticated chat
 persistence, stopped-database restoration, original-Job listener ownership and
 unchanged build artifacts. This is not yet acceptance of the public Windows
 deploy/update/restore transaction.
+Native listener checks now retain original process/Job ownership and kernel
+bind time, including the exact dual-stack wildcard pair. Foreign listeners,
+same-process rebinds and independently created same-process wildcard pairs
+are refused. Controller-side HTTP readiness integration remains pending.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and
