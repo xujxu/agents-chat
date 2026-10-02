@@ -18,10 +18,13 @@ const receive = async () => {
   assert.equal(result.done, false);
   return JSON.parse(result.value);
 };
-const secure = async ({ exposeState = false, stateOnly = false } = {}) => promisify(execFile)(pwsh, [
-  '-NoProfile', '-NonInteractive', '-File', fileURLToPath(new URL('./deployment-windows-private-control.ps1', import.meta.url)),
-  '-Control', control, ...(exposeState ? ['-ExposeState'] : []), ...(stateOnly ? ['-StateOnly'] : []),
-], { timeout: 30000, maxBuffer: 4096 });
+const changeStateAcl = async (action, originalSecurity) => {
+  const { stdout } = await promisify(execFile)(pwsh, [
+    '-NoProfile', '-NonInteractive', '-File', fileURLToPath(new URL('./deployment-windows-private-control.ps1', import.meta.url)),
+    '-Control', control, '-Action', action, ...(originalSecurity ? ['-OriginalSecurity', originalSecurity] : []),
+  ], { timeout: 30000, maxBuffer: 4096 });
+  return stdout.trim();
+};
 console.log(JSON.stringify({ pid: process.pid, identity: lock.processIdentity, operationId: lock.operationId }));
 const admission = await receive();
 const record = JSON.parse(await readFile(admission.admission, 'utf8'));
@@ -37,10 +40,13 @@ const options = { ...admission, pwsh, control, lock };
 await assert.rejects(stopWindowsTaskTransaction(options));
 state = { ...state, phase: operation === 'restore' ? 'restoring' : 'stopped', previousPhase: state.phase };
 await writeState(control, state);
-await secure({ exposeState: true });
-await assert.rejects(stopWindowsTaskTransaction(options));
-assert.deepEqual(await readdir(path.dirname(admission.admission)), ['admission.json']);
-await secure();
+const originalSecurity = await changeStateAcl('expose');
+try {
+  await assert.rejects(stopWindowsTaskTransaction(options));
+  assert.deepEqual(await readdir(path.dirname(admission.admission)), ['admission.json']);
+} finally {
+  await changeStateAcl('restore', originalSecurity);
+}
 await assert.rejects(stopWindowsTaskTransaction({ ...options, lock: { ...lock, token: randomUUID() } }));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const stateDigest = hash(await readFile(path.join(control, 'state.json')));
@@ -62,7 +68,6 @@ await assert.rejects(writeFile(path.join(control, 'lock', 'owner.json'), 'change
 await context.check();
 state = { ...state, phase: operation === 'restore' ? 'restore-activating' : 'copying', previousPhase: state.phase };
 await writeState(control, state);
-await secure({ stateOnly: true });
 await context.check();
 await assert.rejects(releaseLock(control, lock), /maintenance/i);
 assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');

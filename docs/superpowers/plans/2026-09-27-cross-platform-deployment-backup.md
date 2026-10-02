@@ -7542,6 +7542,15 @@ Native compilation and behavioral acceptance are pending.
   transaction receipts, changed-state refusal and cleanup/settlement gates.
   This remains controller integration, not public activation/cold recovery.
 
+Production factory `44016e6` / `36958322571` passed its new native step in
+task-options job `110686185122`; full regression is still running.
+Causal `a33f461` / `36958473499` is pending behind that preserved regression.
+The local integration now replaces the fixture launcher and positive ACL
+repairs. It also asserts cwd retention after all controller/foreign writers
+have settled, before disposal, so a live child's own cwd cannot satisfy the
+factory's directory-retention assertion accidentally. Do not push this
+implementation over the pending causal run before capturing its outcome.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

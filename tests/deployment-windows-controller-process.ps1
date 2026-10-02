@@ -110,6 +110,10 @@ setInterval(() => fs.appendFileSync(marker, 'x'), 25);
     Assert ($foreign.WaitForExit(15000)) 'Independent fixture writer did not settle'
     $foreign.Dispose()
     $foreign = $null
+    $denied = $false
+    try { [IO.Directory]::Move($root, $moved); $cleanupRoot = $moved }
+    catch { $denied = ($_.Exception.GetBaseException().HResult -band 0xffff) -in @(5, 32) }
+    Assert $denied 'Production controller released its working directory before disposal'
     Assert ($diagnostic.Wait(15000)) 'Controller diagnostic pipe did not close after Job settlement'
     Assert ([string]::IsNullOrEmpty($diagnostic.GetAwaiter().GetResult())) 'Unexpected production controller diagnostics'
     $controller.Dispose()

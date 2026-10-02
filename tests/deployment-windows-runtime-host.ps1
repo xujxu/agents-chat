@@ -9,7 +9,8 @@ $helpers = @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePi
     'windows-worker-launcher.ps1', 'windows-runtime-host.ps1')
 Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
     (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'),
-    (Join-Path $source 'WindowsPrivateFile.cs'))
+    (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsControllerToken.cs'),
+    (Join-Path $source 'WindowsControllerProcess.cs'))
 . (Join-Path $source 'windows-task-owner-binding.ps1')
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }

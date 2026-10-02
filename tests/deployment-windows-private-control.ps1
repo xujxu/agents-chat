@@ -1,30 +1,22 @@
-param([Parameter(Mandatory)][string]$Control, [switch]$ExposeState, [switch]$StateOnly)
+param(
+    [Parameter(Mandatory)][string]$Control,
+    [Parameter(Mandatory)][ValidateSet('expose', 'restore')][string]$Action,
+    [string]$OriginalSecurity
+)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
-$entries = if ($StateOnly) { @(Get-Item -LiteralPath (Join-Path $Control 'state.json')) } else {
-    @((Get-Item -LiteralPath $Control)) + @(Get-ChildItem -LiteralPath $Control -Recurse)
-}
-foreach ($entry in $entries) {
-    $acl = Get-Acl -LiteralPath $entry.FullName
-    $acl.SetOwner($sid)
-    $acl.SetAccessRuleProtection($true, $false)
-    foreach ($rule in @($acl.Access)) { $acl.RemoveAccessRuleSpecific($rule) }
-    foreach ($principal in @($sid, [Security.Principal.SecurityIdentifier]::new('S-1-5-18'))) {
-        $rule = if ($entry.PSIsContainer) {
-            [Security.AccessControl.FileSystemAccessRule]::new($principal, 'FullControl',
-                'ContainerInherit,ObjectInherit', 'None', 'Allow')
-        } else {
-            [Security.AccessControl.FileSystemAccessRule]::new($principal, 'FullControl', 'Allow')
-        }
-        $acl.AddAccessRule($rule)
-    }
-    Set-Acl -LiteralPath $entry.FullName -AclObject $acl
-}
-if ($ExposeState) {
-    $state = Join-Path $Control 'state.json'
+$state = Join-Path $Control 'state.json'
+if ($Action -eq 'expose') {
     $acl = Get-Acl -LiteralPath $state
+    $original = $acl.Sddl
     $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
         [Security.Principal.SecurityIdentifier]::new('S-1-1-0'), 'Read', 'Allow'))
     Set-Acl -LiteralPath $state -AclObject $acl
+    Write-Output $original
+} else {
+    if ([string]::IsNullOrWhiteSpace($OriginalSecurity)) { throw 'Original state security is required' }
+    $acl = [Security.AccessControl.FileSecurity]::new()
+    $acl.SetSecurityDescriptorSddlForm($OriginalSecurity)
+    Set-Acl -LiteralPath $state -AclObject $acl
+    if ((Get-Acl -LiteralPath $state).Sddl -cne $OriginalSecurity) { throw 'Original state security was not restored exactly' }
 }

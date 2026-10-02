@@ -20,28 +20,37 @@ function Receive-Controller {
     Assert ($line.Wait(60000)) 'Node controller did not reply'
     return $line.GetAwaiter().GetResult() | ConvertFrom-Json
 }
-$info = [Diagnostics.ProcessStartInfo]::new((Get-Command node).Source)
-$info.UseShellExecute = $false
-$info.RedirectStandardInput = $true
-$info.RedirectStandardOutput = $true
-$info.RedirectStandardError = $true
+$node = (Get-Command node).Source
+$node = & $node -p "require('node:fs').realpathSync.native(process.execPath)"
+Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize task controller executable'
 $fixture = if ($Transactional) { 'deployment-windows-task-transaction-controller.mjs' } else { 'deployment-windows-task-controller.mjs' }
-$info.ArgumentList.Add((Join-Path $PSScriptRoot $fixture))
-$info.ArgumentList.Add([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+$arguments = [Collections.Generic.List[string]]::new()
+$arguments.Add((Join-Path $PSScriptRoot $fixture))
+$arguments.Add([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
 $control = $null
 if ($Transactional) {
     $control = "$Root-control"
-    New-Item -ItemType Directory -Path $control | Out-Null
-    & (Join-Path $PSScriptRoot 'deployment-windows-private-control.ps1') -Control $control
-    $info.ArgumentList.Add($control)
-    $info.ArgumentList.Add($Root)
-    $info.ArgumentList.Add($(if ($Restore) { 'restore' } else { 'update' }))
+    $arguments.Add($control)
+    $arguments.Add($Root)
+    $arguments.Add($(if ($Restore) { 'restore' } else { 'update' }))
 }
-$controller = [Diagnostics.Process]::Start($info)
-$null = $controller.Handle
-$diagnostic = $controller.StandardError.ReadToEndAsync()
+$controllerRoot = if ($Transactional) { $control } else { "$Root-controller" }
+$environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+$environment.Add('SystemRoot', $env:SystemRoot)
+$environment.Add('TEMP', $controllerRoot)
+$environment.Add('TMP', $controllerRoot)
+$powershellDirectory = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0'
+Assert (Test-Path -LiteralPath (Join-Path $powershellDirectory 'powershell.exe')) 'System process-identity tool is missing'
+$environment.Add('PATH', $powershellDirectory)
+$controller = $null
+$diagnostic = $null
 $bridge = $null
+$controllerDirectory = [Deployment.WindowsPrivateFile]::CreateDirectory($controllerRoot)
 try {
+    try {
+        $controller = [Deployment.WindowsControllerProcess]::Start($node, $arguments.ToArray(), $controllerRoot, $environment)
+    } finally { $controllerDirectory.Dispose() }
+    $diagnostic = $controller.StandardError.ReadToEndAsync()
     $hello = Receive-Controller
     Assert ($hello.pid -eq $controller.Id -and
         $hello.identity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($controller.Id)) 'Node controller identity differs'
@@ -58,11 +67,9 @@ try {
     $scheduler.Connect()
     $task = $scheduler.GetFolder('\').GetTask($TaskName)
     $readyFile = Join-Path $Root "runtime-$($Ready.identity.Replace(':', '-')).json"
-    $directory = if ($Transactional) { Join-Path $control 'task-maintenance' } else { Join-Path $Root 'node-maintenance' }
-    New-Item -ItemType Directory -Path $directory | Out-Null
-    $security = Get-Acl -LiteralPath $directory
-    $security.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User)
-    Set-Acl -LiteralPath $directory -AclObject $security
+    $directory = Join-Path $controllerRoot $(if ($Transactional) { 'task-maintenance' } else { 'node-maintenance' })
+    $maintenanceDirectory = [Deployment.WindowsPrivateFile]::CreateDirectory($directory)
+    $maintenanceDirectory.Dispose()
     $record = [ordered]@{
         version=1; operationId=$(if ($Transactional) { $hello.operationId } else { [guid]::NewGuid().ToString('D') })
         controllerPid=$hello.pid; controllerIdentity=$hello.identity
@@ -96,17 +103,22 @@ try {
         $observation.members.Count -eq 0 -and
         @(Get-ChildItem -LiteralPath $directory -Filter 'task-stop-*.json').Count -eq 4) `
         'Node completion lost original stopped domain or durable evidence'
-    Write-Output "PASS: Node controller $Action preserves native inhibition, original task owner and durable stopped evidence"
+    Write-Output "PASS: private production Node controller $Action preserves native inhibition, original task owner and durable stopped evidence"
 } finally {
-    if (-not $controller.HasExited) { $controller.Kill() }
-    Assert ($controller.WaitForExit(15000)) 'Generated Node controller failed to exit'
-    if ($bridge) {
-        Assert ($bridge.WaitForExit(15000)) 'Generated native bridge outlived its original Node controller'
-        $bridge.Dispose()
+    if ($controller) {
+        try {
+            $controller.Kill()
+            Assert ($controller.WaitForExit(15000)) 'Generated Node controller failed to exit'
+            if ($bridge) {
+                Assert ($bridge.WaitForExit(15000)) 'Generated native bridge outlived its original Node controller'
+            }
+            if ($diagnostic) {
+                Assert ($diagnostic.Wait(15000)) 'Node controller diagnostics did not close'
+                $text = $diagnostic.GetAwaiter().GetResult()
+                if ($text) { [Console]::Error.WriteLine($text) }
+            }
+        } finally { $controller.Dispose() }
+        Remove-Item -LiteralPath $controllerRoot -Recurse -Force
     }
-    Assert ($diagnostic.Wait(15000)) 'Node controller diagnostics did not close'
-    $text = $diagnostic.GetAwaiter().GetResult()
-    if ($text) { [Console]::Error.WriteLine($text) }
-    $controller.Dispose()
-    if ($control) { Remove-Item -LiteralPath $control -Recurse -Force }
+    if ($bridge) { $bridge.Dispose() }
 }
