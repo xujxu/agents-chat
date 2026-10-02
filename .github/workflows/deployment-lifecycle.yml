@@ -510,3 +510,22 @@ jobs:
       - name: Reopen originally disabled completed task without changing its policy
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-disabled
+
+  windows-task-retirement:
+    name: Native Windows task receipt retirement
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Retire original update receipts and recover after controller loss
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement
+      - name: Retire original restore receipts with retained native policy
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-restore
+      - name: Retire disabled-task receipts without enabling automation
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-disabled

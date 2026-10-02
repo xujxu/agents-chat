@@ -90,7 +90,7 @@ if (action === 'activate-early') {
   await assert.rejects(context.retire(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
 } else if (['retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
   'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state',
-  'activate-complete-proof'].includes(action)) {
+  'activate-complete-proof', 'activate-complete-retirement'].includes(action)) {
   if (operation !== 'restore') {
     for (const phase of ['rotating', 'backup-ready', 'source-selected', 'dependencies', 'building', 'configuring', 'activating']) {
       state = { ...state, previousPhase: state.phase, phase };
@@ -105,7 +105,7 @@ if (action === 'activate-early') {
       { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
   } else {
     if (['replace', 'activate', 'activate-exit', 'activate-state-change', 'activate-readiness',
-      'activate-complete', 'activate-complete-changed-state', 'activate-complete-proof'].includes(action)) {
+      'activate-complete', 'activate-complete-changed-state', 'activate-complete-proof', 'activate-complete-retirement'].includes(action)) {
       await context.replace({ configuration, sha256 });
       await context.replace({ configuration, sha256 });
     }

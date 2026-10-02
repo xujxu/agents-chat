@@ -192,6 +192,10 @@ try {
             & (Join-Path $PSScriptRoot 'deployment-windows-task-completion-proof-cases.ps1') -Control $Control `
                 -Root $Root -Directory $Directory -TaskName $TaskName -OperationId $OperationId -Runtime $runtime `
                 -StateSha256 $terminal.Sha256 -CompletionSha256 $previous -Port $receipt.Data.port -Owner $owner -Member $member
+        } elseif ($Request.action -ceq 'activate-complete-retirement') {
+            $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+            & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-task-retirement.mjs') $Control $pwsh
+            Assert ($LASTEXITCODE -eq 0) 'Native checkpoint-backed receipt retirement failed'
         }
         $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
             $runtime.pid, $runtime.identity, 'observe', 15000) | ConvertFrom-Json

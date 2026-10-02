@@ -8,6 +8,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     'transaction-activate-complete', 'transaction-activate-complete-restore', 'transaction-activate-complete-changed-state',
     'transaction-activate-complete-disabled',
     'transaction-activate-complete-proof', 'transaction-activate-complete-proof-restore', 'transaction-activate-complete-proof-disabled',
+    'transaction-activate-complete-retirement', 'transaction-activate-complete-retirement-restore', 'transaction-activate-complete-retirement-disabled',
     'guarded-owner-exit', 'guarded-release', 'listener-v4', 'listener-v6', 'listener-independent-pair')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -164,7 +165,8 @@ if (process.argv[2] === 'child') {
     finally { $retained.Dispose() }
     Assert ($ready.version -eq 1 -and $ready.pid -eq $owner.Id -and $ready.identity -ceq $ownerIdentity -and
         $ready.configurationSha256 -ceq $digest -and $ready.sessionId -eq 0) 'Managed readiness lost configuration or original task-owner identity'
-    if ($Scenario -cin @('transaction-activate-complete-disabled', 'transaction-activate-complete-proof-disabled')) {
+    if ($Scenario -cin @('transaction-activate-complete-disabled', 'transaction-activate-complete-proof-disabled',
+        'transaction-activate-complete-retirement-disabled')) {
         $task.Enabled = $false
         $task = $scheduler.GetFolder('\').GetTask($taskName)
     }
@@ -251,19 +253,21 @@ if (process.argv[2] === 'child') {
     }
     if ($Scenario.StartsWith('transaction-')) {
         $restoreTransaction = $Scenario -in @('transaction-restore', 'transaction-retire-restore', 'transaction-replace-restore',
-            'transaction-activate-restore', 'transaction-activate-complete-restore', 'transaction-activate-complete-proof-restore')
+            'transaction-activate-restore', 'transaction-activate-complete-restore', 'transaction-activate-complete-proof-restore',
+            'transaction-activate-complete-retirement-restore')
         $transactionAction = if ($Scenario -eq 'transaction-restore') { 'close' } `
             elseif ($Scenario -eq 'transaction-retire-restore') { 'retire' } `
             elseif ($Scenario -eq 'transaction-replace-restore') { 'replace' } `
             elseif ($Scenario -eq 'transaction-activate-restore') { 'activate' } `
             elseif ($Scenario.StartsWith('transaction-activate-complete-proof')) { 'activate-complete-proof' } `
+            elseif ($Scenario.StartsWith('transaction-activate-complete-retirement')) { 'activate-complete-retirement' } `
             elseif ($Scenario -in @('transaction-activate-complete-restore', 'transaction-activate-complete-disabled')) { 'activate-complete' } else { $Scenario.Substring(12) }
         & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $root -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
             -Action $transactionAction -Transactional -Restore:$restoreTransaction
         if ($transactionAction -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
             'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state',
-            'activate-complete-proof')) {
+            'activate-complete-proof', 'activate-complete-retirement')) {
             Assert ($owner.HasExited -and $member.WaitForExit(15000) -and
                 -not $scheduler.GetFolder('\').GetTask($taskName).Enabled) 'Transactional retirement lost original settlement'
             Write-Output "PASS: $Scenario retains durable retirement and original task inhibition"

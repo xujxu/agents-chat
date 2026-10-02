@@ -9853,6 +9853,145 @@ because Windows case aliases must not hide remaining evidence. Linux
 continues using case-sensitive names. Actual native and full acceptance
 remain pending until the implementation run finishes.
 
+### Task 5AM: checkpoint-backed receipt retirement and interrupted-prefix recovery
+
+**Boundary:** retain original state, lock, both root records, native runtime,
+policy, released lease and original listener throughout receipt retirement.
+Use the existing native controller for live transfer. It must open/check the
+new scope before closing the full proof; the old full-proof object then becomes
+unavailable. A fresh process may open the same scope only after both recorded
+creator identities are absent. No second lock, receipt archive, owner rewrite,
+runtime adoption, task-policy mutation or automatic operation unlock.
+
+**Files and responsibilities:**
+- `scripts/deployment/windows-task-retirement-scope.ps1`: native private
+  record reopening, retained checkpoint authority, strict ordered inventory,
+  exact next-file retirement and disposal.
+- `scripts/deployment/windows-task-completion-proof.ps1`: share original
+  runtime/policy/instance/lease/domain assertions without weakening full-proof
+  receipt or original-process checks.
+- `scripts/deployment/windows-task-completion-records.ps1`: share the fixed
+  completion record order and runtime field capture.
+- `scripts/deployment/windows-task-completion-controller.ps1`: live
+  `begin-retirement`, cold retirement mode, `retire-next`, mode-safe check/close.
+- `scripts/deployment/windows-task-completion-proof.mjs`: original
+  admission-bound live transfer and fresh retirement opening; separate
+  WeakMap bindings prevent copied or foreign objects from authorizing deletion.
+- `scripts/deployment/windows-task-retirement-scope.mjs`: strict immutable
+  `{status:'retiring', retiredFiles, checkpoint}` observation codec.
+- `scripts/deployment/saved-worker-engine.mjs` and
+  `tests/deployment-saved-worker.test.mjs`: exact installed helper closure.
+- `tests/deployment-windows-task-retirement.mjs`: a genuine destructive
+  completion scenario, separate from all existing receipt mutation fixtures.
+- Runtime-host/task-node/transaction-controller/activation-case fixture routes:
+  a new `activate-complete-retirement` action and update/restore/disabled
+  scenarios.
+- `.github/workflows/deployment-lifecycle.yml`: one independent native
+  retirement job, retaining the existing 25-job regression.
+
+- [ ] **Step 1: publish a genuine causal retirement fixture.**
+
+  After actual native task completion and original transaction-controller
+  settlement, call the existing completion module and require:
+
+  ```javascript
+  assert.equal(typeof api.beginWindowsTaskRetirement, 'function');
+  assert.equal(typeof api.openWindowsTaskRetirement, 'function');
+  assert.equal(typeof api.retireNextWindowsTaskFile, 'function');
+  ```
+
+  The fixture's held child acquires actual admission, opens full proof and
+  transfers it. Require the original native process identity to stay equal,
+  full-proof check/prepare to refuse after transfer, and copied/foreign
+  retirement/admission bindings to refuse. Retire exactly three original
+  receipts, send the original checkpoint and native identities over IPC, then
+  let the parent terminate that specific child. Require both native proof and
+  admission processes to exit with the original Node owner.
+
+- [ ] **Step 2: reopen only a contiguous missing prefix.**
+
+  The parent reopens the same checkpoint after creator loss. Preserve the
+  checkpoint result exactly and require `retiredFiles === 3`. Each original
+  descriptor must still have its fixed allowlisted path, dev/ino, byte count
+  and SHA256. Retain the original control, lock and maintenance directories.
+  Reject unknown maintenance entries, a missing file after the first remaining
+  file, changed bytes, same-byte replacement, changed checkpoint/native policy,
+  changed original listener and a recorded creator still alive.
+
+  Prefix inference is constrained to the original ordered descriptor array:
+
+  ```javascript
+  let retiredFiles = 0;
+  let remainingStarted = false;
+  for (const descriptor of checkpoint.intent.intent.files) {
+    if (present.has(descriptor.path)) remainingStarted = true;
+    else if (remainingStarted) throw new Error('Non-prefix retirement inventory.');
+    else retiredFiles++;
+  }
+  ```
+
+  Native code performs the inventory check against the retained private
+  directory and opens/checks every remaining descriptor, not just its name.
+  A live scope fixes its observed prefix; subsequent unexpected disappearance
+  or reappearance poisons it rather than changing that prefix.
+
+- [ ] **Step 3: preserve native runtime authority across live handoff.**
+
+  Open/check the checkpoint scope while the full proof still holds all its
+  handles. Both creator pairs must either match the exact current Node/native
+  identities or be absent. Retain both marker files, exact original
+  state/owner files and directory identities, the current installed bundle,
+  original readiness, runtime process handle and listener.
+
+  Hash the exact current Scheduler XML/SDDL and compare with the stored
+  checkpoint before retaining their strings for subsequent exact comparison.
+  Require original task instance GUID, owner PID/creation/session, launcher,
+  released lease, native Job and original listener fingerprint, using shared
+  completion assertions. Do not reconstruct or install task policy.
+
+  Close the full proof only after the new scope passes. Then invalidate its
+  Node facade without closing the native process now owned by the retirement
+  facade. Any handoff failure closes both retained scopes and preserves every
+  receipt. Original controller exit still terminates the same native child.
+
+- [ ] **Step 4: delete only the next exact receipt through its checked handle.**
+
+  Before mutation, check the entire remaining inventory and original runtime.
+  Release only the target receipt's read handle, then call the accepted
+  `WindowsPrivateFile.RetainForRetirement(path, sha256, dev, ino, bytes)`.
+  Recheck original authority and the exclusive target before invoking
+  `Delete()`. Advance the in-memory prefix by one only after that call returns;
+  check the new inventory and runtime again before acknowledging.
+
+  The request has only `{id,method:'retire-next'}`; there is no caller-supplied
+  path or count. Every reply retains the exact original checkpoint and must
+  report the previous count plus one. At count 23, retain the empty
+  task-maintenance directory, both root markers, state and original owner.
+  Exhausted, closed, foreign or poisoned authority cannot delete anything.
+
+- [ ] **Step 5: accept interruption and genuine three-scenario regression.**
+
+  Corruption cases rename original fixture files out and back, preserving
+  their native IDs; do not delete/recreate authentic receipts. Remove only
+  named synthetic replacement/extra files. After actor death and strict
+  refusal cases, reopen at prefix three and retire the remaining twenty
+  receipts. Require the directory empty and state/owner bytes unchanged.
+  Close/reopen at prefix 23, with the exact same checkpoint and live original
+  runtime. Ordinary acquisition remains blocked by Task 5AL.
+
+  Run only in Actions:
+
+  ```powershell
+  ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement
+  ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-restore
+  ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-disabled
+  ```
+
+  Capture the missing API failure before implementation. Preserve the
+  implementation's complete run and require all 26 jobs. Empty-directory
+  retirement, worker evidence handoff and final operation unlock remain the
+  next explicit boundary; this step must not claim they already work.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
