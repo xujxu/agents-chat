@@ -7516,6 +7516,15 @@ in `tests/deployment-saved-worker.test.mjs`.
   launcher, removing positive-path ACL repair rather than copying it into
   public deploy/update/restore.
 
+Causal `ca20571` / `36957738054` completed with the expected missing-helper
+failure: native `110684370436` could not load `WindowsControllerToken.cs`;
+Linux contracts `110684370351` reported the same missing saved-engine source.
+The implementation now supplies both native helpers, validates the retained
+executable and actual process image, encodes literal arguments, restricts
+inherited handles to the three stdio ends, and settles only its original Job.
+The fixture also proves an independent writer survives controller stop.
+Native compilation and behavioral acceptance are pending.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

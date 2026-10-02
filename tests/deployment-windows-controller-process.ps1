@@ -7,11 +7,14 @@ $source = Join-Path $PSScriptRoot '../scripts/deployment'
 $nativeSources = @('WindowsWorkerJob.cs', 'WindowsPrivateFile.cs', 'WindowsControllerToken.cs', 'WindowsControllerProcess.cs')
 Add-Type -Path @($nativeSources | ForEach-Object { Join-Path $source $_ })
 $node = (Get-Command node).Source
+$node = & $node -p "require('node:fs').realpathSync.native(process.execPath)"
+Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize controller Node executable'
 $parent = & $node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" ([IO.Path]::GetTempPath())
 Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize native controller fixture'
 $root = Join-Path $parent "agents-controller-$([guid]::NewGuid()) space"
 $cleanupRoot = $root
 $controller = $null
+$foreign = $null
 $directory = [Deployment.WindowsPrivateFile]::CreateDirectory($root)
 $directory.Dispose()
 try {
@@ -40,13 +43,18 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', as
 '@ | Set-Content -LiteralPath (Join-Path $root 'controller.cjs')
     @'
 const fs = require('node:fs');
-fs.appendFileSync('marker', 'x');
-setInterval(() => fs.appendFileSync('marker', 'x'), 25);
+const marker = process.argv[2] || 'marker';
+fs.appendFileSync(marker, 'x');
+setInterval(() => fs.appendFileSync(marker, 'x'), 25);
 '@ | Set-Content -LiteralPath (Join-Path $root 'writer.cjs')
     $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
     $environment.Add('SystemRoot', $env:SystemRoot)
     $environment.Add('TEMP', $root)
     $environment.Add('TMP', $root)
+    $refused = $false
+    try { [Deployment.WindowsControllerProcess]::Start('node.exe', @(), $root, $environment).Dispose() }
+    catch { $refused = $_.Exception.GetBaseException() -is [ArgumentException] }
+    Assert $refused 'Production controller accepted a relative executable'
     $literal = @('', 'a"b', 'tail\', 'space %n $HOME', 'two\\\"three')
     $controller = [Deployment.WindowsControllerProcess]::Start($node,
         (@((Join-Path $root 'controller.cjs')) + $literal), $root, $environment)
@@ -73,6 +81,18 @@ setInterval(() => fs.appendFileSync('marker', 'x'), 25);
     try { [IO.Directory]::Move($root, $moved); $cleanupRoot = $moved }
     catch { $denied = ($_.Exception.GetBaseException().HResult -band 0xffff) -in @(5, 32) }
     Assert $denied 'Production controller did not retain its private working directory'
+    $foreignMarker = Join-Path $root 'foreign-marker'
+    $foreignInfo = [Diagnostics.ProcessStartInfo]::new($node)
+    $foreignInfo.UseShellExecute = $false
+    $foreignInfo.WorkingDirectory = $parent
+    $foreignInfo.ArgumentList.Add((Join-Path $root 'writer.cjs'))
+    $foreignInfo.ArgumentList.Add($foreignMarker)
+    $foreign = [Diagnostics.Process]::Start($foreignInfo)
+    $deadline = [DateTime]::UtcNow.AddSeconds(10)
+    while (-not (Test-Path -LiteralPath $foreignMarker)) {
+        Assert ([DateTime]::UtcNow -lt $deadline -and -not $foreign.HasExited) 'Independent writer did not start'
+        Start-Sleep -Milliseconds 25
+    }
     $controller.StandardInput.WriteLine('{"method":"spawn-exit"}')
     Assert ($controller.WaitForExit(15000) -and $controller.ExitCode -eq 0) 'Production controller root did not exit'
     $marker = Join-Path $root 'marker'
@@ -81,8 +101,15 @@ setInterval(() => fs.appendFileSync('marker', 'x'), 25);
     Assert ((Get-Item -LiteralPath $marker).Length -gt $before) 'Detached writer did not survive root exit'
     $controller.Kill()
     $after = (Get-Item -LiteralPath $marker).Length
+    $foreignBefore = (Get-Item -LiteralPath $foreignMarker).Length
     Start-Sleep -Milliseconds 200
     Assert ((Get-Item -LiteralPath $marker).Length -eq $after) 'Original controller Job still has a writer after stop'
+    Assert (-not $foreign.HasExited -and (Get-Item -LiteralPath $foreignMarker).Length -gt $foreignBefore) `
+        'Controller stop affected an independent writer'
+    $foreign.Kill()
+    Assert ($foreign.WaitForExit(15000)) 'Independent fixture writer did not settle'
+    $foreign.Dispose()
+    $foreign = $null
     Assert ($diagnostic.Wait(15000)) 'Controller diagnostic pipe did not close after Job settlement'
     Assert ([string]::IsNullOrEmpty($diagnostic.GetAwaiter().GetResult())) 'Unexpected production controller diagnostics'
     $controller.Dispose()
@@ -91,6 +118,11 @@ setInterval(() => fs.appendFileSync('marker', 'x'), 25);
     $cleanupRoot = $moved
     Write-Output 'PASS: production controller preserves literal stdio/private ownership, retains cwd and settles detached writers after root exit'
 } finally {
+    if ($foreign) {
+        if (-not $foreign.HasExited) { $foreign.Kill() }
+        Assert ($foreign.WaitForExit(15000)) 'Independent fixture writer did not settle'
+        $foreign.Dispose()
+    }
     if ($controller) { $controller.Dispose() }
     Remove-Item -LiteralPath $cleanupRoot -Recurse -Force
 }
