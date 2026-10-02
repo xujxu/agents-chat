@@ -16,7 +16,8 @@ try {
     $rootLease = [Deployment.WindowsPrivateFile]::CreateDirectory($root)
     Copy-Item -LiteralPath (Join-Path $source 'WindowsWorkerJob.cs') -Destination (Join-Path $root 'WindowsWorkerJob.cs')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'deployment-windows-controller-token-child.ps1') -Destination (Join-Path $root 'child.ps1')
-    @{ source = [IO.Path]::GetFullPath($source) } | ConvertTo-Json -Compress |
+    @{ source = [IO.Path]::GetFullPath($source); pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName } |
+        ConvertTo-Json -Compress |
         Set-Content -LiteralPath (Join-Path $root 'fixture.json') -Encoding utf8
     @'
 const assert = require('node:assert/strict');
@@ -25,7 +26,8 @@ const path = require('node:path');
 const root = process.argv[2];
 const child = process.argv[3] === 'child';
 async function writeControl() {
-  const source = fs.realpathSync.native(JSON.parse(fs.readFileSync(path.join(root, 'fixture.json'), 'utf8')).source);
+  const fixture = JSON.parse(fs.readFileSync(path.join(root, 'fixture.json'), 'utf8'));
+  const source = fs.realpathSync.native(fixture.source);
   const load = name => import(require('node:url').pathToFileURL(path.join(source, name)).href);
   const [{ acquireLock, writeState }, { createWorkerJournal }, { saveWorkerEngine, verifyWorkerEngine }] =
     await Promise.all([load('state.mjs'), load('worker-journal.mjs'), load('saved-worker-engine.mjs')]);
@@ -35,7 +37,7 @@ async function writeControl() {
   fs.mkdirSync(control, { mode: 0o700 });
   const { randomUUID } = require('node:crypto');
   const operationId = randomUUID();
-  const lock = await acquireLock(control, { project, operationId });
+  const lock = await acquireLock(control, { project, operationId, pwsh: fixture.pwsh });
   let state = {
     version: 1, operationId, project, operation: 'update', phase: 'preflight', previousPhase: null,
     sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40), backupId: null,
@@ -101,7 +103,8 @@ if (!child) {
     $receipt = Get-Content -LiteralPath $journals[0].FullName -Raw | ConvertFrom-Json
     Assert ($receipt.phase -ceq 'intent' -and $receipt.owner.operationId -ceq $lock.operationId) 'Invalid private Node worker journal'
     $files = @(Get-ChildItem -LiteralPath $control -Recurse -File)
-    Assert ($files.Count -eq $manifest.files.Count + 4) 'Unexpected private Node control contents'
+    Assert ($files.Count -eq $manifest.files.Count + 5) 'Unexpected private Node control contents'
+    Assert ((Get-Item -LiteralPath (Join-Path $control 'windows-admission.lock')).Length -eq 0) 'Native admission gate changed'
     foreach ($directory in @((Get-Item -LiteralPath $control)) + @(Get-ChildItem -LiteralPath $control -Recurse -Directory)) {
         $lease = [Deployment.WindowsPrivateFile]::OpenDirectory($directory.FullName)
         try { $lease.Check() }

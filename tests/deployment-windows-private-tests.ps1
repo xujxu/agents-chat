@@ -27,7 +27,7 @@ try {
     }
     $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($entry in [Environment]::GetEnvironmentVariables().GetEnumerator()) {
-        if ($entry.Key -match '^(SystemRoot|PATH|ComSpec|USERPROFILE|APPDATA|LOCALAPPDATA|HOME|CI|GITHUB_ACTIONS|DEPLOYMENT_TEST_[A-Z_]+)$') {
+        if ($entry.Key -match '^(SystemRoot|SystemDrive|WINDIR|PATH|PATHEXT|ComSpec|USERPROFILE|APPDATA|LOCALAPPDATA|HOME|CI|GITHUB_ACTIONS|DEPLOYMENT_TEST_[A-Z_]+)$') {
             $environment.Add([string]$entry.Key, [string]$entry.Value)
         }
     }

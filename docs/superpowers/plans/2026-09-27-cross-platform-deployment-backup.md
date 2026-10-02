@@ -8798,6 +8798,18 @@ preserves identity binding without two extra process launches per check.
 Task-maintenance transport/reply schemas are unchanged. Native and full
 Task 5AG acceptance remain pending Actions.
 
+Implementation `e9b440d` / `37036786060` passed native ownership admission
+at 16:53:35 UTC and all three completed-task proof scenarios by 16:56:12 UTC
+in job `110936879725`; native Windows Job ownership also passed.
+Full regression exposed two fixture migration omissions: embedded Node in
+`deployment-windows-controller-token.ps1` lacked explicit `pwsh`, and the
+new private test runner omitted normal Windows executable-environment
+variables, causing the managed-application fixture's native invocation to
+leave `LASTEXITCODE` unset. Pass the selected runtime through fixture JSON,
+include the persistent gate in its exact private inventory, and preserve
+`PATHEXT`, `WINDIR` and `SystemDrive` in the runner. These fixes still require
+Actions acceptance; preserve the running implementation regression.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
