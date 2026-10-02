@@ -150,6 +150,108 @@ try {
     Assert ([IO.File]::ReadAllText($file) -ceq $text -and
         [IO.File]::ReadAllText($neighbour) -ceq '{"keep":true}') 'Unsafe retirement changed evidence'
     Write-Output 'PASS: native retirement refuses unsafe or changed file/parent permissions, hard links and redirected paths without repair or deletion'
+    Assert ($null -ne [Deployment.WindowsPrivateFile].GetMethod('RetainDirectoryForRetirement')) `
+        'Missing exact native private directory retirement factory'
+    $emptyParent = Join-Path $root 'empty-parent'
+    [Deployment.WindowsPrivateFile]::CreateDirectory($emptyParent).Dispose()
+    $empty = Join-Path $emptyParent 'empty'
+    $lease = [Deployment.WindowsPrivateFile]::CreateDirectory($empty)
+    try { $emptyIdentity = $lease.CaptureIdentity() }
+    finally { $lease.Dispose() }
+    function Retain-Empty {
+        return [Deployment.WindowsPrivateFile]::RetainDirectoryForRetirement(
+            $empty, $emptyIdentity.Dev, $emptyIdentity.Ino)
+    }
+    foreach ($changed in @(
+        @(($emptyIdentity.Dev + '0'), $emptyIdentity.Ino),
+        @($emptyIdentity.Dev, ($emptyIdentity.Ino + '0'))
+    )) {
+        Refuses {
+            [Deployment.WindowsPrivateFile]::RetainDirectoryForRetirement(
+                $empty, $changed[0], $changed[1]).Dispose()
+        } 'Original retirement directory identity differs.'
+    }
+    Refuses {
+        [Deployment.WindowsPrivateFile]::RetainDirectoryForRetirement(
+            $file, $identity.Dev, $identity.Ino).Dispose()
+    } 'Private publication directory is redirected.'
+    $movedEmpty = Join-Path $root 'moved-empty'
+    [IO.Directory]::Move($empty, $movedEmpty)
+    [Deployment.WindowsPrivateFile]::CreateDirectory($empty).Dispose()
+    Refuses { (Retain-Empty).Dispose() } 'Original retirement directory identity differs.'
+    Remove-Item -LiteralPath $empty
+    [IO.Directory]::Move($movedEmpty, $empty)
+    $lease = [Deployment.WindowsPrivateFile]::OpenDirectory($empty)
+    try { Refuses-Sharing { (Retain-Empty).Dispose() } }
+    finally { $lease.Dispose() }
+    $retained = Retain-Empty
+    try {
+        $retained.Check()
+        Refuses-Sharing { [IO.Directory]::Move($empty, $movedEmpty) }
+        Refuses-Sharing { [IO.Directory]::Delete($empty) }
+        Refuses-Sharing { [IO.Directory]::Move($emptyParent, (Join-Path $root 'moved-parent')) }
+    } finally { $retained.Dispose() }
+    Assert (Test-Path -LiteralPath $empty) 'Ordinary retirement close deleted the original directory'
+    $child = Join-Path $empty 'retained.json'
+    [Deployment.WindowsPrivateFile]::Publish($child, '{"keep":true}').Dispose()
+    $retained = Retain-Empty
+    try {
+        $code = 0
+        try { $retained.Delete() }
+        catch {
+            $failure = $_.Exception.GetBaseException()
+            if ($failure -isnot [ComponentModel.Win32Exception]) { throw }
+            $code = $failure.NativeErrorCode
+        }
+        Assert ($code -eq 145) "Native directory retirement did not refuse nonempty directory: $code"
+        $retained.Check()
+    } finally { $retained.Dispose() }
+    Assert ([IO.File]::ReadAllText($child) -ceq '{"keep":true}') 'Nonempty refusal changed original child evidence'
+    Remove-Item -LiteralPath $child
+    $emptyAcl = Get-Acl -LiteralPath $empty
+    $publicEmpty = Get-Acl -LiteralPath $empty
+    $publicEmpty.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+        [Security.Principal.SecurityIdentifier]::new('S-1-1-0'), 'Read', 'Allow'))
+    Set-Acl -LiteralPath $empty -AclObject $publicEmpty
+    Refuses { (Retain-Empty).Dispose() } 'Private configuration permissions are unsupported.'
+    Set-Acl -LiteralPath $empty -AclObject $emptyAcl
+    $retained = Retain-Empty
+    try {
+        Set-Acl -LiteralPath $empty -AclObject $publicEmpty
+        Refuses { $retained.Delete() } 'Private publication directory changed.'
+    } finally { $retained.Dispose() }
+    Assert (Test-Path -LiteralPath $empty) 'Changed directory ACL allowed retirement'
+    Set-Acl -LiteralPath $empty -AclObject $emptyAcl
+    $emptyParentAcl = Get-Acl -LiteralPath $emptyParent
+    $publicEmptyParent = Get-Acl -LiteralPath $emptyParent
+    $publicEmptyParent.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+        [Security.Principal.SecurityIdentifier]::new('S-1-1-0'), 'Read', 'Allow'))
+    $retained = Retain-Empty
+    try {
+        Set-Acl -LiteralPath $emptyParent -AclObject $publicEmptyParent
+        Refuses { $retained.Delete() } 'Private publication directory changed.'
+    } finally { $retained.Dispose() }
+    Refuses { (Retain-Empty).Dispose() } 'Private configuration permissions are unsupported.'
+    Set-Acl -LiteralPath $emptyParent -AclObject $emptyParentAcl
+    New-Item -ItemType Junction -Path $junction -Target $empty | Out-Null
+    Refuses {
+        [Deployment.WindowsPrivateFile]::RetainDirectoryForRetirement(
+            $junction, $emptyIdentity.Dev, $emptyIdentity.Ino).Dispose()
+    } 'Private publication directory is redirected.'
+    Remove-Item -LiteralPath $junction
+    $retained = Retain-Empty
+    try {
+        $retained.Delete()
+        Assert (-not (Test-Path -LiteralPath $empty)) 'Original empty directory survived retirement'
+        foreach ($action in @({ $retained.Check() }, { $retained.Delete() })) {
+            $disposed = $false
+            try { & $action }
+            catch { $disposed = $_.Exception.GetBaseException() -is [ObjectDisposedException] }
+            Assert $disposed 'Disposed directory retirement handle was accepted'
+        }
+    } finally { $retained.Dispose() }
+    Assert ([IO.File]::ReadAllText($neighbour) -ceq '{"keep":true}') 'Directory retirement changed unrelated evidence'
+    Write-Output 'PASS: exact native directory retirement preserves on close, refuses nonempty/replaced/shared/unsafe directories and deletes only the original empty directory'
 } finally {
     $directory.Dispose()
     Remove-Item -LiteralPath $root -Recurse -Force

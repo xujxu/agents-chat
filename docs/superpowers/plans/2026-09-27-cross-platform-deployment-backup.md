@@ -10053,6 +10053,77 @@ failure. The accepted consumer retires all 23 receipts and preserves the
 empty directory, both root markers, original state and old operation lock.
 Directory/worker/final-unlock handoff remains unfinished.
 
+### Task 5AN: exact native empty-directory retirement primitive
+
+Provide the missing directory counterpart to the accepted private-file
+primitive, without yet changing transaction cleanup order. The final
+directory/worker handoff must have durable authority before interpreting a
+missing directory as completed retirement; this primitive grants none of
+that authority by itself.
+
+**Files:**
+- `scripts/deployment/WindowsPrivateFile.cs`: extend the existing private
+  directory opener with an internal retirement access mode and add
+  `RetainDirectoryForRetirement(path, dev, ino)` returning a disposable
+  `RetirementDirectory` with `Check`, `Delete`, and ordinary `Dispose`.
+- `tests/deployment-windows-private-retirement.ps1`: reuse the exact native
+  fixture and refusal helpers for directory identity, contention, disposal,
+  kernel-enforced nonempty refusal, ACL changes, parent protection and links.
+- `README.md`: distinguish primitive acceptance from final transaction unlock.
+
+- [ ] **Step 1: publish the missing native directory factory cases.**
+
+  Require `RetainDirectoryForRetirement` through native reflection after all
+  existing file-retirement cases. Capture an original private directory's
+  dev/ino, then verify:
+
+  ```powershell
+  $retained = [Deployment.WindowsPrivateFile]::RetainDirectoryForRetirement(
+      $empty, $emptyIdentity.Dev, $emptyIdentity.Ino)
+  $retained.Check()
+  $retained.Dispose()
+  Assert (Test-Path -LiteralPath $empty) 'Ordinary close deleted the directory'
+  ```
+
+  With a child present before opening, `Delete()` must return native
+  `ERROR_DIR_NOT_EMPTY` (145), preserve the child bytes, and leave the
+  retained context closable. After explicitly removing only that fixture
+  child, exact deletion must remove the directory and preserve its neighbour.
+  Also require wrong/replaced identity, retained-reader contention, path
+  renames, unsafe ACLs and reparse-point refusals.
+
+- [ ] **Step 2: extend the same checked native handle mechanism.**
+
+  The internal publication-directory opener adds `DELETE` (0x10000) only
+  for retirement and uses share mode zero. All existing callers keep their
+  current access and sharing. The factory first retains the private parent,
+  opens the exact original directory, checks dev/ino and retains both.
+  Use the existing private-directory ACL/type/final-path checks before and
+  after. Ordinary close only releases handles.
+
+  `Delete()` checks parent/directory/parent, then uses:
+
+  ```csharp
+  byte disposition = 1;
+  Native(SetFileInformationByHandle(original.handle, 4, ref disposition, 1),
+      "Retire original private directory");
+  Dispose();
+  ```
+
+  Windows performs the empty-directory check atomically on that handle;
+  do not enumerate-and-recursively-delete, use path-based `RemoveDirectory`,
+  or pre-authorize removal from a stale empty-directory observation.
+  Dispose both handles on every construction/deletion failure, preserving
+  the original native error. Retain the existing nine-helper installation.
+
+- [ ] **Step 3: accept native refusal and complete regression.**
+
+  Use the existing `Native Windows task options` Actions job for the
+  new cases. Capture missing-factory failure before implementation; then
+  preserve a full 26-job run. Require all original receipt retirement,
+  complete-proof, Linux lifecycle, contracts and real-application jobs.
+  Do not remove the actual maintenance directory or old operation lock yet.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
