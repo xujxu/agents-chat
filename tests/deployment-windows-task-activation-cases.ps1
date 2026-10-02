@@ -181,6 +181,29 @@ try {
         Assert (-not $owner.HasExited -and -not $member.HasExited) 'Completed original runtime died with its controller'
         Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
             $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') 'Independent completion observer cannot establish actual original lease release'
+        if ($Request.action -ceq 'activate-complete-proof') {
+            $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+            $beforeProof = [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml
+            $evidence = @(Get-ChildItem -LiteralPath $Directory -File | Sort-Object Name | ForEach-Object {
+                "$($_.Name):$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash)"
+            })
+            $output = & $pwsh -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deployment-windows-task-completion-proof.ps1') -Control $Control
+            Assert ($LASTEXITCODE -eq 0) 'Fresh completed-task proof process failed'
+            $proof = ($output -join "`n") | ConvertFrom-Json
+            Assert ($proof.status -ceq 'observed' -and -not $proof.mutationAuthority -and
+                $proof.lease -ceq 'released' -and $proof.operationId -ceq $OperationId -and
+                $proof.taskName -ceq $TaskName -and $proof.stateSha256 -ceq $terminal.Sha256 -and
+                $proof.completionSha256 -ceq $previous -and $proof.port -eq $receipt.Data.port) 'Cold proof lost original completed authority'
+            foreach ($field in $runtime.PSObject.Properties.Name) {
+                Assert ($proof.runtime.$field -ceq $runtime.$field) 'Cold proof adopted another runtime'
+            }
+            $afterEvidence = @(Get-ChildItem -LiteralPath $Directory -File | Sort-Object Name | ForEach-Object {
+                "$($_.Name):$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash)"
+            })
+            Assert (($evidence -join "`n") -ceq ($afterEvidence -join "`n") -and
+                [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml -ceq $beforeProof -and
+                -not $owner.HasExited -and -not $member.HasExited) 'Read-only proof changed evidence, task policy or original runtime'
+        }
         $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
             $runtime.pid, $runtime.identity, 'observe', 15000) | ConvertFrom-Json
         Assert ($observation.members -contains $member.Id -and $observation.members -contains $runtime.launcherPid -and

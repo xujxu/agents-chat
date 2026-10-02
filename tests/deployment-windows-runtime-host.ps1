@@ -7,6 +7,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     'transaction-activate-state-change', 'transaction-activate-readiness',
     'transaction-activate-complete', 'transaction-activate-complete-restore', 'transaction-activate-complete-changed-state',
     'transaction-activate-complete-disabled',
+    'transaction-activate-complete-proof',
     'guarded-owner-exit', 'guarded-release', 'listener-v4', 'listener-v6', 'listener-independent-pair')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -260,7 +261,8 @@ if (process.argv[2] === 'child') {
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
             -Action $transactionAction -Transactional -Restore:$restoreTransaction
         if ($transactionAction -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
-            'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state')) {
+            'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state',
+            'activate-complete-proof')) {
             Assert ($owner.HasExited -and $member.WaitForExit(15000) -and
                 -not $scheduler.GetFolder('\').GetTask($taskName).Enabled) 'Transactional retirement lost original settlement'
             Write-Output "PASS: $Scenario retains durable retirement and original task inhibition"

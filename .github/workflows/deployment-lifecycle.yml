@@ -447,3 +447,16 @@ jobs:
       - name: Settle unverified task and original Job after controller exit
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-owner-exit
+
+  windows-completion-proof:
+    name: Native Windows completed task proof
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Reopen completed original task evidence in a fresh native process
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof

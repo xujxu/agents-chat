@@ -8249,6 +8249,61 @@ constructors and domain-observation fields. The native domain fixture with
 no observer explicitly refuses the query instead of reporting `unguarded`.
 Implementation acceptance remains pending Actions.
 
+#### Task 5AD: reopen completed task evidence without mutation
+
+**Files:** new `scripts/deployment/windows-task-completion-proof.ps1`,
+new `tests/deployment-windows-task-completion-proof.ps1`; existing transaction
+state parser, completion fixture/driver, saved-worker inventory and a separate
+bounded native proof job in the lifecycle workflow.
+
+Scope this first reopening step to a fully completed nine-receipt handoff,
+not interrupted prefixes or evidence deletion. A fresh native process receives
+only the external control directory, never the old in-memory context.
+
+- [ ] After actual completion and original Node/bridge exit, invoke:
+  ```powershell
+  $proof = Open-AgentsChatTaskCompletionProof -Control $Control
+  try { Assert-AgentsChatTaskCompletionProof -Context $proof }
+  finally { Close-AgentsChatTaskCompletionProof -Context $proof }
+  ```
+  Capture the missing production proof helper in Actions before publication.
+- [ ] Retain the private control directory, original lock/state and exact
+  23-file maintenance inventory: admission, transaction, twelve task
+  stop/retire/replace/activate records and nine completion records. Reject
+  another recovery lock, unsupported inventory, duplicate/unexpected fields
+  or changed permissions/content. Verify every previous/admission/transaction
+  hash and original operation/controller/task/configuration reference.
+- [ ] Require the original Node and native bridge identities to be absent;
+  PID reuse alone is not liveness and must never authorize termination.
+  Validate original transaction admission, activating-state snapshot and
+  exact accepted/restored state using shared strict state parsing. Reuse
+  existing validation instead of writing a second permissive state parser.
+- [ ] Retain the original completed runtime process, native Scheduler
+  instance, private configuration/helper bundle and readiness file. Compare
+  native enabled policy and exact other XML/security against the completed
+  replacement, handling only the established default-true omission.
+- [ ] Require actual native lease observation `released`, original nonempty
+  Job membership and exact original listener PID/identity/address/bind-time/
+  pair shape. Retaining a newly observed listener is insufficient unless it
+  matches the completed receipt. Check all retained evidence/native
+  identities again before returning:
+  ```powershell
+  [pscustomobject]@{
+      status='observed'; mutationAuthority=$false
+      operationId=$context.OperationId; taskName=$context.TaskName
+      stateSha256=$context.StateSha256; completionSha256=$context.CompletionSha256
+      runtime=$context.Runtime; port=$context.Port; providers=$context.Providers
+      lease='released'
+  }
+  ```
+- [ ] Native tests independently compare returned identity and unchanged
+  receipt hashes/task policy, refuse a still-live original controller,
+  changed terminal bytes and changed task policy, and refuse same-process
+  listener rebinding. Clean up only the fixture's original runtime.
+- [ ] This proof never stops, releases, enables, deletes, repairs ACLs,
+  releases operation locks or reports deployment success. A later exclusive
+  recovery admission and atomic retirement mechanism are still necessary.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

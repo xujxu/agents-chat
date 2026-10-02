@@ -9,7 +9,7 @@ param(
     [Parameter(Mandatory)][ValidateSet('close', 'exit', 'changed-state', 'retire', 'retire-refused',
         'replace', 'replace-refused', 'replace-early', 'replace-variable', 'replace-argument',
         'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-early',
-        'activate-complete', 'activate-complete-changed-state')][string]$Action,
+        'activate-complete', 'activate-complete-changed-state', 'activate-complete-proof')][string]$Action,
     [switch]$Transactional,
     [switch]$Restore
 )
@@ -108,7 +108,7 @@ try {
     $request = @{ action=$Action }
     $replacement = $null
     if ($Action.StartsWith('replace') -or $Action -in @('activate', 'activate-exit', 'activate-state-change', 'activate-readiness',
-        'activate-complete', 'activate-complete-changed-state')) {
+        'activate-complete', 'activate-complete-changed-state', 'activate-complete-proof')) {
         $original = [IO.File]::ReadAllText($Configuration) | ConvertFrom-Json -AsHashtable
         $candidateEnvironment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($key in $original.command.environment.Keys) { $candidateEnvironment.Add($key, $original.command.environment[$key]) }
@@ -124,7 +124,7 @@ try {
         $request.sha256 = $replacement.Sha256
     }
     if ($Action -in @('activate', 'activate-exit', 'activate-state-change', 'activate-readiness',
-        'activate-complete', 'activate-complete-changed-state')) {
+        'activate-complete', 'activate-complete-changed-state', 'activate-complete-proof')) {
         & (Join-Path $PSScriptRoot 'deployment-windows-task-activation-cases.ps1') `
             -Controller $controller -Bridge $bridge -OriginalOwner $Owner -OriginalReady $Ready `
             -Replacement $replacement -Request $request -Root $Root -Control $control -Directory $directory `
