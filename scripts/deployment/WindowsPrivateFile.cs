@@ -157,9 +157,10 @@ namespace Deployment
             var parent = new WindowsPrivateFile { file = directory };
             try
             {
-                const uint readAttributes = 0x80, readControl = 0x20000, shareReadWrite = 3;
+                // Metadata-only handles do not prevent directory renames through share-delete exclusion.
+                const uint listDirectory = 1, readAttributes = 0x80, readControl = 0x20000, shareReadWrite = 3;
                 const uint openExisting = 3, backupSemantics = 0x2000000, openReparsePoint = 0x200000;
-                parent.handle = CreateFileW(directory, readAttributes | readControl, shareReadWrite,
+                parent.handle = CreateFileW(directory, listDirectory | readAttributes | readControl, shareReadWrite,
                     IntPtr.Zero, openExisting, backupSemantics | openReparsePoint, IntPtr.Zero);
                 if (parent.handle.IsInvalid)
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "Open original private publication directory");

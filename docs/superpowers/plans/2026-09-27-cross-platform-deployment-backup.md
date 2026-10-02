@@ -7337,6 +7337,14 @@ require the same move to succeed after disposing the leases. This strengthens
 the behavioral observation without changing native access/share policy.
 The token diagnostic step was not reached in this run.
 
+`58e148f` / `36951126319`, native `110664145382`, resolved that ambiguity:
+the actual directory move succeeded (`moveCode=0`), so this is not an alternate
+denial code. The existing directory gate requested metadata/security rights
+only. Request `FILE_LIST_DIRECTORY` as well so the retained handle participates
+in read/share-delete exclusion; keep no-delete-sharing and every path/security
+check intact. Do not weaken the movement assertion or claim directory lifetime
+acceptance before the native denial and post-disposal positive control pass.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
