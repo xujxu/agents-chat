@@ -7097,8 +7097,8 @@ actual authentication and chat creation, a second prebuilt start and API rename,
 stopped-data restoration, a third prebuilt start with the original chat,
 original-Job TCP ownership around every API phase, durable stopped maintenance,
 and final unchanged build/dependency artifact identity. The job completed in
-298 seconds including the one existing source install/build. Full regression
-is still running; do not promote it before all 23 jobs complete.
+298 seconds including the one existing source install/build. The full regression
+passed **23/23**; this is the accepted baseline.
 
 #### Task 5M: Node-controlled native task maintenance lifetime
 
@@ -7115,7 +7115,7 @@ Add `tests/deployment-windows-task-controller.mjs` and
 `tests/deployment-windows-task-node-cases.ps1`; extend only the existing native
 host fixture and native Windows task job.
 
-- [ ] Run the causal `node-close` host fixture in Actions: the real Node child
+- [x] Run the causal `node-close` host fixture in Actions: the real Node child
   must fail on the absent controller module before native task mutation.
 - [ ] Implement `stopWindowsTask({ pwsh, admission, sha256, signal })` returning
   frozen native bridge identity and `check()` / idempotent `close()`. Require
@@ -7137,8 +7137,10 @@ host fixture and native Windows task job.
 - [ ] Preserve the full ongoing actual-application regression, then run the
   causal and implementation through Actions without local validation.
 
-The Node causal is `bdb649b` / `36943394041`, queued behind the preserved actual
-application run. Implementation adds the bounded native bridge and original
+The Node causal `bdb649b` / `36943394041`, native job `110643545083`, passed
+all preceding native cases then failed exactly on the absent
+`windows-task-controller.mjs` import before mutation. Implementation `32bb6da`
+adds the bounded native bridge and original
 Node identity checks, includes the complete native dependency closure in the
 saved worker engine, and retains its independent expected manifest test.
 Native acceptance remains pending; generic Windows control-file ACL creation

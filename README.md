@@ -143,7 +143,7 @@ runtime-control transport, task-held Jobs, scoped control requests,
 retained private configuration, direct native task-owner checks and the
 installed private runtime host, native restart inhibition and write-through
 private receipt publication and durable native task-stop contexts, passed at
-`d973e20` (run `36924898739`).
+`8a9de5f` (run `36943041386`).
 The isolated real Windows application job also passed at `8a9de5f`
 (run `36943041386`): three prebuilt managed starts, authenticated chat
 persistence, stopped-database restoration, original-Job listener ownership and
