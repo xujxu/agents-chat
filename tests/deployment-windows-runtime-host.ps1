@@ -3,6 +3,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     'transaction-retire', 'transaction-retire-refused', 'transaction-retire-restore',
     'transaction-replace', 'transaction-replace-restore', 'transaction-replace-refused', 'transaction-replace-early',
     'transaction-replace-variable', 'transaction-replace-argument',
+    'transaction-activate', 'transaction-activate-restore', 'transaction-activate-exit', 'transaction-activate-early',
     'guarded-owner-exit', 'guarded-release')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -116,7 +117,14 @@ if (process.argv[2] === 'child') {
     $action = New-ScheduledTaskAction -Execute $pwsh -WorkingDirectory $root -Argument $taskArguments
     $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Highest
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 3)
-    Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Settings $settings | Out-Null
+    if ($Scenario.StartsWith('transaction-activate')) {
+        $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 3) `
+            -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
+        $trigger = New-ScheduledTaskTrigger -AtStartup
+        Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Settings $settings -Trigger $trigger | Out-Null
+    } else {
+        Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Settings $settings | Out-Null
+    }
     $registered = $true
     $scheduler = New-Object -ComObject 'Schedule.Service'
     $scheduler.Connect()
@@ -209,14 +217,16 @@ if (process.argv[2] === 'child') {
             -Action $Scenario.Substring(5)
     }
     if ($Scenario.StartsWith('transaction-')) {
-        $restoreTransaction = $Scenario -in @('transaction-restore', 'transaction-retire-restore', 'transaction-replace-restore')
+        $restoreTransaction = $Scenario -in @('transaction-restore', 'transaction-retire-restore', 'transaction-replace-restore',
+            'transaction-activate-restore')
         $transactionAction = if ($Scenario -eq 'transaction-restore') { 'close' } `
             elseif ($Scenario -eq 'transaction-retire-restore') { 'retire' } `
-            elseif ($Scenario -eq 'transaction-replace-restore') { 'replace' } else { $Scenario.Substring(12) }
+            elseif ($Scenario -eq 'transaction-replace-restore') { 'replace' } `
+            elseif ($Scenario -eq 'transaction-activate-restore') { 'activate' } else { $Scenario.Substring(12) }
         & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $root -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
             -Action $transactionAction -Transactional -Restore:$restoreTransaction
-        if ($transactionAction -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument')) {
+        if ($transactionAction -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument', 'activate', 'activate-exit')) {
             Assert ($owner.HasExited -and $member.WaitForExit(15000) -and
                 -not $scheduler.GetFolder('\').GetTask($taskName).Enabled) 'Transactional retirement lost original settlement'
             Write-Output "PASS: $Scenario retains durable retirement and original task inhibition"

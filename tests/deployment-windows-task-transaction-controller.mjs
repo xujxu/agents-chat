@@ -82,11 +82,13 @@ assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
 console.log(JSON.stringify({ phase: 'stopped', bridge: context.identity }));
 const { action, configuration, sha256 } = await receive();
 if (action === 'exit') process.exit(0);
-if (action === 'replace-early') {
+if (action === 'activate-early') {
+  await assert.rejects(context.activate(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
+} else if (action === 'replace-early') {
   await assert.rejects(context.replace({ configuration, sha256 }), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
 } else if (action === 'retire-refused') {
   await assert.rejects(context.retire(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
-} else if (['retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument'].includes(action)) {
+} else if (['retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument', 'activate', 'activate-exit'].includes(action)) {
   if (operation !== 'restore') {
     for (const phase of ['rotating', 'backup-ready', 'source-selected', 'dependencies', 'building', 'configuring', 'activating']) {
       state = { ...state, previousPhase: state.phase, phase };
@@ -100,9 +102,21 @@ if (action === 'replace-early') {
     await assert.rejects(context.replace({ configuration, sha256: action === 'replace-refused' ? '0'.repeat(64) : sha256 }),
       { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
   } else {
-    if (action === 'replace') {
+    if (['replace', 'activate', 'activate-exit'].includes(action)) {
       await context.replace({ configuration, sha256 });
       await context.replace({ configuration, sha256 });
+    }
+    if (action.startsWith('activate')) {
+      const runtime = await context.activate();
+      assert.deepEqual(await context.activate(), runtime);
+      await context.check();
+      console.log(JSON.stringify({ phase: 'activated', runtime }));
+      const next = await receive();
+      if (action === 'activate-exit') {
+        assert.equal(next.action, 'exit');
+        process.exit(0);
+      }
+      assert.equal(next.action, 'close');
     }
     await context.check();
     await context.close();

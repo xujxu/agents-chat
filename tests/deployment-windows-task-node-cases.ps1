@@ -7,7 +7,8 @@ param(
     [Parameter(Mandatory)][string]$Sha256,
     [Parameter(Mandatory)]$Binding,
     [Parameter(Mandatory)][ValidateSet('close', 'exit', 'changed-state', 'retire', 'retire-refused',
-        'replace', 'replace-refused', 'replace-early', 'replace-variable', 'replace-argument')][string]$Action,
+        'replace', 'replace-refused', 'replace-early', 'replace-variable', 'replace-argument',
+        'activate', 'activate-exit', 'activate-early')][string]$Action,
     [switch]$Transactional,
     [switch]$Restore
 )
@@ -68,7 +69,7 @@ try {
     $scheduler = New-Object -ComObject 'Schedule.Service'
     $scheduler.Connect()
     $task = $scheduler.GetFolder('\').GetTask($TaskName)
-    if ($Action.StartsWith('replace') -and $Restore) {
+    if (($Action.StartsWith('replace') -or $Action.StartsWith('activate')) -and $Restore) {
         $originalDescriptor = [string]$task.GetSecurityDescriptor(7)
         $custom = [Security.AccessControl.RawSecurityDescriptor]::new($originalDescriptor)
         $custom.DiscretionaryAcl.InsertAce(0, [Security.AccessControl.CommonAce]::new(
@@ -105,7 +106,7 @@ try {
     $stoppedDefinition = [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml
     $request = @{ action=$Action }
     $replacement = $null
-    if ($Action.StartsWith('replace')) {
+    if ($Action.StartsWith('replace') -or $Action -in @('activate', 'activate-exit')) {
         $original = [IO.File]::ReadAllText($Configuration) | ConvertFrom-Json -AsHashtable
         $candidateEnvironment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($key in $original.command.environment.Keys) { $candidateEnvironment.Add($key, $original.command.environment[$key]) }
@@ -119,6 +120,14 @@ try {
             -Arguments ([string[]]$original.command.args) -WorkingDirectory $original.command.cwd -Environment $candidateEnvironment
         $request.configuration = $replacement.Configuration
         $request.sha256 = $replacement.Sha256
+    }
+    if ($Action -in @('activate', 'activate-exit')) {
+        & (Join-Path $PSScriptRoot 'deployment-windows-task-activation-cases.ps1') `
+            -Controller $controller -Bridge $bridge -OriginalOwner $Owner -OriginalReady $Ready `
+            -Replacement $replacement -Request $request -Root $Root -Control $control -Directory $directory `
+            -TaskName $TaskName -OperationId $hello.operationId -AdmissionSha256 $digest `
+            -SecurityDescriptor $record.securityDescriptor
+        return
     }
     $controller.StandardInput.WriteLine(($request | ConvertTo-Json -Compress))
     $controller.StandardInput.Flush()
@@ -204,6 +213,8 @@ try {
     }
     Assert (@(Get-ChildItem -LiteralPath $directory -Filter 'task-retire-*.json').Count -eq 0) `
         'Unaccepted retirement published intent'
+    Assert (@(Get-ChildItem -LiteralPath $directory -Filter 'task-activate-*.json').Count -eq 0) `
+        'Unaccepted activation published intent'
     Assert (@(Get-ChildItem -LiteralPath $directory -Filter 'task-replace-*.json').Count -eq 0 -and
         [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml -ceq $stoppedDefinition) `
         'Replacement before retirement changed the task or published intent'

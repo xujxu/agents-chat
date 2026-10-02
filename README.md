@@ -138,7 +138,7 @@ For persistent deployment on a Windows machine, use `scripts\deploy.ps1` which m
 On this development branch, Windows transaction/backup/recovery integration is
 still incomplete; do not use it as the final cross-platform deployment release.
 The task parameter and read-only definition changes below passed native
-PowerShell 5.1 acceptance. The full 23-job regression, including private
+PowerShell 5.1 acceptance. The full 24-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
 retained private configuration, direct native task-owner checks and the
 installed private runtime host, native restart inhibition and write-through
@@ -146,7 +146,7 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `95f4e06` (run `36994391371`). This also accepts the
+creation, passed at `52b5a39` (run `36996890010`). This also accepts the
 production native controller process: literal arguments and bidirectional
 stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
@@ -161,8 +161,10 @@ unrelated task XML, retains a validated private candidate, and publishes
 intent/completion evidence without starting it. Incorrect digests and paths
 containing Scheduler substitutions are refused before replacement.
 Controller-bound unverified runtime lifetime and authenticated lease release
-are awaiting native acceptance; task activation and health-gated transaction
-release remain incomplete.
+also passed: original controller loss or expiry terminates the guarded host
+and its original Job, while release by the actual original pipe peer lets the
+same runtime survive controller exit. This does not establish application
+health; task activation and health-gated transaction release remain incomplete.
 Integration into the public deployment entrypoints remains pending.
 The isolated real Windows application job also passed in that run:
 three prebuilt managed starts, authenticated chat

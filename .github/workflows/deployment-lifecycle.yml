@@ -402,6 +402,18 @@ jobs:
       - name: Retain and release original activation controller with bounded lifetime
         shell: pwsh
         run: ./tests/deployment-windows-runtime-lease.ps1
+      - name: Activate exact guarded replacement in the native update transaction
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate
+      - name: Activate exact guarded replacement with restored task permissions
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-restore
+      - name: Settle unreleased transaction activation after original controller exit
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-exit
+      - name: Refuse activation before original retirement and replacement
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-early
       - name: Settle unverified task and original Job after controller exit
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-owner-exit

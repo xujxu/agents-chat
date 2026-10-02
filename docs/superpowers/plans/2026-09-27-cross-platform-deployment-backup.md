@@ -7868,6 +7868,50 @@ retained/synchronized original-controller lease and native peer-authenticated
 It also checks mismatched controller identity before any startup/readiness
 and refuses release on unguarded hosts. Native and full acceptance are pending.
 
+Task 5X implementation `52b5a39` / `36996890010` completed **24/24 success**.
+Native activation-lease `110805967919` passed primitive identity/peer/release,
+real one-second deadline, actual S4U controller-loss original-Job settlement
+and released original-runtime survival. Existing task-options `110805967771`,
+real Windows application and all Linux lifecycle jobs also passed.
+`52b5a39` is the latest full accepted baseline.
+
+#### Task 5Y: activate a guarded replacement while retaining task inhibition
+
+**Files:** new `windows-task-activation.ps1`; native maintenance/retirement
+context and Node/native controller protocol; explicit saved-worker closure;
+new focused activation fixture driver and existing transaction/host fixtures.
+
+- [ ] Add actual update/restore activation, controller-abandonment and premature
+  activation refusal cases. Use `await context.activate()` after retirement and
+  replacement, recheck idempotence, retain actual new owner/member handles,
+  and require their settlement when the unreleased bridge closes or loses its
+  original Node controller. This tests activation mechanics, not application
+  health or source/build completion.
+- [ ] Before startup, record and register a disabled staging definition:
+  same admitted candidate/account/security, literal bridge PID/start identity
+  in bootstrap arguments, no triggers and no restart-on-failure. Retain the
+  original replacement definition for eventual policy restoration. Require
+  supported demand-start and ignore-new instance policy before any mutation.
+- [ ] Publish start intent before enabling; demand-start only that exact staged
+  task, retain the returned native instance/original owner, then disable it
+  again. Bound startup/readiness waits and refuse task/instance/configuration
+  changes. Controller loss during the enabled interval cannot admit an
+  unguarded runtime or automatic restart: staged startup requires its original
+  bridge lease, triggers are absent and restart-on-failure is suppressed.
+- [ ] Bind private readiness to the new owner PID/start, configuration digest,
+  session, generation and Scheduler instance; verify original control endpoint
+  and Job membership. Keep all old retirement and replacement evidence,
+  append private requested/prepared/start-requested/running receipts, and
+  return a bounded native runtime identity through `activate`.
+- [ ] Dispatch active checks separately from retired/zero-instance checks.
+  Ordinary close must not release the runtime lease or enable restart policy;
+  bridge exit settles the unverified generation. Preserve all evidence and
+  inhibition on uncertainty. No health or final-success claim is introduced.
+- [ ] Capture the missing activation method in Actions, implement, and require
+  native plus full regression. Health-gated permanent policy/lease release,
+  reopening/cold recovery and public Windows transaction composition remain
+  subsequent work.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
