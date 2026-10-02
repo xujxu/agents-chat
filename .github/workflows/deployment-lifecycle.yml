@@ -352,3 +352,6 @@ jobs:
       - name: Bind native task maintenance to original restore-phase authority
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore
+      - name: Probe private Node file creation with an isolated copied controller token
+        shell: pwsh
+        run: ./tests/deployment-windows-controller-token.ps1

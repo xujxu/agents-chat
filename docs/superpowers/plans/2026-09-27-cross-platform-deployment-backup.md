@@ -7230,6 +7230,48 @@ evidence after advancing the state. Limit that later fixture preparation to
 the newly replaced `state.json` only; preserve all original evidence ACLs and
 all production checks. This is a fixture correction, not relaxed admission.
 
+`8a90d84` / `36948065624`, native `110654883963`, passed every native case,
+including transactional close, abrupt controller exit, changed-state refusal
+and restore-phase authority. Preserve the full regression, still active.
+
+#### Task 5O: isolated default-owner premise for private Node control files
+
+Do not ship the fixture's recursive permission repair as production behavior.
+Per-file native publication remains an option, but requires coordinating all
+mutable state/journal paths. A narrower candidate is an isolated controller
+primary token whose default owner is its existing user SID; ordinary Node
+creation beneath a private parent could then be private at creation. First
+prove that native premise without modifying any production entrypoint or the
+calling process's token.
+
+**Files:** add only `tests/WindowsControllerTokenProbe.cs`,
+`tests/deployment-windows-controller-token.ps1`, and its focused child fixture;
+append one step to the existing Windows native job.
+
+- [ ] Duplicate the actual caller primary token, alter only the copy's
+  `TokenOwner` to its existing user SID, and require unchanged user, privilege
+  list, elevation, integrity and session. Use explicit `CreateProcessWithTokenW`
+  with no profile/network-logon options and a filtered Unicode environment.
+- [ ] Inspect the actual created process token while suspended before running
+  the fixture. Require its desired default owner and unchanged permission
+  signature. Keep original process/thread handles and finite startup/exit bounds.
+- [ ] Child PowerShell must check the original parent lifetime and join the
+  existing private kill-on-close Job before starting Node. Node and a genuine
+  Node descendant create separate files; no ownership or ACL repair occurs
+  after those creations. Require both files to pass `WindowsPrivateFile.Open`
+  and the original Job to be empty before fixture cleanup.
+- [ ] Confirm the original caller token's default owner and permission
+  signature remain unchanged. Reject unsupported privileges/API behavior
+  explicitly; do not add credentials, grant privileges or change user policy.
+- [ ] Run this characterization only in Actions after preserving the current
+  full regression. A passing probe is not yet production control creation,
+  bootstrap integration, cross-account support or public lifecycle acceptance.
+
+Native API references used for this bounded premise:
+- `https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-token_owner`
+- `https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-settokeninformation`
+- `https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithtokenw`
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
