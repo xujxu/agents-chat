@@ -2,7 +2,8 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     'transaction-close', 'transaction-exit', 'transaction-changed-state', 'transaction-restore',
     'transaction-retire', 'transaction-retire-refused', 'transaction-retire-restore',
     'transaction-replace', 'transaction-replace-restore', 'transaction-replace-refused', 'transaction-replace-early',
-    'transaction-replace-variable', 'transaction-replace-argument')][string]$Scenario = 'stop')
+    'transaction-replace-variable', 'transaction-replace-argument',
+    'guarded-owner-exit', 'guarded-release')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -34,6 +35,8 @@ $registered = $false
 $owner = $null
 $member = $null
 $unexpectedOwner = $null
+$guardController = $null
+$guardDiagnostic = $null
 try {
     $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
     $environment.Add('SystemRoot', $env:SystemRoot)
@@ -84,8 +87,26 @@ if (process.argv[2] === 'child') {
     }
     Write-Output 'PASS: installed host rejects wrong configuration digest, duplicate fields and changed helper content before admission'
     $digest = Save-Configuration $configFile $text
-    $action = New-ScheduledTaskAction -Execute $pwsh -WorkingDirectory $root -Argument (
-        "-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$configFile`" -Sha256 $digest")
+    $taskArguments = "-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$configFile`" -Sha256 $digest"
+    if ($Scenario.StartsWith('guarded-')) {
+        $controllerRoot = Join-Path $root 'activation-controller'
+        [Deployment.WindowsPrivateFile]::CreateDirectory($controllerRoot).Dispose()
+        $controllerEnvironment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $controllerEnvironment.Add('SystemRoot', $env:SystemRoot)
+        $controllerEnvironment.Add('TEMP', $controllerRoot)
+        $controllerEnvironment.Add('TMP', $controllerRoot)
+        $guardController = [Deployment.WindowsControllerProcess]::Start($pwsh,
+            @('-NoProfile', '-NonInteractive', '-File', (Join-Path $PSScriptRoot 'deployment-windows-runtime-lease-client.ps1'),
+                '-Role', 'owner'), $controllerRoot, $controllerEnvironment)
+        $guardDiagnostic = $guardController.StandardError.ReadToEndAsync()
+        $read = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync($guardController.StandardOutput, 4096)
+        Assert ($read.Wait(15000)) 'Activation controller did not announce its identity'
+        $hello = $read.GetAwaiter().GetResult() | ConvertFrom-Json
+        Assert ($hello.pid -eq $guardController.Id -and
+            $hello.identity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($guardController.Id)) 'Activation controller identity differs'
+        $taskArguments += " -ControllerPid $($hello.pid) -ControllerIdentity $($hello.identity)"
+    }
+    $action = New-ScheduledTaskAction -Execute $pwsh -WorkingDirectory $root -Argument $taskArguments
     $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Highest
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 3)
     Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Settings $settings | Out-Null
@@ -131,6 +152,40 @@ if (process.argv[2] === 'child') {
     $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'observe', 15000) | ConvertFrom-Json
     Assert ($observation.members -contains $member.Id -and -not $observation.quiescent -and
         -not $observation.applicationHealthy) 'Managed host lost detached ownership or invented application health'
+    if ($Scenario.StartsWith('guarded-')) {
+        $refused = $false
+        try { [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'release', 15000) | Out-Null }
+        catch { $refused = $_.Exception.GetBaseException().Message -ceq 'Runtime control request was refused.' }
+        Assert ($refused -and -not $owner.HasExited -and -not $member.HasExited) 'A different native peer released or destroyed the runtime lease'
+        if ($Scenario -ceq 'guarded-release') {
+            foreach ($attempt in @(1, 2)) {
+                $guardController.StandardInput.WriteLine((@{ method='release-runtime'; generation=$ready.generation
+                    ownerPid=$ready.pid; ownerIdentity=$ready.identity } | ConvertTo-Json -Compress))
+                $read = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync($guardController.StandardOutput, 4096)
+                Assert ($read.Wait(15000)) 'Original controller release was not acknowledged'
+                Assert (($read.GetAwaiter().GetResult() | ConvertFrom-Json).value -ceq 'released') 'Original controller release reply differs'
+            }
+        }
+        $guardController.StandardInput.WriteLine('{"method":"exit"}')
+        Assert ($guardController.WaitForExit(15000) -and $guardController.ExitCode -eq 0) 'Original activation controller failed to exit'
+        if ($Scenario -ceq 'guarded-owner-exit') {
+            Assert ($owner.WaitForExit(15000) -and $owner.ExitCode -eq 1 -and $member.WaitForExit(15000)) `
+                'Unverified runtime or its original detached Job member outlived controller exit'
+        } else {
+            Start-Sleep -Milliseconds 500
+            Assert (-not $owner.HasExited -and -not $member.HasExited) 'Released original runtime died with its controller'
+            $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation,
+                $ready.pid, $ready.identity, 'observe', 15000) | ConvertFrom-Json
+            Assert ($observation.members -contains $member.Id -and -not $observation.quiescent -and
+                -not $observation.applicationHealthy) 'Lease release changed ownership or invented application health'
+            $null = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'stop', 15000)
+            Assert ($member.WaitForExit(15000)) 'Released runtime failed its ordinary owned stop'
+            $reply = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'retire', 15000)
+            Assert ($reply -ceq 'retired' -and $owner.WaitForExit(15000) -and $owner.ExitCode -eq 0) 'Released runtime failed ordinary retirement'
+        }
+        Write-Output "PASS: $Scenario binds actual release peer and preserves original runtime Job ownership across controller exit"
+        return
+    }
     if ($Scenario -eq 'durable-stop') {
         & (Join-Path $PSScriptRoot 'deployment-windows-task-maintenance-cases.ps1') -Root $root -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding
@@ -246,5 +301,13 @@ if (process.argv[2] === 'child') {
         $member.Dispose()
     }
     if ($registered) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false }
+    if ($guardController) {
+        try {
+            $guardController.Kill()
+            Assert ($guardController.WaitForExit(15000) -and $guardDiagnostic.Wait(15000)) 'Activation controller did not settle'
+            $text = $guardDiagnostic.GetAwaiter().GetResult()
+            if ($text) { [Console]::Error.WriteLine($text) }
+        } finally { $guardController.Dispose() }
+    }
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
 }

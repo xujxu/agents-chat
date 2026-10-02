@@ -233,12 +233,4 @@ try {
         Remove-Item -LiteralPath $controllerRoot -Recurse -Force
     }
     if ($bridge) { $bridge.Dispose() }
-    if ($stoppedDefinition -and $Action.StartsWith('replace')) {
-        $actual = [xml]$scheduler.GetFolder('\').GetTask($TaskName).Xml
-        $prior = [xml]$stoppedDefinition
-        if ($prior.Task.RegistrationInfo.OuterXml -cne $actual.Task.RegistrationInfo.OuterXml) {
-            [Console]::Error.WriteLine("Synthetic registration fields before: $([string]::Join(',', @($prior.Task.RegistrationInfo.ChildNodes | ForEach-Object LocalName)))")
-            [Console]::Error.WriteLine("Synthetic registration fields after: $([string]::Join(',', @($actual.Task.RegistrationInfo.ChildNodes | ForEach-Object LocalName)))")
-        }
-    }
 }

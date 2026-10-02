@@ -389,3 +389,22 @@ jobs:
         run: |
           ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-variable
           ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-argument
+
+  windows-runtime-activation:
+    name: Native Windows activation lease
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Retain and release original activation controller with bounded lifetime
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-lease.ps1
+      - name: Settle unverified task and original Job after controller exit
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-owner-exit
+      - name: Authenticate original lease release without changing runtime ownership
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-release

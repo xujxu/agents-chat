@@ -7809,6 +7809,56 @@ DONT_ADD_PRINCIPAL_ACE and exact security/XML checks. Add a restore fixture
 with deliberately nondefault task permissions to prove existing ACLs are not
 reset to defaults. This candidate correction still requires native acceptance.
 
+`95f4e06` / `36994391371`, native `110798069319`, passed every replacement
+case: update, restore with a nondefault ACL, pre-retirement refusal, wrong
+digest, environment-variable path and Scheduler-argument path refusals.
+Omitting the unnecessary SDDL update preserves RegistrationInfo as well as
+the exact native security descriptor. Full regression remains running.
+
+#### Task 5X: bind unverified runtime lifetime to its original controller
+
+Before task activation, provide a runtime-side original-process lease that
+can be explicitly released by that controller only. A disabled task cannot
+be used as a demand-start workaround: Microsoft documents RunEx returning
+S_OK without running it; existing native Run coverage also observes
+SCHED_E_TASK_DISABLED. Do not add an unprotected enable/run window.
+
+**Files:** new `scripts/deployment/WindowsRuntimeLease.cs`; installed runtime
+host, control pipe/control protocol and bootstrap; explicit helper closures;
+new native lease client/fixture tests and guarded scenarios in the existing
+actual Scheduled Task host fixture. A separate native activation-lease job
+keeps the existing task-options deadline unchanged.
+
+- [ ] Add native causal tests for retained owner identity, wrong-peer release,
+  repeated authorized release, controller exit and a measured one-second
+  deadline. Use production private controller processes, not PID/name kills.
+  Add actual S4U host cases: wrong caller cannot release; controller exit
+  before release exits the host and settles its original detached Job member;
+  after authorized release the same host/member survive controller exit and
+  remain available for ordinary scoped stop/retire.
+- [ ] Implement `WindowsRuntimeLease.Start(pid, identity, timeoutMilliseconds)`
+  with a retained original Process handle, bounded lifetime up to 30 minutes,
+  a synchronized timer, `Check()`, `TryRelease(actualPeerPid)` and Dispose.
+  A missing/exited/changed owner or deadline before release exits only the
+  current guarded host. Serialize release with timer callbacks so a queued
+  callback cannot terminate an already released host. Reject a reused PID
+  through the retained original handle, never by killing a looked-up process.
+- [ ] Add an optional explicit ControllerPid/ControllerIdentity bootstrap pair
+  and a guarded Run overload. Acquire the lease after read-only bundle
+  admission but before any runtime Job/start; include it in host checks.
+  Preserve the original unguarded Run and readiness schema.
+- [ ] Add `release` to scoped runtime control with an optional release
+  callback. Obtain the actual connected client PID from the native pipe,
+  not the JSON payload. Only the retained original controller may disarm
+  the lease. Refuse release on an unguarded/stopped host; successful reply is
+  exactly `released`, not an application-health or transaction-success claim.
+- [ ] Include the new native dependency in bootstrap, every installed helper
+  inventory and saved-worker closure, including independent tests. Push causal
+  cases and capture missing capability in Actions, then implement and require
+  the new native job plus full regression. Task enable/start, new-generation
+  transaction binding, health-gated release and cold recovery remain the next
+  integration work; this lease alone does not complete public activation.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
