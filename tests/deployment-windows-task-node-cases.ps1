@@ -6,7 +6,7 @@ param(
     [Parameter(Mandatory)][string]$Configuration,
     [Parameter(Mandatory)][string]$Sha256,
     [Parameter(Mandatory)]$Binding,
-    [Parameter(Mandatory)][ValidateSet('close', 'exit', 'changed-state')][string]$Action,
+    [Parameter(Mandatory)][ValidateSet('close', 'exit', 'changed-state', 'retire', 'retire-refused')][string]$Action,
     [switch]$Transactional,
     [switch]$Restore
 )
@@ -95,6 +95,36 @@ try {
     if ($Action -ne 'exit') { Assert ((Receive-Controller).phase -ceq 'closed') 'Node close was not acknowledged' }
     Assert ($controller.WaitForExit(15000) -and $controller.ExitCode -eq 0 -and
         $bridge.WaitForExit(15000)) 'Original Node controller or bridge survived completion'
+    if ($Action -eq 'retire') {
+        Assert ($Owner.WaitForExit(15000) -and $Owner.ExitCode -eq 0) 'Original task owner did not retire cleanly'
+        $task = $scheduler.GetFolder('\').GetTask($TaskName)
+        Assert (-not $task.Enabled -and $task.GetInstances(0).Count -eq 0) 'Retirement released inhibition or left a task instance'
+        $previous = (Get-FileHash -LiteralPath (Join-Path $directory 'task-stop-stopped.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+        $transactionHash = (Get-FileHash -LiteralPath (Join-Path $directory 'transaction.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+        foreach ($phase in @('requested', 'complete')) {
+            $file = Join-Path $directory "task-retire-$phase.json"
+            $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            $retained = [Deployment.WindowsPrivateFile]::Open($file, $hash)
+            try { $receipt = $retained.ReadText() | ConvertFrom-Json }
+            finally { $retained.Dispose() }
+            Assert ($receipt.version -eq 1 -and $receipt.phase -ceq $phase -and
+                $receipt.previousSha256 -ceq $previous -and $receipt.admissionSha256 -ceq $digest -and
+                $receipt.transactionSha256 -ceq $transactionHash -and $receipt.operationId -ceq $hello.operationId -and
+                $receipt.ownerPid -eq $Owner.Id -and $receipt.ownerIdentity -ceq $Ready.identity -and
+                $receipt.generation -ceq $Ready.generation -and $receipt.instanceGuid -ceq $Binding.instanceGuid -and
+                $receipt.definition -ceq [string]$task.Xml -and
+                $receipt.securityDescriptor -ceq [string]$task.GetSecurityDescriptor(7) -and
+                $receipt.statePhase -ceq $(if ($Restore) { 'restore-activating' } else { 'activating' })) `
+                'Retirement evidence lost original authority or task policy'
+            $previous = $hash
+        }
+        Assert (@(Get-ChildItem -LiteralPath $directory -Filter 'task-retire-*.json').Count -eq 2 -and
+            @(Get-ChildItem -LiteralPath $directory -Filter 'task-stop-*.json').Count -eq 4) 'Retirement duplicated or removed evidence'
+        Write-Output 'PASS: transactional retirement joins only the original task owner and retains disabled policy and exact private receipts'
+        return
+    }
+    Assert (@(Get-ChildItem -LiteralPath $directory -Filter 'task-retire-*.json').Count -eq 0) `
+        'Unaccepted retirement published intent'
     Assert (-not $Owner.HasExited -and -not $scheduler.GetFolder('\').GetTask($TaskName).Enabled) `
         'Node completion retired the original task owner or released inhibition'
     $observation = [Deployment.WindowsRuntimeControl]::Exchange(

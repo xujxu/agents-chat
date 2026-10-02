@@ -1,5 +1,6 @@
 param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-stop', 'node-close', 'node-exit',
-    'transaction-close', 'transaction-exit', 'transaction-changed-state', 'transaction-restore')][string]$Scenario = 'stop')
+    'transaction-close', 'transaction-exit', 'transaction-changed-state', 'transaction-restore',
+    'transaction-retire', 'transaction-retire-refused', 'transaction-retire-restore')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -138,11 +139,18 @@ if (process.argv[2] === 'child') {
             -Action $Scenario.Substring(5)
     }
     if ($Scenario.StartsWith('transaction-')) {
-        $restoreTransaction = $Scenario -eq 'transaction-restore'
-        $transactionAction = if ($restoreTransaction) { 'close' } else { $Scenario.Substring(12) }
+        $restoreTransaction = $Scenario -in @('transaction-restore', 'transaction-retire-restore')
+        $transactionAction = if ($Scenario -eq 'transaction-restore') { 'close' } `
+            elseif ($Scenario -eq 'transaction-retire-restore') { 'retire' } else { $Scenario.Substring(12) }
         & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $root -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
             -Action $transactionAction -Transactional -Restore:$restoreTransaction
+        if ($transactionAction -eq 'retire') {
+            Assert ($owner.HasExited -and $member.WaitForExit(15000) -and
+                -not $scheduler.GetFolder('\').GetTask($taskName).Enabled) 'Transactional retirement lost original settlement'
+            Write-Output "PASS: $Scenario retains durable retirement and original task inhibition"
+            return
+        }
     }
     if ($Scenario -eq 'task-inhibition') {
         $expected = [xml]$task.Xml

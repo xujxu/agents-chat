@@ -7635,6 +7635,73 @@ output, and do not weaken restore admission or claim a transient failure
 without evidence. Diagnose the next actual public-command result before
 considering the Linux regression resolved.
 
+Task 5U causal `3ae9260` / `36985307563` failed on the absent production
+publisher in native `110774758443`; Linux contracts `110774758397` also
+captured the saved-source `ENOENT`. Implementation `55cccf7` and saved
+diagnostics `c7e4ccd` are pushed. Run `36987509720` has passed its production
+bundle publication step in native `110775795029`, including exact UTF-8
+copies, private destinations, unchanged source ACLs, literal arguments and
+refusals. Both synthetic installed-host and real application fixtures now
+use this production publisher; their full regression and the previously
+failing Linux public-command restore still need final outcomes.
+
+The real Windows application job `110775794937` and all native task-options
+cases `110775795029` passed. The previously failing Linux command also passed
+at `110775795144`; no root cause for the earlier single `UNKNOWN` failure is
+established. Keep the new diagnostic coverage and require this case in later
+full regressions rather than claiming a speculative repair.
+
+#### Task 5V: durable retirement of the original stopped task owner
+
+The next prerequisite for changing an installed task's action is settling its
+original host, while retaining restart inhibition and transaction evidence.
+Do not yet register, enable or start a replacement task.
+
+**Files:** new `scripts/deployment/windows-task-retirement.ps1`;
+existing maintenance context, native/Node task controller bridge and explicit
+saved-worker manifests; existing task-transaction/native host fixtures and
+workflow.
+
+- [ ] Add actual S4U task cases `transaction-retire` and
+  `transaction-retire-refused`. The latter calls retirement while copying
+  and requires refusal with no retirement intent, leaving the stopped
+  original owner alive. The positive case advances the real state/check
+  sequence to `activating`, then exercises:
+  ```js
+  await context.retire();
+  await context.retire();
+  await context.check();
+  await context.close();
+  ```
+  Require original owner and member handles signaled, task still disabled
+  with zero Scheduler instances, exactly one request/completion pair, and
+  the unchanged four stopped-phase receipts. Capture the missing-method
+  failure in Actions; existing cases remain unchanged.
+- [ ] Add `Retire-AgentsChatTaskOwner -Context` and
+  `Assert-AgentsChatTaskRetired -Context` in the focused native module.
+  Require a live unpoisoned stopped context and its original transaction at
+  `activating` or `restore-activating` before publishing any intent.
+  Persist `task-retire-requested.json`, chained to the stopped receipt;
+  recheck authority; request `retire` through the existing original
+  generation/PID/start-bound control; join the retained original process.
+  Require exit code zero, unchanged disabled task XML/security and zero
+  instances before publishing `task-retire-complete.json`.
+- [ ] Add explicit `Retired` context state. Stopped checks must not certify a
+  retired host. Retired checks retain original controller identity, transaction
+  lock/state/configuration, all immutable receipts, the signaled original
+  owner handle, and unchanged disabled task policy/no instances.
+  Failures poison the context and retain all evidence/inhibition. Repeat
+  retirement rechecks completed authority without creating another receipt.
+- [ ] Extend the bounded native request protocol with `retire`, dispatching
+  later `check`/`close` to the correct stopped or retired gate. Export Node's
+  `retire()` via the existing single-flight request path; preserve explicit
+  abandonment on uncertain failure. Include the native script in the saved
+  engine and independent expected manifest.
+- [ ] Validate native cases and full regression in Actions. This establishes
+  original-owner retirement only; replacement registration, activation,
+  release, cold recovery and public transactional commands remain separate
+  unfinished work.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

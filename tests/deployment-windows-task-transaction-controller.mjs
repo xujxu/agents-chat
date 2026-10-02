@@ -82,7 +82,21 @@ assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
 console.log(JSON.stringify({ phase: 'stopped', bridge: context.identity }));
 const { action } = await receive();
 if (action === 'exit') process.exit(0);
-if (action === 'changed-state') {
+if (action === 'retire-refused') {
+  await assert.rejects(context.retire(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
+} else if (action === 'retire') {
+  if (operation !== 'restore') {
+    for (const phase of ['rotating', 'backup-ready', 'source-selected', 'dependencies', 'building', 'configuring', 'activating']) {
+      state = { ...state, previousPhase: state.phase, phase };
+      await writeState(control, state);
+      await context.check();
+    }
+  }
+  await context.retire();
+  await context.retire();
+  await context.check();
+  await context.close();
+} else if (action === 'changed-state') {
   await writeFile(path.join(control, 'state.json'), JSON.stringify({ ...state, operationId: randomUUID() }));
   await assert.rejects(context.check(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
 } else {

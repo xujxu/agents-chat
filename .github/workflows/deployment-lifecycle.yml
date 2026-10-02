@@ -363,3 +363,12 @@ jobs:
       - name: Bind native task maintenance to original restore-phase authority
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore
+      - name: Refuse original task retirement before activation phase
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-retire-refused
+      - name: Retire original stopped task owner with durable transaction authority
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-retire
+      - name: Retire original task owner for restore activation
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-retire-restore
