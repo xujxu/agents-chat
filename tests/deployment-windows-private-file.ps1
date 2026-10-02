@@ -69,9 +69,54 @@ try {
     Set-Acl -LiteralPath $publicDirectory -AclObject $publicAcl
     Refuses { [Deployment.WindowsPrivateFile]::Publish((Join-Path $publicDirectory 'intent.json'), '{}') } 'Private configuration permissions are unsupported.'
     Assert (@(Get-ChildItem -LiteralPath $publicDirectory).Count -eq 0) 'Private publication wrote into an unsupported directory'
+    $createdDirectory = Join-Path $publicDirectory 'native-private'
+    $parentSecurity = (Get-Acl -LiteralPath $publicDirectory).Sddl
+    $directory = [Deployment.WindowsPrivateFile]::CreateDirectory($createdDirectory)
+    try {
+        $createdSecurity = Get-Acl -LiteralPath $createdDirectory
+        Assert ($createdSecurity.AreAccessRulesProtected -and
+            $createdSecurity.GetOwner([Security.Principal.SecurityIdentifier]).Value -ceq $sid.Value) `
+            'Native directory was not created with protected current-user ownership'
+        Assert ((Get-Acl -LiteralPath $publicDirectory).Sddl -ceq $parentSecurity) 'Native creation altered parent permissions'
+        $directory.Check()
+        $collision = $false
+        try { [Deployment.WindowsPrivateFile]::CreateDirectory($createdDirectory).Dispose() }
+        catch {
+            $failure = $_.Exception.GetBaseException()
+            $collision = $failure -is [ComponentModel.Win32Exception] -and $failure.NativeErrorCode -eq 183
+        }
+        Assert ($collision -and (Get-Acl -LiteralPath $createdDirectory).Sddl -ceq $createdSecurity.Sddl) `
+            'Native directory creation adopted or changed an existing directory'
+        $sharing = $false
+        try { [IO.Directory]::Move($createdDirectory, (Join-Path $publicDirectory 'moved')) }
+        catch { $sharing = ($_.Exception.GetBaseException().HResult -band 0xffff) -eq 32 }
+        Assert $sharing 'Retained native directory allowed replacement'
+        $receipt = [Deployment.WindowsPrivateFile]::Publish((Join-Path $createdDirectory 'intent.json'), '{"private":true}')
+        try { Assert ($receipt.ReadText() -ceq '{"private":true}') 'New private directory cannot publish private evidence' }
+        finally { $receipt.Dispose() }
+        $directory.Check()
+        $reopened = [Deployment.WindowsPrivateFile]::OpenDirectory($createdDirectory)
+        try { $reopened.Check() }
+        finally { $reopened.Dispose() }
+        $changedSecurity = Get-Acl -LiteralPath $createdDirectory
+        $changedSecurity.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+            [Security.Principal.SecurityIdentifier]::new('S-1-1-0'), 'Read', 'Allow'))
+        Set-Acl -LiteralPath $createdDirectory -AclObject $changedSecurity
+        Refuses { $directory.Check() } 'Private publication directory changed.'
+        Refuses { [Deployment.WindowsPrivateFile]::OpenDirectory($createdDirectory) } 'Private configuration permissions are unsupported.'
+        Set-Acl -LiteralPath $createdDirectory -AclObject $createdSecurity
+    } finally { $directory.Dispose() }
+    $disposedDirectory = $false
+    try { $directory.Check() }
+    catch { $disposedDirectory = $_.Exception.GetBaseException() -is [ObjectDisposedException] }
+    Assert $disposedDirectory 'Disposed directory authority was accepted'
+    Remove-Item -LiteralPath $createdDirectory -Recurse -Force
+    Refuses { [Deployment.WindowsPrivateFile]::OpenDirectory($publicDirectory) } 'Private configuration permissions are unsupported.'
+    Write-Output 'PASS: native private directory creation needs no ACL repair, refuses reuse and retains original identity'
     $publicationLink = Join-Path $root 'publication-link'
     New-Item -ItemType Junction -Path $publicationLink -Target $publicDirectory | Out-Null
     Refuses { [Deployment.WindowsPrivateFile]::Publish((Join-Path $publicationLink 'intent.json'), '{}') } 'Private publication directory is redirected.'
+    Refuses { [Deployment.WindowsPrivateFile]::OpenDirectory($publicationLink) } 'Private publication directory is redirected.'
     Assert (@(Get-ChildItem -LiteralPath $publicDirectory).Count -eq 0) 'Redirected publication admitted a write'
     Remove-Item -LiteralPath $publicationLink -Force
     Write-Output 'PASS: atomic private publication retains exact evidence, refuses replacement and validates content and parent before writing'

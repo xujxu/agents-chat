@@ -7277,6 +7277,40 @@ Test-only `f92ca3c` / `36949355622` is running after the accepted full
 regression. Native job `110660746815` has not yet reached the copied-token
 probe. No production bootstrap or private-creation behavior has changed.
 
+#### Task 5P: create and retain a private Windows control directory
+
+This implements the approved private external-control requirement independently
+of the copied-token premise. Reuse `WindowsPrivateFile`'s existing native
+directory identity/security gate rather than copying that logic into a launcher.
+Creation must use a protected owner/SYSTEM inheritable DACL in the original
+`CreateDirectoryW` call; never create broadly and repair later. Existing paths
+are refused by creation and admitted only through a separate read-only open.
+
+**Files:** `scripts/deployment/WindowsPrivateFile.cs` and existing native
+`tests/deployment-windows-private-file.ps1`. The saved engine already contains
+this source, so no new dependency path is needed.
+
+- [ ] Add native causal coverage using
+  `[Deployment.WindowsPrivateFile]::CreateDirectory($createdDirectory)` beneath
+  an explicitly nonprivate fixture parent. Assert protected current-user
+  ownership, unchanged parent SDDL, exact existing-directory refusal,
+  original-handle replacement refusal and successful private publication.
+- [ ] Require `[Deployment.WindowsPrivateFile]::OpenDirectory($createdDirectory)`
+  to retain an already private directory without changing it. Reject public
+  directories/junctions, detect changed ACLs and reject checks after disposal.
+- [ ] Push this test first and capture the missing `CreateDirectory` failure
+  in the existing Actions native Windows task job, preserving the current
+  copied-token run until its premise is observed.
+- [ ] Implement a small `DirectoryLease` exposing only `Check()` and
+  `Dispose()`, backed by the existing native publication-directory gate.
+  `CreateDirectory` pins the explicit `DirectorySecurity` binary descriptor
+  in `SECURITY_ATTRIBUTES`, calls non-recursive `CreateDirectoryW`, then
+  reopens/rechecks the exact canonical directory. Any collision or failed
+  admission throws; never delete a path whose ownership was not retained.
+- [ ] Run native acceptance and full Actions regression. Neither this helper
+  nor the copied-token probe alone is a production bootstrap or public
+  Windows deployment acceptance.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
