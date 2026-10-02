@@ -7525,6 +7525,23 @@ inherited handles to the three stdio ends, and settles only its original Job.
 The fixture also proves an independent writer survives controller stop.
 Native compilation and behavioral acceptance are pending.
 
+#### Task 5T: native controller integration without positive ACL repair
+
+- First require the actual task transaction's freshly created lock to pass
+  native privacy and original-controller PID admission before any fixture
+  ACL changes. Capture the ordinary-launcher failure in Actions.
+- Launch both Node close/exit and transactional update/restore cases through
+  `WindowsControllerProcess`, with explicit system PowerShell discovery and
+  creation-time private controller/control roots. The factory retains its own
+  process handle; remove the old `Process.Handle` pinning.
+- Create the maintenance directory natively. Remove positive-path recursive
+  and state-only ACL repair. Keep the negative state-ACL test by saving its
+  exact original descriptor, adding the deliberate public-read grant, and
+  restoring only that descriptor after the expected refusal.
+- Preserve actual bridge identity, original S4U task owner, inhibition,
+  transaction receipts, changed-state refusal and cleanup/settlement gates.
+  This remains controller integration, not public activation/cold recovery.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

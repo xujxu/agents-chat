@@ -45,6 +45,15 @@ try {
     $hello = Receive-Controller
     Assert ($hello.pid -eq $controller.Id -and
         $hello.identity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($controller.Id)) 'Node controller identity differs'
+    if ($Transactional) {
+        $lockFile = Join-Path $control 'lock/owner.json'
+        $lockHash = (Get-FileHash -LiteralPath $lockFile -Algorithm SHA256).Hash.ToLowerInvariant()
+        $privateLock = [Deployment.WindowsPrivateFile]::Open($lockFile, $lockHash)
+        try {
+            Assert (($privateLock.ReadText() | ConvertFrom-Json).pid -eq $controller.Id) `
+                'Fresh private transaction lock belongs to another controller'
+        } finally { $privateLock.Dispose() }
+    }
     $scheduler = New-Object -ComObject 'Schedule.Service'
     $scheduler.Connect()
     $task = $scheduler.GetFolder('\').GetTask($TaskName)
