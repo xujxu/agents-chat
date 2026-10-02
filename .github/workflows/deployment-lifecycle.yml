@@ -399,6 +399,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Complete healthy native update and release original activation lease
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete
+      - name: Complete healthy native restore with retained task permissions
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-restore
+      - name: Preserve originally disabled policy after healthy native completion
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-disabled
+      - name: Refuse changed terminal state before permanent task policy
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-changed-state
       - name: Retain and release original activation controller with bounded lifetime
         shell: pwsh
         run: ./tests/deployment-windows-runtime-lease.ps1
@@ -420,18 +432,6 @@ jobs:
       - name: Activate exact guarded replacement with restored task permissions
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-restore
-      - name: Complete healthy native update and release original activation lease
-        shell: pwsh
-        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete
-      - name: Complete healthy native restore with retained task permissions
-        shell: pwsh
-        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-restore
-      - name: Preserve originally disabled policy after healthy native completion
-        shell: pwsh
-        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-disabled
-      - name: Refuse changed terminal state before permanent task policy
-        shell: pwsh
-        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-changed-state
       - name: Settle unreleased transaction activation after original controller exit
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-exit

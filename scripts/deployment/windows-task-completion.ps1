@@ -139,20 +139,28 @@ function Complete-AgentsChatTaskActivation {
         Write-AgentsChatTaskCompletionReceipt $Context 'policy-restored'
         Write-AgentsChatTaskCompletionReceipt $Context 'enable-requested'
         Test-AgentsChatActiveTaskContext $Context
-        $Context.Stage = 'completion-enablement'
+        $Context.Stage = 'completion-enable-template'
         $expected = [xml]$Context.CompletionDefinition
         $namespaces = [Xml.XmlNamespaceManager]::new($expected.NameTable)
         $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
         $expected.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces).InnerText =
             $Context.CompletionTargetEnabled.ToString().ToLowerInvariant()
+        $Context.Stage = 'completion-enable-write'
         $task = $Context.Folder.GetTask($Context.Data.taskName)
         $task.Enabled = $Context.CompletionTargetEnabled
+        $Context.Stage = 'completion-enable-read'
         $task = $Context.Folder.GetTask($Context.Data.taskName)
-        if ([bool]$task.Enabled -ne $Context.CompletionTargetEnabled -or
-            ([xml][string]$task.Xml).OuterXml -cne $expected.OuterXml -or
-            [string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor) {
-            throw 'Permanent enabled policy differs.'
+        $Context.Stage = 'completion-enable-value'
+        if ([bool]$task.Enabled -ne $Context.CompletionTargetEnabled) { throw 'Permanent enabled value differs.' }
+        $Context.Stage = 'completion-enable-definition'
+        $actual = [xml][string]$task.Xml
+        if ($actual.OuterXml -cne $expected.OuterXml) {
+            $actualEnabled = $actual.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
+            [Console]::Error.WriteLine("Completion enabled XML differs: enabledNodes=$($actualEnabled.Count).")
+            throw 'Permanent enabled definition differs.'
         }
+        $Context.Stage = 'completion-enable-security'
+        if ([string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor) { throw 'Permanent security differs.' }
         $Context.CompletionDefinition = [string]$task.Xml
         $Context.CompletionEnabled = $Context.CompletionTargetEnabled
         Test-AgentsChatActiveTaskContext $Context

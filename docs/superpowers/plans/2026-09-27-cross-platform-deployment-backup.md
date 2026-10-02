@@ -8172,6 +8172,15 @@ after preparation. Contract tests cover HTTP/preparation/state/release ordering
 and preserving both publication and cleanup errors; these do not substitute
 for native acceptance.
 
+Task 5AB implementation `10ab002` / `37009269970`, native `110845169410`,
+passed the existing listener/activation/HTTP cases and reached authenticated
+release plus full disabled-policy restoration. It then refused at
+`complete/completion-enablement`; the broad stage does not establish whether
+template construction, the COM setter or exact policy comparison failed.
+Add bounded substages without weakening comparisons. The fixture also needs
+to stop/retire its retained original runtime on partial post-release failure
+before deleting fixture directories. Captured and cancelled this failed run.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

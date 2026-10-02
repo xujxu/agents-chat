@@ -210,7 +210,19 @@ try {
     $Controller.Kill()
     Assert ($Controller.WaitForExit(15000) -and $Bridge.WaitForExit(15000)) 'Activation fixture controller did not settle'
     if ($owner) {
-        try { Assert ($owner.WaitForExit(15000)) 'Activation fixture owner survived original controller cleanup' }
+        try {
+            if ($Request.action.StartsWith('activate-complete') -and -not $owner.WaitForExit(1000)) {
+                $task = $scheduler.GetFolder('\').GetTask($TaskName)
+                $cleanupBinding = Get-AgentsChatTaskOwnerBinding -TaskName $TaskName -OwnerPid $owner.Id -OwnerIdentity $runtime.identity `
+                    -Definition ([string]$task.Xml) -SecurityDescriptor $SecurityDescriptor
+                Assert ($cleanupBinding.instanceGuid -ceq $runtime.instanceGuid) 'Completion cleanup lost its original native instance'
+                $task.Enabled = $false
+                $null = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation, $runtime.pid, $runtime.identity, 'stop', 15000)
+                $reply = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation, $runtime.pid, $runtime.identity, 'retire', 15000)
+                Assert ($reply -ceq 'retired') 'Partially completed original runtime did not retire'
+            }
+            Assert ($owner.WaitForExit(15000)) 'Activation fixture owner survived original controller cleanup'
+        }
         finally { $owner.Dispose() }
     }
     if ($member) {
