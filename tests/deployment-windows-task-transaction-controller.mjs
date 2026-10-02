@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { acquireLock, writeState, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
+import { stopWindowsTaskTransaction } from '../scripts/deployment/windows-task-transaction.mjs';
+
+const [pwsh, control, project] = process.argv.slice(2);
+const lock = await acquireLock(control, { project, operationId: randomUUID() });
+const lines = createInterface({ input: process.stdin })[Symbol.asyncIterator]();
+const receive = async () => {
+  const result = await lines.next();
+  assert.equal(result.done, false);
+  return JSON.parse(result.value);
+};
+const secure = async (expose = false) => promisify(execFile)(pwsh, [
+  '-NoProfile', '-NonInteractive', '-File', fileURLToPath(new URL('./deployment-windows-private-control.ps1', import.meta.url)),
+  '-Control', control, ...(expose ? ['-ExposeState'] : []),
+], { timeout: 30000, maxBuffer: 4096 });
+console.log(JSON.stringify({ pid: process.pid, identity: lock.processIdentity, operationId: lock.operationId }));
+const admission = await receive();
+const record = JSON.parse(await readFile(admission.admission, 'utf8'));
+let state = {
+  version: 1, operationId: lock.operationId, project, operation: 'update',
+  phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
+  backupId: null, priorRuntime: 'running', runtimeIdentity: record.generation,
+  startedAt: lock.createdAt, updatedAt: new Date().toISOString(), errorCode: null,
+};
+await writeState(control, state);
+const options = { ...admission, pwsh, control, lock };
+await assert.rejects(stopWindowsTaskTransaction(options));
+state = { ...state, phase: 'stopped', previousPhase: 'preflight' };
+await writeState(control, state);
+await secure(true);
+await assert.rejects(stopWindowsTaskTransaction(options));
+assert.deepEqual(await readdir(path.dirname(admission.admission)), ['admission.json']);
+await secure();
+await assert.rejects(stopWindowsTaskTransaction({ ...options, lock: { ...lock, token: randomUUID() } }));
+const context = await stopWindowsTaskTransaction(options);
+await assert.rejects(writeFile(path.join(control, 'lock', 'owner.json'), 'changed'));
+state = { ...state, phase: 'copying', previousPhase: 'stopped' };
+await writeState(control, state);
+await secure();
+await context.check();
+await assert.rejects(releaseLock(control, lock), /maintenance/i);
+assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
+console.log(JSON.stringify({ phase: 'stopped', bridge: context.identity }));
+const { action } = await receive();
+if (action === 'exit') process.exit(0);
+if (action === 'changed-state') {
+  await writeFile(path.join(control, 'state.json'), JSON.stringify({ ...state, operationId: randomUUID() }));
+  await assert.rejects(context.check(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
+} else {
+  assert.equal(action, 'close');
+  await context.close();
+}
+console.log(JSON.stringify({ phase: 'closed' }));
+process.exit(0);

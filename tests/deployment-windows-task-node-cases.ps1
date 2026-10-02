@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory)][string]$Configuration,
     [Parameter(Mandatory)][string]$Sha256,
     [Parameter(Mandatory)]$Binding,
-    [Parameter(Mandatory)][ValidateSet('close', 'exit')][string]$Action
+    [Parameter(Mandatory)][ValidateSet('close', 'exit', 'changed-state')][string]$Action,
+    [switch]$Transactional
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -23,8 +24,17 @@ $info.UseShellExecute = $false
 $info.RedirectStandardInput = $true
 $info.RedirectStandardOutput = $true
 $info.RedirectStandardError = $true
-$info.ArgumentList.Add((Join-Path $PSScriptRoot 'deployment-windows-task-controller.mjs'))
+$fixture = if ($Transactional) { 'deployment-windows-task-transaction-controller.mjs' } else { 'deployment-windows-task-controller.mjs' }
+$info.ArgumentList.Add((Join-Path $PSScriptRoot $fixture))
 $info.ArgumentList.Add([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+$control = $null
+if ($Transactional) {
+    $control = "$Root-control"
+    New-Item -ItemType Directory -Path $control | Out-Null
+    & (Join-Path $PSScriptRoot 'deployment-windows-private-control.ps1') -Control $control
+    $info.ArgumentList.Add($control)
+    $info.ArgumentList.Add($Root)
+}
 $controller = [Diagnostics.Process]::Start($info)
 $null = $controller.Handle
 $diagnostic = $controller.StandardError.ReadToEndAsync()
@@ -37,13 +47,13 @@ try {
     $scheduler.Connect()
     $task = $scheduler.GetFolder('\').GetTask($TaskName)
     $readyFile = Join-Path $Root "runtime-$($Ready.identity.Replace(':', '-')).json"
-    $directory = Join-Path $Root 'node-maintenance'
+    $directory = if ($Transactional) { Join-Path $control 'task-maintenance' } else { Join-Path $Root 'node-maintenance' }
     New-Item -ItemType Directory -Path $directory | Out-Null
     $security = Get-Acl -LiteralPath $directory
     $security.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User)
     Set-Acl -LiteralPath $directory -AclObject $security
     $record = [ordered]@{
-        version=1; operationId=[guid]::NewGuid().ToString('D')
+        version=1; operationId=$(if ($Transactional) { $hello.operationId } else { [guid]::NewGuid().ToString('D') })
         controllerPid=$hello.pid; controllerIdentity=$hello.identity
         taskName=$TaskName; definition=[string]$task.Xml; securityDescriptor=[string]$task.GetSecurityDescriptor(7)
         configuration=$Configuration; configurationSha256=$Sha256
@@ -64,7 +74,7 @@ try {
         'Native bridge process identity differs'
     $controller.StandardInput.WriteLine((@{ action=$Action } | ConvertTo-Json -Compress))
     $controller.StandardInput.Flush()
-    if ($Action -eq 'close') { Assert ((Receive-Controller).phase -ceq 'closed') 'Node close was not acknowledged' }
+    if ($Action -ne 'exit') { Assert ((Receive-Controller).phase -ceq 'closed') 'Node close was not acknowledged' }
     Assert ($controller.WaitForExit(15000) -and $controller.ExitCode -eq 0 -and
         $bridge.WaitForExit(15000)) 'Original Node controller or bridge survived completion'
     Assert (-not $Owner.HasExited -and -not $scheduler.GetFolder('\').GetTask($TaskName).Enabled) `
@@ -87,4 +97,5 @@ try {
     $text = $diagnostic.GetAwaiter().GetResult()
     if ($text) { [Console]::Error.WriteLine($text) }
     $controller.Dispose()
+    if ($control) { Remove-Item -LiteralPath $control -Recurse -Force }
 }

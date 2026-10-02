@@ -7146,6 +7146,55 @@ saved worker engine, and retains its independent expected manifest test.
 Native acceptance remains pending; generic Windows control-file ACL creation
 and lock/state transaction authority are still not provided by this API.
 
+`8b2b2f3` / `36944817058`, native job `110644646715`, passed the full native
+suite including normal Node close, abrupt original-controller exit, retained
+task owner/inhibition/evidence, duplicate-stop and concurrent-request refusals.
+Preserve the full regression before promoting this baseline.
+
+#### Task 5N: native lock/state authorization for Node task maintenance
+
+The next adapter admits only an already private, original Node transaction.
+It must not silently repair production ACLs or treat Node mode bits as native
+privacy. Native creation of production control files remains a separate
+bootstrap prerequisite; fixtures explicitly prepare their isolated ACLs.
+
+**Files:** add `scripts/deployment/windows-task-transaction.mjs` and
+`scripts/deployment/windows-task-transaction.ps1`; extend the existing bridge
+with optional pinned transaction references, and the native stop context with
+an authority recheck invoked before/after every native observation/mutation.
+Include new files in the saved helper closure and independent expected list.
+Extend `state.mjs` to block generic lock/recovery operations when
+`task-maintenance` evidence exists. Add the focused actual Node transaction
+fixture and its private-control fixture helper; extend existing host scenarios.
+
+- [ ] Capture native missing-transaction-module failure and the contract test
+  showing that an existing task-maintenance directory must block unlock/new
+  admission/automatic recovery.
+- [ ] Implement `stopWindowsTaskTransaction({ control, lock, pwsh, admission,
+  sha256, signal })`. Require canonical external control, current original
+  Node lock, admission exactly under `task-maintenance/admission.json`, and
+  the matching stopped/restoring state before delegating. Pin original lock
+  and initial state bytes by digest for native admission.
+- [ ] Native admission retains private lock and configuration capabilities.
+  Strict lock fields bind original Node PID/start time, operation and project;
+  configuration command working directory must be that project. Strict state
+  fields bind operation, project, original runtime generation, running prior
+  role and original start time. Refuse wrong phase, foreign ACL, replaced lock
+  and changed transaction identity before publishing a stop intent.
+- [ ] Every stop-context check reopens current private state, permits only
+  supported forward maintenance phase transitions, and rechecks original lock
+  and configuration. Native admission also checks exact initial state digest.
+  Close releases capabilities, never inhibition/evidence or the lock.
+- [ ] Actual Node fixture acquires the real lock, writes preflight/stopped
+  state, rejects exposed state ACL and a wrong token, then stops the native
+  task. Require retained lock write refusal, accepted copying-state advance,
+  blocked generic unlock/recovery, normal close and abrupt controller exit.
+  A third actual task changes state operation ID and must lose authority while
+  retaining original task owner, inhibition and all durable receipts.
+- [ ] Run all validation in Actions and preserve the preceding full baseline.
+  This still does not claim activation, cold recovery or public Windows
+  deploy/update/restore transaction completion.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

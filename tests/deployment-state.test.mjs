@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFile, writeFile, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import {
@@ -17,6 +17,18 @@ test('service maintenance evidence blocks lock release, fresh admission and idle
   const other = await temporaryDeployment(t);
   await writeFile(path.join(other, 'service-stop.ndjson'), '');
   await assert.rejects(acquireLock(other, { project: other, operationId: 'new' }), /service/i);
+  assert.equal((await reconcileInterruptedOperation(other)).status, 'blocked');
+});
+
+test('native task maintenance evidence blocks unlock, new admission and automatic recovery', async t => {
+  const root = await temporaryDeployment(t);
+  const lock = await acquireLock(root, { project: root, operationId: 'task-stop' });
+  await mkdir(path.join(root, 'task-maintenance'));
+  await assert.rejects(releaseLock(root, lock), /maintenance/i);
+  assert.equal((await reconcileInterruptedOperation(root)).status, 'blocked');
+  const other = await temporaryDeployment(t);
+  await mkdir(path.join(other, 'task-maintenance'));
+  await assert.rejects(acquireLock(other, { project: other, operationId: 'new' }), /maintenance/i);
   assert.equal((await reconcileInterruptedOperation(other)).status, 'blocked');
 });
 

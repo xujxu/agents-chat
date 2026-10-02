@@ -340,3 +340,12 @@ jobs:
       - name: Preserve stopped task evidence after original Node controller exits
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario node-exit
+      - name: Bind native task maintenance to private Node transaction state
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-close
+      - name: Preserve native transaction inhibition after Node controller exits
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-exit
+      - name: Refuse changed original native task transaction state
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-changed-state
