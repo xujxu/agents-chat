@@ -13,7 +13,7 @@ $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment
 $helpers = @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
     'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeLease.cs', 'WindowsRuntimeHost.cs',
     'windows-worker-launcher.ps1', 'windows-runtime-host.ps1')
-$observerHelpers = if ($Scenario.StartsWith('listener-')) { @((Join-Path $source 'WindowsRuntimeListener.cs')) } else { @() }
+$observerHelpers = @(if ($Scenario.StartsWith('listener-')) { Join-Path $source 'WindowsRuntimeListener.cs' })
 Add-Type -Path (@((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
     (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'),
     (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsRuntimeLease.cs'), (Join-Path $source 'WindowsRuntimeHost.cs'),
@@ -73,7 +73,10 @@ if (process.argv[2] === 'child') {
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       res.end('owned-listener');
     });
-    const save = file => fs.writeFileSync(file, JSON.stringify({ pid: process.pid, port: server.address().port }));
+    const save = file => {
+      fs.writeFileSync(`${file}.tmp`, JSON.stringify({ pid: process.pid, port: server.address().port }), { flag: 'wx' });
+      fs.renameSync(`${file}.tmp`, file);
+    };
     server.listen({ port: 0, host: process.env.RUNTIME_LISTENER_ADDRESS, ipv6Only: false }, () => save('listener.json'));
     let rebinding = false;
     setInterval(() => {
