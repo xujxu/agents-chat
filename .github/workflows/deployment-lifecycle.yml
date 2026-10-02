@@ -414,6 +414,9 @@ jobs:
       - name: Activate exact guarded replacement in the native update transaction
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate
+      - name: Bind Windows HTTP readiness to retained native listener and activation authority
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-readiness
       - name: Activate exact guarded replacement with restored task permissions
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-restore

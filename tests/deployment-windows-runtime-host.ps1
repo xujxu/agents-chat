@@ -4,7 +4,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     'transaction-replace', 'transaction-replace-restore', 'transaction-replace-refused', 'transaction-replace-early',
     'transaction-replace-variable', 'transaction-replace-argument',
     'transaction-activate', 'transaction-activate-restore', 'transaction-activate-exit', 'transaction-activate-early',
-    'transaction-activate-state-change',
+    'transaction-activate-state-change', 'transaction-activate-readiness',
     'guarded-owner-exit', 'guarded-release', 'listener-v4', 'listener-v6', 'listener-independent-pair')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -45,8 +45,9 @@ try {
     $environment.Add('SystemRoot', $env:SystemRoot)
     $environment.Add('PATH', $env:PATH)
     $environment.Add('RUNTIME_LITERAL', 'literal %n $HOME " space')
-    if ($Scenario.StartsWith('listener-')) {
+    if ($Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness') {
         $address = switch ($Scenario) { 'listener-v4' { '127.0.0.1' } 'listener-v6' { '::' } default { 'independent' } }
+        if ($Scenario -ceq 'transaction-activate-readiness') { $address = '127.0.0.1' }
         $environment.Add('RUNTIME_LISTENER_ADDRESS', $address)
     }
     $bundle = New-AgentsChatRuntimeBundle -Source $source -Directory $root -File $node `
@@ -63,7 +64,7 @@ try {
         try { $retained.Check() }
         finally { $retained.Dispose() }
     }
-    if ($Scenario.StartsWith('listener-')) {
+    if ($Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness') {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'deployment-windows-runtime-listener.cjs') -Destination (Join-Path $root 'listener-fixture.cjs')
     }
     @'
@@ -240,7 +241,7 @@ if (process.argv[2] === 'child') {
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
             -Action $transactionAction -Transactional -Restore:$restoreTransaction
         if ($transactionAction -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
-            'activate', 'activate-exit', 'activate-state-change')) {
+            'activate', 'activate-exit', 'activate-state-change', 'activate-readiness')) {
             Assert ($owner.HasExited -and $member.WaitForExit(15000) -and
                 -not $scheduler.GetFolder('\').GetTask($taskName).Enabled) 'Transactional retirement lost original settlement'
             Write-Output "PASS: $Scenario retains durable retirement and original task inhibition"

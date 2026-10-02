@@ -8025,6 +8025,44 @@ same original Job owner. The listener fixture is extracted into a focused CJS
 helper instead of further growing the installed-host fixture. Full acceptance
 of the paired representation and its counterexample is pending.
 
+`19e577f` / `37003698264`, native `110827360402`, passed IPv4, dual-stack,
+the independent same-process wildcard-pair counterexample, and all existing
+activation/lease cases. The real Windows application job `110827360458` also
+passed create/mutate/stopped restore with the new retained native listener
+checks around authenticated API operations. Full regression remains running.
+
+#### Task 5AA: bind Windows HTTP readiness to retained native activation
+
+**Files:** new `windows-task-listener.ps1`, `windows-readiness.mjs` and shared
+`http-readiness.mjs`; Node/native task protocol and maintenance context;
+`linux-readiness.mjs` shared-probe extraction; explicit saved helper inventory;
+new `deployment-windows-readiness-cases.mjs` and existing actual activation
+fixture/Node driver.
+
+- [ ] After exact active-context checks, expose bounded `context.listener({
+  port, signal })`: retain the original native listener in the existing
+  checkable/disposable authority context. Return explicit `not-ready` only
+  for the native absent-listener exception. A retained listener must never
+  be silently replaced or switched to a different port.
+- [ ] Add `verifyWindowsReadiness` and `waitWindowsReadiness`. Validate admitted
+  providers before touching the runtime; obtain native listener authority
+  before HTTP and recheck it afterward. Return only endpoint readiness and
+  actual generation, not deployment success or a released runtime lease.
+- [ ] Extract existing bounded HTTP/UTF-8/provider matching without changing
+  Linux behavior: three-second request bound, 8 KiB headers, 64 KiB body,
+  uncompressed 200 JSON, exact advertised provider IDs and valid URLs.
+  Retry only absent listener/HTTP503, not malformed responses or lost owner.
+- [ ] Native activation fixture exercises successful HTTP, exactly three
+  startup attempts, one-attempt provider mismatch, hanging-response deadline,
+  and subsequent retained-runtime check. Original task remains disabled,
+  activation-state digest unchanged, and ordinary unreleased close still
+  settles the same host/member.
+- [ ] Preserve the complete saved-worker/recovery import closure and actual
+  Linux readiness regression. Capture the missing Windows readiness module
+  before implementation publication, then require native and full acceptance.
+- [ ] Leave permanent task-policy restoration, verifying-state transition and
+  health-gated lease release to the next transaction completion step.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

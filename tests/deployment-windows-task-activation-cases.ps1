@@ -112,6 +112,14 @@ try {
     Assert (($receipt.Data.runtime | ConvertTo-Json -Compress) -ceq ($runtime | ConvertTo-Json -Compress)) `
         'Running receipt differs from the acknowledged original runtime'
     Assert (@(Get-ChildItem -LiteralPath $Directory -Filter 'task-activate-*.json').Count -eq 4) 'Repeated activation duplicated intent or completion'
+    if ($Request.action -ceq 'activate-readiness') {
+        $Controller.StandardInput.WriteLine('{"action":"readiness"}')
+        Assert ((Receive).phase -ceq 'readiness') 'Bound native HTTP readiness was not acknowledged'
+        Assert (-not $owner.HasExited -and -not $member.HasExited -and
+            -not $scheduler.GetFolder('\').GetTask($TaskName).Enabled) 'Readiness silently released or destroyed original activation'
+        Assert ((Get-FileHash -LiteralPath (Join-Path $Control 'state.json') -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $stateHash) `
+            'Readiness silently advanced the original transaction state'
+    }
     $exitWithoutClose = $Request.action -ceq 'activate-exit'
     $finalAction = if ($exitWithoutClose) { 'exit' } elseif ($Request.action -ceq 'activate-state-change') { 'changed-state' } else { 'close' }
     $Controller.StandardInput.WriteLine((@{ action=$finalAction } | ConvertTo-Json -Compress))
