@@ -9853,6 +9853,18 @@ because Windows case aliases must not hide remaining evidence. Linux
 continues using case-sensitive names. Actual native and full acceptance
 remain pending until the implementation run finishes.
 
+**Task 5AL native result / CI envelope:** `b078486 / 37063208496`
+passed the actual admission guard cases in job `111024634816`, followed by
+all three completion/intent/checkpoint scenarios. Windows contracts
+`111024634773` reported 332 passing assertions and zero failures, followed
+by all five two-test cold-retirement samples passing. The job nevertheless
+reached its 10-minute total envelope (20:51:53 to 21:01:56 UTC) and was
+reported cancelled. It is not a green full regression. Increase only the
+Windows contracts job envelope to 15 minutes; keep Linux at 10 minutes,
+all five samples, and every individual process/request/readiness deadline.
+Preserve the existing run through completion and require subsequent full
+acceptance with the corrected envelope.
+
 ### Task 5AM: checkpoint-backed receipt retirement and interrupted-prefix recovery
 
 **Boundary:** retain original state, lock, both root records, native runtime,

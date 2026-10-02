@@ -167,7 +167,7 @@ jobs:
   contracts:
     name: Contracts (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: ${{ matrix.os == 'windows-2022' && 15 || 10 }}
     strategy:
       fail-fast: false
       matrix:
