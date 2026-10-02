@@ -8888,7 +8888,7 @@ permission bypass. Keep standalone read-only inspection unchanged.
   `tests/deployment-saved-worker.test.mjs`: add both new production files to
   the exact saved dependency closure. Installed runtime helpers stay nine.
 
-- [ ] **Step 1: publish the real failing invocation before implementation.**
+- [x] **Step 1: publish the real failing invocation before implementation.**
 
   The native driver invokes the following file after its first `Observe`.
   Use the selected `node` and current `$pwsh`; propagate a nonzero exit.
@@ -8934,7 +8934,7 @@ permission bypass. Keep standalone read-only inspection unchanged.
   console.log('PASS: completed-task proof retains native evidence inside original shared admission without mutation');
   ```
 
-- [ ] **Step 2: capture the causal Actions failure.**
+- [x] **Step 2: capture the causal Actions failure.**
 
   Push the test/driver/plan commit to `feat/deployment-backup`. In the existing
   `Native Windows completed task proof` job, require the already working
@@ -8942,7 +8942,7 @@ permission bypass. Keep standalone read-only inspection unchanged.
   `windows-task-completion-proof.mjs` import. Only cancel this characterized
   causal run; the accepted `b08a6fe` run is already complete.
 
-- [ ] **Step 3: implement the strict observation boundary.**
+- [x] **Step 3: implement the strict observation boundary.**
 
   Export the existing `captureActivatedRuntime` function. In the new client,
   use this capture without changing its accepted runtime fields:
@@ -9033,7 +9033,7 @@ permission bypass. Keep standalone read-only inspection unchanged.
   })
   ```
 
-- [ ] **Step 4: retain the native proof on the original controller transport.**
+- [x] **Step 4: retain the native proof on the original controller transport.**
 
   The native entry takes only mandatory `Control`, `ControllerPid` and
   `ControllerIdentity`. Compile the existing eight sources used by
@@ -9083,7 +9083,7 @@ permission bypass. Keep standalone read-only inspection unchanged.
   Surface the failed stage and base exception message to stderr; exit 1 on
   primary or cleanup failure. Never delete evidence or stop the runtime.
 
-- [ ] **Step 5: exercise original-controller loss and refusal boundaries.**
+- [x] **Step 5: exercise original-controller loss and refusal boundaries.**
 
   Extend the native Node fixture with an IPC child mode. The child obtains
   admission, opens proof, sends both original native identities to its parent
@@ -9101,7 +9101,7 @@ permission bypass. Keep standalone read-only inspection unchanged.
   admission. Keep existing malformed-frame and original native proof
   refusal coverage intact.
 
-- [ ] **Step 6: complete saved closure and Actions acceptance.**
+- [x] **Step 6: complete saved closure and Actions acceptance.**
 
   Add `windows-task-completion-proof.mjs` and
   `windows-task-completion-controller.ps1` beside the existing proof entries
@@ -9122,6 +9122,15 @@ The native fixture adds malformed/oversized request refusal and independent
 Node-controller loss followed by disappearance of both original helper
 identities and fresh acquisition. Source inventory, original runtime and
 task policy must remain unchanged. Actions acceptance is pending.
+
+Implementation `119b17e` / `37047636516` passed native proof job
+`110973085205`: update at 18:30:18 UTC, restore at 18:31:18 UTC and
+originally disabled policy at 18:32:22 UTC, followed by all original native
+refusals in each scenario. Actual Windows application job `110973085362`
+again passed authenticated create/mutate/restored data and three prebuilt
+starts at 18:34:47 UTC. Full regression completed **25/25 success**, observed
+18:49:38 UTC. Task 5AH is accepted and `119b17e` is the new full baseline.
+No receipt retirement, operation unlock or public Windows recovery is implied.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
