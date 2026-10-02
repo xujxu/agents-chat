@@ -408,6 +408,9 @@ jobs:
       - name: Retain native dual-stack listener bind time and original Job ownership
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario listener-v6
+      - name: Refuse independent wildcard bindings in the same original process
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario listener-independent-pair
       - name: Activate exact guarded replacement in the native update transaction
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate

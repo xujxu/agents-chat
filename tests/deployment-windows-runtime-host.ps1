@@ -5,7 +5,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     'transaction-replace-variable', 'transaction-replace-argument',
     'transaction-activate', 'transaction-activate-restore', 'transaction-activate-exit', 'transaction-activate-early',
     'transaction-activate-state-change',
-    'guarded-owner-exit', 'guarded-release', 'listener-v4', 'listener-v6')][string]$Scenario = 'stop')
+    'guarded-owner-exit', 'guarded-release', 'listener-v4', 'listener-v6', 'listener-independent-pair')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -46,7 +46,8 @@ try {
     $environment.Add('PATH', $env:PATH)
     $environment.Add('RUNTIME_LITERAL', 'literal %n $HOME " space')
     if ($Scenario.StartsWith('listener-')) {
-        $environment.Add('RUNTIME_LISTENER_ADDRESS', $(if ($Scenario -ceq 'listener-v4') { '127.0.0.1' } else { '::' }))
+        $address = switch ($Scenario) { 'listener-v4' { '127.0.0.1' } 'listener-v6' { '::' } default { 'independent' } }
+        $environment.Add('RUNTIME_LISTENER_ADDRESS', $address)
     }
     $bundle = New-AgentsChatRuntimeBundle -Source $source -Directory $root -File $node `
         -Arguments @((Join-Path $root 'writer.cjs'), 'literal %n $HOME " space') `
@@ -62,33 +63,16 @@ try {
         try { $retained.Check() }
         finally { $retained.Dispose() }
     }
+    if ($Scenario.StartsWith('listener-')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'deployment-windows-runtime-listener.cjs') -Destination (Join-Path $root 'listener-fixture.cjs')
+    }
     @'
 const fs = require('node:fs');
 if (process.argv[2] === 'child') {
   fs.writeFileSync('writer-pid', String(process.pid));
   fs.writeFileSync('writes', 'x');
   setInterval(() => fs.appendFileSync('writes', 'x'), 10);
-  if (process.env.RUNTIME_LISTENER_ADDRESS) {
-    const server = require('node:http').createServer((req, res) => {
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      res.end('owned-listener');
-    });
-    const save = file => {
-      fs.writeFileSync(`${file}.tmp`, JSON.stringify({ pid: process.pid, port: server.address().port }), { flag: 'wx' });
-      fs.renameSync(`${file}.tmp`, file);
-    };
-    server.listen({ port: 0, host: process.env.RUNTIME_LISTENER_ADDRESS, ipv6Only: false }, () => save('listener.json'));
-    let rebinding = false;
-    setInterval(() => {
-      if (!rebinding && fs.existsSync('listener-rebind')) {
-        rebinding = true;
-        const port = server.address().port;
-        server.close(() => setTimeout(() => {
-          server.listen({ port, host: process.env.RUNTIME_LISTENER_ADDRESS, ipv6Only: false }, () => save('listener-rebound.json'));
-        }, 100));
-      }
-    }, 20);
-  }
+  if (process.env.RUNTIME_LISTENER_ADDRESS) require('./listener-fixture.cjs')();
 } else {
   fs.writeFileSync('literal.json', JSON.stringify([process.argv[2], process.env.RUNTIME_LITERAL]));
   const child = require('node:child_process').spawn(process.execPath, [__filename, 'child'],

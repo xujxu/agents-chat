@@ -8011,6 +8011,20 @@ multiple-record gate. Add bounded count/wildcard/same-owner/same-bind flags
 to identify the actual two-family native representation before changing the
 admission policy; do not assume two records are the same socket.
 
+`e2523d1` / `37003341990`, native `110826005037`, confirmed the dual-stack
+listener produces exactly two wildcard records (`0.0.0.0` and `::`) with
+the **same owner PID and same nonzero kernel bind timestamp**. The deliberate
+cross-family ambiguity case has neither wildcard-pair shape and stays refused.
+Admit only this exact paired representation in addition to a single record;
+retain the paired/single shape in the binding identity and compare it on every
+check. Do not admit arbitrary same-PID pairs.
+
+Add a separate actual same-process IPv6-only/IPv4 wildcard pair created 100 ms
+apart. It must remain rejected even though both endpoints respond and have the
+same original Job owner. The listener fixture is extracted into a focused CJS
+helper instead of further growing the installed-host fixture. Full acceptance
+of the paired representation and its counterexample is pending.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

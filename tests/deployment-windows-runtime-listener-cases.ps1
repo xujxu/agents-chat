@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$Root,
     [Parameter(Mandatory)]$Ready,
     [Parameter(Mandatory)]$Owner,
-    [Parameter(Mandatory)][ValidateSet('listener-v4', 'listener-v6')][string]$Scenario
+    [Parameter(Mandatory)][ValidateSet('listener-v4', 'listener-v6', 'listener-independent-pair')][string]$Scenario
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -32,10 +32,21 @@ try {
     $endpoint = Wait-File (Join-Path $Root 'listener.json')
     $listener = [Diagnostics.Process]::GetProcessById([int]$endpoint.pid)
     $null = $listener.Handle
+    if ($Scenario -ceq 'listener-independent-pair') {
+        Refuses { $unexpected = Retain $endpoint.port; $unexpected.Dispose() } 'Runtime listener is ambiguous.'
+        foreach ($address in @('127.0.0.1', '[::1]')) {
+            $response = Invoke-WebRequest -Uri "http://$address`:$($endpoint.port)/" -NoProxy -MaximumRedirection 0 -TimeoutSec 5
+            Assert ($response.StatusCode -eq 200 -and $response.Content -ceq 'owned-listener') 'Refusal stopped an independent original listener'
+        }
+        Assert (-not $listener.HasExited -and -not $Owner.HasExited) 'Independent-binding refusal stopped original work'
+        Write-Output 'PASS: separately created wildcard listeners in the same owned process are not collapsed into one native binding'
+        return
+    }
     $retained = Retain $endpoint.port
     Assert ($retained.ListenerPid -eq $listener.Id -and
         $retained.ListenerIdentity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($listener.Id) -and
         $retained.Port -eq $endpoint.port -and [long]$retained.CreatedAt -gt 0 -and
+        $retained.PairedRecords -eq ($Scenario -ceq 'listener-v6') -and
         $retained.Address -ceq $(if ($Scenario -ceq 'listener-v4') { '127.0.0.1' } else { '::' })) `
         'Native listener lost original process, port, address or kernel binding time'
     $retained.Check()

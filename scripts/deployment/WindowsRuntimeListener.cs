@@ -49,6 +49,7 @@ namespace Deployment
             public string Address;
             public int Pid, Port;
             public long CreatedAt;
+            public bool Paired;
         }
         readonly object gate = new object();
         readonly Guid generation;
@@ -64,6 +65,7 @@ namespace Deployment
         public string Address { get { return binding.Address; } }
         public int Port { get { return binding.Port; } }
         public string CreatedAt { get { return binding.CreatedAt.ToString(CultureInfo.InvariantCulture); } }
+        public bool PairedRecords { get { return binding.Paired; } }
 
         WindowsRuntimeListener(Guid generation, int ownerPid, string ownerIdentity, int launcherPid, int port)
         {
@@ -138,6 +140,12 @@ namespace Deployment
             {
                 Binding ipv4 = matches.Find(value => value.Address == "0.0.0.0");
                 Binding ipv6 = matches.Find(value => value.Address == "::");
+                if (matches.Count == 2 && ipv4 != null && ipv6 != null &&
+                    ipv4.Pid == ipv6.Pid && ipv4.CreatedAt == ipv6.CreatedAt)
+                {
+                    ipv6.Paired = true;
+                    return ipv6;
+                }
                 Console.Error.WriteLine("Native listener ambiguity: count={0}; ipv4Any={1}; ipv6Any={2}; sameOwner={3}; sameBind={4}.",
                     matches.Count, ipv4 != null, ipv6 != null,
                     ipv4 != null && ipv6 != null && ipv4.Pid == ipv6.Pid,
@@ -229,7 +237,8 @@ namespace Deployment
                     !members.Contains(listener.Id))
                     throw new InvalidOperationException("Original runtime listener process differs.");
                 Binding current = ReadBinding(port);
-                if (current.Pid != binding.Pid || current.CreatedAt != binding.CreatedAt || current.Address != binding.Address)
+                if (current.Pid != binding.Pid || current.CreatedAt != binding.CreatedAt ||
+                    current.Address != binding.Address || current.Paired != binding.Paired)
                     throw new InvalidOperationException("Original runtime listener binding changed.");
                 if (!Members().Contains(listener.Id) || listener.HasExited ||
                     WindowsWorkerJob.ProcessIdentity(listener.Id) != listenerIdentity)
