@@ -305,6 +305,9 @@ jobs:
       - name: Run production private controller with literal stdio and original Job settlement
         shell: pwsh
         run: ./tests/deployment-windows-controller-process.ps1
+      - name: Publish private installed runtime bundle without source ACL repair
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-bundle.ps1
       - name: Probe private Node file creation with a distinct original-Job child token
         shell: pwsh
         run: ./tests/deployment-windows-controller-token.ps1

@@ -7566,6 +7566,64 @@ remove the exposed replacement and restore the original file by rename,
 checking its original volume/file identity. No ACL setter touches the file
 used by the successful transaction or its subsequent production replacements.
 
+#### Task 5U: production publication of an installed private runtime bundle
+
+Continue inline under the approved Windows bootstrap design. Replace the
+runtime-host fixture's ordinary copies and owner repairs with production
+creation-time publication. This does not introduce a new account policy or
+claim public deployment activation.
+
+**Files:** `WindowsPrivateFile.cs` owns bounded exact UTF-8 source copying;
+`WindowsRuntimeDomain.cs` exposes its existing command encoding/validation;
+`WindowsRuntimeHost.cs` exposes a copied helper-name list;
+new `windows-runtime-bundle.ps1` assembles the immutable installed bundle.
+The independent saved-engine list and native fixture must include the new
+script. `tests/deployment-windows-runtime-bundle.ps1` covers creation and
+refusal before the existing runtime-host cases.
+
+- [ ] Add causal native coverage invoking the production publication function:
+  ```powershell
+  $bundle = New-AgentsChatRuntimeBundle -Source $source -Directory $directory `
+      -File $node -Arguments @('literal %n $HOME " space') `
+      -WorkingDirectory $project -Environment $environment
+  $private = [Deployment.WindowsPrivateFile]::Open($bundle.Configuration, $bundle.Sha256)
+  try { $configuration = $private.ReadText() | ConvertFrom-Json }
+  finally { $private.Dispose() }
+  ```
+  Require current-SID/SYSTEM native privacy for every helper and the config,
+  identical source/copy hashes, literal command fields, unchanged source ACLs,
+  refusal of existing destinations and invalid command input. Capture the
+  missing-script failure in Actions after preserving the current full run.
+- [ ] Add `CopyTrustedSource(source, expectedSha256, destination)` to native
+  private publication. Refactor current `Open` into a private `OpenFile` with
+  one internal `requirePrivate` parameter; public `Open` always passes true.
+  Only the new copy method passes false for its temporary source reader.
+  All source canonical-path, links/type/size, original-handle, content/digest
+  and unchanged-security checks remain. Do not expose the nonprivate reader.
+  Publish the decoded strict UTF-8 bytes through the existing private API;
+  recheck source and destination digests and dispose both on failure.
+- [ ] Extract the pre-mutation command encoding from native domain `Start`:
+  ```csharp
+  public static string CommandFrame(string file, string[] args, string cwd,
+      Dictionary<string, string> environment)
+  ```
+  Keep the exact existing validation and wire format. `Start` calls this
+  method; the publisher uses its `command` JSON, not a second encoder.
+  Expose `WindowsRuntimeHost.HelperFiles` as a cloned string array.
+- [ ] Publish only to a newly created native private directory. The PowerShell
+  function takes explicit executable/argv/cwd/environment, validates the
+  command before creation, hashes the fixed trusted source list, copies each
+  through `CopyTrustedSource`, rechecks source hashes, and publishes
+  `configuration.json` last. Return `Directory`, `Configuration`, `Sha256`.
+  Retain the directory during publication; dispose handles on all paths.
+  A post-creation failure leaves an explicitly reported incomplete bundle,
+  never deletes/adopts existing directories or repairs ACLs.
+- [ ] Wire the actual installed-runtime fixture to this publisher, retaining
+  its independent helper list/configuration assertions and all native task,
+  inhibition, close/exit, transaction and changed-configuration cases.
+  Run `./tests/deployment-windows-runtime-bundle.ps1` and the existing native
+  cases only in Actions; require the full regression before acceptance.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
