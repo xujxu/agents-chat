@@ -134,7 +134,16 @@ namespace Deployment
             ReadTable(2, port, matches);
             ReadTable(23, port, matches);
             if (matches.Count == 0) throw new WindowsRuntimeListenerNotReadyException();
-            if (matches.Count != 1) throw new InvalidOperationException("Runtime listener is ambiguous.");
+            if (matches.Count != 1)
+            {
+                Binding ipv4 = matches.Find(value => value.Address == "0.0.0.0");
+                Binding ipv6 = matches.Find(value => value.Address == "::");
+                Console.Error.WriteLine("Native listener ambiguity: count={0}; ipv4Any={1}; ipv6Any={2}; sameOwner={3}; sameBind={4}.",
+                    matches.Count, ipv4 != null, ipv6 != null,
+                    ipv4 != null && ipv6 != null && ipv4.Pid == ipv6.Pid,
+                    ipv4 != null && ipv6 != null && ipv4.CreatedAt == ipv6.CreatedAt);
+                throw new InvalidOperationException("Runtime listener is ambiguous.");
+            }
             Binding result = matches[0];
             IPAddress address = IPAddress.Parse(result.Address);
             if (!address.Equals(IPAddress.Loopback) && !address.Equals(IPAddress.Any) &&

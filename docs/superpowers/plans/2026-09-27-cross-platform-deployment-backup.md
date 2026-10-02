@@ -8004,6 +8004,13 @@ creating a task. The result was captured before publishing the implementation.
 Local commits `bf1171b` and `ec8e008` implement the observer and fixture
 corrections; native plus full listener acceptance remain pending.
 
+`dd2a09e` / `37003015827`, native `110825158407`, passed actual IPv4 native
+ownership/bind-time retention, same-process rebind, foreign/ambiguous listener
+refusal and original Job settlement. The dual-stack case refused at the
+multiple-record gate. Add bounded count/wildcard/same-owner/same-bind flags
+to identify the actual two-family native representation before changing the
+admission policy; do not assume two records are the same socket.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
