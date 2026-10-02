@@ -7,7 +7,8 @@ param(
     [Parameter(Mandatory)][string]$Sha256,
     [Parameter(Mandatory)]$Binding,
     [Parameter(Mandatory)][ValidateSet('close', 'exit', 'changed-state')][string]$Action,
-    [switch]$Transactional
+    [switch]$Transactional,
+    [switch]$Restore
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -34,6 +35,7 @@ if ($Transactional) {
     & (Join-Path $PSScriptRoot 'deployment-windows-private-control.ps1') -Control $control
     $info.ArgumentList.Add($control)
     $info.ArgumentList.Add($Root)
+    $info.ArgumentList.Add($(if ($Restore) { 'restore' } else { 'update' }))
 }
 $controller = [Diagnostics.Process]::Start($info)
 $null = $controller.Handle

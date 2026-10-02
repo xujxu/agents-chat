@@ -1,5 +1,5 @@
 param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-stop', 'node-close', 'node-exit',
-    'transaction-close', 'transaction-exit', 'transaction-changed-state')][string]$Scenario = 'stop')
+    'transaction-close', 'transaction-exit', 'transaction-changed-state', 'transaction-restore')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -151,9 +151,11 @@ if (process.argv[2] === 'child') {
             -Action $Scenario.Substring(5)
     }
     if ($Scenario.StartsWith('transaction-')) {
+        $restoreTransaction = $Scenario -eq 'transaction-restore'
+        $transactionAction = if ($restoreTransaction) { 'close' } else { $Scenario.Substring(12) }
         & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $root -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
-            -Action $Scenario.Substring(12) -Transactional
+            -Action $transactionAction -Transactional -Restore:$restoreTransaction
     }
     if ($Scenario -eq 'task-inhibition') {
         $expected = [xml]$task.Xml

@@ -7149,7 +7149,7 @@ and lock/state transaction authority are still not provided by this API.
 `8b2b2f3` / `36944817058`, native job `110644646715`, passed the full native
 suite including normal Node close, abrupt original-controller exit, retained
 task owner/inhibition/evidence, duplicate-stop and concurrent-request refusals.
-Preserve the full regression before promoting this baseline.
+The full regression passed **23/23** and is the accepted baseline.
 
 #### Task 5N: native lock/state authorization for Node task maintenance
 
@@ -7167,7 +7167,7 @@ Extend `state.mjs` to block generic lock/recovery operations when
 `task-maintenance` evidence exists. Add the focused actual Node transaction
 fixture and its private-control fixture helper; extend existing host scenarios.
 
-- [ ] Capture native missing-transaction-module failure and the contract test
+- [x] Capture native missing-transaction-module failure and the contract test
   showing that an existing task-maintenance directory must block unlock/new
   admission/automatic recovery.
 - [ ] Implement `stopWindowsTaskTransaction({ control, lock, pwsh, admission,
@@ -7196,9 +7196,22 @@ fixture and its private-control fixture helper; extend existing host scenarios.
   blocked generic unlock/recovery, normal close and abrupt controller exit.
   A third actual task changes state operation ID and must lose authority while
   retaining original task owner, inhibition and all durable receipts.
+- [ ] A fourth actual task exercises original restore admission and its
+  `restoring -> restore-activating` maintenance transition without claiming
+  application restoration or activation.
 - [ ] Run all validation in Actions and preserve the preceding full baseline.
   This still does not claim activation, cold recovery or public Windows
   deploy/update/restore transaction completion.
+
+The causal `cb5bc6b` / `36945367568`, native `110650681417`, passed preceding
+native cases and failed on the missing `windows-task-transaction.mjs`.
+Linux contracts `110650681159` and Windows contracts `110650681425` both failed
+exactly on the missing unlock refusal with task-maintenance evidence.
+Implementation `8fa39b0` retains native lock/config
+capabilities, checks private state before/after original-domain observations,
+records exact initial state text plus its digest in the immutable binding, and
+uses version-2 transactional stop receipts. Restore-phase coverage is included
+in the follow-up test commit; native acceptance remains pending.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

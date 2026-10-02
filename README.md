@@ -142,8 +142,9 @@ PowerShell 5.1 acceptance. The full 23-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
 retained private configuration, direct native task-owner checks and the
 installed private runtime host, native restart inhibition and write-through
-private receipt publication and durable native task-stop contexts, passed at
-`8a9de5f` (run `36943041386`).
+private receipt publication, durable native task-stop contexts and
+original-Node-controller close/exit handling, passed at
+`8b2b2f3` (run `36944817058`).
 The isolated real Windows application job also passed at `8a9de5f`
 (run `36943041386`): three prebuilt managed starts, authenticated chat
 persistence, stopped-database restoration, original-Job listener ownership and

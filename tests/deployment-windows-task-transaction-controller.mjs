@@ -9,7 +9,8 @@ import { promisify } from 'node:util';
 import { acquireLock, writeState, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
 import { stopWindowsTaskTransaction } from '../scripts/deployment/windows-task-transaction.mjs';
 
-const [pwsh, control, project] = process.argv.slice(2);
+const [pwsh, control, project, operation] = process.argv.slice(2);
+assert.ok(['update', 'restore'].includes(operation));
 const lock = await acquireLock(control, { project, operationId: randomUUID() });
 const lines = createInterface({ input: process.stdin })[Symbol.asyncIterator]();
 const receive = async () => {
@@ -25,15 +26,16 @@ console.log(JSON.stringify({ pid: process.pid, identity: lock.processIdentity, o
 const admission = await receive();
 const record = JSON.parse(await readFile(admission.admission, 'utf8'));
 let state = {
-  version: 1, operationId: lock.operationId, project, operation: 'update',
-  phase: 'preflight', previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
+  version: 1, operationId: lock.operationId, project, operation,
+  phase: operation === 'restore' ? 'restore-preflight' : 'preflight',
+  previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
   backupId: null, priorRuntime: 'running', runtimeIdentity: record.generation,
   startedAt: lock.createdAt, updatedAt: new Date().toISOString(), errorCode: null,
 };
 await writeState(control, state);
 const options = { ...admission, pwsh, control, lock };
 await assert.rejects(stopWindowsTaskTransaction(options));
-state = { ...state, phase: 'stopped', previousPhase: 'preflight' };
+state = { ...state, phase: operation === 'restore' ? 'restoring' : 'stopped', previousPhase: state.phase };
 await writeState(control, state);
 await secure(true);
 await assert.rejects(stopWindowsTaskTransaction(options));
@@ -56,7 +58,7 @@ for (const phase of ['intent', 'inhibited', 'stop-requested', 'stopped']) {
   assert.equal(receipt.transactionSha256, hash(evidenceBytes));
 }
 await assert.rejects(writeFile(path.join(control, 'lock', 'owner.json'), 'changed'));
-state = { ...state, phase: 'copying', previousPhase: 'stopped' };
+state = { ...state, phase: operation === 'restore' ? 'restore-activating' : 'copying', previousPhase: state.phase };
 await writeState(control, state);
 await secure();
 await context.check();

@@ -349,3 +349,6 @@ jobs:
       - name: Refuse changed original native task transaction state
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-changed-state
+      - name: Bind native task maintenance to original restore-phase authority
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore
