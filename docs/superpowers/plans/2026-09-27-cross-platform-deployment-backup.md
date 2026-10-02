@@ -7232,7 +7232,8 @@ all production checks. This is a fixture correction, not relaxed admission.
 
 `8a90d84` / `36948065624`, native `110654883963`, passed every native case,
 including transactional close, abrupt controller exit, changed-state refusal
-and restore-phase authority. Preserve the full regression, still active.
+and restore-phase authority. The full regression completed successfully
+**23/23** and is the accepted baseline.
 
 #### Task 5O: isolated default-owner premise for private Node control files
 
@@ -7271,6 +7272,10 @@ Native API references used for this bounded premise:
 - `https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-token_owner`
 - `https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-settokeninformation`
 - `https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithtokenw`
+
+Test-only `f92ca3c` / `36949355622` is running after the accepted full
+regression. Native job `110660746815` has not yet reached the copied-token
+probe. No production bootstrap or private-creation behavior has changed.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

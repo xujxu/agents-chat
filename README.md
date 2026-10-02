@@ -143,8 +143,8 @@ runtime-control transport, task-held Jobs, scoped control requests,
 retained private configuration, direct native task-owner checks and the
 installed private runtime host, native restart inhibition and write-through
 private receipt publication, durable native task-stop contexts and
-original-Node-controller close/exit handling, passed at
-`8b2b2f3` (run `36944817058`).
+original-Node-controller close/exit handling and private lock/state transaction
+authorization, passed at `8a90d84` (run `36948065624`).
 The isolated real Windows application job also passed at `8a9de5f`
 (run `36943041386`): three prebuilt managed starts, authenticated chat
 persistence, stopped-database restoration, original-Job listener ownership and
