@@ -293,6 +293,30 @@ namespace Deployment
         }
         public static WindowsPrivateFile Open(string file, string expectedSha256)
         {
+            return OpenFile(file, expectedSha256, true);
+        }
+        public static WindowsPrivateFile CopyTrustedSource(string source, string expectedSha256, string destination)
+        {
+            using (WindowsPrivateFile original = OpenFile(source, expectedSha256, false))
+            {
+                WindowsPrivateFile copy = null;
+                try
+                {
+                    copy = Publish(destination, original.ReadText());
+                    original.Check();
+                    if (copy.Sha256 != expectedSha256)
+                        throw new InvalidDataException("Copied source digest differs.");
+                    return copy;
+                }
+                catch
+                {
+                    if (copy != null) copy.Dispose();
+                    throw;
+                }
+            }
+        }
+        static WindowsPrivateFile OpenFile(string file, string expectedSha256, bool requirePrivate)
+        {
             RequirePath(file);
             if (expectedSha256 == null || expectedSha256.Length != 64)
                 throw new ArgumentException("An exact configuration SHA-256 is required.");
@@ -316,7 +340,7 @@ namespace Deployment
                 if (!String.Equals(retained.FinalPath(), file, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Private configuration path is redirected.");
                 RawSecurityDescriptor security = retained.Security();
-                RequirePrivate(security);
+                if (requirePrivate) RequirePrivate(security);
                 retained.metadata = information.Identity();
                 retained.security = Descriptor(security);
                 retained.stream = new FileStream(retained.handle, FileAccess.Read, 1, false);

@@ -70,7 +70,21 @@ try {
     Assert ($refused -and -not (Test-Path -LiteralPath $copy)) 'Wrong source digest published executable code'
     $hardlink = Join-Path $root 'hardlink.cs'
     $original = Join-Path $root 'original.cs'
-    [IO.File]::WriteAllText($original, 'trusted source')
+    [IO.File]::WriteAllBytes($original, ([byte[]]@(239, 187, 191) + [Text.Encoding]::UTF8.GetBytes("trusted source`r`n")))
+    $sourceAcl = Get-Acl -LiteralPath $original
+    $sourceAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+        [Security.Principal.SecurityIdentifier]::new('S-1-1-0'), 'Read', 'Allow'))
+    Set-Acl -LiteralPath $original -AclObject $sourceAcl
+    $sourceSecurity = (Get-Acl -LiteralPath $original).Sddl
+    $sourceHash = (Get-FileHash -LiteralPath $original -Algorithm SHA256).Hash.ToLowerInvariant()
+    $sourceCopy = [Deployment.WindowsPrivateFile]::CopyTrustedSource($original, $sourceHash, (Join-Path $root 'copied.cs'))
+    try { Assert ($sourceCopy.Sha256 -ceq $sourceHash) 'Trusted UTF-8 copy changed BOM or line endings' }
+    finally { $sourceCopy.Dispose() }
+    Assert ((Get-Acl -LiteralPath $original).Sddl -ceq $sourceSecurity) 'Trusted copy repaired source permissions'
+    $refused = $false
+    try { [Deployment.WindowsPrivateFile]::Open($original, $sourceHash).Dispose() }
+    catch { $refused = $_.Exception.GetBaseException().Message -ceq 'Private configuration permissions are unsupported.' }
+    Assert $refused 'Trusted copy weakened ordinary private-file admission'
     New-Item -ItemType HardLink -Path $hardlink -Target $original | Out-Null
     $hash = (Get-FileHash -LiteralPath $hardlink -Algorithm SHA256).Hash.ToLowerInvariant()
     $refused = $false

@@ -6,18 +6,14 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
-$source = Join-Path $PSScriptRoot '../scripts/deployment'
+$source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment'))
 Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
     (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'),
-    (Join-Path $source 'WindowsPrivateFile.cs'))
+    (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsRuntimeHost.cs'))
 . (Join-Path $source 'windows-task-maintenance.ps1')
+. (Join-Path $source 'windows-runtime-bundle.ps1')
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
-}
-function Set-PrivateOwner([string]$File) {
-    $acl = Get-Acl -LiteralPath $File
-    $acl.SetOwner($sid)
-    Set-Acl -LiteralPath $File -AclObject $acl
 }
 function Get-Listeners {
     @(Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq 3010)
@@ -34,22 +30,9 @@ function Assert-OwnedListener($Ready, $Owner, $Listener) {
 }
 
 $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+$Control = & $Node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" $Control
+Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize managed application parent'
 $root = Join-Path $Control "managed-application-$([guid]::NewGuid())"
-New-Item -ItemType Directory -Path $root | Out-Null
-Set-PrivateOwner $root
-$root = & $Node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" $root
-Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize managed application bundle'
-$helpers = @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
-    'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeHost.cs',
-    'windows-worker-launcher.ps1', 'windows-runtime-host.ps1')
-$hashes = [ordered]@{}
-foreach ($name in $helpers) {
-    $file = Join-Path $root $name
-    Copy-Item -LiteralPath (Join-Path $source $name) -Destination $file
-    Set-PrivateOwner $file
-    $hashes[$name] = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
-}
 $environment = [ordered]@{}
 foreach ($entry in Get-ChildItem Env:) {
     if ($entry.Name.ToUpperInvariant() -in @('PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT',
@@ -62,18 +45,13 @@ $environment.NEXTAUTH_SECRET = 'actions-isolated-build-fixture-secret'
 $environment.NEXTAUTH_URL = 'http://localhost:3010'
 $environment.ADMIN_USERNAME = 'fixture'
 $environment.ADMIN_PASSWORD = 'private-fixture-password'
-$configuration = [ordered]@{
-    version=1; helpers=$hashes
-    command=[ordered]@{
-        file=$Node
-        args=@((Join-Path $Project 'node_modules/next/dist/bin/next'), 'start', '--hostname', '127.0.0.1', '--port', '3010')
-        cwd=$Project; environment=$environment
-    }
-}
-$configFile = Join-Path $root 'configuration.json'
-$published = [Deployment.WindowsPrivateFile]::Publish($configFile, ($configuration | ConvertTo-Json -Depth 8 -Compress))
-try { $digest = $published.Sha256 }
-finally { $published.Dispose() }
+$runtimeEnvironment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($entry in $environment.GetEnumerator()) { $runtimeEnvironment.Add($entry.Key, $entry.Value) }
+$bundle = New-AgentsChatRuntimeBundle -Source $source -Directory $root -File $Node `
+    -Arguments @((Join-Path $Project 'node_modules/next/dist/bin/next'), 'start', '--hostname', '127.0.0.1', '--port', '3010') `
+    -WorkingDirectory $Project -Environment $runtimeEnvironment
+$configFile = $bundle.Configuration
+$digest = $bundle.Sha256
 $hostFile = Join-Path $root 'windows-runtime-host.ps1'
 $data = Join-Path $Project '.data'
 $backup = Join-Path $root 'stopped-data'
@@ -136,8 +114,7 @@ foreach ($phase in @('create', 'mutate', 'restored')) {
         Assert-OwnedListener $ready $owner $listener
 
         $directory = Join-Path $root $phase
-        New-Item -ItemType Directory -Path $directory | Out-Null
-        Set-PrivateOwner $directory
+        [Deployment.WindowsPrivateFile]::CreateDirectory($directory).Dispose()
         $record = [ordered]@{
             version=1; operationId=[guid]::NewGuid().ToString('D')
             controllerPid=$PID; controllerIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)

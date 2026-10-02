@@ -42,11 +42,8 @@ namespace Deployment
                 return root.Clone();
             }
         }
-        public static WindowsRuntimeDomain Start(Guid generation, string pwsh, string helpers,
-            string file, string[] args, string cwd, Dictionary<string, string> environment)
+        public static string CommandFrame(string file, string[] args, string cwd, Dictionary<string, string> environment)
         {
-            Text(pwsh, "PowerShell", true);
-            Text(helpers, "helper directory", true);
             Text(file, "executable", true);
             Text(cwd, "working directory", true);
             if (args == null || args.Length > 4096 || environment == null || environment.Count > 512)
@@ -73,6 +70,14 @@ namespace Deployment
             });
             if (Encoding.UTF8.GetByteCount(grant) > 65536)
                 throw new ArgumentException("Runtime command exceeds the launcher frame limit.");
+            return grant;
+        }
+        public static WindowsRuntimeDomain Start(Guid generation, string pwsh, string helpers,
+            string file, string[] args, string cwd, Dictionary<string, string> environment)
+        {
+            Text(pwsh, "PowerShell", true);
+            Text(helpers, "helper directory", true);
+            string grant = CommandFrame(file, args, cwd, environment);
             var domain = new WindowsRuntimeDomain();
             try
             {

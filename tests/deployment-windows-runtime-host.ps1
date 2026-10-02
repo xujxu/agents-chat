@@ -3,54 +3,52 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
-$source = Join-Path $PSScriptRoot '../scripts/deployment'
+$source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment'))
 $helpers = @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
     'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeHost.cs',
     'windows-worker-launcher.ps1', 'windows-runtime-host.ps1')
 Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
     (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'),
-    (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsControllerToken.cs'),
+    (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsRuntimeHost.cs'),
+    (Join-Path $source 'WindowsControllerToken.cs'),
     (Join-Path $source 'WindowsControllerProcess.cs'))
 . (Join-Path $source 'windows-task-owner-binding.ps1')
+. (Join-Path $source 'windows-runtime-bundle.ps1')
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
 function Save-Configuration([string]$File, [string]$Text) {
     [IO.File]::WriteAllText($File, $Text, [Text.UTF8Encoding]::new($false))
-    $security = Get-Acl -LiteralPath $File
-    $security.SetOwner($sid)
-    Set-Acl -LiteralPath $File -AclObject $security
     return (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
 $node = (Get-Command node).Source
 $taskName = "Agents-Chat-Runtime-Host-Test-$([guid]::NewGuid())"
-$root = Join-Path ([IO.Path]::GetTempPath()) "$taskName space"
+$parent = & $node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" ([IO.Path]::GetTempPath())
+Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize installed host fixture parent'
+$root = Join-Path $parent "$taskName space"
 $registered = $false
 $owner = $null
 $member = $null
 $unexpectedOwner = $null
-New-Item -ItemType Directory -Path $root | Out-Null
 try {
-    $root = & $node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" $root
-    Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize installed host fixture'
-    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
-    $acl = Get-Acl -LiteralPath $root
-    $acl.SetOwner($sid)
-    $acl.SetAccessRuleProtection($true, $false)
-    foreach ($principal in @($sid, [Security.Principal.SecurityIdentifier]::new('S-1-5-18'))) {
-        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($principal, 'FullControl',
-            'ContainerInherit, ObjectInherit', 'None', 'Allow'))
-    }
-    Set-Acl -LiteralPath $root -AclObject $acl
-    $hashes = [ordered]@{}
+    $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $environment.Add('SystemRoot', $env:SystemRoot)
+    $environment.Add('PATH', $env:PATH)
+    $environment.Add('RUNTIME_LITERAL', 'literal %n $HOME " space')
+    $bundle = New-AgentsChatRuntimeBundle -Source $source -Directory $root -File $node `
+        -Arguments @((Join-Path $root 'writer.cjs'), 'literal %n $HOME " space') `
+        -WorkingDirectory $root -Environment $environment
+    $configFile = $bundle.Configuration
+    $text = [IO.File]::ReadAllText($configFile)
+    $configuration = $text | ConvertFrom-Json -AsHashtable
+    $hashes = $configuration.helpers
+    Assert (($hashes.Keys | Sort-Object | ConvertTo-Json -Compress) -ceq ($helpers | Sort-Object | ConvertTo-Json -Compress)) `
+        'Production bundle helper inventory differs from installed host contract'
     foreach ($name in $helpers) {
-        $file = Join-Path $root $name
-        Copy-Item -LiteralPath (Join-Path $source $name) -Destination $file
-        $security = Get-Acl -LiteralPath $file
-        $security.SetOwner($sid)
-        Set-Acl -LiteralPath $file -AclObject $security
-        $hashes[$name] = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+        $retained = [Deployment.WindowsPrivateFile]::Open((Join-Path $root $name), $hashes[$name])
+        try { $retained.Check() }
+        finally { $retained.Dispose() }
     }
     @'
 const fs = require('node:fs');
@@ -65,19 +63,7 @@ if (process.argv[2] === 'child') {
   child.unref();
 }
 '@ | Set-Content -LiteralPath (Join-Path $root 'writer.cjs')
-    $configuration = [ordered]@{
-        version=1
-        helpers=$hashes
-        command=[ordered]@{
-            file=$node
-            args=@((Join-Path $root 'writer.cjs'), 'literal %n $HOME " space')
-            cwd=$root
-            environment=[ordered]@{ SystemRoot=$env:SystemRoot; PATH=$env:PATH; RUNTIME_LITERAL='literal %n $HOME " space' }
-        }
-    }
-    $configFile = Join-Path $root 'configuration.json'
     $hostFile = Join-Path $root 'windows-runtime-host.ps1'
-    $text = $configuration | ConvertTo-Json -Depth 8 -Compress
     foreach ($mode in @('digest', 'duplicate', 'unknown', 'environment', 'helper')) {
         $candidate = $text
         if ($mode -eq 'duplicate') { $candidate = $text.Replace('"version":1', '"version":1,"version":1') }
@@ -249,5 +235,5 @@ if (process.argv[2] === 'child') {
         $member.Dispose()
     }
     if ($registered) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false }
-    Remove-Item -LiteralPath $root -Recurse -Force
+    if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
 }

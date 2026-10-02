@@ -13,6 +13,7 @@ namespace Deployment
             "WindowsRuntimeControl.cs", "WindowsPrivateFile.cs", "WindowsRuntimeHost.cs",
             "windows-worker-launcher.ps1", "windows-runtime-host.ps1"
         };
+        public static string[] HelperFiles { get { return (string[])Helpers.Clone(); } }
         readonly List<WindowsPrivateFile> retained = new List<WindowsPrivateFile>();
         WindowsRuntimeDomain domain;
         WindowsRuntimeControl control;
