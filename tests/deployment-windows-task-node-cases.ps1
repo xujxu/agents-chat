@@ -46,6 +46,7 @@ $environment.Add('PATH', $powershellDirectory)
 $controller = $null
 $diagnostic = $null
 $bridge = $null
+$stoppedDefinition = $null
 $controllerDirectory = [Deployment.WindowsPrivateFile]::CreateDirectory($controllerRoot)
 try {
     try {
@@ -222,4 +223,12 @@ try {
         Remove-Item -LiteralPath $controllerRoot -Recurse -Force
     }
     if ($bridge) { $bridge.Dispose() }
+    if ($stoppedDefinition -and $Action.StartsWith('replace')) {
+        $actual = [xml]$scheduler.GetFolder('\').GetTask($TaskName).Xml
+        $prior = [xml]$stoppedDefinition
+        if ($prior.Task.Settings.OuterXml -cne $actual.Task.Settings.OuterXml) {
+            [Console]::Error.WriteLine("Synthetic task settings before: $($prior.Task.Settings.OuterXml)")
+            [Console]::Error.WriteLine("Synthetic task settings after: $($actual.Task.Settings.OuterXml)")
+        }
+    }
 }

@@ -122,11 +122,18 @@ function Publish-AgentsChatTaskReplacement {
             [string]$definition.Principal.UserId, $null, [int]$definition.Principal.LogonType,
             $Context.Data.securityDescriptor)
         $task = $Context.Folder.GetTask($Context.Data.taskName)
-        if ($task.Path -cne "\$($Context.Data.taskName)" -or $task.Enabled -or
-            $task.GetInstances(0).Count -ne 0 -or
-            [string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor -or
-            ([xml][string]$task.Xml).OuterXml -cne ([xml]$requestedDefinition).OuterXml) {
-            throw 'Registered replacement differs from the admitted disabled candidate.'
+        $Context.Stage = 'replacement-registered-path'
+        if ($task.Path -cne "\$($Context.Data.taskName)") { throw 'Registered replacement path differs.' }
+        $Context.Stage = 'replacement-registered-inhibition'
+        if ($task.Enabled -or $task.GetInstances(0).Count -ne 0) { throw 'Registered replacement is not inhibited.' }
+        $Context.Stage = 'replacement-registered-security'
+        if ([string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor) {
+            throw 'Registered replacement security differs.'
+        }
+        Confirm-AgentsChatTaskReplacementPolicy $requestedDefinition ([string]$task.Xml) $Context
+        $Context.Stage = 'replacement-registered-definition'
+        if (([xml][string]$task.Xml).OuterXml -cne ([xml]$requestedDefinition).OuterXml) {
+            throw 'Registered replacement definition differs.'
         }
         $Context.ReplacementDefinition = [string]$task.Xml
         $Context.ReplacementPrepared = $true
