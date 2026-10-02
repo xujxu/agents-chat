@@ -7427,9 +7427,9 @@ supported on Windows 10 / Windows Server 2016 and later:
 `4e8e5cc` / `36953793698`, native `110672262846`, passed the first
 distinct-child-token probe: actual child token modification, spawn-time Job,
 unchanged original token and both Node writers' native private-file admission.
-Native job `110672262846` has now completed successfully, including every
-existing case after the new probe. The full regression is still running
-(11 jobs passed, no failures at latest observation); preserve it.
+Native job `110672262846` completed successfully, including every existing
+case after the new probe. The full regression completed **23/23** successfully;
+`4e8e5cc` / `36953793698` is the new accepted baseline.
 
 #### Task 5R: actual Node control-file creation under the admitted child token
 
@@ -7455,11 +7455,18 @@ child fixture's explicitly filtered Windows PowerShell discovery path.
   private persistence creation, not yet a public production controller,
   transaction activation, cold recovery or Windows lifecycle acceptance.
 
-Causal `1ceb564` / `36954162713` is queued behind the preserved regression.
+Causal `1ceb564` / `36954162713`, native `110676233230`, is now running after
+the preserved full regression completed successfully.
 The local writer implementation uses the existing production APIs and an
 explicit system PowerShell PATH. On Node failure, its bounded stderr is
 retained in a private fixture file and surfaced before rethrowing the native
 failure, rather than losing the underlying cause behind the child exit code.
+
+The causal native job failed exactly with
+`Missing actual private Node transaction files` after the original simple
+file-ownership checks. Implementation `ecd5636` is ready to push with the
+accepted baseline documentation; the actual control-file assertions remain
+unchanged.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
