@@ -15,6 +15,7 @@ export const workerEngineFiles = Object.freeze([
   'WindowsWorkerJob.cs', 'windows-worker-launcher.ps1', 'windows-worker-owner.ps1', 'windows-worker.mjs',
   'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs', 'WindowsRuntimeControl.cs',
   'WindowsPrivateFile.cs', 'WindowsRuntimeHost.cs', 'windows-runtime-host.ps1',
+  'WindowsControllerToken.cs', 'WindowsControllerProcess.cs',
   'windows-task-owner-binding.ps1', 'windows-task-maintenance.ps1',
   'windows-task-controller.ps1', 'windows-task-controller.mjs',
   'windows-task-transaction.ps1', 'windows-task-transaction.mjs',

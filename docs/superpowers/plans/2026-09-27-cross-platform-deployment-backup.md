@@ -7471,8 +7471,50 @@ unchanged.
 Pushed with documentation at `ddb33dd` / `36955332382`, native
 `110677115820`: the first probe step passed, including actual Node-created
 lock/state/journal/complete-engine native privacy assertions. The remaining
-native cases and full regression are still running. Production controller
+native cases and full regression completed **23/23** successfully.
+`ddb33dd` / `36955332382` is the new accepted baseline. Production controller
 bootstrap/entrypoint integration remains the next responsibility.
+
+#### Task 5S: production private controller process with native stdio
+
+Promote the verified token preparation into
+`scripts/deployment/WindowsControllerToken.cs` and implement
+`scripts/deployment/WindowsControllerProcess.cs`. The process owns a fresh
+private kill-on-close Job, retains its private working directory, and creates
+the suspended Node process with both JOB_LIST and a strict HANDLE_LIST for
+anonymous stdin/stdout/stderr pipes. Do not inherit the Job handle, arbitrary
+caller handles or caller environment. Use literal Windows argument encoding,
+not a shell or the probe's restricted fixture-only quoting.
+
+The token component is internal to the native helper assembly. It verifies
+the caller's unchanged token and prepares only the separately identified
+child token before resume. Process creation/containment remains the process
+component's responsibility, not a capability of the token component.
+
+**Files:** the two native helpers above;
+`tests/deployment-windows-controller-process.ps1`;
+`.github/workflows/deployment-lifecycle.yml`;
+`scripts/deployment/saved-worker-engine.mjs` and its independent expected list
+in `tests/deployment-saved-worker.test.mjs`.
+
+- [ ] Add native causal coverage for the production process API: literal
+  arguments and bidirectional JSON frames; current-user private file creation;
+  root exit with a still-writing detached descendant; original Job stop/join;
+  unchanged marker after termination and native private-directory retention.
+- [ ] Capture the missing helper failure in Actions before implementation.
+- [ ] Expose bounded lifecycle operations (`WaitForExit`, `Kill`, `Dispose`)
+  and actual `Id`/`ExitCode`/`HasExited`, plus stream readers/writer compatible
+  with the existing bounded `ReadFrameAsync` helper. Pipe EOF is never Job
+  settlement. Stop only the original Job and join it before cleanup succeeds.
+- [ ] Validate canonical executable/private cwd, literal arguments and a
+  bounded explicit environment before creating a process. Retain native
+  handles throughout setup; unsuccessful startup settles the original Job.
+- [ ] Include both new helper sources in the saved engine and independently
+  specified expected manifest, so restored code does not depend on the checkout.
+- [ ] Run native controller acceptance and all existing Actions gates. Then
+  wire the real task transaction controller fixtures through this production
+  launcher, removing positive-path ACL repair rather than copying it into
+  public deploy/update/restore.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

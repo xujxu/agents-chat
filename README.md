@@ -145,7 +145,8 @@ installed private runtime host, native restart inhibition and write-through
 private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
-characterization, passed at `4e8e5cc` (run `36953793698`). The child-token
+characterization with actual private Node lock/state/journal/saved-engine
+creation, passed at `ddb33dd` (run `36955332382`). The child-token
 characterization is not yet a production controller bootstrap.
 The isolated real Windows application job also passed at `8a9de5f`
 (run `36943041386`): three prebuilt managed starts, authenticated chat
