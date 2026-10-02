@@ -71,7 +71,7 @@ function Publish-AgentsChatTaskReplacement {
         }
         $bundle = [IO.Path]::GetDirectoryName($Configuration)
         if ([IO.Path]::GetFileName($Configuration) -cne 'configuration.json' -or
-            $Sha256 -cnotmatch '^[a-f0-9]{64}$' -or
+            $Configuration -match '%|\$\(' -or $Sha256 -cnotmatch '^[a-f0-9]{64}$' -or
             [string]::Equals($bundle, [IO.Path]::GetDirectoryName($Context.Data.configuration),
                 [StringComparison]::OrdinalIgnoreCase)) { throw 'Replacement requires a distinct installed bundle.' }
         $candidate = [Deployment.WindowsRuntimeHost]::Open($Configuration, $Sha256, $bundle)
@@ -90,16 +90,23 @@ function Publish-AgentsChatTaskReplacement {
         $process = [Diagnostics.Process]::GetCurrentProcess()
         try { $powershell = $process.MainModule.FileName }
         finally { $process.Dispose() }
-        $action = $definition.Actions.Item(1)
-        $Context.Stage = 'replacement-action-file'
-        $action.Path = $powershell
+        if ($powershell -match '%|\$\(') { throw 'PowerShell path is not literal for Task Scheduler.' }
         $hostFile = Join-Path $bundle 'windows-runtime-host.ps1'
-        $Context.Stage = 'replacement-action-arguments'
-        $action.Arguments = "-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$Configuration`" -Sha256 $Sha256"
-        $Context.Stage = 'replacement-action-directory'
-        $action.WorkingDirectory = $bundle
         $Context.Stage = 'replacement-definition-xml'
-        $requestedDefinition = [string]$definition.XmlText
+        $requested = [xml]$Context.Definition
+        $namespaces = [Xml.XmlNamespaceManager]::new($requested.NameTable)
+        $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+        $values = [ordered]@{
+            Command=$powershell
+            Arguments="-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$Configuration`" -Sha256 $Sha256"
+            WorkingDirectory=$bundle
+        }
+        foreach ($name in $values.Keys) {
+            $nodes = $requested.SelectNodes("/t:Task/t:Actions/t:Exec/t:$name", $namespaces)
+            if ($nodes.Count -ne 1) { throw 'Replacement requires one complete literal action.' }
+            $nodes[0].InnerText = $values[$name]
+        }
+        $requestedDefinition = $requested.OuterXml
         if ($requestedDefinition.Length -gt 262144) { throw 'Replacement definition exceeds admission limits.' }
         Confirm-AgentsChatTaskReplacementPolicy $Context.Definition $requestedDefinition $Context
         $Context.ReplacementConfiguration = $Configuration
@@ -111,7 +118,7 @@ function Publish-AgentsChatTaskReplacement {
         Test-AgentsChatRetiredTaskContext $Context
         $Context.Stage = 'replacement-registration'
         # Update only; preserve the admitted DACL and suppress registration triggers.
-        $null = $Context.Folder.RegisterTaskDefinition($Context.Data.taskName, $definition, (4 -bor 16 -bor 32),
+        $null = $Context.Folder.RegisterTask($Context.Data.taskName, $requestedDefinition, (4 -bor 16 -bor 32),
             [string]$definition.Principal.UserId, $null, [int]$definition.Principal.LogonType,
             $Context.Data.securityDescriptor)
         $task = $Context.Folder.GetTask($Context.Data.taskName)

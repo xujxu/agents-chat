@@ -384,3 +384,8 @@ jobs:
       - name: Refuse changed replacement configuration before task mutation
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-refused
+      - name: Refuse Scheduler expansion in replacement paths
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-variable
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-argument

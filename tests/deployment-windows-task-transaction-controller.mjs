@@ -86,7 +86,7 @@ if (action === 'replace-early') {
   await assert.rejects(context.replace({ configuration, sha256 }), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
 } else if (action === 'retire-refused') {
   await assert.rejects(context.retire(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
-} else if (['retire', 'replace', 'replace-refused'].includes(action)) {
+} else if (['retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument'].includes(action)) {
   if (operation !== 'restore') {
     for (const phase of ['rotating', 'backup-ready', 'source-selected', 'dependencies', 'building', 'configuring', 'activating']) {
       state = { ...state, previousPhase: state.phase, phase };
@@ -96,8 +96,8 @@ if (action === 'replace-early') {
   }
   await context.retire();
   await context.retire();
-  if (action === 'replace-refused') {
-    await assert.rejects(context.replace({ configuration, sha256: '0'.repeat(64) }),
+  if (['replace-refused', 'replace-variable', 'replace-argument'].includes(action)) {
+    await assert.rejects(context.replace({ configuration, sha256: action === 'replace-refused' ? '0'.repeat(64) : sha256 }),
       { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
   } else {
     if (action === 'replace') {

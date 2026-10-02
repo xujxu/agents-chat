@@ -7758,7 +7758,7 @@ and saved-worker manifest, native runtime bundle and transaction fixtures.
   -Sha256`. Recheck completed retirement and exact activation-state digest;
   retain the candidate; copy the admitted disabled task definition and
   replace only its three literal action fields. Publish requested evidence
-  before `RegisterTaskDefinition` with UPDATE, DONT_ADD_PRINCIPAL_ACE and
+  before `RegisterTask` with UPDATE, DONT_ADD_PRINCIPAL_ACE and
   IGNORE_REGISTRATION_TRIGGERS. Preserve original principal/logon type and
   exact security descriptor. Compare native returned XML, disabled state
   and zero instances before completed evidence. Fail closed and retain
@@ -7788,6 +7788,16 @@ only fixed task-policy section names when reporting an XML mismatch; do not
 emit configuration/XML contents or relax policy comparison. Move that
 independent positive scenario immediately after bundle admission to shorten
 feedback; preserve every existing scenario.
+
+Diagnostics `88e84a2` / `36993134478`, native `110793975499`, isolated the
+failure to `replacement-policy-settings` before registration: exporting the
+COM definition after editing only the action changes the Settings XML.
+Do not guess which Scheduler default caused this or relax comparison.
+Construct the request by editing the three action nodes in retained original
+XML, and submit that XML directly through `RegisterTask` with the same flags.
+Keep the exact independent post-registration comparison. Reject `%` environment
+substitutions and `$(...)` Scheduler argument substitutions in replacement
+paths, with separate real native negative cases before replacement intent.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

@@ -7,7 +7,7 @@ param(
     [Parameter(Mandatory)][string]$Sha256,
     [Parameter(Mandatory)]$Binding,
     [Parameter(Mandatory)][ValidateSet('close', 'exit', 'changed-state', 'retire', 'retire-refused',
-        'replace', 'replace-refused', 'replace-early')][string]$Action,
+        'replace', 'replace-refused', 'replace-early', 'replace-variable', 'replace-argument')][string]$Action,
     [switch]$Transactional,
     [switch]$Restore
 )
@@ -98,8 +98,13 @@ try {
         $original = [IO.File]::ReadAllText($Configuration) | ConvertFrom-Json -AsHashtable
         $candidateEnvironment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($key in $original.command.environment.Keys) { $candidateEnvironment.Add($key, $original.command.environment[$key]) }
+        $candidateName = switch ($Action) {
+            'replace-variable' { 'replacement%SystemRoot%' }
+            'replace-argument' { 'replacement$(Arg0)' }
+            default { 'replacement' }
+        }
         $replacement = New-AgentsChatRuntimeBundle -Source ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment'))) `
-            -Directory (Join-Path $controllerRoot 'replacement') -File $original.command.file `
+            -Directory (Join-Path $controllerRoot $candidateName) -File $original.command.file `
             -Arguments ([string[]]$original.command.args) -WorkingDirectory $original.command.cwd -Environment $candidateEnvironment
         $request.configuration = $replacement.Configuration
         $request.sha256 = $replacement.Sha256
@@ -109,7 +114,7 @@ try {
     if ($Action -ne 'exit') { Assert ((Receive-Controller).phase -ceq 'closed') 'Node close was not acknowledged' }
     Assert ($controller.WaitForExit(15000) -and $controller.ExitCode -eq 0 -and
         $bridge.WaitForExit(15000)) 'Original Node controller or bridge survived completion'
-    if ($Action -in @('retire', 'replace', 'replace-refused')) {
+    if ($Action -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument')) {
         Assert ($Owner.WaitForExit(15000) -and $Owner.ExitCode -eq 0) 'Original task owner did not retire cleanly'
         $task = $scheduler.GetFolder('\').GetTask($TaskName)
         Assert (-not $task.Enabled -and $task.GetInstances(0).Count -eq 0) 'Retirement released inhibition or left a task instance'
