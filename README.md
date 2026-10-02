@@ -184,8 +184,11 @@ bind time, including the exact dual-stack wildcard pair. Foreign listeners,
 same-process rebinds and independently created same-process wildcard pairs
 are refused. Controller-side HTTP readiness and the full 24-job shared-readiness
 regression passed at `839ac62`, including saved Linux restore and real Windows
-application/data checks. Health-gated
-permanent task-policy restoration and lease release are not yet accepted.
+application/data checks. Health-gated permanent task-policy restoration and
+original-peer lease release passed native update/restore, custom-permission,
+originally-disabled and changed-state cases at `f7c5e19`; its full regression
+is pending. Cold completion/reopening and public Windows integration remain
+unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

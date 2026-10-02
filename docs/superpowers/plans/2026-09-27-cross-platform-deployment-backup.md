@@ -8238,6 +8238,13 @@ The installed helper inventory remains nine files.
   Cold policy mutation and evidence retirement still need their own original
   task/instance/receipt/lock admission; lease status alone never authorizes them.
 
+Task 5AC causal `2748d88` / `37011600468` is queued behind the preserved
+Task 5AB full regression. The local implementation adds only read-only lease
+observation and strict string reply capture, preserving all existing control
+constructors and domain-observation fields. The native domain fixture with
+no observer explicitly refuses the query instead of reporting `unguarded`.
+The implementation remains unpublished until the causal result is captured.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

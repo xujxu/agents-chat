@@ -145,7 +145,8 @@ namespace Deployment
                         host.commandFile, host.commandArguments, host.commandDirectory, host.commandEnvironment);
                     stage = "publication";
                     host.control = new WindowsRuntimeControl(host.domain, generation, host.Check,
-                        host.lease == null ? null : new Func<int, bool>(host.lease.TryRelease));
+                        host.lease == null ? null : new Func<int, bool>(host.lease.TryRelease),
+                        () => host.lease == null ? "unguarded" : host.lease.Observe());
                     host.Check();
                     host.Publish(helpers, host.configurationSha256, generation);
                     stage = "control";

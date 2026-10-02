@@ -21,6 +21,7 @@ namespace Deployment
         readonly int ownerPid;
         readonly Action check;
         readonly Func<int, bool> release;
+        readonly Func<string> observeLease;
         bool running, disposed;
 
         public WindowsRuntimeControl(WindowsRuntimeDomain domain, Guid generation)
@@ -30,6 +31,10 @@ namespace Deployment
             : this(domain, generation, check, null) { }
 
         public WindowsRuntimeControl(WindowsRuntimeDomain domain, Guid generation, Action check, Func<int, bool> release)
+            : this(domain, generation, check, release, null) { }
+
+        public WindowsRuntimeControl(WindowsRuntimeDomain domain, Guid generation, Action check,
+            Func<int, bool> release, Func<string> observeLease)
         {
             if (domain == null || generation == Guid.Empty ||
                 domain.Name != @"Local\agents-deploy-" + generation.ToString("D"))
@@ -38,6 +43,7 @@ namespace Deployment
             this.generation = generation.ToString("D");
             this.check = check;
             this.release = release;
+            this.observeLease = observeLease;
             ownerPid = Environment.ProcessId;
             ownerIdentity = WindowsWorkerJob.ProcessIdentity(ownerPid);
             pipe = WindowsRuntimePipe.Create(generation);
@@ -69,7 +75,11 @@ namespace Deployment
         }
         static bool Method(string method)
         {
-            return method == "observe" || method == "stop" || method == "retire" || method == "release";
+            return method == "observe" || method == "stop" || method == "retire" || method == "release" || method == "lease";
+        }
+        static bool LeaseState(string state)
+        {
+            return state == "unguarded" || state == "guarded" || state == "released";
         }
         static async Task<string> ReadFrame(PipeStream stream, int maximum, CancellationToken token)
         {
@@ -154,7 +164,18 @@ namespace Deployment
 
             if (check != null) check();
             object result;
-            if (method == "release")
+            if (method == "lease")
+            {
+                if (observeLease == null)
+                {
+                    await Refuse("unavailable-activation-lease-observation").ConfigureAwait(false);
+                    return false;
+                }
+                string state = observeLease();
+                if (!LeaseState(state)) throw new InvalidDataException("Invalid original activation lease observation.");
+                result = state;
+            }
+            else if (method == "release")
             {
                 if (release == null || domain.Observe().phase == "stopped")
                 {
@@ -217,6 +238,12 @@ namespace Deployment
 
         static string CaptureResult(JsonElement result, string method)
         {
+            if (method == "lease")
+            {
+                if (result.ValueKind != JsonValueKind.String || !LeaseState(result.GetString()))
+                    throw new InvalidDataException("Invalid runtime lease reply.");
+                return result.GetString();
+            }
             if (method == "retire" || method == "release")
             {
                 string expected = method == "retire" ? "retired" : "released";

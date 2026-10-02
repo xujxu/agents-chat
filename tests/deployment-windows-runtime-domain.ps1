@@ -200,6 +200,9 @@ if (process.argv[2] === 'child') {
             $request.generation = $generation.ToString('D')
             $request.method = 'retire'
             Assert ((Raw-Request $identity $generation ($request | ConvertTo-Json -Compress)) -ceq 'refused') 'Control protocol retired a running domain'
+            $request.method = 'lease'
+            Assert ((Raw-Request $identity $generation ($request | ConvertTo-Json -Compress)) -ceq 'refused') `
+                'Missing lease observer was silently treated as unguarded'
             $request.method = 'observe'
             $delayed = Raw-Request $identity $generation ($request | ConvertTo-Json -Compress) 500 | ConvertFrom-Json
             Assert ($delayed.result.phase -eq 'root-exited' -and $delayed.requestId -ceq $request.requestId) 'Control server discarded a reply before the client read it'

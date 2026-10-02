@@ -86,6 +86,16 @@ namespace Deployment
             }
         }
 
+        public string Observe()
+        {
+            lock (gate)
+            {
+                if (disposed) throw new ObjectDisposedException("Runtime activation lease");
+                if (!released) RequireOwner();
+                return released ? "released" : "guarded";
+            }
+        }
+
         public void Dispose()
         {
             lock (gate)
