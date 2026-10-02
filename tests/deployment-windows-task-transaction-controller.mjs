@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { acquireLock, writeState, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
 import { stopWindowsTaskTransaction } from '../scripts/deployment/windows-task-transaction.mjs';
+import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
+import { saveRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
+import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 
 const [pwsh, control, project, operation] = process.argv.slice(2);
 assert.ok(['update', 'restore'].includes(operation));
@@ -81,6 +84,28 @@ await assert.rejects(releaseLock(control, lock, { pwsh }), /maintenance/i);
 assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
 console.log(JSON.stringify({ phase: 'stopped', bridge: context.identity }));
 const { action, configuration, sha256 } = await receive();
+let workerOperation;
+if (action === 'activate-complete-retirement') {
+  const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
+  const saved = await saveWorkerEngine({ source, control, project, operationId: lock.operationId });
+  await saveRecoveryEngine({ source, control });
+  const script = `
+    $ErrorActionPreference='Stop'
+    @{accountSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;
+      sessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId}|ConvertTo-Json -Compress
+  `;
+  const { stdout } = await promisify(execFile)(pwsh,
+    ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+    { timeout: 30000, maxBuffer: 4096 });
+  workerOperation = await createWorkerOperation({ control, lock, saved });
+  const result = await workerOperation.run({
+    workerId: randomUUID(), runtime: { pwsh, ...JSON.parse(stdout) },
+    command: { file: process.execPath, args: ['-e', 'process.stdout.write("worker-settled")'], cwd: project,
+      env: Object.fromEntries(Object.entries(process.env).filter(([key]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))) },
+  });
+  assert.equal(result.stdout, 'worker-settled');
+  await workerOperation.seal();
+}
 if (action === 'exit') process.exit(0);
 if (action === 'activate-early') {
   await assert.rejects(context.activate(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
@@ -174,5 +199,6 @@ if (action === 'activate-early') {
   assert.equal(action, 'close');
   await context.close();
 }
+await workerOperation?.close();
 console.log(JSON.stringify({ phase: 'closed' }));
 process.exit(0);

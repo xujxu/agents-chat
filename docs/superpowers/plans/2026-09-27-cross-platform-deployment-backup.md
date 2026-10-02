@@ -10141,6 +10141,127 @@ completed proof `111051146735` and actual Windows application `111051146416`
 also passed. This accepts the OS primitive only; the transaction still
 retains its empty directory until durable worker/final-unlock handoff exists.
 
+### Task 5AO: one native deployment-retirement manifest through final unlock
+
+Reuse `worker-retirement.json` as the durable handoff, with a distinct Windows
+version 3 schema. Do not add another task-directory marker or another lock.
+The old version 2 Linux/live-worker path remains unchanged. Publication
+requires the actual task-retirement scope at prefix 23, a sealed original
+worker operation, settled journals and the original saved helper manifest.
+
+**Files and boundaries:**
+- `scripts/deployment/windows-deployment-retirement-record.mjs`: strict
+  immutable version 3 manifest/observation capture.
+- `scripts/deployment/windows-deployment-retirement-evidence.mjs`: reuse
+  `readWorkerOperation`, `readWorkerJournal` and `verifyWorkerEngine` while
+  native handles retain their original files. Compare the operation lock
+  with the task checkpoint's original lock; require sealed/settled records.
+- `scripts/deployment/windows-deployment-retirement.ps1`: retain original
+  private worker evidence, publish the checked manifest, reopen its exact
+  prefix, retain the original runtime, and retire its next fixed entry.
+- `scripts/deployment/windows-task-completion-controller.ps1` and
+  `scripts/deployment/windows-task-completion-proof.mjs`: explicit
+  same-controller handoff and a separate cold deployment-retirement mode.
+  Preserve full-proof and task-retirement facade isolation.
+- Saved worker implementation/test inventories: include the new helpers;
+  the independent recovery closure already includes the worker helper set.
+- `tests/deployment-windows-task-transaction-controller.mjs`: only the
+  receipt-retirement scenarios create/run/seal a genuine original worker
+  operation and save an independent recovery engine; close without deleting
+  its evidence when the original controller exits.
+- `tests/deployment-windows-deployment-retirement.mjs`: live handoff,
+  crash/reopen from independent recovery helpers after worker helpers have
+  disappeared, corrupted inventory refusal, complete cleanup and new-lock
+  admission. Invoke after existing receipt-retirement assertions.
+
+- [ ] **Step 1: establish genuine worker evidence and capture missing API.**
+
+  Under the original operation lock, save worker/recovery engines and use
+  `createWorkerOperation` to run an actual Windows Job command. Require its
+  output, seal the operation before application acceptance, and close it
+  before the original Node controller acknowledges exit. Do not fabricate
+  settled JSON or use a new operation ID. After genuine task completion and
+  receipt cleanup, require:
+
+  ```javascript
+  for (const name of ['beginWindowsDeploymentRetirement',
+    'openWindowsDeploymentRetirement', 'retireNextWindowsDeploymentEntry']) {
+    assert.equal(typeof api[name], 'function');
+  }
+  ```
+
+- [ ] **Step 2: retain, validate and publish one native manifest.**
+
+  First retain private worker-operation/journal files, the helper directory
+  and every original helper/manifest file under the existing native task
+  scope. Reject unknown inventory, live original owners, unsealed operations,
+  unsettled journals, wrong locks and changed helper manifests. Run the
+  existing complete Node validators before publication while native read
+  handles exclude writes/replacements; do not duplicate their state machines
+  or trust an input Boolean.
+
+  The private atomic manifest has exact fields:
+
+  ```text
+  version: 3
+  control: canonical original control path
+  task: original prepared task-retirement checkpoint (including its intent)
+  workerManifestSha256: original saved worker manifest digest
+  entries: ordered native file/directory descriptors
+  creator: original current Node/native PID and creation-identity pairs
+  ```
+
+  File entries add `kind:'file'` to the existing exact file descriptor.
+  Directory entries are `{kind:'directory',path,dev,ino}`. The fixed order
+  is empty `task-maintenance`, enrolled worker journals, saved helper files
+  and their manifest, empty `worker-engine`, `worker-operation.ndjson`,
+  `task-retirement.json`, `task-retirement-checkpoint.json`, `lock\owner.json`,
+  and empty `lock`. No caller-supplied deletion path or count.
+
+- [ ] **Step 3: hand off the same native controller and reopen only its prefix.**
+
+  Open/check the deployment-retirement scope from the published manifest
+  before closing the task-retirement scope. The old facade must thereafter
+  refuse check/close/mutation without closing the transferred controller.
+  The new scope retains original control/state, manifest, remaining entry
+  handles, installed runtime bundle, exact policy/instance/lease/listener and
+  original process identities.
+
+  A cold scope reads only the private version 3 manifest and surviving
+  prefix entries, not already-deleted task markers or helper files. Its
+  embedded task checkpoint supplies the already-verified runtime facts.
+  Require original creators absent unless both identities match the current
+  Node/native pair. Reject holes, reappearing entries, identity/ACL/content
+  changes and unknown files in the owned namespaces.
+
+- [ ] **Step 4: retire exact entries and commit cleanup by removing the manifest.**
+
+  Check original runtime and remaining inventory before/after each mutation.
+  Release only the target's read handle and use the accepted native file or
+  directory retirement factory. Windows must reject nonempty directories.
+  Preserve state and the independent recovery engine. Do not call ordinary
+  `assertLockOwner` with a dead PID or invent an ownership bypass.
+
+  The Node API returns exact immutable
+  `{status,retiredEntries,manifest:{descriptor,record}}`. Status is
+  `retiring-deployment` until every listed entry is retired. A final next
+  request rechecks original authority, deletes only the retained manifest,
+  closes the native scope and returns `status:'retired'` with the unchanged
+  entry count. Keep admission held until acknowledgement/child settlement.
+  A missing manifest alone is not permission to adopt another runtime.
+
+- [ ] **Step 5: accept the whole handoff and genuine three-scenario regression.**
+
+  A held child begins deployment retirement and deletes seven entries, so
+  the maintenance directory and part of the original worker helper closure
+  are gone. Terminate that specific child; reopen with the independent
+  recovery module, require the same manifest/prefix, reject a later hole
+  and same-byte replacement, and finish every entry plus manifest commit.
+  Require unchanged state and live original runtime, no task/worker/lock
+  artifacts, and successful fresh ordinary acquire/release. Keep all previous
+  receipt-retirement assertions. Run update/restore/disabled scenarios and
+  preserve the full Actions regression before claiming final unlock.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

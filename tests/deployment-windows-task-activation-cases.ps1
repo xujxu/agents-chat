@@ -196,6 +196,8 @@ try {
             $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
             & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-task-retirement.mjs') $Control $pwsh
             Assert ($LASTEXITCODE -eq 0) 'Native checkpoint-backed receipt retirement failed'
+            & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-deployment-retirement.mjs') $Control $pwsh
+            Assert ($LASTEXITCODE -eq 0) 'Native deployment retirement and final unlock failed'
         }
         $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
             $runtime.pid, $runtime.identity, 'observe', 15000) | ConvertFrom-Json
