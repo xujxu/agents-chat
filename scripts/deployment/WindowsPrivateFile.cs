@@ -38,6 +38,16 @@ namespace Deployment
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr attributes,
             uint creation, uint flags, IntPtr template);
+        [StructLayout(LayoutKind.Sequential)]
+        struct SecurityAttributes
+        {
+            public int Length;
+            public IntPtr Descriptor;
+            public int Inherit;
+        }
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool CreateDirectoryW(string name, ref SecurityAttributes attributes);
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool GetFileInformationByHandle(SafeFileHandle file, out FileInformation information);
@@ -142,7 +152,7 @@ namespace Deployment
                 !String.Equals(Path.GetFullPath(file), file, StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("A canonical local configuration file path is required.");
         }
-        static WindowsPrivateFile PublicationDirectory(string directory)
+        static WindowsPrivateFile PublicationDirectory(string directory, bool requirePrivate = true)
         {
             var parent = new WindowsPrivateFile { file = directory };
             try
@@ -160,7 +170,7 @@ namespace Deployment
                     !String.Equals(parent.FinalPath(), directory, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Private publication directory is redirected.");
                 RawSecurityDescriptor security = parent.Security();
-                RequirePrivate(security);
+                if (requirePrivate) RequirePrivate(security);
                 parent.metadata = information.DirectoryIdentity();
                 parent.security = Descriptor(security);
                 return parent;
@@ -176,6 +186,63 @@ namespace Deployment
             if (Information().DirectoryIdentity() != metadata ||
                 !String.Equals(FinalPath(), file, StringComparison.OrdinalIgnoreCase) || Descriptor(Security()) != security)
                 throw new InvalidDataException("Private publication directory changed.");
+        }
+        public sealed class DirectoryLease : IDisposable
+        {
+            readonly WindowsPrivateFile directory;
+            internal DirectoryLease(WindowsPrivateFile directory) { this.directory = directory; }
+            public void Check()
+            {
+                if (directory.disposed) throw new ObjectDisposedException("Private directory");
+                directory.CheckPublicationDirectory();
+            }
+            public void Dispose() { directory.Dispose(); }
+        }
+        public static DirectoryLease OpenDirectory(string directory)
+        {
+            RequirePath(directory);
+            return new DirectoryLease(PublicationDirectory(directory));
+        }
+        public static DirectoryLease CreateDirectory(string directory)
+        {
+            RequirePath(directory);
+            using (WindowsPrivateFile parent = PublicationDirectory(Path.GetDirectoryName(directory), false))
+            {
+                var security = new DirectorySecurity();
+                using (WindowsIdentity account = WindowsIdentity.GetCurrent())
+                {
+                    security.SetOwner(account.User);
+                    security.SetAccessRuleProtection(true, false);
+                    foreach (SecurityIdentifier sid in new[] {
+                        account.User, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null)
+                    })
+                        security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl,
+                            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                            PropagationFlags.None, AccessControlType.Allow));
+                }
+                GCHandle descriptor = GCHandle.Alloc(security.GetSecurityDescriptorBinaryForm(), GCHandleType.Pinned);
+                try
+                {
+                    parent.CheckPublicationDirectory();
+                    var attributes = new SecurityAttributes {
+                        Length = Marshal.SizeOf<SecurityAttributes>(), Descriptor = descriptor.AddrOfPinnedObject(), Inherit = 0
+                    };
+                    Native(CreateDirectoryW(directory, ref attributes), "Create original private directory");
+                }
+                finally { descriptor.Free(); }
+                DirectoryLease created = OpenDirectory(directory);
+                try
+                {
+                    parent.CheckPublicationDirectory();
+                    created.Check();
+                    return created;
+                }
+                catch
+                {
+                    created.Dispose();
+                    throw;
+                }
+            }
         }
         public static WindowsPrivateFile Publish(string file, string text)
         {

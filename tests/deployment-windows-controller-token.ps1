@@ -7,12 +7,13 @@ $source = Join-Path $PSScriptRoot '../scripts/deployment'
 Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsPrivateFile.cs'),
     (Join-Path $PSScriptRoot 'WindowsControllerTokenProbe.cs'))
 $node = (Get-Command node).Source
-$root = Join-Path ([IO.Path]::GetTempPath()) "agents-token-owner-$([guid]::NewGuid()) space"
+$parent = & $node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" ([IO.Path]::GetTempPath())
+Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize controller-token fixture parent'
+$root = Join-Path $parent "agents-token-owner-$([guid]::NewGuid()) space"
 $job = $null
-New-Item -ItemType Directory -Path $root | Out-Null
+$rootLease = $null
 try {
-    $root = & $node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" $root
-    Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize controller-token fixture'
+    $rootLease = [Deployment.WindowsPrivateFile]::CreateDirectory($root)
     Copy-Item -LiteralPath (Join-Path $source 'WindowsWorkerJob.cs') -Destination (Join-Path $root 'WindowsWorkerJob.cs')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'deployment-windows-controller-token-child.ps1') -Destination (Join-Path $root 'child.ps1')
     @'
@@ -28,13 +29,14 @@ if (!child) {
   assert.equal(result.status, 0);
 }
 '@ | Set-Content -LiteralPath (Join-Path $root 'writer.cjs')
-    & (Join-Path $PSScriptRoot 'deployment-windows-private-control.ps1') -Control $root
+    $rootLease.Check()
     $job = [Deployment.WindowsWorkerJob]::Create([guid]::NewGuid())
     $owner = [DeploymentTests.WindowsControllerTokenProbe]::Run(
         [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
         (Join-Path $root 'child.ps1'), (Join-Path $root 'WindowsWorkerJob.cs'), $node, $root, $job.Name,
         $PID, [Deployment.WindowsWorkerJob]::ProcessIdentity($PID))
     Assert (@($job.Members()).Count -eq 0) 'Original token fixture Job is not empty'
+    $rootLease.Check()
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
     foreach ($name in @('node-root.json', 'node-child.json')) {
         $file = Join-Path $root $name
@@ -56,5 +58,8 @@ if (!child) {
         }
         $job.Dispose()
     }
-    Remove-Item -LiteralPath $root -Recurse -Force
+    if ($rootLease) {
+        $rootLease.Dispose()
+        Remove-Item -LiteralPath $root -Recurse -Force
+    }
 }

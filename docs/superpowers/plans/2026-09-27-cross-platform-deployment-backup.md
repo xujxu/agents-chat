@@ -7273,9 +7273,12 @@ Native API references used for this bounded premise:
 - `https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-settokeninformation`
 - `https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithtokenw`
 
-Test-only `f92ca3c` / `36949355622` is running after the accepted full
-regression. Native job `110660746815` has not yet reached the copied-token
-probe. No production bootstrap or private-creation behavior has changed.
+Test-only `f92ca3c` / `36949355622`, native `110660746815`, passed all
+preceding native cases but failed the copied-token probe with
+`Invalid token information size.` The premise is unverified. Add bounded
+information-class/length/native-error diagnostics, not relaxed validation.
+The characterized failed run was cancelled so the queued directory causal
+`6d15fdc` / `36950325029` can proceed. No production token bootstrap exists.
 
 #### Task 5P: create and retain a private Windows control directory
 
@@ -7310,6 +7313,20 @@ this source, so no new dependency path is needed.
 - [ ] Run native acceptance and full Actions regression. Neither this helper
   nor the copied-token probe alone is a production bootstrap or public
   Windows deployment acceptance.
+
+The local implementation also retains/rechecks the canonical existing parent
+before creating a child, refusing junction redirection before any creation.
+The parent need not be private; the new child always receives its explicit
+protected DACL. Token fixture setup will use this native root creation instead
+of its permission-repair helper, retaining the root across the child lifetime.
+
+Causal `6d15fdc` / `36950325029`, native `110662059027`, failed exactly on
+missing `WindowsPrivateFile.CreateDirectory` after preceding native cases.
+The implementation is ready for Actions, including canonical parent retention,
+explicit creation-time security, separate directory opening, collision/refusal
+coverage and token-probe setup without fixture ACL repair. Token sizing still
+requires actual diagnostic evidence; no caller privileges or privacy checks
+have been relaxed.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

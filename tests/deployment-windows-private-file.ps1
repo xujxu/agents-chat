@@ -117,6 +117,7 @@ try {
     New-Item -ItemType Junction -Path $publicationLink -Target $publicDirectory | Out-Null
     Refuses { [Deployment.WindowsPrivateFile]::Publish((Join-Path $publicationLink 'intent.json'), '{}') } 'Private publication directory is redirected.'
     Refuses { [Deployment.WindowsPrivateFile]::OpenDirectory($publicationLink) } 'Private publication directory is redirected.'
+    Refuses { [Deployment.WindowsPrivateFile]::CreateDirectory((Join-Path $publicationLink 'refused')) } 'Private publication directory is redirected.'
     Assert (@(Get-ChildItem -LiteralPath $publicDirectory).Count -eq 0) 'Redirected publication admitted a write'
     Remove-Item -LiteralPath $publicationLink -Force
     Write-Output 'PASS: atomic private publication retains exact evidence, refuses replacement and validates content and parent before writing'

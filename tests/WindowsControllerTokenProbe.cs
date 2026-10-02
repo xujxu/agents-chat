@@ -55,8 +55,10 @@ namespace DeploymentTests
         {
             int needed;
             bool sized = GetTokenInformation(token, type, IntPtr.Zero, 0, out needed);
-            if (sized || Marshal.GetLastWin32Error() != 122 || needed < (sid ? IntPtr.Size : 4) || needed > 65536)
-                throw new InvalidOperationException("Invalid token information size.");
+            int error = Marshal.GetLastWin32Error();
+            if (sized || error != 122 || needed < (sid ? IntPtr.Size : 4) || needed > 65536)
+                throw new InvalidOperationException("Invalid token information size: class=" + type +
+                    ", bytes=" + needed + ", error=" + error + ", returned=" + sized + ".");
             IntPtr data = Marshal.AllocHGlobal(needed);
             try
             {
