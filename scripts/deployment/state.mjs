@@ -351,18 +351,20 @@ export async function releaseLock(root, owner) {
 
 export async function requireNoServiceMaintenance(directory, { allowLiveRetirement = false } = {}) {
   if ((await readdir(directory)).some(name => name.startsWith('service-')
+    || name === 'task-maintenance'
     || !allowLiveRetirement && name === 'live-retirement.json')) {
-    throw new Error('Service maintenance evidence requires explicit service recovery before this operation.');
+    throw new Error('Service or task maintenance evidence requires explicit runtime recovery before this operation.');
   }
 }
 
 export async function reconcileInterruptedOperation(root) {
   const directory = await ownedDirectory(root);
   const state = await loadState(directory);
-  if ((await readdir(directory)).some(name => name.startsWith('service-') || name === 'live-retirement.json')) {
+  if ((await readdir(directory)).some(name => name.startsWith('service-') || name === 'live-retirement.json'
+    || name === 'task-maintenance')) {
     return {
       status: 'blocked', operationId: state?.operationId ?? null, phase: state?.phase ?? null,
-      message: 'Service maintenance evidence exists. Retain lock and inhibition; inspect before restart or recovery.',
+      message: 'Service or task maintenance evidence exists. Retain lock and inhibition; inspect before restart or recovery.',
     };
   }
   let recoveryExists = true;

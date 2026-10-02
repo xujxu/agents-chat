@@ -21,7 +21,7 @@ async function boundedExit(exited) {
   } finally { clearTimeout(timer); }
 }
 
-export async function stopWindowsTask({ pwsh, admission, sha256, signal }) {
+export async function stopWindowsTask({ pwsh, admission, sha256, signal, transaction }) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![pwsh, admission].every(value =>
     typeof value === 'string' && path.isAbsolute(value) && !/[\0\r\n]/.test(value))
@@ -31,10 +31,21 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal }) {
   }
   const controllerIdentity = await processIdentity(process.pid);
   if (!controllerIdentity) throw uncertain(new Error('Original Node controller identity is unavailable.'));
+  let reference;
+  if (transaction !== undefined) {
+    reference = captureWorkerFields(transaction, ['control', 'lockSha256', 'stateSha256'], 'task transaction reference');
+    if (typeof reference.control !== 'string' || !path.isAbsolute(reference.control)
+      || /[\0\r\n]/.test(reference.control) || admission !== path.join(reference.control, 'task-maintenance', 'admission.json')
+      || ![reference.lockSha256, reference.stateSha256].every(value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value))) {
+      throw uncertain(new Error('Invalid native task transaction reference.'));
+    }
+  }
   signal?.throwIfAborted();
   const child = spawn(pwsh, ['-NoProfile', '-NonInteractive', '-File', script,
     '-Admission', admission, '-Sha256', sha256, '-ControllerPid', String(process.pid),
     '-ControllerIdentity', controllerIdentity,
+    ...(reference ? ['-Control', reference.control, '-LockSha256', reference.lockSha256,
+      '-StateSha256', reference.stateSha256] : []),
   ], { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
     env: Object.fromEntries(Object.entries(process.env)
       .filter(([key]) => !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase()))),
@@ -66,9 +77,10 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal }) {
   };
   try {
     const ready = captureWorkerFields(await wire.receive({ signal, timeoutMs: 60000 }),
-      ['type', 'pid', 'processIdentity', 'admissionSha256', 'stopped', 'inhibited'], 'task controller readiness');
+      ['type', 'pid', 'processIdentity', 'admissionSha256', 'stopped', 'inhibited', 'transactionSha256'], 'task controller readiness');
     if (ready.type !== 'ready' || ready.pid !== child.pid || ready.admissionSha256 !== sha256
       || ready.stopped !== true || ready.inhibited !== true
+      || ready.transactionSha256 !== (reference?.lockSha256 ?? null)
       || ready.processIdentity !== await processIdentity(child.pid)) {
       throw new Error('Original native task controller readiness differs.');
     }

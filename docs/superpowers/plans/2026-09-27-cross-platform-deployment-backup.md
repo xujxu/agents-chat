@@ -7181,6 +7181,11 @@ fixture and its private-control fixture helper; extend existing host scenarios.
   fields bind operation, project, original runtime generation, running prior
   role and original start time. Refuse wrong phase, foreign ACL, replaced lock
   and changed transaction identity before publishing a stop intent.
+- [ ] After original task admission, publish an immutable `transaction.json`
+  binding original lock/initial-state digests to admission, operation, project,
+  controller and runtime generation. Transactional stop receipts are version 2
+  and each references that binding digest. Existing nontransactional version 1
+  native receipts remain unchanged.
 - [ ] Every stop-context check reopens current private state, permits only
   supported forward maintenance phase transitions, and rechecks original lock
   and configuration. Native admission also checks exact initial state digest.

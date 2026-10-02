@@ -2,13 +2,17 @@ param(
     [Parameter(Mandatory)][string]$Admission,
     [Parameter(Mandatory)][string]$Sha256,
     [Parameter(Mandatory)][int]$ControllerPid,
-    [Parameter(Mandatory)][string]$ControllerIdentity
+    [Parameter(Mandatory)][string]$ControllerIdentity,
+    [string]$Control,
+    [string]$LockSha256,
+    [string]$StateSha256
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $retained = $null
 $context = $null
 $watch = $null
+$transaction = $null
 $stage = 'bootstrap'
 try {
     if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7) { throw 'Unsupported bridge platform.' }
@@ -16,6 +20,7 @@ try {
         (Join-Path $PSScriptRoot 'WindowsRuntimePipe.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeControl.cs'),
         (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-maintenance.ps1')
+    . (Join-Path $PSScriptRoot 'windows-task-transaction.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwner($ControllerPid, $ControllerIdentity)
     $retained = [Deployment.WindowsPrivateFile]::Open($Admission, $Sha256)
@@ -25,11 +30,21 @@ try {
         'ownerPid', 'ownerIdentity', 'generation', 'instanceGuid')
     if ($fields.controllerPid.GetInt32() -ne $ControllerPid -or
         $fields.controllerIdentity.GetString() -cne $ControllerIdentity) { throw 'Original controller differs.' }
+    $stage = 'transaction'
+    if ($Control -or $LockSha256 -or $StateSha256) {
+        if (-not $Control -or -not $LockSha256 -or -not $StateSha256 -or
+            $Admission -cne (Join-Path $Control 'task-maintenance/admission.json')) {
+            throw 'Incomplete native transaction admission.'
+        }
+        $transaction = Open-AgentsChatTaskTransaction -Control $Control -LockSha256 $LockSha256 `
+            -StateSha256 $StateSha256 -AdmissionFields $fields
+    }
     $stage = 'stop'
-    $context = Stop-AgentsChatManagedTask -Admission $Admission -Sha256 $Sha256
+    $context = Stop-AgentsChatManagedTask -Admission $Admission -Sha256 $Sha256 -Transaction $transaction
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
         admissionSha256=$Sha256; stopped=$true; inhibited=$true
+        transactionSha256=$(if ($transaction) { $LockSha256 } else { $null })
     } | ConvertTo-Json -Compress))
     [Console]::Out.Flush()
     $sequence = 0
@@ -51,6 +66,7 @@ try {
             $context = $null
             $retained.Dispose()
             $retained = $null
+            if ($transaction) { Close-AgentsChatTaskTransaction $transaction; $transaction = $null }
         }
         [Console]::Out.WriteLine((@{ id=$id; type='reply'; value=$method } | ConvertTo-Json -Compress))
         [Console]::Out.Flush()
@@ -62,5 +78,6 @@ try {
 } finally {
     if ($context) { Close-AgentsChatTaskMaintenance -Context $context }
     if ($retained) { $retained.Dispose() }
+    if ($transaction) { Close-AgentsChatTaskTransaction $transaction }
     if ($watch) { $watch.Dispose() }
 }

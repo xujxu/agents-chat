@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -40,7 +40,21 @@ await assert.rejects(stopWindowsTaskTransaction(options));
 assert.deepEqual(await readdir(path.dirname(admission.admission)), ['admission.json']);
 await secure();
 await assert.rejects(stopWindowsTaskTransaction({ ...options, lock: { ...lock, token: randomUUID() } }));
+const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const stateDigest = hash(await readFile(path.join(control, 'state.json')));
 const context = await stopWindowsTaskTransaction(options);
+const evidenceBytes = await readFile(path.join(path.dirname(admission.admission), 'transaction.json'));
+const evidence = JSON.parse(evidenceBytes);
+assert.equal(evidence.lockSha256, hash(await readFile(path.join(control, 'lock', 'owner.json'))));
+assert.equal(evidence.initialStateSha256, stateDigest);
+assert.equal(hash(Buffer.from(evidence.initialState)), stateDigest);
+assert.equal(evidence.admissionSha256, admission.sha256);
+assert.equal(evidence.operationId, lock.operationId);
+for (const phase of ['intent', 'inhibited', 'stop-requested', 'stopped']) {
+  const receipt = JSON.parse(await readFile(path.join(path.dirname(admission.admission), `task-stop-${phase}.json`)));
+  assert.equal(receipt.version, 2);
+  assert.equal(receipt.transactionSha256, hash(evidenceBytes));
+}
 await assert.rejects(writeFile(path.join(control, 'lock', 'owner.json'), 'changed'));
 state = { ...state, phase: 'copying', previousPhase: 'stopped' };
 await writeState(control, state);

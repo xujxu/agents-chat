@@ -26,6 +26,8 @@ function Get-AgentsChatMaintenanceBinding([hashtable]$Context) {
 
 function Test-AgentsChatMaintenanceContext([hashtable]$Context, [bool]$Stopped) {
     if ($Context.Closed -or $Context.Poisoned) { throw 'Unavailable maintenance context.' }
+    $Context.Stage = 'transaction'
+    if ($Context.Transaction) { Assert-AgentsChatTaskTransaction $Context.Transaction }
     $Context.Stage = 'identity'
     if ($Context.Controller.HasExited -or $Context.Owner.HasExited -or
         [Deployment.WindowsWorkerJob]::ProcessIdentity($Context.Controller.Id) -cne $Context.Data.controllerIdentity -or
@@ -48,17 +50,25 @@ function Test-AgentsChatMaintenanceContext([hashtable]$Context, [bool]$Stopped) 
     foreach ($file in $Context.Files) { $file.Check() }
     $Context.Stage = 'binding'
     $null = Get-AgentsChatMaintenanceBinding $Context
+    $Context.Stage = 'transaction'
+    if ($Context.Transaction) { Assert-AgentsChatTaskTransaction $Context.Transaction }
 }
 
 function Write-AgentsChatTaskStopReceipt([hashtable]$Context, [string]$Phase) {
     Test-AgentsChatMaintenanceContext $Context $Context.Stopped
     $Context.Stage = 'receipt'
+    if ($Context.Transaction -and $Phase -ceq 'intent') {
+        $binding = Write-AgentsChatTaskTransactionEvidence $Context
+        $Context.Files.Add($binding)
+        $Context.Transaction.ReceiptSha256 = $binding.Sha256
+    }
     $record = [ordered]@{
-        version=1; phase=$Phase; operationId=$Context.Data.operationId
+        version=$(if ($Context.Transaction) { 2 } else { 1 }); phase=$Phase; operationId=$Context.Data.operationId
         admissionSha256=$Context.AdmissionSha256; previousSha256=$Context.PreviousSha256
         instanceGuid=$Context.Data.instanceGuid; definition=$Context.Definition
         securityDescriptor=$Context.Data.securityDescriptor
     }
+    if ($Context.Transaction) { $record.transactionSha256 = $Context.Transaction.ReceiptSha256 }
     $file = Join-Path $Context.Directory "task-stop-$Phase.json"
     $retained = [Deployment.WindowsPrivateFile]::Publish($file, ($record | ConvertTo-Json -Depth 4 -Compress))
     $Context.Files.Add($retained)
@@ -123,7 +133,8 @@ function Stop-AgentsChatManagedTask {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$Admission,
-        [Parameter(Mandatory)][string]$Sha256
+        [Parameter(Mandatory)][string]$Sha256,
+        [hashtable]$Transaction
     )
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
@@ -132,6 +143,7 @@ function Stop-AgentsChatManagedTask {
         Controller=$null; Owner=$null; Folder=$null; Data=$null
         Closed=$false; Poisoned=$false; Busy=$false; Stopped=$false; Inhibited=$false
         AdmissionSha256=$Sha256; PreviousSha256=$Sha256; Definition=$null; LauncherPid=0
+        Transaction=$Transaction
         Directory=[IO.Path]::GetDirectoryName($Admission)
     }
     try {
