@@ -7881,33 +7881,33 @@ real Windows application and all Linux lifecycle jobs also passed.
 context and Node/native controller protocol; explicit saved-worker closure;
 new focused activation fixture driver and existing transaction/host fixtures.
 
-- [ ] Add actual update/restore activation, controller-abandonment and premature
+- [x] Add actual update/restore activation, controller-abandonment and premature
   activation refusal cases. Use `await context.activate()` after retirement and
   replacement, recheck idempotence, retain actual new owner/member handles,
   and require their settlement when the unreleased bridge closes or loses its
   original Node controller. This tests activation mechanics, not application
   health or source/build completion.
-- [ ] Before startup, record and register a disabled staging definition:
+- [x] Before startup, record and register a disabled staging definition:
   same admitted candidate/account/security, literal bridge PID/start identity
   in bootstrap arguments, no triggers and no restart-on-failure. Retain the
   original replacement definition for eventual policy restoration. Require
   supported demand-start and ignore-new instance policy before any mutation.
-- [ ] Publish start intent before enabling; demand-start only that exact staged
+- [x] Publish start intent before enabling; demand-start only that exact staged
   task, retain the returned native instance/original owner, then disable it
   again. Bound startup/readiness waits and refuse task/instance/configuration
   changes. Controller loss during the enabled interval cannot admit an
   unguarded runtime or automatic restart: staged startup requires its original
   bridge lease, triggers are absent and restart-on-failure is suppressed.
-- [ ] Bind private readiness to the new owner PID/start, configuration digest,
+- [x] Bind private readiness to the new owner PID/start, configuration digest,
   session, generation and Scheduler instance; verify original control endpoint
   and Job membership. Keep all old retirement and replacement evidence,
   append private requested/prepared/start-requested/running receipts, and
   return a bounded native runtime identity through `activate`.
-- [ ] Dispatch active checks separately from retired/zero-instance checks.
+- [x] Dispatch active checks separately from retired/zero-instance checks.
   Ordinary close must not release the runtime lease or enable restart policy;
   bridge exit settles the unverified generation. Preserve all evidence and
   inhibition on uncertainty. No health or final-success claim is introduced.
-- [ ] Capture the missing activation method in Actions, implement, and require
+- [x] Capture the missing activation method in Actions, implement, and require
   native plus full regression. Health-gated permanent policy/lease release,
   reopening/cold recovery and public Windows transaction composition remain
   subsequent work.
@@ -7992,6 +7992,17 @@ identity, checks original control/Job membership before and after observation,
 and is wired around the actual application API fixture. Implementation
 publication waits for the missing-helper causal result; no listener acceptance
 is claimed yet.
+
+`99a985e` / `37000065119` completed **24/24 success** at 11:47 UTC:
+Task 5Y, including retained original Scheduler instance and exact active-state
+digest refusal, is fully accepted. This replaces `ad311cf` as the latest full
+accepted baseline.
+
+Task 5Z causal `49f073d` / `37001596831`, native `110824355280`, failed
+exactly at the missing `WindowsRuntimeListener.cs` Add-Type input before
+creating a task. The result was captured before publishing the implementation.
+Local commits `bf1171b` and `ec8e008` implement the observer and fixture
+corrections; native plus full listener acceptance remain pending.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

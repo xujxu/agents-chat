@@ -146,7 +146,7 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `ad311cf` (run `36999643657`). This also accepts the
+creation, passed at `99a985e` (run `37000065119`). This also accepts the
 production native controller process: literal arguments and bidirectional
 stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
@@ -170,7 +170,9 @@ temporary demand-start suppresses triggers and restart-on-failure, the new
 original task/Job is bound to private readiness, and the task is disabled
 again while its runtime lease remains armed. All 24 regression jobs passed
 for this step; health-gated permanent policy restoration and transaction
-release remain incomplete.
+release remain incomplete. Active checks retain the original Scheduler
+instance as well as the process, and reject a changed activation-state digest
+before settling the unreleased generation.
 Integration into the public deployment entrypoints remains pending.
 The isolated real Windows application job also passed in that run:
 three prebuilt managed starts, authenticated chat
