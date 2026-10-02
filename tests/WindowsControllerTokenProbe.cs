@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
@@ -93,6 +94,23 @@ namespace DeploymentTests
                 throw new ArgumentException("Unsupported literal fixture argument.");
             return "\"" + value + "\"";
         }
+        static int SuspendedCreationControl(SafeAccessTokenHandle token, string pwsh, string command,
+            IntPtr environment, string cwd)
+        {
+            var startup = new Startup { cb = Marshal.SizeOf<Startup>() };
+            ProcessInformation info;
+            if (!CreateProcessWithTokenW(token, 0, pwsh, new StringBuilder(command), 0x404, environment, cwd,
+                ref startup, out info))
+                return Marshal.GetLastWin32Error();
+            using (var process = new SafeProcessHandle(info.process, true))
+            using (var thread = new SafeWaitHandle(info.thread, true))
+            {
+                Native(TerminateProcess(process, 1), "Stop suspended creation control");
+                if (WaitForSingleObject(process, 15000) != 0)
+                    throw new InvalidOperationException("Suspended creation control did not settle.");
+            }
+            return 0;
+        }
         public static string Run(string pwsh, string childScript, string source, string node,
             string root, string job, int parentPid, string parentIdentity)
         {
@@ -134,8 +152,23 @@ namespace DeploymentTests
                     {
                         var startup = new Startup { cb = Marshal.SizeOf<Startup>() };
                         ProcessInformation info;
-                        Native(CreateProcessWithTokenW(copy, 0, pwsh, command, 0x404, environment, root,
-                            ref startup, out info), "Create suspended private-owner fixture");
+                        string originalCommand = command.ToString();
+                        if (!CreateProcessWithTokenW(copy, 0, pwsh, command, 0x404, environment, root,
+                            ref startup, out info))
+                        {
+                            int error = Marshal.GetLastWin32Error();
+                            SafeAccessTokenHandle unchanged;
+                            Native(DuplicateTokenEx(original, TokenAssignPrimary | TokenDuplicate | TokenQuery | TokenAdjustDefault,
+                                IntPtr.Zero, 2, 1, out unchanged), "Duplicate unchanged creation control token");
+                            int originalOwner;
+                            using (unchanged)
+                                originalOwner = SuspendedCreationControl(unchanged, pwsh, originalCommand, environment, root);
+                            int executableDirectory = SuspendedCreationControl(copy, pwsh, originalCommand, environment,
+                                Path.GetDirectoryName(pwsh));
+                            throw new Win32Exception(error, "Create suspended private-owner fixture (Win32 " + error +
+                                "; unchanged-owner control=" + originalOwner +
+                                "; executable-directory control=" + executableDirectory + ").");
+                        }
                         using (var process = new SafeProcessHandle(info.process, true))
                         using (var thread = new SafeWaitHandle(info.thread, true))
                         {

@@ -7371,6 +7371,15 @@ Run this self-contained probe immediately after Node setup, before the
 unchanged native task cases, to expose its failure promptly. No case, platform
 or deadline is removed; a successful job still requires every existing step.
 
+`d75e07e` / `36952817328`, native `110669295125`, identified creation failure
+as Win32 5 (access denied), not a missing-privilege error. Add two bounded,
+never-resumed controls only on failure: an unchanged-owner duplicate with the
+same private working directory, and the modified-owner token with the known
+PowerShell executable directory as working directory. A successful control is
+terminated/joined through its original process handle without executing payload;
+both native codes accompany the original failure. These diagnostics do not
+turn an unsupported premise into success, broaden ACLs or grant privileges.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
