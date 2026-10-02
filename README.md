@@ -146,7 +146,7 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `2c1aafc` (run `37017035126`). This also accepts the
+creation, passed at `c7de917` (run `37017549550`). This also accepts the
 production native controller process: literal arguments and bidirectional
 stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
@@ -196,7 +196,7 @@ lock-release authority; its dedicated 25th regression job and full regression
 passed at `2c1aafc`. Expanded native update, restore/custom-permission and
 originally-disabled cases passed at `c7de917`, including refusals for live
 controllers, changed evidence/policy and same-process listener rebinding.
-The expanded full regression remains pending.
+The expanded full regression also passed all 25 jobs.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
