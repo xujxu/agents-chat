@@ -19,6 +19,29 @@ namespace Deployment
         string file, metadata, security;
         bool disposed;
         public string Sha256 { get; private set; }
+        public sealed class EvidenceIdentity
+        {
+            public string Dev { get; }
+            public string Ino { get; }
+            internal EvidenceIdentity(uint volume, uint high, uint low)
+            {
+                Dev = volume.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                Ino = (((ulong)high << 32) | low).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+        }
+        EvidenceIdentity OriginalIdentity()
+        {
+            FileInformation information = Information();
+            return new EvidenceIdentity(information.Volume, information.IndexHigh, information.IndexLow);
+        }
+        public EvidenceIdentity CaptureIdentity()
+        {
+            Check();
+            EvidenceIdentity result = OriginalIdentity();
+            Check();
+            return result;
+        }
+        public int ByteLength { get { Check(); return content.Length; } }
 
         [StructLayout(LayoutKind.Sequential)]
         struct FileInformation
@@ -196,6 +219,13 @@ namespace Deployment
             {
                 if (directory.disposed) throw new ObjectDisposedException("Private directory");
                 directory.CheckPublicationDirectory();
+            }
+            public EvidenceIdentity CaptureIdentity()
+            {
+                Check();
+                EvidenceIdentity result = directory.OriginalIdentity();
+                Check();
+                return result;
             }
             public void Dispose() { directory.Dispose(); }
         }

@@ -9161,7 +9161,7 @@ available for complete native replay when reopening the intent.
   retained-session acceptance and before deliberate evidence mutation.
 - Update both saved-helper inventories for the three new helper files.
 
-- [ ] **Step 1: publish the native missing-entry causal test.**
+- [x] **Step 1: publish the native missing-entry causal test.**
 
   After the existing session test, run the new Node fixture with `$Control`
   and current `$pwsh`; require success. The initial fixture imports the
@@ -9330,6 +9330,13 @@ available for complete native replay when reopening the intent.
   preserve the full 25-job regression after native success. Mark this task
   accepted only on complete success. Subsequent exact/prefix retirement,
   worker handoff and atomic operation unlock remain explicitly unfinished.
+
+**Causal evidence:** `c8a24cf / 37051846485`, native job `110986898609`,
+failed at 19:09:11 UTC on the missing `prepareWindowsTaskRetirement` export,
+after genuine completion and retained-session acceptance at 19:09:11 UTC.
+The characterized causal run was then cancelled. Native publication/reopen,
+strict capture and actor-loss/refusal coverage are implemented next; full
+acceptance remains pending.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

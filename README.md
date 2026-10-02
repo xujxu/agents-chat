@@ -218,6 +218,12 @@ native controller while the caller holds actual same-installation admission.
 Its native contention, strict-context/protocol and controller-loss cases passed
 at `119b17e`, including update, restore and originally disabled tasks; all 25
 Actions jobs passed. It does not grant evidence-deletion or unlock authority.
+The retained proof can prepare a private `task-retirement.json`, binding the
+original lock/state, all 23 maintenance records, directory/file identities
+and the original preparing processes. Reopening preserves the original intent
+and requires either that same retained session or both original preparers
+absent. This preparation preserves every maintenance file and the operation
+lock; its new native acceptance is pending.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

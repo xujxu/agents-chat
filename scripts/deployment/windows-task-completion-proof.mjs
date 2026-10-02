@@ -4,9 +4,11 @@ import { isDeepStrictEqual } from 'node:util';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
-import { validateReadinessProviders } from './http-readiness.mjs';
-import { captureActivatedRuntime } from './windows-task-controller.mjs';
 import { assertWindowsAdmission } from './windows-admission.mjs';
+import { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
+import { captureWindowsTaskRetirement } from './windows-task-retirement-record.mjs';
+
+export { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
 
 const script = fileURLToPath(new URL('./windows-task-completion-controller.ps1', import.meta.url));
 const proofs = new WeakMap();
@@ -16,34 +18,21 @@ function refused(cause) {
   });
 }
 
-export function captureWindowsTaskCompletionProof(value) {
-  const result = captureWorkerFields(value, [
-    'status', 'mutationAuthority', 'operationId', 'taskName', 'stateSha256',
-    'completionSha256', 'runtime', 'port', 'providers', 'lease',
-  ], 'completed task proof');
-  if (result.status !== 'observed' || result.mutationAuthority !== false
-    || result.lease !== 'released'
-    || typeof result.operationId !== 'string'
-    || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(result.operationId)
-    || result.operationId === '00000000-0000-0000-0000-000000000000'
-    || typeof result.taskName !== 'string'
-    || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(result.taskName)
-    || ![result.stateSha256, result.completionSha256].every(hash =>
-      typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash))
-    || !Number.isSafeInteger(result.port) || result.port < 1 || result.port > 65535) {
-    throw new Error('Invalid completed-task proof observation.');
-  }
-  validateReadinessProviders(result.providers);
-  return Object.freeze({ ...result, runtime: captureActivatedRuntime(result.runtime),
-    providers: Object.freeze([...result.providers]) });
-}
-
-export async function assertWindowsTaskCompletionProof(control, proof, admission, options) {
+function bindingFor(control, proof, admission) {
   const binding = proofs.get(proof);
   if (!binding || binding.control !== control || binding.admission !== admission) {
     throw new Error('Original retained completed-task proof does not match admission.');
   }
+  return binding;
+}
+
+export async function assertWindowsTaskCompletionProof(control, proof, admission, options) {
+  bindingFor(control, proof, admission);
   return proof.check(options);
+}
+
+export async function prepareWindowsTaskRetirement(control, proof, admission, { signal } = {}) {
+  return bindingFor(control, proof, admission).prepare(signal);
 }
 
 export async function openWindowsTaskCompletionProof({ control, pwsh, admission, signal }) {
@@ -93,7 +82,7 @@ export async function openWindowsTaskCompletionProof({ control, pwsh, admission,
       busy = true;
       try {
         requestSignal?.throwIfAborted();
-        if (method === 'check') await assertWindowsAdmission(control, admission, { signal: requestSignal });
+        if (method !== 'close') await assertWindowsAdmission(control, admission, { signal: requestSignal });
         requireOriginalChild();
         const id = ++sequence;
         await wire.send({ id, method });
@@ -110,11 +99,13 @@ export async function openWindowsTaskCompletionProof({ control, pwsh, admission,
           wire.close();
           return;
         }
-        const observed = captureWindowsTaskCompletionProof(reply.value);
+        const prepared = method === 'prepare-retirement' ? captureWindowsTaskRetirement(reply.value) : undefined;
+        if (prepared && prepared.intent.control !== control) throw new Error('Retirement intent control differs.');
+        const observed = prepared ? prepared.intent.completion : captureWindowsTaskCompletionProof(reply.value);
         if (!isDeepStrictEqual(observed, observation)) throw new Error('Original completed-task proof observation changed.');
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
         requireOriginalChild();
-        return observed;
+        return prepared ?? observed;
       } catch (cause) { throw await abandon(cause); }
       finally { busy = false; }
     };
@@ -128,7 +119,7 @@ export async function openWindowsTaskCompletionProof({ control, pwsh, admission,
         if (!closed) await request('close');
       },
     });
-    proofs.set(proof, { control, admission });
+    proofs.set(proof, { control, admission, prepare: requestSignal => request('prepare-retirement', requestSignal) });
     return proof;
   } catch (cause) { throw await abandon(cause); }
 }
