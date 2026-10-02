@@ -10118,7 +10118,7 @@ that authority by itself.
   with file retirement; callers dispose it in `finally`. Preserve the
   original native error and the existing nine-helper installation.
 
-- [ ] **Step 3: accept native refusal and complete regression.**
+- [x] **Step 3: accept native refusal and complete regression.**
 
   Use the existing `Native Windows task options` Actions job for the
   new cases. Capture missing-factory failure before implementation; then
@@ -10132,6 +10132,14 @@ factory after both existing private-file retirement suites passed. Captured
 the log and cancelled the characterized causal run. The directory factory
 and internal exclusive directory-open mode are now implemented; native and
 full acceptance remain pending. No transaction-directory deletion was added.
+
+**Task 5AN acceptance:** `0a1500a / 37071297219` completed all 26 jobs
+successfully at 22:36:54 UTC. Native task-options `111051146765` passed
+the exact-directory, nonempty (145), identity, sharing, ACL, junction and
+ordinary-close cases at 22:15:29 UTC. Receipt retirement `111051146730`,
+completed proof `111051146735` and actual Windows application `111051146416`
+also passed. This accepts the OS primitive only; the transaction still
+retains its empty directory until durable worker/final-unlock handoff exists.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

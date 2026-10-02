@@ -249,9 +249,9 @@ native handle. All three native scenarios and the full 26-job regression
 passed at `670818a / 37067463428`. The consumer retains the
 empty task receipt directory, state, lock and both root records, and does not
 perform final worker cleanup or unlock.
-The native empty-directory retirement handle is implemented but still awaiting
-acceptance. Transaction cleanup does not yet invoke it or infer success from
-an absent maintenance directory.
+The native empty-directory retirement handle passed its Windows refusal cases
+and the full 26-job regression at `0a1500a / 37071297219`. Transaction cleanup
+does not yet invoke it or infer success from an absent maintenance directory.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
