@@ -133,9 +133,18 @@ try {
         $originalTask = [xml]$admitted.Data.definition
         $originalEnabled = $originalTask.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces)
         $expectedEnabled = $null -eq $originalEnabled -or $originalEnabled.InnerText -ceq 'true'
-        $permanent.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces).InnerText = $expectedEnabled.ToString().ToLowerInvariant()
         $task = $scheduler.GetFolder('\').GetTask($TaskName)
-        Assert ([bool]$task.Enabled -eq $expectedEnabled -and ([xml][string]$task.Xml).OuterXml -ceq $permanent.OuterXml -and
+        $actualPermanent = [xml][string]$task.Xml
+        $actualEnabledNodes = $actualPermanent.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
+        Assert ($actualEnabledNodes.Count -le 1 -and
+            ($actualEnabledNodes.Count -eq 1 -or $expectedEnabled)) 'Permanent enabled XML is ambiguous or missing false'
+        if ($actualEnabledNodes.Count) {
+            Assert ($actualEnabledNodes[0].InnerText -ceq $expectedEnabled.ToString().ToLowerInvariant()) 'Permanent XML/native enabled values differ'
+            $null = $actualEnabledNodes[0].ParentNode.RemoveChild($actualEnabledNodes[0])
+        }
+        $expectedEnabledNode = $permanent.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces)
+        $null = $expectedEnabledNode.ParentNode.RemoveChild($expectedEnabledNode)
+        Assert ([bool]$task.Enabled -eq $expectedEnabled -and $actualPermanent.OuterXml -ceq $permanent.OuterXml -and
             [string]$task.GetSecurityDescriptor(7) -ceq $SecurityDescriptor -and
             $task.Definition.Triggers.Count -gt 0 -and $task.Definition.Settings.RestartCount -gt 0 -and
             [string]$task.Definition.Actions.Item(1).Arguments -cnotmatch '-ControllerPid|-ControllerIdentity') `

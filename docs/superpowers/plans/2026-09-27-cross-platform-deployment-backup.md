@@ -8181,6 +8181,18 @@ Add bounded substages without weakening comparisons. The fixture also needs
 to stop/retire its retained original runtime on partial post-release failure
 before deleting fixture directories. Captured and cancelled this failed run.
 
+Diagnostic `b376d84` / `37010237447`, native `110847953714`, established
+`complete/completion-enable-definition` with **enabledNodes=0** after the
+native enabled-value check passed. Task Scheduler omits the default true
+Enabled node. Reuse existing `Confirm-AgentsChatTaskInhibition` in reverse:
+require the native desired enabled value and compare every other XML node
+exactly; retain the actual native definition afterward. Disabled policy still
+requires exact unchanged XML. The independent native fixture separately
+checks absent/explicit true versus required explicit false, then compares
+all other policy and security. Partial post-release fixture cleanup now
+settles the original runtime without the previous directory-lock failure.
+Captured this diagnostic before cancellation and correction publication.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

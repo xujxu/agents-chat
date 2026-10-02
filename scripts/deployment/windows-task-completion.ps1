@@ -139,12 +139,7 @@ function Complete-AgentsChatTaskActivation {
         Write-AgentsChatTaskCompletionReceipt $Context 'policy-restored'
         Write-AgentsChatTaskCompletionReceipt $Context 'enable-requested'
         Test-AgentsChatActiveTaskContext $Context
-        $Context.Stage = 'completion-enable-template'
-        $expected = [xml]$Context.CompletionDefinition
-        $namespaces = [Xml.XmlNamespaceManager]::new($expected.NameTable)
-        $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
-        $expected.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces).InnerText =
-            $Context.CompletionTargetEnabled.ToString().ToLowerInvariant()
+        $disabledDefinition = $Context.CompletionDefinition
         $Context.Stage = 'completion-enable-write'
         $task = $Context.Folder.GetTask($Context.Data.taskName)
         $task.Enabled = $Context.CompletionTargetEnabled
@@ -153,11 +148,10 @@ function Complete-AgentsChatTaskActivation {
         $Context.Stage = 'completion-enable-value'
         if ([bool]$task.Enabled -ne $Context.CompletionTargetEnabled) { throw 'Permanent enabled value differs.' }
         $Context.Stage = 'completion-enable-definition'
-        $actual = [xml][string]$task.Xml
-        if ($actual.OuterXml -cne $expected.OuterXml) {
-            $actualEnabled = $actual.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
-            [Console]::Error.WriteLine("Completion enabled XML differs: enabledNodes=$($actualEnabled.Count).")
-            throw 'Permanent enabled definition differs.'
+        if ($Context.CompletionTargetEnabled) {
+            Confirm-AgentsChatTaskInhibition ([string]$task.Xml) $disabledDefinition
+        } elseif ([string]$task.Xml -cne $disabledDefinition) {
+            throw 'Permanent disabled definition differs.'
         }
         $Context.Stage = 'completion-enable-security'
         if ([string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor) { throw 'Permanent security differs.' }
