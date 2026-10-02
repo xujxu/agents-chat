@@ -11,7 +11,7 @@ import { stopWindowsTaskTransaction } from '../scripts/deployment/windows-task-t
 
 const [pwsh, control, project, operation] = process.argv.slice(2);
 assert.ok(['update', 'restore'].includes(operation));
-const lock = await acquireLock(control, { project, operationId: randomUUID() });
+const lock = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
 const lines = createInterface({ input: process.stdin })[Symbol.asyncIterator]();
 const receive = async () => {
   const result = await lines.next();
@@ -77,7 +77,7 @@ await context.check();
 state = { ...state, phase: operation === 'restore' ? 'restore-activating' : 'copying', previousPhase: state.phase };
 await writeState(control, state);
 await context.check();
-await assert.rejects(releaseLock(control, lock), /maintenance/i);
+await assert.rejects(releaseLock(control, lock, { pwsh }), /maintenance/i);
 assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
 console.log(JSON.stringify({ phase: 'stopped', bridge: context.identity }));
 const { action, configuration, sha256 } = await receive();

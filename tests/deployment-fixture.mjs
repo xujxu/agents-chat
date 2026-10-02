@@ -1,7 +1,24 @@
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { writeState } from '../scripts/deployment/state.mjs';
+import { writeState, acquireLock as acquire, releaseLock as release } from '../scripts/deployment/state.mjs';
+import { recoverRetirement as recover } from '../scripts/deployment/retirement-recovery.mjs';
+import { retirementRecoveryInvocation as invocation } from '../scripts/deployment/saved-recovery-engine.mjs';
+
+export function fixtureRuntime() {
+  if (process.platform !== 'win32') return {};
+  const pwsh = process.env.DEPLOYMENT_TEST_PWSH;
+  if (typeof pwsh !== 'string' || !path.isAbsolute(pwsh)) {
+    throw new Error('Actions must select an explicit PowerShell runtime for Windows fixtures.');
+  }
+  return { pwsh };
+}
+
+export const admissionFiles = process.platform === 'win32' ? ['windows-admission.lock'] : [];
+export const acquireLock = (root, options) => acquire(root, { ...fixtureRuntime(), ...options });
+export const releaseLock = (root, owner, options) => release(root, owner, { ...fixtureRuntime(), ...options });
+export const recoverRetirement = options => recover({ ...fixtureRuntime(), ...options });
+export const retirementRecoveryInvocation = (saved, options) => invocation(saved, { ...fixtureRuntime(), ...options });
 
 export async function temporaryDeployment(t) {
   const temporary = await realpath(os.tmpdir());

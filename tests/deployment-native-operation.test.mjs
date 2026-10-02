@@ -7,12 +7,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
-import { temporaryDeployment, acceptOperation } from './deployment-fixture.mjs';
-import { acquireLock, releaseLock, writeState } from '../scripts/deployment/state.mjs';
+import { temporaryDeployment, acceptOperation, acquireLock, releaseLock,
+  retirementRecoveryInvocation, admissionFiles } from './deployment-fixture.mjs';
+import { writeState } from '../scripts/deployment/state.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation, readWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 import { readWorkerJournal } from '../scripts/deployment/worker-journal.mjs';
-import { saveRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
+import { saveRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
 import { prepareNpmCommand } from '../scripts/deployment/npm-command.mjs';
 import { readSourceCommandResult } from '../scripts/deployment/source-command.mjs';
 import { runStage } from '../scripts/deployment/stage-runner.mjs';
@@ -32,21 +33,7 @@ async function fixture(t) {
   if (process.platform === 'win32') {
     const script = `
       $ErrorActionPreference='Stop'
-      $root='${control.replaceAll("'", "''")}'
       $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User
-      foreach($entry in @((Get-Item -LiteralPath $root)) + @(Get-ChildItem -LiteralPath $root -Recurse)){
-        $acl=Get-Acl -LiteralPath $entry.FullName
-        $acl.SetOwner($sid)
-        $acl.SetAccessRuleProtection($true,$false)
-        foreach($rule in @($acl.Access)){$acl.RemoveAccessRuleSpecific($rule)}
-        foreach($s in @($sid,[Security.Principal.SecurityIdentifier]::new('S-1-5-18'))){
-          if($entry.PSIsContainer){
-            $rule=[Security.AccessControl.FileSystemAccessRule]::new($s,'FullControl','ContainerInherit,ObjectInherit','None','Allow')
-          }else{$rule=[Security.AccessControl.FileSystemAccessRule]::new($s,'FullControl','Allow')}
-          $acl.AddAccessRule($rule)
-        }
-        Set-Acl -LiteralPath $entry.FullName -AclObject $acl
-      }
       @{accountSid=$sid.Value;sessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId}|ConvertTo-Json -Compress
     `;
     const { stdout } = await execute(process.env.DEPLOYMENT_TEST_PWSH,
@@ -356,27 +343,12 @@ test('two accepted native operations reuse one helper slot without deleting back
   await acceptOperation(f.control, f.lock);
   await f.operation.retire();
   await releaseLock(f.control, f.lock);
-  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'state.json']);
+  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'state.json', ...admissionFiles]);
   const lock = await acquireLock(f.control, { project: f.project, operationId: randomUUID() });
   const accepted = JSON.parse(await readFile(path.join(f.control, 'state.json'), 'utf8'));
   await writeState(f.control, { ...accepted, operationId: lock.operationId, phase: 'preflight',
     previousPhase: null, startedAt: lock.createdAt });
   const saved = await saveWorkerEngine({ source, control: f.control, project: f.project, operationId: lock.operationId });
-  if (process.platform === 'win32') {
-    const script = `
-      $ErrorActionPreference='Stop'
-      $root='${saved.directory.replaceAll("'", "''")}'
-      $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User
-      foreach($entry in @((Get-Item -LiteralPath $root)) + @(Get-ChildItem -LiteralPath $root -Recurse)){
-        $acl=Get-Acl -LiteralPath $entry.FullName
-        $acl.SetOwner($sid)
-        Set-Acl -LiteralPath $entry.FullName -AclObject $acl
-      }
-    `;
-    await execute(f.runtime.pwsh,
-      ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
-      { timeout: 30000, maxBuffer: 4096 });
-  }
   const operation = await createWorkerOperation({ control: f.control, lock, saved });
   t.after(() => operation.close());
   const result = await operation.run({
@@ -394,7 +366,7 @@ test('two accepted native operations reuse one helper slot without deleting back
   }
   await operation.retire();
   await releaseLock(f.control, lock);
-  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'state.json']);
+  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'state.json', ...admissionFiles]);
   assert.equal(await readFile(path.join(f.control, 'backup', 'retained'), 'utf8'), 'original backup');
 });
 
@@ -435,5 +407,5 @@ test('independent recovery releases interrupted cleanup only after a real native
   assert.equal(JSON.parse(stdout).status, 'retired');
   const next = await acquireLock(control, { project, operationId: randomUUID() });
   await releaseLock(control, next);
-  assert.deepEqual((await readdir(control)).sort(), ['recovery-engine', 'state.json']);
+  assert.deepEqual((await readdir(control)).sort(), ['recovery-engine', 'state.json', ...admissionFiles]);
 });

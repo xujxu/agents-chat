@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { temporaryDeployment, acceptOperation, recoverPriorRuntime } from './deployment-fixture.mjs';
-import { acquireLock, releaseLock } from '../scripts/deployment/state.mjs';
+import { acquireLock, releaseLock, admissionFiles } from './deployment-fixture.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 
@@ -49,7 +49,7 @@ test('completed live operation retires only worker artifacts and permits next fi
     else await acceptOperation(f.control, f.lock, phase);
     const state = await readFile(path.join(f.control, 'state.json'));
     await f.operation.retire();
-    assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'lock', 'state.json']);
+    assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'lock', 'state.json', ...admissionFiles]);
     assert.deepEqual(await readFile(path.join(f.control, 'state.json')), state);
     assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained full backup');
     await assert.rejects(f.operation.retire(), unsafe);
@@ -180,7 +180,7 @@ test('final marker deletion failure keeps the only remaining worker artifact as 
   syncBuiltinESMExports();
   try { await assert.rejects(f.operation.retire(), unsafe); }
   finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
-  assert.deepEqual((await readdir(f.control)).sort(), ['lock', 'state.json', 'worker-retirement.json']);
+  assert.deepEqual((await readdir(f.control)).sort(), ['lock', 'state.json', ...admissionFiles, 'worker-retirement.json']);
   await assert.rejects(releaseLock(f.control, f.lock), /evidence/);
 });
 

@@ -61,7 +61,16 @@ function intent(bytes, project, operationId) {
   });
 }
 
-export async function recoverRetirement({ control, project, operationId }) {
+export async function recoverRetirement(options) {
+  if (process.platform === 'win32') {
+    const { withWindowsAdmission, assertWindowsAdmission } = await import('./windows-admission.mjs');
+    return withWindowsAdmission(options.control, options, admission =>
+      recoverRetirementAdmitted(options, () => assertWindowsAdmission(options.control, admission)));
+  }
+  return recoverRetirementAdmitted(options);
+}
+
+async function recoverRetirementAdmitted({ control, project, operationId }, checkAdmission) {
   const handles = [];
   const errors = [];
   let result;
@@ -140,11 +149,13 @@ export async function recoverRetirement({ control, project, operationId }) {
     let guard;
     let guardFile;
     const checkGuard = async () => {
+      await checkAdmission?.();
       if (!guard) return;
       await checkDirectory(guardName, guard);
       await checkFile(guardFile);
     };
     const checkAuthority = async () => {
+      await checkAdmission?.();
       await requireNoServiceMaintenance(root);
       await checkDirectory('', original.controlIdentity);
       await checkDirectory('lock', original.lockIdentity);
@@ -175,6 +186,7 @@ export async function recoverRetirement({ control, project, operationId }) {
     };
     await checkInventory();
     const guardPath = path.join(root, guardName);
+    await checkAdmission?.();
     await mkdir(guardPath, { mode: 0o700 });
     await syncWorkerDirectory(root);
     guard = identity(await lstat(guardPath));
@@ -223,6 +235,7 @@ export async function recoverRetirement({ control, project, operationId }) {
     await checkDirectory('lock', original.lockIdentity);
     await checkFile(original.lockFile);
     await checkFile(original.state);
+    await checkAdmission?.();
     await unlink(path.join(root, original.lockFile.path));
     await syncWorkerDirectory(path.join(root, 'lock'));
     await rmdir(path.join(root, 'lock'));
@@ -232,6 +245,7 @@ export async function recoverRetirement({ control, project, operationId }) {
       throw new Error('Recovery completion evidence changed.');
     }
     await unlink(completePath);
+    await checkAdmission?.();
     await unlink(leasePath);
     await syncWorkerDirectory(guardPath);
     await rmdir(guardPath);

@@ -3,6 +3,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { verifyRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
+import { fixtureRuntime } from './deployment-fixture.mjs';
 
 const [control, project, operationId, manifestSha256] = process.argv.slice(2);
 try {
@@ -17,7 +18,7 @@ try {
     }
   };
   syncBuiltinESMExports();
-  await recoverRetirement({ control, project, operationId });
+  await recoverRetirement({ control, project, operationId, ...fixtureRuntime() });
   throw new Error('Recovery fixture unexpectedly completed.');
 } catch (error) {
   process.stderr.write(`${error.stack}\n`);

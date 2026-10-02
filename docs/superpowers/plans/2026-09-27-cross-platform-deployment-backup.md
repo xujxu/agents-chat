@@ -8700,7 +8700,7 @@ read-only inspection remain unchanged.
   contracts/native-operation suites under valid private creation-time
   ownership. Keep Linux execution unchanged.
 
-- [ ] **Step 1: publish a genuine native entrypoint failure.**
+- [x] **Step 1: publish a genuine native entrypoint failure.**
   Create private roots and start Node through `WindowsControllerProcess`.
   The first mutation assertion uses an actual retained native lease:
   ```js
@@ -8719,7 +8719,7 @@ read-only inspection remain unchanged.
   Expect the current implementation to fail with missing expected rejection,
   after actual private controller/root creation, not with fixture ACL errors.
 
-- [ ] **Step 2: capture causal Actions, then implement shared admission.**
+- [x] **Step 2: capture causal Actions, then implement shared admission.**
   Push fixtures/plan with the required coauthor trailer. Inspect the exact
   native job and capture the missing-rejection assertion before cancelling
   only the causal run. Keep `c1f90f1` / `37032247968` as the full accepted
@@ -8756,7 +8756,7 @@ read-only inspection remain unchanged.
   context through mutation and final unlock; a kernel lease does not replace
   original owner absence, exact evidence identity or inventory checks.
 
-- [ ] **Step 3: migrate actual callers and creation-time test ownership.**
+- [x] **Step 3: migrate actual callers and creation-time test ownership.**
   Carry `pwsh` through saved invocation/entry and independent fixture
   processes; no silently admitted call path remains. Reuse
   `WindowsControllerProcess.Start`, private root/TEMP/TMP, and literal
@@ -8773,6 +8773,30 @@ read-only inspection remain unchanged.
   continuity only from actual acceptance. This shared admission does not
   complete partial Windows task recovery, public lifecycle integration,
   cross-account configuration policy or live deployment/voice acceptance.
+
+Task 5AG causal `4092d66` / `37035726800`, native `110933333489`,
+failed at 16:44:23 UTC with the missing expected busy rejection: normal
+Windows lock acquisition bypassed held native admission. The original
+private Node controller and private directories were established first.
+Captured before cancelling only that causal run.
+
+The implementation uses the planned shared wrapper and explicit saved
+Windows invocation arguments. Existing test adapters pass a selected runtime;
+the Windows contract/native-build suites use the existing production private
+controller with private TEMP/TMP. Old post-creation fixture ACL repairs are
+removed. Exact control inventories now include the persistent empty gate
+only where lock acquisition occurred. Linux execution and argument shapes
+remain unchanged.
+
+Recovery checks admission at its repeated authority/mutation boundaries.
+To avoid spawning external PowerShell processes at every file boundary,
+native check/close replies now include the bridge's actual process-creation
+identity, validated against initial independently checked readiness over the
+original child transport. The native side still checks the original Node
+identity on every request; the client rejects original-child exit. This
+preserves identity binding without two extra process launches per check.
+Task-maintenance transport/reply schemas are unchanged. Native and full
+Task 5AG acceptance remain pending Actions.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

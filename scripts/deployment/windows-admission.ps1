@@ -42,7 +42,10 @@ try {
             $lease.Dispose()
             $lease = $null
         }
-        [Console]::Out.WriteLine((@{ id=$id; type='reply'; value=$method } | ConvertTo-Json -Compress))
+        [Console]::Out.WriteLine((@{
+            id=$id; type='reply'; value=$method
+            processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+        } | ConvertTo-Json -Compress))
         [Console]::Out.Flush()
         if ($method -ceq 'close') { break }
     }

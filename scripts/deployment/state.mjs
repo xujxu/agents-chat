@@ -248,6 +248,10 @@ async function requireNoRecovery(directory) {
 }
 
 export async function acquireLock(root, options) {
+  if (process.platform === 'win32') {
+    const { withWindowsAdmission } = await import('./windows-admission.mjs');
+    return withWindowsAdmission(root, options, () => acquireLockAdmitted(root, options));
+  }
   const admission = process.platform === 'linux'
     ? await (await import('./linux-recovery-admission.mjs')).acquireRecoveryAdmission(root) : null;
   try { return await acquireLockAdmitted(root, options); }
@@ -321,7 +325,15 @@ export async function assertLockOwner(root, suppliedOwner) {
   return owner;
 }
 
-export async function releaseLock(root, owner) {
+export async function releaseLock(root, owner, options = {}) {
+  if (process.platform === 'win32') {
+    const { withWindowsAdmission } = await import('./windows-admission.mjs');
+    return withWindowsAdmission(root, options, () => releaseLockAdmitted(root, owner));
+  }
+  return releaseLockAdmitted(root, owner);
+}
+
+async function releaseLockAdmitted(root, owner) {
   if (process.platform === 'linux' && (await readdir(root)).includes('live-retirement.json')) {
     const { releaseLiveRetirement } = await import('./linux-live-retirement.mjs');
     return releaseLiveRetirement(root, owner);

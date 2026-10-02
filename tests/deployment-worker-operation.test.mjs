@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
-import { acquireLock, releaseLock } from '../scripts/deployment/state.mjs';
+import { acquireLock, releaseLock } from './deployment-fixture.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation, readWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 

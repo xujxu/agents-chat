@@ -7,10 +7,10 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { temporaryDeployment } from './deployment-fixture.mjs';
-import { acquireLock, releaseLock, reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
-import { saveRecoveryEngine, verifyRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
-import { recoverRetirement } from '../scripts/deployment/retirement-recovery.mjs';
+import { temporaryDeployment, acquireLock, releaseLock, recoverRetirement,
+  retirementRecoveryInvocation, admissionFiles } from './deployment-fixture.mjs';
+import { reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
+import { saveRecoveryEngine, verifyRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
 
 const sourceTree = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
 const execute = promisify(execFile);
@@ -22,6 +22,13 @@ test('changed recovery controllers publish an immutable generation without repla
   await cp(sourceTree, source, { recursive: true });
   await mkdir(control, { mode: 0o700 });
   const legacy = await saveRecoveryEngine({ source, control });
+  if (process.platform === 'win32') {
+    const { retirementRecoveryInvocation: direct } = await import('../scripts/deployment/saved-recovery-engine.mjs');
+    const options = { control, project: path.join(root, 'app'), operationId: 'runtime-binding' };
+    assert.throws(() => direct(legacy, options), /explicit canonical PowerShell/);
+    assert.deepEqual(retirementRecoveryInvocation(legacy, options).args.slice(-2),
+      ['worker', process.env.DEPLOYMENT_TEST_PWSH]);
+  }
   const original = await readFile(path.join(legacy.directory, 'manifest.json'));
   const helper = path.join(source, 'linux-readiness.mjs');
   await writeFile(helper, `${await readFile(helper, 'utf8')}\n// Next controller generation.\n`);
@@ -140,7 +147,7 @@ test('independent saved recovery finishes partial retirement after original chec
   await rename(f.project, `${f.project}.displaced`);
   const result = JSON.parse((await f.recover()).stdout);
   assert.deepEqual(result, { status: 'retired', operationId: f.lock.operationId, restored: false });
-  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-engine', 'state.json']);
+  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-engine', 'state.json', ...admissionFiles]);
   assert.deepEqual(await readFile(path.join(f.control, 'state.json')), state);
   assert.equal(await readFile(path.join(f.control, 'backup', 'sentinel'), 'utf8'), 'retained backup');
   await mkdir(f.project);
@@ -219,7 +226,7 @@ test('concurrent saved recovery processes cannot both acquire cleanup authority'
   const results = await Promise.allSettled([f.recover(), f.recover()]);
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
   assert.equal(results.filter(result => result.status === 'rejected').length, 1);
-  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-engine', 'state.json']);
+  assert.deepEqual((await readdir(f.control)).sort(), ['backup', 'recovery-engine', 'state.json', ...admissionFiles]);
 });
 
 test('preexisting incomplete recovery guard blocks recovery and ordinary lock operations', async t => {

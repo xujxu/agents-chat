@@ -19,6 +19,30 @@ export async function assertWindowsAdmission(control, admission, options) {
   await admission.check(options);
 }
 
+export async function withWindowsAdmission(control, options, action) {
+  const supplied = options.admission !== undefined;
+  const admission = supplied ? options.admission
+    : await acquireWindowsAdmission({ control, pwsh: options.pwsh });
+  let primary;
+  try {
+    await assertWindowsAdmission(control, admission);
+    const result = await action(admission);
+    await assertWindowsAdmission(control, admission);
+    return result;
+  } catch (error) {
+    primary = error;
+    throw error;
+  } finally {
+    if (!supplied) {
+      try { await admission.close(); }
+      catch (error) {
+        throw new AggregateError([...(primary ? [primary] : []), error],
+          'Windows admission action and cleanup failed.');
+      }
+    }
+  }
+}
+
 export async function acquireWindowsAdmission({ control, pwsh, signal }) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value =>
@@ -60,15 +84,15 @@ export async function acquireWindowsAdmission({ control, pwsh, signal }) {
       busy = true;
       try {
         requestSignal?.throwIfAborted();
-        if (await processIdentity(process.pid) !== controllerIdentity
-          || await processIdentity(child.pid) !== identity.processIdentity) {
-          throw new Error('Original admission controller identity changed.');
+        if (child.exitCode !== null || child.signalCode !== null) {
+          throw new Error('Original admission controller exited.');
         }
         const id = ++sequence;
         await wire.send({ id, method });
         const reply = captureWorkerFields(await wire.receive({ signal: requestSignal, timeoutMs: 30000 }),
-          ['id', 'type', 'value'], 'Windows admission reply');
-        if (reply.id !== id || reply.type !== 'reply' || reply.value !== method) {
+          ['id', 'type', 'value', 'processIdentity'], 'Windows admission reply');
+        if (reply.id !== id || reply.type !== 'reply' || reply.value !== method
+          || reply.processIdentity !== identity.processIdentity) {
           throw new Error('Unexpected native admission acknowledgement.');
         }
         if (method === 'close') {

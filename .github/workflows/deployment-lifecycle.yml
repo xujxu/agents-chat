@@ -126,8 +126,7 @@ jobs:
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
-          node --test --test-name-pattern="^actual application source installs and builds" tests/deployment-native-operation.test.mjs
-          exit $LASTEXITCODE
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds'
 
   database-admission:
     name: Database admission (${{ matrix.os }})
@@ -179,6 +178,7 @@ jobs:
         with:
           node-version: 24
       - name: Run behavioral contracts
+        if: runner.os == 'Linux'
         run: >-
           node --test
           tests/deployment-state.test.mjs
@@ -211,14 +211,49 @@ jobs:
           tests/deployment-runtime-version.test.mjs
           tests/deployment-diagnostics.test.mjs
           tests/deployment-cold-activation-state.test.mjs
+      - name: Run private Windows behavioral contracts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-private-tests.ps1 -Tests @(
+            'tests/deployment-state.test.mjs',
+            'tests/deployment-cli.test.mjs',
+            'tests/deployment-snapshot.test.mjs',
+            'tests/deployment-snapshot-scope.test.mjs',
+            'tests/deployment-snapshot-external.test.mjs',
+            'tests/deployment-transaction.test.mjs',
+            'tests/deployment-restore-transaction.test.mjs',
+            'tests/deployment-restore-project.test.mjs',
+            'tests/deployment-restore-external.test.mjs',
+            'tests/deployment-source.test.mjs',
+            'tests/deployment-npm-command.test.mjs',
+            'tests/deployment-build-artifacts.test.mjs',
+            'tests/deployment-receipt.test.mjs',
+            'tests/deployment-git-metadata.test.mjs',
+            'tests/deployment-git-objects.test.mjs',
+            'tests/deployment-update-policy.test.mjs',
+            'tests/deployment-stage-runner.test.mjs',
+            'tests/deployment-worker-errors.test.mjs',
+            'tests/deployment-owned-worker.test.mjs',
+            'tests/deployment-worker-journal.test.mjs',
+            'tests/deployment-saved-worker.test.mjs',
+            'tests/deployment-worker-wire.test.mjs',
+            'tests/deployment-worker-operation.test.mjs',
+            'tests/deployment-worker-retirement.test.mjs',
+            'tests/deployment-retirement-recovery.test.mjs',
+            'tests/deployment-configuration-files.test.mjs',
+            'tests/deployment-snapshot-configuration.test.mjs',
+            'tests/deployment-runtime-version.test.mjs',
+            'tests/deployment-diagnostics.test.mjs',
+            'tests/deployment-cold-activation-state.test.mjs'
+          )
       - name: Probe Windows cold retirement stability
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           for ($attempt = 1; $attempt -le 5; $attempt++) {
             Write-Host "Cold retirement diagnostic sample $attempt"
-            node --test --test-name-pattern="independent saved recovery finishes|cold worker retirement preserves" tests/deployment-retirement-recovery.test.mjs
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs') -NamePattern 'independent saved recovery finishes|cold worker retirement preserves'
           }
 
   linux-native:
@@ -291,7 +326,7 @@ jobs:
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
           $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
-          node --test tests/deployment-windows-worker.test.mjs tests/deployment-native-operation.test.mjs
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-worker.test.mjs', 'tests/deployment-native-operation.test.mjs')
 
   windows-task-options:
     name: Native Windows task options

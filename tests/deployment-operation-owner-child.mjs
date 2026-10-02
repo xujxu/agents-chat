@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { acquireLock } from '../scripts/deployment/state.mjs';
+import { acquireLock } from './deployment-fixture.mjs';
 import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 

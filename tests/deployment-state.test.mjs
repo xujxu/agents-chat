@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdir, readFile, writeFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { temporaryDeployment } from './deployment-fixture.mjs';
+import { temporaryDeployment, acquireLock, releaseLock } from './deployment-fixture.mjs';
 import {
-  nextPhase, recoveryAdvice, loadState, writeState, acquireLock, releaseLock,
+  nextPhase, recoveryAdvice, loadState, writeState,
   reconcileInterruptedOperation,
 } from '../scripts/deployment/state.mjs';
 

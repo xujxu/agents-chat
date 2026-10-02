@@ -5,7 +5,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment, acceptOperation } from './deployment-fixture.mjs';
-import { acquireLock } from '../scripts/deployment/state.mjs';
+import { acquireLock } from './deployment-fixture.mjs';
 import { publishDeploymentReceipt, readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
 
 async function fixture(t) {
