@@ -47,6 +47,35 @@ if (!child) {
         try { Assert (($retained.ReadText() | ConvertFrom-Json).pid -gt 0) 'Invalid native owner writer result' }
         finally { $retained.Dispose() }
     }
+    $control = Join-Path $root 'control'
+    Assert (Test-Path -LiteralPath (Join-Path $control 'lock/owner.json')) 'Missing actual private Node transaction files'
+    $lock = Get-Content -LiteralPath (Join-Path $control 'lock/owner.json') -Raw | ConvertFrom-Json
+    $state = Get-Content -LiteralPath (Join-Path $control 'state.json') -Raw | ConvertFrom-Json
+    $manifest = Get-Content -LiteralPath (Join-Path $control 'worker-engine/manifest.json') -Raw | ConvertFrom-Json
+    $writer = Get-Content -LiteralPath (Join-Path $root 'node-root.json') -Raw | ConvertFrom-Json
+    Assert ($lock.pid -eq $writer.pid -and $state.operationId -ceq $lock.operationId -and
+        $state.phase -ceq 'copying' -and $manifest.operationId -ceq $lock.operationId) 'Private Node transaction identity changed'
+    $journals = @(Get-ChildItem -LiteralPath $control -Filter 'worker-*.ndjson')
+    Assert ($journals.Count -eq 1) 'Missing actual private Node worker journal'
+    $receipt = Get-Content -LiteralPath $journals[0].FullName -Raw | ConvertFrom-Json
+    Assert ($receipt.phase -ceq 'intent' -and $receipt.owner.operationId -ceq $lock.operationId) 'Invalid private Node worker journal'
+    $files = @(Get-ChildItem -LiteralPath $control -Recurse -File)
+    Assert ($files.Count -eq $manifest.files.Count + 4) 'Unexpected private Node control contents'
+    foreach ($directory in @((Get-Item -LiteralPath $control)) + @(Get-ChildItem -LiteralPath $control -Recurse -Directory)) {
+        $lease = [Deployment.WindowsPrivateFile]::OpenDirectory($directory.FullName)
+        try { $lease.Check() }
+        finally { $lease.Dispose() }
+    }
+    foreach ($file in $files) {
+        Assert ((Get-Acl -LiteralPath $file.FullName).GetOwner([Security.Principal.SecurityIdentifier]).Value -ceq $sid.Value) `
+            'Actual Node control file has an unsupported owner'
+        $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        $lease = [Deployment.WindowsPrivateFile]::Open($file.FullName, $hash)
+        try { $lease.Check() }
+        finally { $lease.Dispose() }
+    }
+    $rootLease.Check()
+    Write-Output 'PASS: actual Node lock, replaced state, worker journal and complete saved engine are natively private without ACL repair'
     Write-Output "PASS: distinct child token and spawn-time Job create private Node/descendant files without ACL repair; original default owner $owner unchanged"
 } finally {
     if ($job) {

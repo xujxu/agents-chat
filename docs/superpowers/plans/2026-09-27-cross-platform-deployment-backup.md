@@ -7424,6 +7424,35 @@ supported on Windows 10 / Windows Server 2016 and later:
 - `https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-token_statistics`
 - `https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute`
 
+`4e8e5cc` / `36953793698`, native `110672262846`, passed the first
+distinct-child-token probe: actual child token modification, spawn-time Job,
+unchanged original token and both Node writers' native private-file admission.
+The remainder of the native job/full regression is still running; preserve it.
+
+#### Task 5R: actual Node control-file creation under the admitted child token
+
+**Files:** extend the existing
+`tests/deployment-windows-controller-token.ps1` writer/acceptance and the
+child fixture's explicitly filtered Windows PowerShell discovery path.
+
+- [ ] First require actual `control/lock/owner.json`, replaced `state.json`,
+  a worker intent journal and the complete saved worker engine. Bind their
+  operation ID and original writer PID; require all control directories and
+  files to pass native retained privacy checks without permission repair.
+- [ ] Capture the missing actual-transaction-files failure in Actions after
+  preserving the complete current regression.
+- [ ] Have the real Node writer call the existing `acquireLock`, `writeState`
+  (`preflight -> stopped -> copying`), `createWorkerJournal` and
+  `saveWorkerEngine`/`verifyWorkerEngine` APIs. Use a generated private fixture
+  configuration to identify the existing source directory, not synthetic API
+  stubs or copied implementations.
+- [ ] Provide only the explicit system Windows PowerShell directory on the
+  writer's PATH, since `processIdentity` invokes `powershell.exe`. Keep
+  SystemRoot/TEMP/TMP filtering and original Job/token checks.
+- [ ] Run the native assertions and full regression. This establishes actual
+  private persistence creation, not yet a public production controller,
+  transaction activation, cold recovery or Windows lifecycle acceptance.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
