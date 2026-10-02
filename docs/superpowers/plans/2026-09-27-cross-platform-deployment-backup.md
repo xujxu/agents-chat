@@ -8093,6 +8093,66 @@ activation cases passed. Captured this causal failure before cancelling the
 run and publishing implementation `469a38c`; implementation acceptance is
 pending Actions.
 
+Task 5AA implementation `839ac62` / `37006419246` native `110835994597`
+passed all activation/listener/readiness cases. Full regression remains in
+progress; preserve it.
+
+#### Task 5AB: health-gated native task completion
+
+Continue the approved live-transaction design, not a new deployment model.
+Inspection of `state.mjs` established that no `verifying` state exists:
+use `activating -> accepted` and `restore-activating -> restored`, without
+changing Linux transitions. A terminal state alone cannot release a lease.
+
+**Files:** new `windows-task-completion.ps1` and
+`windows-task-completion.mjs`; existing native/Node controller protocol,
+transaction and active-context guards, saved-worker inventory; actual
+activation fixture and new completion scenarios in the native workflow.
+
+- [ ] Add causal native completion after actual guarded activation and
+  independent twelve-receipt checks. Dynamically import the new helper so
+  the missing module is the failure, not a pre-activation fixture defect:
+  ```js
+  const { completeWindowsTaskActivation } =
+    await import('../scripts/deployment/windows-task-completion.mjs');
+  await completeWindowsTaskActivation({
+    context, port, providers: ['admin-login'],
+    recordAcceptance: async () => {
+      state = { ...state, previousPhase: state.phase,
+        phase: operation === 'restore' ? 'restored' : 'accepted',
+        updatedAt: new Date().toISOString() };
+      await writeState(control, state);
+      return hash(await readFile(stateFile));
+    },
+  });
+  ```
+- [ ] The Node helper performs bounded native-bound HTTP readiness, then
+  `context.prepareCompletion({ port, providers })`. Native code retains the
+  exact original activating state and writes a readiness-bound completion
+  intent. No task policy, state or lease changes during preparation.
+- [ ] Only `context.complete({ stateSha256 })` may admit the exact expected
+  terminal state. Compare every prior field except phase/previousPhase and
+  monotonic updatedAt; bind the explicit digest and keep checking it afterward.
+  Ordinary checks must still reject unannounced state changes.
+- [ ] Publish disabled permanent replacement XML without the temporary guard
+  arguments, retaining original triggers/restart/account/security. Journal
+  intent before registration; recheck original running instance/owner/Job/
+  listener and exact registered policy after registration.
+- [ ] Persist release intent while still disabled, require authenticated
+  original-peer `released` acknowledgement, then restore the prior enabled
+  setting. Check all retained identities around each step and persist
+  completion. Controller loss before release still settles the guarded Job;
+  after release, the same original runtime must survive. Do not enable
+  automatic restart before release or treat a release acknowledgement as
+  source/build/application acceptance.
+- [ ] Native update and restore cases independently check the terminal
+  state, receipt chain, permanent action, triggers/restart/security, original
+  generation survival after controller close, and explicit final Job cleanup.
+  Add changed-state rejection after preparation. Run the existing Actions
+  workflow only; require native success and preserve full regression.
+- [ ] Reopening/cold completion, cross-account permissions and complete
+  source/artifact acceptance remain separately required before public wiring.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

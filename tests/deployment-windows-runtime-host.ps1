@@ -5,6 +5,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     'transaction-replace-variable', 'transaction-replace-argument',
     'transaction-activate', 'transaction-activate-restore', 'transaction-activate-exit', 'transaction-activate-early',
     'transaction-activate-state-change', 'transaction-activate-readiness',
+    'transaction-activate-complete', 'transaction-activate-complete-restore', 'transaction-activate-complete-changed-state',
     'guarded-owner-exit', 'guarded-release', 'listener-v4', 'listener-v6', 'listener-independent-pair')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -45,9 +46,9 @@ try {
     $environment.Add('SystemRoot', $env:SystemRoot)
     $environment.Add('PATH', $env:PATH)
     $environment.Add('RUNTIME_LITERAL', 'literal %n $HOME " space')
-    if ($Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness') {
+    if ($Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
         $address = switch ($Scenario) { 'listener-v4' { '127.0.0.1' } 'listener-v6' { '::' } default { 'independent' } }
-        if ($Scenario -ceq 'transaction-activate-readiness') { $address = '127.0.0.1' }
+        if ($Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) { $address = '127.0.0.1' }
         $environment.Add('RUNTIME_LISTENER_ADDRESS', $address)
     }
     $bundle = New-AgentsChatRuntimeBundle -Source $source -Directory $root -File $node `
@@ -64,7 +65,7 @@ try {
         try { $retained.Check() }
         finally { $retained.Dispose() }
     }
-    if ($Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness') {
+    if ($Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'deployment-windows-runtime-listener.cjs') -Destination (Join-Path $root 'listener-fixture.cjs')
     }
     @'
@@ -232,16 +233,17 @@ if (process.argv[2] === 'child') {
     }
     if ($Scenario.StartsWith('transaction-')) {
         $restoreTransaction = $Scenario -in @('transaction-restore', 'transaction-retire-restore', 'transaction-replace-restore',
-            'transaction-activate-restore')
+            'transaction-activate-restore', 'transaction-activate-complete-restore')
         $transactionAction = if ($Scenario -eq 'transaction-restore') { 'close' } `
             elseif ($Scenario -eq 'transaction-retire-restore') { 'retire' } `
             elseif ($Scenario -eq 'transaction-replace-restore') { 'replace' } `
-            elseif ($Scenario -eq 'transaction-activate-restore') { 'activate' } else { $Scenario.Substring(12) }
+            elseif ($Scenario -eq 'transaction-activate-restore') { 'activate' } `
+            elseif ($Scenario -eq 'transaction-activate-complete-restore') { 'activate-complete' } else { $Scenario.Substring(12) }
         & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $root -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
             -Action $transactionAction -Transactional -Restore:$restoreTransaction
         if ($transactionAction -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
-            'activate', 'activate-exit', 'activate-state-change', 'activate-readiness')) {
+            'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state')) {
             Assert ($owner.HasExited -and $member.WaitForExit(15000) -and
                 -not $scheduler.GetFolder('\').GetTask($taskName).Enabled) 'Transactional retirement lost original settlement'
             Write-Output "PASS: $Scenario retains durable retirement and original task inhibition"

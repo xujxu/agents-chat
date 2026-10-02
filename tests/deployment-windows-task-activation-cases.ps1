@@ -112,6 +112,64 @@ try {
     Assert (($receipt.Data.runtime | ConvertTo-Json -Compress) -ceq ($runtime | ConvertTo-Json -Compress)) `
         'Running receipt differs from the acknowledged original runtime'
     Assert (@(Get-ChildItem -LiteralPath $Directory -Filter 'task-activate-*.json').Count -eq 4) 'Repeated activation duplicated intent or completion'
+    if ($Request.action.StartsWith('activate-complete')) {
+        $Controller.StandardInput.WriteLine('{"action":"complete"}')
+        if ($Request.action -ceq 'activate-complete-changed-state') {
+            Assert ((Receive).phase -ceq 'closed') 'Changed completion state was not refused'
+            Assert ($Controller.WaitForExit(15000) -and $Controller.ExitCode -eq 0 -and
+                $Bridge.WaitForExit(15000) -and $owner.WaitForExit(15000) -and
+                $owner.ExitCode -eq 1 -and $member.WaitForExit(15000)) 'Refused completion released its guarded runtime'
+            Assert (-not $scheduler.GetFolder('\').GetTask($TaskName).Enabled -and
+                -not (Test-Path -LiteralPath (Join-Path $Directory 'task-complete-policy-requested.json'))) `
+                'Changed completion state altered permanent policy'
+            return
+        }
+        Assert ((Receive).phase -ceq 'completed') 'Healthy task completion was not acknowledged'
+        $terminal = Read-Receipt (Join-Path $Control 'state.json')
+        Assert ($terminal.Data.phase -ceq $(if ($terminal.Data.operation -ceq 'restore') { 'restored' } else { 'accepted' })) `
+            'Completion did not bind the expected terminal state'
+        $permanent = [xml]$published.Data.definition
+        $permanent.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces).InnerText = 'true'
+        $task = $scheduler.GetFolder('\').GetTask($TaskName)
+        Assert ($task.Enabled -and ([xml][string]$task.Xml).OuterXml -ceq $permanent.OuterXml -and
+            [string]$task.GetSecurityDescriptor(7) -ceq $SecurityDescriptor -and
+            $task.Definition.Triggers.Count -gt 0 -and $task.Definition.Settings.RestartCount -gt 0 -and
+            [string]$task.Definition.Actions.Item(1).Arguments -cnotmatch '-ControllerPid|-ControllerIdentity') `
+            'Completion did not restore the exact permanent task policy'
+        foreach ($phase in @('prepared', 'policy-requested', 'policy-restored', 'release-requested', 'released', 'enable-requested', 'complete')) {
+            $receipt = Read-Receipt (Join-Path $Directory "task-complete-$phase.json")
+            Assert ($receipt.Data.version -eq 1 -and $receipt.Data.phase -ceq $phase -and
+                $receipt.Data.previousSha256 -ceq $previous -and $receipt.Data.operationId -ceq $OperationId -and
+                $receipt.Data.admissionSha256 -ceq $AdmissionSha256 -and
+                $receipt.Data.transactionSha256 -ceq $transaction.Sha256 -and
+                $receipt.Data.activatingStateSha256 -ceq $stateHash -and
+                ($receipt.Data.runtime | ConvertTo-Json -Compress) -ceq ($runtime | ConvertTo-Json -Compress) -and
+                $receipt.Data.port -gt 0 -and @($receipt.Data.providers).Count -eq 1 -and
+                $receipt.Data.providers[0] -ceq 'admin-login') 'Completion receipt lost original authority or readiness'
+            if ($phase -cne 'prepared') {
+                Assert ($receipt.Data.stateSha256 -ceq $terminal.Sha256) 'Completion receipt terminal digest differs'
+            }
+            $previous = $receipt.Sha256
+        }
+        Assert (@(Get-ChildItem -LiteralPath $Directory -Filter 'task-complete-*.json').Count -eq 7) 'Repeated completion duplicated receipts'
+        $Controller.StandardInput.WriteLine('{"action":"close"}')
+        Assert ((Receive).phase -ceq 'closed') 'Completed controller close was not acknowledged'
+        Assert ($Controller.WaitForExit(15000) -and $Controller.ExitCode -eq 0 -and
+            $Bridge.WaitForExit(15000) -and $Bridge.ExitCode -eq 0) 'Completed controller did not settle'
+        Start-Sleep -Milliseconds 750
+        Assert (-not $owner.HasExited -and -not $member.HasExited) 'Completed original runtime died with its controller'
+        $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
+            $runtime.pid, $runtime.identity, 'observe', 15000) | ConvertFrom-Json
+        Assert ($observation.members -contains $member.Id -and $observation.members -contains $runtime.launcherPid -and
+            -not $observation.quiescent -and -not $observation.applicationHealthy) 'Completion replaced runtime ownership or invented domain health'
+        $task.Enabled = $false
+        $null = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation, $runtime.pid, $runtime.identity, 'stop', 15000)
+        Assert ($member.WaitForExit(15000)) 'Completed original member did not stop'
+        $retired = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation, $runtime.pid, $runtime.identity, 'retire', 15000)
+        Assert ($retired -ceq 'retired' -and $owner.WaitForExit(15000) -and $owner.ExitCode -eq 0) 'Completed original owner did not retire'
+        Write-Output 'PASS: healthy native task completion restores permanent policy, binds terminal state and releases only the original guarded generation'
+        return
+    }
     if ($Request.action -ceq 'activate-readiness') {
         $Controller.StandardInput.WriteLine('{"action":"readiness"}')
         Assert ((Receive).phase -ceq 'readiness') 'Bound native HTTP readiness was not acknowledged'

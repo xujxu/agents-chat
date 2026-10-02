@@ -8,7 +8,8 @@ param(
     [Parameter(Mandatory)]$Binding,
     [Parameter(Mandatory)][ValidateSet('close', 'exit', 'changed-state', 'retire', 'retire-refused',
         'replace', 'replace-refused', 'replace-early', 'replace-variable', 'replace-argument',
-        'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-early')][string]$Action,
+        'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-early',
+        'activate-complete', 'activate-complete-changed-state')][string]$Action,
     [switch]$Transactional,
     [switch]$Restore
 )
@@ -106,7 +107,8 @@ try {
     $stoppedDefinition = [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml
     $request = @{ action=$Action }
     $replacement = $null
-    if ($Action.StartsWith('replace') -or $Action -in @('activate', 'activate-exit', 'activate-state-change', 'activate-readiness')) {
+    if ($Action.StartsWith('replace') -or $Action -in @('activate', 'activate-exit', 'activate-state-change', 'activate-readiness',
+        'activate-complete', 'activate-complete-changed-state')) {
         $original = [IO.File]::ReadAllText($Configuration) | ConvertFrom-Json -AsHashtable
         $candidateEnvironment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($key in $original.command.environment.Keys) { $candidateEnvironment.Add($key, $original.command.environment[$key]) }
@@ -121,7 +123,8 @@ try {
         $request.configuration = $replacement.Configuration
         $request.sha256 = $replacement.Sha256
     }
-    if ($Action -in @('activate', 'activate-exit', 'activate-state-change', 'activate-readiness')) {
+    if ($Action -in @('activate', 'activate-exit', 'activate-state-change', 'activate-readiness',
+        'activate-complete', 'activate-complete-changed-state')) {
         & (Join-Path $PSScriptRoot 'deployment-windows-task-activation-cases.ps1') `
             -Controller $controller -Bridge $bridge -OriginalOwner $Owner -OriginalReady $Ready `
             -Replacement $replacement -Request $request -Root $Root -Control $control -Directory $directory `

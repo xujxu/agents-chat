@@ -89,7 +89,7 @@ if (action === 'activate-early') {
 } else if (action === 'retire-refused') {
   await assert.rejects(context.retire(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
 } else if (['retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
-  'activate', 'activate-exit', 'activate-state-change', 'activate-readiness'].includes(action)) {
+  'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state'].includes(action)) {
   if (operation !== 'restore') {
     for (const phase of ['rotating', 'backup-ready', 'source-selected', 'dependencies', 'building', 'configuring', 'activating']) {
       state = { ...state, previousPhase: state.phase, phase };
@@ -103,7 +103,8 @@ if (action === 'activate-early') {
     await assert.rejects(context.replace({ configuration, sha256: action === 'replace-refused' ? '0'.repeat(64) : sha256 }),
       { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
   } else {
-    if (['replace', 'activate', 'activate-exit', 'activate-state-change', 'activate-readiness'].includes(action)) {
+    if (['replace', 'activate', 'activate-exit', 'activate-state-change', 'activate-readiness',
+      'activate-complete', 'activate-complete-changed-state'].includes(action)) {
       await context.replace({ configuration, sha256 });
       await context.replace({ configuration, sha256 });
     }
@@ -113,6 +114,33 @@ if (action === 'activate-early') {
       await context.check();
       console.log(JSON.stringify({ phase: 'activated', runtime }));
       let next = await receive();
+      if (action.startsWith('activate-complete')) {
+        assert.equal(next.action, 'complete');
+        const { completeWindowsTaskActivation } = await import('../scripts/deployment/windows-task-completion.mjs');
+        const endpoint = JSON.parse(await readFile(path.join(project, 'listener.json'), 'utf8'));
+        assert.equal(endpoint.pid, Number(await readFile(path.join(project, 'writer-pid'), 'utf8')));
+        const completion = () => completeWindowsTaskActivation({
+          context, port: endpoint.port, providers: ['admin-login'],
+          recordAcceptance: async () => {
+            state = { ...state, previousPhase: state.phase,
+              phase: operation === 'restore' ? 'restored' : 'accepted', updatedAt: new Date().toISOString() };
+            if (action.endsWith('changed-state')) state.targetCommit = 'c'.repeat(40);
+            await writeState(control, state);
+            return hash(await readFile(stateFile));
+          },
+        });
+        if (action.endsWith('changed-state')) {
+          await assert.rejects(completion(), error => error.code === 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED'
+            && /completion-state/.test(error.diagnostic));
+          console.log(JSON.stringify({ phase: 'closed' }));
+          process.exit(0);
+        }
+        await completion();
+        await context.check();
+        await context.complete({ stateSha256: hash(await readFile(stateFile)) });
+        console.log(JSON.stringify({ phase: 'completed' }));
+        next = await receive();
+      }
       if (action === 'activate-readiness') {
         assert.equal(next.action, 'readiness');
         const { runWindowsReadinessCases } = await import('./deployment-windows-readiness-cases.mjs');
