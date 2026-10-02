@@ -9111,6 +9111,18 @@ permission bypass. Keep standalone read-only inspection unchanged.
   after all jobs pass; durable intent publication, receipt retirement and
   interrupted-prefix recovery are still explicit subsequent work.
 
+Task 5AH causal `94bb0b1` / `37046756926`, native `110970038129`,
+failed at 18:22:07 UTC on the missing
+`windows-task-completion-proof.mjs`, after real completion and the driver's
+successful independent `Observe`. Captured before cancelling only that
+causal run. The implementation reuses the original shared transport and
+runtime capture, checks actual caller admission around every native check,
+and retains immutable original observations with a private context binding.
+The native fixture adds malformed/oversized request refusal and independent
+Node-controller loss followed by disappearance of both original helper
+identities and fresh acquisition. Source inventory, original runtime and
+task policy must remain unchanged. Actions acceptance is pending.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

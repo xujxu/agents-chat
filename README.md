@@ -213,6 +213,10 @@ temporary paths beyond MAX_PATH. Admission never grants authority to bypass
 durable evidence. Mutating Windows controllers
 and their test fixtures use private creation-time ownership rather than
 repairing arbitrary existing permissions.
+The next recovery integration retains the completed-task proof on its original
+native controller while the caller holds actual same-installation admission.
+Its native contention, strict-context/protocol and controller-loss cases await
+Actions acceptance; it does not grant evidence-deletion or unlock authority.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

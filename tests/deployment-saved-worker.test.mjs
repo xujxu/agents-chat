@@ -31,6 +31,7 @@ const files = [
   'windows-task-listener.ps1', 'windows-readiness.mjs', 'http-readiness.mjs',
   'windows-task-completion.ps1', 'windows-task-completion.mjs',
   'windows-task-completion-records.ps1', 'windows-task-completion-proof.ps1',
+  'windows-task-completion-proof.mjs', 'windows-task-completion-controller.ps1',
   'evidence-journal.mjs', 'worker-operation.mjs', 'state.mjs',
   'worker-retirement.mjs',
   'linux-systemd.mjs', 'linux-runtime.mjs',

@@ -12,7 +12,7 @@ function uncertain(cause) {
     code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED', recoveryAllowed: false,
   });
 }
-function captureActivatedRuntime(value) {
+export function captureActivatedRuntime(value) {
   const runtime = captureWorkerFields(value, ['pid', 'identity', 'generation', 'instanceGuid', 'sessionId',
     'configurationSha256', 'launcherPid', 'readySha256'], 'activated runtime');
   if (![runtime.pid, runtime.launcherPid].every(id => Number.isSafeInteger(id) && id > 0 && id <= 2147483647)
