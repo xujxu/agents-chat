@@ -459,6 +459,94 @@ not substitute for durable state after OOM or reboot. A stale lock requires
 checking whether its owner is alive and whether an unfinished phase exists.
 Block blind reruns; give explicit inspection, recovery or safe cleanup actions.
 
+### Shared native admission for deployment and recovery
+
+The user approved the industry-standard approach on 2026-10-02: use OS-backed
+interprocess exclusion together with the existing durable transaction state.
+This is internal concurrency control, not a new user-authorization system or
+a second recovery protocol.
+
+Use one admission resource per canonical external installation control
+directory. Linux retains its existing directory-backed `flock`. Windows uses
+a fixed `windows-admission.lock` file opened with read/write access and no
+sharing, corresponding to `FileShare.None` / Win32 `dwShareMode = 0`.
+Keep the Windows file after releasing the handle; neither its existence nor
+its timestamp/PID content establishes occupancy. The file remains empty and
+is separate from the operation owner, state, journals and recovery receipts.
+Do not use truncation or delete-on-close.
+
+Create the Windows file with explicit private ownership/permissions and a
+non-inheritable handle. On opening an existing file, validate rather than
+repair its permissions. Reuse the native private-directory/file identity
+checks: reject redirected paths, reparse points, extra hard links, unexpected
+content and replaced identities. Retain the actual control directory and
+file handles for the admission lifetime. The current supported private-owner
+policy remains the current account or SYSTEM; unsupported cross-account
+access must fail without granting broader permissions.
+
+Admission protects checks and changes to transaction ownership:
+
+- Normal deploy/update lock acquisition checks for recovery/maintenance
+  evidence and creates the operation owner while holding admission.
+- Recovery acquires the same admission resource before inspecting and
+  taking over an interrupted operation, and retains it across its authorized
+  recovery mutations and ownership cleanup.
+- Operation-lock release and recovery-evidence retirement use the same
+  admission boundary. Do not add a recovery-only mutex while leaving normal
+  lock acquisition or release able to race with it.
+- Avoid recursive acquisition through the Node/PowerShell bridge. A retained
+  admission context may be passed to internal helpers; each helper verifies
+  that context rather than accepting a Boolean bypass.
+
+The durable operation lock continues to protect long-running deployment
+work after the short acquisition critical section ends. Admission does not
+authorize removal of the old operation lock, backup restoration, task
+mutation, receipt retirement, or a success report on its own. Those actions
+still require the existing state, source/artifact, original runtime and
+receipt checks. A normal deployment cannot take over a stale operation simply
+because it acquired the kernel resource.
+
+Treat sharing contention as an explicit busy result, initially fail-fast.
+Distinguish it from access, path, identity and I/O errors; do not silently
+retry all errors or introduce expiry-based lock stealing. Close the native
+handle on normal completion and expose independent cleanup failures. The
+owner's process exit also releases its handles, but does not establish that
+application children are settled or that transaction data is consistent.
+Keep the handle out of child inheritance and bind a helper process's lifetime
+to its original controller using the existing owned-controller mechanism.
+
+Read-only inspection remains read-only: it does not create this lock file,
+take over the operation or acquire mutation authority. Keep rejecting
+unsupported interrupted prefixes until their recovery paths are implemented.
+
+Deliver in two connected steps: prove native exclusion/lifetime/permission
+behavior, then integrate every relevant lock/recovery entrypoint. Do not
+describe the primitive alone as completed public Windows recovery support.
+Actions acceptance must cover same-directory contention in independent
+processes, independent installations, normal close and abrupt owner exit,
+non-inheritance, unsafe existing files/ACLs, directory or file replacement,
+and preservation of the old operation evidence after admission release.
+Integration coverage must exercise deployment-versus-recovery contention and
+retain the existing read-only completion, native runtime and full dual-platform
+regressions. No local builds, tests or servers are permitted.
+
+Primary references verified against actual source/documentation:
+
+- [NuGet ConcurrencyUtilities](https://github.com/NuGet/NuGet.Client/blob/dev/src/NuGet.Core/NuGet.Common/ConcurrencyUtilities.cs)
+  uses `OpenOrCreate`, read/write access and `FileShare.None`. Its Windows
+  delete-on-close policy is not required by this design.
+- [gofrs/flock Windows implementation](https://github.com/gofrs/flock/blob/main/flock_windows.go)
+  uses `LockFileEx` and retains the file on unlock; its Unix counterpart uses
+  `flock`. This is an alternative OS-backed mechanism, not another dependency
+  required by this application.
+- [Win32 CreateFileW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)
+  defines sharing exclusion and non-inheritance; an existing file's security
+  descriptor is not replaced by the creation-time descriptor.
+- [Win32 Mutex Objects](https://learn.microsoft.com/en-us/windows/win32/sync/mutex-objects)
+  documents thread ownership and abandoned-state uncertainty. A named mutex
+  is valid, but adds naming/thread-lifetime considerations without a benefit
+  for this file-oriented admission layer.
+
 ## Failure messages and recovery
 
 Every caught failure returns a nonzero exit and prints:
