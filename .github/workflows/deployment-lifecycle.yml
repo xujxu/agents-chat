@@ -463,6 +463,9 @@ jobs:
       - name: Require original-controller-bound Windows admission
         shell: pwsh
         run: ./tests/deployment-windows-admission-bridge.ps1
+      - name: Require shared admission at Windows ownership entrypoints
+        shell: pwsh
+        run: ./tests/deployment-windows-admission-state.ps1
       - name: Reopen completed original task evidence in a fresh native process
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof

@@ -202,8 +202,11 @@ exclusive file handle, following the standard package-manager locking pattern.
 The primitive preserves durable operation evidence and does not itself permit
 recovery or unlock. Native admission and the three completed-task proof
 scenarios passed at `234bef9`, along with all 25 full-regression jobs.
-The original-controller-bound bridge and shared entrypoint integration are
-being implemented; neither grants authority to bypass durable evidence.
+The original-controller-bound bridge passed native acceptance at `c1f90f1`,
+including competing processes, invalid contexts/requests and controller loss.
+Its full regression also passed all 25 jobs. Shared operation-entrypoint
+integration remains pending; admission never grants authority to bypass
+durable evidence.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

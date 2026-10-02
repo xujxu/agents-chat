@@ -8492,7 +8492,7 @@ selection or create another worktree.
   both saved-worker source lists. The inventory test independently asserts
   its presence; generic saved recovery capture then includes the same source.
 
-- [ ] **Step 4: publish and require native plus full acceptance.**
+- [x] **Step 4: publish and require native plus full acceptance.**
   Commit only the planned production, inventory and directly related
   documentation changes; push and locate Actions by exact SHA. Require the
   native fixture to pass all independent-process and refusal cases, plus
@@ -8636,7 +8636,7 @@ both graceful close and abrupt original-controller loss.
   specifically as `Windows admission refused: acquire/busy.`; propagate
   other refusals as their actual stage, without retry or permission repair.
 
-- [ ] **Step 4: require native and full regression acceptance.**
+- [x] **Step 4: require native and full regression acceptance.**
   Publish implementation with both saved-helper inventories updated.
   Require the new native fixture and all three completed-task proof
   scenarios, then preserve the entire 25-job regression. No local
@@ -8652,7 +8652,127 @@ control/evidence PASS line. Captured before cancelling only that causal run.
 Implementation preserves existing task transport and bounded watch semantics,
 adds the no-deadline admission watch, and includes raw native refusals for
 duplicate/extra fields, skipped IDs, unsupported mutation and oversized
-frames. Native and full acceptance remain pending publication/Actions.
+frames. Implementation `c1f90f1` / `37032247968`, native `110921705338`,
+passed the bridge fixture at 16:12:50 UTC and all three completed-task proof
+scenarios at 16:15:08 UTC. Completed logs were captured by
+`admission-bridge-implementation-watch`; the full regression passed all
+25 jobs, observed at 16:34:32 UTC.
+
+### Task 5AG: shared Windows admission at real ownership entrypoints
+
+Continue the approved design without a new approval prompt. The accepted
+bridge is necessary but insufficient: normal lock acquisition/release and
+saved cold worker retirement must actually use it. Linux behavior and
+read-only inspection remain unchanged.
+
+**Files and API boundaries:**
+- Add `tests/deployment-windows-admission-state.ps1` and `.mjs`, using the
+  existing production private controller/token and native-created roots.
+- Extend `scripts/deployment/windows-admission.mjs` with
+  `withWindowsAdmission(control, { pwsh, admission }, action)`. A supplied
+  context is validated by the actual WeakMap; otherwise acquire using
+  explicit `pwsh`. Check before and after the action, close only an internally
+  acquired context, and preserve action plus close errors.
+- `scripts/deployment/state.mjs`: `acquireLock(root, options)` accepts
+  `pwsh`/`admission`; `releaseLock(root, owner, options = {})` accepts the same.
+  Windows must always use the native critical section, not only when the
+  caller happened to supply a runtime. Preserve existing Linux paths.
+- `scripts/deployment/retirement-recovery.mjs`: accept `pwsh`/`admission`,
+  acquire before reading/claiming recovery authority and retain through
+  final evidence/lock retirement. Recheck retained admission at mutation
+  authority boundaries. The existing durable checks remain mandatory.
+- `scripts/deployment/saved-recovery-engine.mjs` and
+  `scripts/deployment/retirement-recovery-entry.mjs`: carry explicit Windows
+  PowerShell selection across the actual saved invocation, preserving
+  Linux argument shapes. Do not look up an arbitrary production runtime
+  from PATH or a test-only environment variable.
+- `tests/deployment-fixture.mjs`: explicitly supply the Actions-selected
+  runtime in test acquire/release/recovery adapters. Adapt Windows-relevant
+  state, receipt, worker-operation/retirement and retirement-recovery tests;
+  child fixtures must carry the runtime too.
+- Windows native-operation and task-transaction-controller fixtures must
+  pass their already-selected runtime. Use the existing private controller
+  and private TEMP/TMP setup for Windows suites that previously relied on
+  ordinary elevated-process default ownership. Do not bypass native checks
+  or add production permission repair.
+- `.github/workflows/deployment-lifecycle.yml`: include the causal native
+  ownership fixture in the existing proof job, then run affected Windows
+  contracts/native-operation suites under valid private creation-time
+  ownership. Keep Linux execution unchanged.
+
+- [ ] **Step 1: publish a genuine native entrypoint failure.**
+  Create private roots and start Node through `WindowsControllerProcess`.
+  The first mutation assertion uses an actual retained native lease:
+  ```js
+  const admission = await acquireWindowsAdmission({ control, pwsh });
+  try {
+    await assert.rejects(acquireLock(control, {
+      project, operationId: randomUUID(), pwsh,
+    }), error => error.code === 'DEPLOYMENT_WINDOWS_ADMISSION_REFUSED'
+      && /acquire\/busy/.test(error.diagnostic));
+  } finally { await admission.close(); }
+  ```
+  Before this assertion, prove read-only reconciliation creates no gate.
+  Additional executable cases cover cold recovery refusal, blocked release
+  preserving exact owner bytes, reuse of a real context without recursive
+  acquisition, and foreign/forged context and omitted-runtime refusals.
+  Expect the current implementation to fail with missing expected rejection,
+  after actual private controller/root creation, not with fixture ACL errors.
+
+- [ ] **Step 2: capture causal Actions, then implement shared admission.**
+  Push fixtures/plan with the required coauthor trailer. Inspect the exact
+  native job and capture the missing-rejection assertion before cancelling
+  only the causal run. Keep `c1f90f1` / `37032247968` as the full accepted
+  25/25 baseline. Implement the Windows wrapper and entrypoints, without
+  changing `reconcileInterruptedOperation` or adding automatic lock removal.
+  The wrapper's error/ownership contract is:
+  ```js
+  export async function withWindowsAdmission(control, options, action) {
+    const supplied = options.admission !== undefined;
+    const admission = supplied ? options.admission
+      : await acquireWindowsAdmission({ control, pwsh: options.pwsh });
+    let primary;
+    try {
+      await assertWindowsAdmission(control, admission);
+      const result = await action(admission);
+      await assertWindowsAdmission(control, admission);
+      return result;
+    } catch (error) {
+      primary = error;
+      throw error;
+    } finally {
+      if (!supplied) {
+        try { await admission.close(); }
+        catch (error) {
+          throw new AggregateError([...(primary ? [primary] : []), error],
+            'Windows admission action and cleanup failed.');
+        }
+      }
+    }
+  }
+  ```
+  Wire Windows acquire and release through this wrapper while keeping their
+  admitted bodies and durable ownership guards. Recovery retains the same
+  context through mutation and final unlock; a kernel lease does not replace
+  original owner absence, exact evidence identity or inventory checks.
+
+- [ ] **Step 3: migrate actual callers and creation-time test ownership.**
+  Carry `pwsh` through saved invocation/entry and independent fixture
+  processes; no silently admitted call path remains. Reuse
+  `WindowsControllerProcess.Start`, private root/TEMP/TMP, and literal
+  absolute test paths. Preserve bounded process/Job and stream cleanup.
+  Existing native fixtures already demonstrate Node-created private files
+  under this token; do not normalize arbitrary pre-existing ACLs.
+  Keep omitted runtime and fake context cases using direct production APIs
+  so adapters cannot conceal an unsupported caller.
+
+- [ ] **Step 4: require native and full acceptance, then continue recovery.**
+  Publish the implementation and require the actual ownership fixture plus
+  all existing bridge/proof cases. Inspect all 25 jobs; diagnose observed
+  failures remotely and publish precise fixes. Update README/plan and
+  continuity only from actual acceptance. This shared admission does not
+  complete partial Windows task recovery, public lifecycle integration,
+  cross-account configuration policy or live deployment/voice acceptance.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
