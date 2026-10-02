@@ -99,7 +99,9 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
         }
         const id = ++sequence;
         await wire.send({ id, method });
-        const reply = captureWorkerFields(await wire.receive({ signal: requestSignal, timeoutMs: 30000 }),
+        const reply = captureWorkerFields(await wire.receive({
+          signal: requestSignal, timeoutMs: method === 'retire' ? 60000 : 30000,
+        }),
           ['id', 'type', 'value'], 'task controller reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.value !== method) {
           throw new Error('Unexpected task controller acknowledgement.');
@@ -116,6 +118,7 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
     return Object.freeze({
       identity,
       check: ({ signal: checkSignal } = {}) => request('check', checkSignal),
+      retire: ({ signal: retireSignal } = {}) => request('retire', retireSignal),
       async close() {
         if (busy) throw uncertain(new Error('Cannot close an active task controller request.'));
         if (failure) throw failure;

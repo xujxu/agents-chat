@@ -21,6 +21,7 @@ try {
         (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-maintenance.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-transaction.ps1')
+    . (Join-Path $PSScriptRoot 'windows-task-retirement.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwner($ControllerPid, $ControllerIdentity)
     $retained = [Deployment.WindowsPrivateFile]::Open($Admission, $Sha256)
@@ -55,11 +56,16 @@ try {
         $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close')) { throw 'Invalid controller request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire')) { throw 'Invalid controller request.' }
         $sequence = $id
         $stage = 'check'
         $retained.Check()
-        $null = Assert-AgentsChatTaskStopped -Context $context
+        if ($context.Retired) { $null = Assert-AgentsChatTaskRetired -Context $context }
+        else { $null = Assert-AgentsChatTaskStopped -Context $context }
+        if ($method -ceq 'retire') {
+            $stage = 'retire'
+            $null = Retire-AgentsChatTaskOwner -Context $context
+        }
         if ($method -ceq 'close') {
             $stage = 'close'
             Close-AgentsChatTaskMaintenance -Context $context

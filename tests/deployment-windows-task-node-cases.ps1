@@ -110,6 +110,7 @@ try {
             Assert ($receipt.version -eq 1 -and $receipt.phase -ceq $phase -and
                 $receipt.previousSha256 -ceq $previous -and $receipt.admissionSha256 -ceq $digest -and
                 $receipt.transactionSha256 -ceq $transactionHash -and $receipt.operationId -ceq $hello.operationId -and
+                $receipt.taskName -ceq $TaskName -and
                 $receipt.ownerPid -eq $Owner.Id -and $receipt.ownerIdentity -ceq $Ready.identity -and
                 $receipt.generation -ceq $Ready.generation -and $receipt.instanceGuid -ceq $Binding.instanceGuid -and
                 $receipt.definition -ceq [string]$task.Xml -and

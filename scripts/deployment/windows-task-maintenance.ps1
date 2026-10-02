@@ -25,7 +25,7 @@ function Get-AgentsChatMaintenanceBinding([hashtable]$Context) {
 }
 
 function Test-AgentsChatMaintenanceContext([hashtable]$Context, [bool]$Stopped) {
-    if ($Context.Closed -or $Context.Poisoned) { throw 'Unavailable maintenance context.' }
+    if ($Context.Closed -or $Context.Poisoned -or $Context.Retired) { throw 'Unavailable maintenance context.' }
     $Context.Stage = 'transaction'
     if ($Context.Transaction) {
         try { Assert-AgentsChatTaskTransaction $Context.Transaction }
@@ -148,6 +148,7 @@ function Stop-AgentsChatManagedTask {
         Stage='admission'; Files=[Collections.Generic.List[IDisposable]]::new()
         Controller=$null; Owner=$null; Folder=$null; Data=$null
         Closed=$false; Poisoned=$false; Busy=$false; Stopped=$false; Inhibited=$false
+        Retired=$false; RetirementRequested=$false; RetirementSha256=$null
         AdmissionSha256=$Sha256; PreviousSha256=$Sha256; Definition=$null; LauncherPid=0
         Transaction=$Transaction
         Directory=[IO.Path]::GetDirectoryName($Admission)
