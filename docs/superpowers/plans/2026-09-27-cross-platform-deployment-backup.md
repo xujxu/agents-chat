@@ -7360,6 +7360,17 @@ documentation, revealing that the workflow path filters covered only
 `tests/deployment-*`. Include native C# fixtures in both push and pull-request
 filters so isolated helper corrections cannot silently miss Actions.
 
+`25b6033` / `36952267043`, native `110667569892`, passed the directory,
+runtime and transaction cases again. Fixed token reads, duplication and the
+pre-launch identity/permission comparisons succeeded; failure advanced to
+`Create suspended private-owner fixture`. Include the native error number
+in the bounded exception message (the previous custom Win32Exception message
+hid that number in PowerShell's displayed exception). Do not infer missing
+privileges or alter caller policy without the actual native result.
+Run this self-contained probe immediately after Node setup, before the
+unchanged native task cases, to expose its failure promptly. No case, platform
+or deadline is removed; a successful job still requires every existing step.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

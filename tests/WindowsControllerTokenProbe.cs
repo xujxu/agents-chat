@@ -49,7 +49,11 @@ namespace DeploymentTests
 
         static void Native(bool success, string stage)
         {
-            if (!success) throw new Win32Exception(Marshal.GetLastWin32Error(), stage);
+            if (!success)
+            {
+                int error = Marshal.GetLastWin32Error();
+                throw new Win32Exception(error, stage + " (Win32 " + error + ").");
+            }
         }
         static string Information(SafeAccessTokenHandle token, int type, bool sid)
         {
