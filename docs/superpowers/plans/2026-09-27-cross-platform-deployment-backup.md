@@ -7708,11 +7708,12 @@ bundle publisher and the Linux public restore previously observed failing.
 This replaces `44016e6` as the full accepted baseline; retain the documented
 uncertainty about the earlier isolated failure's root cause.
 
-Task 5V causal `3d71f9e` / `36989723092` is running; native task-options
-`110782885172` has not reached the new retirement cases yet. Local `c5d5b6d`
-implements the focused native retirement module, requested/complete private
-receipts, original process/task settlement checks and Node/native `retire`
-request. It is committed but not pushed pending causal evidence. Retirement
+Task 5V causal `3d71f9e` / `36989723092` failed exactly because
+`context.retire` was absent; the characterized run was then cancelled.
+Implementation `c5d5b6d` and exact-state binding `284e32f` are pushed.
+Native task-options `110784933138` in run `36990262413` passed early-phase
+refusal, update retirement and restore retirement. Full regression remains
+in progress; the latest full accepted baseline is still `c7e4ccd`. Retirement
 requests allow 60 seconds for the two bounded native joins plus rechecks;
 ordinary check/close request deadlines remain unchanged.
 
@@ -7720,6 +7721,56 @@ Retirement also captures the exact natively opened activation-state SHA-256
 in both receipts, not only its phase name. Every subsequent retirement check
 requires that digest unchanged, alongside the original lock/configuration.
 The positive update and restore tests independently verify this state digest.
+
+#### Task 5W: publish a disabled replacement task after original retirement
+
+Continue the approved activation design without enabling a task or claiming
+application health. Reject replacement before retirement, wrong candidate
+digests, changed transaction state and unrelated task policy changes.
+
+**Files:** `WindowsRuntimeHost.cs` (shared read-only installed configuration
+admission), new `windows-task-replacement.ps1` (retained candidate and exact
+disabled task publication), existing maintenance/retirement/controller modules
+and saved-worker manifest, native runtime bundle and transaction fixtures.
+
+- [ ] Add native tests using the production bundle publisher and actual
+  Scheduled Tasks. Drive update and restore to their activation phases, retire
+  the original owner, and execute:
+  ```js
+  await context.replace({ configuration, sha256 });
+  await context.replace({ configuration, sha256 });
+  await context.check();
+  await context.close();
+  ```
+  Require exactly two private `task-replace` receipts chained from completed
+  retirement, unchanged original retirement receipts, disabled/no-instance
+  task, exact candidate action and unchanged XML outside Command, Arguments
+  and WorkingDirectory. Wrong digest and pre-retirement calls must publish
+  no replacement intent or task mutation.
+- [ ] Share the installed host's existing strict configuration/helper/command
+  parsing through `WindowsRuntimeHost.Open(configuration, sha256, helpers)`.
+  It returns an IDisposable retained candidate with `Check()` and does not
+  create a Job, runtime process, control pipe or readiness file. `Run` uses
+  the same admission before starting the domain. Test write denial while
+  retained and absence of runtime readiness.
+- [ ] Implement `Publish-AgentsChatTaskReplacement -Context -Configuration
+  -Sha256`. Recheck completed retirement and exact activation-state digest;
+  retain the candidate; copy the admitted disabled task definition and
+  replace only its three literal action fields. Publish requested evidence
+  before `RegisterTaskDefinition` with UPDATE, DONT_ADD_PRINCIPAL_ACE and
+  IGNORE_REGISTRATION_TRIGGERS. Preserve original principal/logon type and
+  exact security descriptor. Compare native returned XML, disabled state
+  and zero instances before completed evidence. Fail closed and retain
+  evidence rather than silently rolling back or enabling.
+- [ ] Keep original disabled XML immutable for retirement evidence; retain a
+  distinct replacement definition for subsequent policy checks. Repeated
+  identical replacement checks authority, not another registration.
+  Add bounded `replace` native/Node request payload and explicit saved
+  dependency. Existing stop/check/retire/close paths remain unchanged.
+- [ ] Push causal tests, capture missing shared admission or replace method in
+  Actions, then push implementation and require native/full regression.
+  Starting and binding the new generation, health verification, release,
+  cold recovery and public Windows transactions are still unfinished.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

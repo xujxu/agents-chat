@@ -1,6 +1,7 @@
 param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-stop', 'node-close', 'node-exit',
     'transaction-close', 'transaction-exit', 'transaction-changed-state', 'transaction-restore',
-    'transaction-retire', 'transaction-retire-refused', 'transaction-retire-restore')][string]$Scenario = 'stop')
+    'transaction-retire', 'transaction-retire-refused', 'transaction-retire-restore',
+    'transaction-replace', 'transaction-replace-restore', 'transaction-replace-refused', 'transaction-replace-early')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -139,13 +140,14 @@ if (process.argv[2] === 'child') {
             -Action $Scenario.Substring(5)
     }
     if ($Scenario.StartsWith('transaction-')) {
-        $restoreTransaction = $Scenario -in @('transaction-restore', 'transaction-retire-restore')
+        $restoreTransaction = $Scenario -in @('transaction-restore', 'transaction-retire-restore', 'transaction-replace-restore')
         $transactionAction = if ($Scenario -eq 'transaction-restore') { 'close' } `
-            elseif ($Scenario -eq 'transaction-retire-restore') { 'retire' } else { $Scenario.Substring(12) }
+            elseif ($Scenario -eq 'transaction-retire-restore') { 'retire' } `
+            elseif ($Scenario -eq 'transaction-replace-restore') { 'replace' } else { $Scenario.Substring(12) }
         & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $root -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
             -Action $transactionAction -Transactional -Restore:$restoreTransaction
-        if ($transactionAction -eq 'retire') {
+        if ($transactionAction -in @('retire', 'replace', 'replace-refused')) {
             Assert ($owner.HasExited -and $member.WaitForExit(15000) -and
                 -not $scheduler.GetFolder('\').GetTask($taskName).Enabled) 'Transactional retirement lost original settlement'
             Write-Output "PASS: $Scenario retains durable retirement and original task inhibition"

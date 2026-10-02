@@ -372,3 +372,15 @@ jobs:
       - name: Retire original task owner for restore activation
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-retire-restore
+      - name: Refuse replacement before original retirement
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-early
+      - name: Publish disabled replacement with original transaction authority
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace
+      - name: Publish disabled replacement for restore
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-restore
+      - name: Refuse changed replacement configuration before task mutation
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-refused

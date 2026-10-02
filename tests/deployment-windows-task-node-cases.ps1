@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory)][string]$Configuration,
     [Parameter(Mandatory)][string]$Sha256,
     [Parameter(Mandatory)]$Binding,
-    [Parameter(Mandatory)][ValidateSet('close', 'exit', 'changed-state', 'retire', 'retire-refused')][string]$Action,
+    [Parameter(Mandatory)][ValidateSet('close', 'exit', 'changed-state', 'retire', 'retire-refused',
+        'replace', 'replace-refused', 'replace-early')][string]$Action,
     [switch]$Transactional,
     [switch]$Restore
 )
@@ -90,12 +91,25 @@ try {
     $null = $bridge.Handle
     Assert ($stopped.bridge.processIdentity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($bridge.Id)) `
         'Native bridge process identity differs'
-    $controller.StandardInput.WriteLine((@{ action=$Action } | ConvertTo-Json -Compress))
+    $stoppedDefinition = [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml
+    $request = @{ action=$Action }
+    $replacement = $null
+    if ($Action.StartsWith('replace')) {
+        $original = [IO.File]::ReadAllText($Configuration) | ConvertFrom-Json -AsHashtable
+        $candidateEnvironment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($key in $original.command.environment.Keys) { $candidateEnvironment.Add($key, $original.command.environment[$key]) }
+        $replacement = New-AgentsChatRuntimeBundle -Source ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment'))) `
+            -Directory (Join-Path $controllerRoot 'replacement') -File $original.command.file `
+            -Arguments ([string[]]$original.command.args) -WorkingDirectory $original.command.cwd -Environment $candidateEnvironment
+        $request.configuration = $replacement.Configuration
+        $request.sha256 = $replacement.Sha256
+    }
+    $controller.StandardInput.WriteLine(($request | ConvertTo-Json -Compress))
     $controller.StandardInput.Flush()
     if ($Action -ne 'exit') { Assert ((Receive-Controller).phase -ceq 'closed') 'Node close was not acknowledged' }
     Assert ($controller.WaitForExit(15000) -and $controller.ExitCode -eq 0 -and
         $bridge.WaitForExit(15000)) 'Original Node controller or bridge survived completion'
-    if ($Action -eq 'retire') {
+    if ($Action -in @('retire', 'replace', 'replace-refused')) {
         Assert ($Owner.WaitForExit(15000) -and $Owner.ExitCode -eq 0) 'Original task owner did not retire cleanly'
         $task = $scheduler.GetFolder('\').GetTask($TaskName)
         Assert (-not $task.Enabled -and $task.GetInstances(0).Count -eq 0) 'Retirement released inhibition or left a task instance'
@@ -114,7 +128,7 @@ try {
                 $receipt.taskName -ceq $TaskName -and $receipt.stateSha256 -ceq $stateHash -and
                 $receipt.ownerPid -eq $Owner.Id -and $receipt.ownerIdentity -ceq $Ready.identity -and
                 $receipt.generation -ceq $Ready.generation -and $receipt.instanceGuid -ceq $Binding.instanceGuid -and
-                $receipt.definition -ceq [string]$task.Xml -and
+                $receipt.definition -ceq $stoppedDefinition -and
                 $receipt.securityDescriptor -ceq [string]$task.GetSecurityDescriptor(7) -and
                 $receipt.statePhase -ceq $(if ($Restore) { 'restore-activating' } else { 'activating' })) `
                 'Retirement evidence lost original authority or task policy'
@@ -122,11 +136,61 @@ try {
         }
         Assert (@(Get-ChildItem -LiteralPath $directory -Filter 'task-retire-*.json').Count -eq 2 -and
             @(Get-ChildItem -LiteralPath $directory -Filter 'task-stop-*.json').Count -eq 4) 'Retirement duplicated or removed evidence'
+        if ($Action -eq 'replace') {
+            $definition = $task.Definition
+            $actionDefinition = $definition.Actions.Item(1)
+            $hostFile = Join-Path $replacement.Directory 'windows-runtime-host.ps1'
+            $expectedArguments = "-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$($replacement.Configuration)`" -Sha256 $($replacement.Sha256)"
+            Assert ($definition.Actions.Count -eq 1 -and
+                [string]$actionDefinition.Path -ceq [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName -and
+                [string]$actionDefinition.Arguments -ceq $expectedArguments -and
+                [string]$actionDefinition.WorkingDirectory -ceq $replacement.Directory) 'Replacement action is not the exact candidate'
+            $before = [xml]$stoppedDefinition
+            $after = [xml]$task.Xml
+            $namespaces = [Xml.XmlNamespaceManager]::new($before.NameTable)
+            $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+            foreach ($name in @('Command', 'Arguments', 'WorkingDirectory')) {
+                foreach ($document in @($before, $after)) {
+                    $nodes = $document.SelectNodes("/t:Task/t:Actions/t:Exec/t:$name", $namespaces)
+                    Assert ($nodes.Count -eq 1) 'Replacement lost literal action fields'
+                    $nodes[0].InnerText = 'normalized'
+                }
+            }
+            Assert ($before.OuterXml -ceq $after.OuterXml) 'Replacement changed account, triggers, settings or unrelated task policy'
+            foreach ($phase in @('requested', 'complete')) {
+                $file = Join-Path $directory "task-replace-$phase.json"
+                $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+                $retained = [Deployment.WindowsPrivateFile]::Open($file, $hash)
+                try { $receipt = $retained.ReadText() | ConvertFrom-Json }
+                finally { $retained.Dispose() }
+                Assert ($receipt.version -eq 1 -and $receipt.phase -ceq $phase -and
+                    $receipt.previousSha256 -ceq $previous -and $receipt.operationId -ceq $hello.operationId -and
+                    $receipt.admissionSha256 -ceq $digest -and $receipt.transactionSha256 -ceq $transactionHash -and
+                    $receipt.stateSha256 -ceq $stateHash -and $receipt.taskName -ceq $TaskName -and
+                    $receipt.originalDefinition -ceq $stoppedDefinition -and
+                    ([xml]$receipt.definition).OuterXml -ceq ([xml]$task.Xml).OuterXml -and
+                    $receipt.securityDescriptor -ceq $record.securityDescriptor -and
+                    $receipt.configuration -ceq $replacement.Configuration -and
+                    $receipt.configurationSha256 -ceq $replacement.Sha256) 'Replacement receipts lost original authority or candidate binding'
+                $previous = $hash
+            }
+            Assert (@(Get-ChildItem -LiteralPath $directory -Filter 'task-replace-*.json').Count -eq 2 -and
+                @(Get-ChildItem -LiteralPath $replacement.Directory -Filter 'runtime-*.json').Count -eq 0) `
+                'Replacement duplicated evidence or started an unverified runtime'
+            Write-Output 'PASS: update/restore replacement preserves disabled policy, account, triggers and permissions with exact private candidate receipts'
+        } else {
+            Assert ([string]$task.Xml -ceq $stoppedDefinition -and
+                @(Get-ChildItem -LiteralPath $directory -Filter 'task-replace-*.json').Count -eq 0) `
+                'Unaccepted replacement changed the task or published intent'
+        }
         Write-Output 'PASS: transactional retirement joins only the original task owner and retains disabled policy and exact private receipts'
         return
     }
     Assert (@(Get-ChildItem -LiteralPath $directory -Filter 'task-retire-*.json').Count -eq 0) `
         'Unaccepted retirement published intent'
+    Assert (@(Get-ChildItem -LiteralPath $directory -Filter 'task-replace-*.json').Count -eq 0 -and
+        [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml -ceq $stoppedDefinition) `
+        'Replacement before retirement changed the task or published intent'
     Assert (-not $Owner.HasExited -and -not $scheduler.GetFolder('\').GetTask($TaskName).Enabled) `
         'Node completion retired the original task owner or released inhibition'
     $observation = [Deployment.WindowsRuntimeControl]::Exchange(

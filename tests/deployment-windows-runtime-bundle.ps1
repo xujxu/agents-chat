@@ -37,6 +37,18 @@ try {
         'Runtime publication changed the literal command'
     Assert (@(Get-ChildItem -LiteralPath $directory).Count -eq $helpers.Count + 1 -and
         @($configuration.helpers.PSObject.Properties).Count -eq $helpers.Count) 'Unexpected runtime bundle inventory'
+    $candidate = [Deployment.WindowsRuntimeHost]::Open($bundle.Configuration, $bundle.Sha256, $directory)
+    try {
+        $candidate.Check()
+        foreach ($file in @($bundle.Configuration, (Join-Path $directory $helpers[0]))) {
+            $refused = $false
+            try { [IO.File]::WriteAllText($file, 'changed') }
+            catch { $refused = ($_.Exception.GetBaseException().HResult -band 0xffff) -eq 32 }
+            Assert $refused 'Candidate admission did not retain its configuration and helpers'
+        }
+        Assert (@(Get-ChildItem -LiteralPath $directory -Filter 'runtime-*.json').Count -eq 0) `
+            'Read-only candidate admission started a runtime'
+    } finally { $candidate.Dispose() }
     $lease = [Deployment.WindowsPrivateFile]::OpenDirectory($directory)
     try { $lease.Check() }
     finally { $lease.Dispose() }

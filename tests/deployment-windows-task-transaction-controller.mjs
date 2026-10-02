@@ -80,11 +80,13 @@ await context.check();
 await assert.rejects(releaseLock(control, lock), /maintenance/i);
 assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
 console.log(JSON.stringify({ phase: 'stopped', bridge: context.identity }));
-const { action } = await receive();
+const { action, configuration, sha256 } = await receive();
 if (action === 'exit') process.exit(0);
-if (action === 'retire-refused') {
+if (action === 'replace-early') {
+  await assert.rejects(context.replace({ configuration, sha256 }), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
+} else if (action === 'retire-refused') {
   await assert.rejects(context.retire(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
-} else if (action === 'retire') {
+} else if (['retire', 'replace', 'replace-refused'].includes(action)) {
   if (operation !== 'restore') {
     for (const phase of ['rotating', 'backup-ready', 'source-selected', 'dependencies', 'building', 'configuring', 'activating']) {
       state = { ...state, previousPhase: state.phase, phase };
@@ -94,8 +96,17 @@ if (action === 'retire-refused') {
   }
   await context.retire();
   await context.retire();
-  await context.check();
-  await context.close();
+  if (action === 'replace-refused') {
+    await assert.rejects(context.replace({ configuration, sha256: '0'.repeat(64) }),
+      { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
+  } else {
+    if (action === 'replace') {
+      await context.replace({ configuration, sha256 });
+      await context.replace({ configuration, sha256 });
+    }
+    await context.check();
+    await context.close();
+  }
 } else if (action === 'changed-state') {
   await writeFile(path.join(control, 'state.json'), JSON.stringify({ ...state, operationId: randomUUID() }));
   await assert.rejects(context.check(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
