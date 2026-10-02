@@ -236,7 +236,7 @@ to that intent: exact task-policy/security hashes, original listener binding,
 installed configuration and retired process identities. It preserves all
 receipts and is intended for subsequent partial-cleanup recovery; native
 checkpoint acceptance passed all three scenarios and the full 25-job
-regression at `cb7a2aa`. Its partial-cleanup consumer is not yet complete.
+regression at `cb7a2aa`; its receipt-cleanup consumer is accepted below.
 Both root retirement records independently block ordinary lock acquisition,
 release, worker-retirement recovery and idle reporting even without the task
 receipt directory. Windows checks include case aliases; marker contents are
@@ -245,7 +245,8 @@ Checkpoint-backed receipt retirement now has a separate native scope and
 Actions fixture: live handoff retains the original controller, while cold
 reopening accepts only an exact missing prefix after creator loss. Each
 request deletes only the next original descriptor through its exclusive
-native handle. Acceptance of this consumer is still pending; it retains the
+native handle. All three native scenarios and the full 26-job regression
+passed at `670818a / 37067463428`. The consumer retains the
 empty task receipt directory, state, lock and both root records, and does not
 perform final worker cleanup or unlock.
 Interrupted completion/recovery and public Windows integration remain unaccepted.

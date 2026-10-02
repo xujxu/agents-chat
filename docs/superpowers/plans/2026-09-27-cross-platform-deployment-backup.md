@@ -9834,7 +9834,7 @@ exception; it must not exempt Windows task-retirement evidence.
   marker and confirm ordinary admission still works. Keep all existing
   competing/forged/foreign-admission and non-mutating inspection tests.
 
-- [ ] **Step 4: require native and complete Actions acceptance.**
+- [x] **Step 4: require native and complete Actions acceptance.**
 
   Push the implementation and retain its full regression. Read native
   admission-state output and require both platform contracts plus all
@@ -9923,7 +9923,7 @@ runtime adoption, task-policy mutation or automatic operation unlock.
   let the parent terminate that specific child. Require both native proof and
   admission processes to exit with the original Node owner.
 
-- [ ] **Step 2: reopen only a contiguous missing prefix.**
+- [x] **Step 2: reopen only a contiguous missing prefix.**
 
   The parent reopens the same checkpoint after creator loss. Preserve the
   checkpoint result exactly and require `retiredFiles === 3`. Each original
@@ -9950,7 +9950,7 @@ runtime adoption, task-policy mutation or automatic operation unlock.
   A live scope fixes its observed prefix; subsequent unexpected disappearance
   or reappearance poisons it rather than changing that prefix.
 
-- [ ] **Step 3: preserve native runtime authority across live handoff.**
+- [x] **Step 3: preserve native runtime authority across live handoff.**
 
   Open/check the checkpoint scope while the full proof still holds all its
   handles. Both creator pairs must either match the exact current Node/native
@@ -9969,7 +9969,7 @@ runtime adoption, task-policy mutation or automatic operation unlock.
   facade. Any handoff failure closes both retained scopes and preserves every
   receipt. Original controller exit still terminates the same native child.
 
-- [ ] **Step 4: delete only the next exact receipt through its checked handle.**
+- [x] **Step 4: delete only the next exact receipt through its checked handle.**
 
   Before mutation, check the entire remaining inventory and original runtime.
   Release only the target receipt's read handle, then call the accepted
@@ -9984,7 +9984,7 @@ runtime adoption, task-policy mutation or automatic operation unlock.
   task-maintenance directory, both root markers, state and original owner.
   Exhausted, closed, foreign or poisoned authority cannot delete anything.
 
-- [ ] **Step 5: accept interruption and genuine three-scenario regression.**
+- [x] **Step 5: accept interruption and genuine three-scenario regression.**
 
   Corruption cases rename original fixture files out and back, preserving
   their native IDs; do not delete/recreate authentic receipts. Remove only
@@ -10040,6 +10040,18 @@ https://git-scm.com/docs/git-maintenance. Add command-local
 do not change production Git behavior, repository/global configuration, or
 add cleanup retries that hide surviving writers. Preserve the run and
 require the corrected fixture plus the full regression to pass.
+
+**Task 5AL / 5AM final acceptance:** corrected
+`670818a / 37067463428` completed successfully with all 26 jobs at
+22:05:45 UTC. Native receipt retirement `111042218538` passed update,
+restore and originally disabled scenarios at 21:45:51 / 21:47:37 /
+21:49:24 UTC. Windows contracts `111042218628`, actual Windows application
+`111042218683`, and the previously failing Linux database admission
+`111042218686` all passed. The original `9da4c9a` run was preserved through
+completion: 25 successes and the single characterized fixture teardown
+failure. The accepted consumer retires all 23 receipts and preserves the
+empty directory, both root markers, original state and old operation lock.
+Directory/worker/final-unlock handoff remains unfinished.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
