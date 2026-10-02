@@ -16,25 +16,66 @@ try {
     $rootLease = [Deployment.WindowsPrivateFile]::CreateDirectory($root)
     Copy-Item -LiteralPath (Join-Path $source 'WindowsWorkerJob.cs') -Destination (Join-Path $root 'WindowsWorkerJob.cs')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'deployment-windows-controller-token-child.ps1') -Destination (Join-Path $root 'child.ps1')
+    @{ source = [IO.Path]::GetFullPath($source) } | ConvertTo-Json -Compress |
+        Set-Content -LiteralPath (Join-Path $root 'fixture.json') -Encoding utf8
     @'
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = process.argv[2];
 const child = process.argv[3] === 'child';
+async function writeControl() {
+  const source = fs.realpathSync.native(JSON.parse(fs.readFileSync(path.join(root, 'fixture.json'), 'utf8')).source);
+  const load = name => import(require('node:url').pathToFileURL(path.join(source, name)).href);
+  const [{ acquireLock, writeState }, { createWorkerJournal }, { saveWorkerEngine, verifyWorkerEngine }] =
+    await Promise.all([load('state.mjs'), load('worker-journal.mjs'), load('saved-worker-engine.mjs')]);
+  const project = path.join(root, 'project');
+  const control = path.join(root, 'control');
+  fs.mkdirSync(project, { mode: 0o700 });
+  fs.mkdirSync(control, { mode: 0o700 });
+  const { randomUUID } = require('node:crypto');
+  const operationId = randomUUID();
+  const lock = await acquireLock(control, { project, operationId });
+  let state = {
+    version: 1, operationId, project, operation: 'update', phase: 'preflight', previousPhase: null,
+    sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40), backupId: null,
+    priorRuntime: 'running', runtimeIdentity: randomUUID(), startedAt: lock.createdAt,
+    updatedAt: new Date().toISOString(), errorCode: null,
+  };
+  await writeState(control, state);
+  for (const phase of ['stopped', 'copying']) {
+    state = { ...state, previousPhase: state.phase, phase, updatedAt: new Date().toISOString() };
+    await writeState(control, state);
+  }
+  const owner = { project, operationId, workerId: randomUUID(), controllerIdentity: lock.processIdentity };
+  const journal = await createWorkerJournal(control, owner);
+  try { await journal.record({ version: 1, owner, phase: 'intent', domain: null }); }
+  finally { await journal.close(); }
+  const saved = await saveWorkerEngine({ source, control, project, operationId });
+  assert.deepEqual(await verifyWorkerEngine({ control, project, operationId, manifestSha256: saved.manifestSha256 }), saved);
+}
 fs.writeFileSync(path.join(root, child ? 'node-child.json' : 'node-root.json'), JSON.stringify({ pid: process.pid }));
 if (!child) {
   const result = require('node:child_process').spawnSync(process.execPath, [__filename, root, 'child'],
     { timeout: 10000, stdio: 'pipe', env: process.env });
   assert.equal(result.status, 0);
+  writeControl().catch(error => { console.error(error); process.exitCode = 1; });
 }
 '@ | Set-Content -LiteralPath (Join-Path $root 'writer.cjs')
     $rootLease.Check()
     $job = [Deployment.WindowsWorkerJob]::Create([guid]::NewGuid())
-    $owner = [DeploymentTests.WindowsControllerTokenProbe]::Run(
-        [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
-        (Join-Path $root 'child.ps1'), (Join-Path $root 'WindowsWorkerJob.cs'), $node, $root, $job.Name,
-        $PID, [Deployment.WindowsWorkerJob]::ProcessIdentity($PID))
+    try {
+        $owner = [DeploymentTests.WindowsControllerTokenProbe]::Run(
+            [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+            (Join-Path $root 'child.ps1'), (Join-Path $root 'WindowsWorkerJob.cs'), $node, $root, $job.Name,
+            $PID, [Deployment.WindowsWorkerJob]::ProcessIdentity($PID))
+    } catch {
+        $diagnostic = Join-Path $root 'writer-error.txt'
+        if ((Test-Path -LiteralPath $diagnostic) -and (Get-Item -LiteralPath $diagnostic).Length -le 32768) {
+            Write-Output ([IO.File]::ReadAllText($diagnostic))
+        }
+        throw
+    }
     Assert (@($job.Members()).Count -eq 0) 'Original token fixture Job is not empty'
     $rootLease.Check()
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
