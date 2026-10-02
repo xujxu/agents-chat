@@ -8193,6 +8193,51 @@ all other policy and security. Partial post-release fixture cleanup now
 settles the original runtime without the previous directory-lock failure.
 Captured this diagnostic before cancellation and correction publication.
 
+Task 5AB corrected `f7c5e19` / `37010551771`, native `110849112501`,
+passed update, restore/custom security, originally disabled policy and changed
+terminal-state refusal, then all earlier activation/listener/lease scenarios.
+The same original runtime survived controller close in every positive
+completion case. Full regression remains in progress; preserve it.
+
+#### Task 5AC: read-only original activation lease observation
+
+Cold completion must not infer lease release merely because a process survives
+controller loss. Add an explicit, generation-bound native observation before
+implementing cold policy/receipt reopening. This is neither new release
+authority nor application-health evidence.
+
+**Files:** `WindowsRuntimeLease.cs`, `WindowsRuntimeControl.cs`,
+`WindowsRuntimeHost.cs`; existing actual runtime-host and activation fixtures.
+The installed helper inventory remains nine files.
+
+- [ ] Causal actual installed guarded host test:
+  ```powershell
+  Assert ([Deployment.WindowsRuntimeControl]::Exchange(
+      [guid]$ready.generation, $ready.pid, $ready.identity, 'lease', 15000) -ceq 'guarded') `
+      'Read-only observation lost the original activation lease'
+  ```
+  Require the existing client to fail specifically with unsupported method,
+  after native host readiness/binding; do not describe it as server acceptance.
+- [ ] Add `WindowsRuntimeLease.Observe()` under the same release/timer gate:
+  disposed throws; unreleased checks the original owner/lifetime and returns
+  `guarded`; released returns `released` without requiring a still-live
+  former controller.
+- [ ] Extend control with an optional `Func<string>` observer, preserving
+  existing constructor overloads. A missing observer refuses explicitly.
+  Production host supplies `unguarded` only when it genuinely has no lease.
+  Strict `lease` replies accept exactly `unguarded`, `guarded`, or `released`
+  within the existing owner/generation/request-ID-bound frame. Do not change
+  domain observation fields, health flags or release-peer authorization.
+- [ ] Actual second-process observation must not release guarded work:
+  check before and after a rejected foreign-peer release, after legitimate
+  original-peer release, after controller exit, and after ordinary Job stop.
+  Also observe `unguarded` production hosts and the released original
+  transaction runtime from its independent post-close fixture controller.
+- [ ] Run only Actions. Preserve full Task 5AB regression, capture causal
+  failure, publish implementation, and require native plus full regression.
+  Cold policy mutation and evidence retirement still need their own original
+  task/instance/receipt/lock admission; lease status alone never authorizes them.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

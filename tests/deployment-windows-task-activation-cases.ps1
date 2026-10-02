@@ -179,6 +179,8 @@ try {
             $Bridge.WaitForExit(15000) -and $Bridge.ExitCode -eq 0) 'Completed controller did not settle'
         Start-Sleep -Milliseconds 750
         Assert (-not $owner.HasExited -and -not $member.HasExited) 'Completed original runtime died with its controller'
+        Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
+            $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') 'Independent completion observer cannot establish actual original lease release'
         $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
             $runtime.pid, $runtime.identity, 'observe', 15000) | ConvertFrom-Json
         Assert ($observation.members -contains $member.Id -and $observation.members -contains $runtime.launcherPid -and

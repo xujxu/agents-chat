@@ -399,6 +399,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Authenticate original lease release without changing runtime ownership
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-release
       - name: Complete healthy native update and release original activation lease
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete
@@ -444,6 +447,3 @@ jobs:
       - name: Settle unverified task and original Job after controller exit
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-owner-exit
-      - name: Authenticate original lease release without changing runtime ownership
-        shell: pwsh
-        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-release

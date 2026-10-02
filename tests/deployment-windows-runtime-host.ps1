@@ -185,16 +185,22 @@ if (process.argv[2] === 'child') {
     Assert ($observation.members -contains $member.Id -and -not $observation.quiescent -and
         -not $observation.applicationHealthy) 'Managed host lost detached ownership or invented application health'
     if (-not $Scenario.StartsWith('guarded-')) {
+        Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation,
+            $ready.pid, $ready.identity, 'lease', 15000) -ceq 'unguarded') 'Unguarded production host invented an activation lease'
         $refused = $false
         try { [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'release', 15000) | Out-Null }
         catch { $refused = $_.Exception.GetBaseException().Message -ceq 'Runtime control request was refused.' }
         Assert ($refused -and -not $owner.HasExited -and -not $member.HasExited) 'Unguarded runtime accepted activation release'
     }
     if ($Scenario.StartsWith('guarded-')) {
+        Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation,
+            $ready.pid, $ready.identity, 'lease', 15000) -ceq 'guarded') 'Read-only observation lost the original activation lease'
         $refused = $false
         try { [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'release', 15000) | Out-Null }
         catch { $refused = $_.Exception.GetBaseException().Message -ceq 'Runtime control request was refused.' }
         Assert ($refused -and -not $owner.HasExited -and -not $member.HasExited) 'A different native peer released or destroyed the runtime lease'
+        Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation,
+            $ready.pid, $ready.identity, 'lease', 15000) -ceq 'guarded') 'Read-only observation or refused peer released the lease'
         if ($Scenario -ceq 'guarded-release') {
             foreach ($attempt in @(1, 2)) {
                 $guardController.StandardInput.WriteLine((@{ method='release-runtime'; generation=$ready.generation
@@ -202,6 +208,8 @@ if (process.argv[2] === 'child') {
                 $read = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync($guardController.StandardOutput, 4096)
                 Assert ($read.Wait(15000)) 'Original controller release was not acknowledged'
                 Assert (($read.GetAwaiter().GetResult() | ConvertFrom-Json).value -ceq 'released') 'Original controller release reply differs'
+                Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation,
+                    $ready.pid, $ready.identity, 'lease', 15000) -ceq 'released') 'Actual original-peer release is not observable'
             }
         }
         $guardController.StandardInput.WriteLine('{"method":"exit"}')
@@ -212,12 +220,16 @@ if (process.argv[2] === 'child') {
         } else {
             Start-Sleep -Milliseconds 500
             Assert (-not $owner.HasExited -and -not $member.HasExited) 'Released original runtime died with its controller'
+            Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation,
+                $ready.pid, $ready.identity, 'lease', 15000) -ceq 'released') 'New observer lost released state after original controller exit'
             $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation,
                 $ready.pid, $ready.identity, 'observe', 15000) | ConvertFrom-Json
             Assert ($observation.members -contains $member.Id -and -not $observation.quiescent -and
                 -not $observation.applicationHealthy) 'Lease release changed ownership or invented application health'
             $null = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'stop', 15000)
             Assert ($member.WaitForExit(15000)) 'Released runtime failed its ordinary owned stop'
+            Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation,
+                $ready.pid, $ready.identity, 'lease', 15000) -ceq 'released') 'Job stop changed historical lease release'
             $reply = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'retire', 15000)
             Assert ($reply -ceq 'retired' -and $owner.WaitForExit(15000) -and $owner.ExitCode -eq 0) 'Released runtime failed ordinary retirement'
         }
