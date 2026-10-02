@@ -283,7 +283,8 @@ namespace Deployment
                     }
                     parent.CheckPublicationDirectory();
                     const uint writeThrough = 8;
-                    Native(MoveFileExW(pending, file, writeThrough), "Publish original private evidence");
+                    // The generated pending name can exceed MAX_PATH even when the public destination does not.
+                    Native(MoveFileExW(@"\\?\" + pending, file, writeThrough), "Publish original private evidence");
                     published = Open(file, Digest(bytes));
                     parent.CheckPublicationDirectory();
                     return published;

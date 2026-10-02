@@ -8822,12 +8822,30 @@ exception; the cause is not yet established. Keep this regression running.
   directory: its final helper paths remain below MAX_PATH while generated
   `.pending-<uuid>` paths exceed it. Use the existing production publisher,
   candidate checks and exact inventory, not an application rebuild.
-- [ ] Run the native case in Actions and compare its actual error with the
+- [x] Run the native case in Actions and compare its actual error with the
   actual-build failure before changing native path handling. Do not shorten
   the private controller namespace or relax owner/ACL/path/hash admission.
 - [ ] After the root-cause fix, accept all 25 jobs, including actual Windows
   startup and stopped-database restoration; the latest fully accepted
   baseline remains `c1f90f1` / `37032247968`.
+
+The preserved `276fe0d` regression completed 24/25 at 17:36:56 UTC:
+only actual Windows bundle publication failed. Diagnostic `5665d59` /
+`37040382252` reproduced `Win32Exception: Publish original private evidence`
+both in the short native case (`110953584821`, 17:37:12 UTC) and in the
+actual application fixture (`110953584629`, 17:41:01 UTC). Native creation
+of the pending file succeeds, but its generated suffix exceeds MAX_PATH
+at the following `MoveFileExW`.
+
+Use Microsoft's documented extended-length source prefix at that native
+rename boundary: `MoveFileExW(@"\\?\" + pending, file, writeThrough)`.
+The [MoveFileExW reference](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
+documents the default source limit and explicit prefix. Keep the public
+destination's existing path semantics and all retained directory, ACL,
+digest and file checks; preserve same-directory, no-overwrite publication
+and `MOVEFILE_WRITE_THROUGH`. Do not shorten private roots, change machine
+policy, enable replacement or claim general long public-path support.
+The focused case and complete actual application regression must now pass.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
