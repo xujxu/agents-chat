@@ -148,7 +148,7 @@ function Stop-AgentsChatManagedTask {
         Stage='admission'; Files=[Collections.Generic.List[IDisposable]]::new()
         Controller=$null; Owner=$null; Folder=$null; Data=$null
         Closed=$false; Poisoned=$false; Busy=$false; Stopped=$false; Inhibited=$false
-        Retired=$false; RetirementRequested=$false; RetirementSha256=$null
+        Retired=$false; RetirementRequested=$false; RetirementSha256=$null; RetirementStateSha256=$null
         AdmissionSha256=$Sha256; PreviousSha256=$Sha256; Definition=$null; LauncherPid=0
         Transaction=$Transaction
         Directory=[IO.Path]::GetDirectoryName($Admission)

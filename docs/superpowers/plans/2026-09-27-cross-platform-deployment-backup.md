@@ -7702,6 +7702,25 @@ workflow.
   release, cold recovery and public transactional commands remain separate
   unfinished work.
 
+**Accepted runtime/controller baseline:** `c7e4ccd` / `36987509720` completed
+**23/23 success**, including the real Windows application using the production
+bundle publisher and the Linux public restore previously observed failing.
+This replaces `44016e6` as the full accepted baseline; retain the documented
+uncertainty about the earlier isolated failure's root cause.
+
+Task 5V causal `3d71f9e` / `36989723092` is running; native task-options
+`110782885172` has not reached the new retirement cases yet. Local `c5d5b6d`
+implements the focused native retirement module, requested/complete private
+receipts, original process/task settlement checks and Node/native `retire`
+request. It is committed but not pushed pending causal evidence. Retirement
+requests allow 60 seconds for the two bounded native joins plus rechecks;
+ordinary check/close request deadlines remain unchanged.
+
+Retirement also captures the exact natively opened activation-state SHA-256
+in both receipts, not only its phase name. Every subsequent retirement check
+requires that digest unchanged, alongside the original lock/configuration.
+The positive update and restore tests independently verify this state digest.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

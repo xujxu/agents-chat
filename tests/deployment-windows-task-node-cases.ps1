@@ -101,6 +101,7 @@ try {
         Assert (-not $task.Enabled -and $task.GetInstances(0).Count -eq 0) 'Retirement released inhibition or left a task instance'
         $previous = (Get-FileHash -LiteralPath (Join-Path $directory 'task-stop-stopped.json') -Algorithm SHA256).Hash.ToLowerInvariant()
         $transactionHash = (Get-FileHash -LiteralPath (Join-Path $directory 'transaction.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+        $stateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash.ToLowerInvariant()
         foreach ($phase in @('requested', 'complete')) {
             $file = Join-Path $directory "task-retire-$phase.json"
             $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -110,7 +111,7 @@ try {
             Assert ($receipt.version -eq 1 -and $receipt.phase -ceq $phase -and
                 $receipt.previousSha256 -ceq $previous -and $receipt.admissionSha256 -ceq $digest -and
                 $receipt.transactionSha256 -ceq $transactionHash -and $receipt.operationId -ceq $hello.operationId -and
-                $receipt.taskName -ceq $TaskName -and
+                $receipt.taskName -ceq $TaskName -and $receipt.stateSha256 -ceq $stateHash -and
                 $receipt.ownerPid -eq $Owner.Id -and $receipt.ownerIdentity -ceq $Ready.identity -and
                 $receipt.generation -ceq $Ready.generation -and $receipt.instanceGuid -ceq $Binding.instanceGuid -and
                 $receipt.definition -ceq [string]$task.Xml -and

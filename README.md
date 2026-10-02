@@ -146,13 +146,15 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `44016e6` (run `36958322571`). This also accepts the
+creation, passed at `c7e4ccd` (run `36987509720`). This also accepts the
 production native controller process: literal arguments and bidirectional
 stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
-processes. Integration into the public deployment entrypoints remains pending.
-The isolated real Windows application job also passed at `8a9de5f`
-(run `36943041386`): three prebuilt managed starts, authenticated chat
+processes. Real task controllers and installed runtime bundles now use
+production creation-time privacy rather than fixture ACL repair.
+Integration into the public deployment entrypoints remains pending.
+The isolated real Windows application job also passed in that run:
+three prebuilt managed starts, authenticated chat
 persistence, stopped-database restoration, original-Job listener ownership and
 unchanged build artifacts. This is not yet acceptance of the public Windows
 deploy/update/restore transaction.
@@ -164,8 +166,8 @@ The native task-definition inspector records and rechecks XML,
 task permissions, principal/mode settings and Scheduler instances. It is
 read-only and explicitly returns no runtime authority: a Scheduler engine PID
 is not proof of ownership of the watchdog or its descendants, and Ready or
-Disabled is not proof that application processes are stopped. Full Windows
-process containment, artifact/configuration binding and recovery remain pending.
+Disabled is not proof that application processes are stopped. Public integration
+of Windows containment, artifact/configuration binding and recovery remains pending.
 
 ```powershell
 # Deploy (pulls latest code, restarts the service, waits for readiness)

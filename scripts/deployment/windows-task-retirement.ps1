@@ -16,6 +16,9 @@ function Test-AgentsChatRetirementTransaction([hashtable]$Context) {
     $Context.Stage = 'retirement-phase'
     $expected = if ($Context.Transaction.Operation -ceq 'restore') { 'restore-activating' } else { 'activating' }
     if ($Context.Transaction.Phase -cne $expected) { throw 'Transaction is not ready for activation.' }
+    if ($Context.RetirementRequested -and $Context.Transaction.StateSha256 -cne $Context.RetirementStateSha256) {
+        throw 'Original activation state changed during retirement.'
+    }
 }
 
 function Test-AgentsChatRetiredTaskContext([hashtable]$Context) {
@@ -50,6 +53,7 @@ function Write-AgentsChatTaskRetirementReceipt([hashtable]$Context, [string]$Pha
         definition=$Context.Definition; securityDescriptor=$data.securityDescriptor
         ownerPid=$data.ownerPid; ownerIdentity=$data.ownerIdentity
         generation=$data.generation; instanceGuid=$data.instanceGuid; statePhase=$Context.Transaction.Phase
+        stateSha256=$Context.RetirementStateSha256
     }
     $receipt = [Deployment.WindowsPrivateFile]::Publish(
         (Join-Path $Context.Directory "task-retire-$Phase.json"), ($record | ConvertTo-Json -Depth 4 -Compress))
@@ -87,6 +91,7 @@ function Retire-AgentsChatTaskOwner {
         Test-AgentsChatMaintenanceContext $Context $true
         Test-AgentsChatRetirementTransaction $Context
         $Context.RetirementSha256 = $Context.PreviousSha256
+        $Context.RetirementStateSha256 = $Context.Transaction.StateSha256
         Write-AgentsChatTaskRetirementReceipt $Context 'requested'
         $Context.RetirementRequested = $true
         Test-AgentsChatMaintenanceContext $Context $true

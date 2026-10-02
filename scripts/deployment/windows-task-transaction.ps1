@@ -33,6 +33,7 @@ function Read-AgentsChatTaskTransactionState([hashtable]$Transaction, [string]$E
             [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)
         if ($updated -lt $started) { throw 'Invalid transaction time.' }
         $file.Check()
+        $Transaction.StateSha256 = $file.Sha256
         if ($ExpectedSha256) { $Transaction.InitialState = $text }
         return $state
     } finally { $file.Dispose() }
@@ -104,7 +105,7 @@ function Open-AgentsChatTaskTransaction {
         Lock=$null; Configuration=$null; Closed=$false; Poisoned=$false
         Project=$null; OperationId=$null; Generation=$null; StartedAt=$null
         StateFile=(Join-Path $Control 'state.json'); Phase=$null; PreviousPhase=$null; Operation=$null
-        InitialStateSha256=$StateSha256; ReceiptSha256=$null
+        InitialStateSha256=$StateSha256; StateSha256=$null; ReceiptSha256=$null
         InitialState=$null; Control=$Control; Stage='transaction-admission'
     }
     try {
