@@ -71,6 +71,8 @@ try {
     $arguments = $expected.SelectSingleNode('/t:Task/t:Actions/t:Exec/t:Arguments', $namespaces)
     $arguments.InnerText += " -ControllerPid $($Bridge.Id) -ControllerIdentity $([Deployment.WindowsWorkerJob]::ProcessIdentity($Bridge.Id))"
     Assert ($expected.OuterXml -ceq ([xml]$definition).OuterXml) 'Activation changed unrelated candidate policy or its original lease binding'
+    $expectedEnabled = [xml]$expected.OuterXml
+    $expectedEnabled.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces).InnerText = 'true'
 
     $deadline = [Diagnostics.Stopwatch]::StartNew()
     do {
@@ -102,10 +104,13 @@ try {
                 $receipt.Data.leaseIdentity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($Bridge.Id) -and
                 $receipt.Data.configurationSha256 -ceq $Replacement.Sha256 -and
                 $receipt.Data.securityDescriptor -ceq $SecurityDescriptor -and
-                ([xml]$receipt.Data.definition).OuterXml -ceq $expected.OuterXml) 'Activation evidence lost candidate, controller or state binding'
+                ([xml]$receipt.Data.definition).OuterXml -ceq $expected.OuterXml -and
+                ([xml]$receipt.Data.enabledDefinition).OuterXml -ceq $expectedEnabled.OuterXml) 'Activation evidence lost candidate, controller or state binding'
         }
         $previous = $receipt.Sha256
     }
+    Assert (($receipt.Data.runtime | ConvertTo-Json -Compress) -ceq ($runtime | ConvertTo-Json -Compress)) `
+        'Running receipt differs from the acknowledged original runtime'
     Assert (@(Get-ChildItem -LiteralPath $Directory -Filter 'task-activate-*.json').Count -eq 4) 'Repeated activation duplicated intent or completion'
     $exitWithoutClose = $Request.action -ceq 'activate-exit'
     $Controller.StandardInput.WriteLine((@{ action=$(if ($exitWithoutClose) { 'exit' } else { 'close' }) } | ConvertTo-Json -Compress))

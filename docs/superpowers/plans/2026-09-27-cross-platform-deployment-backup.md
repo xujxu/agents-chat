@@ -7912,6 +7912,13 @@ new focused activation fixture driver and existing transaction/host fixtures.
   reopening/cold recovery and public Windows transaction composition remain
   subsequent work.
 
+Task 5Y causal `b87d528` / `36999083642`, native `110812379397`, failed
+exactly at `context.activate is not a function` after real transactional
+retirement and replacement. The failure was captured before implementation.
+The implementation adds separately retained active-owner context and guarded
+startup, without relaxing the exact activating-state digest or adding a
+release/health/success path. Native and full regression remain pending.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

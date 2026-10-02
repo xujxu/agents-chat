@@ -21,6 +21,22 @@ async function boundedExit(exited) {
   } finally { clearTimeout(timer); }
 }
 
+function captureActivatedRuntime(value) {
+  const runtime = captureWorkerFields(value, ['pid', 'identity', 'generation', 'instanceGuid', 'sessionId',
+    'configurationSha256', 'launcherPid', 'readySha256'], 'activated runtime');
+  const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+  if (![runtime.pid, runtime.launcherPid].every(id => Number.isSafeInteger(id) && id > 0 && id <= 2147483647)
+    || !Number.isSafeInteger(runtime.sessionId) || runtime.sessionId < 0 || runtime.sessionId > 2147483647
+    || typeof runtime.identity !== 'string' || runtime.identity.length > 64
+    || !new RegExp(`^${runtime.pid}:[1-9][0-9]*$`).test(runtime.identity)
+    || ![runtime.generation, runtime.instanceGuid].every(id => typeof id === 'string' && uuid.test(id)
+      && id !== '00000000-0000-0000-0000-000000000000')
+    || ![runtime.configurationSha256, runtime.readySha256].every(hash => typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash))) {
+    throw new Error('Invalid activated runtime identity.');
+  }
+  return runtime;
+}
+
 export async function stopWindowsTask({ pwsh, admission, sha256, signal, transaction }) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![pwsh, admission].every(value =>
@@ -108,12 +124,13 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
         if (Buffer.byteLength(JSON.stringify(frame)) > 4096) throw new Error('Task controller request exceeds its bound.');
         await wire.send(frame);
         const reply = captureWorkerFields(await wire.receive({
-          signal: requestSignal, timeoutMs: method === 'retire' ? 60000 : 30000,
+          signal: requestSignal, timeoutMs: method === 'activate' ? 90000 : method === 'retire' ? 60000 : 30000,
         }),
-          ['id', 'type', 'value'], 'task controller reply');
+          ['id', 'type', 'value', ...(method === 'activate' ? ['runtime'] : [])], 'task controller reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.value !== method) {
           throw new Error('Unexpected task controller acknowledgement.');
         }
+        if (method === 'activate') return captureActivatedRuntime(reply.runtime);
         if (method === 'close') {
           const result = await boundedExit(exited);
           if (result.code !== 0 || result.signal !== null) throw new Error('Native task controller close failed.');
@@ -129,6 +146,7 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
       retire: ({ signal: retireSignal } = {}) => request('retire', retireSignal),
       replace: ({ configuration, sha256, signal: replaceSignal } = {}) =>
         request('replace', replaceSignal, { configuration, sha256 }),
+      activate: ({ signal: activateSignal } = {}) => request('activate', activateSignal),
       async close() {
         if (busy) throw uncertain(new Error('Cannot close an active task controller request.'));
         if (failure) throw failure;

@@ -24,6 +24,7 @@ try {
     . (Join-Path $PSScriptRoot 'windows-task-transaction.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-retirement.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-replacement.ps1')
+    . (Join-Path $PSScriptRoot 'windows-task-activation.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwner($ControllerPid, $ControllerIdentity)
     $retained = [Deployment.WindowsPrivateFile]::Open($Admission, $Sha256)
@@ -64,11 +65,12 @@ try {
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire', 'replace')) { throw 'Invalid controller request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire', 'replace', 'activate')) { throw 'Invalid controller request.' }
         $sequence = $id
         $stage = 'check'
         $retained.Check()
-        if ($context.Retired) { $null = Assert-AgentsChatTaskRetired -Context $context }
+        if ($context.Activated) { $null = Assert-AgentsChatTaskActive -Context $context }
+        elseif ($context.Retired) { $null = Assert-AgentsChatTaskRetired -Context $context }
         else { $null = Assert-AgentsChatTaskStopped -Context $context }
         if ($method -ceq 'retire') {
             $stage = 'retire'
@@ -79,6 +81,11 @@ try {
             $null = Publish-AgentsChatTaskReplacement -Context $context `
                 -Configuration $request.configuration.GetString() -Sha256 $request.sha256.GetString()
         }
+        $reply = @{ id=$id; type='reply'; value=$method }
+        if ($method -ceq 'activate') {
+            $stage = 'activate'
+            $reply.runtime = Start-AgentsChatTaskReplacement -Context $context
+        }
         if ($method -ceq 'close') {
             $stage = 'close'
             Close-AgentsChatTaskMaintenance -Context $context
@@ -87,7 +94,7 @@ try {
             $retained = $null
             if ($transaction) { Close-AgentsChatTaskTransaction $transaction; $transaction = $null }
         }
-        [Console]::Out.WriteLine((@{ id=$id; type='reply'; value=$method } | ConvertTo-Json -Compress))
+        [Console]::Out.WriteLine(($reply | ConvertTo-Json -Depth 4 -Compress))
         [Console]::Out.Flush()
         if ($method -ceq 'close') { return }
     }

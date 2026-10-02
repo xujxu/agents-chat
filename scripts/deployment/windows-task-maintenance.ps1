@@ -108,7 +108,7 @@ function Close-AgentsChatTaskMaintenance {
     if ($Context.Closed) { return }
     $Context.Closed = $true
     $failures = [Collections.Generic.List[Exception]]::new()
-    foreach ($handle in @($Context.Files.ToArray()) + @($Context.Owner, $Context.Controller)) {
+    foreach ($handle in @($Context.Files.ToArray()) + @($Context.ActivationOwner, $Context.Owner, $Context.Controller)) {
         if ($handle) {
             try { $handle.Dispose() }
             catch { $failures.Add($_.Exception) }
@@ -151,6 +151,9 @@ function Stop-AgentsChatManagedTask {
         Retired=$false; RetirementRequested=$false; RetirementSha256=$null; RetirementStateSha256=$null
         ReplacementPrepared=$false; ReplacementDefinition=$null; ReplacementSha256=$null
         ReplacementConfiguration=$null; ReplacementConfigurationSha256=$null
+        Activated=$false; ActivationOwner=$null; ActivationRuntime=$null; ActivationSha256=$null
+        ActivationDefinition=$null; ActivationEnabledDefinition=$null; ActivationDemandDefinition=$null
+        ActivationLeasePid=0; ActivationLeaseIdentity=$null
         AdmissionSha256=$Sha256; PreviousSha256=$Sha256; Definition=$null; LauncherPid=0
         Transaction=$Transaction
         Directory=[IO.Path]::GetDirectoryName($Admission)
