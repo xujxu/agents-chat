@@ -18,10 +18,11 @@ try {
     if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7) { throw 'Unsupported bridge platform.' }
     Add-Type -Path @((Join-Path $PSScriptRoot 'WindowsWorkerJob.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeDomain.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimePipe.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeControl.cs'),
-        (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'))
+        (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-maintenance.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-transaction.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-retirement.ps1')
+    . (Join-Path $PSScriptRoot 'windows-task-replacement.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwner($ControllerPid, $ControllerIdentity)
     $retained = [Deployment.WindowsPrivateFile]::Open($Admission, $Sha256)
@@ -53,10 +54,16 @@ try {
         $stage = 'request'
         $line = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync([Console]::In, 4096)
         if (-not $line.Wait(1800000)) { throw 'Controller request timed out.' }
-        $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
+        $text = $line.GetAwaiter().GetResult()
+        $document = [Text.Json.JsonDocument]::Parse($text)
+        try { $method = $document.RootElement.GetProperty('method').GetString() }
+        finally { $document.Dispose() }
+        $fields = @('id', 'method')
+        if ($method -ceq 'replace') { $fields += @('configuration', 'sha256') }
+        $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire')) { throw 'Invalid controller request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire', 'replace')) { throw 'Invalid controller request.' }
         $sequence = $id
         $stage = 'check'
         $retained.Check()
@@ -65,6 +72,11 @@ try {
         if ($method -ceq 'retire') {
             $stage = 'retire'
             $null = Retire-AgentsChatTaskOwner -Context $context
+        }
+        if ($method -ceq 'replace') {
+            $stage = 'replace'
+            $null = Publish-AgentsChatTaskReplacement -Context $context `
+                -Configuration $request.configuration.GetString() -Sha256 $request.sha256.GetString()
         }
         if ($method -ceq 'close') {
             $stage = 'close'

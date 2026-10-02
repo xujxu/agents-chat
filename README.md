@@ -152,6 +152,13 @@ stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
 processes. Real task controllers and installed runtime bundles now use
 production creation-time privacy rather than fixture ACL repair.
+Native original-owner retirement also passed for update and restore at
+`284e32f` (task-options job `110784933138`): the task stays disabled, its
+original owner exits cleanly, and private receipts bind the exact activation
+state. Its full regression is still running. Disabled replacement-task
+publication is under implementation; it must preserve account, triggers and
+permissions, retain a validated private candidate, and publish intent/completion
+evidence without starting it.
 Integration into the public deployment entrypoints remains pending.
 The isolated real Windows application job also passed in that run:
 three prebuilt managed starts, authenticated chat

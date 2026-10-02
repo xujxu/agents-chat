@@ -86,19 +86,27 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
     }
     signal?.throwIfAborted();
     const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity });
-    const request = async (method, requestSignal) => {
+    const request = async (method, requestSignal, payload = {}) => {
       if (busy) throw uncertain(new Error('A task controller request is already active.'));
       if (failure) throw failure;
       if (closed) throw uncertain(new Error('Task controller is closed.'));
       busy = true;
       try {
         requestSignal?.throwIfAborted();
+        if (method === 'replace' && (typeof payload.configuration !== 'string'
+          || !path.isAbsolute(payload.configuration) || /[\0\r\n]/.test(payload.configuration)
+          || path.basename(payload.configuration) !== 'configuration.json'
+          || typeof payload.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(payload.sha256))) {
+          throw new Error('Explicit replacement configuration and digest are required.');
+        }
         if (await processIdentity(process.pid) !== controllerIdentity
           || await processIdentity(child.pid) !== identity.processIdentity) {
           throw new Error('Original task controller identity changed.');
         }
         const id = ++sequence;
-        await wire.send({ id, method });
+        const frame = { id, method, ...payload };
+        if (Buffer.byteLength(JSON.stringify(frame)) > 4096) throw new Error('Task controller request exceeds its bound.');
+        await wire.send(frame);
         const reply = captureWorkerFields(await wire.receive({
           signal: requestSignal, timeoutMs: method === 'retire' ? 60000 : 30000,
         }),
@@ -119,6 +127,8 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
       identity,
       check: ({ signal: checkSignal } = {}) => request('check', checkSignal),
       retire: ({ signal: retireSignal } = {}) => request('retire', retireSignal),
+      replace: ({ configuration, sha256, signal: replaceSignal } = {}) =>
+        request('replace', replaceSignal, { configuration, sha256 }),
       async close() {
         if (busy) throw uncertain(new Error('Cannot close an active task controller request.'));
         if (failure) throw failure;

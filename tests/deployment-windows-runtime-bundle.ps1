@@ -49,6 +49,22 @@ try {
         Assert (@(Get-ChildItem -LiteralPath $directory -Filter 'runtime-*.json').Count -eq 0) `
             'Read-only candidate admission started a runtime'
     } finally { $candidate.Dispose() }
+    $invalid = $retained = $null
+    try {
+        $invalidCommand = [IO.File]::ReadAllText($bundle.Configuration) | ConvertFrom-Json -AsHashtable
+        $invalidCommand.command.file = 'relative.exe'
+        $invalid = [Deployment.WindowsPrivateFile]::Publish((Join-Path $directory 'invalid.json'),
+            ($invalidCommand | ConvertTo-Json -Depth 8 -Compress))
+        $refused = $false
+        try { $retained = [Deployment.WindowsRuntimeHost]::Open((Join-Path $directory 'invalid.json'), $invalid.Sha256, $directory) }
+        catch { $refused = $_.Exception.GetBaseException().Message -ceq 'Managed runtime startup refused: command.' }
+        Assert ($refused -and @(Get-ChildItem -LiteralPath $directory -Filter 'runtime-*.json').Count -eq 0) `
+            'Candidate admission did not refuse invalid command before activation'
+    } finally {
+        if ($retained) { $retained.Dispose() }
+        if ($invalid) { $invalid.Dispose() }
+    }
+    Remove-Item -LiteralPath (Join-Path $directory 'invalid.json')
     $lease = [Deployment.WindowsPrivateFile]::OpenDirectory($directory)
     try { $lease.Check() }
     finally { $lease.Dispose() }

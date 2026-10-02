@@ -7662,7 +7662,7 @@ existing maintenance context, native/Node task controller bridge and explicit
 saved-worker manifests; existing task-transaction/native host fixtures and
 workflow.
 
-- [ ] Add actual S4U task cases `transaction-retire` and
+- [x] Add actual S4U task cases `transaction-retire` and
   `transaction-retire-refused`. The latter calls retirement while copying
   and requires refusal with no retirement intent, leaving the stopped
   original owner alive. The positive case advances the real state/check
@@ -7677,7 +7677,7 @@ workflow.
   with zero Scheduler instances, exactly one request/completion pair, and
   the unchanged four stopped-phase receipts. Capture the missing-method
   failure in Actions; existing cases remain unchanged.
-- [ ] Add `Retire-AgentsChatTaskOwner -Context` and
+- [x] Add `Retire-AgentsChatTaskOwner -Context` and
   `Assert-AgentsChatTaskRetired -Context` in the focused native module.
   Require a live unpoisoned stopped context and its original transaction at
   `activating` or `restore-activating` before publishing any intent.
@@ -7686,13 +7686,13 @@ workflow.
   generation/PID/start-bound control; join the retained original process.
   Require exit code zero, unchanged disabled task XML/security and zero
   instances before publishing `task-retire-complete.json`.
-- [ ] Add explicit `Retired` context state. Stopped checks must not certify a
+- [x] Add explicit `Retired` context state. Stopped checks must not certify a
   retired host. Retired checks retain original controller identity, transaction
   lock/state/configuration, all immutable receipts, the signaled original
   owner handle, and unchanged disabled task policy/no instances.
   Failures poison the context and retain all evidence/inhibition. Repeat
   retirement rechecks completed authority without creating another receipt.
-- [ ] Extend the bounded native request protocol with `retire`, dispatching
+- [x] Extend the bounded native request protocol with `retire`, dispatching
   later `check`/`close` to the correct stopped or retired gate. Export Node's
   `retire()` via the existing single-flight request path; preserve explicit
   abandonment on uncertain failure. Include the native script in the saved

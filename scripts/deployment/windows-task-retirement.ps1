@@ -1,8 +1,9 @@
 function Test-AgentsChatRetirementPolicy([hashtable]$Context) {
     $Context.Stage = 'retirement-policy'
     $task = $Context.Folder.GetTask($Context.Data.taskName)
+    $definition = if ($Context.ReplacementPrepared) { $Context.ReplacementDefinition } else { $Context.Definition }
     if ($task.Path -cne "\$($Context.Data.taskName)" -or $task.Enabled -or
-        [string]$task.Xml -cne $Context.Definition -or
+        [string]$task.Xml -cne $definition -or
         [string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor) {
         throw 'Original disabled task policy changed.'
     }
