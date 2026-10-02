@@ -342,7 +342,6 @@ async function releaseLockAdmitted(root, owner) {
   const directory = await ownedDirectory(root);
   await requireNoRecovery(directory);
   await requireNoServiceMaintenance(directory);
-  await requireNoWorkerRetirement(directory);
   if ((await loadState(directory))?.phase === 'blocked') {
     throw new Error('Blocked deployment workers require retaining the lock.');
   }
@@ -356,7 +355,7 @@ async function releaseLockAdmitted(root, owner) {
     || actual.processIdentity !== await processIdentity(process.pid)) {
     throw new Error('Only the current lock owner can release a deployment lock.');
   }
-  if ((await readdir(directory)).some(name => name.startsWith('worker-'))) {
+  if ((await readdir(directory)).some(name => name.startsWith('worker-') || workerRetirementEntry(name))) {
     throw new Error('Native worker evidence requires verified retirement before lock release.');
   }
   await unlink(ownerPath);

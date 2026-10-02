@@ -10284,6 +10284,13 @@ worker operation, settled journals and the original saved helper manifest.
   rather than changing existing refusal assertions. Keep this implementation
   run through completion and require a fresh full corrected run.
 
+  Windows contract detail also confirmed that wrong/dead-owner release must
+  keep its existing owner refusal, before any worker-artifact diagnostic.
+  Preserve that ordering: acquire checks the manifest before creating a
+  lock; release keeps the existing ownership check and extends its existing
+  worker-evidence barrier to Windows marker case aliases. No duplicate early
+  release barrier or assertion relaxation.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
