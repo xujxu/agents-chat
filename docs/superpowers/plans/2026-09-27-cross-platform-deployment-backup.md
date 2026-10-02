@@ -7468,6 +7468,12 @@ file-ownership checks. Implementation `ecd5636` is ready to push with the
 accepted baseline documentation; the actual control-file assertions remain
 unchanged.
 
+Pushed with documentation at `ddb33dd` / `36955332382`, native
+`110677115820`: the first probe step passed, including actual Node-created
+lock/state/journal/complete-engine native privacy assertions. The remaining
+native cases and full regression are still running. Production controller
+bootstrap/entrypoint integration remains the next responsibility.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
