@@ -7,6 +7,7 @@ import { captureWorkerFields } from './worker-identity.mjs';
 import { workerWire } from './worker-wire.mjs';
 
 const script = fileURLToPath(new URL('./windows-task-controller.ps1', import.meta.url));
+const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 function uncertain(cause) {
   return Object.assign(new Error('Windows task maintenance authority is uncertain; retain inhibition and evidence.', { cause }), {
     code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED', recoveryAllowed: false,
@@ -24,7 +25,6 @@ async function boundedExit(exited) {
 function captureActivatedRuntime(value) {
   const runtime = captureWorkerFields(value, ['pid', 'identity', 'generation', 'instanceGuid', 'sessionId',
     'configurationSha256', 'launcherPid', 'readySha256'], 'activated runtime');
-  const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
   if (![runtime.pid, runtime.launcherPid].every(id => Number.isSafeInteger(id) && id > 0 && id <= 2147483647)
     || !Number.isSafeInteger(runtime.sessionId) || runtime.sessionId < 0 || runtime.sessionId > 2147483647
     || typeof runtime.identity !== 'string' || runtime.identity.length > 64
@@ -35,6 +35,23 @@ function captureActivatedRuntime(value) {
     throw new Error('Invalid activated runtime identity.');
   }
   return runtime;
+}
+
+function captureTaskListener(value, runtime, port) {
+  if (value?.status === 'not-ready') return captureWorkerFields(value, ['status'], 'absent listener');
+  const listener = captureWorkerFields(value,
+    ['status', 'generation', 'port', 'pid', 'identity', 'address', 'createdAt', 'pairedRecords'], 'retained listener');
+  if (listener.status !== 'retained' || listener.generation !== runtime.generation || listener.port !== port
+    || !Number.isSafeInteger(listener.pid) || listener.pid < 1 || listener.pid > 2147483647
+    || typeof listener.identity !== 'string' || listener.identity.length > 64
+    || !new RegExp(`^${listener.pid}:[1-9][0-9]*$`).test(listener.identity)
+    || !['127.0.0.1', '0.0.0.0', '::', '::ffff:127.0.0.1'].includes(listener.address)
+    || typeof listener.createdAt !== 'string' || !/^[1-9][0-9]{0,18}$/.test(listener.createdAt)
+    || BigInt(listener.createdAt) > 9223372036854775807n
+    || typeof listener.pairedRecords !== 'boolean' || listener.pairedRecords && listener.address !== '::') {
+    throw new Error('Original retained Windows listener identity differs.');
+  }
+  return listener;
 }
 
 export async function stopWindowsTask({ pwsh, admission, sha256, signal, transaction }) {
@@ -80,6 +97,7 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
   let closed = false;
   let busy = false;
   let sequence = 0;
+  let activeRuntime;
   let failure;
   const abandon = async cause => {
     failure ??= uncertain(cause);
@@ -109,6 +127,9 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
       busy = true;
       try {
         requestSignal?.throwIfAborted();
+        if (method === 'listener' && (!activeRuntime || !Number.isInteger(payload.port) || payload.port < 1 || payload.port > 65535)) {
+          throw new Error('Listener observation requires active runtime authority and an explicit port.');
+        }
         if (method === 'replace' && (typeof payload.configuration !== 'string'
           || !path.isAbsolute(payload.configuration) || /[\0\r\n]/.test(payload.configuration)
           || path.basename(payload.configuration) !== 'configuration.json'
@@ -126,11 +147,15 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
         const reply = captureWorkerFields(await wire.receive({
           signal: requestSignal, timeoutMs: method === 'activate' ? 90000 : method === 'retire' ? 60000 : 30000,
         }),
-          ['id', 'type', 'value', ...(method === 'activate' ? ['runtime'] : [])], 'task controller reply');
+          ['id', 'type', 'value', ...(method === 'activate' ? ['runtime'] : method === 'listener' ? ['listener'] : [])], 'task controller reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.value !== method) {
           throw new Error('Unexpected task controller acknowledgement.');
         }
-        if (method === 'activate') return captureActivatedRuntime(reply.runtime);
+        if (method === 'activate') {
+          activeRuntime = captureActivatedRuntime(reply.runtime);
+          return activeRuntime;
+        }
+        if (method === 'listener') return captureTaskListener(reply.listener, activeRuntime, payload.port);
         if (method === 'close') {
           const result = await boundedExit(exited);
           if (result.code !== 0 || result.signal !== null) throw new Error('Native task controller close failed.');
@@ -147,6 +172,7 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
       replace: ({ configuration, sha256, signal: replaceSignal } = {}) =>
         request('replace', replaceSignal, { configuration, sha256 }),
       activate: ({ signal: activateSignal } = {}) => request('activate', activateSignal),
+      listener: ({ port, signal: listenerSignal } = {}) => request('listener', listenerSignal, { port }),
       async close() {
         if (busy) throw uncertain(new Error('Cannot close an active task controller request.'));
         if (failure) throw failure;

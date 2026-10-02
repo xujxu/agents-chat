@@ -33,10 +33,11 @@ export async function runWindowsReadinessCases({ context, runtime, project }) {
   assert.deepEqual(await requests(), ['/api/auth/providers']);
   await context.check();
   await mode('hanging');
-  await assert.rejects(waitWindowsReadiness({ ...options, waitSeconds: 1 }),
-    { code: 'DEPLOYMENT_STAGE_TIMEOUT', recoveryAllowed: true });
+  const started = performance.now();
+  await assert.rejects(verifyWindowsReadiness(options), /HTTP request exceeded its deadline/);
+  assert.ok(performance.now() - started >= 3000 && performance.now() - started < 15000);
   await context.check();
   await mode('ready');
   assert.deepEqual(await verifyWindowsReadiness(options), result);
-  console.error('PASS: Windows HTTP readiness binds the retained native listener, retries only startup 503, rejects mismatched providers and bounds cancellation without releasing activation');
+  console.error('PASS: Windows HTTP readiness binds the retained native listener, retries only startup 503, rejects mismatched providers and bounds HTTP responses without releasing activation');
 }

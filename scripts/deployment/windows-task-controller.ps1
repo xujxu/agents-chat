@@ -19,12 +19,13 @@ try {
     Add-Type -Path @((Join-Path $PSScriptRoot 'WindowsWorkerJob.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeDomain.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimePipe.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeControl.cs'),
         (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
-        (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'))
+        (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-maintenance.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-transaction.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-retirement.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-replacement.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-activation.ps1')
+    . (Join-Path $PSScriptRoot 'windows-task-listener.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwner($ControllerPid, $ControllerIdentity)
     $retained = [Deployment.WindowsPrivateFile]::Open($Admission, $Sha256)
@@ -62,10 +63,11 @@ try {
         finally { $document.Dispose() }
         $fields = @('id', 'method')
         if ($method -ceq 'replace') { $fields += @('configuration', 'sha256') }
+        if ($method -ceq 'listener') { $fields += @('port') }
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire', 'replace', 'activate')) { throw 'Invalid controller request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire', 'replace', 'activate', 'listener')) { throw 'Invalid controller request.' }
         $sequence = $id
         $stage = 'check'
         $retained.Check()
@@ -85,6 +87,10 @@ try {
         if ($method -ceq 'activate') {
             $stage = 'activate'
             $reply.runtime = Start-AgentsChatTaskReplacement -Context $context
+        }
+        if ($method -ceq 'listener') {
+            $stage = 'listener'
+            $reply.listener = Open-AgentsChatTaskListener -Context $context -Port $request.port.GetInt32()
         }
         if ($method -ceq 'close') {
             $stage = 'close'

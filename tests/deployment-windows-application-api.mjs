@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { loginDeploymentFixture } from './deployment-http-fixture.mjs';
+import { verifyHttpReadiness } from '../scripts/deployment/http-readiness.mjs';
 
 const [mode, chatId] = process.argv.slice(2);
 assert.ok(['create', 'mutate', 'restored'].includes(mode), 'An explicit API fixture phase is required.');
 assert.match(chatId ?? '', /^[a-zA-Z0-9-]+$/);
+await verifyHttpReadiness({ port: 3010, providers: ['admin-login'] });
 const api = await loginDeploymentFixture();
 const originalName = 'Before native maintenance';
 const content = 'Managed Windows data survives restoration';

@@ -8063,6 +8063,25 @@ fixture/Node driver.
 - [ ] Leave permanent task-policy restoration, verifying-state transition and
   health-gated lease release to the next transaction completion step.
 
+The implementation retains the native listener in `Context.Files`, so all
+subsequent active checks include its original socket identity. The new
+`listener` reply is strictly captured and generation/port-bound by Node.
+`http-readiness.mjs` contains the unchanged HTTP/provider rules and shared
+retry deadline, with thin Linux and Windows wrappers.
+
+Platform-independent contract tests additionally prove zero HTTP requests
+after native refusal, input rejection before ownership work, explicit
+absent-listener retries and rejection after healthy HTTP if ownership changes.
+The real Windows application API fixture now invokes the same provider probe
+between its original native listener checks.
+
+The actual native hanging-response test uses the internal three-second HTTP
+deadline and checks elapsed time/continued context authority. A one-second
+overall deadline could instead interrupt a native ownership request, whose
+existing contract correctly abandons uncertain authority; it must not be
+misrepresented as HTTP-only cancellation. The shared overall-stage deadline
+is covered by the isolated Node contract and existing native Linux tests.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
