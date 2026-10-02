@@ -8112,7 +8112,7 @@ changing Linux transitions. A terminal state alone cannot release a lease.
 transaction and active-context guards, saved-worker inventory; actual
 activation fixture and new completion scenarios in the native workflow.
 
-- [ ] Add causal native completion after actual guarded activation and
+- [x] Add causal native completion after actual guarded activation and
   independent twelve-receipt checks. Dynamically import the new helper so
   the missing module is the failure, not a pre-activation fixture defect:
   ```js
@@ -8129,19 +8129,19 @@ activation fixture and new completion scenarios in the native workflow.
     },
   });
   ```
-- [ ] The Node helper performs bounded native-bound HTTP readiness, then
+- [x] The Node helper performs bounded native-bound HTTP readiness, then
   `context.prepareCompletion({ port, providers })`. Native code retains the
   exact original activating state and writes a readiness-bound completion
   intent. No task policy, state or lease changes during preparation.
-- [ ] Only `context.complete({ stateSha256 })` may admit the exact expected
+- [x] Only `context.complete({ stateSha256 })` may admit the exact expected
   terminal state. Compare every prior field except phase/previousPhase and
   monotonic updatedAt; bind the explicit digest and keep checking it afterward.
   Ordinary checks must still reject unannounced state changes.
-- [ ] Publish disabled staged XML without the temporary guard arguments,
+- [x] Publish disabled staged XML without the temporary guard arguments,
   still suppressing triggers/restart and retaining account/security. Journal
   intent before registration; recheck original running instance/owner/Job/
   listener and exact registered policy after registration.
-- [ ] Persist release intent while still disabled, require authenticated
+- [x] Persist release intent while still disabled, require authenticated
   original-peer `released` acknowledgement, then restore the full original
   triggers/restart policy while disabled and finally the prior enabled
   setting. Never assume disabling alone suppresses every restart mechanism.
@@ -8150,7 +8150,7 @@ activation fixture and new completion scenarios in the native workflow.
   after release, the same original runtime must survive. Do not enable
   automatic restart before release or treat a release acknowledgement as
   source/build/application acceptance.
-- [ ] Native update and restore cases independently check the terminal
+- [x] Native update and restore cases independently check the terminal
   state, receipt chain, permanent action, triggers/restart/security, original
   generation survival after controller close, and explicit final Job cleanup.
   Add changed-state rejection after preparation. Run the existing Actions
@@ -8197,7 +8197,8 @@ Task 5AB corrected `f7c5e19` / `37010551771`, native `110849112501`,
 passed update, restore/custom security, originally disabled policy and changed
 terminal-state refusal, then all earlier activation/listener/lease scenarios.
 The same original runtime survived controller close in every positive
-completion case. Full regression remains in progress; preserve it.
+completion case. Full regression completed **24/24 success**, observed at
+13:26 UTC. This is the latest fully accepted baseline.
 
 #### Task 5AC: read-only original activation lease observation
 
@@ -8238,12 +8239,15 @@ The installed helper inventory remains nine files.
   Cold policy mutation and evidence retirement still need their own original
   task/instance/receipt/lock admission; lease status alone never authorizes them.
 
-Task 5AC causal `2748d88` / `37011600468` is queued behind the preserved
-Task 5AB full regression. The local implementation adds only read-only lease
+Task 5AC causal `2748d88` / `37011600468`, native `110856969218`, failed at
+13:27:07 UTC with **Unsupported runtime control method** after real guarded
+host readiness and native binding. This is the old client's missing method,
+not a successful server request. Captured before cancellation and publication
+of implementation `033ed82`. The implementation adds only read-only lease
 observation and strict string reply capture, preserving all existing control
 constructors and domain-observation fields. The native domain fixture with
 no observer explicitly refuses the query instead of reporting `unguarded`.
-The implementation remains unpublished until the causal result is captured.
+Implementation acceptance remains pending Actions.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

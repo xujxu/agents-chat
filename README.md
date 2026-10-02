@@ -146,7 +146,7 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `839ac62` (run `37006419246`). This also accepts the
+creation, passed at `f7c5e19` (run `37010551771`). This also accepts the
 production native controller process: literal arguments and bidirectional
 stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
@@ -186,8 +186,8 @@ are refused. Controller-side HTTP readiness and the full 24-job shared-readiness
 regression passed at `839ac62`, including saved Linux restore and real Windows
 application/data checks. Health-gated permanent task-policy restoration and
 original-peer lease release passed native update/restore, custom-permission,
-originally-disabled and changed-state cases at `f7c5e19`; its full regression
-is pending. Cold completion/reopening and public Windows integration remain
+originally-disabled and changed-state cases at `f7c5e19`; all 24 regression
+jobs also passed. Cold completion/reopening and public Windows integration remain
 unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
