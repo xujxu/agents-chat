@@ -223,7 +223,12 @@ original lock/state, all 23 maintenance records, directory/file identities
 and the original preparing processes. Reopening preserves the original intent
 and requires either that same retained session or both original preparers
 absent. This preparation preserves every maintenance file and the operation
-lock; its new native acceptance is pending.
+lock. This preparation passed all 25 Actions jobs at `b30581f`, including
+original-actor loss and strict reopening/refusal on all three native scenarios.
+The private-file layer also provides an explicit exclusive, checked
+DELETE-capable handle. It deletes only the original descriptor-matched file
+through that handle; ordinary disposal preserves it. Its native acceptance
+is pending, and it is not yet wired as task retirement or unlock authority.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

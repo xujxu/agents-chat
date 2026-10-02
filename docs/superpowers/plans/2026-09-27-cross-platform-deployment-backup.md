@@ -9206,7 +9206,7 @@ available for complete native replay when reopening the intent.
   native observation and the existing retained-session cases pass in Actions.
   No local execution and no cancellation of the accepted full baseline.
 
-- [ ] **Step 2: add checked native identity capture.**
+- [x] **Step 2: add checked native identity capture.**
 
   Add an immutable `EvidenceIdentity` with string `Dev` and `Ino`, constructed
   from the existing native `FileInformation`:
@@ -9241,7 +9241,7 @@ available for complete native replay when reopening the intent.
   captures `directory.OriginalIdentity()`, checks again and returns it.
   Keep the standalone base class and installed nine-helper compilation valid.
 
-- [ ] **Step 3: persist the fully bound version-1 intent.**
+- [x] **Step 3: persist the fully bound version-1 intent.**
 
   The exact root fields are:
 
@@ -9287,7 +9287,7 @@ available for complete native replay when reopening the intent.
   descriptor path `task-retirement.json`. Retain incomplete artifacts on
   publication failure; never overwrite a colliding intent.
 
-- [ ] **Step 4: reopen unchanged intent without adopting a live preparer.**
+- [x] **Step 4: reopen unchanged intent without adopting a live preparer.**
 
   On an existing marker, first obtain the full original native proof again.
   Open the marker with `WindowsPrivateFile.Open` and parse its exact root
@@ -9307,7 +9307,7 @@ available for complete native replay when reopening the intent.
   actual proof/admission WeakMap binding before sending `prepare-retirement`,
   and check admission/original native process around its reply.
 
-- [ ] **Step 5: complete original-actor loss and refusal coverage.**
+- [x] **Step 5: complete original-actor loss and refusal coverage.**
 
   Extend the real Node fixture with a held IPC child that prepares the
   marker, reports both original helper identities and remains alive.
@@ -9324,7 +9324,7 @@ available for complete native replay when reopening the intent.
   The existing native proof cases continue to verify all original receipt,
   task-policy and listener refusals after this fixture.
 
-- [ ] **Step 6: accept only after full Actions completion.**
+- [x] **Step 6: accept only after full Actions completion.**
 
   Update the saved closure, push implementation, read native diagnostics and
   preserve the full 25-job regression after native success. Mark this task
@@ -9334,9 +9334,16 @@ available for complete native replay when reopening the intent.
 **Causal evidence:** `c8a24cf / 37051846485`, native job `110986898609`,
 failed at 19:09:11 UTC on the missing `prepareWindowsTaskRetirement` export,
 after genuine completion and retained-session acceptance at 19:09:11 UTC.
-The characterized causal run was then cancelled. Native publication/reopen,
-strict capture and actor-loss/refusal coverage are implemented next; full
-acceptance remains pending.
+The characterized causal run was then cancelled.
+
+**Task 5AI acceptance:** `b30581f / 37052547806` completed all 25 jobs
+successfully, observed 19:33:19 UTC. Native job `110989222192` passed intent
+preparation, original-actor loss, unchanged reopen and refusal cases on update
+(19:16:01 UTC), restore (19:18:35 UTC), and originally disabled tasks
+(19:21:17 UTC), followed by every original completion refusal case. Actual
+Windows application job `110989221920` passed three prebuilt starts and
+authenticated create/mutate/restored data at 19:18:24 UTC. All implementation
+steps are complete; this intent still does not delete receipts or unlock.
 
 ### Task 5AJ: exact native private-file retirement handle
 
@@ -9370,7 +9377,7 @@ contains a one-byte `BOOLEAN DeleteFile`, not a four-byte Win32 `BOOL`.
 Use explicit disposition only after final checks; do not use delete-on-close
 at open time, POSIX deletion flags, permission repair or replacement flags.
 
-- [ ] **Step 1: publish the native missing-method causal case.**
+- [x] **Step 1: publish the native missing-method causal case.**
 
   The focused fixture creates an actually private native directory and
   publishes a small original receipt with the existing publisher. Capture
@@ -9525,6 +9532,12 @@ at open time, POSIX deletion flags, permission repair or replacement flags.
   replacing the old proof handles with DELETE-capable handles must not
   bypass these checks. Worker handoff and operation unlock remain separate
   explicit transaction transitions.
+
+**Task 5AJ causal evidence:** `8e963a5 / 37054238487`, native task-options
+job `110996797719`, reached the missing `RetainForRetirement` native method
+at 19:34:58 UTC after the full existing private-file fixture passed. The
+characterized causal run was cancelled; the preceding Task 5AI regression
+was preserved through complete success. Implementation acceptance is pending.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

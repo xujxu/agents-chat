@@ -74,6 +74,10 @@ namespace Deployment
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool GetFileInformationByHandle(SafeFileHandle file, out FileInformation information);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool SetFileInformationByHandle(SafeFileHandle file, int informationClass,
+            ref byte information, uint bytes);
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool MoveFileExW(string existing, string destination, uint flags);
@@ -331,6 +335,57 @@ namespace Deployment
         {
             return OpenFile(file, expectedSha256, true);
         }
+        public sealed class RetirementFile : IDisposable
+        {
+            readonly WindowsPrivateFile original;
+            readonly DirectoryLease parent;
+            internal RetirementFile(WindowsPrivateFile original, DirectoryLease parent)
+            {
+                this.original = original;
+                this.parent = parent;
+            }
+            public void Check()
+            {
+                parent.Check();
+                original.Check();
+                parent.Check();
+            }
+            public void Delete()
+            {
+                Check();
+                byte disposition = 1;
+                Native(SetFileInformationByHandle(original.handle, 4, ref disposition, 1),
+                    "Retire original private file");
+                Dispose();
+            }
+            public void Dispose()
+            {
+                try { original.Dispose(); }
+                finally { parent.Dispose(); }
+            }
+        }
+        public static RetirementFile RetainForRetirement(string file, string sha256,
+            string dev, string ino, int bytes)
+        {
+            RequirePath(file);
+            DirectoryLease parent = OpenDirectory(Path.GetDirectoryName(file));
+            WindowsPrivateFile original = null;
+            try
+            {
+                original = OpenFile(file, sha256, true, true);
+                EvidenceIdentity identity = original.CaptureIdentity();
+                if (identity.Dev != dev || identity.Ino != ino || original.ByteLength != bytes)
+                    throw new InvalidDataException("Original retirement file identity or length differs.");
+                parent.Check();
+                return new RetirementFile(original, parent);
+            }
+            catch
+            {
+                try { if (original != null) original.Dispose(); }
+                finally { parent.Dispose(); }
+                throw;
+            }
+        }
         public static WindowsPrivateFile CopyTrustedSource(string source, string expectedSha256, string destination)
         {
             using (WindowsPrivateFile original = OpenFile(source, expectedSha256, false))
@@ -351,7 +406,7 @@ namespace Deployment
                 }
             }
         }
-        static WindowsPrivateFile OpenFile(string file, string expectedSha256, bool requirePrivate)
+        static WindowsPrivateFile OpenFile(string file, string expectedSha256, bool requirePrivate, bool retirement = false)
         {
             RequirePath(file);
             if (expectedSha256 == null || expectedSha256.Length != 64)
@@ -363,7 +418,9 @@ namespace Deployment
             try
             {
                 const uint read = 0x80000000, readControl = 0x20000, shareRead = 1, openExisting = 3, openReparsePoint = 0x200000;
-                retained.handle = CreateFileW(file, read | readControl, shareRead, IntPtr.Zero,
+                uint access = read | readControl | (retirement ? 0x10000u : 0u);
+                uint share = retirement ? 0u : shareRead;
+                retained.handle = CreateFileW(file, access, share, IntPtr.Zero,
                     openExisting, openReparsePoint, IntPtr.Zero);
                 if (retained.handle.IsInvalid)
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "Open original private configuration");
