@@ -237,6 +237,10 @@ installed configuration and retired process identities. It preserves all
 receipts and is intended for subsequent partial-cleanup recovery; native
 checkpoint acceptance passed all three scenarios and the full 25-job
 regression at `cb7a2aa`. Its partial-cleanup consumer is not yet complete.
+Both root retirement records independently block ordinary lock acquisition,
+release, worker-retirement recovery and idle reporting even without the task
+receipt directory. Windows checks include case aliases; marker contents are
+not interpreted as permission to clear the barrier.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

@@ -9780,7 +9780,7 @@ exception; it must not exempt Windows task-retirement evidence.
   admission, lock release, fresh acquisition and worker-recovery refusals.
 - Update `README.md` to state the remaining root-marker barrier.
 
-- [ ] **Step 1: publish the missing root-marker guard cases.**
+- [x] **Step 1: publish the missing root-marker guard cases.**
 
   For each of `task-retirement.json` and
   `task-retirement-checkpoint.json`, obtain an ordinary lock, write only the
@@ -9798,15 +9798,16 @@ exception; it must not exempt Windows task-retirement evidence.
   Actions contracts, capture the missing rejection and preserve the accepted
   `cb7a2aa` baseline. Do not run tests locally.
 
-- [ ] **Step 2: share the exact maintenance predicate.**
+- [x] **Step 2: share the exact maintenance predicate.**
 
   Add and use:
 
   ```javascript
   function serviceMaintenanceEntry(name, allowLiveRetirement = false) {
-    return name.startsWith('service-')
-      || ['task-maintenance', 'task-retirement.json', 'task-retirement-checkpoint.json'].includes(name)
-      || (!allowLiveRetirement && name === 'live-retirement.json');
+    const entry = process.platform === 'win32' ? name.toLowerCase() : name;
+    return entry.startsWith('service-')
+      || ['task-maintenance', 'task-retirement.json', 'task-retirement-checkpoint.json'].includes(entry)
+      || (!allowLiveRetirement && entry === 'live-retirement.json');
   }
   ```
 
@@ -9818,7 +9819,7 @@ exception; it must not exempt Windows task-retirement evidence.
   contents, remove evidence, create admission resources during inspection,
   or introduce a task-retirement bypass.
 
-- [ ] **Step 3: exercise the actual Windows entrypoints.**
+- [x] **Step 3: exercise the actual Windows entrypoints.**
 
   Extend the retained native-admission fixture. For each root marker,
   acquire an ordinary lock under the actual admission, save its owner bytes,
@@ -9839,6 +9840,18 @@ exception; it must not exempt Windows task-retirement evidence.
   admission-state output and require both platform contracts plus all
   remaining jobs to pass. This wires a necessary cleanup barrier only;
   actual exact/prefix retirement and final worker/unlock handoff follow.
+
+**Task 5AL causal result:** `402261e / 37062928408` Linux contracts
+`111023657159` failed at 20:49:01 UTC on both root markers with
+`Missing expected rejection` at ordinary lock release. Both existing
+service/task-directory barriers passed immediately before these failures.
+Captured the causal log and cancelled this characterized run.
+
+**Implementation scope:** the shared predicate and actual admission fixture
+are implemented. Native fixtures also use each marker's uppercase spelling,
+because Windows case aliases must not hide remaining evidence. Linux
+continues using case-sensitive names. Actual native and full acceptance
+remain pending until the implementation run finishes.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
