@@ -8356,7 +8356,7 @@ selection or create another worktree.
 - Extend `scripts/deployment/saved-worker-engine.mjs` and
   `tests/deployment-saved-worker.test.mjs` with the new partial source.
 
-- [ ] **Step 1: publish the native failing fixture before implementation.**
+- [x] **Step 1: publish the native failing fixture before implementation.**
   Compile the existing base file and, when present, the admission partial
   file. First create and retain an actual private control directory using
   `WindowsPrivateFile.CreateDirectory`; then call the new API:
@@ -8380,7 +8380,7 @@ selection or create another worktree.
   evidence remains unchanged. Fixture cleanup targets only its own named
   temporary directories and retained child process.
 
-- [ ] **Step 2: capture the causal failure in Actions.**
+- [x] **Step 2: capture the causal failure in Actions.**
   Add this step to `windows-completion-proof`, after Node setup:
   ```yaml
       - name: Require exclusive native Windows admission and crash release
@@ -8393,7 +8393,7 @@ selection or create another worktree.
   creation, not an unrelated fixture failure. Capture before cancelling the
   characterized causal run. Never compile or execute locally.
 
-- [ ] **Step 3: implement retained exclusive opening.**
+- [x] **Step 3: implement retained exclusive opening.**
   Extract the existing `FileSecurity` construction from `Publish` into
   `PrivateFileSecurity()`, and the existing metadata/path/ACL/content/hash
   capture from `OpenFile` into
@@ -8511,8 +8511,140 @@ Task 5AE causal `e495cb4` / `37029435961`, native job `110912252982`,
 created the actual private control directories, then failed exactly on the
 missing `AcquireAdmission` method at 15:48:01 UTC. Captured before cancelling
 the characterized run. The implementation follows the approved partial-class
-plan and retains the existing installed nine-helper host contract. Native
-and full regression acceptance remain pending Actions.
+plan and retains the existing installed nine-helper host contract.
+Implementation `234bef9` / `37029680450`, native `110913330877`, passed the
+actual admission fixture at 15:50:33 UTC and all three completed-task proof
+scenarios at 15:52:56 UTC. Logs confirm independent contention, separate
+installations, retained namespace/non-inherited handles, abrupt owner exit,
+unsafe content/ACL/hard-link refusal, and unchanged operation evidence.
+Preserve the full 25-job regression, which remains running.
+
+### Task 5AF: original-controller-bound shared Windows admission bridge
+
+Continue the approved design inline. This closes the Node/native boundary;
+it does not yet authorize cold recovery or claim that public Windows
+deploy/update/restore uses the gate. Subsequent ownership integration must
+cover `state.mjs` acquire/release and `retirement-recovery.mjs`, without
+private-root fixture bypasses. Existing private operation evidence survives
+both graceful close and abrupt original-controller loss.
+
+**Files and boundaries:**
+- `tests/deployment-windows-admission-bridge.ps1`: create genuine private
+  controls using `WindowsPrivateFile.CreateDirectory`, publish original
+  evidence, invoke Node and compare evidence/gate after exit.
+- `tests/deployment-windows-admission-bridge.mjs`: independent native bridge
+  contention, distinct roots, retained context identity, explicit close and
+  original Node controller termination.
+- `scripts/deployment/windows-controller-transport.mjs`: extract the
+  existing task controller's bounded stderr, `workerWire`, process-exit wait
+  and failure cleanup; both clients use the same mechanism.
+- `scripts/deployment/windows-admission.mjs`: explicit absolute `pwsh` and
+  control, original PID/creation identity, native readiness and check/close,
+  module-private WeakMap binding of each actual context to its control.
+- `scripts/deployment/windows-admission.ps1`: compile the existing standalone
+  `WindowsWorkerJob.cs` with both `WindowsPrivateFile` sources; reuse strict
+  `Read-AgentsChatMaintenanceFields` and `ReadFrameAsync`. Hold the real
+  admission lease, not an existence marker or Boolean.
+- `scripts/deployment/WindowsWorkerJob.cs`: preserve existing bounded
+  `WatchOwner` behavior and add `WatchOwnerUntilExit` using the same original
+  PID/creation check without a lifetime deadline. An admission cannot expire
+  merely because its legitimate owner has worked for thirty minutes.
+- `scripts/deployment/windows-task-controller.mjs`: consume the extracted
+  transport without changing maintenance requests, readiness or completion.
+- Both saved-worker inventories: include the three new production helpers;
+  leave the nine installed runtime helpers unchanged.
+- `.github/workflows/deployment-lifecycle.yml`: add the native fixture to the
+  existing completed-task proof job before its three proof scenarios.
+
+- [ ] **Step 1: publish the native failing boundary contract.**
+  The PowerShell fixture creates private controls before loading the new
+  module. The Node contract is:
+  ```js
+  const { acquireWindowsAdmission, assertWindowsAdmission } =
+    await import('../scripts/deployment/windows-admission.mjs');
+  const lease = await acquireWindowsAdmission({ control, pwsh });
+  try {
+    await assertWindowsAdmission(control, lease);
+    await assert.rejects(acquireWindowsAdmission({ control, pwsh }),
+      error => error.code === 'DEPLOYMENT_WINDOWS_ADMISSION_REFUSED'
+        && /acquire\/busy/.test(error.diagnostic));
+    await assert.rejects(assertWindowsAdmission(other, lease),
+      /retained Windows admission/);
+    await assert.rejects(assertWindowsAdmission(control, {
+      check() { assert.fail('Forged context callback must not execute'); },
+    }), /retained Windows admission/);
+  } finally { await lease.close(); }
+  ```
+  The complete executable fixture also checks independent installation
+  admission and closed-context refusal. Fork a new Node fixture controller,
+  obtain its actual bridge PID/creation identity via IPC, terminate that
+  exact controller, require its original bridge to exit within fifteen
+  seconds and reacquire. Do not accept arbitrary acquisition failures as
+  contention: require the explicit native `acquire/busy` diagnostic.
+
+- [ ] **Step 2: capture the exact causal Actions failure.**
+  ```bash
+  git add tests/deployment-windows-admission-bridge.ps1 tests/deployment-windows-admission-bridge.mjs .github/workflows/deployment-lifecycle.yml README.md docs/superpowers/plans/2026-09-27-cross-platform-deployment-backup.md
+  git commit -m "test: require controller-bound Windows admission" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+  git push origin feat/deployment-backup
+  ```
+  Preserve `234bef9`'s full regression. Inspect the new exact native job
+  after completion; expect missing `windows-admission.mjs` only after the
+  private directory/evidence PASS line. Capture before cancelling only the
+  characterized causal run.
+
+- [ ] **Step 3: implement the boundary with existing transport semantics.**
+  The exported validator uses an actual module-private registry:
+  ```js
+  const admissions = new WeakMap();
+  export async function assertWindowsAdmission(control, admission, options) {
+    if (!admissions.has(admission) || admissions.get(admission) !== control) {
+      throw new Error('Original retained Windows admission does not match control.');
+    }
+    await admission.check(options);
+  }
+  ```
+  `acquireWindowsAdmission({ control, pwsh, signal })` validates canonical
+  absolute inputs, captures the current Node creation identity and starts
+  the bridge with `-Control`, `-ControllerPid`, `-ControllerIdentity`.
+  Validate exact ready fields `type,pid,processIdentity,control,controllerIdentity`
+  against the spawned child and original controller. Freeze and register
+  `{ identity, check, close }` only after this acknowledgement. Check/close
+  use strictly increasing integer IDs and exact `id,type,value` replies;
+  reject concurrent requests, changed process identities, lost transport
+  and closed contexts. Close waits for successful native process exit and
+  is idempotent only after successful closure. Failure cleanup retains both
+  primary and cleanup errors and bounded stderr; use error code
+  `DEPLOYMENT_WINDOWS_ADMISSION_REFUSED`, never a success-shaped fallback.
+
+  Extract the existing task controller transport into
+  `windowsControllerTransport({ pwsh, args, refused, label })`, returning
+  `{ child, wire, waitForExit, abandon }`. Keep `shell:false`, sanitized
+  `NODE_OPTIONS`/`NODE_PATH`, 4096-byte stderr and fifteen-second exit bound.
+  The task caller continues maintaining its own closed/busy/failure state.
+  Do not alter task completion behavior during this extraction.
+
+  Native startup order is original-owner watch, `AcquireAdmission(Control)`,
+  `Check`, then readiness. Use the new no-deadline watch for this bridge
+  only. Check original owner identity and lease before each request.
+  `ReadFrameAsync` retains its 4096-byte request limit but does not impose
+  an idle/lifetime deadline while the original owner remains alive.
+  Only `check` and `close` are supported; duplicate, extra, missing, skipped-ID
+  or unsupported-method requests terminate with failure. Dispose the lease
+  before close acknowledgement; EOF/failure also disposes it without
+  touching any operation/recovery evidence. Report native sharing error32
+  specifically as `Windows admission refused: acquire/busy.`; propagate
+  other refusals as their actual stage, without retry or permission repair.
+
+- [ ] **Step 4: require native and full regression acceptance.**
+  Publish implementation with both saved-helper inventories updated.
+  Require the new native fixture and all three completed-task proof
+  scenarios, then preserve the entire 25-job regression. No local
+  compilation, test, installation or server. Update accepted SHA/run in
+  README, this plan and the continuity artifact only from actual results.
+  Then implement shared ownership entrypoint admission, including valid
+  creation-time Windows fixture privacy and explicit runtime selection;
+  never treat this bridge-only acceptance as public recovery completion.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

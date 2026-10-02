@@ -200,7 +200,9 @@ The expanded full regression also passed all 25 jobs.
 Windows shared admission is being implemented using a private, non-inherited
 exclusive file handle, following the standard package-manager locking pattern.
 The primitive preserves durable operation evidence and does not itself permit
-recovery or unlock; native acceptance and entrypoint integration are pending.
+recovery or unlock. Native admission and the three completed-task proof
+scenarios passed at `234bef9`; its full regression and shared entrypoint
+integration remain pending.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
