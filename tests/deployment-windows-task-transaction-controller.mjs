@@ -57,7 +57,9 @@ for (const phase of ['intent', 'inhibited', 'stop-requested', 'stopped']) {
   assert.equal(receipt.version, 2);
   assert.equal(receipt.transactionSha256, hash(evidenceBytes));
 }
+await context.check();
 await assert.rejects(writeFile(path.join(control, 'lock', 'owner.json'), 'changed'));
+await context.check();
 state = { ...state, phase: operation === 'restore' ? 'restore-activating' : 'copying', previousPhase: state.phase };
 await writeState(control, state);
 await secure();

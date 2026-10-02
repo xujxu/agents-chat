@@ -41,9 +41,13 @@ function Read-AgentsChatTaskTransactionState([hashtable]$Transaction, [string]$E
 function Assert-AgentsChatTaskTransaction([hashtable]$Transaction) {
     if ($Transaction.Closed -or $Transaction.Poisoned) { throw 'Unavailable task transaction.' }
     try {
+        $Transaction.Stage = 'transaction-recovery'
         if (Test-Path -LiteralPath (Join-Path $Transaction.Control 'recovery-lock')) { throw 'Recovery authority exists.' }
+        $Transaction.Stage = 'transaction-lock'
         $Transaction.Lock.Check()
+        $Transaction.Stage = 'transaction-configuration'
         $Transaction.Configuration.Check()
+        $Transaction.Stage = 'transaction-state'
         $state = Read-AgentsChatTaskTransactionState $Transaction ''
         $next = @{
             stopped=@('copying'); copying=@('rotating'); rotating=@('backup-ready')
@@ -51,6 +55,7 @@ function Assert-AgentsChatTaskTransaction([hashtable]$Transaction) {
             dependencies=@('building'); building=@('configuring'); configuring=@('activating'); activating=@()
             restoring=@('restore-activating'); 'restore-activating'=@()
         }
+        $Transaction.Stage = 'transaction-phase'
         if ($state.operation -cne $Transaction.Operation -or
             -not $next.ContainsKey($state.phase) -or
             ($state.phase -ceq $Transaction.Phase -and $state.previousPhase -cne $Transaction.PreviousPhase) -or
@@ -58,8 +63,11 @@ function Assert-AgentsChatTaskTransaction([hashtable]$Transaction) {
                 ($state.phase -cnotin $next[$Transaction.Phase] -or $state.previousPhase -cne $Transaction.Phase))) {
             throw 'Unsupported transaction phase change.'
         }
+        $Transaction.Stage = 'transaction-lock'
         $Transaction.Lock.Check()
+        $Transaction.Stage = 'transaction-configuration'
         $Transaction.Configuration.Check()
+        $Transaction.Stage = 'transaction-recovery'
         if (Test-Path -LiteralPath (Join-Path $Transaction.Control 'recovery-lock')) { throw 'Recovery authority exists.' }
         $Transaction.Phase = $state.phase
         $Transaction.PreviousPhase = $state.previousPhase
@@ -97,7 +105,7 @@ function Open-AgentsChatTaskTransaction {
         Project=$null; OperationId=$null; Generation=$null; StartedAt=$null
         StateFile=(Join-Path $Control 'state.json'); Phase=$null; PreviousPhase=$null; Operation=$null
         InitialStateSha256=$StateSha256; ReceiptSha256=$null
-        InitialState=$null; Control=$Control
+        InitialState=$null; Control=$Control; Stage='transaction-admission'
     }
     try {
         $transaction.Lock = [Deployment.WindowsPrivateFile]::Open((Join-Path $Control 'lock/owner.json'), $LockSha256)

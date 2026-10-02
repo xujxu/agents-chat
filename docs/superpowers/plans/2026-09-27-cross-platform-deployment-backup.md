@@ -7213,6 +7213,15 @@ records exact initial state text plus its digest in the immutable binding, and
 uses version-2 transactional stop receipts. Restore-phase coverage is included
 in the follow-up test commit; native acceptance remains pending.
 
+`375ccb7` / `36947168841` passed both contract jobs (`110651862396` Linux,
+`110651862278` Windows), including the new generic maintenance guard. Native
+`110651862505` passed preceding suites and successfully opened transactional
+stop, checked immutable binding/v2 receipts and refused a lock-file write, but
+failed its first check after state advancement and fixture ACL preparation.
+Add bounded native substage diagnostics and check immediately before/after the
+denied lock write to distinguish that from state/ACL advancement; do not relax
+private-file or state checks without identifying the actual cause.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

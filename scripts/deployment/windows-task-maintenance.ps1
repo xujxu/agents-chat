@@ -27,7 +27,10 @@ function Get-AgentsChatMaintenanceBinding([hashtable]$Context) {
 function Test-AgentsChatMaintenanceContext([hashtable]$Context, [bool]$Stopped) {
     if ($Context.Closed -or $Context.Poisoned) { throw 'Unavailable maintenance context.' }
     $Context.Stage = 'transaction'
-    if ($Context.Transaction) { Assert-AgentsChatTaskTransaction $Context.Transaction }
+    if ($Context.Transaction) {
+        try { Assert-AgentsChatTaskTransaction $Context.Transaction }
+        finally { $Context.Stage = $Context.Transaction.Stage }
+    }
     $Context.Stage = 'identity'
     if ($Context.Controller.HasExited -or $Context.Owner.HasExited -or
         [Deployment.WindowsWorkerJob]::ProcessIdentity($Context.Controller.Id) -cne $Context.Data.controllerIdentity -or
@@ -51,7 +54,10 @@ function Test-AgentsChatMaintenanceContext([hashtable]$Context, [bool]$Stopped) 
     $Context.Stage = 'binding'
     $null = Get-AgentsChatMaintenanceBinding $Context
     $Context.Stage = 'transaction'
-    if ($Context.Transaction) { Assert-AgentsChatTaskTransaction $Context.Transaction }
+    if ($Context.Transaction) {
+        try { Assert-AgentsChatTaskTransaction $Context.Transaction }
+        finally { $Context.Stage = $Context.Transaction.Stage }
+    }
 }
 
 function Write-AgentsChatTaskStopReceipt([hashtable]$Context, [string]$Phase) {

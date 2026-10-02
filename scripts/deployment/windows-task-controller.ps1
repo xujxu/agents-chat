@@ -73,6 +73,7 @@ try {
         if ($method -ceq 'close') { return }
     }
 } catch {
+    if ($_.Exception.Message -cmatch '^Task maintenance refused: ([a-z-]+)\.$') { $stage += "/$($Matches[1])" }
     [Console]::Error.WriteLine("Task controller refused: $stage.")
     exit 1
 } finally {
