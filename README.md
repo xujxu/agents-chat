@@ -146,17 +146,17 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `c7e4ccd` (run `36987509720`). This also accepts the
+creation, passed at `284e32f` (run `36990262413`). This also accepts the
 production native controller process: literal arguments and bidirectional
 stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
 processes. Real task controllers and installed runtime bundles now use
 production creation-time privacy rather than fixture ACL repair.
-Native original-owner retirement also passed for update and restore at
-`284e32f` (task-options job `110784933138`): the task stays disabled, its
+Native original-owner retirement also passed for update and restore
+(task-options job `110784933138`): the task stays disabled, its
 original owner exits cleanly, and private receipts bind the exact activation
-state. Its full regression is still running. Disabled replacement-task
-publication is under implementation; it must preserve account, triggers and
+state. Disabled replacement-task publication is awaiting Actions acceptance;
+it must preserve account, triggers and
 permissions, retain a validated private candidate, and publish intent/completion
 evidence without starting it.
 Integration into the public deployment entrypoints remains pending.

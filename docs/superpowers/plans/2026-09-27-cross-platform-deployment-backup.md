@@ -7697,7 +7697,7 @@ workflow.
   `retire()` via the existing single-flight request path; preserve explicit
   abandonment on uncertain failure. Include the native script in the saved
   engine and independent expected manifest.
-- [ ] Validate native cases and full regression in Actions. This establishes
+- [x] Validate native cases and full regression in Actions. This establishes
   original-owner retirement only; replacement registration, activation,
   release, cold recovery and public transactional commands remain separate
   unfinished work.
@@ -7712,8 +7712,9 @@ Task 5V causal `3d71f9e` / `36989723092` failed exactly because
 `context.retire` was absent; the characterized run was then cancelled.
 Implementation `c5d5b6d` and exact-state binding `284e32f` are pushed.
 Native task-options `110784933138` in run `36990262413` passed early-phase
-refusal, update retirement and restore retirement. Full regression remains
-in progress; the latest full accepted baseline is still `c7e4ccd`. Retirement
+refusal, update retirement and restore retirement. Full run `36990262413`
+completed **23/23 success**, making `284e32f` the new full accepted baseline.
+Retirement
 requests allow 60 seconds for the two bounded native joins plus rechecks;
 ordinary check/close request deadlines remain unchanged.
 
@@ -7771,6 +7772,11 @@ and saved-worker manifest, native runtime bundle and transaction fixtures.
   Actions, then push implementation and require native/full regression.
   Starting and binding the new generation, health verification, release,
   cold recovery and public Windows transactions are still unfinished.
+
+Task 5W causal `e0a821f` / `36991379979` is starting, native task-options
+`110790274379`. Local committed `d0104bb` implements the shared read-only
+candidate admission, disabled registration and durable replacement context;
+do not push until the causal missing-method result is captured.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
