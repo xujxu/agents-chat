@@ -60,6 +60,8 @@ Observe
 Assert ($LASTEXITCODE -eq 0) 'Admitted completed-task proof session failed'
 & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-task-retirement-intent.mjs') $Control $pwsh
 Assert ($LASTEXITCODE -eq 0) 'Durable completed-task retirement intent failed'
+& (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-task-retirement-checkpoint.mjs') $Control $pwsh
+Assert ($LASTEXITCODE -eq 0) 'Native retirement runtime checkpoint failed'
 $state = Join-Path $Control 'state.json'
 Changed-Bytes $state ([IO.File]::ReadAllText($state) + "`n") 'records-completion-state' 'Private configuration digest differs.'
 $intent = Join-Path $Directory 'task-stop-intent.json'

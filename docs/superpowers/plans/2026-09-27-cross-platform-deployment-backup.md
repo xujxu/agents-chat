@@ -9549,6 +9549,185 @@ passed authenticated create/mutate/restored data and three prebuilt starts
 at 19:43:10 UTC. This accepts the native deletion boundary, not transaction
 cleanup or operation unlock.
 
+### Task 5AK: minimal durable native runtime checkpoint for retirement
+
+The original full proof deliberately pins all 23 receipts with read-only
+handles that prevent deletion. It also requires all receipts on reopening.
+Before replacing those handles with checked retirement handles, persist the
+native facts required to re-observe the original runtime after a deletion
+prefix. Do not weaken the full proof or duplicate the entire receipt history.
+Use one small private checkpoint bound to the accepted intent, not a new
+lock, a heartbeat, a compressed archive or a deployment-success claim.
+
+This task publishes/reopens that checkpoint while full original evidence
+still exists. A subsequent cleanup consumer must check the exact remaining
+inventory and the original runtime against it before every deletion. This
+task does not delete receipts or release the operation lock.
+
+**Files:**
+- Create `scripts/deployment/windows-task-retirement-checkpoint.ps1`:
+  capture already-verified native facts and publish/reopen the fixed private
+  `task-retirement-checkpoint.json`.
+- Create `scripts/deployment/windows-task-retirement-checkpoint.mjs`:
+  immutable exact checkpoint/result capture; no filesystem mutation.
+- Modify `scripts/deployment/windows-task-retirement-intent.ps1`: extract
+  its canonical private publication/reopen and creator checks for reuse by
+  the two fixed retirement record names, preserving version-1 intent behavior.
+- Modify `scripts/deployment/windows-task-retirement-record.mjs`: export
+  its strict file descriptor, creator and process-pair capture for reuse;
+  keep the original exact intent schema unchanged.
+- Modify `scripts/deployment/windows-task-completion-controller.ps1` and
+  `windows-task-completion-proof.mjs`: explicit `prepare-retirement-checkpoint`
+  request/API with the same real proof/admission binding.
+- Create `tests/deployment-windows-task-retirement-checkpoint.mjs`;
+  invoke after the accepted intent test and before deliberate completion
+  evidence mutations in `deployment-windows-task-completion-proof-cases.ps1`.
+- Add the two helper files to both saved worker-engine inventories.
+- Update `README.md` with the checkpoint's exact, non-unlock boundary.
+
+- [ ] **Step 1: publish and capture the missing checkpoint entry.**
+
+  The initial test uses actual admission and full native proof:
+
+  ```javascript
+  import assert from 'node:assert/strict';
+  import { createHash } from 'node:crypto';
+  import { readFile } from 'node:fs/promises';
+  import path from 'node:path';
+  import { withWindowsAdmission } from '../scripts/deployment/windows-admission.mjs';
+  import {
+    openWindowsTaskCompletionProof, prepareWindowsTaskRetirement,
+    prepareWindowsTaskRetirementCheckpoint,
+  } from '../scripts/deployment/windows-task-completion-proof.mjs';
+  const [control, pwsh] = process.argv.slice(2);
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    const proof = await openWindowsTaskCompletionProof({ control, pwsh, admission });
+    try {
+      const intent = await prepareWindowsTaskRetirement(control, proof, admission);
+      const result = await prepareWindowsTaskRetirementCheckpoint(control, proof, admission);
+      assert.equal(result.status, 'prepared');
+      assert.equal(result.descriptor.path, 'task-retirement-checkpoint.json');
+      assert.deepEqual(result.intent, intent);
+      assert.deepEqual(result.checkpoint.intent, intent.descriptor);
+      const bytes = await readFile(path.join(control, result.descriptor.path));
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), result.descriptor.sha256);
+      assert.deepEqual(JSON.parse(bytes), result.checkpoint);
+      assert.deepEqual(await prepareWindowsTaskRetirementCheckpoint(control, proof, admission), result);
+      await proof.check();
+    } finally { await proof.close(); }
+  });
+  console.log('PASS: private runtime checkpoint binds original retirement intent without deleting evidence');
+  ```
+
+  Invoke with current native PowerShell, requiring zero Node exit code:
+
+  ```powershell
+  & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-task-retirement-checkpoint.mjs') $Control $pwsh
+  Assert ($LASTEXITCODE -eq 0) 'Native retirement runtime checkpoint failed'
+  ```
+
+  Push to the existing feature branch; capture the missing
+  `prepareWindowsTaskRetirementCheckpoint` export after actual intent
+  acceptance. Cancel only this characterized causal run.
+
+- [ ] **Step 2: capture the minimal canonical checkpoint from full proof.**
+
+  The exact checkpoint fields are `version,intent,configuration,
+  definitionSha256,securityDescriptorSha256,enabled,listener,retiredBridge,
+  retiredOwner,creator`. Version is 1. `intent` is the original prepared
+  marker descriptor, including its native identity and exact digest.
+  `configuration` is the verified literal installed configuration path.
+  Hash the exact native Scheduler XML and security descriptor, not a
+  newly normalized or reconstructed policy. Capture:
+
+  ```powershell
+  function Get-AgentsChatRetirementTextHash([string]$Text) {
+      $bytes = [Text.UTF8Encoding]::new($false, $true).GetBytes($Text)
+      return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+  }
+  $candidate = [ordered]@{
+      version=1; intent=$prepared.descriptor; configuration=$Context.Configuration
+      definitionSha256=(Get-AgentsChatRetirementTextHash $Context.NativeDefinition)
+      securityDescriptorSha256=(Get-AgentsChatRetirementTextHash $Context.SecurityDescriptor)
+      enabled=$Context.Enabled
+      listener=[ordered]@{
+          pid=$Context.Completed.listenerPid.GetInt32()
+          processIdentity=$Context.Completed.listenerIdentity.GetString()
+          createdAt=$Context.Completed.listenerCreatedAt.GetString()
+          address=$Context.Completed.listenerAddress.GetString()
+          pairedRecords=$Context.Completed.listenerPairedRecords.GetBoolean()
+      }
+      retiredBridge=[ordered]@{ pid=$Context.BridgePid; processIdentity=$Context.BridgeIdentity }
+      retiredOwner=[ordered]@{
+          pid=$Context.Admission.ownerPid.GetInt32()
+          processIdentity=$Context.Admission.ownerIdentity.GetString()
+      }
+      creator=[ordered]@{
+          pid=$ControllerPid; processIdentity=$ControllerIdentity
+          bridgePid=$PID; bridgeIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+      }
+  }
+  ```
+
+  First call the accepted native `Prepare-AgentsChatTaskRetirement`, which
+  checks full original proof and retains the private intent. Capture the
+  fields above, then run full proof immediately before and after private
+  publication. Retain the checkpoint file in the proof's checked Files list.
+  Check the original requesting Node creation identity around publication.
+
+  Reuse the intent's exact canonical-field reopen comparison and strict
+  creator parsing. Existing checkpoint bytes/identity must stay unchanged;
+  reopening requires that same original Node/native session or absence of
+  both stored creator identities. Compare all non-creator fields with a
+  fresh candidate from the full proof; no replacement or ACL repair.
+
+- [ ] **Step 3: enforce a strict, immutable Node protocol boundary.**
+
+  Response exact fields: `status,descriptor,intent,checkpoint`.
+  Status is `prepared`; descriptor path is
+  `task-retirement-checkpoint.json`. Capture `intent` with the accepted
+  version-1 prepared-intent codec, then require deep equality between its
+  descriptor and `checkpoint.intent`.
+
+  Reuse exact descriptor fields `path,dev,ino,bytes,sha256`; use exact process
+  pairs `pid,processIdentity` and the existing four-field creator. Require a
+  canonical local Windows configuration path ending in `configuration.json`,
+  lowercase 64-character hashes, and Boolean enabled/pairedRecords.
+  Listener createdAt is a canonical positive decimal bounded by Int64.MaxValue.
+  Match the native listener's admitted address set:
+  `127.0.0.1`, `0.0.0.0`, `::`, `::ffff:127.0.0.1`; pairedRecords true
+  requires `::`. Deeply freeze all nested records.
+
+  Export `prepareWindowsTaskRetirementCheckpoint(control,proof,admission,
+  {signal}={})` only through the actual module-private proof binding.
+  Add its explicit protocol method, preserving check/close/intent behavior.
+  Require the returned intent control and completion observation to equal
+  the existing original context; validate admission before/after the request.
+
+- [ ] **Step 4: exercise persistence, original actor loss and corruption.**
+
+  Extend the initial native fixture with a held child creating both records,
+  report the complete checkpoint result and both native controller identities,
+  and terminate only that original Node. Verify native helpers disappear and
+  fresh admission/proof reopens identical bytes, native identity and creator.
+  Keep ordinary acquisition busy while the original child holds admission.
+
+  Add strict codec cases for extra fields, invalid listener identity/time/
+  address/pairing, non-Boolean policy and mismatched intent descriptor.
+  Change one stored policy hash, original listener timestamp or intent
+  descriptor; preparation must refuse without rewriting. Truncate/duplicate
+  checkpoint fields and substitute a live creator; require refusal. Restore
+  only fixture bytes between negatives. Keep all 23 original files, state,
+  lock and runtime policy untouched; existing completion refusal tests follow.
+
+- [ ] **Step 5: accept full Actions regression before partial cleanup use.**
+
+  Preserve all 25 implementation jobs after native success, including actual
+  Windows application data restore and exact private-file deletion. Record
+  native logs and full run conclusion, then implement the checkpoint reader
+  and prefix-cleanup consumer. The checkpoint is not itself permission to
+  bypass remaining-evidence, original-runtime or worker-handoff checks.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
