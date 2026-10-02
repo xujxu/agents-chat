@@ -19,7 +19,7 @@ const files = [
   'worker-identity.mjs', 'worker-journal.mjs', 'worker-wire.mjs',
   'WindowsWorkerJob.cs', 'windows-worker-launcher.ps1', 'windows-worker-owner.ps1', 'windows-worker.mjs',
   'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs', 'WindowsRuntimeControl.cs',
-  'WindowsPrivateFile.cs', 'WindowsRuntimeHost.cs', 'windows-runtime-host.ps1',
+  'WindowsPrivateFile.cs', 'WindowsRuntimeLease.cs', 'WindowsRuntimeHost.cs', 'windows-runtime-host.ps1',
   'windows-runtime-bundle.ps1',
   'WindowsControllerToken.cs', 'WindowsControllerProcess.cs',
   'windows-task-owner-binding.ps1', 'windows-task-maintenance.ps1',

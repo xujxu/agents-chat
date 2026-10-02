@@ -18,7 +18,8 @@ try {
     if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7) { throw 'Unsupported bridge platform.' }
     Add-Type -Path @((Join-Path $PSScriptRoot 'WindowsWorkerJob.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeDomain.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimePipe.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeControl.cs'),
-        (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'))
+        (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
+        (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-maintenance.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-transaction.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-retirement.ps1')

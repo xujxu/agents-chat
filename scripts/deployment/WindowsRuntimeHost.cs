@@ -10,13 +10,14 @@ namespace Deployment
     {
         static readonly string[] Helpers = {
             "WindowsWorkerJob.cs", "WindowsRuntimeDomain.cs", "WindowsRuntimePipe.cs",
-            "WindowsRuntimeControl.cs", "WindowsPrivateFile.cs", "WindowsRuntimeHost.cs",
+            "WindowsRuntimeControl.cs", "WindowsPrivateFile.cs", "WindowsRuntimeLease.cs", "WindowsRuntimeHost.cs",
             "windows-worker-launcher.ps1", "windows-runtime-host.ps1"
         };
         public static string[] HelperFiles { get { return (string[])Helpers.Clone(); } }
         readonly List<WindowsPrivateFile> retained = new List<WindowsPrivateFile>();
         WindowsRuntimeDomain domain;
         WindowsRuntimeControl control;
+        WindowsRuntimeLease lease;
         string commandFile, commandDirectory, configurationSha256;
         string[] commandArguments;
         Dictionary<string, string> commandEnvironment;
@@ -44,6 +45,7 @@ namespace Deployment
         public void Check()
         {
             if (disposed) throw new ObjectDisposedException("Managed runtime host");
+            if (lease != null) lease.Check();
             foreach (WindowsPrivateFile file in retained) file.Check();
         }
         void Publish(string directory, string configurationSha256, Guid generation)
@@ -121,16 +123,29 @@ namespace Deployment
         }
         public static void Run(string configuration, string sha256, string helpers, string pwsh)
         {
+            Run(configuration, sha256, helpers, pwsh, 0, null);
+        }
+        public static void Run(string configuration, string sha256, string helpers, string pwsh,
+            int controllerPid, string controllerIdentity)
+        {
             string stage = "configuration";
             try
             {
                 using (WindowsRuntimeHost host = Load(configuration, sha256, helpers, ref stage))
                 {
+                    if (controllerPid != 0 || controllerIdentity != null)
+                    {
+                        stage = "activation-lease";
+                        host.lease = WindowsRuntimeLease.Start(controllerPid, controllerIdentity);
+                        host.Check();
+                    }
+                    stage = "command";
                     Guid generation = Guid.NewGuid();
                     host.domain = WindowsRuntimeDomain.Start(generation, pwsh, helpers,
                         host.commandFile, host.commandArguments, host.commandDirectory, host.commandEnvironment);
                     stage = "publication";
-                    host.control = new WindowsRuntimeControl(host.domain, generation, host.Check);
+                    host.control = new WindowsRuntimeControl(host.domain, generation, host.Check,
+                        host.lease == null ? null : new Func<int, bool>(host.lease.TryRelease));
                     host.Check();
                     host.Publish(helpers, host.configurationSha256, generation);
                     stage = "control";
@@ -153,6 +168,7 @@ namespace Deployment
             }
             finally
             {
+                if (lease != null) lease.Dispose();
                 foreach (WindowsPrivateFile file in retained) file.Dispose();
                 disposed = true;
             }

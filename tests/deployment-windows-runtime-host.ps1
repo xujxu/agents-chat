@@ -9,11 +9,11 @@ $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment'))
 $helpers = @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
-    'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeHost.cs',
+    'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeLease.cs', 'WindowsRuntimeHost.cs',
     'windows-worker-launcher.ps1', 'windows-runtime-host.ps1')
 Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
     (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'),
-    (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsRuntimeHost.cs'),
+    (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsRuntimeLease.cs'), (Join-Path $source 'WindowsRuntimeHost.cs'),
     (Join-Path $source 'WindowsControllerToken.cs'),
     (Join-Path $source 'WindowsControllerProcess.cs'))
 . (Join-Path $source 'windows-task-owner-binding.ps1')
@@ -70,7 +70,7 @@ if (process.argv[2] === 'child') {
 }
 '@ | Set-Content -LiteralPath (Join-Path $root 'writer.cjs')
     $hostFile = Join-Path $root 'windows-runtime-host.ps1'
-    foreach ($mode in @('digest', 'duplicate', 'unknown', 'environment', 'helper')) {
+    foreach ($mode in @('digest', 'duplicate', 'unknown', 'environment', 'helper', 'controller')) {
         $candidate = $text
         if ($mode -eq 'duplicate') { $candidate = $text.Replace('"version":1', '"version":1,"version":1') }
         if ($mode -eq 'unknown') { $candidate = $text.Replace('"version":1', '"version":1,"unknown":true') }
@@ -78,8 +78,15 @@ if (process.argv[2] === 'child') {
         if ($mode -eq 'helper') { $candidate = $text.Replace($hashes['windows-worker-launcher.ps1'], ('0' * 64)) }
         $digest = Save-Configuration $configFile $candidate
         if ($mode -eq 'digest') { $digest = '0' * 64 }
-        $stage = switch ($mode) { 'helper' { 'helpers' } 'environment' { 'command' } default { 'configuration' } }
-        $output = & $pwsh -NoProfile -NonInteractive -File $hostFile -Configuration $configFile -Sha256 $digest 2>&1
+        $stage = switch ($mode) {
+            'helper' { 'helpers' } 'environment' { 'command' } 'controller' { 'activation-lease' } default { 'configuration' }
+        }
+        $output = if ($mode -ceq 'controller') {
+            & $pwsh -NoProfile -NonInteractive -File $hostFile -Configuration $configFile -Sha256 $digest `
+                -ControllerPid $PID -ControllerIdentity '1:1' 2>&1
+        } else {
+            & $pwsh -NoProfile -NonInteractive -File $hostFile -Configuration $configFile -Sha256 $digest 2>&1
+        }
         Assert ($LASTEXITCODE -ne 0 -and ($output -join "`n") -match "Managed runtime startup refused: $stage\.") "Unsupported $mode configuration was not explicitly refused"
         Assert (-not (Test-Path -LiteralPath (Join-Path $root 'writes')) -and
             @(Get-ChildItem -LiteralPath $root -Filter 'runtime-*.json').Count -eq 0) 'Refused startup published readiness or admitted target work'
@@ -152,6 +159,12 @@ if (process.argv[2] === 'child') {
     $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'observe', 15000) | ConvertFrom-Json
     Assert ($observation.members -contains $member.Id -and -not $observation.quiescent -and
         -not $observation.applicationHealthy) 'Managed host lost detached ownership or invented application health'
+    if (-not $Scenario.StartsWith('guarded-')) {
+        $refused = $false
+        try { [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'release', 15000) | Out-Null }
+        catch { $refused = $_.Exception.GetBaseException().Message -ceq 'Runtime control request was refused.' }
+        Assert ($refused -and -not $owner.HasExited -and -not $member.HasExited) 'Unguarded runtime accepted activation release'
+    }
     if ($Scenario.StartsWith('guarded-')) {
         $refused = $false
         try { [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'release', 15000) | Out-Null }

@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory)][string]$Configuration,
-    [Parameter(Mandatory)][string]$Sha256
+    [Parameter(Mandatory)][string]$Sha256,
+    [int]$ControllerPid,
+    [string]$ControllerIdentity
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -10,12 +12,16 @@ try {
         throw 'Managed runtime startup refused: bootstrap.'
     }
     $files = @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
-        'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeHost.cs')
+        'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeLease.cs', 'WindowsRuntimeHost.cs')
     Add-Type -Path @($files | ForEach-Object { Join-Path $PSScriptRoot $_ })
     $process = [Diagnostics.Process]::GetCurrentProcess()
     try { $pwsh = $process.MainModule.FileName }
     finally { $process.Dispose() }
-    [Deployment.WindowsRuntimeHost]::Run($Configuration, $Sha256, $PSScriptRoot, $pwsh)
+    if ($PSBoundParameters.ContainsKey('ControllerPid') -or $PSBoundParameters.ContainsKey('ControllerIdentity')) {
+        [Deployment.WindowsRuntimeHost]::Run($Configuration, $Sha256, $PSScriptRoot, $pwsh, $ControllerPid, $ControllerIdentity)
+    } else {
+        [Deployment.WindowsRuntimeHost]::Run($Configuration, $Sha256, $PSScriptRoot, $pwsh)
+    }
 } catch {
     $message = $_.Exception.GetBaseException().Message
     if ($message -cnotmatch '^Managed runtime startup refused: [a-z-]+\.$') {

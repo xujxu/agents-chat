@@ -3,7 +3,7 @@ Set-StrictMode -Version Latest
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment'))
 . (Join-Path $source 'windows-runtime-bundle.ps1')
 $helpers = @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
-    'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeHost.cs',
+    'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeLease.cs', 'WindowsRuntimeHost.cs',
     'windows-worker-launcher.ps1', 'windows-runtime-host.ps1')
 Add-Type -Path @($helpers | Where-Object { $_.EndsWith('.cs') } | ForEach-Object { Join-Path $source $_ })
 function Assert([bool]$Condition, [string]$Message) {

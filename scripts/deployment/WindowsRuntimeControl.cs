@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
@@ -19,12 +20,16 @@ namespace Deployment
         readonly string generation, ownerIdentity;
         readonly int ownerPid;
         readonly Action check;
+        readonly Func<int, bool> release;
         bool running, disposed;
 
         public WindowsRuntimeControl(WindowsRuntimeDomain domain, Guid generation)
             : this(domain, generation, null) { }
 
         public WindowsRuntimeControl(WindowsRuntimeDomain domain, Guid generation, Action check)
+            : this(domain, generation, check, null) { }
+
+        public WindowsRuntimeControl(WindowsRuntimeDomain domain, Guid generation, Action check, Func<int, bool> release)
         {
             if (domain == null || generation == Guid.Empty ||
                 domain.Name != @"Local\agents-deploy-" + generation.ToString("D"))
@@ -32,6 +37,7 @@ namespace Deployment
             this.domain = domain;
             this.generation = generation.ToString("D");
             this.check = check;
+            this.release = release;
             ownerPid = Environment.ProcessId;
             ownerIdentity = WindowsWorkerJob.ProcessIdentity(ownerPid);
             pipe = WindowsRuntimePipe.Create(generation);
@@ -63,7 +69,7 @@ namespace Deployment
         }
         static bool Method(string method)
         {
-            return method == "observe" || method == "stop" || method == "retire";
+            return method == "observe" || method == "stop" || method == "retire" || method == "release";
         }
         static async Task<string> ReadFrame(PipeStream stream, int maximum, CancellationToken token)
         {
@@ -148,7 +154,29 @@ namespace Deployment
 
             if (check != null) check();
             object result;
-            if (method == "retire")
+            if (method == "release")
+            {
+                if (release == null || domain.Observe().phase == "stopped")
+                {
+                    await Refuse("unavailable-activation-lease").ConfigureAwait(false);
+                    return false;
+                }
+                int peer;
+                try { peer = WindowsRuntimePipe.ClientProcessId(pipe); }
+                catch (Win32Exception error) when (error.NativeErrorCode == 109 ||
+                    error.NativeErrorCode == 232 || error.NativeErrorCode == 233)
+                {
+                    await Refuse("release-peer-disconnected").ConfigureAwait(false);
+                    return false;
+                }
+                if (!release(peer))
+                {
+                    await Refuse("release-peer").ConfigureAwait(false);
+                    return false;
+                }
+                result = "released";
+            }
+            else if (method == "retire")
             {
                 if (domain.Observe().phase != "stopped")
                 {
@@ -189,11 +217,12 @@ namespace Deployment
 
         static string CaptureResult(JsonElement result, string method)
         {
-            if (method == "retire")
+            if (method == "retire" || method == "release")
             {
-                if (result.ValueKind != JsonValueKind.String || result.GetString() != "retired")
-                    throw new InvalidDataException("Invalid runtime retirement reply.");
-                return "retired";
+                string expected = method == "retire" ? "retired" : "released";
+                if (result.ValueKind != JsonValueKind.String || result.GetString() != expected)
+                    throw new InvalidDataException("Invalid runtime lifecycle reply.");
+                return expected;
             }
             JsonElement value = Fields(result.GetRawText(), "phase", "rootExitCode", "members", "applicationHealthy", "quiescent");
             bool admitted = Equal(value, "phase", "admitted"), exited = Equal(value, "phase", "root-exited");

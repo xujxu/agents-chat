@@ -146,7 +146,7 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `284e32f` (run `36990262413`). This also accepts the
+creation, passed at `95f4e06` (run `36994391371`). This also accepts the
 production native controller process: literal arguments and bidirectional
 stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
@@ -155,10 +155,14 @@ production creation-time privacy rather than fixture ACL repair.
 Native original-owner retirement also passed for update and restore
 (task-options job `110784933138`): the task stays disabled, its
 original owner exits cleanly, and private receipts bind the exact activation
-state. Disabled replacement-task publication is awaiting Actions acceptance;
-it must preserve account, triggers and
-permissions, retain a validated private candidate, and publish intent/completion
-evidence without starting it.
+state. Disabled replacement-task publication also passed: it preserves
+account, triggers, existing permissions (including a nondefault ACL) and
+unrelated task XML, retains a validated private candidate, and publishes
+intent/completion evidence without starting it. Incorrect digests and paths
+containing Scheduler substitutions are refused before replacement.
+Controller-bound unverified runtime lifetime and authenticated lease release
+are awaiting native acceptance; task activation and health-gated transaction
+release remain incomplete.
 Integration into the public deployment entrypoints remains pending.
 The isolated real Windows application job also passed in that run:
 three prebuilt managed starts, authenticated chat

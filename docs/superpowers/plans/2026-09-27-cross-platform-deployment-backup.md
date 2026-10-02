@@ -7813,7 +7813,8 @@ reset to defaults. This candidate correction still requires native acceptance.
 case: update, restore with a nondefault ACL, pre-retirement refusal, wrong
 digest, environment-variable path and Scheduler-argument path refusals.
 Omitting the unnecessary SDDL update preserves RegistrationInfo as well as
-the exact native security descriptor. Full regression remains running.
+the exact native security descriptor. Full run `36994391371` completed
+**23/23 success**; `95f4e06` is the new full accepted baseline.
 
 #### Task 5X: bind unverified runtime lifetime to its original controller
 
@@ -7858,6 +7859,14 @@ keeps the existing task-options deadline unchanged.
   the new native job plus full regression. Task enable/start, new-generation
   transaction binding, health-gated release and cold recovery remain the next
   integration work; this lease alone does not complete public activation.
+
+Task 5X causal `57135cf` / `36996350112`, native activation-lease
+`110804418372`, failed exactly on missing `WindowsRuntimeLease.cs` at the
+fixture's Add-Type. The workflow now has 24 jobs. Implementation adds the
+retained/synchronized original-controller lease and native peer-authenticated
+`release`, guarded bootstrap, the ninth installed helper and saved closure.
+It also checks mismatched controller identity before any startup/readiness
+and refuses release on unguarded hosts. Native and full acceptance are pending.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

@@ -30,6 +30,9 @@ namespace Deployment
         static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint pid);
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe, out uint pid);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool GetHandleInformation(SafePipeHandle handle, out uint flags);
         [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -109,6 +112,15 @@ namespace Deployment
             byte[] descriptor = new byte[security.BinaryLength];
             security.GetBinaryForm(descriptor, 0);
             return descriptor;
+        }
+
+        public static int ClientProcessId(NamedPipeServerStream server)
+        {
+            if (server == null) throw new ArgumentNullException("server");
+            uint pid;
+            Check(GetNamedPipeClientProcessId(server.SafePipeHandle, out pid), "Read runtime pipe client PID");
+            if (pid == 0 || pid > Int32.MaxValue) throw new InvalidOperationException("Invalid runtime control peer.");
+            return (int)pid;
         }
 
         public static NamedPipeClientStream Connect(Guid generation, int serverPid, string identity, int timeoutMilliseconds)
