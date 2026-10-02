@@ -7799,6 +7799,16 @@ Keep the exact independent post-registration comparison. Reject `%` environment
 substitutions and `$(...)` Scheduler argument substitutions in replacement
 paths, with separate real native negative cases before replacement intent.
 
+`7e67985` / `36993546554` reached registration but failed its postcondition.
+Further diagnostics `f655e0b` / `36993893212`, native `110796492403`, confirmed
+that inhibition and exact native task security passed; Settings no longer
+differed. The remaining mismatch is RegistrationInfo after registration.
+Do not exempt that section. Submit UPDATE without the optional SDDL (this
+operation changes the action, not permissions), retaining
+DONT_ADD_PRINCIPAL_ACE and exact security/XML checks. Add a restore fixture
+with deliberately nondefault task permissions to prove existing ACLs are not
+reset to defaults. This candidate correction still requires native acceptance.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

@@ -25,6 +25,17 @@ function Confirm-AgentsChatTaskReplacementPolicy([string]$Before, [string]$After
             if (($beforeNodes | ForEach-Object OuterXml | ConvertTo-Json -Compress) -cne
                 ($afterNodes | ForEach-Object OuterXml | ConvertTo-Json -Compress)) {
                 $Context.Stage = "replacement-policy-$($name.ToLowerInvariant())"
+                if ($name -ceq 'RegistrationInfo') {
+                    foreach ($field in @('URI', 'SecurityDescriptor', 'Date', 'Author', 'Version', 'Source', 'Description', 'Documentation')) {
+                        $beforeField = $original.SelectNodes("/t:Task/t:RegistrationInfo/t:$field", $namespaces)
+                        $afterField = $candidate.SelectNodes("/t:Task/t:RegistrationInfo/t:$field", $namespaces)
+                        if (($beforeField | ForEach-Object OuterXml | ConvertTo-Json -Compress) -cne
+                            ($afterField | ForEach-Object OuterXml | ConvertTo-Json -Compress)) {
+                            $Context.Stage += "-$($field.ToLowerInvariant())"
+                            break
+                        }
+                    }
+                }
                 break
             }
         }
@@ -117,10 +128,10 @@ function Publish-AgentsChatTaskReplacement {
         Write-AgentsChatTaskReplacementReceipt $Context 'requested'
         Test-AgentsChatRetiredTaskContext $Context
         $Context.Stage = 'replacement-registration'
-        # Update only; preserve the admitted DACL and suppress registration triggers.
+        # Update the action, not task security; prohibit implicit principal ACE changes.
         $null = $Context.Folder.RegisterTask($Context.Data.taskName, $requestedDefinition, (4 -bor 16 -bor 32),
             [string]$definition.Principal.UserId, $null, [int]$definition.Principal.LogonType,
-            $Context.Data.securityDescriptor)
+            $null)
         $task = $Context.Folder.GetTask($Context.Data.taskName)
         $Context.Stage = 'replacement-registered-path'
         if ($task.Path -cne "\$($Context.Data.taskName)") { throw 'Registered replacement path differs.' }

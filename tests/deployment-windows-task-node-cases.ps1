@@ -68,6 +68,16 @@ try {
     $scheduler = New-Object -ComObject 'Schedule.Service'
     $scheduler.Connect()
     $task = $scheduler.GetFolder('\').GetTask($TaskName)
+    if ($Action.StartsWith('replace') -and $Restore) {
+        $originalDescriptor = [string]$task.GetSecurityDescriptor(7)
+        $custom = [Security.AccessControl.RawSecurityDescriptor]::new($originalDescriptor)
+        $custom.DiscretionaryAcl.InsertAce(0, [Security.AccessControl.CommonAce]::new(
+            [Security.AccessControl.AceFlags]::None, [Security.AccessControl.AceQualifier]::AccessDenied,
+            [int]::MinValue, [Security.Principal.SecurityIdentifier]::new('S-1-5-7'), $false, $null))
+        $task.SetSecurityDescriptor($custom.GetSddlForm([Security.AccessControl.AccessControlSections]::All), 16)
+        $task = $scheduler.GetFolder('\').GetTask($TaskName)
+        Assert ([string]$task.GetSecurityDescriptor(7) -cne $originalDescriptor) 'Fixture must exercise nondefault task permissions'
+    }
     $readyFile = Join-Path $Root "runtime-$($Ready.identity.Replace(':', '-')).json"
     $directory = Join-Path $controllerRoot $(if ($Transactional) { 'task-maintenance' } else { 'node-maintenance' })
     $maintenanceDirectory = [Deployment.WindowsPrivateFile]::CreateDirectory($directory)
@@ -226,9 +236,9 @@ try {
     if ($stoppedDefinition -and $Action.StartsWith('replace')) {
         $actual = [xml]$scheduler.GetFolder('\').GetTask($TaskName).Xml
         $prior = [xml]$stoppedDefinition
-        if ($prior.Task.Settings.OuterXml -cne $actual.Task.Settings.OuterXml) {
-            [Console]::Error.WriteLine("Synthetic task settings before: $($prior.Task.Settings.OuterXml)")
-            [Console]::Error.WriteLine("Synthetic task settings after: $($actual.Task.Settings.OuterXml)")
+        if ($prior.Task.RegistrationInfo.OuterXml -cne $actual.Task.RegistrationInfo.OuterXml) {
+            [Console]::Error.WriteLine("Synthetic registration fields before: $([string]::Join(',', @($prior.Task.RegistrationInfo.ChildNodes | ForEach-Object LocalName)))")
+            [Console]::Error.WriteLine("Synthetic registration fields after: $([string]::Join(',', @($actual.Task.RegistrationInfo.ChildNodes | ForEach-Object LocalName)))")
         }
     }
 }
