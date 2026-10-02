@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { lstat, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -63,6 +63,10 @@ if (mode === 'hold') {
   await useScope((scope, admission) => hold(scope, admission, scope.observation.manifest.record.entries.length));
 } else {
   const state = await readFile(path.join(control, 'state.json'));
+  const initial = new Map(await Promise.all((await readdir(control)).map(async name => {
+    const info = await lstat(path.join(control, name), { bigint: true });
+    return [name, { dev: info.dev, ino: info.ino }];
+  })));
   const crash = async mode => {
     const child = fork(fileURLToPath(import.meta.url), [control, pwsh, mode], {
       execArgv: [], stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
@@ -96,9 +100,16 @@ if (mode === 'hold') {
   };
   const original = await crash('hold');
   assert.equal(original.retiredEntries, 7);
+  const retiredRoots = new Set(original.manifest.record.entries.map(entry => entry.path.split('\\')[0]));
+  const preserved = [...initial.keys()].filter(name => !retiredRoots.has(name)).sort();
   const captured = captureWindowsDeploymentRetirement(original);
   assert.deepEqual(captured, original);
   assert.ok(Object.isFrozen(captured.manifest.record.entries));
+  for (const retiredEntries of [-1, original.manifest.record.entries.length + 1, 1.5, '7']) {
+    assert.throws(() => captureWindowsDeploymentRetirement({ ...original, retiredEntries }));
+  }
+  assert.throws(() => captureWindowsDeploymentRetirement({ ...original, status: 'retired' }));
+  assert.throws(() => captureWindowsDeploymentRetirement({ ...original, mutationAuthority: true }));
   assert.deepEqual(await useScope(scope => scope.check()), original);
   const refused = () => assert.rejects(useScope(scope => scope.check()), error => error.recoveryAllowed === false);
   const fileAt = entry => path.join(control, entry.path);
@@ -136,12 +147,16 @@ if (mode === 'hold') {
   assert.equal(beforeCommit.retiredEntries, original.manifest.record.entries.length);
   assert.deepEqual(beforeCommit.manifest, original.manifest);
   assert.deepEqual(await useScope(scope => scope.check()), beforeCommit);
-  assert.deepEqual((await readdir(control)).sort(), ['recovery-engine', 'state.json', 'windows-admission.lock', 'worker-retirement.json']);
+  assert.deepEqual((await readdir(control)).sort(), [...preserved, 'worker-retirement.json'].sort());
   const completed = await useScope((scope, admission) => api.retireNextWindowsDeploymentEntry(control, scope, admission));
   assert.equal(completed.status, 'retired');
   assert.deepEqual(completed.manifest, original.manifest);
   assert.equal(completed.retiredEntries, beforeCommit.retiredEntries);
-  assert.deepEqual((await readdir(control)).sort(), ['recovery-engine', 'state.json', 'windows-admission.lock']);
+  assert.deepEqual((await readdir(control)).sort(), preserved);
+  for (const name of preserved) {
+    const info = await lstat(path.join(control, name), { bigint: true });
+    assert.deepEqual({ dev: info.dev, ino: info.ino }, initial.get(name), `Unrelated retained entry changed: ${name}`);
+  }
   assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
   assert.equal((await reconcileInterruptedOperation(control)).status, 'idle');
   const lock = await acquireLock(control, {

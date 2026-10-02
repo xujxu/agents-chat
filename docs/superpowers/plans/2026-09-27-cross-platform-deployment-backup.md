@@ -10271,6 +10271,19 @@ worker operation, settled journals and the original saved helper manifest.
   receipt-retirement assertions. Run update/restore/disabled scenarios and
   preserve the full Actions regression before claiming final unlock.
 
+  Implementation `11852a9 / 37075732548` reached both destructive crash
+  prefixes in the update scenario, including cold reopening after the old
+  lock and worker helper directory were gone. At **23:07:44 UTC** the fixture
+  then rejected two legitimate pre-existing control children:
+  `%SystemDrive%` (literal-path refusal fixture) and `replacement` (the live
+  runtime bundle). Correct the assertion to derive retired root names from
+  the verified manifest and preserve every other initial entry by dev/ino;
+  do not delete either directory or weaken native inventory checks.
+  Linux contracts also found the new ownership-barrier error omitted the
+  existing `worker`/`evidence` diagnostic vocabulary. Preserve that wording
+  rather than changing existing refusal assertions. Keep this implementation
+  run through completion and require a fresh full corrected run.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

@@ -376,7 +376,7 @@ function workerRetirementEntry(name) {
 
 async function requireNoWorkerRetirement(directory) {
   if ((await readdir(directory)).some(workerRetirementEntry)) {
-    throw new Error('Worker retirement manifest requires explicit cleanup before lock operations.');
+    throw new Error('Native worker retirement evidence requires explicit cleanup before lock operations.');
   }
 }
 
