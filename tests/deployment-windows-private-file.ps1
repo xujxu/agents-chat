@@ -87,10 +87,13 @@ try {
         }
         Assert ($collision -and (Get-Acl -LiteralPath $createdDirectory).Sddl -ceq $createdSecurity.Sddl) `
             'Native directory creation adopted or changed an existing directory'
-        $sharing = $false
-        try { [IO.Directory]::Move($createdDirectory, (Join-Path $publicDirectory 'moved')) }
-        catch { $sharing = ($_.Exception.GetBaseException().HResult -band 0xffff) -eq 32 }
-        Assert $sharing 'Retained native directory allowed replacement'
+        $movedDirectory = Join-Path $publicDirectory 'moved'
+        $moveCode = 0
+        try { [IO.Directory]::Move($createdDirectory, $movedDirectory) }
+        catch { $moveCode = $_.Exception.GetBaseException().HResult -band 0xffff }
+        Assert ($moveCode -in @(5, 32) -and (Test-Path -LiteralPath $createdDirectory) -and
+            -not (Test-Path -LiteralPath $movedDirectory)) "Retained native directory replacement was not refused: $moveCode"
+        $directory.Check()
         $receipt = [Deployment.WindowsPrivateFile]::Publish((Join-Path $createdDirectory 'intent.json'), '{"private":true}')
         try { Assert ($receipt.ReadText() -ceq '{"private":true}') 'New private directory cannot publish private evidence' }
         finally { $receipt.Dispose() }
@@ -110,6 +113,10 @@ try {
     try { $directory.Check() }
     catch { $disposedDirectory = $_.Exception.GetBaseException() -is [ObjectDisposedException] }
     Assert $disposedDirectory 'Disposed directory authority was accepted'
+    [IO.Directory]::Move($createdDirectory, $movedDirectory)
+    Assert (-not (Test-Path -LiteralPath $createdDirectory) -and (Test-Path -LiteralPath $movedDirectory)) `
+        'Directory move control did not succeed after releasing original handles'
+    [IO.Directory]::Move($movedDirectory, $createdDirectory)
     Remove-Item -LiteralPath $createdDirectory -Recurse -Force
     Refuses { [Deployment.WindowsPrivateFile]::OpenDirectory($publicDirectory) } 'Private configuration permissions are unsupported.'
     Write-Output 'PASS: native private directory creation needs no ACL repair, refuses reuse and retains original identity'

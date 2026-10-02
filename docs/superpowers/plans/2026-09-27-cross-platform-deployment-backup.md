@@ -7328,6 +7328,15 @@ coverage and token-probe setup without fixture ACL repair. Token sizing still
 requires actual diagnostic evidence; no caller privileges or privacy checks
 have been relaxed.
 
+Implementation `40f68ed` / `36950710044`, native `110662852178`, reached the
+directory movement assertion after passing creation/privacy/parent/collision
+checks. The assertion recognized only file-sharing error 32, whereas directory
+movement may report access denied (5). Require an explicit denial (5 or 32),
+unchanged original path/no destination and original retained identity; also
+require the same move to succeed after disposing the leases. This strengthens
+the behavioral observation without changing native access/share policy.
+The token diagnostic step was not reached in this run.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
