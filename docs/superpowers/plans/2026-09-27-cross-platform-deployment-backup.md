@@ -7773,10 +7773,12 @@ and saved-worker manifest, native runtime bundle and transaction fixtures.
   Starting and binding the new generation, health verification, release,
   cold recovery and public Windows transactions are still unfinished.
 
-Task 5W causal `e0a821f` / `36991379979` is starting, native task-options
-`110790274379`. Local committed `d0104bb` implements the shared read-only
+Task 5W causal `e0a821f` / `36991379979`, native task-options
+`110790274379`, failed exactly at bundle-test line 40 because
+`WindowsRuntimeHost` has no `Open` method. The characterized run is cancelled
+before implementation validation. `d0104bb` implements shared read-only
 candidate admission, disabled registration and durable replacement context;
-do not push until the causal missing-method result is captured.
+native replacement and full regression are not yet accepted.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
