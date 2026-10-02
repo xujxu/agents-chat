@@ -9583,9 +9583,14 @@ task does not delete receipts or release the operation lock.
   invoke after the accepted intent test and before deliberate completion
   evidence mutations in `deployment-windows-task-completion-proof-cases.ps1`.
 - Add the two helper files to both saved worker-engine inventories.
+- Modify the `windows-completion-proof` job in
+  `.github/workflows/deployment-lifecycle.yml`: increase only its overall
+  envelope from 10 to 15 minutes for the added native checkpoint scenarios.
+  The accepted original scenarios already take roughly nine minutes.
+  Keep all controller/readiness/request timeouts unchanged.
 - Update `README.md` with the checkpoint's exact, non-unlock boundary.
 
-- [ ] **Step 1: publish and capture the missing checkpoint entry.**
+- [x] **Step 1: publish and capture the missing checkpoint entry.**
 
   The initial test uses actual admission and full native proof:
 
@@ -9727,6 +9732,15 @@ task does not delete receipts or release the operation lock.
   native logs and full run conclusion, then implement the checkpoint reader
   and prefix-cleanup consumer. The checkpoint is not itself permission to
   bypass remaining-evidence, original-runtime or worker-handoff checks.
+
+**Task 5AK causal evidence:** `1f2f708 / 37057709392`, native job
+`111006401762`, reached the missing `prepareWindowsTaskRetirementCheckpoint`
+export at 20:04:05 UTC after genuine retained intent acceptance in the same
+second. The characterized causal run was cancelled. The implementation
+extracts canonical private publication/reopen for the two fixed retirement
+record names, preserves the original intent schema, and adds the strict
+checkpoint with original-actor-loss and corruption coverage. Full acceptance
+remains pending.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

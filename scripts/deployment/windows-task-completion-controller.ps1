@@ -17,6 +17,7 @@ try {
         (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-completion-proof.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-retirement-intent.ps1')
+    . (Join-Path $PSScriptRoot 'windows-task-retirement-checkpoint.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'proof-open'
@@ -34,7 +35,8 @@ try {
         $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'prepare-retirement')) {
+        if ($id -ne $sequence + 1 -or $method -cnotin @(
+            'check', 'close', 'prepare-retirement', 'prepare-retirement-checkpoint')) {
             throw 'Invalid completed-task proof request.'
         }
         $sequence = $id
@@ -49,6 +51,9 @@ try {
             $value = 'close'
         } elseif ($method -ceq 'prepare-retirement') {
             $value = Prepare-AgentsChatTaskRetirement -Context $proof `
+                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
+        } elseif ($method -ceq 'prepare-retirement-checkpoint') {
+            $value = Prepare-AgentsChatTaskRetirementCheckpoint -Context $proof `
                 -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
         } else { $value = Assert-AgentsChatTaskCompletionProof -Context $proof }
         [Console]::Out.WriteLine((@{

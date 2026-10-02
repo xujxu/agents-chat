@@ -34,11 +34,25 @@ function descriptor(value, expected) {
   }
   return result;
 }
+export { descriptor as captureRetirementFile, canonical as canonicalRetirementPath };
 function processPair(pid, processIdentity) {
   if (!Number.isSafeInteger(pid) || pid < 1 || pid > 2147483647
     || typeof processIdentity !== 'string' || processIdentity.length > 64
     || !new RegExp(`^${pid}:[1-9][0-9]*$`).test(processIdentity)) {
     throw new Error('Invalid native retirement creator.');
+  }
+  export function captureRetirementProcess(value) {
+    const result = captureWorkerFields(value, ['pid', 'processIdentity'], 'retirement process');
+    processPair(result.pid, result.processIdentity);
+    return result;
+  }
+  export function captureRetirementCreator(value) {
+    const result = captureWorkerFields(value,
+      ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'], 'retirement creator');
+    processPair(result.pid, result.processIdentity);
+    processPair(result.bridgePid, result.bridgeIdentity);
+    if (result.pid === result.bridgePid) throw new Error('Ambiguous retirement creator.');
+    return result;
   }
 }
 export function captureWindowsTaskRetirement(value) {
@@ -49,17 +63,13 @@ export function captureWindowsTaskRetirement(value) {
   ], 'retirement intent');
   const lock = captureLockOwner(intent.lock);
   const completion = captureWindowsTaskCompletionProof(intent.completion);
-  const creator = captureWorkerFields(intent.creator,
-    ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'], 'retirement creator');
-  processPair(creator.pid, creator.processIdentity);
-  processPair(creator.bridgePid, creator.bridgeIdentity);
+  const creator = captureRetirementCreator(intent.creator);
   processPair(lock.pid, lock.processIdentity);
   const lockFile = descriptor(intent.lockFile, 'lock\\owner.json');
   const state = descriptor(intent.state, 'state.json');
   if (result.status !== 'prepared' || intent.version !== 1
     || !canonical(intent.control) || !canonical(intent.project) || intent.project !== lock.project
     || completion.operationId !== lock.operationId || completion.stateSha256 !== state.sha256
-    || creator.pid === creator.bridgePid
     || !Array.isArray(intent.files) || intent.files.length !== files.length) {
     throw new Error('Invalid native retirement intent scope.');
   }

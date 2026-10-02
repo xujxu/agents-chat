@@ -7,6 +7,7 @@ import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { assertWindowsAdmission } from './windows-admission.mjs';
 import { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
 import { captureWindowsTaskRetirement } from './windows-task-retirement-record.mjs';
+import { captureWindowsTaskRetirementCheckpoint } from './windows-task-retirement-checkpoint.mjs';
 
 export { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
 
@@ -33,6 +34,10 @@ export async function assertWindowsTaskCompletionProof(control, proof, admission
 
 export async function prepareWindowsTaskRetirement(control, proof, admission, { signal } = {}) {
   return bindingFor(control, proof, admission).prepare(signal);
+}
+
+export async function prepareWindowsTaskRetirementCheckpoint(control, proof, admission, { signal } = {}) {
+  return bindingFor(control, proof, admission).prepareCheckpoint(signal);
 }
 
 export async function openWindowsTaskCompletionProof({ control, pwsh, admission, signal }) {
@@ -99,13 +104,20 @@ export async function openWindowsTaskCompletionProof({ control, pwsh, admission,
           wire.close();
           return;
         }
-        const prepared = method === 'prepare-retirement' ? captureWindowsTaskRetirement(reply.value) : undefined;
+        let result;
+        let prepared;
+        if (method === 'prepare-retirement-checkpoint') {
+          result = captureWindowsTaskRetirementCheckpoint(reply.value);
+          prepared = result.intent;
+        } else if (method === 'prepare-retirement') {
+          result = prepared = captureWindowsTaskRetirement(reply.value);
+        }
         if (prepared && prepared.intent.control !== control) throw new Error('Retirement intent control differs.');
         const observed = prepared ? prepared.intent.completion : captureWindowsTaskCompletionProof(reply.value);
         if (!isDeepStrictEqual(observed, observation)) throw new Error('Original completed-task proof observation changed.');
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
         requireOriginalChild();
-        return prepared ?? observed;
+        return result ?? observed;
       } catch (cause) { throw await abandon(cause); }
       finally { busy = false; }
     };
@@ -119,7 +131,9 @@ export async function openWindowsTaskCompletionProof({ control, pwsh, admission,
         if (!closed) await request('close');
       },
     });
-    proofs.set(proof, { control, admission, prepare: requestSignal => request('prepare-retirement', requestSignal) });
+    proofs.set(proof, { control, admission,
+      prepare: requestSignal => request('prepare-retirement', requestSignal),
+      prepareCheckpoint: requestSignal => request('prepare-retirement-checkpoint', requestSignal) });
     return proof;
   } catch (cause) { throw await abandon(cause); }
 }

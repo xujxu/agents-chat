@@ -27,6 +27,64 @@ function Get-AgentsChatRetirementCompletion($Observation) {
     }
 }
 
+function Publish-AgentsChatRetirementRecord {
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][Collections.Specialized.OrderedDictionary]$Candidate,
+        [Parameter(Mandatory)][ValidateSet('task-retirement.json', 'task-retirement-checkpoint.json')][string]$Name
+    )
+    $current = $Candidate.creator
+    Assert-AgentsChatCompletionProcessIdentity $current.pid $current.processIdentity
+    if ($current.bridgePid -ne $PID -or
+        $current.bridgeIdentity -cne [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
+        throw 'Original retirement bridge changed.'
+    }
+    $text = $Candidate | ConvertTo-Json -Depth 12 -Compress
+    $marker = Join-Path $Context.Control $Name
+    $null = Assert-AgentsChatTaskCompletionProof -Context $Context
+    if ([Deployment.WindowsWorkerJob]::ProcessIdentity($current.pid) -cne $current.processIdentity) {
+        throw 'Original retirement controller changed before publication.'
+    }
+    if (Test-Path -LiteralPath $marker) {
+        $retained = Open-AgentsChatCompletionFile $Context $marker ''
+        $stored = Read-AgentsChatMaintenanceFields ($retained.ReadText()) ([string[]]$Candidate.Keys)
+        $expected = Read-AgentsChatMaintenanceFields $text ([string[]]$Candidate.Keys)
+        foreach ($field in $Candidate.Keys) {
+            if ($field -cne 'creator' -and $stored[$field].GetRawText() -cne $expected[$field].GetRawText()) {
+                throw "Original retirement record differs: $field."
+            }
+        }
+        $creator = Read-AgentsChatMaintenanceFields $stored.creator.GetRawText() @(
+            'pid', 'processIdentity', 'bridgePid', 'bridgeIdentity')
+        $owner = [ordered]@{
+            pid=$creator.pid.GetInt32(); processIdentity=$creator.processIdentity.GetString()
+            bridgePid=$creator.bridgePid.GetInt32(); bridgeIdentity=$creator.bridgeIdentity.GetString()
+        }
+        Assert-AgentsChatCompletionProcessIdentity $owner.pid $owner.processIdentity
+        Assert-AgentsChatCompletionProcessIdentity $owner.bridgePid $owner.bridgeIdentity
+        if ($owner.pid -eq $owner.bridgePid) { throw 'Ambiguous retirement creator.' }
+        if ($owner.pid -ne $current.pid -or $owner.processIdentity -cne $current.processIdentity -or
+            $owner.bridgePid -ne $PID -or $owner.bridgeIdentity -cne $current.bridgeIdentity) {
+            Assert-AgentsChatCompletionProcessAbsent $owner.pid $owner.processIdentity
+            Assert-AgentsChatCompletionProcessAbsent $owner.bridgePid $owner.bridgeIdentity
+        }
+        $Candidate.creator = $owner
+    } else {
+        $retained = [Deployment.WindowsPrivateFile]::Publish($marker, $text)
+        $Context.Files.Add($retained)
+    }
+    $identity = $retained.CaptureIdentity()
+    $descriptor = [ordered]@{
+        path=$Name; dev=$identity.Dev; ino=$identity.Ino
+        bytes=$retained.ByteLength; sha256=$retained.Sha256
+    }
+    $null = Assert-AgentsChatTaskCompletionProof -Context $Context
+    if ([Deployment.WindowsWorkerJob]::ProcessIdentity($current.pid) -cne $current.processIdentity) {
+        throw 'Original retirement controller changed after publication.'
+    }
+    return [ordered]@{ descriptor=$descriptor; record=$Candidate }
+}
+
 function Prepare-AgentsChatTaskRetirement {
     [CmdletBinding()]
     param(
@@ -69,48 +127,6 @@ function Prepare-AgentsChatTaskRetirement {
     if ($candidate.lock.operationId -cne $completion.operationId -or
         $candidate.lock.project -cne $candidate.project -or $candidate.state.sha256 -cne $completion.stateSha256 -or
         $candidate.files[-1].sha256 -cne $completion.completionSha256) { throw 'Original retirement scope differs.' }
-    $text = $candidate | ConvertTo-Json -Depth 12 -Compress
-    $marker = Join-Path $Context.Control 'task-retirement.json'
-    $null = Assert-AgentsChatTaskCompletionProof -Context $Context
-    if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
-        throw 'Original retirement controller changed before publication.'
-    }
-    if (Test-Path -LiteralPath $marker) {
-        $retained = Open-AgentsChatCompletionFile $Context $marker ''
-        $stored = Read-AgentsChatMaintenanceFields ($retained.ReadText()) ([string[]]$candidate.Keys)
-        $expected = Read-AgentsChatMaintenanceFields $text ([string[]]$candidate.Keys)
-        foreach ($name in $candidate.Keys) {
-            if ($name -cne 'creator' -and $stored[$name].GetRawText() -cne $expected[$name].GetRawText()) {
-                throw "Original retirement intent differs: $name."
-            }
-        }
-        $creator = Read-AgentsChatMaintenanceFields $stored.creator.GetRawText() @(
-            'pid', 'processIdentity', 'bridgePid', 'bridgeIdentity')
-        $owner = [ordered]@{
-            pid=$creator.pid.GetInt32(); processIdentity=$creator.processIdentity.GetString()
-            bridgePid=$creator.bridgePid.GetInt32(); bridgeIdentity=$creator.bridgeIdentity.GetString()
-        }
-        Assert-AgentsChatCompletionProcessIdentity $owner.pid $owner.processIdentity
-        Assert-AgentsChatCompletionProcessIdentity $owner.bridgePid $owner.bridgeIdentity
-        if ($owner.pid -eq $owner.bridgePid) { throw 'Ambiguous retirement creator.' }
-        if ($owner.pid -ne $ControllerPid -or $owner.processIdentity -cne $ControllerIdentity -or
-            $owner.bridgePid -ne $PID -or $owner.bridgeIdentity -cne $candidate.creator.bridgeIdentity) {
-            Assert-AgentsChatCompletionProcessAbsent $owner.pid $owner.processIdentity
-            Assert-AgentsChatCompletionProcessAbsent $owner.bridgePid $owner.bridgeIdentity
-        }
-        $candidate.creator = $owner
-    } else {
-        $retained = [Deployment.WindowsPrivateFile]::Publish($marker, $text)
-        $Context.Files.Add($retained)
-    }
-    $identity = $retained.CaptureIdentity()
-    $descriptor = [ordered]@{
-        path='task-retirement.json'; dev=$identity.Dev; ino=$identity.Ino
-        bytes=$retained.ByteLength; sha256=$retained.Sha256
-    }
-    $null = Assert-AgentsChatTaskCompletionProof -Context $Context
-    if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
-        throw 'Original retirement controller changed after publication.'
-    }
-    return [ordered]@{ status='prepared'; descriptor=$descriptor; intent=$candidate }
+    $published = Publish-AgentsChatRetirementRecord -Context $Context -Candidate $candidate -Name 'task-retirement.json'
+    return [ordered]@{ status='prepared'; descriptor=$published.descriptor; intent=$published.record }
 }
