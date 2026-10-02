@@ -179,15 +179,17 @@ namespace Deployment
                 !String.Equals(Path.GetFullPath(file), file, StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("A canonical local configuration file path is required.");
         }
-        static WindowsPrivateFile PublicationDirectory(string directory, bool requirePrivate = true)
+        static WindowsPrivateFile PublicationDirectory(string directory, bool requirePrivate = true, bool retirement = false)
         {
             var parent = new WindowsPrivateFile { file = directory };
             try
             {
                 // Metadata-only handles do not prevent directory renames through share-delete exclusion.
                 const uint listDirectory = 1, readAttributes = 0x80, readControl = 0x20000, shareReadWrite = 3;
+                const uint delete = 0x10000;
                 const uint openExisting = 3, backupSemantics = 0x2000000, openReparsePoint = 0x200000;
-                parent.handle = CreateFileW(directory, listDirectory | readAttributes | readControl, shareReadWrite,
+                parent.handle = CreateFileW(directory, listDirectory | readAttributes | readControl | (retirement ? delete : 0),
+                    retirement ? 0 : shareReadWrite,
                     IntPtr.Zero, openExisting, backupSemantics | openReparsePoint, IntPtr.Zero);
                 if (parent.handle.IsInvalid)
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "Open original private publication directory");
@@ -378,6 +380,58 @@ namespace Deployment
                     throw new InvalidDataException("Original retirement file identity or length differs.");
                 parent.Check();
                 return new RetirementFile(original, parent);
+            }
+            catch
+            {
+                try { if (original != null) original.Dispose(); }
+                finally { parent.Dispose(); }
+                throw;
+            }
+        }
+        public sealed class RetirementDirectory : IDisposable
+        {
+            readonly WindowsPrivateFile original;
+            readonly DirectoryLease parent;
+            internal RetirementDirectory(WindowsPrivateFile original, DirectoryLease parent)
+            {
+                this.original = original;
+                this.parent = parent;
+            }
+            public void Check()
+            {
+                if (original.disposed) throw new ObjectDisposedException("Private directory");
+                parent.Check();
+                original.CheckPublicationDirectory();
+                parent.Check();
+            }
+            public void Delete()
+            {
+                Check();
+                byte disposition = 1;
+                Native(SetFileInformationByHandle(original.handle, 4, ref disposition, 1),
+                    "Retire original private directory");
+                Dispose();
+            }
+            public void Dispose()
+            {
+                try { original.Dispose(); }
+                finally { parent.Dispose(); }
+            }
+        }
+        public static RetirementDirectory RetainDirectoryForRetirement(string directory, string dev, string ino)
+        {
+            RequirePath(directory);
+            DirectoryLease parent = OpenDirectory(Path.GetDirectoryName(directory));
+            WindowsPrivateFile original = null;
+            try
+            {
+                original = PublicationDirectory(directory, retirement: true);
+                EvidenceIdentity identity = original.OriginalIdentity();
+                if (identity.Dev != dev || identity.Ino != ino)
+                    throw new InvalidDataException("Original retirement directory identity differs.");
+                original.CheckPublicationDirectory();
+                parent.Check();
+                return new RetirementDirectory(original, parent);
             }
             catch
             {

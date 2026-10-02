@@ -10071,7 +10071,7 @@ that authority by itself.
   kernel-enforced nonempty refusal, ACL changes, parent protection and links.
 - `README.md`: distinguish primitive acceptance from final transaction unlock.
 
-- [ ] **Step 1: publish the missing native directory factory cases.**
+- [x] **Step 1: publish the missing native directory factory cases.**
 
   Require `RetainDirectoryForRetirement` through native reflection after all
   existing file-retirement cases. Capture an original private directory's
@@ -10092,7 +10092,7 @@ that authority by itself.
   Also require wrong/replaced identity, retained-reader contention, path
   renames, unsafe ACLs and reparse-point refusals.
 
-- [ ] **Step 2: extend the same checked native handle mechanism.**
+- [x] **Step 2: extend the same checked native handle mechanism.**
 
   The internal publication-directory opener adds `DELETE` (0x10000) only
   for retirement and uses share mode zero. All existing callers keep their
@@ -10113,8 +10113,10 @@ that authority by itself.
   Windows performs the empty-directory check atomically on that handle;
   do not enumerate-and-recursively-delete, use path-based `RemoveDirectory`,
   or pre-authorize removal from a stale empty-directory observation.
-  Dispose both handles on every construction/deletion failure, preserving
-  the original native error. Retain the existing nine-helper installation.
+  Dispose both handles on construction failure. A refused `Delete()` keeps
+  the retained context available for inspection and ordinary disposal, as
+  with file retirement; callers dispose it in `finally`. Preserve the
+  original native error and the existing nine-helper installation.
 
 - [ ] **Step 3: accept native refusal and complete regression.**
 
@@ -10123,6 +10125,13 @@ that authority by itself.
   preserve a full 26-job run. Require all original receipt retirement,
   complete-proof, Linux lifecycle, contracts and real-application jobs.
   Do not remove the actual maintenance directory or old operation lock yet.
+
+**Task 5AN causal:** `a895458 / 37070935301`, native task-options job
+`111049947043`, failed at 22:11:56 UTC on the missing exact native directory
+factory after both existing private-file retirement suites passed. Captured
+the log and cancelled the characterized causal run. The directory factory
+and internal exclusive directory-open mode are now implemented; native and
+full acceptance remain pending. No transaction-directory deletion was added.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
