@@ -241,6 +241,13 @@ Both root retirement records independently block ordinary lock acquisition,
 release, worker-retirement recovery and idle reporting even without the task
 receipt directory. Windows checks include case aliases; marker contents are
 not interpreted as permission to clear the barrier.
+Checkpoint-backed receipt retirement now has a separate native scope and
+Actions fixture: live handoff retains the original controller, while cold
+reopening accepts only an exact missing prefix after creator loss. Each
+request deletes only the next original descriptor through its exclusive
+native handle. Acceptance of this consumer is still pending; it retains the
+empty task receipt directory, state, lock and both root records, and does not
+perform final worker cleanup or unlock.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

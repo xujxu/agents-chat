@@ -9879,6 +9879,9 @@ runtime adoption, task-policy mutation or automatic operation unlock.
 - `scripts/deployment/windows-task-retirement-scope.ps1`: native private
   record reopening, retained checkpoint authority, strict ordered inventory,
   exact next-file retirement and disposal.
+- `scripts/deployment/windows-task-retirement-records.ps1`: strict native
+  checkpoint/intent codecs and descriptor/creator bindings, without receipt
+  reconstruction or permissive date conversion.
 - `scripts/deployment/windows-task-completion-proof.ps1`: share original
   runtime/policy/instance/lease/domain assertions without weakening full-proof
   receipt or original-process checks.
@@ -9901,7 +9904,7 @@ runtime adoption, task-policy mutation or automatic operation unlock.
 - `.github/workflows/deployment-lifecycle.yml`: one independent native
   retirement job, retaining the existing 25-job regression.
 
-- [ ] **Step 1: publish a genuine causal retirement fixture.**
+- [x] **Step 1: publish a genuine causal retirement fixture.**
 
   After actual native task completion and original transaction-controller
   settlement, call the existing completion module and require:
@@ -10003,6 +10006,21 @@ runtime adoption, task-policy mutation or automatic operation unlock.
   implementation's complete run and require all 26 jobs. Empty-directory
   retirement, worker evidence handoff and final operation unlock remain the
   next explicit boundary; this step must not claim they already work.
+
+**Task 5AM causal:** `6a780b1 / 37063868335`, native retirement job
+`111032457980`, failed at 21:15:03 UTC on missing
+`beginWindowsTaskRetirement`, after genuine completion and original
+transaction-controller settlement. Captured the log and cancelled only this
+characterized causal run. The preceding guard run completed with 24 successful
+jobs and one Windows-contract envelope cancellation; all that job's assertions
+passed, but full acceptance remains pending.
+
+**Implementation prepared:** native record/scope helpers, shared original
+runtime assertions, same-controller handoff, mode-safe Node facades, exact
+next-file deletion, saved-helper closure and destructive/refusal cases are
+implemented. The consumer retains the empty directory and old lock. Validate
+the full 26-job implementation run, including the committed Windows-contract
+envelope correction `da7ffb7`, before checking the remaining boxes.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

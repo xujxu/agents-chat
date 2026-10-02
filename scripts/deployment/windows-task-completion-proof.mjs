@@ -8,11 +8,13 @@ import { assertWindowsAdmission } from './windows-admission.mjs';
 import { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
 import { captureWindowsTaskRetirement } from './windows-task-retirement-record.mjs';
 import { captureWindowsTaskRetirementCheckpoint } from './windows-task-retirement-checkpoint.mjs';
+import { captureWindowsTaskRetirementScope } from './windows-task-retirement-scope.mjs';
 
 export { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
 
 const script = fileURLToPath(new URL('./windows-task-completion-controller.ps1', import.meta.url));
 const proofs = new WeakMap();
+const retirements = new WeakMap();
 function refused(cause) {
   return Object.assign(new Error('Completed-task proof unavailable; retain operation and recovery evidence.', { cause }), {
     code: 'DEPLOYMENT_WINDOWS_COMPLETION_PROOF_REFUSED', recoveryAllowed: false,
@@ -40,7 +42,27 @@ export async function prepareWindowsTaskRetirementCheckpoint(control, proof, adm
   return bindingFor(control, proof, admission).prepareCheckpoint(signal);
 }
 
-export async function openWindowsTaskCompletionProof({ control, pwsh, admission, signal }) {
+export async function beginWindowsTaskRetirement(control, proof, admission, { signal } = {}) {
+  return bindingFor(control, proof, admission).begin(signal);
+}
+
+export async function retireNextWindowsTaskFile(control, scope, admission, { signal } = {}) {
+  const binding = retirements.get(scope);
+  if (!binding || binding.control !== control || binding.admission !== admission) {
+    throw new Error('Original retained task retirement authority does not match admission.');
+  }
+  return binding.next(signal);
+}
+
+export async function openWindowsTaskCompletionProof(options) {
+  return openWindowsTaskAuthority(options, false);
+}
+
+export async function openWindowsTaskRetirement(options) {
+  return openWindowsTaskAuthority(options, true);
+}
+
+async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, retiring) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value =>
     typeof value === 'string' && value.length <= 4096 && path.isAbsolute(value)
@@ -54,7 +76,8 @@ export async function openWindowsTaskCompletionProof({ control, pwsh, admission,
   const { child, wire, waitForExit, abandon: abandonTransport } = windowsControllerTransport({
     pwsh, refused, label: 'Native completed-task proof controller',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
-      '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
+      '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
+      ...(retiring ? ['-Retirement'] : [])],
   });
   let closed = false;
   let busy = false;
@@ -73,7 +96,12 @@ export async function openWindowsTaskCompletionProof({ control, pwsh, admission,
       || ready.processIdentity !== await processIdentity(child.pid)) {
       throw new Error('Original completed-task proof readiness differs.');
     }
-    const observation = captureWindowsTaskCompletionProof(ready.value);
+    let retirementObservation = retiring ? captureWindowsTaskRetirementScope(ready.value) : undefined;
+    const observation = retirementObservation?.checkpoint.intent.intent.completion
+      ?? captureWindowsTaskCompletionProof(ready.value);
+    if (retirementObservation && retirementObservation.checkpoint.intent.intent.control !== control) {
+      throw new Error('Retirement readiness control differs.');
+    }
     const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity });
     const requireOriginalChild = () => {
       if (child.exitCode !== null || child.signalCode !== null) {
@@ -106,7 +134,20 @@ export async function openWindowsTaskCompletionProof({ control, pwsh, admission,
         }
         let result;
         let prepared;
-        if (method === 'prepare-retirement-checkpoint') {
+        let nextRetirement;
+        if (retiring || method === 'begin-retirement') {
+          result = nextRetirement = captureWindowsTaskRetirementScope(reply.value);
+          prepared = result.checkpoint.intent;
+          if (retirementObservation) {
+            const expected = retirementObservation.retiredFiles + (method === 'retire-next' ? 1 : 0);
+            if (result.retiredFiles !== expected
+              || !isDeepStrictEqual(result.checkpoint, retirementObservation.checkpoint)) {
+              throw new Error('Original retirement checkpoint or ordered progress changed.');
+            }
+          } else if (result.retiredFiles !== 0) {
+            throw new Error('Full-proof transfer cannot begin after missing receipts.');
+          }
+        } else if (method === 'prepare-retirement-checkpoint') {
           result = captureWindowsTaskRetirementCheckpoint(reply.value);
           prepared = result.intent;
         } else if (method === 'prepare-retirement') {
@@ -117,23 +158,55 @@ export async function openWindowsTaskCompletionProof({ control, pwsh, admission,
         if (!isDeepStrictEqual(observed, observation)) throw new Error('Original completed-task proof observation changed.');
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
         requireOriginalChild();
+        if (nextRetirement) {
+          retiring = true;
+          retirementObservation = nextRetirement;
+        }
         return result ?? observed;
       } catch (cause) { throw await abandon(cause); }
       finally { busy = false; }
     };
     await request('check', signal);
-    const proof = Object.freeze({
-      identity, observation,
-      check: ({ signal: checkSignal } = {}) => request('check', checkSignal),
+    const requireMode = expected => {
+      if (retiring !== expected) throw refused(new Error('Original proof was transferred to retirement authority.'));
+    };
+    const contextFor = retirement => Object.freeze({
+      identity, observation: retirement ? retirementObservation : observation,
+      async check({ signal: checkSignal } = {}) {
+        requireMode(retirement);
+        return request('check', checkSignal);
+      },
       async close() {
+        requireMode(retirement);
         if (busy) throw refused(new Error('Cannot close an active completed-task proof request.'));
         if (failure) throw failure;
         if (!closed) await request('close');
       },
     });
+    const retirementContext = () => {
+      const scope = contextFor(true);
+      retirements.set(scope, { control, admission, async next(requestSignal) {
+        requireMode(true);
+        if (retirementObservation.retiredFiles >= retirementObservation.checkpoint.intent.intent.files.length) {
+          throw refused(new Error('Retirement receipt list is exhausted.'));
+        }
+        return request('retire-next', requestSignal);
+      } });
+      return scope;
+    };
+    if (retiring) return retirementContext();
+    const proof = contextFor(false);
+    const fullRequest = (method, requestSignal) => {
+      requireMode(false);
+      return request(method, requestSignal);
+    };
     proofs.set(proof, { control, admission,
-      prepare: requestSignal => request('prepare-retirement', requestSignal),
-      prepareCheckpoint: requestSignal => request('prepare-retirement-checkpoint', requestSignal) });
+      prepare: requestSignal => fullRequest('prepare-retirement', requestSignal),
+      prepareCheckpoint: requestSignal => fullRequest('prepare-retirement-checkpoint', requestSignal),
+      async begin(requestSignal) {
+        await fullRequest('begin-retirement', requestSignal);
+        return retirementContext();
+      } });
     return proof;
   } catch (cause) { throw await abandon(cause); }
 }

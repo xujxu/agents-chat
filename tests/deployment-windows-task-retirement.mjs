@@ -7,6 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { withWindowsAdmission } from '../scripts/deployment/windows-admission.mjs';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
+import { captureWindowsTaskRetirementScope } from '../scripts/deployment/windows-task-retirement-scope.mjs';
 import * as api from '../scripts/deployment/windows-task-completion-proof.mjs';
 
 const [control, pwsh, mode] = process.argv.slice(2);
@@ -26,6 +27,7 @@ if (mode === 'hold') {
     try {
       assert.deepEqual(scope.identity, proof.identity, 'Handoff replaced the original native controller.');
       await assert.rejects(proof.check(), /unavailable|transferred/i);
+      await assert.rejects(proof.close(), /unavailable|transferred/i);
       await assert.rejects(api.prepareWindowsTaskRetirement(control, proof, admission), /unavailable|transferred/i);
       for (const [root, retained, admitted] of [
         [control, { ...scope }, admission], [`${control}-foreign`, scope, admission],
@@ -76,10 +78,34 @@ if (mode === 'hold') {
     }
   }
   const original = ready.observation;
+  const captured = captureWindowsTaskRetirementScope(original);
+  assert.deepEqual(captured, original);
+  assert.ok(Object.isFrozen(captured) && Object.isFrozen(captured.checkpoint)
+    && Object.isFrozen(captured.checkpoint.intent.intent.files));
+  for (const retiredFiles of [-1, 24, 1.5, '3']) {
+    assert.throws(() => captureWindowsTaskRetirementScope({ ...original, retiredFiles }));
+  }
+  assert.throws(() => captureWindowsTaskRetirementScope({ ...original, mutationAuthority: true }));
   assert.deepEqual(await useRetirement(scope => scope.check()), original);
   const descriptors = original.checkpoint.intent.intent.files;
   const refused = () => assert.rejects(useRetirement(scope => scope.check()), error =>
     error.recoveryAllowed === false);
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    const scope = await api.openWindowsTaskRetirement({ control, pwsh, admission });
+    const reappeared = fileAt(descriptors[0]);
+    let poisoned;
+    try {
+      await writeFile(reappeared, '{}');
+      await assert.rejects(scope.check(), error => {
+        poisoned = error;
+        return error.recoveryAllowed === false;
+      });
+    } finally {
+      await unlink(reappeared);
+      if (poisoned) await assert.rejects(scope.close(), error => error === poisoned);
+      else await scope.close();
+    }
+  });
   const held = path.join(control, 'retirement-fixture-held');
   const hole = fileAt(descriptors[8]);
   await rename(hole, held);
@@ -105,13 +131,26 @@ if (mode === 'hold') {
   finally { await unlink(extra); }
   const checkpointFile = fileAt(original.checkpoint.descriptor);
   const checkpointBytes = await readFile(checkpointFile);
-  const changed = structuredClone(original.checkpoint.checkpoint);
-  changed.creator.pid = process.pid;
-  changed.creator.processIdentity = await processIdentity(process.pid);
-  try {
-    await writeFile(checkpointFile, JSON.stringify(changed));
-    await refused();
-  } finally { await writeFile(checkpointFile, checkpointBytes); }
+  const changed = mutate => {
+    const value = structuredClone(original.checkpoint.checkpoint);
+    mutate(value);
+    return value;
+  };
+  const liveCreator = changed(value => { value.creator.pid = process.pid; });
+  liveCreator.creator.processIdentity = await processIdentity(process.pid);
+  const corrupt = [
+    liveCreator,
+    changed(value => { value.definitionSha256 = '0'.repeat(64); }),
+    changed(value => { value.listener.createdAt = String(BigInt(value.listener.createdAt) + 1n); }),
+  ].map(value => JSON.stringify(value));
+  corrupt.push(checkpointBytes.toString().replace('"version":1', '"version":1,"version":1'));
+  for (const text of corrupt) {
+    try {
+      await writeFile(checkpointFile, text);
+      await refused();
+      assert.equal(await readFile(checkpointFile, 'utf8'), text);
+    } finally { await writeFile(checkpointFile, checkpointBytes); }
+  }
   await useRetirement(async (scope, admission) => {
     assert.deepEqual(await scope.check(), original);
     for (let count = 4; count <= descriptors.length; count++) {
@@ -119,7 +158,8 @@ if (mode === 'hold') {
       assert.equal(observation.retiredFiles, count);
       assert.deepEqual(observation.checkpoint, original.checkpoint);
     }
-    await assert.rejects(api.retireNextWindowsTaskFile(control, scope, admission), /exhausted/i);
+    await assert.rejects(api.retireNextWindowsTaskFile(control, scope, admission),
+      error => /exhausted/i.test(error.cause?.message));
     assert.equal((await scope.check()).retiredFiles, descriptors.length);
   });
   const complete = await useRetirement(scope => scope.check());

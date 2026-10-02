@@ -85,6 +85,48 @@ function Close-AgentsChatTaskCompletionProof {
     if ($failures.Count) { throw [AggregateException]::new('Completion proof close failed.', $failures) }
 }
 
+function Assert-AgentsChatCompletionRuntime([hashtable]$Context) {
+    $runtime = $Context.Runtime
+    $Context.Stage = 'runtime-owner'
+    if ($Context.Owner.HasExited -or
+        "$($runtime.pid):$($Context.Owner.StartTime.ToUniversalTime().Ticks)" -cne $runtime.identity -or
+        $Context.Owner.SessionId -ne $runtime.sessionId) { throw 'Original completed runtime exited or changed.' }
+    $Context.Stage = 'task-policy'
+    $task = $Context.Folder.GetTask($Context.TaskName)
+    if ([bool]$task.Enabled -ne $Context.Enabled -or [string]$task.Xml -cne $Context.NativeDefinition -or
+        [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor) { throw 'Completed task policy changed.' }
+    $Context.Stage = 'task-instance'
+    $Context.Instance.Refresh()
+    if (([guid]$Context.Instance.InstanceGuid).ToString('D') -cne $runtime.instanceGuid -or
+        [int]$Context.Instance.EnginePID -ne $runtime.pid -or [int]$Context.Instance.State -ne 4 -or
+        $Context.Instance.Path -cne "\$($Context.TaskName)") { throw 'Original completed task instance changed.' }
+    $binding = Get-AgentsChatTaskOwnerBinding -TaskName $Context.TaskName -OwnerPid $runtime.pid `
+        -OwnerIdentity $runtime.identity -Definition $Context.NativeDefinition -SecurityDescriptor $Context.SecurityDescriptor
+    if ($binding.instanceGuid -cne $runtime.instanceGuid -or $binding.sessionId -ne $runtime.sessionId -or
+        $binding.enabled -ne $Context.Enabled) { throw 'Original completed native binding differs.' }
+    $Context.Stage = 'runtime-lease'
+    if ([Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation, $runtime.pid, $runtime.identity,
+        'lease', 15000) -cne 'released') { throw 'Original runtime lease is not released.' }
+    $Context.Stage = 'runtime-domain'
+    $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation, $runtime.pid, $runtime.identity,
+        'observe', 15000) | ConvertFrom-Json
+    if ($observation.quiescent -or $observation.phase -ceq 'stopped' -or $observation.applicationHealthy -or
+        $observation.members -notcontains $runtime.launcherPid) { throw 'Original completed Job is not active.' }
+}
+
+function Assert-AgentsChatCompletionFinalRuntime([hashtable]$Context) {
+    $runtime = $Context.Runtime
+    $Context.Stage = 'final-native-observation'
+    $task = $Context.Folder.GetTask($Context.TaskName)
+    $Context.Instance.Refresh()
+    if ($Context.Owner.HasExited -or [bool]$task.Enabled -ne $Context.Enabled -or
+        [string]$task.Xml -cne $Context.NativeDefinition -or
+        [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor -or
+        ([guid]$Context.Instance.InstanceGuid).ToString('D') -cne $runtime.instanceGuid -or
+        [int]$Context.Instance.EnginePID -ne $runtime.pid -or [int]$Context.Instance.State -ne 4 -or
+        $task.GetInstances(0).Count -ne 1) { throw 'Completion changed during observation.' }
+}
+
 function Assert-AgentsChatTaskCompletionProof {
     [CmdletBinding()]
     param([Parameter(Mandatory)][hashtable]$Context)
@@ -97,49 +139,16 @@ function Assert-AgentsChatTaskCompletionProof {
         Assert-AgentsChatCompletionControllers $Context
         $Context.Stage = 'retained-evidence'
         foreach ($file in $Context.Files) { $file.Check() }
-        $runtime = $Context.Runtime
-        $Context.Stage = 'runtime-owner'
-        if ($Context.Owner.HasExited -or
-            "$($runtime.pid):$($Context.Owner.StartTime.ToUniversalTime().Ticks)" -cne $runtime.identity -or
-            $Context.Owner.SessionId -ne $runtime.sessionId) { throw 'Original completed runtime exited or changed.' }
-        $Context.Stage = 'task-policy'
-        $task = $Context.Folder.GetTask($Context.TaskName)
-        if ([bool]$task.Enabled -ne $Context.Enabled -or [string]$task.Xml -cne $Context.NativeDefinition -or
-            [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor) { throw 'Completed task policy changed.' }
-        $Context.Stage = 'task-instance'
-        $Context.Instance.Refresh()
-        if (([guid]$Context.Instance.InstanceGuid).ToString('D') -cne $runtime.instanceGuid -or
-            [int]$Context.Instance.EnginePID -ne $runtime.pid -or [int]$Context.Instance.State -ne 4 -or
-            $Context.Instance.Path -cne "\$($Context.TaskName)") { throw 'Original completed task instance changed.' }
-        $binding = Get-AgentsChatTaskOwnerBinding -TaskName $Context.TaskName -OwnerPid $runtime.pid `
-            -OwnerIdentity $runtime.identity -Definition $Context.NativeDefinition -SecurityDescriptor $Context.SecurityDescriptor
-        if ($binding.instanceGuid -cne $runtime.instanceGuid -or $binding.sessionId -ne $runtime.sessionId -or
-            $binding.enabled -ne $Context.Enabled) { throw 'Original completed native binding differs.' }
-        $Context.Stage = 'runtime-lease'
-        if ([Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation, $runtime.pid, $runtime.identity,
-            'lease', 15000) -cne 'released') { throw 'Original runtime lease is not released.' }
-        $Context.Stage = 'runtime-domain'
-        $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation, $runtime.pid, $runtime.identity,
-            'observe', 15000) | ConvertFrom-Json
-        if ($observation.quiescent -or $observation.phase -ceq 'stopped' -or $observation.applicationHealthy -or
-            $observation.members -notcontains $runtime.launcherPid) { throw 'Original completed Job is not active.' }
+        Assert-AgentsChatCompletionRuntime $Context
         $Context.Stage = 'retained-evidence'
         foreach ($file in $Context.Files) { $file.Check() }
         Assert-AgentsChatCompletionInventory $Context
         Assert-AgentsChatCompletionControllers $Context
-        $Context.Stage = 'final-native-observation'
-        $task = $Context.Folder.GetTask($Context.TaskName)
-        $Context.Instance.Refresh()
-        if ($Context.Owner.HasExited -or [bool]$task.Enabled -ne $Context.Enabled -or
-            [string]$task.Xml -cne $Context.NativeDefinition -or
-            [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor -or
-            ([guid]$Context.Instance.InstanceGuid).ToString('D') -cne $runtime.instanceGuid -or
-            [int]$Context.Instance.EnginePID -ne $runtime.pid -or [int]$Context.Instance.State -ne 4 -or
-            $task.GetInstances(0).Count -ne 1) { throw 'Completion changed during observation.' }
+        Assert-AgentsChatCompletionFinalRuntime $Context
         return [pscustomobject][ordered]@{
             status='observed'; mutationAuthority=$false; operationId=$Context.OperationId; taskName=$Context.TaskName
             stateSha256=$Context.StateSha256; completionSha256=$Context.CompletionSha256
-            runtime=[pscustomobject]$runtime; port=$Context.Port; providers=$Context.Providers; lease='released'
+            runtime=[pscustomobject]$Context.Runtime; port=$Context.Port; providers=$Context.Providers; lease='released'
         }
     } catch {
         $Context.Poisoned = $true
@@ -168,16 +177,7 @@ function Open-AgentsChatTaskCompletionProof {
         Assert-AgentsChatCompletionControllers $context
         $context.Stage = 'runtime-record'
         $completed = $context.Completed
-        $fields = Read-AgentsChatMaintenanceFields $completed.runtime.GetRawText() @(
-            'pid', 'identity', 'generation', 'instanceGuid', 'sessionId', 'configurationSha256', 'launcherPid', 'readySha256')
-        $runtime = @{}
-        foreach ($name in @('pid', 'sessionId', 'launcherPid')) { $runtime[$name] = $fields[$name].GetInt32() }
-        foreach ($name in @('identity', 'generation', 'instanceGuid', 'configurationSha256', 'readySha256')) {
-            $runtime[$name] = $fields[$name].GetString()
-        }
-        Assert-AgentsChatCompletionProcessIdentity $runtime.pid $runtime.identity
-        Assert-AgentsChatCompletionGuid $runtime.generation
-        Assert-AgentsChatCompletionGuid $runtime.instanceGuid
+        $runtime = ConvertFrom-AgentsChatCompletionRuntime $completed.runtime.GetRawText()
         if ($runtime.generation -ceq $context.Admission.generation.GetString() -or
             $runtime.identity -ceq $context.Admission.ownerIdentity.GetString() -or
             $runtime.configurationSha256 -cne $context.ConfigurationSha256 -or

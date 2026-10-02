@@ -36,6 +36,31 @@ function Assert-AgentsChatCompletionProcessIdentity([int]$ProcessId, [string]$Id
         $Identity -cnotmatch "^$ProcessId`:[1-9][0-9]*$") { throw 'Invalid completion process identity.' }
 }
 
+function Get-AgentsChatCompletionRecordNames {
+    return @('stop-intent', 'stop-inhibited', 'stop-stop-requested', 'stop-stopped',
+        'retire-requested', 'retire-complete', 'replace-requested', 'replace-complete',
+        'activate-requested', 'activate-prepared', 'activate-start-requested', 'activate-running',
+        'complete-prepared', 'complete-policy-requested', 'complete-policy-staged', 'complete-release-requested',
+        'complete-released', 'complete-policy-restore-requested', 'complete-policy-restored', 'complete-enable-requested', 'complete-complete')
+}
+
+function ConvertFrom-AgentsChatCompletionRuntime([string]$Text) {
+    $fields = Read-AgentsChatMaintenanceFields $Text @(
+        'pid', 'identity', 'generation', 'instanceGuid', 'sessionId', 'configurationSha256', 'launcherPid', 'readySha256')
+    $runtime = @{}
+    foreach ($name in @('pid', 'sessionId', 'launcherPid')) { $runtime[$name] = $fields[$name].GetInt32() }
+    foreach ($name in @('identity', 'generation', 'instanceGuid', 'configurationSha256', 'readySha256')) {
+        $runtime[$name] = $fields[$name].GetString()
+    }
+    Assert-AgentsChatCompletionProcessIdentity $runtime.pid $runtime.identity
+    Assert-AgentsChatCompletionGuid $runtime.generation
+    Assert-AgentsChatCompletionGuid $runtime.instanceGuid
+    if ($runtime.launcherPid -lt 1 -or $runtime.sessionId -lt 0 -or
+        $runtime.configurationSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $runtime.readySha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Invalid completed runtime fields.' }
+    return $runtime
+}
+
 function Read-AgentsChatTaskCompletionRecords([hashtable]$Context) {
     $Context.Stage = 'records-admission'
     $admitted = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Directory 'admission.json') ''
@@ -113,11 +138,7 @@ function Read-AgentsChatTaskCompletionRecords([hashtable]$Context) {
             'definition', 'stagedDefinition', 'enabled', 'port', 'providers', 'listenerPid', 'listenerIdentity',
             'listenerCreatedAt', 'listenerAddress', 'listenerPairedRecords')
     }
-    $Context.RecordNames = @('stop-intent', 'stop-inhibited', 'stop-stop-requested', 'stop-stopped',
-        'retire-requested', 'retire-complete', 'replace-requested', 'replace-complete',
-        'activate-requested', 'activate-prepared', 'activate-start-requested', 'activate-running',
-        'complete-prepared', 'complete-policy-requested', 'complete-policy-staged', 'complete-release-requested',
-        'complete-released', 'complete-policy-restore-requested', 'complete-policy-restored', 'complete-enable-requested', 'complete-complete')
+    $Context.RecordNames = @(Get-AgentsChatCompletionRecordNames)
     $records = @{}
     $previous = $admitted.Sha256
     foreach ($name in $Context.RecordNames) {

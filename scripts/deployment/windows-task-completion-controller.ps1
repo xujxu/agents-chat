@@ -1,11 +1,12 @@
 param(
     [Parameter(Mandatory)][string]$Control,
     [Parameter(Mandatory)][int]$ControllerPid,
-    [Parameter(Mandatory)][string]$ControllerIdentity
+    [Parameter(Mandatory)][string]$ControllerIdentity,
+    [switch]$Retirement
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$proof = $watch = $null
+$proof = $scope = $watch = $null
 $stage = 'bootstrap'
 $failure = $null
 try {
@@ -18,11 +19,19 @@ try {
     . (Join-Path $PSScriptRoot 'windows-task-completion-proof.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-retirement-intent.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-retirement-checkpoint.ps1')
+    . (Join-Path $PSScriptRoot 'windows-task-retirement-scope.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'proof-open'
-    $proof = Open-AgentsChatTaskCompletionProof -Control $Control
-    $observed = Assert-AgentsChatTaskCompletionProof -Context $proof
+    if ($Retirement) {
+        $stage = 'retirement-open'
+        $scope = Open-AgentsChatTaskRetirement -Control $Control `
+            -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
+        $observed = Assert-AgentsChatTaskRetirement $scope
+    } else {
+        $proof = Open-AgentsChatTaskCompletionProof -Control $Control
+        $observed = Assert-AgentsChatTaskCompletionProof -Context $proof
+    }
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
         control=$Control; controllerIdentity=$ControllerIdentity; value=$observed
@@ -36,7 +45,7 @@ try {
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
         if ($id -ne $sequence + 1 -or $method -cnotin @(
-            'check', 'close', 'prepare-retirement', 'prepare-retirement-checkpoint')) {
+            'check', 'close', 'prepare-retirement', 'prepare-retirement-checkpoint', 'begin-retirement', 'retire-next')) {
             throw 'Invalid completed-task proof request.'
         }
         $sequence = $id
@@ -45,17 +54,31 @@ try {
             throw 'Original completed-task proof controller changed.'
         }
         $stage = $method
+        if (($scope -and $method -cnotin @('check', 'close', 'retire-next')) -or
+            ($proof -and $method -ceq 'retire-next')) { throw 'Request does not match retained native authority.' }
         if ($method -ceq 'close') {
-            Close-AgentsChatTaskCompletionProof -Context $proof
-            $proof = $null
+            if ($scope) { Close-AgentsChatTaskCompletionProof $scope; $scope = $null }
+            if ($proof) { Close-AgentsChatTaskCompletionProof $proof; $proof = $null }
             $value = 'close'
+        } elseif ($method -ceq 'begin-retirement') {
+            $null = Prepare-AgentsChatTaskRetirementCheckpoint -Context $proof `
+                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
+            $scope = Open-AgentsChatTaskRetirement -Control $Control `
+                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
+            $null = Assert-AgentsChatTaskCompletionProof $proof
+            Close-AgentsChatTaskCompletionProof $proof
+            $proof = $null
+            $value = Assert-AgentsChatTaskRetirement $scope
+        } elseif ($method -ceq 'retire-next') {
+            $value = Remove-AgentsChatNextRetirementFile $scope
         } elseif ($method -ceq 'prepare-retirement') {
             $value = Prepare-AgentsChatTaskRetirement -Context $proof `
                 -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
         } elseif ($method -ceq 'prepare-retirement-checkpoint') {
             $value = Prepare-AgentsChatTaskRetirementCheckpoint -Context $proof `
                 -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
-        } else { $value = Assert-AgentsChatTaskCompletionProof -Context $proof }
+        } elseif ($scope) { $value = Assert-AgentsChatTaskRetirement $scope }
+        else { $value = Assert-AgentsChatTaskCompletionProof -Context $proof }
         [Console]::Out.WriteLine((@{
             id=$id; type='reply'; value=$value
             processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
@@ -67,6 +90,15 @@ try {
     $failure = $_.Exception
     [Console]::Error.WriteLine("Completed-task proof refused: $stage. $($failure.GetBaseException().Message)")
 } finally {
+    if ($scope) {
+        try { Close-AgentsChatTaskCompletionProof $scope }
+        catch {
+            [Console]::Error.WriteLine('Retirement authority cleanup failed.')
+            $failure = if ($failure) {
+                [AggregateException]::new('Retirement and cleanup failed.', [Exception[]]@($failure, $_.Exception))
+            } else { $_.Exception }
+        }
+    }
     if ($proof) {
         try { Close-AgentsChatTaskCompletionProof -Context $proof }
         catch {
