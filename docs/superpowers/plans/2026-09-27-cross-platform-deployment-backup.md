@@ -8507,6 +8507,13 @@ The integration task remains explicit in session tracking. A primitive-only
 pass does not complete the approved shared-entrypoint requirement or public
 Windows recovery, and must not unblock generic lock removal.
 
+Task 5AE causal `e495cb4` / `37029435961`, native job `110912252982`,
+created the actual private control directories, then failed exactly on the
+missing `AcquireAdmission` method at 15:48:01 UTC. Captured before cancelling
+the characterized run. The implementation follows the approved partial-class
+plan and retains the existing installed nine-helper host contract. Native
+and full regression acceptance remain pending Actions.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

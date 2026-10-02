@@ -10,7 +10,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Deployment
 {
-    public sealed class WindowsPrivateFile : IDisposable
+    public sealed partial class WindowsPrivateFile : IDisposable
     {
         const int MaximumBytes = 1024 * 1024;
         SafeFileHandle handle;
@@ -245,6 +245,20 @@ namespace Deployment
                 }
             }
         }
+        static FileSecurity PrivateFileSecurity()
+        {
+            var security = new FileSecurity();
+            using (WindowsIdentity account = WindowsIdentity.GetCurrent())
+            {
+                security.SetOwner(account.User);
+                security.SetAccessRuleProtection(true, false);
+                foreach (SecurityIdentifier sid in new[] {
+                    account.User, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null)
+                })
+                    security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, AccessControlType.Allow));
+            }
+            return security;
+        }
         public static WindowsPrivateFile Publish(string file, string text)
         {
             RequirePath(file);
@@ -258,16 +272,7 @@ namespace Deployment
                 using (WindowsPrivateFile parent = PublicationDirectory(Path.GetDirectoryName(file)))
                 {
                     parent.CheckPublicationDirectory();
-                    var security = new FileSecurity();
-                    using (WindowsIdentity account = WindowsIdentity.GetCurrent())
-                    {
-                        security.SetOwner(account.User);
-                        security.SetAccessRuleProtection(true, false);
-                        foreach (SecurityIdentifier sid in new[] {
-                            account.User, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null)
-                        })
-                            security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, AccessControlType.Allow));
-                    }
+                    var security = PrivateFileSecurity();
                     string pending = file + ".pending-" + Guid.NewGuid().ToString("D");
                     using (FileStream stream = FileSystemAclExtensions.Create(new FileInfo(pending), FileMode.CreateNew,
                         FileSystemRights.FullControl, FileShare.None, 4096, FileOptions.WriteThrough, security))
@@ -331,23 +336,7 @@ namespace Deployment
                     openExisting, openReparsePoint, IntPtr.Zero);
                 if (retained.handle.IsInvalid)
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "Open original private configuration");
-                FileInformation information = retained.Information();
-                const uint directory = 0x10, reparsePoint = 0x400, encrypted = 0x4000;
-                if ((information.Attributes & (directory | reparsePoint | encrypted)) != 0 || information.Links != 1)
-                    throw new InvalidDataException("Private configuration file type or links are unsupported.");
-                if (information.SizeHigh != 0 || information.SizeLow > MaximumBytes)
-                    throw new InvalidDataException("Private configuration file exceeds the size limit.");
-                if (!String.Equals(retained.FinalPath(), file, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("Private configuration path is redirected.");
-                RawSecurityDescriptor security = retained.Security();
-                if (requirePrivate) RequirePrivate(security);
-                retained.metadata = information.Identity();
-                retained.security = Descriptor(security);
-                retained.stream = new FileStream(retained.handle, FileAccess.Read, 1, false);
-                retained.content = retained.ReadContent((int)information.SizeLow);
-                retained.Sha256 = Digest(retained.content);
-                if (retained.Sha256 != expectedSha256) throw new InvalidDataException("Private configuration digest differs.");
-                retained.Check();
+                retained.CaptureOpenedFile(FileAccess.Read, requirePrivate, expectedSha256);
                 return retained;
             }
             catch
@@ -355,6 +344,26 @@ namespace Deployment
                 retained.Dispose();
                 throw;
             }
+        }
+        void CaptureOpenedFile(FileAccess access, bool requirePrivate, string expectedSha256)
+        {
+            FileInformation information = Information();
+            const uint directory = 0x10, reparsePoint = 0x400, encrypted = 0x4000;
+            if ((information.Attributes & (directory | reparsePoint | encrypted)) != 0 || information.Links != 1)
+                throw new InvalidDataException("Private configuration file type or links are unsupported.");
+            if (information.SizeHigh != 0 || information.SizeLow > MaximumBytes)
+                throw new InvalidDataException("Private configuration file exceeds the size limit.");
+            if (!String.Equals(FinalPath(), file, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Private configuration path is redirected.");
+            RawSecurityDescriptor descriptor = Security();
+            if (requirePrivate) RequirePrivate(descriptor);
+            metadata = information.Identity();
+            security = Descriptor(descriptor);
+            stream = new FileStream(handle, access, 1, false);
+            content = ReadContent((int)information.SizeLow);
+            Sha256 = Digest(content);
+            if (Sha256 != expectedSha256) throw new InvalidDataException("Private configuration digest differs.");
+            Check();
         }
         void CheckMetadata()
         {

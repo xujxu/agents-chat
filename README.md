@@ -197,6 +197,10 @@ passed at `2c1aafc`. Expanded native update, restore/custom-permission and
 originally-disabled cases passed at `c7de917`, including refusals for live
 controllers, changed evidence/policy and same-process listener rebinding.
 The expanded full regression also passed all 25 jobs.
+Windows shared admission is being implemented using a private, non-inherited
+exclusive file handle, following the standard package-manager locking pattern.
+The primitive preserves durable operation evidence and does not itself permit
+recovery or unlock; native acceptance and entrypoint integration are pending.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
