@@ -76,6 +76,8 @@ test('saved Linux restore entry works without checkout helpers and refuses missi
   const refused = await execute(false);
   assert.equal(refused.code, 1);
   assert.match(refused.stderr, /acknowledgement|accept-data-loss/i);
+  assert.match(refused.stderr, /Restore diagnostic: location=linux-restore-entry\.mjs:[1-9][0-9]*:[1-9][0-9]*/);
+  assert.ok(!refused.stderr.includes(saved.directory));
   await assert.rejects(lstat(path.join(f.control, 'lock')), { code: 'ENOENT' });
   await f.service.check();
   assert.equal(await readFile(path.join(f.project, 'saved-data'), 'utf8'), 'new data');

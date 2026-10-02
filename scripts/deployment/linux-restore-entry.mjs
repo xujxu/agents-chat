@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual as same } from 'node:util';
 import { verifyRecoveryEngine } from './saved-recovery-engine.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
+import { deploymentDiagnostics } from './deployment-diagnostics.mjs';
 
 let service;
 let lock;
@@ -97,13 +98,12 @@ if (errors.length) {
     process.stderr.write('Export post-backup data before providing explicit --accept-data-loss acknowledgement.\n');
   }
   process.stderr.write(`Restore diagnostic: stage=${stage}\n`);
-  const pending = [...errors];
-  for (let count = 0; pending.length && count < 8; count++) {
-    const failure = pending.shift();
-    const code = typeof failure?.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(failure.code) ? failure.code : 'UNKNOWN';
-    process.stderr.write(`Restore diagnostic: code=${code}\n`);
-    if (failure?.cause) pending.push(failure.cause);
-    if (failure instanceof AggregateError) pending.push(...failure.errors.slice(0, 8));
+  const failure = errors.length === 1 ? errors[0] : new AggregateError(errors);
+  for (const diagnostic of deploymentDiagnostics(failure, [new URL('./', import.meta.url).href])) {
+    process.stderr.write(`Restore diagnostic: code=${diagnostic.code}\n`);
+    for (const location of diagnostic.locations) {
+      process.stderr.write(`Restore diagnostic: location=${location.module}:${location.line}:${location.column}\n`);
+    }
   }
   process.exitCode = 1;
 } else {

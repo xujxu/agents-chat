@@ -7624,6 +7624,17 @@ refusal before the existing runtime-host cases.
   Run `./tests/deployment-windows-runtime-bundle.ps1` and the existing native
   cases only in Actions; require the full regression before acceptance.
 
+`2397c4c` / `36984988082` passed all native Windows task-controller cases, but
+Linux public-command job `110767973311` failed during saved live restore with
+only `stage=restore` / `code=UNKNOWN`. It is not a new full accepted baseline.
+There are no diagnostic artifacts. Reuse `deploymentDiagnostics` in the saved
+entry, include that module explicitly in its saved closure, and require
+bounded owned module/line/column output in the real saved-entry rejection
+test. Do not emit private filesystem paths, raw error messages or command
+output, and do not weaken restore admission or claim a transient failure
+without evidence. Diagnose the next actual public-command result before
+considering the Linux regression resolved.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

@@ -7,7 +7,7 @@ import { recoveryDigest as digest, inspectRecoveryEngineFiles, locateRecoveryEng
 
 const files = Object.freeze([...new Set([
   'saved-recovery-engine.mjs', 'retirement-recovery-entry.mjs', 'retirement-recovery.mjs',
-  'recovery-engine-files.mjs',
+  'recovery-engine-files.mjs', 'deployment-diagnostics.mjs',
   'saved-worker-engine.mjs', 'worker-files.mjs', 'worker-identity.mjs', 'process-identity.mjs', 'state.mjs',
   'linux-service-recovery.mjs', 'linux-service-inspection.mjs', 'linux-runtime.mjs', 'linux-systemd.mjs',
   'linux-recovery-admission.mjs', 'linux-recovery-completion.mjs',
