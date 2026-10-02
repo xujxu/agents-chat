@@ -1,0 +1,36 @@
+import { isDeepStrictEqual } from 'node:util';
+import { readWorkerOperation } from './worker-operation.mjs';
+import { readWorkerJournal } from './worker-journal.mjs';
+import { verifyWorkerEngine } from './saved-worker-engine.mjs';
+import { captureWindowsDeploymentRetirementRecord } from './windows-deployment-retirement-record.mjs';
+
+// The native task scope retains every file before this read and through manifest publication.
+export async function verifyWindowsDeploymentRetirementEvidence(control, supplied) {
+  const record = captureWindowsDeploymentRetirementRecord(supplied);
+  if (record.control !== control) throw new Error('Original retirement control differs.');
+  const lock = record.task.intent.intent.lock;
+  const operation = await readWorkerOperation(control);
+  if (operation.at(-1).phase !== 'sealed' || !isDeepStrictEqual(operation[0].lock, lock)
+    || operation[0].manifestSha256 !== record.workerManifestSha256) {
+    throw new Error('Original worker operation is not sealed for this completed task.');
+  }
+  await verifyWorkerEngine({ control, project: lock.project, operationId: lock.operationId,
+    manifestSha256: record.workerManifestSha256 });
+  const workerIds = operation.filter(entry => entry.phase === 'enrolled').map(entry => entry.workerId);
+  const expected = workerIds.map(workerId => `worker-${workerId}.ndjson`);
+  const actual = record.entries.slice(1, 1 + workerIds.length).map(entry => entry.path);
+  const allJournals = record.entries.filter(entry => /^worker-[a-f0-9-]+\.ndjson$/.test(entry.path));
+  if (!isDeepStrictEqual(actual, expected) || allJournals.length !== workerIds.length) {
+    throw new Error('Original worker enrollment differs from retained cleanup inventory.');
+  }
+  for (const workerId of workerIds) {
+    const receipts = await readWorkerJournal(control, {
+      project: lock.project, operationId: lock.operationId, workerId, controllerIdentity: lock.processIdentity,
+    });
+    if (receipts.at(-1).phase !== 'settled'
+      || receipts.some(entry => entry.domain && entry.domain.kind !== 'windows-job')) {
+      throw new Error('Original Windows worker has not settled.');
+    }
+  }
+  return record;
+}

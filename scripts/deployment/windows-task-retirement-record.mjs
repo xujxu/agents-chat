@@ -34,7 +34,8 @@ function descriptor(value, expected) {
   }
   return result;
 }
-export { descriptor as captureRetirementFile, canonical as canonicalRetirementPath };
+export { descriptor as captureRetirementFile, canonical as canonicalRetirementPath,
+  identity as captureRetirementIdentity };
 function processPair(pid, processIdentity) {
   if (!Number.isSafeInteger(pid) || pid < 1 || pid > 2147483647
     || typeof processIdentity !== 'string' || processIdentity.length > 64

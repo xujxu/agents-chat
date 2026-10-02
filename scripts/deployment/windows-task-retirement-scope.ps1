@@ -1,5 +1,35 @@
 . (Join-Path $PSScriptRoot 'windows-task-retirement-records.ps1')
 
+function Open-AgentsChatRetirementRuntime([hashtable]$Context) {
+    $Context.Stage = 'retirement-runtime-bundle'
+    $runtime = $Context.Runtime
+    Open-AgentsChatCompletionBundle $Context $Context.Checkpoint.configuration $runtime.configurationSha256 $runtime
+    $Context.Stage = 'retirement-runtime-owner'
+    $Context.Owner = [Diagnostics.Process]::GetProcessById($runtime.pid)
+    $null = $Context.Owner.Handle
+    $Context.Stage = 'retirement-task-policy'
+    $scheduler = New-Object -ComObject 'Schedule.Service'
+    $scheduler.Connect()
+    $Context.Folder = $scheduler.GetFolder('\')
+    $task = $Context.Folder.GetTask($Context.TaskName)
+    $Context.NativeDefinition = [string]$task.Xml
+    $Context.SecurityDescriptor = [string]$task.GetSecurityDescriptor(7)
+    if ((Get-AgentsChatRetirementTextHash $Context.NativeDefinition) -cne $Context.Checkpoint.definitionSha256 -or
+        (Get-AgentsChatRetirementTextHash $Context.SecurityDescriptor) -cne $Context.Checkpoint.securityDescriptorSha256 -or
+        [bool]$task.Enabled -ne $Context.Enabled) { throw 'Original retirement task policy differs.' }
+    $instances = $task.GetInstances(0)
+    if ($instances.Count -ne 1) { throw 'Original retirement task instance is ambiguous.' }
+    $Context.Instance = $instances.Item(1)
+    $Context.Stage = 'retirement-listener'
+    $listener = [Deployment.WindowsRuntimeListener]::Retain(
+        [guid]$runtime.generation, $runtime.pid, $runtime.identity, $runtime.launcherPid, $Context.Port)
+    $Context.Files.Add($listener)
+    $original = $Context.Checkpoint.listener
+    if ($listener.ListenerPid -ne $original.pid -or $listener.ListenerIdentity -cne $original.processIdentity -or
+        $listener.CreatedAt -cne $original.createdAt -or $listener.Address -cne $original.address -or
+        $listener.PairedRecords -ne $original.pairedRecords) { throw 'Original retirement listener differs.' }
+}
+
 function Assert-AgentsChatRetirementInventory([hashtable]$Context) {
     $Context.Stage = 'retirement-inventory'
     if (Test-Path -LiteralPath (Join-Path $Context.Control 'recovery-lock')) { throw 'Exclusive recovery authority exists.' }
@@ -79,33 +109,7 @@ function Open-AgentsChatTaskRetirement {
             else { $context.Prefix++ }
         }
         if ($present.Count) { throw 'Unexpected retirement receipt entry.' }
-        $context.Stage = 'retirement-runtime-bundle'
-        $runtime = $context.Runtime
-        Open-AgentsChatCompletionBundle $context $context.Checkpoint.configuration $runtime.configurationSha256 $runtime
-        $context.Stage = 'retirement-runtime-owner'
-        $context.Owner = [Diagnostics.Process]::GetProcessById($runtime.pid)
-        $null = $context.Owner.Handle
-        $context.Stage = 'retirement-task-policy'
-        $scheduler = New-Object -ComObject 'Schedule.Service'
-        $scheduler.Connect()
-        $context.Folder = $scheduler.GetFolder('\')
-        $task = $context.Folder.GetTask($context.TaskName)
-        $context.NativeDefinition = [string]$task.Xml
-        $context.SecurityDescriptor = [string]$task.GetSecurityDescriptor(7)
-        if ((Get-AgentsChatRetirementTextHash $context.NativeDefinition) -cne $context.Checkpoint.definitionSha256 -or
-            (Get-AgentsChatRetirementTextHash $context.SecurityDescriptor) -cne $context.Checkpoint.securityDescriptorSha256 -or
-            [bool]$task.Enabled -ne $context.Enabled) { throw 'Original retirement task policy differs.' }
-        $instances = $task.GetInstances(0)
-        if ($instances.Count -ne 1) { throw 'Original retirement task instance is ambiguous.' }
-        $context.Instance = $instances.Item(1)
-        $context.Stage = 'retirement-listener'
-        $listener = [Deployment.WindowsRuntimeListener]::Retain(
-            [guid]$runtime.generation, $runtime.pid, $runtime.identity, $runtime.launcherPid, $context.Port)
-        $context.Files.Add($listener)
-        $original = $context.Checkpoint.listener
-        if ($listener.ListenerPid -ne $original.pid -or $listener.ListenerIdentity -cne $original.processIdentity -or
-            $listener.CreatedAt -cne $original.createdAt -or $listener.Address -cne $original.address -or
-            $listener.PairedRecords -ne $original.pairedRecords) { throw 'Original retirement listener differs.' }
+        Open-AgentsChatRetirementRuntime $context
         $null = Assert-AgentsChatTaskRetirement $context
         return $context
     } catch {

@@ -10159,6 +10159,9 @@ worker operation, settled journals and the original saved helper manifest.
 - `scripts/deployment/windows-deployment-retirement.ps1`: retain original
   private worker evidence, publish the checked manifest, reopen its exact
   prefix, retain the original runtime, and retire its next fixed entry.
+- `scripts/deployment/windows-deployment-retirement-evidence.ps1`: retain
+  original worker files and helper inventory before Node semantic validation
+  and native manifest publication.
 - `scripts/deployment/windows-task-completion-controller.ps1` and
   `scripts/deployment/windows-task-completion-proof.mjs`: explicit
   same-controller handoff and a separate cold deployment-retirement mode.
@@ -10174,7 +10177,7 @@ worker operation, settled journals and the original saved helper manifest.
   disappeared, corrupted inventory refusal, complete cleanup and new-lock
   admission. Invoke after existing receipt-retirement assertions.
 
-- [ ] **Step 1: establish genuine worker evidence and capture missing API.**
+- [x] **Step 1: establish genuine worker evidence and capture missing API.**
 
   Under the original operation lock, save worker/recovery engines and use
   `createWorkerOperation` to run an actual Windows Job command. Require its
@@ -10189,6 +10192,12 @@ worker operation, settled journals and the original saved helper manifest.
     assert.equal(typeof api[name], 'function');
   }
   ```
+
+  Causal `8d3d1e3 / 37074934655`, native job `111062580840`, failed at
+  **22:56:31 UTC** on missing `beginWindowsDeploymentRetirement`, after real
+  worker run/seal/close, original task completion and all existing exact
+  receipt retirement checks. Captured the job log and cancelled only this
+  characterized causal run.
 
 - [ ] **Step 2: retain, validate and publish one native manifest.**
 

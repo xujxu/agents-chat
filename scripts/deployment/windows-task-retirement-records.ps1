@@ -91,8 +91,44 @@ function Read-AgentsChatRetirementRecords([hashtable]$Context) {
     $Context.Stage = 'checkpoint'
     $checkpointFile = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'task-retirement-checkpoint.json') ''
     $checkpoint = Read-AgentsChatRetirementJson ($checkpointFile.ReadText())
+    $intentFile = Open-AgentsChatRetirementFile $Context $checkpoint.intent 'task-retirement.json'
+    $intent = Read-AgentsChatRetirementJson ($intentFile.ReadText())
+    $identity = $checkpointFile.CaptureIdentity()
+    $prepared = [ordered]@{
+        status='prepared'
+        descriptor=[ordered]@{ path='task-retirement-checkpoint.json'; dev=$identity.Dev; ino=$identity.Ino
+            bytes=$checkpointFile.ByteLength; sha256=$checkpointFile.Sha256 }
+        intent=[ordered]@{ status='prepared'; descriptor=$checkpoint.intent; intent=$intent }
+        checkpoint=$checkpoint
+    }
+    Initialize-AgentsChatRetirementRecords $Context $prepared
+    Open-AgentsChatRetirementDirectory $Context (Join-Path $Context.Control 'lock') $intent.lockIdentity
+    Open-AgentsChatRetirementDirectory $Context $Context.Directory $intent.maintenanceIdentity
+    $owner = Open-AgentsChatRetirementFile $Context $intent.lockFile 'lock\owner.json'
+    $lockNames = @('version', 'token', 'project', 'operationId', 'pid', 'processIdentity', 'createdAt')
+    $originalLock = Read-AgentsChatMaintenanceFields ($owner.ReadText()) $lockNames
+    $storedLock = Read-AgentsChatMaintenanceFields ($intent.lock | ConvertTo-Json -Compress) $lockNames
+    Assert-AgentsChatCompletionFields $originalLock $storedLock $lockNames
+}
+
+function Initialize-AgentsChatRetirementRecords([hashtable]$Context, $Prepared) {
+    Assert-AgentsChatRetirementFields $Prepared @('status', 'descriptor', 'intent', 'checkpoint')
+    Assert-AgentsChatRetirementFields $Prepared.intent @('status', 'descriptor', 'intent')
+    if ($Prepared.status -cne 'prepared' -or $Prepared.intent.status -cne 'prepared') {
+        throw 'Invalid prepared retirement checkpoint.'
+    }
+    Assert-AgentsChatRetirementDescriptor $Prepared.descriptor 'task-retirement-checkpoint.json'
+    Assert-AgentsChatRetirementDescriptor $Prepared.intent.descriptor 'task-retirement.json'
+    $checkpoint = $Prepared.checkpoint
+    $intent = $Prepared.intent.intent
     Assert-AgentsChatRetirementFields $checkpoint @('version', 'intent', 'configuration',
         'definitionSha256', 'securityDescriptorSha256', 'enabled', 'listener', 'retiredBridge', 'retiredOwner', 'creator')
+    Assert-AgentsChatRetirementDescriptor $checkpoint.intent 'task-retirement.json'
+    foreach ($name in $checkpoint.intent.Keys) {
+        if ($checkpoint.intent[$name] -cne $Prepared.intent.descriptor[$name]) {
+            throw 'Prepared checkpoint intent descriptor differs.'
+        }
+    }
     if ($checkpoint.version -isnot [int] -or $checkpoint.version -ne 1 -or
         $checkpoint.enabled -isnot [bool]) { throw 'Unsupported retirement checkpoint.' }
     foreach ($name in @('definitionSha256', 'securityDescriptorSha256')) {
@@ -102,8 +138,6 @@ function Read-AgentsChatRetirementRecords([hashtable]$Context) {
     }
     Assert-AgentsChatRetirementCreator $checkpoint.creator $Context.ControllerPid $Context.ControllerIdentity
     $Context.Stage = 'intent'
-    $intentFile = Open-AgentsChatRetirementFile $Context $checkpoint.intent 'task-retirement.json'
-    $intent = Read-AgentsChatRetirementJson ($intentFile.ReadText())
     Assert-AgentsChatRetirementFields $intent @('version', 'control', 'project', 'lock', 'lockFile', 'state',
         'controlIdentity', 'lockIdentity', 'maintenanceIdentity', 'completion', 'files', 'creator')
     if ($intent.version -isnot [int] -or $intent.version -ne 1 -or $intent.control -cne $Context.Control -or
@@ -118,15 +152,12 @@ function Read-AgentsChatRetirementRecords([hashtable]$Context) {
     }
     Assert-AgentsChatRetirementCreator $intent.creator $Context.ControllerPid $Context.ControllerIdentity
     Open-AgentsChatRetirementDirectory $Context $Context.Control $intent.controlIdentity
-    Open-AgentsChatRetirementDirectory $Context (Join-Path $Context.Control 'lock') $intent.lockIdentity
-    Open-AgentsChatRetirementDirectory $Context $Context.Directory $intent.maintenanceIdentity
+    Assert-AgentsChatRetirementIdentity $intent.lockIdentity
+    Assert-AgentsChatRetirementIdentity $intent.maintenanceIdentity
     $Context.Stage = 'original-lock-state'
-    $owner = Open-AgentsChatRetirementFile $Context $intent.lockFile 'lock\owner.json'
+    Assert-AgentsChatRetirementDescriptor $intent.lockFile 'lock\owner.json'
     $lockNames = @('version', 'token', 'project', 'operationId', 'pid', 'processIdentity', 'createdAt')
     Assert-AgentsChatRetirementFields $intent.lock $lockNames
-    $originalLock = Read-AgentsChatMaintenanceFields ($owner.ReadText()) $lockNames
-    $storedLock = Read-AgentsChatMaintenanceFields ($intent.lock | ConvertTo-Json -Compress) $lockNames
-    Assert-AgentsChatCompletionFields $originalLock $storedLock $lockNames
     if ($intent.lock.version -isnot [int] -or $intent.lock.version -ne 1 -or
         $intent.lock.pid -isnot [int] -or $intent.lock.project -cne $intent.project -or
         $intent.lock.createdAt -isnot [string] -or -not $intent.lock.createdAt) { throw 'Invalid retirement owner.' }
@@ -185,12 +216,5 @@ function Read-AgentsChatRetirementRecords([hashtable]$Context) {
     $Context.Enabled = $checkpoint.enabled
     $Context.Intent = $intent
     $Context.Checkpoint = $checkpoint
-    $identity = $checkpointFile.CaptureIdentity()
-    $Context.Prepared = [ordered]@{
-        status='prepared'
-        descriptor=[ordered]@{ path='task-retirement-checkpoint.json'; dev=$identity.Dev; ino=$identity.Ino
-            bytes=$checkpointFile.ByteLength; sha256=$checkpointFile.Sha256 }
-        intent=[ordered]@{ status='prepared'; descriptor=$checkpoint.intent; intent=$intent }
-        checkpoint=$checkpoint
-    }
+    $Context.Prepared = $Prepared
 }

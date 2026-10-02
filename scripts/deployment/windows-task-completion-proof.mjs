@@ -9,12 +9,15 @@ import { captureWindowsTaskCompletionProof } from './windows-task-completion-rec
 import { captureWindowsTaskRetirement } from './windows-task-retirement-record.mjs';
 import { captureWindowsTaskRetirementCheckpoint } from './windows-task-retirement-checkpoint.mjs';
 import { captureWindowsTaskRetirementScope } from './windows-task-retirement-scope.mjs';
+import { captureWindowsDeploymentRetirement, captureWindowsDeploymentRetirementRecord } from './windows-deployment-retirement-record.mjs';
+import { verifyWindowsDeploymentRetirementEvidence } from './windows-deployment-retirement-evidence.mjs';
 
 export { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
 
 const script = fileURLToPath(new URL('./windows-task-completion-controller.ps1', import.meta.url));
 const proofs = new WeakMap();
 const retirements = new WeakMap();
+const deployments = new WeakMap();
 function refused(cause) {
   return Object.assign(new Error('Completed-task proof unavailable; retain operation and recovery evidence.', { cause }), {
     code: 'DEPLOYMENT_WINDOWS_COMPLETION_PROOF_REFUSED', recoveryAllowed: false,
@@ -55,14 +58,34 @@ export async function retireNextWindowsTaskFile(control, scope, admission, { sig
 }
 
 export async function openWindowsTaskCompletionProof(options) {
-  return openWindowsTaskAuthority(options, false);
+  return openWindowsTaskAuthority(options, 'proof');
 }
 
 export async function openWindowsTaskRetirement(options) {
-  return openWindowsTaskAuthority(options, true);
+  return openWindowsTaskAuthority(options, 'task');
 }
 
-async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, retiring) {
+export async function openWindowsDeploymentRetirement(options) {
+  return openWindowsTaskAuthority(options, 'deployment');
+}
+
+export async function beginWindowsDeploymentRetirement(control, scope, admission, { signal } = {}) {
+  const binding = retirements.get(scope);
+  if (!binding || binding.control !== control || binding.admission !== admission) {
+    throw new Error('Original retained task retirement authority does not match admission.');
+  }
+  return binding.beginDeployment(signal);
+}
+
+export async function retireNextWindowsDeploymentEntry(control, scope, admission, { signal } = {}) {
+  const binding = deployments.get(scope);
+  if (!binding || binding.control !== control || binding.admission !== admission) {
+    throw new Error('Original retained deployment retirement authority does not match admission.');
+  }
+  return binding.next(signal);
+}
+
+async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mode) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value =>
     typeof value === 'string' && value.length <= 4096 && path.isAbsolute(value)
@@ -77,12 +100,13 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, re
     pwsh, refused, label: 'Native completed-task proof controller',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
       '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
-      ...(retiring ? ['-Retirement'] : [])],
+      ...(mode === 'task' ? ['-Retirement'] : mode === 'deployment' ? ['-DeploymentRetirement'] : [])],
   });
   let closed = false;
   let busy = false;
   let sequence = 0;
   let failure;
+  let transferring = false;
   const abandon = async cause => {
     closed = true;
     failure = await abandonTransport(cause);
@@ -96,11 +120,18 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, re
       || ready.processIdentity !== await processIdentity(child.pid)) {
       throw new Error('Original completed-task proof readiness differs.');
     }
-    let retirementObservation = retiring ? captureWindowsTaskRetirementScope(ready.value) : undefined;
+    let retirementObservation = mode === 'task' ? captureWindowsTaskRetirementScope(ready.value) : undefined;
+    let deploymentObservation = mode === 'deployment' ? captureWindowsDeploymentRetirement(ready.value) : undefined;
+    let candidate;
     const observation = retirementObservation?.checkpoint.intent.intent.completion
+      ?? deploymentObservation?.manifest.record.task.intent.intent.completion
       ?? captureWindowsTaskCompletionProof(ready.value);
     if (retirementObservation && retirementObservation.checkpoint.intent.intent.control !== control) {
       throw new Error('Retirement readiness control differs.');
+    }
+    if (deploymentObservation && (deploymentObservation.manifest.record.control !== control
+      || deploymentObservation.status !== 'retiring-deployment')) {
+      throw new Error('Deployment retirement readiness differs.');
     }
     const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity });
     const requireOriginalChild = () => {
@@ -135,7 +166,32 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, re
         let result;
         let prepared;
         let nextRetirement;
-        if (retiring || method === 'begin-retirement') {
+        let nextDeployment;
+        if (method === 'retain-workers') {
+          result = captureWindowsDeploymentRetirementRecord(reply.value);
+          if (!isDeepStrictEqual(result.task, retirementObservation.checkpoint)) {
+            throw new Error('Worker cleanup candidate changed the original task checkpoint.');
+          }
+          candidate = result;
+          prepared = result.task.intent;
+        } else if (mode === 'deployment' || method === 'begin-deployment-retirement') {
+          result = nextDeployment = captureWindowsDeploymentRetirement(reply.value);
+          prepared = result.manifest.record.task.intent;
+          if (deploymentObservation) {
+            const count = deploymentObservation.retiredEntries;
+            const committing = method === 'retire-deployment-next'
+              && count === deploymentObservation.manifest.record.entries.length;
+            const expected = count + (method === 'retire-deployment-next' && !committing ? 1 : 0);
+            if (result.retiredEntries !== expected
+              || result.status !== (committing ? 'retired' : 'retiring-deployment')
+              || !isDeepStrictEqual(result.manifest, deploymentObservation.manifest)) {
+              throw new Error('Original deployment manifest or ordered progress changed.');
+            }
+          } else if (result.retiredEntries !== 0 || result.status !== 'retiring-deployment'
+            || !candidate || !isDeepStrictEqual(result.manifest.record, candidate)) {
+            throw new Error('Deployment retirement handoff differs from verified worker evidence.');
+          }
+        } else if (mode === 'task' || method === 'begin-retirement') {
           result = nextRetirement = captureWindowsTaskRetirementScope(reply.value);
           prepared = result.checkpoint.intent;
           if (retirementObservation) {
@@ -157,10 +213,19 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, re
         const observed = prepared ? prepared.intent.completion : captureWindowsTaskCompletionProof(reply.value);
         if (!isDeepStrictEqual(observed, observation)) throw new Error('Original completed-task proof observation changed.');
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
-        requireOriginalChild();
+        if (nextDeployment?.status === 'retired') {
+          const result = await waitForExit();
+          if (result.code !== 0 || result.signal !== null) throw new Error('Native deployment retirement did not settle.');
+          closed = true;
+          wire.close();
+        } else requireOriginalChild();
         if (nextRetirement) {
-          retiring = true;
+          mode = 'task';
           retirementObservation = nextRetirement;
+        }
+        if (nextDeployment) {
+          mode = 'deployment';
+          deploymentObservation = nextDeployment;
         }
         return result ?? observed;
       } catch (cause) { throw await abandon(cause); }
@@ -168,36 +233,58 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, re
     };
     await request('check', signal);
     const requireMode = expected => {
-      if (retiring !== expected) throw refused(new Error('Original proof was transferred to retirement authority.'));
+      if (mode !== expected) throw refused(new Error('Original proof was transferred to retirement authority.'));
+      if (transferring) throw refused(new Error('Original retirement authority handoff is active.'));
     };
-    const contextFor = retirement => Object.freeze({
-      identity, observation: retirement ? retirementObservation : observation,
+    const contextFor = contextMode => Object.freeze({
+      identity, observation: contextMode === 'deployment' ? deploymentObservation
+        : contextMode === 'task' ? retirementObservation : observation,
       async check({ signal: checkSignal } = {}) {
-        requireMode(retirement);
+        requireMode(contextMode);
         return request('check', checkSignal);
       },
       async close() {
-        requireMode(retirement);
+        requireMode(contextMode);
         if (busy) throw refused(new Error('Cannot close an active completed-task proof request.'));
         if (failure) throw failure;
         if (!closed) await request('close');
       },
     });
+    const deploymentContext = () => {
+      const scope = contextFor('deployment');
+      deployments.set(scope, { control, admission, next(requestSignal) {
+        requireMode('deployment');
+        if (deploymentObservation.status === 'retired') throw refused(new Error('Deployment retirement is complete.'));
+        return request('retire-deployment-next', requestSignal);
+      } });
+      return scope;
+    };
     const retirementContext = () => {
-      const scope = contextFor(true);
+      const scope = contextFor('task');
       retirements.set(scope, { control, admission, async next(requestSignal) {
-        requireMode(true);
+        requireMode('task');
         if (retirementObservation.retiredFiles >= retirementObservation.checkpoint.intent.intent.files.length) {
           throw refused(new Error('Retirement receipt list is exhausted.'));
         }
         return request('retire-next', requestSignal);
+      }, async beginDeployment(requestSignal) {
+        requireMode('task');
+        transferring = true;
+        try {
+          const retained = await request('retain-workers', requestSignal);
+          await verifyWindowsDeploymentRetirementEvidence(control, retained);
+          await request('begin-deployment-retirement', requestSignal);
+          return deploymentContext();
+        } catch (cause) { throw await abandon(cause); }
+        finally { transferring = false; }
       } });
       return scope;
     };
-    if (retiring) return retirementContext();
-    const proof = contextFor(false);
+    if (mode === 'deployment') return deploymentContext();
+    if (mode === 'task') return retirementContext();
+    const proof = contextFor('proof');
     const fullRequest = (method, requestSignal) => {
-      requireMode(false);
+      requireMode('proof');
       return request(method, requestSignal);
     };
     proofs.set(proof, { control, admission,

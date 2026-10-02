@@ -263,6 +263,7 @@ async function acquireLockAdmitted(root, { project, operationId }) {
   const directory = await ownedDirectory(root);
   await requireNoRecovery(directory);
   await requireNoServiceMaintenance(directory);
+  await requireNoWorkerRetirement(directory);
   if ((await readdir(directory)).includes('live-retirement.json')) {
     throw new Error('Live service retirement requires original unlock or recovery.');
   }
@@ -341,6 +342,7 @@ async function releaseLockAdmitted(root, owner) {
   const directory = await ownedDirectory(root);
   await requireNoRecovery(directory);
   await requireNoServiceMaintenance(directory);
+  await requireNoWorkerRetirement(directory);
   if ((await loadState(directory))?.phase === 'blocked') {
     throw new Error('Blocked deployment workers require retaining the lock.');
   }
@@ -368,6 +370,16 @@ function serviceMaintenanceEntry(name, allowLiveRetirement = false) {
     || (!allowLiveRetirement && entry === 'live-retirement.json');
 }
 
+function workerRetirementEntry(name) {
+  return (process.platform === 'win32' ? name.toLowerCase() : name) === 'worker-retirement.json';
+}
+
+async function requireNoWorkerRetirement(directory) {
+  if ((await readdir(directory)).some(workerRetirementEntry)) {
+    throw new Error('Worker retirement manifest requires explicit cleanup before lock operations.');
+  }
+}
+
 export async function requireNoServiceMaintenance(directory, { allowLiveRetirement = false } = {}) {
   if ((await readdir(directory)).some(name => serviceMaintenanceEntry(name, allowLiveRetirement))) {
     throw new Error('Service or task maintenance evidence requires explicit runtime recovery before this operation.');
@@ -377,10 +389,10 @@ export async function requireNoServiceMaintenance(directory, { allowLiveRetireme
 export async function reconcileInterruptedOperation(root) {
   const directory = await ownedDirectory(root);
   const state = await loadState(directory);
-  if ((await readdir(directory)).some(name => serviceMaintenanceEntry(name))) {
+  if ((await readdir(directory)).some(name => serviceMaintenanceEntry(name) || workerRetirementEntry(name))) {
     return {
       status: 'blocked', operationId: state?.operationId ?? null, phase: state?.phase ?? null,
-      message: 'Service or task maintenance evidence exists. Retain lock and inhibition; inspect before restart or recovery.',
+      message: 'Service, task or worker retirement evidence exists. Retain it; inspect before restart or recovery.',
     };
   }
   let recoveryExists = true;

@@ -81,6 +81,23 @@ test('prior-runtime-restored is a failed pre-source outcome, never a new deploym
   await writeState(root, { ...base, operationId: 'retry-update' });
 });
 
+for (const marker of process.platform === 'win32'
+  ? ['worker-retirement.json', 'WORKER-RETIREMENT.JSON'] : ['worker-retirement.json']) {
+  test(`${marker} blocks ordinary ownership after the old lock has disappeared`, async t => {
+    const root = await temporaryDeployment(t);
+    await writeFile(path.join(root, marker), '{"version":3,');
+    await assert.rejects(acquireLock(root, { project: root, operationId: 'new' }), /retirement/i);
+    await assert.rejects(stat(path.join(root, 'lock')), { code: 'ENOENT' });
+    assert.equal((await reconcileInterruptedOperation(root)).status, 'blocked');
+    const other = await temporaryDeployment(t);
+    const lock = await acquireLock(other, { project: other, operationId: 'old' });
+    const owner = await readFile(path.join(other, 'lock', 'owner.json'));
+    await writeFile(path.join(other, marker), '');
+    await assert.rejects(releaseLock(other, lock), /retirement/i);
+    assert.deepEqual(await readFile(path.join(other, 'lock', 'owner.json')), owner);
+  });
+}
+
 test('preflight refusal is a distinct retryable failed outcome with no downtime or restoration claim', async t => {
   assert.equal(nextPhase('preflight', 'preflight-refused'), 'preflight-refused');
   for (const phase of ['stopped', 'copying', 'source-selected', 'accepted', 'restored', 'blocked']) {

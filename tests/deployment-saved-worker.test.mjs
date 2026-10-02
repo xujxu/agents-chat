@@ -35,6 +35,8 @@ const files = [
   'windows-task-completion-record.mjs', 'windows-task-retirement-record.mjs', 'windows-task-retirement-intent.ps1',
   'windows-task-retirement-checkpoint.mjs', 'windows-task-retirement-checkpoint.ps1',
   'windows-task-retirement-records.ps1', 'windows-task-retirement-scope.ps1', 'windows-task-retirement-scope.mjs',
+  'windows-deployment-retirement-record.mjs', 'windows-deployment-retirement-evidence.mjs',
+  'windows-deployment-retirement-evidence.ps1', 'windows-deployment-retirement.ps1',
   'evidence-journal.mjs', 'worker-operation.mjs', 'state.mjs',
   'worker-retirement.mjs',
   'linux-systemd.mjs', 'linux-runtime.mjs',
