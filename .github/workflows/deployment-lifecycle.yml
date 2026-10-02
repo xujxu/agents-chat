@@ -12,6 +12,7 @@ on:
       - 'scripts/service-watchdog.ps1'
       - 'scripts/install-scheduled-task.ps1'
       - 'tests/deployment-*'
+      - 'tests/Windows*.cs'
       - '.github/workflows/deployment-lifecycle.yml'
   pull_request:
     paths:
@@ -23,6 +24,7 @@ on:
       - 'scripts/service-watchdog.ps1'
       - 'scripts/install-scheduled-task.ps1'
       - 'tests/deployment-*'
+      - 'tests/Windows*.cs'
       - '.github/workflows/deployment-lifecycle.yml'
   workflow_dispatch:
 

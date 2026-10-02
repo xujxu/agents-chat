@@ -7355,6 +7355,11 @@ length before reading any buffer. Do not ignore a failed actual read or change
 identity/privilege comparisons. Full regression still awaits a passing probe.
 Reference: `https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-gettokeninformation`.
 
+Fixed-field commit `be37516` changed only a `tests/Windows*.cs` helper and
+documentation, revealing that the workflow path filters covered only
+`tests/deployment-*`. Include native C# fixtures in both push and pull-request
+filters so isolated helper corrections cannot silently miss Actions.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
