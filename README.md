@@ -138,7 +138,7 @@ For persistent deployment on a Windows machine, use `scripts\deploy.ps1` which m
 On this development branch, Windows transaction/backup/recovery integration is
 still incomplete; do not use it as the final cross-platform deployment release.
 The task parameter and read-only definition changes below passed native
-PowerShell 5.1 acceptance. The full 24-job regression, including private
+PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
 retained private configuration, direct native task-owner checks and the
 installed private runtime host, native restart inhibition and write-through
@@ -146,7 +146,7 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `8f3063b` (run `37013169103`). This also accepts the
+creation, passed at `2c1aafc` (run `37017035126`). This also accepts the
 production native controller process: literal arguments and bidirectional
 stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
@@ -192,7 +192,11 @@ including observation of the released original runtime after controller exit;
 all 24 jobs passed. The fresh-process completed-task proof now retains the
 23-file private evidence chain, lock/state, installed bundles and original
 native runtime/listener identity. It is read-only and grants no mutation or
-lock-release authority; its dedicated 25th regression job is not yet accepted.
+lock-release authority; its dedicated 25th regression job and full regression
+passed at `2c1aafc`. Expanded native update, restore/custom-permission and
+originally-disabled cases passed at `c7de917`, including refusals for live
+controllers, changed evidence/policy and same-process listener rebinding.
+The expanded full regression remains pending.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

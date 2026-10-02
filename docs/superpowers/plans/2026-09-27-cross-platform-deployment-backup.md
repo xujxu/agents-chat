@@ -8324,7 +8324,10 @@ fields, extra maintenance inventory, existing recovery authority, changed
 task enablement and a same-process/same-port rebind. Every refusal preserves
 the original runtime, task policy and private receipts/lock/state. The
 dedicated job also exercises restore with nondefault task permissions and
-an originally disabled task. Expanded native acceptance remains pending.
+an originally disabled task. Full `2c1aafc` run `37017035126` passed **25/25**.
+Expanded `c7de917` run `37017549550`, native job `110877950045`, passed all
+three scenarios and their refusal cases at 14:25:10 UTC. Its full regression
+remains running; do not cancel it or claim public Windows recovery acceptance.
 The embedded activating snapshot is validated as state and linked to every
 recorded activating digest; it is not a claim to reconstruct the former
 state file's exact serialized bytes.
