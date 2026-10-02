@@ -146,7 +146,7 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `f7c5e19` (run `37010551771`). This also accepts the
+creation, passed at `8f3063b` (run `37013169103`). This also accepts the
 production native controller process: literal arguments and bidirectional
 stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
@@ -169,8 +169,8 @@ update/restore and controller-loss cases (`ad311cf`, job `110814478038`):
 temporary demand-start suppresses triggers and restart-on-failure, the new
 original task/Job is bound to private readiness, and the task is disabled
 again while its runtime lease remains armed. All 24 regression jobs passed
-for this step; health-gated permanent policy restoration and transaction
-release remain incomplete. Active checks retain the original Scheduler
+for this step; transaction-evidence retirement and lock release remain
+incomplete. Active checks retain the original Scheduler
 instance as well as the process, and reject a changed activation-state digest
 before settling the unreleased generation.
 Integration into the public deployment entrypoints remains pending.
@@ -187,8 +187,13 @@ regression passed at `839ac62`, including saved Linux restore and real Windows
 application/data checks. Health-gated permanent task-policy restoration and
 original-peer lease release passed native update/restore, custom-permission,
 originally-disabled and changed-state cases at `f7c5e19`; all 24 regression
-jobs also passed. Cold completion/reopening and public Windows integration remain
-unaccepted.
+jobs also passed. Actual read-only lease observation passed at `8f3063b`,
+including observation of the released original runtime after controller exit;
+all 24 jobs passed. The fresh-process completed-task proof now retains the
+23-file private evidence chain, lock/state, installed bundles and original
+native runtime/listener identity. It is read-only and grants no mutation or
+lock-release authority; its dedicated 25th regression job is not yet accepted.
+Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

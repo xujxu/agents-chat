@@ -8247,11 +8247,16 @@ of implementation `033ed82`. The implementation adds only read-only lease
 observation and strict string reply capture, preserving all existing control
 constructors and domain-observation fields. The native domain fixture with
 no observer explicitly refuses the query instead of reporting `unguarded`.
-Implementation acceptance remains pending Actions.
+Implementation `033ed82`, published through `8f3063b`, passed native activation
+job `110857820365` and task-options job `110857820807`. Full run `37013169103`
+passed **24/24**, including saved Linux restore, public Linux lifecycle and
+real Windows application/data continuity. This is the latest fully accepted
+baseline; no public Windows cold mutation or evidence retirement is implied.
 
 #### Task 5AD: reopen completed task evidence without mutation
 
 **Files:** new `scripts/deployment/windows-task-completion-proof.ps1`,
+new `scripts/deployment/windows-task-completion-records.ps1`,
 new `tests/deployment-windows-task-completion-proof.ps1`; existing transaction
 state parser, completion fixture/driver, saved-worker inventory and a separate
 bounded native proof job in the lifecycle workflow.
@@ -8303,6 +8308,18 @@ only the external control directory, never the old in-memory context.
 - [ ] This proof never stops, releases, enables, deletes, repairs ACLs,
   releases operation locks or reports deployment success. A later exclusive
   recovery admission and atomic retirement mechanism are still necessary.
+
+Task 5AD causal `6def158` / `37015583694`, dedicated native job
+`110866209874`, failed at 13:52:23 UTC on the missing production
+`windows-task-completion-proof.ps1`, after genuine completed handoff and
+original Node/bridge exit. Captured the exact failure before cancellation.
+The production implementation separates strict retained receipt replay from
+read-only native runtime observation, reuses the existing 14-field state
+converter, and is included in the saved-worker/recovery helper closure.
+Positive native acceptance and the additional refusal cases remain pending.
+The embedded activating snapshot is validated as state and linked to every
+recorded activating digest; it is not a claim to reconstruct the former
+state file's exact serialized bytes.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

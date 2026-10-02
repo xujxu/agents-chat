@@ -1,3 +1,33 @@
+function ConvertFrom-AgentsChatTaskTransactionState([hashtable]$Transaction, [string]$Text) {
+    $fields = Read-AgentsChatMaintenanceFields $Text @(
+        'version', 'operationId', 'project', 'operation', 'phase', 'previousPhase', 'sourceCommit',
+        'targetCommit', 'backupId', 'priorRuntime', 'runtimeIdentity', 'startedAt', 'updatedAt', 'errorCode')
+    $state = @{ version=$fields.version.GetInt32() }
+    foreach ($name in $fields.Keys) {
+        if ($name -cne 'version') { $state[$name] = $fields[$name].GetString() }
+    }
+    if ($state.version -ne 1 -or $state.project -cne $Transaction.Project -or
+        $state.operationId -cne $Transaction.OperationId -or $state.priorRuntime -cne 'running' -or
+        $state.runtimeIdentity -cne $Transaction.Generation -or $state.startedAt -cne $Transaction.StartedAt -or
+        $state.operation -cnotin @('deploy', 'update', 'restore') -or $null -ne $state.errorCode) {
+        throw 'Transaction state identity differs.'
+    }
+    foreach ($name in @('sourceCommit', 'targetCommit')) {
+        if ($null -ne $state[$name] -and $state[$name] -cnotmatch '^(?:[a-f0-9]{40}|[a-f0-9]{64})$') {
+            throw 'Invalid transaction commit.'
+        }
+    }
+    if ($null -ne $state.backupId -and $state.backupId -cnotmatch '^[a-zA-Z0-9_.:-]+$') {
+        throw 'Invalid transaction backup.'
+    }
+    $started = [DateTimeOffset]::ParseExact($state.startedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ',
+        [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)
+    $updated = [DateTimeOffset]::ParseExact($state.updatedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ',
+        [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)
+    if ($updated -lt $started) { throw 'Invalid transaction time.' }
+    return $state
+}
+
 function Read-AgentsChatTaskTransactionState([hashtable]$Transaction, [string]$ExpectedSha256) {
     if ((Get-Item -LiteralPath $Transaction.StateFile).Length -gt 65536) { throw 'Oversized transaction state.' }
     $digest = if ($ExpectedSha256) { $ExpectedSha256 } else {
@@ -6,32 +36,7 @@ function Read-AgentsChatTaskTransactionState([hashtable]$Transaction, [string]$E
     $file = [Deployment.WindowsPrivateFile]::Open($Transaction.StateFile, $digest)
     try {
         $text = $file.ReadText()
-        $fields = Read-AgentsChatMaintenanceFields $text @(
-            'version', 'operationId', 'project', 'operation', 'phase', 'previousPhase', 'sourceCommit',
-            'targetCommit', 'backupId', 'priorRuntime', 'runtimeIdentity', 'startedAt', 'updatedAt', 'errorCode')
-        $state = @{ version=$fields.version.GetInt32() }
-        foreach ($name in $fields.Keys) {
-            if ($name -cne 'version') { $state[$name] = $fields[$name].GetString() }
-        }
-        if ($state.version -ne 1 -or $state.project -cne $Transaction.Project -or
-            $state.operationId -cne $Transaction.OperationId -or $state.priorRuntime -cne 'running' -or
-            $state.runtimeIdentity -cne $Transaction.Generation -or $state.startedAt -cne $Transaction.StartedAt -or
-            $state.operation -cnotin @('deploy', 'update', 'restore') -or $null -ne $state.errorCode) {
-            throw 'Transaction state identity differs.'
-        }
-        foreach ($name in @('sourceCommit', 'targetCommit')) {
-            if ($null -ne $state[$name] -and $state[$name] -cnotmatch '^(?:[a-f0-9]{40}|[a-f0-9]{64})$') {
-                throw 'Invalid transaction commit.'
-            }
-        }
-        if ($null -ne $state.backupId -and $state.backupId -cnotmatch '^[a-zA-Z0-9_.:-]+$') {
-            throw 'Invalid transaction backup.'
-        }
-        $started = [DateTimeOffset]::ParseExact($state.startedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ',
-            [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)
-        $updated = [DateTimeOffset]::ParseExact($state.updatedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ',
-            [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)
-        if ($updated -lt $started) { throw 'Invalid transaction time.' }
+        $state = ConvertFrom-AgentsChatTaskTransactionState $Transaction $text
         $file.Check()
         $Transaction.StateSha256 = $file.Sha256
         if ($ExpectedSha256) { $Transaction.InitialState = $text }
