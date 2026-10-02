@@ -7380,6 +7380,50 @@ terminated/joined through its original process handle without executing payload;
 both native codes accompany the original failure. These diagnostics do not
 turn an unsupported premise into success, broaden ACLs or grant privileges.
 
+`a264058` / `36953165393`, native `110670356208`, returned Win32 5 for
+both controls as well. Stop pursuing `CreateProcessWithTokenW` for this
+bootstrap premise; unchanged-owner and executable-directory controls did
+not establish a supported launch path. No production code adopted that API.
+
+#### Task 5Q: distinct suspended child token with spawn-time Job assignment
+
+Keep the approved isolated-owner objective but use ordinary `CreateProcessW`.
+Pass the original private Job in `PROC_THREAD_ATTRIBUTE_JOB_LIST`, with
+`CREATE_SUSPENDED`, `CREATE_UNICODE_ENVIRONMENT` and
+`EXTENDED_STARTUPINFO_PRESENT`. No primary thread runs before the Job and
+actual token are checked. This also removes the earlier probe's suspended
+process gap before child-side Job attachment.
+
+**Files:** replace the unsupported path in
+`tests/WindowsControllerTokenProbe.cs`; remove self-attachment from
+`tests/deployment-windows-controller-token-child.ps1`, since creation must
+already establish original Job membership. Retain native private root setup
+and both real Node file writers.
+
+- [ ] Open the original token query-only and save its token-object ID,
+  complete statistics, default owner and permission signature.
+- [ ] Create the suspended child with a non-inherited original private Job
+  handle in the startup attribute list. Verify original Job membership
+  through the retained process handle before inspecting/changing its token.
+- [ ] Open only the actual child's token with query/default-adjust rights.
+  Require a different `TOKEN_STATISTICS.TokenId`, primary token type and
+  unchanged initial owner/user/privilege/elevation/integrity/session values.
+  If the token object is shared with the parent, refuse before modification.
+- [ ] Set only that child's default owner to its already-existing user SID,
+  then recheck its identity/permissions and the unchanged original token
+  statistics/owner/permissions before resuming the original primary thread.
+- [ ] Run the existing real Node/descendant private-file assertions without
+  ACL repair. Original Job assignment is mandatory, not a best-effort fallback;
+  process/attribute/token handles and waits remain bounded.
+- [ ] Require native success and the complete unchanged Actions regression
+  before adopting any production bootstrap.
+
+References: `TOKEN_STATISTICS.TokenId` identifies a token object; the Job-list
+startup attribute assigns the supplied Job handles at process creation and is
+supported on Windows 10 / Windows Server 2016 and later:
+- `https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-token_statistics`
+- `https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute`
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

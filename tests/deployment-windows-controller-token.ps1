@@ -47,7 +47,7 @@ if (!child) {
         try { Assert (($retained.ReadText() | ConvertFrom-Json).pid -gt 0) 'Invalid native owner writer result' }
         finally { $retained.Dispose() }
     }
-    Write-Output "PASS: copied primary token creates private Node/descendant files without ACL repair; original default owner $owner unchanged"
+    Write-Output "PASS: distinct child token and spawn-time Job create private Node/descendant files without ACL repair; original default owner $owner unchanged"
 } finally {
     if ($job) {
         $job.Terminate()

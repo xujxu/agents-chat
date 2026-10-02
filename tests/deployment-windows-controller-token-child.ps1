@@ -2,7 +2,6 @@ param(
     [Parameter(Mandatory)][string]$Source,
     [Parameter(Mandatory)][string]$Node,
     [Parameter(Mandatory)][string]$Root,
-    [Parameter(Mandatory)][string]$JobName,
     [Parameter(Mandatory)][int]$OwnerPid,
     [Parameter(Mandatory)][string]$OwnerIdentity
 )
@@ -11,7 +10,6 @@ Set-StrictMode -Version Latest
 Add-Type -Path $Source
 $watch = [Deployment.WindowsWorkerLauncher]::WatchOwner($OwnerPid, $OwnerIdentity)
 try {
-    [Deployment.WindowsWorkerJob]::JoinCurrent($JobName)
     $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
     $environment.Add('SystemRoot', $env:SystemRoot)
     $environment.Add('TEMP', $Root)

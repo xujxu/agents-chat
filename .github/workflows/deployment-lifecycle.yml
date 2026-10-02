@@ -302,7 +302,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Probe private Node file creation with an isolated copied controller token
+      - name: Probe private Node file creation with a distinct original-Job child token
         shell: pwsh
         run: ./tests/deployment-windows-controller-token.ps1
       - name: Verify portable Scheduled Task and child parameters with PowerShell 5.1

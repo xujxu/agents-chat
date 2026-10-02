@@ -1,6 +1,5 @@
 using System;
 using System.ComponentModel;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
@@ -10,8 +9,9 @@ namespace DeploymentTests
 {
     public static class WindowsControllerTokenProbe
     {
-        const int TokenUser = 1, TokenPrivileges = 3, TokenOwner = 4, TokenSession = 12, TokenElevation = 20, TokenIntegrity = 25;
-        const uint TokenAssignPrimary = 1, TokenDuplicate = 2, TokenQuery = 8, TokenAdjustDefault = 0x80;
+        const int TokenUser = 1, TokenPrivileges = 3, TokenOwner = 4, TokenStatistics = 10,
+            TokenSession = 12, TokenElevation = 20, TokenIntegrity = 25;
+        const uint TokenQuery = 8, TokenAdjustDefault = 0x80;
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         struct Startup
         {
@@ -27,18 +27,33 @@ namespace DeploymentTests
             public IntPtr process, thread;
             public uint pid, tid;
         }
+        [StructLayout(LayoutKind.Sequential)]
+        struct ExtendedStartup
+        {
+            public Startup startup;
+            public IntPtr attributes;
+        }
         [DllImport("advapi32.dll", SetLastError = true)]
         static extern bool OpenProcessToken(IntPtr process, uint access, out SafeAccessTokenHandle token);
-        [DllImport("advapi32.dll", SetLastError = true)]
-        static extern bool DuplicateTokenEx(SafeAccessTokenHandle token, uint access, IntPtr security,
-            int impersonation, int type, out SafeAccessTokenHandle copy);
         [DllImport("advapi32.dll", SetLastError = true)]
         static extern bool GetTokenInformation(SafeAccessTokenHandle token, int type, IntPtr buffer, int size, out int needed);
         [DllImport("advapi32.dll", SetLastError = true)]
         static extern bool SetTokenInformation(SafeAccessTokenHandle token, int type, IntPtr buffer, int size);
-        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        static extern bool CreateProcessWithTokenW(SafeAccessTokenHandle token, uint logon, string application,
-            StringBuilder command, uint flags, IntPtr environment, string cwd, ref Startup startup, out ProcessInformation process);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool CreateProcessW(string application, StringBuilder command, IntPtr processAttributes,
+            IntPtr threadAttributes, bool inherit, uint flags, IntPtr environment, string cwd,
+            ref ExtendedStartup startup, out ProcessInformation process);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern SafeFileHandle OpenJobObjectW(uint access, bool inherit, string name);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool IsProcessInJob(SafeProcessHandle process, SafeFileHandle job, out bool member);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, uint flags, ref UIntPtr size);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool UpdateProcThreadAttribute(IntPtr list, uint flags, UIntPtr attribute, IntPtr value,
+            UIntPtr size, IntPtr previous, IntPtr returned);
+        [DllImport("kernel32.dll")]
+        static extern void DeleteProcThreadAttributeList(IntPtr list);
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern uint ResumeThread(SafeWaitHandle thread);
         [DllImport("kernel32.dll", SetLastError = true)]
@@ -58,8 +73,8 @@ namespace DeploymentTests
         }
         static string Information(SafeAccessTokenHandle token, int type, bool sid)
         {
-            bool fixedSize = type == TokenElevation || type == TokenSession;
-            int needed = 4;
+            bool fixedSize = type == TokenElevation || type == TokenSession || type == TokenStatistics;
+            int needed = type == TokenStatistics ? 56 : 4;
             if (!fixedSize)
             {
                 bool sized = GetTokenInformation(token, type, IntPtr.Zero, 0, out needed);
@@ -73,7 +88,7 @@ namespace DeploymentTests
             try
             {
                 Native(GetTokenInformation(token, type, data, capacity, out needed), "Read token information class " + type);
-                if (needed < (sid ? IntPtr.Size : 4) || needed > capacity || fixedSize && needed != 4)
+                if (needed < (sid ? IntPtr.Size : 4) || needed > capacity || fixedSize && needed != capacity)
                     throw new InvalidOperationException("Invalid returned token information size for class " + type + ".");
                 if (sid) return new SecurityIdentifier(Marshal.ReadIntPtr(data)).Value;
                 byte[] bytes = new byte[needed];
@@ -94,91 +109,100 @@ namespace DeploymentTests
                 throw new ArgumentException("Unsupported literal fixture argument.");
             return "\"" + value + "\"";
         }
-        static int SuspendedCreationControl(SafeAccessTokenHandle token, string pwsh, string command,
-            IntPtr environment, string cwd)
+        static void RequireMembership(SafeProcessHandle process, SafeFileHandle job)
         {
-            var startup = new Startup { cb = Marshal.SizeOf<Startup>() };
-            ProcessInformation info;
-            if (!CreateProcessWithTokenW(token, 0, pwsh, new StringBuilder(command), 0x404, environment, cwd,
-                ref startup, out info))
-                return Marshal.GetLastWin32Error();
-            using (var process = new SafeProcessHandle(info.process, true))
-            using (var thread = new SafeWaitHandle(info.thread, true))
+            bool member;
+            Native(IsProcessInJob(process, job, out member), "Inspect original child Job membership");
+            if (!member) throw new InvalidOperationException("Suspended child was not created in the original Job.");
+        }
+        static void RequireOriginal(SafeAccessTokenHandle original, string owner, string permissions, string statistics)
+        {
+            if (Information(original, TokenOwner, true) != owner || Permissions(original) != permissions ||
+                Information(original, TokenStatistics, false) != statistics)
+                throw new InvalidOperationException("Original caller token changed.");
+        }
+        static void SetOwner(SafeAccessTokenHandle token, string user)
+        {
+            var sid = new SecurityIdentifier(user);
+            byte[] bytes = new byte[sid.BinaryLength];
+            sid.GetBinaryForm(bytes, 0);
+            IntPtr sidData = Marshal.AllocHGlobal(bytes.Length);
+            IntPtr descriptor = Marshal.AllocHGlobal(IntPtr.Size);
+            try
             {
-                Native(TerminateProcess(process, 1), "Stop suspended creation control");
-                if (WaitForSingleObject(process, 15000) != 0)
-                    throw new InvalidOperationException("Suspended creation control did not settle.");
+                Marshal.Copy(bytes, 0, sidData, bytes.Length);
+                Marshal.WriteIntPtr(descriptor, sidData);
+                Native(SetTokenInformation(token, TokenOwner, descriptor, IntPtr.Size), "Set distinct child token default owner");
             }
-            return 0;
+            finally { Marshal.FreeHGlobal(descriptor); Marshal.FreeHGlobal(sidData); }
         }
         public static string Run(string pwsh, string childScript, string source, string node,
             string root, string job, int parentPid, string parentIdentity)
         {
             SafeAccessTokenHandle original;
-            Native(OpenProcessToken(new IntPtr(-1), TokenQuery | TokenDuplicate, out original), "Open original controller token");
+            Native(OpenProcessToken(new IntPtr(-1), TokenQuery, out original), "Open original controller token");
             using (original)
+            using (SafeFileHandle originalJob = OpenJobObjectW(5, false, job))
             {
+                Native(!originalJob.IsInvalid, "Open original fixture Job");
                 string owner = Information(original, TokenOwner, true);
                 string user = Information(original, TokenUser, true);
                 string permissions = Permissions(original);
-                SafeAccessTokenHandle copy;
-                Native(DuplicateTokenEx(original, TokenAssignPrimary | TokenDuplicate | TokenQuery | TokenAdjustDefault,
-                    IntPtr.Zero, 2, 1, out copy), "Duplicate controller primary token");
-                using (copy)
+                string statistics = Information(original, TokenStatistics, false);
+                UIntPtr size = UIntPtr.Zero;
+                bool sized = InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+                int sizeError = Marshal.GetLastWin32Error();
+                if (sized || sizeError != 122 || size.ToUInt64() == 0 || size.ToUInt64() > 65536)
+                    throw new InvalidOperationException("Invalid process attribute list size (Win32 " + sizeError + ").");
+                IntPtr attributes = Marshal.AllocHGlobal((int)size.ToUInt64());
+                IntPtr jobValue = Marshal.AllocHGlobal(IntPtr.Size);
+                bool initialized = false;
+                try
                 {
-                    var sid = new SecurityIdentifier(user);
-                    byte[] bytes = new byte[sid.BinaryLength];
-                    sid.GetBinaryForm(bytes, 0);
-                    IntPtr sidData = Marshal.AllocHGlobal(bytes.Length);
-                    IntPtr descriptor = Marshal.AllocHGlobal(IntPtr.Size);
-                    try
-                    {
-                        Marshal.Copy(bytes, 0, sidData, bytes.Length);
-                        Marshal.WriteIntPtr(descriptor, sidData);
-                        Native(SetTokenInformation(copy, TokenOwner, descriptor, IntPtr.Size), "Set copied token default owner");
-                    }
-                    finally { Marshal.FreeHGlobal(descriptor); Marshal.FreeHGlobal(sidData); }
-                    if (Information(copy, TokenOwner, true) != user || Permissions(copy) != permissions ||
-                        Information(original, TokenOwner, true) != owner)
-                        throw new InvalidOperationException("Copied token changed caller identity or privileges.");
+                    Native(InitializeProcThreadAttributeList(attributes, 1, 0, ref size), "Initialize original Job startup attributes");
+                    initialized = true;
+                    Marshal.WriteIntPtr(jobValue, originalJob.DangerousGetHandle());
+                    Native(UpdateProcThreadAttribute(attributes, 0, new UIntPtr(0x2000d), jobValue,
+                        new UIntPtr((uint)IntPtr.Size), IntPtr.Zero, IntPtr.Zero), "Bind original Job at process creation");
                     var command = new StringBuilder(String.Join(" ", Array.ConvertAll(new[] {
                         pwsh, "-NoProfile", "-NonInteractive", "-File", childScript, "-Source", source,
-                        "-Node", node, "-Root", root, "-JobName", job, "-OwnerPid", parentPid.ToString(),
+                        "-Node", node, "-Root", root, "-OwnerPid", parentPid.ToString(),
                         "-OwnerIdentity", parentIdentity
                     }, Quote)));
                     IntPtr environment = Marshal.StringToHGlobalUni(
                         "SystemRoot=" + Environment.GetEnvironmentVariable("SystemRoot") + "\0TEMP=" + root + "\0TMP=" + root + "\0\0");
                     try
                     {
-                        var startup = new Startup { cb = Marshal.SizeOf<Startup>() };
+                        var startup = new ExtendedStartup {
+                            startup = new Startup { cb = Marshal.SizeOf<ExtendedStartup>() }, attributes = attributes
+                        };
                         ProcessInformation info;
-                        string originalCommand = command.ToString();
-                        if (!CreateProcessWithTokenW(copy, 0, pwsh, command, 0x404, environment, root,
-                            ref startup, out info))
-                        {
-                            int error = Marshal.GetLastWin32Error();
-                            SafeAccessTokenHandle unchanged;
-                            Native(DuplicateTokenEx(original, TokenAssignPrimary | TokenDuplicate | TokenQuery | TokenAdjustDefault,
-                                IntPtr.Zero, 2, 1, out unchanged), "Duplicate unchanged creation control token");
-                            int originalOwner;
-                            using (unchanged)
-                                originalOwner = SuspendedCreationControl(unchanged, pwsh, originalCommand, environment, root);
-                            int executableDirectory = SuspendedCreationControl(copy, pwsh, originalCommand, environment,
-                                Path.GetDirectoryName(pwsh));
-                            throw new Win32Exception(error, "Create suspended private-owner fixture (Win32 " + error +
-                                "; unchanged-owner control=" + originalOwner +
-                                "; executable-directory control=" + executableDirectory + ").");
-                        }
+                        Native(CreateProcessW(pwsh, command, IntPtr.Zero, IntPtr.Zero, false, 0x80404,
+                            environment, root, ref startup, out info), "Create suspended original-Job fixture");
                         using (var process = new SafeProcessHandle(info.process, true))
                         using (var thread = new SafeWaitHandle(info.thread, true))
                         {
                             try
                             {
+                                RequireMembership(process, originalJob);
                                 SafeAccessTokenHandle actual;
-                                Native(OpenProcessToken(info.process, TokenQuery, out actual), "Inspect created controller token");
+                                Native(OpenProcessToken(info.process, TokenQuery | TokenAdjustDefault, out actual), "Inspect created controller token");
                                 using (actual)
-                                    if (Information(actual, TokenOwner, true) != user || Permissions(actual) != permissions)
-                                        throw new InvalidOperationException("Created controller token differs before admission.");
+                                {
+                                    string childStatistics = Information(actual, TokenStatistics, false);
+                                    // TOKEN_STATISTICS starts with two LUIDs; its primary-token type is at byte 24.
+                                    if (childStatistics.Substring(0, 16) == statistics.Substring(0, 16) ||
+                                        childStatistics.Substring(16, 16) != statistics.Substring(16, 16) ||
+                                        childStatistics.Substring(48, 8) != "01000000" ||
+                                        Information(actual, TokenOwner, true) != owner || Permissions(actual) != permissions)
+                                        throw new InvalidOperationException("Created child token is shared or differs before admission.");
+                                    SetOwner(actual, user);
+                                    if (Information(actual, TokenOwner, true) != user || Permissions(actual) != permissions ||
+                                        Information(actual, TokenStatistics, false).Substring(0, 16) != childStatistics.Substring(0, 16))
+                                        throw new InvalidOperationException("Distinct child token changed identity or privileges.");
+                                    RequireOriginal(original, owner, permissions, statistics);
+                                }
+                                RequireMembership(process, originalJob);
                                 Native(ResumeThread(thread) != UInt32.MaxValue, "Resume private-owner fixture");
                                 uint wait = WaitForSingleObject(process, 30000);
                                 if (wait == UInt32.MaxValue) Native(false, "Wait for private-owner fixture");
@@ -202,8 +226,13 @@ namespace DeploymentTests
                     }
                     finally { Marshal.FreeHGlobal(environment); }
                 }
-                if (Information(original, TokenOwner, true) != owner || Permissions(original) != permissions)
-                    throw new InvalidOperationException("Original caller token changed.");
+                finally
+                {
+                    if (initialized) DeleteProcThreadAttributeList(attributes);
+                    Marshal.FreeHGlobal(jobValue);
+                    Marshal.FreeHGlobal(attributes);
+                }
+                RequireOriginal(original, owner, permissions, statistics);
                 return owner;
             }
         }
