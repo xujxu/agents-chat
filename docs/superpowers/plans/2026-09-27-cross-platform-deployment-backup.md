@@ -9132,6 +9132,205 @@ starts at 18:34:47 UTC. Full regression completed **25/25 success**, observed
 18:49:38 UTC. Task 5AH is accepted and `119b17e` is the new full baseline.
 No receipt retirement, operation unlock or public Windows recovery is implied.
 
+### Task 5AI: native durable completed-task retirement intent
+
+Continue the approved write-ahead retirement pattern. Publish one private
+`task-retirement.json` while actual shared admission and the original native
+completion proof are retained. This is a prepared cleanup intent, not a
+deployment-success receipt or permission to release the operation lock.
+Do not delete maintenance files in this task; keep all 23 original files
+available for complete native replay when reopening the intent.
+
+**Files:**
+- Modify `scripts/deployment/WindowsPrivateFile.cs`: expose immutable native
+  volume/file identity and retained byte length, checked through the existing
+  file/directory leases. No new handle access, ACL policy or runtime helper.
+- Create `scripts/deployment/windows-task-retirement-intent.ps1`: capture
+  the original proof/lock/state/23-file inventory and atomically publish or
+  strictly reopen the intent with `WindowsPrivateFile.Publish/Open`.
+- Create `scripts/deployment/windows-task-completion-record.mjs`: extract
+  existing strict completion-observation capture for shared protocol use.
+  Preserve its re-export from the proof client.
+- Create `scripts/deployment/windows-task-retirement-record.mjs`: strict,
+  immutable intent/result capture with the same allowlisted 23-file layout.
+- Modify `scripts/deployment/windows-task-completion-controller.ps1` and
+  `.mjs`: add only the explicit `prepare-retirement` request; bind it to the
+  existing actual proof/admission, with ordinary check/close unchanged.
+- Create `tests/deployment-windows-task-retirement-intent.mjs`, invoked from
+  `tests/deployment-windows-task-completion-proof-cases.ps1` after successful
+  retained-session acceptance and before deliberate evidence mutation.
+- Update both saved-helper inventories for the three new helper files.
+
+- [ ] **Step 1: publish the native missing-entry causal test.**
+
+  After the existing session test, run the new Node fixture with `$Control`
+  and current `$pwsh`; require success. The initial fixture imports the
+  intentionally missing `prepareWindowsTaskRetirement` export:
+
+  ```javascript
+  import assert from 'node:assert/strict';
+  import { createHash } from 'node:crypto';
+  import { readFile, stat } from 'node:fs/promises';
+  import path from 'node:path';
+  import { withWindowsAdmission } from '../scripts/deployment/windows-admission.mjs';
+  import {
+    openWindowsTaskCompletionProof, prepareWindowsTaskRetirement,
+  } from '../scripts/deployment/windows-task-completion-proof.mjs';
+  const [control, pwsh] = process.argv.slice(2);
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    const proof = await openWindowsTaskCompletionProof({ control, pwsh, admission });
+    try {
+      await assert.rejects(prepareWindowsTaskRetirement(control, { ...proof }, admission),
+        /Original retained completed-task proof/);
+      const prepared = await prepareWindowsTaskRetirement(control, proof, admission);
+      assert.equal(prepared.status, 'prepared');
+      assert.equal(prepared.descriptor.path, 'task-retirement.json');
+      assert.deepEqual(prepared.intent.completion, proof.observation);
+      const bytes = await readFile(path.join(control, prepared.descriptor.path));
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), prepared.descriptor.sha256);
+      assert.deepEqual(JSON.parse(bytes), prepared.intent);
+      for (const entry of [prepared.intent.lockFile, prepared.intent.state, ...prepared.intent.files]) {
+        const info = await stat(path.join(control, entry.path), { bigint: true });
+        assert.equal(String(info.dev), entry.dev);
+        assert.equal(String(info.ino), entry.ino);
+        assert.equal(Number(info.size), entry.bytes);
+      }
+      assert.deepEqual(await prepareWindowsTaskRetirement(control, proof, admission), prepared);
+      await proof.check();
+    } finally { await proof.close(); }
+  });
+  console.log('PASS: native task retirement intent binds original private evidence without deletion or unlock');
+  ```
+
+  Capture the missing named export only after real completion, independent
+  native observation and the existing retained-session cases pass in Actions.
+  No local execution and no cancellation of the accepted full baseline.
+
+- [ ] **Step 2: add checked native identity capture.**
+
+  Add an immutable `EvidenceIdentity` with string `Dev` and `Ino`, constructed
+  from the existing native `FileInformation`:
+
+  ```csharp
+  public sealed class EvidenceIdentity
+  {
+      public string Dev { get; }
+      public string Ino { get; }
+      internal EvidenceIdentity(uint volume, uint high, uint low)
+      {
+          Dev = volume.ToString(System.Globalization.CultureInfo.InvariantCulture);
+          Ino = (((ulong)high << 32) | low).ToString(System.Globalization.CultureInfo.InvariantCulture);
+      }
+  }
+  EvidenceIdentity OriginalIdentity()
+  {
+      FileInformation information = Information();
+      return new EvidenceIdentity(information.Volume, information.IndexHigh, information.IndexLow);
+  }
+  public EvidenceIdentity CaptureIdentity()
+  {
+      Check();
+      EvidenceIdentity result = OriginalIdentity();
+      Check();
+      return result;
+  }
+  public int ByteLength { get { Check(); return content.Length; } }
+  ```
+
+  `DirectoryLease.CaptureIdentity()` similarly calls its existing `Check()`,
+  captures `directory.OriginalIdentity()`, checks again and returns it.
+  Keep the standalone base class and installed nine-helper compilation valid.
+
+- [ ] **Step 3: persist the fully bound version-1 intent.**
+
+  The exact root fields are:
+
+  ```text
+  version, control, project, lock, lockFile, state,
+  controlIdentity, lockIdentity, maintenanceIdentity,
+  completion, files, creator
+  ```
+
+  Version is 1. `control` is the actual admitted canonical control; `project`
+  and `lock` come from the original retained lock. File descriptors have
+  exactly `path,dev,ino,bytes,sha256`; identities have exactly `dev,ino`.
+  State/lock paths are exactly `state.json` and `lock\owner.json`.
+  `completion` is the existing strict original native observation. Require
+  its operation ID, state digest and completion digest to match lock/state
+  and the final completion receipt. File entries, in order, are
+  `task-maintenance\admission.json`, `task-maintenance\transaction.json`,
+  followed by the 21 `task-<RecordNames>.json` entries in the established
+  native replay order. Do not accept arbitrary relative paths.
+
+  `creator` has exactly:
+
+  ```powershell
+  [ordered]@{
+      pid=$ControllerPid; processIdentity=$ControllerIdentity
+      bridgePid=$PID; bridgeIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+  }
+  ```
+
+  Verify the original requesting Node identity before/after publication.
+  For every file, open with the existing native private reader, capture its
+  checked identity, retained byte length and digest; preserve the original
+  native proof throughout. Capture the three directory identities using
+  native directory leases. Construct ordered JSON objects, including the
+  nested completion runtime fields, so a fresh process can compare the
+  producer's exact canonical field values. Retain the published intent in
+  the proof's checked file list until proof close.
+
+  Publish with `WindowsPrivateFile.Publish`, never Node's Windows mode bits
+  or permission repair. Existing `writeWorkerFile/privateMode` only enforces
+  Unix ownership and is not sufficient private Windows publication.
+  Return exactly `status,descriptor,intent`, with status `prepared` and
+  descriptor path `task-retirement.json`. Retain incomplete artifacts on
+  publication failure; never overwrite a colliding intent.
+
+- [ ] **Step 4: reopen unchanged intent without adopting a live preparer.**
+
+  On an existing marker, first obtain the full original native proof again.
+  Open the marker with `WindowsPrivateFile.Open` and parse its exact root
+  fields with `Read-AgentsChatMaintenanceFields`. Compare every non-creator
+  field's raw JSON to the newly captured canonical candidate; this also
+  refuses unexpected or duplicate nested fields and changed identities.
+  Parse creator fields strictly and validate both PID/creation identities.
+  Accept live identities only when both are exactly this same original
+  Node/native proof session. Otherwise require both former identities to be
+  absent with the existing original-process check. Never replace creator
+  references merely to claim ownership.
+
+  Preserve the marker's original bytes/digest/identity on reopen. Refuse
+  partial JSON, foreign scope, altered paths/state/receipts, unsupported ACLs
+  or hard links, leaving all original evidence and runtime untouched.
+  The client captures and deeply freezes the exact result schema; require
+  actual proof/admission WeakMap binding before sending `prepare-retirement`,
+  and check admission/original native process around its reply.
+
+- [ ] **Step 5: complete original-actor loss and refusal coverage.**
+
+  Extend the real Node fixture with a held IPC child that prepares the
+  marker, reports both original helper identities and remains alive.
+  While it is alive, competing ordinary acquisition must be busy. Terminate
+  only that original Node child, wait for both native identities to vanish,
+  then reopen under a fresh admission/proof and require identical marker
+  bytes and file identity. Assert returned native volume/file IDs against
+  Node bigint `stat` for all original files and directories.
+
+  Alter one stored scope/path/identity field or truncate the marker, invoke
+  fresh preparation and require refusal with no further writes. Restore only
+  the fixture's original bytes between cases. Exercise forged proof/admission,
+  same-session idempotency, foreign controls and unchanged state/lock/runtime.
+  The existing native proof cases continue to verify all original receipt,
+  task-policy and listener refusals after this fixture.
+
+- [ ] **Step 6: accept only after full Actions completion.**
+
+  Update the saved closure, push implementation, read native diagnostics and
+  preserve the full 25-job regression after native success. Mark this task
+  accepted only on complete success. Subsequent exact/prefix retirement,
+  worker handoff and atomic operation unlock remain explicitly unfinished.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
