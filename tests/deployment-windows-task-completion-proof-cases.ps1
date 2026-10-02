@@ -56,6 +56,8 @@ $definition = [string]$folder.GetTask($TaskName).Xml
 $enabled = [bool]$folder.GetTask($TaskName).Enabled
 $before = @(Evidence)
 Observe
+& (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-completion-session.mjs') $Control $pwsh
+Assert ($LASTEXITCODE -eq 0) 'Admitted completed-task proof session failed'
 $state = Join-Path $Control 'state.json'
 Changed-Bytes $state ([IO.File]::ReadAllText($state) + "`n") 'records-completion-state' 'Private configuration digest differs.'
 $intent = Join-Path $Directory 'task-stop-intent.json'

@@ -8858,6 +8858,259 @@ completed **25/25 success**, observed 18:07:18 UTC. Task 5AG is accepted;
 `b08a6fe` is the new fully accepted baseline. This is not public Windows
 recovery, task-evidence retirement or complete deployment delivery.
 
+### Task 5AH: retained completed-task proof inside shared recovery admission
+
+Continue the approved shared-admission design and the already selected inline
+execution. Do not reopen approach/execution-mode approval. The next cleanup
+intent must be based on a retained original native proof, not a one-shot JSON
+report whose handles have already closed. This task joins the two existing
+mechanisms; it does not introduce another lock, recovery state machine or
+permission bypass. Keep standalone read-only inspection unchanged.
+
+**Files and boundaries:**
+- Create `scripts/deployment/windows-task-completion-proof.mjs`: strict
+  immutable observation capture and original-child proof client. Opening
+  requires an actual same-control admission context; the client never owns
+  or closes its caller's admission.
+- Create `scripts/deployment/windows-task-completion-controller.ps1`: bounded
+  check/close transport around the existing native proof, tied to the original
+  requesting Node process. It acquires no second admission handle and grants
+  no task mutation or lock-release authority.
+- Modify `scripts/deployment/windows-task-controller.mjs`: export its existing
+  strict `captureActivatedRuntime` helper instead of duplicating that schema.
+- Create `tests/deployment-windows-completion-session.mjs`: genuine retained
+  proof, admission contention, forged/foreign/closed context and original
+  controller-loss cases, using the existing completed native runtime.
+- Modify `tests/deployment-windows-task-completion-proof-cases.ps1`: invoke
+  the new test only after the existing independent native proof succeeds,
+  before its deliberate state/receipt/policy/listener changes.
+- Modify `scripts/deployment/saved-worker-engine.mjs` and
+  `tests/deployment-saved-worker.test.mjs`: add both new production files to
+  the exact saved dependency closure. Installed runtime helpers stay nine.
+
+- [ ] **Step 1: publish the real failing invocation before implementation.**
+
+  The native driver invokes the following file after its first `Observe`.
+  Use the selected `node` and current `$pwsh`; propagate a nonzero exit.
+
+  ```powershell
+  & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-completion-session.mjs') $Control $pwsh
+  Assert ($LASTEXITCODE -eq 0) 'Admitted completed-task proof session failed'
+  ```
+
+  Initial test file:
+
+  ```javascript
+  import assert from 'node:assert/strict';
+  import { withWindowsAdmission } from '../scripts/deployment/windows-admission.mjs';
+  import { acquireLock } from '../scripts/deployment/state.mjs';
+  import {
+    openWindowsTaskCompletionProof, assertWindowsTaskCompletionProof,
+  } from '../scripts/deployment/windows-task-completion-proof.mjs';
+  const [control, pwsh] = process.argv.slice(2);
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    await assert.rejects(openWindowsTaskCompletionProof({
+      control, pwsh, admission: Object.freeze({ check: async () => {} }),
+    }), /Original retained Windows admission/);
+    const proof = await openWindowsTaskCompletionProof({ control, pwsh, admission });
+    try {
+      assert.equal(proof.observation.status, 'observed');
+      assert.equal(proof.observation.mutationAuthority, false);
+      assert.equal(proof.observation.lease, 'released');
+      assert.ok(Object.isFrozen(proof) && Object.isFrozen(proof.observation)
+        && Object.isFrozen(proof.observation.runtime) && Object.isFrozen(proof.observation.providers));
+      assert.deepEqual(await assertWindowsTaskCompletionProof(control, proof, admission), proof.observation);
+      await assert.rejects(assertWindowsTaskCompletionProof(control, { ...proof }, admission),
+        /Original retained completed-task proof/);
+      await assert.rejects(assertWindowsTaskCompletionProof(`${control}-foreign`, proof, admission),
+        /Original retained completed-task proof/);
+      await assert.rejects(acquireLock(control, { pwsh }),
+        error => /acquire\/busy/.test(error.diagnostic ?? ''));
+    } finally { await proof.close(); }
+    await assert.rejects(proof.check(), /Completed-task proof unavailable/);
+    await proof.close();
+    await admission.check();
+  });
+  console.log('PASS: completed-task proof retains native evidence inside original shared admission without mutation');
+  ```
+
+- [ ] **Step 2: capture the causal Actions failure.**
+
+  Push the test/driver/plan commit to `feat/deployment-backup`. In the existing
+  `Native Windows completed task proof` job, require the already working
+  completion and fresh native observation to finish, then capture the missing
+  `windows-task-completion-proof.mjs` import. Only cancel this characterized
+  causal run; the accepted `b08a6fe` run is already complete.
+
+- [ ] **Step 3: implement the strict observation boundary.**
+
+  Export the existing `captureActivatedRuntime` function. In the new client,
+  use this capture without changing its accepted runtime fields:
+
+  ```javascript
+  export function captureWindowsTaskCompletionProof(value) {
+    const result = captureWorkerFields(value, [
+      'status', 'mutationAuthority', 'operationId', 'taskName', 'stateSha256',
+      'completionSha256', 'runtime', 'port', 'providers', 'lease',
+    ], 'completed task proof');
+    if (result.status !== 'observed' || result.mutationAuthority !== false
+      || result.lease !== 'released'
+      || typeof result.operationId !== 'string'
+      || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(result.operationId)
+      || result.operationId === '00000000-0000-0000-0000-000000000000'
+      || typeof result.taskName !== 'string'
+      || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(result.taskName)
+      || ![result.stateSha256, result.completionSha256].every(hash =>
+        typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash))
+      || !Number.isSafeInteger(result.port) || result.port < 1 || result.port > 65535) {
+      throw new Error('Invalid completed-task proof observation.');
+    }
+    validateReadinessProviders(result.providers);
+    return Object.freeze({ ...result, runtime: captureActivatedRuntime(result.runtime),
+      providers: Object.freeze([...result.providers]) });
+  }
+  ```
+
+  Client imports `path`, `fileURLToPath`, `isDeepStrictEqual`, the existing
+  `processIdentity`, `captureWorkerFields`, `windowsControllerTransport`,
+  `validateReadinessProviders`, `captureActivatedRuntime` and
+  `assertWindowsAdmission`. Keep a module-private WeakMap of actual returned
+  proof objects to `{ control, admission }`. The public retained assertion is:
+
+  ```javascript
+  export async function assertWindowsTaskCompletionProof(control, proof, admission, options) {
+    const binding = proofs.get(proof);
+    if (!binding || binding.control !== control || binding.admission !== admission) {
+      throw new Error('Original retained completed-task proof does not match admission.');
+    }
+    return proof.check(options);
+  }
+  ```
+
+  `openWindowsTaskCompletionProof({ control, pwsh, admission, signal })`
+  first checks abort, Windows platform, explicit canonical absolute paths
+  (maximum 4096 characters, no NUL/CR/LF), and actual admission. Capture the
+  original Node identity, then use `windowsControllerTransport` with:
+
+  ```javascript
+  args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
+    '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity]
+  ```
+
+  The ready frame has exactly
+  `type,pid,processIdentity,control,controllerIdentity,value`. Verify native
+  PID against the original child, creation identity independently through
+  `processIdentity(child.pid)`, control and original Node identity. Capture
+  `value` using the function above, freeze native identity and check the
+  caller's admission again before returning.
+
+  Each request uses strictly increasing IDs and only `check` or `close`.
+  For check, verify admission before and after the original native reply,
+  capture its observation and require `isDeepStrictEqual` with the initial
+  observation. Require exact reply fields `id,type,value,processIdentity`,
+  the original native identity and a still-live original child. Close expects
+  the literal value `close` and a successful bounded child exit. Close must
+  work even if admission/proof checks have failed; do not require a new
+  health observation to dispose retained resources.
+
+  Use the transport's existing abandon/diagnostic/exit handling and the
+  established busy/closed/failure states. Readiness waits at most 60 seconds,
+  requests at most 30 seconds, exit uses the existing 15-second bound.
+  Request failures poison the proof and abandon only its original child.
+  Refusals use `DEPLOYMENT_WINDOWS_COMPLETION_PROOF_REFUSED`,
+  `recoveryAllowed:false` and the message `Completed-task proof unavailable;
+  retain operation and recovery evidence.` Return and register only:
+
+  ```javascript
+  Object.freeze({
+    identity, observation,
+    check: ({ signal: checkSignal } = {}) => request('check', checkSignal),
+    async close() {
+      if (busy) throw refused(new Error('Cannot close an active completed-task proof request.'));
+      if (failure) throw failure;
+      if (!closed) await request('close');
+    },
+  })
+  ```
+
+- [ ] **Step 4: retain the native proof on the original controller transport.**
+
+  The native entry takes only mandatory `Control`, `ControllerPid` and
+  `ControllerIdentity`. Compile the existing eight sources used by
+  `tests/deployment-windows-task-completion-proof.ps1`; dot-source the
+  production proof. No admission partial or second lock acquisition is
+  needed: the requesting Node already owns the actual shared admission.
+
+  ```powershell
+  $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
+  $proof = Open-AgentsChatTaskCompletionProof -Control $Control
+  $observed = Assert-AgentsChatTaskCompletionProof -Context $proof
+  [Console]::Out.WriteLine((@{
+      type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+      control=$Control; controllerIdentity=$ControllerIdentity; value=$observed
+  } | ConvertTo-Json -Depth 8 -Compress))
+  [Console]::Out.Flush()
+  $sequence = 0
+  while ($true) {
+      $line = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync([Console]::In, 4096)
+      $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
+      $id = $request.id.GetInt32()
+      $method = $request.method.GetString()
+      if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close')) {
+          throw 'Invalid completed-task proof request.'
+      }
+      $sequence = $id
+      if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
+          throw 'Original completed-task proof controller changed.'
+      }
+      if ($method -ceq 'close') {
+          Close-AgentsChatTaskCompletionProof -Context $proof
+          $proof = $null
+          $value = 'close'
+      } else { $value = Assert-AgentsChatTaskCompletionProof -Context $proof }
+      [Console]::Out.WriteLine((@{
+          id=$id; type='reply'; value=$value
+          processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+      } | ConvertTo-Json -Depth 8 -Compress))
+      [Console]::Out.Flush()
+      if ($method -ceq 'close') { break }
+  }
+  ```
+
+  Wrap bootstrap/open/request/close in the same explicit staged refusal and
+  aggregated cleanup pattern as `windows-admission.ps1`. Initialize proof
+  and watch to null; always close a remaining proof and dispose the watch.
+  Surface the failed stage and base exception message to stderr; exit 1 on
+  primary or cleanup failure. Never delete evidence or stop the runtime.
+
+- [ ] **Step 5: exercise original-controller loss and refusal boundaries.**
+
+  Extend the native Node fixture with an IPC child mode. The child obtains
+  admission, opens proof, sends both original native identities to its parent
+  and remains alive. The parent terminates only that original Node child,
+  waits for its exit, then polls `processIdentity` for both captured native
+  identities with a 20-second bound. Require both to be absent/replaced
+  without terminating a reused PID. Reacquire admission and open a new
+  original proof. The surrounding PowerShell fixture verifies unchanged
+  evidence hashes, task policy and original runtime/listener survival.
+
+  Also assert a foreign control cannot use the real admission; a forged
+  proof cannot use its real methods to pass the WeakMap check; and closed
+  proof is unavailable while the caller's admission remains usable.
+  Use actual IPC/stdio, not an injected success callback or fake native
+  admission. Keep existing malformed-frame and original native proof
+  refusal coverage intact.
+
+- [ ] **Step 6: complete saved closure and Actions acceptance.**
+
+  Add `windows-task-completion-proof.mjs` and
+  `windows-task-completion-controller.ps1` beside the existing proof entries
+  in both saved-helper inventories. Push implementation with the standard
+  co-author trailer; inspect the native proof job and preserve its full
+  25-job regression. No local execution. Mark only this integration accepted
+  after all jobs pass; durable intent publication, receipt retirement and
+  interrupted-prefix recovery are still explicit subsequent work.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
