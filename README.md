@@ -197,7 +197,7 @@ passed at `2c1aafc`. Expanded native update, restore/custom-permission and
 originally-disabled cases passed at `c7de917`, including refusals for live
 controllers, changed evidence/policy and same-process listener rebinding.
 The expanded full regression also passed all 25 jobs.
-Windows shared admission is being implemented using a private, non-inherited
+Windows shared admission uses a private, non-inherited
 exclusive file handle, following the standard package-manager locking pattern.
 The primitive preserves durable operation evidence and does not itself permit
 recovery or unlock. Native admission and the three completed-task proof
@@ -207,8 +207,10 @@ including competing processes, invalid contexts/requests and controller loss.
 Its full regression also passed all 25 jobs. Shared admission is now wired
 into Windows operation-lock acquisition/release and saved worker-retirement
 recovery, with explicit PowerShell selection and retained-context checks.
-This entrypoint integration is awaiting Actions acceptance; admission never
-grants authority to bypass durable evidence. Mutating Windows controllers
+This entrypoint integration passed all 25 Actions jobs at `b08a6fe`, including
+real Windows application/data restoration and native publication with generated
+temporary paths beyond MAX_PATH. Admission never grants authority to bypass
+durable evidence. Mutating Windows controllers
 and their test fixtures use private creation-time ownership rather than
 repairing arbitrary existing permissions.
 Interrupted completion/recovery and public Windows integration remain unaccepted.

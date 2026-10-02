@@ -8825,7 +8825,7 @@ exception; the cause is not yet established. Keep this regression running.
 - [x] Run the native case in Actions and compare its actual error with the
   actual-build failure before changing native path handling. Do not shorten
   the private controller namespace or relax owner/ACL/path/hash admission.
-- [ ] After the root-cause fix, accept all 25 jobs, including actual Windows
+- [x] After the root-cause fix, accept all 25 jobs, including actual Windows
   startup and stopped-database restoration; the latest fully accepted
   baseline remains `c1f90f1` / `37032247968`.
 
@@ -8846,6 +8846,17 @@ digest and file checks; preserve same-directory, no-overwrite publication
 and `MOVEFILE_WRITE_THROUGH`. Do not shorten private roots, change machine
 policy, enable replacement or claim general long public-path support.
 The focused case and complete actual application regression must now pass.
+
+Fix `b08a6fe` / `37042579313` passed the focused native publication at
+17:45:41 UTC, actual Windows application job `110956549448` at 17:49:26 UTC
+and all native completion/admission cases in `110956549631`. The application
+performed three prebuilt Scheduled Task starts with authenticated create,
+mutation and restored data, original listener settlement before data access,
+and stopped SQLite restoration. Task-options job `110956549685` also passed,
+including the private token fixture without owner/ACL repair. Full regression
+completed **25/25 success**, observed 18:07:18 UTC. Task 5AG is accepted;
+`b08a6fe` is the new fully accepted baseline. This is not public Windows
+recovery, task-evidence retirement or complete deployment delivery.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
