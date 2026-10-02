@@ -8039,28 +8039,28 @@ checks around authenticated API operations. Full regression remains running.
 new `deployment-windows-readiness-cases.mjs` and existing actual activation
 fixture/Node driver.
 
-- [ ] After exact active-context checks, expose bounded `context.listener({
+- [x] After exact active-context checks, expose bounded `context.listener({
   port, signal })`: retain the original native listener in the existing
   checkable/disposable authority context. Return explicit `not-ready` only
   for the native absent-listener exception. A retained listener must never
   be silently replaced or switched to a different port.
-- [ ] Add `verifyWindowsReadiness` and `waitWindowsReadiness`. Validate admitted
+- [x] Add `verifyWindowsReadiness` and `waitWindowsReadiness`. Validate admitted
   providers before touching the runtime; obtain native listener authority
   before HTTP and recheck it afterward. Return only endpoint readiness and
   actual generation, not deployment success or a released runtime lease.
-- [ ] Extract existing bounded HTTP/UTF-8/provider matching without changing
+- [x] Extract existing bounded HTTP/UTF-8/provider matching without changing
   Linux behavior: three-second request bound, 8 KiB headers, 64 KiB body,
   uncompressed 200 JSON, exact advertised provider IDs and valid URLs.
   Retry only absent listener/HTTP503, not malformed responses or lost owner.
-- [ ] Native activation fixture exercises successful HTTP, exactly three
+- [x] Native activation fixture exercises successful HTTP, exactly three
   startup attempts, one-attempt provider mismatch, hanging-response deadline,
   and subsequent retained-runtime check. Original task remains disabled,
   activation-state digest unchanged, and ordinary unreleased close still
   settles the same host/member.
-- [ ] Preserve the complete saved-worker/recovery import closure and actual
+- [x] Preserve the complete saved-worker/recovery import closure and actual
   Linux readiness regression. Capture the missing Windows readiness module
   before implementation publication, then require native and full acceptance.
-- [ ] Leave permanent task-policy restoration, verifying-state transition and
+- [x] Leave permanent task-policy restoration, terminal-state transition and
   health-gated lease release to the next transaction completion step.
 
 The implementation retains the native listener in `Context.Files`, so all
@@ -8094,8 +8094,11 @@ run and publishing implementation `469a38c`; implementation acceptance is
 pending Actions.
 
 Task 5AA implementation `839ac62` / `37006419246` native `110835994597`
-passed all activation/listener/readiness cases. Full regression remains in
-progress; preserve it.
+passed all activation/listener/readiness cases. Full regression completed
+**24/24 success**, observed at 12:47 UTC. Actual Windows application job
+`110835994211` passed authenticated create/mutate/stopped-data restoration
+with the shared HTTP/provider probe; all saved Linux and public lifecycle
+gates passed. This is the latest fully accepted baseline.
 
 #### Task 5AB: health-gated native task completion
 
@@ -8155,9 +8158,11 @@ activation fixture and new completion scenarios in the native workflow.
 - [ ] Reopening/cold completion, cross-account permissions and complete
   source/artifact acceptance remain separately required before public wiring.
 
-Task 5AB causal `a6a1636` / `37007154332` is queued behind the preserved
-Task 5AA full regression. The local implementation is not yet published or
-accepted. Its nine immutable completion receipts retain the activating state,
+Task 5AB causal `a6a1636` / `37007154332`, native `110843214497`, failed
+at 12:50:37 UTC with `ERR_MODULE_NOT_FOUND` for `windows-task-completion.mjs`
+after genuine guarded activation and independent receipt checks. Captured
+this result before cancellation and publication of implementation `3fb918b`.
+Implementation acceptance remains pending. Its nine immutable completion receipts retain the activating state,
 terminal digest, original runtime and listener, staged no-automation action,
 original permanent task definition and enabled/security policy. Automation
 stays suppressed until the authenticated lease release has completed.
