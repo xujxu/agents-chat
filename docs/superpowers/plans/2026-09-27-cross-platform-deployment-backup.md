@@ -9762,6 +9762,84 @@ at 20:30:50 UTC. The initial `cf54be0` run was retained through all jobs:
 checkpoint still preserves all receipts and does not implement partial cleanup
 or operation unlock.
 
+### Task 5AL: preserve ordinary ownership guards after task receipt cleanup
+
+Before a consumer can remove the task-maintenance directory, both durable
+root records must independently prevent ordinary admission, unlock and
+worker-retirement recovery. Otherwise directory removal would make remaining
+Windows retirement evidence invisible to the existing maintenance checks.
+Preserve read-only reconciliation and the existing Linux live-retirement
+exception; it must not exempt Windows task-retirement evidence.
+
+**Files:**
+- Modify `scripts/deployment/state.mjs`: one shared entry predicate for
+  `requireNoServiceMaintenance` and read-only `reconcileInterruptedOperation`.
+- Modify `tests/deployment-state.test.mjs`: test each root marker without
+  the task-maintenance directory, including empty/truncated marker contents.
+- Modify `tests/deployment-windows-admission-state.mjs`: actual native
+  admission, lock release, fresh acquisition and worker-recovery refusals.
+- Update `README.md` to state the remaining root-marker barrier.
+
+- [ ] **Step 1: publish the missing root-marker guard cases.**
+
+  For each of `task-retirement.json` and
+  `task-retirement-checkpoint.json`, obtain an ordinary lock, write only the
+  root marker, then require:
+
+  ```javascript
+  await assert.rejects(releaseLock(root, lock), /maintenance/i);
+  await assert.rejects(requireNoServiceMaintenance(root, { allowLiveRetirement: true }), /maintenance/i);
+  assert.equal((await reconcileInterruptedOperation(root)).status, 'blocked');
+  assert.deepEqual(await readFile(ownerPath), originalOwnerBytes);
+  ```
+
+  A second fresh control with only an empty root marker must refuse
+  acquisition and report blocked rather than idle. Run through the existing
+  Actions contracts, capture the missing rejection and preserve the accepted
+  `cb7a2aa` baseline. Do not run tests locally.
+
+- [ ] **Step 2: share the exact maintenance predicate.**
+
+  Add and use:
+
+  ```javascript
+  function serviceMaintenanceEntry(name, allowLiveRetirement = false) {
+    return name.startsWith('service-')
+      || ['task-maintenance', 'task-retirement.json', 'task-retirement-checkpoint.json'].includes(name)
+      || (!allowLiveRetirement && name === 'live-retirement.json');
+  }
+  ```
+
+  `requireNoServiceMaintenance` checks
+  `(await readdir(directory)).some(name => serviceMaintenanceEntry(name, allowLiveRetirement))`.
+  Read-only reconciliation uses the same predicate with no exception before
+  interpreting owner/state. Keep the existing refusal error and blocked
+  response, including their operation/phase details. Do not inspect marker
+  contents, remove evidence, create admission resources during inspection,
+  or introduce a task-retirement bypass.
+
+- [ ] **Step 3: exercise the actual Windows entrypoints.**
+
+  Extend the retained native-admission fixture. For each root marker,
+  acquire an ordinary lock under the actual admission, save its owner bytes,
+  create the marker, and require release/reconciliation refusal. Require
+  `recoverRetirement({control,...options,admission})` to return
+  `DEPLOYMENT_RECOVERY_UNSETTLED` caused by the maintenance guard, without
+  creating recovery evidence or changing the original owner bytes.
+
+  Remove only the fixture marker, release the original fixture lock, then
+  recreate an empty marker with no lock/directory. Fresh acquisition must
+  refuse and reconciliation must remain blocked. Clean up that named fixture
+  marker and confirm ordinary admission still works. Keep all existing
+  competing/forged/foreign-admission and non-mutating inspection tests.
+
+- [ ] **Step 4: require native and complete Actions acceptance.**
+
+  Push the implementation and retain its full regression. Read native
+  admission-state output and require both platform contracts plus all
+  remaining jobs to pass. This wires a necessary cleanup barrier only;
+  actual exact/prefix retirement and final worker/unlock handoff follow.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

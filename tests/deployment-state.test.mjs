@@ -5,7 +5,7 @@ import path from 'node:path';
 import { temporaryDeployment, acquireLock, releaseLock } from './deployment-fixture.mjs';
 import {
   nextPhase, recoveryAdvice, loadState, writeState,
-  reconcileInterruptedOperation,
+  reconcileInterruptedOperation, requireNoServiceMaintenance,
 } from '../scripts/deployment/state.mjs';
 
 test('service maintenance evidence blocks lock release, fresh admission and idle reporting', async t => {
@@ -31,6 +31,24 @@ test('native task maintenance evidence blocks unlock, new admission and automati
   await assert.rejects(acquireLock(other, { project: other, operationId: 'new' }), /maintenance/i);
   assert.equal((await reconcileInterruptedOperation(other)).status, 'blocked');
 });
+
+for (const marker of ['task-retirement.json', 'task-retirement-checkpoint.json']) {
+  test(`${marker} blocks ordinary ownership even without the task receipt directory`, async t => {
+    const root = await temporaryDeployment(t);
+    const lock = await acquireLock(root, { project: root, operationId: 'task-retirement' });
+    const ownerPath = path.join(root, 'lock', 'owner.json');
+    const owner = await readFile(ownerPath);
+    await writeFile(path.join(root, marker), '{"version":1,');
+    await assert.rejects(releaseLock(root, lock), /maintenance/i);
+    await assert.rejects(requireNoServiceMaintenance(root, { allowLiveRetirement: true }), /maintenance/i);
+    assert.equal((await reconcileInterruptedOperation(root)).status, 'blocked');
+    assert.deepEqual(await readFile(ownerPath), owner);
+    const other = await temporaryDeployment(t);
+    await writeFile(path.join(other, marker), '');
+    await assert.rejects(acquireLock(other, { project: other, operationId: 'new' }), /maintenance/i);
+    assert.equal((await reconcileInterruptedOperation(other)).status, 'blocked');
+  });
+}
 
 test('prior-runtime-restored is a failed pre-source outcome, never a new deployment acceptance', async t => {
   for (const phase of ['stopped', 'copying', 'rotating', 'backup-ready']) {
