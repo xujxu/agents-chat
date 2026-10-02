@@ -1,20 +1,35 @@
-function Confirm-AgentsChatTaskReplacementPolicy([string]$Before, [string]$After) {
+function Confirm-AgentsChatTaskReplacementPolicy([string]$Before, [string]$After, [hashtable]$Context) {
+    $Context.Stage = 'replacement-policy-xml'
     $original = [xml]$Before
     $candidate = [xml]$After
     $namespaces = [Xml.XmlNamespaceManager]::new($original.NameTable)
     $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
     foreach ($document in @($original, $candidate)) {
+        $Context.Stage = 'replacement-policy-inhibition'
         $enabled = $document.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
         if ($enabled.Count -ne 1 -or $enabled[0].InnerText -cne 'false') {
             throw 'Replacement must retain explicit task inhibition.'
         }
         foreach ($name in @('Command', 'Arguments', 'WorkingDirectory')) {
+            $Context.Stage = 'replacement-policy-action'
             $nodes = $document.SelectNodes("/t:Task/t:Actions/t:Exec/t:$name", $namespaces)
             if ($nodes.Count -ne 1) { throw 'Replacement requires one complete literal action.' }
             $nodes[0].InnerText = 'normalized'
         }
     }
-    if ($original.OuterXml -cne $candidate.OuterXml) { throw 'Unrelated replacement task policy changed.' }
+    if ($original.OuterXml -cne $candidate.OuterXml) {
+        $Context.Stage = 'replacement-policy-root'
+        foreach ($name in @('RegistrationInfo', 'Triggers', 'Principals', 'Settings', 'Actions')) {
+            $beforeNodes = $original.SelectNodes("/t:Task/t:$name", $namespaces)
+            $afterNodes = $candidate.SelectNodes("/t:Task/t:$name", $namespaces)
+            if (($beforeNodes | ForEach-Object OuterXml | ConvertTo-Json -Compress) -cne
+                ($afterNodes | ForEach-Object OuterXml | ConvertTo-Json -Compress)) {
+                $Context.Stage = "replacement-policy-$($name.ToLowerInvariant())"
+                break
+            }
+        }
+        throw 'Unrelated replacement task policy changed.'
+    }
 }
 
 function Write-AgentsChatTaskReplacementReceipt([hashtable]$Context, [string]$Phase) {
@@ -61,26 +76,32 @@ function Publish-AgentsChatTaskReplacement {
                 [StringComparison]::OrdinalIgnoreCase)) { throw 'Replacement requires a distinct installed bundle.' }
         $candidate = [Deployment.WindowsRuntimeHost]::Open($Configuration, $Sha256, $bundle)
         $Context.Files.Add($candidate)
-        $Context.Stage = 'replacement-definition'
+        $Context.Stage = 'replacement-current-policy'
         $task = $Context.Folder.GetTask($Context.Data.taskName)
         if ([string]$task.Xml -cne $Context.Definition -or
             [string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor) {
             throw 'Original task changed before replacement.'
         }
+        $Context.Stage = 'replacement-action-shape'
         $definition = $task.Definition
         if ($definition.Actions.Count -ne 1 -or [int]$definition.Actions.Item(1).Type -ne 0 -or
             [int]$definition.Principal.LogonType -notin @(2, 3)) { throw 'Unsupported replacement task policy.' }
+        $Context.Stage = 'replacement-executable'
         $process = [Diagnostics.Process]::GetCurrentProcess()
         try { $powershell = $process.MainModule.FileName }
         finally { $process.Dispose() }
         $action = $definition.Actions.Item(1)
+        $Context.Stage = 'replacement-action-file'
         $action.Path = $powershell
         $hostFile = Join-Path $bundle 'windows-runtime-host.ps1'
+        $Context.Stage = 'replacement-action-arguments'
         $action.Arguments = "-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$Configuration`" -Sha256 $Sha256"
+        $Context.Stage = 'replacement-action-directory'
         $action.WorkingDirectory = $bundle
+        $Context.Stage = 'replacement-definition-xml'
         $requestedDefinition = [string]$definition.XmlText
         if ($requestedDefinition.Length -gt 262144) { throw 'Replacement definition exceeds admission limits.' }
-        Confirm-AgentsChatTaskReplacementPolicy $Context.Definition $requestedDefinition
+        Confirm-AgentsChatTaskReplacementPolicy $Context.Definition $requestedDefinition $Context
         $Context.ReplacementConfiguration = $Configuration
         $Context.ReplacementConfigurationSha256 = $Sha256
         $Context.ReplacementDefinition = $requestedDefinition
@@ -108,6 +129,7 @@ function Publish-AgentsChatTaskReplacement {
         return [pscustomobject]@{ replaced=$true; inhibited=$true }
     } catch {
         $Context.Poisoned = $true
+        [Console]::Error.WriteLine("Task replacement diagnostic: line=$($_.InvocationInfo.ScriptLineNumber); hresult=$($_.Exception.GetBaseException().HResult).")
         throw "Task maintenance refused: $($Context.Stage)."
     } finally { $Context.Busy = $false }
 }

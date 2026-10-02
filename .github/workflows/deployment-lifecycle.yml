@@ -308,6 +308,9 @@ jobs:
       - name: Publish private installed runtime bundle without source ACL repair
         shell: pwsh
         run: ./tests/deployment-windows-runtime-bundle.ps1
+      - name: Publish disabled replacement with original transaction authority
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace
       - name: Probe private Node file creation with a distinct original-Job child token
         shell: pwsh
         run: ./tests/deployment-windows-controller-token.ps1
@@ -375,9 +378,6 @@ jobs:
       - name: Refuse replacement before original retirement
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-early
-      - name: Publish disabled replacement with original transaction authority
-        shell: pwsh
-        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace
       - name: Publish disabled replacement for restore
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-restore

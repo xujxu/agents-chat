@@ -7780,6 +7780,15 @@ before implementation validation. `d0104bb` implements shared read-only
 candidate admission, disabled registration and durable replacement context;
 native replacement and full regression are not yet accepted.
 
+Implementation `500716f` / `36992268112`, native `110791253701`, passed
+shared read-only candidate admission and replacement-before-retirement refusal.
+Positive replacement failed at `replace/replacement-definition`, before
+registration. Add bounded stage/HRESULT/source-line diagnostics and compare
+only fixed task-policy section names when reporting an XML mismatch; do not
+emit configuration/XML contents or relax policy comparison. Move that
+independent positive scenario immediately after bundle admission to shorten
+feedback; preserve every existing scenario.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
