@@ -10199,7 +10199,7 @@ worker operation, settled journals and the original saved helper manifest.
   receipt retirement checks. Captured the job log and cancelled only this
   characterized causal run.
 
-- [ ] **Step 2: retain, validate and publish one native manifest.**
+- [x] **Step 2: retain, validate and publish one native manifest.**
 
   First retain private worker-operation/journal files, the helper directory
   and every original helper/manifest file under the existing native task
@@ -10227,7 +10227,7 @@ worker operation, settled journals and the original saved helper manifest.
   `task-retirement.json`, `task-retirement-checkpoint.json`, `lock\owner.json`,
   and empty `lock`. No caller-supplied deletion path or count.
 
-- [ ] **Step 3: hand off the same native controller and reopen only its prefix.**
+- [x] **Step 3: hand off the same native controller and reopen only its prefix.**
 
   Open/check the deployment-retirement scope from the published manifest
   before closing the task-retirement scope. The old facade must thereafter
@@ -10243,7 +10243,7 @@ worker operation, settled journals and the original saved helper manifest.
   Node/native pair. Reject holes, reappearing entries, identity/ACL/content
   changes and unknown files in the owned namespaces.
 
-- [ ] **Step 4: retire exact entries and commit cleanup by removing the manifest.**
+- [x] **Step 4: retire exact entries and commit cleanup by removing the manifest.**
 
   Check original runtime and remaining inventory before/after each mutation.
   Release only the target's read handle and use the accepted native file or
@@ -10259,7 +10259,7 @@ worker operation, settled journals and the original saved helper manifest.
   entry count. Keep admission held until acknowledgement/child settlement.
   A missing manifest alone is not permission to adopt another runtime.
 
-- [ ] **Step 5: accept the whole handoff and genuine three-scenario regression.**
+- [x] **Step 5: accept the whole handoff and genuine three-scenario regression.**
 
   A held child begins deployment retirement and deletes seven entries, so
   the maintenance directory and part of the original worker helper closure
@@ -10290,6 +10290,21 @@ worker operation, settled journals and the original saved helper manifest.
   lock; release keeps the existing ownership check and extends its existing
   worker-evidence barrier to Windows marker case aliases. No duplicate early
   release barrier or assertion relaxation.
+
+  **Acceptance:** `85993045f83e659411869e70cb37110370318c67 /
+  37076374627` completed **26/26 success at 23:52:43 UTC**. Native job
+  `111070957330` passed update at **23:31:59**, restore at **23:35:31**, and
+  originally disabled task at **23:39:09 UTC**. Each scenario includes both
+  destructive crash prefixes, independent saved-helper reopening, final
+  native manifest commit, child settlement, unchanged original runtime and
+  application state, preserved unrelated bundles, and fresh ordinary lock
+  acquisition/release. Both contract jobs and real application builds passed.
+  The first implementation run finished with 23 successes and only the three
+  characterized failures above; it was not cancelled.
+
+  This accepts post-completion cleanup and final unlock, not interrupted
+  pre-completion activation/reboot recovery or public Windows composition.
+  Those remain required before deployment PR creation or voice integration.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

@@ -251,16 +251,17 @@ empty task receipt directory, state, lock and both root records, and does not
 perform final worker cleanup or unlock.
 The native empty-directory retirement handle passed its Windows refusal cases
 and the full 26-job regression at `0a1500a / 37071297219`.
-A final-cleanup consumer is implemented but not yet accepted: it retains and
+A final-cleanup consumer now retains and
 validates the original sealed worker operation, publishes a private version 3
 `worker-retirement.json`, and transfers the same native controller. Its fixed
 entry list covers the empty task directory, settled worker evidence, saved
 worker helpers, task markers and old lock. Cold reopening uses the retained
 manifest and an independent saved recovery engine, never directory absence
 alone. Ordinary ownership stays blocked until the final manifest is retired.
-Genuine worker/task setup exposed the missing consumer at
-`8d3d1e3 / 37074934655`; complete cleanup and crash recovery remain pending
-Actions acceptance.
+All three native scenarios (update, restore and originally disabled task),
+including two destructive crash prefixes, final unlock and preservation of
+unrelated runtime bundles, passed at `8599304 / 37076374627`. The full
+26-job Linux/Windows regression also passed.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
