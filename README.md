@@ -146,7 +146,7 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `52b5a39` (run `36996890010`). This also accepts the
+creation, passed at `ad311cf` (run `36999643657`). This also accepts the
 production native controller process: literal arguments and bidirectional
 stdio, unchanged caller token, private child-file ownership, retained working
 directory, and original-Job descendant settlement without stopping independent
@@ -168,9 +168,9 @@ health. Guarded transactional replacement activation also passed native
 update/restore and controller-loss cases (`ad311cf`, job `110814478038`):
 temporary demand-start suppresses triggers and restart-on-failure, the new
 original task/Job is bound to private readiness, and the task is disabled
-again while its runtime lease remains armed. Full regression for this step
-is pending; health-gated permanent policy restoration and transaction release
-remain incomplete.
+again while its runtime lease remains armed. All 24 regression jobs passed
+for this step; health-gated permanent policy restoration and transaction
+release remain incomplete.
 Integration into the public deployment entrypoints remains pending.
 The isolated real Windows application job also passed in that run:
 three prebuilt managed starts, authenticated chat

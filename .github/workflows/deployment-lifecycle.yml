@@ -402,6 +402,12 @@ jobs:
       - name: Retain and release original activation controller with bounded lifetime
         shell: pwsh
         run: ./tests/deployment-windows-runtime-lease.ps1
+      - name: Retain native IPv4 listener bind time and original Job ownership
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario listener-v4
+      - name: Retain native dual-stack listener bind time and original Job ownership
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario listener-v6
       - name: Activate exact guarded replacement in the native update transaction
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate

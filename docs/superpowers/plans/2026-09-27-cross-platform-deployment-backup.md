@@ -7940,6 +7940,46 @@ only the valid state's timestamp changes after activation; the refused
 bridge must exit and settle that same guarded host/member. This prevents
 passing by testing only a malformed state or a generic timeout.
 
+`ad311cf` / `36999643657` completed **24/24 success** at 11:30 UTC.
+This is the new full accepted baseline. Follow-up `99a985e` / `37000065119`
+is running; its native activation job is `110819509658`.
+
+#### Task 5Z: retained native Windows listener identity before health release
+
+**Files:** new `scripts/deployment/WindowsRuntimeListener.cs` and
+`tests/deployment-windows-runtime-listener-cases.ps1`; actual installed-host
+fixture, actual prebuilt application fixture, native activation job and saved
+helper inventory.
+
+- [ ] Require `WindowsRuntimeListener.Retain(generation, ownerPid,
+  ownerIdentity, launcherPid, port)` and `Check()` on actual S4U-owned IPv4 and
+  dual-stack listeners. Retain the original host and listener process handles,
+  their creation identities, original Job membership and kernel TCP binding
+  timestamp; releasing the observation must not stop the application.
+- [ ] Use `GetExtendedTcpTable` with `TCP_TABLE_OWNER_MODULE_LISTENER` for
+  both address families. Bound allocations, row counts and table-growth
+  retries; validate struct alignment and lengths. Require exactly one
+  loopback-accessible listener across both families and explicit nonzero
+  bind timestamp. Only absent listener is retryable, never wrong ownership,
+  ambiguous port, changed PID/bind time or invalid native observations.
+- [ ] Exercise unrelated listener refusal, cross-family ambiguity, wrong host
+  identity, same-process close/rebind and stopped original Job. Use the
+  actual Node listener rather than a mocked table and verify that refusals
+  do not stop unrelated work.
+- [ ] Wire this observation around the existing real application/API fixture
+  and retain its complete saved helper closure. Capture the missing-helper
+  causal failure in Actions, then require native and full acceptance.
+- [ ] Subsequent health composition must reuse the existing bounded HTTP and
+  admitted-provider checks from `linux-readiness.mjs`, not duplicate them.
+  Native listener ownership by itself does not permit lease release or mark
+  the deployment successful.
+
+Microsoft documents `liCreateTimestamp` as the FILETIME of the context bind,
+not the process creation time:
+`https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcprow_owner_module`
+and `.../ns-tcpmib-mib_tcp6row_owner_module`. The table API is documented at
+`https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable`.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

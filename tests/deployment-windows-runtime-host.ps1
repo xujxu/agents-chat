@@ -5,7 +5,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     'transaction-replace-variable', 'transaction-replace-argument',
     'transaction-activate', 'transaction-activate-restore', 'transaction-activate-exit', 'transaction-activate-early',
     'transaction-activate-state-change',
-    'guarded-owner-exit', 'guarded-release')][string]$Scenario = 'stop')
+    'guarded-owner-exit', 'guarded-release', 'listener-v4', 'listener-v6')][string]$Scenario = 'stop')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -13,11 +13,12 @@ $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment
 $helpers = @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
     'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeLease.cs', 'WindowsRuntimeHost.cs',
     'windows-worker-launcher.ps1', 'windows-runtime-host.ps1')
-Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
+$observerHelpers = if ($Scenario.StartsWith('listener-')) { @((Join-Path $source 'WindowsRuntimeListener.cs')) } else { @() }
+Add-Type -Path (@((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
     (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'),
     (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsRuntimeLease.cs'), (Join-Path $source 'WindowsRuntimeHost.cs'),
     (Join-Path $source 'WindowsControllerToken.cs'),
-    (Join-Path $source 'WindowsControllerProcess.cs'))
+    (Join-Path $source 'WindowsControllerProcess.cs')) + $observerHelpers)
 . (Join-Path $source 'windows-task-owner-binding.ps1')
 . (Join-Path $source 'windows-runtime-bundle.ps1')
 function Assert([bool]$Condition, [string]$Message) {
@@ -44,6 +45,9 @@ try {
     $environment.Add('SystemRoot', $env:SystemRoot)
     $environment.Add('PATH', $env:PATH)
     $environment.Add('RUNTIME_LITERAL', 'literal %n $HOME " space')
+    if ($Scenario.StartsWith('listener-')) {
+        $environment.Add('RUNTIME_LISTENER_ADDRESS', $(if ($Scenario -ceq 'listener-v4') { '127.0.0.1' } else { '::' }))
+    }
     $bundle = New-AgentsChatRuntimeBundle -Source $source -Directory $root -File $node `
         -Arguments @((Join-Path $root 'writer.cjs'), 'literal %n $HOME " space') `
         -WorkingDirectory $root -Environment $environment
@@ -64,6 +68,21 @@ if (process.argv[2] === 'child') {
   fs.writeFileSync('writer-pid', String(process.pid));
   fs.writeFileSync('writes', 'x');
   setInterval(() => fs.appendFileSync('writes', 'x'), 10);
+  if (process.env.RUNTIME_LISTENER_ADDRESS) {
+    const server = require('node:http').createServer((req, res) => res.end('owned-listener'));
+    const save = file => fs.writeFileSync(file, JSON.stringify({ pid: process.pid, port: server.address().port }));
+    server.listen({ port: 0, host: process.env.RUNTIME_LISTENER_ADDRESS, ipv6Only: false }, () => save('listener.json'));
+    let rebinding = false;
+    setInterval(() => {
+      if (!rebinding && fs.existsSync('listener-rebind')) {
+        rebinding = true;
+        const port = server.address().port;
+        server.close(() => setTimeout(() => {
+          server.listen({ port, host: process.env.RUNTIME_LISTENER_ADDRESS, ipv6Only: false }, () => save('listener-rebound.json'));
+        }, 100));
+      }
+    }, 20);
+  }
 } else {
   fs.writeFileSync('literal.json', JSON.stringify([process.argv[2], process.env.RUNTIME_LITERAL]));
   const child = require('node:child_process').spawn(process.execPath, [__filename, 'child'],
@@ -207,6 +226,9 @@ if (process.argv[2] === 'child') {
         }
         Write-Output "PASS: $Scenario binds actual release peer and preserves original runtime Job ownership across controller exit"
         return
+    }
+    if ($Scenario.StartsWith('listener-')) {
+        & (Join-Path $PSScriptRoot 'deployment-windows-runtime-listener-cases.ps1') -Root $root -Ready $ready -Owner $owner -Scenario $Scenario
     }
     if ($Scenario -eq 'durable-stop') {
         & (Join-Path $PSScriptRoot 'deployment-windows-task-maintenance-cases.ps1') -Root $root -TaskName $taskName `
