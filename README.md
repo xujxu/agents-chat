@@ -235,7 +235,8 @@ The retained full proof can also prepare a private runtime checkpoint bound
 to that intent: exact task-policy/security hashes, original listener binding,
 installed configuration and retired process identities. It preserves all
 receipts and is intended for subsequent partial-cleanup recovery; native
-checkpoint acceptance and its cleanup consumer are not yet complete.
+checkpoint acceptance passed all three scenarios and the full 25-job
+regression at `cb7a2aa`. Its partial-cleanup consumer is not yet complete.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
