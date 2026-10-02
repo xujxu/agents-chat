@@ -119,7 +119,18 @@ try {
     try { [Deployment.WindowsPrivateFile]::CopyTrustedSource($hardlink, $hash, $copy).Dispose() }
     catch { $refused = $_.Exception.GetBaseException().Message -ceq 'Private configuration file type or links are unsupported.' }
     Assert ($refused -and -not (Test-Path -LiteralPath $copy)) 'Linked source published executable code'
-    Write-Output 'PASS: production runtime bundle is exact and natively private without ACL repair; invalid commands, collisions and changed or linked sources are refused'
+    $longDirectory = Join-Path $root ('publication-' + ('x' * (220 - $root.Length - 13)))
+    Assert ($longDirectory.Length -eq 220 -and
+        (Join-Path $longDirectory $helpers[0]).Length + '.pending-'.Length + 36 -gt 260) `
+        'Long publication fixture does not exercise a pending path beyond MAX_PATH'
+    $longBundle = New-AgentsChatRuntimeBundle -Source $source -Directory $longDirectory -File $node `
+        -Arguments $arguments -WorkingDirectory $project -Environment $environment
+    $candidate = [Deployment.WindowsRuntimeHost]::Open($longBundle.Configuration, $longBundle.Sha256, $longDirectory)
+    try { $candidate.Check() }
+    finally { $candidate.Dispose() }
+    Assert (@(Get-ChildItem -LiteralPath $longDirectory).Count -eq $helpers.Count + 1) `
+        'Long runtime publication left incomplete helper or pending evidence'
+    Write-Output 'PASS: production runtime bundle is exact and natively private without ACL repair, including long pending paths; invalid commands, collisions and changed or linked sources are refused'
 } finally {
     $rootLease.Dispose()
     Remove-Item -LiteralPath $root -Recurse -Force

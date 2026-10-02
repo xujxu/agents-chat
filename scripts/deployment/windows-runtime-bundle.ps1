@@ -45,7 +45,10 @@ function New-AgentsChatRuntimeBundle {
         foreach ($copy in $retained) { $copy.Check() }
         return [pscustomobject]@{ Directory=$Directory; Configuration=$configuration; Sha256=$published.Sha256 }
     } catch {
-        throw [InvalidOperationException]::new("Runtime bundle publication failed; retain incomplete directory $Directory.", $_.Exception)
+        $cause = $_.Exception.GetBaseException()
+        throw [InvalidOperationException]::new(
+            "Runtime bundle publication failed; retain incomplete directory $Directory. Cause: $($cause.GetType().Name): $($cause.Message)",
+            $_.Exception)
     } finally {
         $failures = [Collections.Generic.List[Exception]]::new()
         foreach ($resource in @($retained.ToArray()) + @($directoryLease)) {

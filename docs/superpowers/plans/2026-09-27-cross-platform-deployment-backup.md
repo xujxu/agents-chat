@@ -8810,6 +8810,25 @@ include the persistent gate in its exact private inventory, and preserve
 `PATHEXT`, `WINDIR` and `SystemDrive` in the runner. These fixes still require
 Actions acceptance; preserve the running implementation regression.
 
+That implementation regression finished 23/25. Fix `276fe0d` /
+`37037539645` passed the native completed-task proof again, but its actual
+Windows build (`110944941174`, 17:18:54 UTC) now fails later, inside
+runtime bundle publication. The PowerShell wrapper obscures the original
+exception; the cause is not yet established. Keep this regression running.
+
+- [x] Include the base exception's type/message in the publication failure
+  while preserving its inner exception and incomplete directory.
+- [x] Add a focused native runtime-bundle case with a 220-character bundle
+  directory: its final helper paths remain below MAX_PATH while generated
+  `.pending-<uuid>` paths exceed it. Use the existing production publisher,
+  candidate checks and exact inventory, not an application rebuild.
+- [ ] Run the native case in Actions and compare its actual error with the
+  actual-build failure before changing native path handling. Do not shorten
+  the private controller namespace or relax owner/ACL/path/hash admission.
+- [ ] After the root-cause fix, accept all 25 jobs, including actual Windows
+  startup and stopped-database restoration; the latest fully accepted
+  baseline remains `c1f90f1` / `37032247968`.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
