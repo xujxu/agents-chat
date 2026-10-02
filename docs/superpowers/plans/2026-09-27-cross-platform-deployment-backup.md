@@ -8333,6 +8333,180 @@ The embedded activating snapshot is validated as state and linked to every
 recorded activating digest; it is not a claim to reconstruct the former
 state file's exact serialized bytes.
 
+#### Task 5AE: standard native Windows admission primitive
+
+Approved design: `Shared native admission for deployment and recovery` in
+the existing specification, commit `6c77eb6`; written design approved by the
+user. Execute inline in the existing worktree. Do not reopen the approach
+selection or create another worktree.
+
+**Files:**
+- Modify `scripts/deployment/WindowsPrivateFile.cs`: declare the class
+  partial and extract its existing private file-security creation and
+  opened-handle capture into private shared methods, preserving validation.
+- Create `scripts/deployment/WindowsPrivateFile.Admission.cs`: only the
+  retained admission lease and exclusive-open operation. The partial class
+  shares private validation without exposing raw handles or duplicating
+  native metadata/ACL parsing. Existing installed hosts can still compile
+  the base file alone; their nine-helper inventory does not change.
+- Create `tests/deployment-windows-private-admission.ps1`: actual independent
+  process contention, close/exit, privacy, namespace and non-inheritance cases.
+- Extend `.github/workflows/deployment-lifecycle.yml`: run the native
+  admission fixture before the existing completed-task proof cases.
+- Extend `scripts/deployment/saved-worker-engine.mjs` and
+  `tests/deployment-saved-worker.test.mjs` with the new partial source.
+
+- [ ] **Step 1: publish the native failing fixture before implementation.**
+  Compile the existing base file and, when present, the admission partial
+  file. First create and retain an actual private control directory using
+  `WindowsPrivateFile.CreateDirectory`; then call the new API:
+  ```powershell
+  $lease = [Deployment.WindowsPrivateFile]::AcquireAdmission($control)
+  try {
+      $lease.Check()
+      $other = & $pwsh -NoProfile -NonInteractive -File $PSCommandPath -Case busy -Control $control
+      if ($LASTEXITCODE -ne 0 -or $other -cne 'busy') { throw 'Independent admission was not excluded.' }
+      $lease.Check()
+  } finally { $lease.Dispose() }
+  ```
+  The `busy` process must observe Win32 error 32, not treat every exception
+  as contention. The suite must additionally acquire another private
+  control directory while the first is held, reacquire the same persistent
+  file after close, and terminate an exact retained fixture owner process
+  before reacquiring. Inspect the native handle's inheritance flag in the
+  fixture rather than inferring non-inheritance from a restricted child
+  launcher. Wrong permissions, nonempty content and extra hard links must
+  refuse without rewriting the file/ACL. Verify the original operation
+  evidence remains unchanged. Fixture cleanup targets only its own named
+  temporary directories and retained child process.
+
+- [ ] **Step 2: capture the causal failure in Actions.**
+  Add this step to `windows-completion-proof`, after Node setup:
+  ```yaml
+      - name: Require exclusive native Windows admission and crash release
+        shell: pwsh
+        run: ./tests/deployment-windows-private-admission.ps1
+  ```
+  Push the fixture/workflow commit with the required co-author trailer.
+  Query the workflow using its exact head SHA; inspect completed native job
+  logs. Require the missing `AcquireAdmission` API after real private-root
+  creation, not an unrelated fixture failure. Capture before cancelling the
+  characterized causal run. Never compile or execute locally.
+
+- [ ] **Step 3: implement retained exclusive opening.**
+  Extract the existing `FileSecurity` construction from `Publish` into
+  `PrivateFileSecurity()`, and the existing metadata/path/ACL/content/hash
+  capture from `OpenFile` into
+  `CaptureOpenedFile(FileAccess access, bool requirePrivate, string expectedSha256)`.
+  `OpenFile` calls the capture method with `FileAccess.Read`; admission
+  uses `ReadWrite` and the SHA-256 of an empty byte array. Keep the existing
+  regular-file, single-link, size, canonical final-path and private-ACL
+  checks unchanged. Do not add the admission source to the installed host
+  helper inventory, because the base partial has no dependency on it.
+
+  The admission partial supplies this complete lease/opening implementation:
+  ```csharp
+  using System;
+  using System.Collections.Generic;
+  using System.ComponentModel;
+  using System.IO;
+  using System.Runtime.InteropServices;
+  using Microsoft.Win32.SafeHandles;
+
+  namespace Deployment
+  {
+      public sealed partial class WindowsPrivateFile
+      {
+          [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+          static extern SafeFileHandle CreateFileW(string name, uint access, uint share,
+              ref SecurityAttributes attributes, uint creation, uint flags, IntPtr template);
+
+          public sealed class AdmissionLease : IDisposable
+          {
+              readonly WindowsPrivateFile parent, gate;
+              bool closed;
+              internal AdmissionLease(WindowsPrivateFile parent, WindowsPrivateFile gate)
+              { this.parent = parent; this.gate = gate; }
+              public void Check()
+              {
+                  if (closed) throw new ObjectDisposedException("Windows admission");
+                  parent.CheckPublicationDirectory();
+                  gate.Check();
+                  parent.CheckPublicationDirectory();
+              }
+              public void Dispose()
+              {
+                  if (closed) return;
+                  closed = true;
+                  var failures = new List<Exception>();
+                  try { gate.Dispose(); } catch (Exception error) { failures.Add(error); }
+                  try { parent.Dispose(); } catch (Exception error) { failures.Add(error); }
+                  if (failures.Count != 0)
+                      throw new AggregateException("Windows admission close failed.", failures);
+              }
+          }
+
+          public static AdmissionLease AcquireAdmission(string control)
+          {
+              RequirePath(control);
+              WindowsPrivateFile parent = null, gate = null;
+              try
+              {
+                  parent = PublicationDirectory(control);
+                  gate = new WindowsPrivateFile { file = Path.Combine(control, "windows-admission.lock") };
+                  GCHandle descriptor = GCHandle.Alloc(
+                      PrivateFileSecurity().GetSecurityDescriptorBinaryForm(), GCHandleType.Pinned);
+                  try
+                  {
+                      parent.CheckPublicationDirectory();
+                      var attributes = new SecurityAttributes {
+                          Length = Marshal.SizeOf<SecurityAttributes>(),
+                          Descriptor = descriptor.AddrOfPinnedObject(), Inherit = 0
+                      };
+                      const uint readWriteControl = 0xC0020000, openAlways = 4, openReparsePoint = 0x200000;
+                      gate.handle = CreateFileW(gate.file, readWriteControl, 0,
+                          ref attributes, openAlways, openReparsePoint, IntPtr.Zero);
+                      if (gate.handle.IsInvalid)
+                          throw new Win32Exception(Marshal.GetLastWin32Error(), "Acquire exclusive Windows admission");
+                  }
+                  finally { descriptor.Free(); }
+                  gate.CaptureOpenedFile(FileAccess.ReadWrite, true, Digest(Array.Empty<byte>()));
+                  var lease = new AdmissionLease(parent, gate);
+                  lease.Check();
+                  return lease;
+              }
+              catch (Exception failure)
+              {
+                  var failures = new List<Exception> { failure };
+                  try { if (gate != null) gate.Dispose(); } catch (Exception error) { failures.Add(error); }
+                  try { if (parent != null) parent.Dispose(); } catch (Exception error) { failures.Add(error); }
+                  if (failures.Count != 1)
+                      throw new AggregateException("Windows admission acquisition and cleanup failed.", failures);
+                  throw;
+              }
+          }
+      }
+  }
+  ```
+  Add `WindowsPrivateFile.Admission.cs` beside `WindowsPrivateFile.cs` in
+  both saved-worker source lists. The inventory test independently asserts
+  its presence; generic saved recovery capture then includes the same source.
+
+- [ ] **Step 4: publish and require native plus full acceptance.**
+  Commit only the planned production, inventory and directly related
+  documentation changes; push and locate Actions by exact SHA. Require the
+  native fixture to pass all independent-process and refusal cases, plus
+  update/restore/custom-ACL/disabled completion proof cases. Preserve the
+  complete 25-job regression after native success. Diagnose only observed
+  failures, push precise fixes, and repeat remotely.
+
+**Connected next step:** integrate this retained primitive through the
+original-controller-bound Node/PowerShell boundary and all relevant Windows
+ownership entrypoints (`state.mjs` acquisition/release and native recovery).
+The integration task remains explicit in session tracking. A primitive-only
+pass does not complete the approved shared-entrypoint requirement or public
+Windows recovery, and must not unblock generic lock removal.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

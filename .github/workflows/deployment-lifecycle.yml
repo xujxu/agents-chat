@@ -457,6 +457,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Require exclusive native Windows admission and crash release
+        shell: pwsh
+        run: ./tests/deployment-windows-private-admission.ps1
       - name: Reopen completed original task evidence in a fresh native process
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof
