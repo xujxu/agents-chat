@@ -201,6 +201,7 @@ try {
     Assert $disposed 'Disposed configuration handle was accepted'
     $retained = $null
     Write-Output 'PASS: configuration size, encoding and retained-handle lifetime are bounded'
+    & (Join-Path $PSScriptRoot 'deployment-windows-private-retirement.ps1')
 } finally {
     if ($retained) { $retained.Dispose() }
     Remove-Item -LiteralPath $root -Recurse -Force

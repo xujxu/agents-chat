@@ -9338,6 +9338,194 @@ The characterized causal run was then cancelled. Native publication/reopen,
 strict capture and actor-loss/refusal coverage are implemented next; full
 acceptance remains pending.
 
+### Task 5AJ: exact native private-file retirement handle
+
+Continue the approved write-ahead retirement design with the OS deletion
+boundary needed by its consumer. Checking a path, closing the proof handle,
+then calling path-based `Remove-Item` leaves an identity race. Do not introduce
+recursive deletion or make the read-only proof's existing handles deletable.
+Add an explicit exclusive retirement handle which validates the prepared
+descriptor and performs deletion on that same handle. This primitive alone
+does not authorize task evidence cleanup, recovery or operation unlock.
+
+**Files:**
+- Modify `scripts/deployment/WindowsPrivateFile.cs`: add a nested disposable
+  `RetirementFile`, native `SetFileInformationByHandle`, and the explicit
+  `RetainForRetirement(file, sha256, dev, ino, bytes)` factory. Reuse existing
+  private file/directory validation. Keep the nine installed helper sources.
+- Create `tests/deployment-windows-private-retirement.ps1`: native positive,
+  descriptor refusal, replacement/sharing, permission/link and close cases.
+- Modify `tests/deployment-windows-private-file.ps1`: invoke the focused
+  retirement cases after existing private-file acceptance using the already
+  compiled base class. Keep the existing Actions job rather than adding
+  another full application build.
+- Modify `README.md`: distinguish the primitive from accepted transaction
+  retirement/unlock support.
+
+**Verified API references:** Microsoft's
+[SetFileInformationByHandle](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle)
+requires `DELETE` access for `FileDispositionInfo` (class 4).
+[FILE_DISPOSITION_INFO](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_disposition_info)
+contains a one-byte `BOOLEAN DeleteFile`, not a four-byte Win32 `BOOL`.
+Use explicit disposition only after final checks; do not use delete-on-close
+at open time, POSIX deletion flags, permission repair or replacement flags.
+
+- [ ] **Step 1: publish the native missing-method causal case.**
+
+  The focused fixture creates an actually private native directory and
+  publishes a small original receipt with the existing publisher. Capture
+  its native identity, length and digest, dispose the read-only handle, then:
+
+  ```powershell
+  $retirement = [Deployment.WindowsPrivateFile]::RetainForRetirement(
+      $file, $sha256, $identity.Dev, $identity.Ino, $bytes)
+  try {
+      $retirement.Check()
+      $retirement.Delete()
+      Assert (-not (Test-Path -LiteralPath $file)) 'Original private file survived retirement'
+  } finally { $retirement.Dispose() }
+  ```
+
+  Invoke from the existing private-file fixture with:
+
+  ```powershell
+  & (Join-Path $PSScriptRoot 'deployment-windows-private-retirement.ps1')
+  ```
+
+  Push only to the feature branch; capture the missing native static method
+  after existing private-file cases pass. Characterize/cancel this causal
+  run, not the preceding complete implementation regression.
+
+- [ ] **Step 2: implement explicit exclusive retirement admission.**
+
+  Extend the private `OpenFile` with an optional `retirement = false`; only
+  this factory passes true. Existing Open and CopyTrustedSource semantics
+  stay unchanged:
+
+  ```csharp
+  uint access = read | readControl | (retirement ? 0x10000u : 0u);
+  uint share = retirement ? 0u : shareRead;
+  retained.handle = CreateFileW(file, access, share, IntPtr.Zero,
+      openExisting, openReparsePoint, IntPtr.Zero);
+  ```
+
+  Add the native declaration:
+
+  ```csharp
+  [DllImport("kernel32.dll", SetLastError = true)]
+  [return: MarshalAs(UnmanagedType.Bool)]
+  static extern bool SetFileInformationByHandle(SafeFileHandle file, int informationClass,
+      ref byte information, uint bytes);
+  ```
+
+  The factory retains the private parent directory first. It then opens
+  the file with the exclusive DELETE-capable handle and reuses
+  `CaptureOpenedFile` for ACL, non-link, regular-file, canonical path, size
+  and exact digest validation. Compare both native identity strings and
+  the retained length before returning the handle:
+
+  ```csharp
+  public static RetirementFile RetainForRetirement(string file, string sha256,
+      string dev, string ino, int bytes)
+  {
+      RequirePath(file);
+      DirectoryLease parent = OpenDirectory(Path.GetDirectoryName(file));
+      WindowsPrivateFile original = null;
+      try
+      {
+          original = OpenFile(file, sha256, true, true);
+          EvidenceIdentity identity = original.CaptureIdentity();
+          if (identity.Dev != dev || identity.Ino != ino || original.ByteLength != bytes)
+              throw new InvalidDataException("Original retirement file identity or length differs.");
+          parent.Check();
+          return new RetirementFile(original, parent);
+      }
+      catch
+      {
+          try { if (original != null) original.Dispose(); }
+          finally { parent.Dispose(); }
+          throw;
+      }
+  }
+  ```
+
+- [ ] **Step 3: delete only through that original checked handle.**
+
+  The nested lease owns the file and parent, exposes no raw handle or
+  arbitrary-path delete operation, and performs no deletion on ordinary
+  disposal:
+
+  ```csharp
+  public sealed class RetirementFile : IDisposable
+  {
+      readonly WindowsPrivateFile original;
+      readonly DirectoryLease parent;
+      internal RetirementFile(WindowsPrivateFile original, DirectoryLease parent)
+      {
+          this.original = original;
+          this.parent = parent;
+      }
+      public void Check()
+      {
+          parent.Check();
+          original.Check();
+          parent.Check();
+      }
+      public void Delete()
+      {
+          Check();
+          byte disposition = 1;
+          Native(SetFileInformationByHandle(original.handle, 4, ref disposition, 1),
+              "Retire original private file");
+          Dispose();
+      }
+      public void Dispose()
+      {
+          try { original.Dispose(); }
+          finally { parent.Dispose(); }
+      }
+  }
+  ```
+
+  Exclusive sharing rejects existing readers and prevents new data readers,
+  writers, renames and competing deletes. The retained parent prevents
+  ancestor replacement. Failed checks and an ordinary close preserve the
+  file. After deletion or disposal, Check/Delete refuse the disposed handle.
+
+- [ ] **Step 4: cover the destructive boundary in actual Windows Actions.**
+
+  Extend the causal fixture using the same published private receipt:
+  wrong hash, dev, ino and length each refuse and leave exact original bytes;
+  original read-only proof contention refuses; after release, exclusive
+  retirement blocks independent read/write/rename attempts and directory
+  moves. Ordinary Dispose preserves the original receipt. Delete removes
+  only that receipt and leaves a neighbouring receipt unchanged.
+
+  Publish fresh fixtures for a widened ACL, hard link, symbolic link,
+  redirected parent and changed ACL after admission. Verify refusal without
+  repair/deletion. For descriptor mismatch use:
+
+  ```powershell
+  Refuses {
+      [Deployment.WindowsPrivateFile]::RetainForRetirement(
+          $file, $sha256, $identity.Dev, ($identity.Ino + '0'), $bytes).Dispose()
+  } 'Original retirement file identity or length differs.'
+  ```
+
+  Keep the size/type checks in the existing base fixture. No local native
+  compiler, test runner or server. Read the actual native output and retain
+  the full implementation run, including the three completed-task intent
+  scenarios and real Windows application/database restore.
+
+- [ ] **Step 5: record complete acceptance and then wire transaction cleanup.**
+
+  Accept the primitive only after the native cases and every Actions job
+  pass. Exact/prefix task cleanup must subsequently retain/reopen its
+  prepared evidence, original runtime/policy/listener and shared admission;
+  replacing the old proof handles with DELETE-capable handles must not
+  bypass these checks. Worker handoff and operation unlock remain separate
+  explicit transaction transitions.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
