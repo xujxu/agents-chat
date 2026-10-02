@@ -227,8 +227,10 @@ lock. This preparation passed all 25 Actions jobs at `b30581f`, including
 original-actor loss and strict reopening/refusal on all three native scenarios.
 The private-file layer also provides an explicit exclusive, checked
 DELETE-capable handle. It deletes only the original descriptor-matched file
-through that handle; ordinary disposal preserves it. Its native acceptance
-is pending, and it is not yet wired as task retirement or unlock authority.
+through that handle; ordinary disposal preserves it. Its native refusal and
+deletion cases, all three completed-task scenarios, and the full 25-job
+regression passed at `00c9857`. It is not yet wired as task retirement or
+unlock authority.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

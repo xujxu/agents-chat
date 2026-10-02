@@ -9403,7 +9403,7 @@ at open time, POSIX deletion flags, permission repair or replacement flags.
   after existing private-file cases pass. Characterize/cancel this causal
   run, not the preceding complete implementation regression.
 
-- [ ] **Step 2: implement explicit exclusive retirement admission.**
+- [x] **Step 2: implement explicit exclusive retirement admission.**
 
   Extend the private `OpenFile` with an optional `retirement = false`; only
   this factory passes true. Existing Open and CopyTrustedSource semantics
@@ -9456,7 +9456,7 @@ at open time, POSIX deletion flags, permission repair or replacement flags.
   }
   ```
 
-- [ ] **Step 3: delete only through that original checked handle.**
+- [x] **Step 3: delete only through that original checked handle.**
 
   The nested lease owns the file and parent, exposes no raw handle or
   arbitrary-path delete operation, and performs no deletion on ordinary
@@ -9499,7 +9499,7 @@ at open time, POSIX deletion flags, permission repair or replacement flags.
   ancestor replacement. Failed checks and an ordinary close preserve the
   file. After deletion or disposal, Check/Delete refuse the disposed handle.
 
-- [ ] **Step 4: cover the destructive boundary in actual Windows Actions.**
+- [x] **Step 4: cover the destructive boundary in actual Windows Actions.**
 
   Extend the causal fixture using the same published private receipt:
   wrong hash, dev, ino and length each refuse and leave exact original bytes;
@@ -9524,7 +9524,7 @@ at open time, POSIX deletion flags, permission repair or replacement flags.
   the full implementation run, including the three completed-task intent
   scenarios and real Windows application/database restore.
 
-- [ ] **Step 5: record complete acceptance and then wire transaction cleanup.**
+- [x] **Step 5: record complete acceptance; transaction wiring follows.**
 
   Accept the primitive only after the native cases and every Actions job
   pass. Exact/prefix task cleanup must subsequently retain/reopen its
@@ -9537,7 +9537,17 @@ at open time, POSIX deletion flags, permission repair or replacement flags.
 job `110996797719`, reached the missing `RetainForRetirement` native method
 at 19:34:58 UTC after the full existing private-file fixture passed. The
 characterized causal run was cancelled; the preceding Task 5AI regression
-was preserved through complete success. Implementation acceptance is pending.
+was preserved through complete success.
+
+**Task 5AJ acceptance:** `00c9857 / 37055288448` completed all 25 jobs
+successfully at 19:54:43 UTC. Native task-options job `110998382788` passed
+exact handle deletion, identity/refusal and ordinary-close cases at
+19:40:31 UTC, followed by ACL/link/redirected-parent refusal cases. Native
+completion job `110998382687` repeated all three intent/actor-loss/refusal
+scenarios successfully. Actual Windows application job `110998382206`
+passed authenticated create/mutate/restored data and three prebuilt starts
+at 19:43:10 UTC. This accepts the native deletion boundary, not transaction
+cleanup or operation unlock.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
