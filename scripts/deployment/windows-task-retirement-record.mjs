@@ -41,19 +41,19 @@ function processPair(pid, processIdentity) {
     || !new RegExp(`^${pid}:[1-9][0-9]*$`).test(processIdentity)) {
     throw new Error('Invalid native retirement creator.');
   }
-  export function captureRetirementProcess(value) {
-    const result = captureWorkerFields(value, ['pid', 'processIdentity'], 'retirement process');
-    processPair(result.pid, result.processIdentity);
-    return result;
-  }
-  export function captureRetirementCreator(value) {
-    const result = captureWorkerFields(value,
-      ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'], 'retirement creator');
-    processPair(result.pid, result.processIdentity);
-    processPair(result.bridgePid, result.bridgeIdentity);
-    if (result.pid === result.bridgePid) throw new Error('Ambiguous retirement creator.');
-    return result;
-  }
+}
+export function captureRetirementProcess(value) {
+  const result = captureWorkerFields(value, ['pid', 'processIdentity'], 'retirement process');
+  processPair(result.pid, result.processIdentity);
+  return result;
+}
+export function captureRetirementCreator(value) {
+  const result = captureWorkerFields(value,
+    ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'], 'retirement creator');
+  processPair(result.pid, result.processIdentity);
+  processPair(result.bridgePid, result.bridgeIdentity);
+  if (result.pid === result.bridgePid) throw new Error('Ambiguous retirement creator.');
+  return result;
 }
 export function captureWindowsTaskRetirement(value) {
   const result = captureWorkerFields(value, ['status', 'descriptor', 'intent'], 'retirement result');

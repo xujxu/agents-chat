@@ -9742,6 +9742,14 @@ record names, preserves the original intent schema, and adds the strict
 checkpoint with original-actor-loss and corruption coverage. Full acceptance
 remains pending.
 
+The initial implementation `cf54be0 / 37058475936` exposed an extraction
+error: the two new process/creator exports were accidentally nested inside
+`processPair`. Linux contracts (`111008914746`) and native proof
+(`111008914944`, 20:09:08 UTC) both reported `Unexpected token 'export'`.
+Move both exports to module scope without changing the capture checks, then
+repeat the complete Actions run. No checkpoint behavior was accepted by
+that failed import.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
