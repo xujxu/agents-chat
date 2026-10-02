@@ -8517,7 +8517,7 @@ actual admission fixture at 15:50:33 UTC and all three completed-task proof
 scenarios at 15:52:56 UTC. Logs confirm independent contention, separate
 installations, retained namespace/non-inherited handles, abrupt owner exit,
 unsafe content/ACL/hard-link refusal, and unchanged operation evidence.
-Preserve the full 25-job regression, which remains running.
+The full regression passed all 25 jobs, observed at 16:07:51 UTC.
 
 ### Task 5AF: original-controller-bound shared Windows admission bridge
 
@@ -8556,7 +8556,7 @@ both graceful close and abrupt original-controller loss.
 - `.github/workflows/deployment-lifecycle.yml`: add the native fixture to the
   existing completed-task proof job before its three proof scenarios.
 
-- [ ] **Step 1: publish the native failing boundary contract.**
+- [x] **Step 1: publish the native failing boundary contract.**
   The PowerShell fixture creates private controls before loading the new
   module. The Node contract is:
   ```js
@@ -8582,7 +8582,7 @@ both graceful close and abrupt original-controller loss.
   seconds and reacquire. Do not accept arbitrary acquisition failures as
   contention: require the explicit native `acquire/busy` diagnostic.
 
-- [ ] **Step 2: capture the exact causal Actions failure.**
+- [x] **Step 2: capture the exact causal Actions failure.**
   ```bash
   git add tests/deployment-windows-admission-bridge.ps1 tests/deployment-windows-admission-bridge.mjs .github/workflows/deployment-lifecycle.yml README.md docs/superpowers/plans/2026-09-27-cross-platform-deployment-backup.md
   git commit -m "test: require controller-bound Windows admission" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
@@ -8593,7 +8593,7 @@ both graceful close and abrupt original-controller loss.
   private directory/evidence PASS line. Capture before cancelling only the
   characterized causal run.
 
-- [ ] **Step 3: implement the boundary with existing transport semantics.**
+- [x] **Step 3: implement the boundary with existing transport semantics.**
   The exported validator uses an actual module-private registry:
   ```js
   const admissions = new WeakMap();
@@ -8645,6 +8645,14 @@ both graceful close and abrupt original-controller loss.
   Then implement shared ownership entrypoint admission, including valid
   creation-time Windows fixture privacy and explicit runtime selection;
   never treat this bridge-only acceptance as public recovery completion.
+
+Task 5AF causal `090fcd5` / `37031531441`, native `110920024799`,
+failed on missing `windows-admission.mjs` at 16:08:13 UTC after the private
+control/evidence PASS line. Captured before cancelling only that causal run.
+Implementation preserves existing task transport and bounded watch semantics,
+adds the no-deadline admission watch, and includes raw native refusals for
+duplicate/extra fields, skipped IDs, unsupported mutation and oversized
+frames. Native and full acceptance remain pending publication/Actions.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

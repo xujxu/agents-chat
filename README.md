@@ -201,8 +201,9 @@ Windows shared admission is being implemented using a private, non-inherited
 exclusive file handle, following the standard package-manager locking pattern.
 The primitive preserves durable operation evidence and does not itself permit
 recovery or unlock. Native admission and the three completed-task proof
-scenarios passed at `234bef9`; its full regression and shared entrypoint
-integration remain pending.
+scenarios passed at `234bef9`, along with all 25 full-regression jobs.
+The original-controller-bound bridge and shared entrypoint integration are
+being implemented; neither grants authority to bypass durable evidence.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

@@ -1,10 +1,8 @@
-import { spawn } from 'node:child_process';
-import { Duplex } from 'node:stream';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
-import { workerWire } from './worker-wire.mjs';
+import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { validateReadinessProviders } from './http-readiness.mjs';
 
 const script = fileURLToPath(new URL('./windows-task-controller.ps1', import.meta.url));
@@ -14,15 +12,6 @@ function uncertain(cause) {
     code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED', recoveryAllowed: false,
   });
 }
-async function boundedExit(exited) {
-  let timer;
-  try {
-    return await Promise.race([exited, new Promise((resolve, reject) => {
-      timer = setTimeout(() => reject(new Error('Native task controller did not exit.')), 15000);
-    })]);
-  } finally { clearTimeout(timer); }
-}
-
 function captureActivatedRuntime(value) {
   const runtime = captureWorkerFields(value, ['pid', 'identity', 'generation', 'instanceGuid', 'sessionId',
     'configurationSha256', 'launcherPid', 'readySha256'], 'activated runtime');
@@ -75,39 +64,23 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
     }
   }
   signal?.throwIfAborted();
-  const child = spawn(pwsh, ['-NoProfile', '-NonInteractive', '-File', script,
-    '-Admission', admission, '-Sha256', sha256, '-ControllerPid', String(process.pid),
-    '-ControllerIdentity', controllerIdentity,
-    ...(reference ? ['-Control', reference.control, '-LockSha256', reference.lockSha256,
-      '-StateSha256', reference.stateSha256] : []),
-  ], { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
-    env: Object.fromEntries(Object.entries(process.env)
-      .filter(([key]) => !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase()))),
+  const { child, wire, waitForExit, abandon: abandonTransport } = windowsControllerTransport({
+    pwsh, refused: uncertain, label: 'Native task controller',
+    args: ['-NoProfile', '-NonInteractive', '-File', script,
+      '-Admission', admission, '-Sha256', sha256, '-ControllerPid', String(process.pid),
+      '-ControllerIdentity', controllerIdentity,
+      ...(reference ? ['-Control', reference.control, '-LockSha256', reference.lockSha256,
+        '-StateSha256', reference.stateSha256] : []),
+    ],
   });
-  let stderr = Buffer.alloc(0);
-  child.stderr.on('data', bytes => { stderr = Buffer.concat([stderr, bytes]).subarray(-4096); });
-  const exited = new Promise((resolve, reject) => {
-    child.once('exit', (code, exitSignal) => resolve({ code, signal: exitSignal }));
-    child.once('error', reject);
-  });
-  exited.catch(() => {});
-  const transport = Duplex.from({ readable: child.stdout, writable: child.stdin });
-  child.once('error', error => transport.destroy(error));
-  child.once('close', () => transport.destroy());
-  const wire = workerWire(transport);
   let closed = false;
   let busy = false;
   let sequence = 0;
   let activeRuntime;
   let failure;
   const abandon = async cause => {
-    failure ??= uncertain(cause);
     closed = true;
-    wire.close();
-    if (child.exitCode === null && child.signalCode === null) child.kill();
-    try { await boundedExit(exited); }
-    catch (cleanup) { failure = uncertain(new AggregateError([failure, cleanup])); }
-    failure.diagnostic = stderr.toString('utf8');
+    failure = await abandonTransport(cause);
     return failure;
   };
   try {
@@ -164,7 +137,7 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
         }
         if (method === 'listener') return captureTaskListener(reply.listener, activeRuntime, payload.port);
         if (method === 'close') {
-          const result = await boundedExit(exited);
+          const result = await waitForExit();
           if (result.code !== 0 || result.signal !== null) throw new Error('Native task controller close failed.');
           closed = true;
           wire.close();

@@ -21,6 +21,7 @@ const files = [
   'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs', 'WindowsRuntimeControl.cs',
   'WindowsPrivateFile.cs', 'WindowsRuntimeLease.cs', 'WindowsRuntimeHost.cs', 'windows-runtime-host.ps1',
   'WindowsPrivateFile.Admission.cs',
+  'windows-admission.mjs', 'windows-admission.ps1', 'windows-controller-transport.mjs',
   'windows-runtime-bundle.ps1',
   'WindowsControllerToken.cs', 'WindowsControllerProcess.cs',
   'windows-task-owner-binding.ps1', 'windows-task-maintenance.ps1',

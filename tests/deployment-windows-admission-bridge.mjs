@@ -7,6 +7,7 @@ import { processIdentity } from '../scripts/deployment/process-identity.mjs';
 const [mode, control, other, pwsh] = process.argv.slice(2);
 const { acquireWindowsAdmission, assertWindowsAdmission } =
   await import('../scripts/deployment/windows-admission.mjs');
+const { windowsControllerTransport } = await import('../scripts/deployment/windows-controller-transport.mjs');
 assert.equal(process.platform, 'win32');
 
 async function bounded(promise, message) {
@@ -24,6 +25,31 @@ async function requireBridgeExit(identity) {
     assert.ok(Date.now() < deadline, 'Original native admission bridge survived controller exit');
     await delay(250);
   }
+}
+
+async function refuseFrame(frame) {
+  const controllerIdentity = await processIdentity(process.pid);
+  const { child, wire, waitForExit, abandon } = windowsControllerTransport({
+    pwsh, refused: cause => cause, label: 'Fixture native admission',
+    args: ['-NoProfile', '-NonInteractive', '-File',
+      fileURLToPath(new URL('../scripts/deployment/windows-admission.ps1', import.meta.url)),
+      '-Control', control, '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
+  });
+  try {
+    const ready = await wire.receive();
+    assert.equal(ready.type, 'ready');
+    assert.equal(ready.pid, child.pid);
+    assert.equal(ready.processIdentity, await processIdentity(child.pid));
+    assert.equal(ready.control, control);
+    assert.equal(ready.controllerIdentity, controllerIdentity);
+    await new Promise((resolve, reject) => child.stdin.write(`${frame}\n`, error => error ? reject(error) : resolve()));
+    const result = await waitForExit();
+    assert.equal(result.code, 1);
+    assert.equal(result.signal, null);
+    const refusal = await abandon(new Error('Expected native request refusal'));
+    assert.match(refusal.diagnostic, /Windows admission refused: request\./);
+  } catch (error) { throw await abandon(error); }
+  finally { wire.close(); }
 }
 
 if (mode === 'hold') {
@@ -61,6 +87,15 @@ if (mode === 'hold') {
     await requireBridgeExit(identity);
     lease = undefined;
     console.log('PASS: original native bridge excludes competitors, separates controls and refuses foreign/forged/closed admission');
+
+    for (const frame of [
+      '{"id":1,"id":1,"method":"check"}',
+      '{"id":1,"method":"check","extra":true}',
+      '{"id":2,"method":"check"}',
+      '{"id":1,"method":"recover"}',
+      ' '.repeat(4097),
+    ]) await refuseFrame(frame);
+    console.log('PASS: native admission refuses duplicate/extra fields, skipped IDs, unsupported mutation and oversized frames');
 
     owner = fork(fileURLToPath(import.meta.url), ['hold', control, other, pwsh], {
       stdio: ['ignore', 'ignore', 'inherit', 'ipc'], windowsHide: true,

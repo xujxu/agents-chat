@@ -259,11 +259,19 @@ namespace Deployment
     {
         public static IDisposable WatchOwner(int pid, string identity)
         {
+            return WatchOwner(pid, identity, true);
+        }
+        public static IDisposable WatchOwnerUntilExit(int pid, string identity)
+        {
+            return WatchOwner(pid, identity, false);
+        }
+        static IDisposable WatchOwner(int pid, string identity, bool bounded)
+        {
             if (WindowsWorkerJob.ProcessIdentity(pid) != identity) throw new InvalidOperationException("Owner identity changed.");
             Stopwatch lifetime = Stopwatch.StartNew();
             return new Timer(state => {
                 try {
-                    if (lifetime.Elapsed.TotalMinutes >= 30 || WindowsWorkerJob.ProcessIdentity(pid) != identity)
+                    if ((bounded && lifetime.Elapsed.TotalMinutes >= 30) || WindowsWorkerJob.ProcessIdentity(pid) != identity)
                         Environment.Exit(1);
                 }
                 catch { Environment.Exit(1); }
