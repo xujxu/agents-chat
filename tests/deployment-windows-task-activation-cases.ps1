@@ -64,7 +64,7 @@ try {
     $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
     $triggers = $expected.SelectNodes('/t:Task/t:Triggers', $namespaces)
     Assert ($triggers.Count -eq 1 -and $triggers[0].ChildNodes.Count -gt 0) 'Activation fixture must exercise existing automatic triggers'
-    $triggers[0].InnerXml = ''
+    $triggers[0].IsEmpty = $true
     $restart = $expected.SelectNodes('/t:Task/t:Settings/t:RestartOnFailure', $namespaces)
     Assert ($restart.Count -eq 1) 'Activation fixture must exercise restart-on-failure suppression'
     $null = $restart[0].ParentNode.RemoveChild($restart[0])

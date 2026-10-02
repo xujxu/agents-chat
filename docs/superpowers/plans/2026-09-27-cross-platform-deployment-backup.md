@@ -7919,6 +7919,14 @@ The implementation adds separately retained active-owner context and guarded
 startup, without relaxing the exact activating-state digest or adding a
 release/health/success path. Native and full regression remain pending.
 
+Implementation `057963b` / `36999361621`, native `110813564607`, refused
+before demand-start at the registered-profile equality gate. Emptying a
+previously populated `Triggers` element with `InnerXml=''` leaves an explicit
+non-self-closing DOM form; use `IsEmpty=true` to construct the intended empty
+element. Retain exact registered XML/security checks and add bounded substage
+diagnostics. Whether this accounts for the native mismatch remains subject
+to the next Actions run.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

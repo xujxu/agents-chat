@@ -115,7 +115,7 @@ function Start-AgentsChatTaskReplacement {
         if ($triggers.Count -ne 1 -or $restart.Count -gt 1 -or $arguments.Count -ne 1) {
             throw 'Unsupported activation policy shape.'
         }
-        $triggers[0].InnerXml = ''
+        $triggers[0].IsEmpty = $true
         if ($restart.Count) { $null = $restart[0].ParentNode.RemoveChild($restart[0]) }
         $Context.ActivationLeasePid = $PID
         $Context.ActivationLeaseIdentity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
@@ -135,10 +135,16 @@ function Start-AgentsChatTaskReplacement {
         $null = $Context.Folder.RegisterTask($Context.Data.taskName, $Context.ActivationDefinition, (4 -bor 16 -bor 32),
             [string]$principal.UserId, $null, [int]$principal.LogonType, $null)
         $task = $Context.Folder.GetTask($Context.Data.taskName)
-        if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
-            [string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor -or
-            ([xml][string]$task.Xml).OuterXml -cne $requested.OuterXml) {
-            throw 'Registered activation profile differs.'
+        $Context.Stage = 'activation-registered-inhibition'
+        if ($task.Enabled -or $task.GetInstances(0).Count -ne 0) { throw 'Registered activation is not inhibited.' }
+        $Context.Stage = 'activation-registered-security'
+        if ([string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor) {
+            throw 'Registered activation security differs.'
+        }
+        Confirm-AgentsChatTaskReplacementPolicy $Context.ActivationDefinition ([string]$task.Xml) $Context
+        $Context.Stage = 'activation-registered-definition'
+        if (([xml][string]$task.Xml).OuterXml -cne $requested.OuterXml) {
+            throw 'Registered activation definition differs.'
         }
         $Context.ActivationDefinition = [string]$task.Xml
         Test-AgentsChatActivationAuthority $Context
