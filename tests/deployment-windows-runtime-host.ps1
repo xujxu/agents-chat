@@ -69,7 +69,10 @@ if (process.argv[2] === 'child') {
   fs.writeFileSync('writes', 'x');
   setInterval(() => fs.appendFileSync('writes', 'x'), 10);
   if (process.env.RUNTIME_LISTENER_ADDRESS) {
-    const server = require('node:http').createServer((req, res) => res.end('owned-listener'));
+    const server = require('node:http').createServer((req, res) => {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.end('owned-listener');
+    });
     const save = file => fs.writeFileSync(file, JSON.stringify({ pid: process.pid, port: server.address().port }));
     server.listen({ port: 0, host: process.env.RUNTIME_LISTENER_ADDRESS, ipv6Only: false }, () => save('listener.json'));
     let rebinding = false;

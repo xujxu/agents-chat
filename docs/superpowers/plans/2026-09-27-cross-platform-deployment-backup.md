@@ -7980,6 +7980,19 @@ not the process creation time:
 and `.../ns-tcpmib-mib_tcp6row_owner_module`. The table API is documented at
 `https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable`.
 
+Task 5Y follow-up `99a985e` native `110819509658` passed, including the
+specific valid-state digest mutation refusal and original guarded generation
+settlement. Its full regression is still running.
+
+Task 5Z causal `49f073d` / `37001596831` is queued behind that full run.
+The local implementation uses bounded OWNER_MODULE tables with aligned
+IPv4/IPv6 row layouts and retained original owner/listener handles. It exports
+the 64-bit bind timestamp as a decimal string to preserve exact transport
+identity, checks original control/Job membership before and after observation,
+and is wired around the actual application API fixture. Implementation
+publication waits for the missing-helper causal result; no listener acceptance
+is claimed yet.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

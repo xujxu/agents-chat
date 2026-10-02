@@ -20,7 +20,7 @@ export const workerEngineFiles = Object.freeze([
   'windows-task-owner-binding.ps1', 'windows-task-maintenance.ps1',
   'windows-task-controller.ps1', 'windows-task-controller.mjs',
   'windows-task-transaction.ps1', 'windows-task-transaction.mjs',
-  'windows-task-retirement.ps1', 'windows-task-replacement.ps1', 'windows-task-activation.ps1',
+  'windows-task-retirement.ps1', 'windows-task-replacement.ps1', 'windows-task-activation.ps1', 'WindowsRuntimeListener.cs',
   'evidence-journal.mjs', 'worker-operation.mjs', 'state.mjs',
   'worker-retirement.mjs',
   'linux-systemd.mjs', 'linux-runtime.mjs',

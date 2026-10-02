@@ -9,7 +9,8 @@ Set-StrictMode -Version Latest
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment'))
 Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
     (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'),
-    (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsRuntimeLease.cs'), (Join-Path $source 'WindowsRuntimeHost.cs'))
+    (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsRuntimeLease.cs'),
+    (Join-Path $source 'WindowsRuntimeHost.cs'), (Join-Path $source 'WindowsRuntimeListener.cs'))
 . (Join-Path $source 'windows-task-maintenance.ps1')
 . (Join-Path $source 'windows-runtime-bundle.ps1')
 function Assert([bool]$Condition, [string]$Message) {
@@ -18,7 +19,8 @@ function Assert([bool]$Condition, [string]$Message) {
 function Get-Listeners {
     @(Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq 3010)
 }
-function Assert-OwnedListener($Ready, $Owner, $Listener) {
+function Assert-OwnedListener($Ready, $Owner, $Listener, $NativeListener) {
+    $NativeListener.Check()
     Assert (-not $Owner.HasExited -and -not $Listener.HasExited) 'Original application processes exited'
     $observation = [Deployment.WindowsRuntimeControl]::Exchange(
         [guid]$Ready.generation, $Ready.pid, $Ready.identity, 'observe', 15000) | ConvertFrom-Json
@@ -65,6 +67,7 @@ foreach ($phase in @('create', 'mutate', 'restored')) {
     $registered = $false
     $owner = $null
     $listener = $null
+    $nativeListener = $null
     $context = $null
     try {
         Assert (@(Get-Listeners).Count -eq 0) 'Refusing an existing application listener'
@@ -108,10 +111,12 @@ foreach ($phase in @('create', 'mutate', 'restored')) {
         Assert ($listeners.Count -eq 1) 'Ambiguous application listeners'
         $listener = [Diagnostics.Process]::GetProcessById([int]$listeners[0].OwningProcess)
         $null = $listener.Handle
-        Assert-OwnedListener $ready $owner $listener
+        $nativeListener = [Deployment.WindowsRuntimeListener]::Retain(
+            [guid]$ready.generation, $ready.pid, $ready.identity, $ready.launcherPid, 3010)
+        Assert-OwnedListener $ready $owner $listener $nativeListener
         & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs') $phase $chatId
         Assert ($LASTEXITCODE -eq 0) "Managed application API $phase failed"
-        Assert-OwnedListener $ready $owner $listener
+        Assert-OwnedListener $ready $owner $listener $nativeListener
 
         $directory = Join-Path $root $phase
         [Deployment.WindowsPrivateFile]::CreateDirectory($directory).Dispose()
@@ -147,6 +152,7 @@ foreach ($phase in @('create', 'mutate', 'restored')) {
         Assert (-not $scheduler.GetFolder('\').GetTask($taskName).Enabled) 'Application maintenance lost restart inhibition'
         Write-Output "PASS: real Windows application $phase binds listener ownership and settles before data access"
     } finally {
+        if ($nativeListener) { $nativeListener.Dispose() }
         if ($context) { Close-AgentsChatTaskMaintenance -Context $context }
         if ($registered) { Stop-ScheduledTask -TaskName $taskName }
         if ($owner) {

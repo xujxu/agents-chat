@@ -35,7 +35,7 @@ try {
     $retained = Retain $endpoint.port
     Assert ($retained.ListenerPid -eq $listener.Id -and
         $retained.ListenerIdentity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($listener.Id) -and
-        $retained.Port -eq $endpoint.port -and $retained.CreatedAt -gt 0 -and
+        $retained.Port -eq $endpoint.port -and [long]$retained.CreatedAt -gt 0 -and
         $retained.Address -ceq $(if ($Scenario -ceq 'listener-v4') { '127.0.0.1' } else { '::' })) `
         'Native listener lost original process, port, address or kernel binding time'
     $retained.Check()
