@@ -7345,6 +7345,16 @@ in read/share-delete exclusion; keep no-delete-sharing and every path/security
 check intact. Do not weaken the movement assertion or claim directory lifetime
 acceptance before the native denial and post-disposal positive control pass.
 
+`35675b5` / `36951592828`, native `110665565637`, passed the entire private
+directory/file step and all subsequent runtime/transaction cases. The final
+token diagnostic now identifies `class=20, bytes=4, error=24, returned=False`:
+`TokenElevation` reports `ERROR_BAD_LENGTH` for a zero-length sizing request.
+Read the fixed DWORD-sized elevation/session classes directly with a four-byte
+buffer; retain bounded sizing for variable-length classes and validate returned
+length before reading any buffer. Do not ignore a failed actual read or change
+identity/privilege comparisons. Full regression still awaits a passing probe.
+Reference: `https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-gettokeninformation`.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

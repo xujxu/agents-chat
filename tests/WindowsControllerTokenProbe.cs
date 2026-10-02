@@ -53,16 +53,23 @@ namespace DeploymentTests
         }
         static string Information(SafeAccessTokenHandle token, int type, bool sid)
         {
-            int needed;
-            bool sized = GetTokenInformation(token, type, IntPtr.Zero, 0, out needed);
-            int error = Marshal.GetLastWin32Error();
-            if (sized || error != 122 || needed < (sid ? IntPtr.Size : 4) || needed > 65536)
-                throw new InvalidOperationException("Invalid token information size: class=" + type +
-                    ", bytes=" + needed + ", error=" + error + ", returned=" + sized + ".");
+            bool fixedSize = type == TokenElevation || type == TokenSession;
+            int needed = 4;
+            if (!fixedSize)
+            {
+                bool sized = GetTokenInformation(token, type, IntPtr.Zero, 0, out needed);
+                int error = Marshal.GetLastWin32Error();
+                if (sized || error != 122 || needed < (sid ? IntPtr.Size : 4) || needed > 65536)
+                    throw new InvalidOperationException("Invalid token information size: class=" + type +
+                        ", bytes=" + needed + ", error=" + error + ", returned=" + sized + ".");
+            }
+            int capacity = needed;
             IntPtr data = Marshal.AllocHGlobal(needed);
             try
             {
-                Native(GetTokenInformation(token, type, data, needed, out needed), "Read token information");
+                Native(GetTokenInformation(token, type, data, capacity, out needed), "Read token information class " + type);
+                if (needed < (sid ? IntPtr.Size : 4) || needed > capacity || fixedSize && needed != 4)
+                    throw new InvalidOperationException("Invalid returned token information size for class " + type + ".");
                 if (sid) return new SecurityIdentifier(Marshal.ReadIntPtr(data)).Value;
                 byte[] bytes = new byte[needed];
                 Marshal.Copy(data, bytes, 0, needed);
