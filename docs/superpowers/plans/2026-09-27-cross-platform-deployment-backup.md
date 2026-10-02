@@ -7927,6 +7927,19 @@ element. Retain exact registered XML/security checks and add bounded substage
 diagnostics. Whether this accounts for the native mismatch remains subject
 to the next Actions run.
 
+`ad311cf` / `36999643657`, native `110814478038`, passed actual update and
+restore/custom-ACL activation, original-controller exit, pre-retirement
+activation refusal and the existing guarded-host/release cases. Constructing
+self-closing empty triggers passed exact registered XML equality; no policy
+or ACL comparison was relaxed. Full regression remains running.
+
+The follow-up retains the exact returned `IRunningTask` alongside the original
+owner handle and checks it on every active observation. It also requires
+`activate-state-change` to fail specifically at `check/retirement-phase` when
+only the valid state's timestamp changes after activation; the refused
+bridge must exit and settle that same guarded host/member. This prevents
+passing by testing only a malformed state or a generic timeout.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

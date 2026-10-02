@@ -52,6 +52,15 @@ function Test-AgentsChatActiveTaskContext([hashtable]$Context) {
         [Deployment.WindowsWorkerJob]::ProcessIdentity($Context.ActivationOwner.Id) -cne $runtime.identity) {
         throw 'Original activated owner changed.'
     }
+    $Context.Stage = 'activation-instance'
+    if (-not $Context.ActivationInstance) { throw 'Original activation instance is unavailable.' }
+    $Context.ActivationInstance.Refresh()
+    if (([guid]$Context.ActivationInstance.InstanceGuid).ToString('D') -cne $runtime.instanceGuid -or
+        [int]$Context.ActivationInstance.EnginePID -ne $runtime.pid -or
+        [int]$Context.ActivationInstance.State -ne 4 -or
+        $Context.ActivationInstance.Path -cne "\$($Context.Data.taskName)") {
+        throw 'Original activated Scheduler instance changed.'
+    }
     $null = Test-AgentsChatActivationPolicy $Context $false
     $Context.Stage = 'activation-binding'
     $binding = Get-AgentsChatTaskOwnerBinding -TaskName $Context.Data.taskName -OwnerPid $runtime.pid `
@@ -167,6 +176,7 @@ function Start-AgentsChatTaskReplacement {
         $Context.Stage = 'activation-run'
         $instance = $task.Run($null)
         if (-not $instance) { throw 'Native demand-start returned no instance.' }
+        $Context.ActivationInstance = $instance
         $instanceGuid = ([guid]$instance.InstanceGuid).ToString('D')
         if ($instanceGuid -ceq [guid]::Empty.ToString('D') -or $instanceGuid -ceq $Context.Data.instanceGuid) {
             throw 'Native activation reused an original task instance.'

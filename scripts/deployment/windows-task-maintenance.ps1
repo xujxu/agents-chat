@@ -114,6 +114,7 @@ function Close-AgentsChatTaskMaintenance {
             catch { $failures.Add($_.Exception) }
         }
     }
+    $Context.ActivationInstance = $null
     $Context.Folder = $null
     if ($failures.Count) { throw 'Task maintenance refused: close.' }
 }
@@ -151,7 +152,7 @@ function Stop-AgentsChatManagedTask {
         Retired=$false; RetirementRequested=$false; RetirementSha256=$null; RetirementStateSha256=$null
         ReplacementPrepared=$false; ReplacementDefinition=$null; ReplacementSha256=$null
         ReplacementConfiguration=$null; ReplacementConfigurationSha256=$null
-        Activated=$false; ActivationOwner=$null; ActivationRuntime=$null; ActivationSha256=$null
+        Activated=$false; ActivationOwner=$null; ActivationInstance=$null; ActivationRuntime=$null; ActivationSha256=$null
         ActivationDefinition=$null; ActivationEnabledDefinition=$null; ActivationDemandDefinition=$null
         ActivationLeasePid=0; ActivationLeaseIdentity=$null
         AdmissionSha256=$Sha256; PreviousSha256=$Sha256; Definition=$null; LauncherPid=0

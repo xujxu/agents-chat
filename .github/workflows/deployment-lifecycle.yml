@@ -411,6 +411,9 @@ jobs:
       - name: Settle unreleased transaction activation after original controller exit
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-exit
+      - name: Refuse changed activation-state evidence and settle its guarded generation
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-state-change
       - name: Refuse activation before original retirement and replacement
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-early

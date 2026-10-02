@@ -88,7 +88,8 @@ if (action === 'activate-early') {
   await assert.rejects(context.replace({ configuration, sha256 }), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
 } else if (action === 'retire-refused') {
   await assert.rejects(context.retire(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
-} else if (['retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument', 'activate', 'activate-exit'].includes(action)) {
+} else if (['retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
+  'activate', 'activate-exit', 'activate-state-change'].includes(action)) {
   if (operation !== 'restore') {
     for (const phase of ['rotating', 'backup-ready', 'source-selected', 'dependencies', 'building', 'configuring', 'activating']) {
       state = { ...state, previousPhase: state.phase, phase };
@@ -102,7 +103,7 @@ if (action === 'activate-early') {
     await assert.rejects(context.replace({ configuration, sha256: action === 'replace-refused' ? '0'.repeat(64) : sha256 }),
       { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
   } else {
-    if (['replace', 'activate', 'activate-exit'].includes(action)) {
+    if (['replace', 'activate', 'activate-exit', 'activate-state-change'].includes(action)) {
       await context.replace({ configuration, sha256 });
       await context.replace({ configuration, sha256 });
     }
@@ -114,6 +115,14 @@ if (action === 'activate-early') {
       const next = await receive();
       if (action === 'activate-exit') {
         assert.equal(next.action, 'exit');
+        process.exit(0);
+      }
+      if (action === 'activate-state-change') {
+        assert.equal(next.action, 'changed-state');
+        await writeFile(stateFile, JSON.stringify({ ...state, updatedAt: new Date().toISOString() }));
+        await assert.rejects(context.check(), error => error.code === 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED'
+          && /check\/retirement-phase/.test(error.diagnostic));
+        console.log(JSON.stringify({ phase: 'closed' }));
         process.exit(0);
       }
       assert.equal(next.action, 'close');

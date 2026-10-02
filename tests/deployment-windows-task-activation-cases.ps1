@@ -113,7 +113,8 @@ try {
         'Running receipt differs from the acknowledged original runtime'
     Assert (@(Get-ChildItem -LiteralPath $Directory -Filter 'task-activate-*.json').Count -eq 4) 'Repeated activation duplicated intent or completion'
     $exitWithoutClose = $Request.action -ceq 'activate-exit'
-    $Controller.StandardInput.WriteLine((@{ action=$(if ($exitWithoutClose) { 'exit' } else { 'close' }) } | ConvertTo-Json -Compress))
+    $finalAction = if ($exitWithoutClose) { 'exit' } elseif ($Request.action -ceq 'activate-state-change') { 'changed-state' } else { 'close' }
+    $Controller.StandardInput.WriteLine((@{ action=$finalAction } | ConvertTo-Json -Compress))
     if (-not $exitWithoutClose) { Assert ((Receive).phase -ceq 'closed') 'Activation context close was not acknowledged' }
     Assert ($Controller.WaitForExit(15000) -and $Controller.ExitCode -eq 0 -and $Bridge.WaitForExit(15000) -and
         $owner.WaitForExit(15000) -and $owner.ExitCode -eq 1 -and $member.WaitForExit(15000)) `
