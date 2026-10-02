@@ -8316,7 +8316,15 @@ original Node/bridge exit. Captured the exact failure before cancellation.
 The production implementation separates strict retained receipt replay from
 read-only native runtime observation, reuses the existing 14-field state
 converter, and is included in the saved-worker/recovery helper closure.
-Positive native acceptance and the additional refusal cases remain pending.
+Implementation `2c1aafc` / `37017035126` passed the dedicated positive native
+proof job `110870333836` at 14:02:56 UTC. Preserve its full 25-job regression.
+The expanded fixture adds fresh-process refusal of still-live controllers,
+changed terminal bytes, broken receipt links, duplicate/unexpected receipt
+fields, extra maintenance inventory, existing recovery authority, changed
+task enablement and a same-process/same-port rebind. Every refusal preserves
+the original runtime, task policy and private receipts/lock/state. The
+dedicated job also exercises restore with nondefault task permissions and
+an originally disabled task. Expanded native acceptance remains pending.
 The embedded activating snapshot is validated as state and linked to every
 recorded activating digest; it is not a claim to reconstruct the former
 state file's exact serialized bytes.

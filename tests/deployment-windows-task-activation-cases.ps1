@@ -173,6 +173,13 @@ try {
             $previous = $receipt.Sha256
         }
         Assert (@(Get-ChildItem -LiteralPath $Directory -Filter 'task-complete-*.json').Count -eq 9) 'Repeated completion duplicated receipts'
+        if ($Request.action -ceq 'activate-complete-proof') {
+            $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+            $refused = & $pwsh -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deployment-windows-task-completion-proof.ps1') `
+                -Control $Control -ExpectedFailure 'original-processes' -ExpectedCause 'is still alive.'
+            Assert ($LASTEXITCODE -eq 0 -and (($refused -join "`n") | ConvertFrom-Json).status -ceq 'refused') `
+                'Fresh proof must refuse the still-live original controller'
+        }
         $Controller.StandardInput.WriteLine('{"action":"close"}')
         Assert ((Receive).phase -ceq 'closed') 'Completed controller close was not acknowledged'
         Assert ($Controller.WaitForExit(15000) -and $Controller.ExitCode -eq 0 -and
@@ -182,27 +189,9 @@ try {
         Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
             $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') 'Independent completion observer cannot establish actual original lease release'
         if ($Request.action -ceq 'activate-complete-proof') {
-            $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-            $beforeProof = [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml
-            $evidence = @(Get-ChildItem -LiteralPath $Directory -File | Sort-Object Name | ForEach-Object {
-                "$($_.Name):$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash)"
-            })
-            $output = & $pwsh -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deployment-windows-task-completion-proof.ps1') -Control $Control
-            Assert ($LASTEXITCODE -eq 0) 'Fresh completed-task proof process failed'
-            $proof = ($output -join "`n") | ConvertFrom-Json
-            Assert ($proof.status -ceq 'observed' -and -not $proof.mutationAuthority -and
-                $proof.lease -ceq 'released' -and $proof.operationId -ceq $OperationId -and
-                $proof.taskName -ceq $TaskName -and $proof.stateSha256 -ceq $terminal.Sha256 -and
-                $proof.completionSha256 -ceq $previous -and $proof.port -eq $receipt.Data.port) 'Cold proof lost original completed authority'
-            foreach ($field in $runtime.PSObject.Properties.Name) {
-                Assert ($proof.runtime.$field -ceq $runtime.$field) 'Cold proof adopted another runtime'
-            }
-            $afterEvidence = @(Get-ChildItem -LiteralPath $Directory -File | Sort-Object Name | ForEach-Object {
-                "$($_.Name):$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash)"
-            })
-            Assert (($evidence -join "`n") -ceq ($afterEvidence -join "`n") -and
-                [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml -ceq $beforeProof -and
-                -not $owner.HasExited -and -not $member.HasExited) 'Read-only proof changed evidence, task policy or original runtime'
+            & (Join-Path $PSScriptRoot 'deployment-windows-task-completion-proof-cases.ps1') -Control $Control `
+                -Root $Root -Directory $Directory -TaskName $TaskName -OperationId $OperationId -Runtime $runtime `
+                -StateSha256 $terminal.Sha256 -CompletionSha256 $previous -Port $receipt.Data.port -Owner $owner -Member $member
         }
         $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
             $runtime.pid, $runtime.identity, 'observe', 15000) | ConvertFrom-Json

@@ -460,3 +460,9 @@ jobs:
       - name: Reopen completed original task evidence in a fresh native process
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof
+      - name: Reopen completed restore evidence with original custom task permissions
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-restore
+      - name: Reopen originally disabled completed task without changing its policy
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-disabled
