@@ -13,7 +13,8 @@ import { runDeployment } from '../scripts/deployment/transaction.mjs';
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const baseline = '638c553c62406dbb7e6b5aeb41cdddf4cd6de179';
-const git = async (project, args) => (await execute('git', ['-C', project, ...args])).stdout.trim();
+const gitOptions = ['-c', 'maintenance.auto=false'];
+const git = async (project, args) => (await execute('git', [...gitOptions, '-C', project, ...args])).stdout.trim();
 const metadata = {
   version: 1, databaseProfile: 'agents-chat-638c553', configurationProfile: 'agents-chat-auth-638c553',
   runtimeProfile: 'agents-chat-node24-638c553',
@@ -25,7 +26,7 @@ const environment = {
 async function targetFixture(t, change) {
   const root = await temporaryDeployment(t);
   const project = path.join(root, 'repo');
-  await execute('git', ['clone', '--quiet', '--no-hardlinks', '--shared', repository, project]);
+  await execute('git', [...gitOptions, 'clone', '--quiet', '--no-hardlinks', '--shared', repository, project]);
   await git(project, ['config', 'user.name', 'Fixture']);
   await git(project, ['config', 'user.email', 'fixture@example.invalid']);
   await git(project, ['config', 'core.autocrlf', 'false']);

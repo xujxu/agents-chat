@@ -10022,6 +10022,25 @@ implemented. The consumer retains the empty directory and old lock. Validate
 the full 26-job implementation run, including the committed Windows-contract
 envelope correction `da7ffb7`, before checking the remaining boxes.
 
+**Task 5AM native acceptance:** `9da4c9a / 37066345660`, native job
+`111034942833`, passed update at 21:23:39 UTC, restore at 21:25:22 UTC and
+originally disabled at 21:27:10 UTC. Each exercised original-actor death,
+prefix reopening, refusal cases, all 23 exact deletions and final reopening
+without unlock. Actual Windows application `111034943024` passed three
+prebuilt starts and authenticated create/mutate/restored data at 21:27:45 UTC.
+
+**Full-run blocker:** Linux database admission `111034943019` failed in
+target-compatibility fixture teardown with `ENOTEMPTY` under the temporary
+clone's `.git/objects/info/commit-graphs`, rather than a compatibility
+assertion. The fixture performs clone/commit operations without suppressing
+Git's default detached automatic maintenance. Git documents
+`maintenance.auto` and `maintenance.autoDetach` at
+https://git-scm.com/docs/git-maintenance. Add command-local
+`-c maintenance.auto=false` to this fixture's clone and Git helper invocations;
+do not change production Git behavior, repository/global configuration, or
+add cleanup retries that hide surviving writers. Preserve the run and
+require the corrected fixture plus the full regression to pass.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
