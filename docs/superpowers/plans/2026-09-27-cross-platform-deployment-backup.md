@@ -7551,6 +7551,21 @@ have settled, before disposal, so a live child's own cwd cannot satisfy the
 factory's directory-retention assertion accidentally. Do not push this
 implementation over the pending causal run before capturing its outcome.
 
+After interruption, `44016e6` / `36958322571` is confirmed complete **23/23**.
+Causal `a33f461` / `36958473499` failed exactly in native task-options
+`110690402568`: opening the fresh transaction lock returned
+`Private configuration permissions are unsupported.` Implementation
+`30963d7` has now been pushed; integration run `36984627141` is pending.
+
+Integration native `110766719409` passed production controller close/exit
+and fresh transaction-lock privacy, then failed the fixture's exact SDDL
+restoration assertion. Keep the original Node-created state file untouched:
+temporarily rename it aside, create a same-content replacement, grant only
+that replacement public read access, and require native refusal. Finally
+remove the exposed replacement and restore the original file by rename,
+checking its original volume/file identity. No ACL setter touches the file
+used by the successful transaction or its subsequent production replacements.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

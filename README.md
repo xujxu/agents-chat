@@ -146,8 +146,11 @@ private receipt publication, durable native task-stop contexts and
 original-Node-controller close/exit handling, private lock/state transaction
 authorization, native private-directory creation and distinct child-token/Job
 characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `ddb33dd` (run `36955332382`). The child-token
-characterization is not yet a production controller bootstrap.
+creation, passed at `44016e6` (run `36958322571`). This also accepts the
+production native controller process: literal arguments and bidirectional
+stdio, unchanged caller token, private child-file ownership, retained working
+directory, and original-Job descendant settlement without stopping independent
+processes. Integration into the public deployment entrypoints remains pending.
 The isolated real Windows application job also passed at `8a9de5f`
 (run `36943041386`): three prebuilt managed starts, authenticated chat
 persistence, stopped-database restoration, original-Job listener ownership and

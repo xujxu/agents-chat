@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -18,13 +18,6 @@ const receive = async () => {
   assert.equal(result.done, false);
   return JSON.parse(result.value);
 };
-const changeStateAcl = async (action, originalSecurity) => {
-  const { stdout } = await promisify(execFile)(pwsh, [
-    '-NoProfile', '-NonInteractive', '-File', fileURLToPath(new URL('./deployment-windows-private-control.ps1', import.meta.url)),
-    '-Control', control, '-Action', action, ...(originalSecurity ? ['-OriginalSecurity', originalSecurity] : []),
-  ], { timeout: 30000, maxBuffer: 4096 });
-  return stdout.trim();
-};
 console.log(JSON.stringify({ pid: process.pid, identity: lock.processIdentity, operationId: lock.operationId }));
 const admission = await receive();
 const record = JSON.parse(await readFile(admission.admission, 'utf8'));
@@ -40,13 +33,28 @@ const options = { ...admission, pwsh, control, lock };
 await assert.rejects(stopWindowsTaskTransaction(options));
 state = { ...state, phase: operation === 'restore' ? 'restoring' : 'stopped', previousPhase: state.phase };
 await writeState(control, state);
-const originalSecurity = await changeStateAcl('expose');
+// Preserve the original Node-created file and ACL; expose only a temporary replacement.
+const stateFile = path.join(control, 'state.json');
+const originalFile = path.join(control, 'state-acl-original.json');
+const originalIdentity = await stat(stateFile, { bigint: true });
+await rename(stateFile, originalFile);
+let replacement = false;
 try {
+  await writeFile(stateFile, await readFile(originalFile), { flag: 'wx' });
+  replacement = true;
+  await promisify(execFile)(pwsh, [
+    '-NoProfile', '-NonInteractive', '-File', fileURLToPath(new URL('./deployment-windows-private-control.ps1', import.meta.url)),
+    '-Control', control,
+  ], { timeout: 30000, maxBuffer: 4096 });
   await assert.rejects(stopWindowsTaskTransaction(options));
   assert.deepEqual(await readdir(path.dirname(admission.admission)), ['admission.json']);
 } finally {
-  await changeStateAcl('restore', originalSecurity);
+  if (replacement) await unlink(stateFile);
+  await rename(originalFile, stateFile);
 }
+const restoredIdentity = await stat(stateFile, { bigint: true });
+assert.equal(restoredIdentity.dev, originalIdentity.dev);
+assert.equal(restoredIdentity.ino, originalIdentity.ino);
 await assert.rejects(stopWindowsTaskTransaction({ ...options, lock: { ...lock, token: randomUUID() } }));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const stateDigest = hash(await readFile(path.join(control, 'state.json')));
