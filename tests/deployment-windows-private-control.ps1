@@ -1,8 +1,11 @@
-param([Parameter(Mandatory)][string]$Control, [switch]$ExposeState)
+param([Parameter(Mandatory)][string]$Control, [switch]$ExposeState, [switch]$StateOnly)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
-foreach ($entry in @((Get-Item -LiteralPath $Control)) + @(Get-ChildItem -LiteralPath $Control -Recurse)) {
+$entries = if ($StateOnly) { @(Get-Item -LiteralPath (Join-Path $Control 'state.json')) } else {
+    @((Get-Item -LiteralPath $Control)) + @(Get-ChildItem -LiteralPath $Control -Recurse)
+}
+foreach ($entry in $entries) {
     $acl = Get-Acl -LiteralPath $entry.FullName
     $acl.SetOwner($sid)
     $acl.SetAccessRuleProtection($true, $false)

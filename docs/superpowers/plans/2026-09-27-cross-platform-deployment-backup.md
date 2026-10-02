@@ -7222,6 +7222,14 @@ Add bounded native substage diagnostics and check immediately before/after the
 denied lock write to distinguish that from state/ACL advancement; do not relax
 private-file or state checks without identifying the actual cause.
 
+Diagnostic `87bf53a` / `36947641592`, native `110653525255`, proved that
+checks both before and after the denied lock write succeed. The subsequent
+failure is specifically `check/evidence`, not transaction state or lock.
+The fixture's recursive ACL preparation rewrote retained immutable native
+evidence after advancing the state. Limit that later fixture preparation to
+the newly replaced `state.json` only; preserve all original evidence ACLs and
+all production checks. This is a fixture correction, not relaxed admission.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

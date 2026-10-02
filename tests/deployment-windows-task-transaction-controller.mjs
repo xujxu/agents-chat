@@ -18,9 +18,9 @@ const receive = async () => {
   assert.equal(result.done, false);
   return JSON.parse(result.value);
 };
-const secure = async (expose = false) => promisify(execFile)(pwsh, [
+const secure = async ({ exposeState = false, stateOnly = false } = {}) => promisify(execFile)(pwsh, [
   '-NoProfile', '-NonInteractive', '-File', fileURLToPath(new URL('./deployment-windows-private-control.ps1', import.meta.url)),
-  '-Control', control, ...(expose ? ['-ExposeState'] : []),
+  '-Control', control, ...(exposeState ? ['-ExposeState'] : []), ...(stateOnly ? ['-StateOnly'] : []),
 ], { timeout: 30000, maxBuffer: 4096 });
 console.log(JSON.stringify({ pid: process.pid, identity: lock.processIdentity, operationId: lock.operationId }));
 const admission = await receive();
@@ -37,7 +37,7 @@ const options = { ...admission, pwsh, control, lock };
 await assert.rejects(stopWindowsTaskTransaction(options));
 state = { ...state, phase: operation === 'restore' ? 'restoring' : 'stopped', previousPhase: state.phase };
 await writeState(control, state);
-await secure(true);
+await secure({ exposeState: true });
 await assert.rejects(stopWindowsTaskTransaction(options));
 assert.deepEqual(await readdir(path.dirname(admission.admission)), ['admission.json']);
 await secure();
@@ -62,7 +62,7 @@ await assert.rejects(writeFile(path.join(control, 'lock', 'owner.json'), 'change
 await context.check();
 state = { ...state, phase: operation === 'restore' ? 'restore-activating' : 'copying', previousPhase: state.phase };
 await writeState(control, state);
-await secure();
+await secure({ stateOnly: true });
 await context.check();
 await assert.rejects(releaseLock(control, lock), /maintenance/i);
 assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
