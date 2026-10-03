@@ -296,9 +296,10 @@ the complete stop-to-cleanup sequence, passed with all 34 regression jobs at
 `e59b0e9 / 37089382913`. Public Windows command composition remains unfinished.
 Windows owned source/build stages now share the existing Linux orchestration
 and bind mutations to the original native task transaction, selected commit
-and designated phase. Actions acceptance is pending; the new native fixture
-runs actual Git/npm commands and a small fixture build, not a full application
-deployment. Build workers use the installed task's account in the controller's
+and designated phase. The native fixture's actual Git/npm commands, small
+fixture build and subsequent completion/cleanup passed with all 34 regression
+jobs at `a2092bf / 37092400795`; this is not full application deployment
+acceptance. Build workers use the installed task's account in the controller's
 actual session, which may differ from an S4U service's session zero; native
 worker account/session checks remain enforced. Cross-account execution is
 refused before worker enrollment. Cold recovery does not gain a rebuild dependency.

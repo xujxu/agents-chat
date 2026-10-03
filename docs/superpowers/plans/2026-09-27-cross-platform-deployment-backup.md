@@ -10943,7 +10943,7 @@ phase, even though a task controller's general `check()` can remain valid.
   `windows-source-build.mjs` at **2026-10-03 03:05:40 UTC** after the actual
   original task startup. The Git/npm stages had not yet executed.
 
-- [ ] **Step 2: reuse orchestration and bind native source authority.**
+- [x] **Step 2: reuse orchestration and bind native source authority.**
 
   ```javascript
   const stages = await prepareWindowsSourceBuild({
@@ -10981,7 +10981,7 @@ phase, even though a task controller's general `check()` can remain valid.
   native task context before and after reading state. Restore operations may
   not rebuild through this update adapter.
 
-- [ ] **Step 3: run actual commands through the original worker operation.**
+- [x] **Step 3: run actual commands through the original worker operation.**
 
   ```javascript
   await assert.rejects(stages.select({ target, stopped: { ...context } }));
@@ -10999,12 +10999,20 @@ phase, even though a task controller's general `check()` can remain valid.
   replacement/activation/completion/final-retirement sequence. Keep all
   existing restore/disabled scenarios and Linux gates intact.
 
-- [ ] **Step 4: accept full regression and record scope accurately.**
+- [x] **Step 4: accept full regression and record scope accurately.**
 
   Push and run all validation in Actions. Require the extended native update
   case plus all 34 existing jobs. Do not describe a small fixture npm build as
   actual application deployment; public scripts, configuration/ACL adapters,
   snapshot restoration and real first-install/application acceptance remain.
+
+  Accepted `a2092bf0b1ea40d61799004414408a65b68200dd / 37092400795`.
+  Extended native update `111118135106` completed successfully at
+  **2026-10-03 03:32:43 UTC**, disabled regression `111118135109` at
+  **03:32:59 UTC**, and restore `111118135148` at **03:37:12 UTC**.
+  Full regression: **34/34 successful at 03:55:51 UTC**. The initial
+  implementation run `37092203062` was retained through completion with
+  33 passes and its one diagnosed worker-session failure.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
