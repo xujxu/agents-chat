@@ -9,6 +9,7 @@ import { inspectGitMetadata } from '../scripts/deployment/git-metadata.mjs';
 import { inspectSnapshotScope } from '../scripts/deployment/snapshot-scope.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { restoreProjectSnapshot } from '../scripts/deployment/restore-project.mjs';
+import { restoreGitObjects } from '../scripts/deployment/git-objects.mjs';
 
 const execute = promisify(execFile);
 async function fixture(t) {
@@ -48,6 +49,28 @@ test('complete Git snapshots bind packed object bytes as well as HEAD/index', as
   assert.ok(pack);
   await writeFile(path.join(objects, pack), 'corrupt packed object payload');
   await assert.rejects(verifySnapshot(f.backup), /integrity|checksum|size|changed/i);
+});
+
+test('Windows object recovery restores missing packs offline without moving HEAD', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const f = await fixture(t);
+  const manifest = await f.snapshot();
+  await writeFile(path.join(f.project, 'source.txt'), 'later source\n');
+  await f.git('commit', '-am', 'later');
+  const later = await f.git('rev-parse', 'HEAD');
+  await rm(path.join(f.project, '.git/objects/pack'), { recursive: true });
+  await assert.rejects(f.git('cat-file', '-e', `${f.commit}^{commit}`));
+  await restoreGitObjects({
+    project: f.project, backup: f.backup, manifest,
+    checkStopped: async () => ({ stopped: true, inhibited: true }),
+  });
+  assert.equal(await f.git('rev-parse', 'HEAD'), later);
+  assert.equal(await f.git('show', `${f.commit}:source.txt`), 'original source');
+  assert.equal(await f.git('show', `${later}:source.txt`), 'later source');
+  assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'later source\n');
+  await f.git('fsck', '--full', '--no-reflogs');
+  assert.deepEqual(await verifySnapshot(f.backup), manifest);
 });
 
 test('external object alternates are refused instead of producing a falsely self-contained Git backup', async t => {

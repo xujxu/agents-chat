@@ -11409,6 +11409,185 @@ skipped prerequisites for a complete Windows application restore.
   the full lifecycle workflow. Record exact SHA/run/time. This filesystem
   adapter is not complete Windows Git/runtime/task/public restore composition.
 
+### Task 5AX: native Windows immutable Git object recovery
+
+**Prerequisite:** Task 5AW full lifecycle acceptance. Keep the project-level
+Git-bearing restore refusal until object, mutable graph and journal-bound
+HEAD/index/ref restoration are all composed.
+
+**Goal:** Restore missing packed/loose Git objects on Windows without fetching,
+rebuilding, deleting newer objects, weakening source ACLs, or changing HEAD.
+Reuse `git-objects.mjs` streaming, checksum and staged-hardlink publication.
+Native code handles private creation, exact identities, readonly-safe stage
+removal and source metadata only; it must not become a second byte copier.
+
+**Files and boundaries:**
+- Modify `tests/deployment-git-objects.test.mjs`: direct Windows object recovery
+  and publication-evidence cases using its existing real Git fixture.
+- Create `scripts/deployment/windows-git-object-security.mjs`: strict native
+  scope, original-controller readiness/replies, metadata checks and cleanup.
+- Create `scripts/deployment/windows-git-object-security.ps1`: saved/current
+  ownership admission, Git-only path inventory, retained roots and bounded
+  native operations. Reuse `WindowsPrivateFile.SourceSecurity.cs`; do not copy
+  its filesystem security implementation or expand the read-only observer.
+- Modify `scripts/deployment/git-objects.mjs`: Windows hooks around the existing
+  copier/link protocol. Linux branches retain their present behavior.
+- Modify `scripts/deployment/saved-recovery-engine.mjs`: include both new files.
+- Modify `.github/workflows/deployment-lifecycle.yml`: run Git object contracts
+  in the early Windows restoration step and focused dispatch, removing their
+  duplicate entry from the later Windows batch. Full/default remains 34 jobs.
+
+- [ ] **Step 1: publish direct real Windows object recovery coverage.**
+
+  Import `restoreGitObjects` from `scripts/deployment/git-objects.mjs`, then use
+  the existing `fixture(t)`:
+
+  ```javascript
+  test('Windows object recovery restores missing packs offline without moving HEAD', {
+    skip: process.platform !== 'win32',
+  }, async t => {
+    const f = await fixture(t);
+    const manifest = await f.snapshot();
+    await writeFile(path.join(f.project, 'source.txt'), 'later source\n');
+    await f.git('commit', '-am', 'later');
+    const later = await f.git('rev-parse', 'HEAD');
+    await rm(path.join(f.project, '.git/objects/pack'), { recursive: true });
+    await assert.rejects(f.git('cat-file', '-e', `${f.commit}^{commit}`));
+    await restoreGitObjects({
+      project: f.project, backup: f.backup, manifest,
+      checkStopped: async () => ({ stopped: true, inhibited: true }),
+    });
+    assert.equal(await f.git('rev-parse', 'HEAD'), later);
+    assert.equal(await f.git('show', `${f.commit}:source.txt`), 'original source');
+    assert.equal(await f.git('show', `${later}:source.txt`), 'later source');
+    assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'later source\n');
+    await f.git('fsck', '--full', '--no-reflogs');
+    assert.deepEqual(await verifySnapshot(f.backup), manifest);
+  });
+  ```
+
+  Extend the early Windows workflow step to:
+
+  ```yaml
+  - name: Restore native Windows project payloads and Git objects
+    if: runner.os == 'Windows'
+    shell: pwsh
+    run: |
+      ./tests/deployment-windows-private-tests.ps1 -Tests @(
+        'tests/deployment-restore-project.test.mjs',
+        'tests/deployment-git-objects.test.mjs'
+      )
+  ```
+
+  Remove only `tests/deployment-git-objects.test.mjs` from the later Windows
+  batch, not from Linux coverage. Commit/push, dispatch
+  `windows_restore_only=true`, and require the direct Windows call to fail
+  its existing Linux-ownership guard before adding production support.
+
+- [ ] **Step 2: implement the dedicated native metadata scope.**
+
+  The JavaScript factory is `prepareWindowsGitObjectSecurity` with
+  `{ project, backup, manifest, current, signal, pwsh }`, where `project` is
+  the original `.git/objects` directory, `backup` is the verified nested
+  `git-objects` snapshot, and `manifest` is that nested version-3 manifest.
+  Validate snapshot security with `validateWindowsSnapshotSecurity`, require
+  disjoint canonical roots, retain original PID/creation identity, and use
+  `windowsControllerTransport` for all process/wire settlement.
+
+  Its bounded command facade is:
+
+  ```javascript
+  return Object.freeze({
+    check: ({ signal } = {}) => invoke('check', undefined, signal),
+    directory: ({ entry, signal }) => invoke('directory', entry, signal),
+    createStage: ({ entry, signal }) => invoke('create-stage', entry, signal),
+    finishStage: ({ entry, signal }) => invoke('finish-stage', entry, signal),
+    stagePolicy: ({ entry, signal }) => invoke('stage-policy', entry, signal),
+    removeStage: ({ entry, signal }) => invoke('remove-stage', entry, signal),
+    targetPolicy: ({ entry, signal }) => invoke('target-policy', entry, signal),
+    close: () => invoke('close'),
+  });
+  ```
+
+  `invoke` sends sequenced `{ id, method, entries }` frames, with zero entries
+  for check/close and one `{ path }` for each mutation. Only the saved path is
+  sent; native code derives its stage as `path + '.agents-chat-restore'`.
+  Admission uses at most eight entries per frame, the existing 131072-byte
+  wire bound and 250000-entry ceiling. All saved/current owner/group/DACLs
+  must be admitted before mutation. Deduplicate saved SDDL in native storage;
+  retain only needed identities for current entries, not repeated descriptors.
+
+  Native operations use the following existing C# calls, bound to recorded
+  original identities rather than caller-supplied identity claims:
+
+  ```powershell
+  [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($Project, $path, $kind)
+  [Deployment.WindowsPrivateFile]::CreateSourceDirectory($Project, $path)
+  [Deployment.WindowsPrivateFile]::CreateSourceFile($Project, $stage)
+  $lease.Finish($saved.Bytes)
+  [Deployment.WindowsPrivateFile]::RestoreSourceSecurity(
+      $Project, $path, $kind, $original.Dev, $original.Ino, $saved.Security, $saved.Attributes)
+  [Deployment.WindowsPrivateFile]::RemoveSourceEntry(
+      $Project, $stage, 'file', $original.Dev, $original.Ino)
+  ```
+
+  Directory operations create a missing directory privately or match the
+  admitted existing directory, release any creation lease, then apply its
+  saved metadata top-down. This establishes the correct parent inheritance
+  before file policy application; every new file still has an explicit
+  private protected DACL while bytes are copied. Stage finish flushes through
+  the original write handle and checks expected size before releasing it.
+  Stage/target metadata requires an unaliased file; stage deletion is bound
+  to the original admitted or newly created identity and never clears readonly.
+  Target policy after publication uses the created stage's file identity.
+  Refuse unknown paths, stale/repeated transitions, owner/identity changes and
+  invalid replies; aggregate primary/cleanup failures and close every lease.
+
+- [ ] **Step 3: wire metadata operations around the existing Git copier.**
+
+  Capture the native scope after `readGitObjectSnapshot` and current inventory
+  validation. Require Windows version-3 metadata. For this immutable-object
+  stage, refuse saved or current `isGitGraphMetadata(entry.path)` entries
+  before any mutation; mutable graph support has its own following task.
+  Preserve the existing staged/linked/partial/conflict/alternate classification.
+
+  ```javascript
+  await permissions.directory({ entry, signal });
+  await permissions.createStage({ entry, signal });
+  await pipeline(
+    createReadStream(source, { flags: constants.O_RDONLY | constants.O_NOFOLLOW }),
+    createWriteStream(stage, { flags: 'r+', flush: true }), { signal },
+  );
+  await matches(stage, entry);
+  await permissions.finishStage({ entry, signal });
+  await permissions.stagePolicy({ entry, signal });
+  await check();
+  await link(stage, target);
+  await permissions.removeStage({ entry, signal });
+  await permissions.targetPolicy({ entry, signal });
+  ```
+
+  Use those Windows hooks only in the corresponding existing branches:
+  a matching staged file is not overwritten, a linked matching stage is
+  retired without changing its target's attributes, and an already complete
+  target retains byte identity while its admitted source policy is restored.
+  Keep Linux chmod/chown/sync/unlink behavior unchanged. Final Windows
+  inspection must use `windowsRestoredSecurityMatches` for all saved entries,
+  preserve the private nested backup, and verify excluded/newer object
+  contents and policies were not changed by directory propagation.
+  Always close the native scope on success, cancellation and failure.
+
+- [ ] **Step 4: accept this bounded object-store capability in Actions.**
+
+  Require actual missing-pack resurrection, unchanged current HEAD/worktree,
+  retained newer loose objects, `git fsck`, original object ACL/readonly
+  attributes, unchanged private backup and exact stage/link reentry behavior.
+  Reuse the existing evidence fixtures for staged/linked success and
+  partial/conflict/alternate refusal; refuse unsupported graph layouts before
+  touching objects. Run focused Windows contracts first, then require the
+  full lifecycle matrix and saved-recovery dependency closure before recording
+  SHA/run/time. Do not call this HEAD/index/ref or public application recovery.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

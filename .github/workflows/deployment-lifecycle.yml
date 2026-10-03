@@ -29,7 +29,7 @@ on:
   workflow_dispatch:
     inputs:
       windows_restore_only:
-        description: Run only native Windows project restore contracts
+        description: Run only native Windows project and Git object restore contracts
         type: boolean
         default: false
 
@@ -221,10 +221,14 @@ jobs:
           tests/deployment-runtime-version.test.mjs
           tests/deployment-diagnostics.test.mjs
           tests/deployment-cold-activation-state.test.mjs
-      - name: Restore native Windows project payloads
+      - name: Restore native Windows project payloads and Git objects
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-restore-project.test.mjs')
+        run: |
+          ./tests/deployment-windows-private-tests.ps1 -Tests @(
+            'tests/deployment-restore-project.test.mjs',
+            'tests/deployment-git-objects.test.mjs'
+          )
       - name: Run private Windows behavioral contracts
         if: runner.os == 'Windows' && !inputs.windows_restore_only
         shell: pwsh
@@ -243,7 +247,6 @@ jobs:
             'tests/deployment-build-artifacts.test.mjs',
             'tests/deployment-receipt.test.mjs',
             'tests/deployment-git-metadata.test.mjs',
-            'tests/deployment-git-objects.test.mjs',
             'tests/deployment-update-policy.test.mjs',
             'tests/deployment-stage-runner.test.mjs',
             'tests/deployment-worker-errors.test.mjs',
