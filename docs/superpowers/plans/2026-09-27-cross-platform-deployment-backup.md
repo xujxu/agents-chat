@@ -11418,6 +11418,21 @@ skipped prerequisites for a complete Windows application restore.
 
 ### Task 5AX: native Windows immutable Git object recovery
 
+Implementation is drafted for Actions, not accepted. Causal
+`ad3da4bacb45e35236aacb28f7893073de566a37 / 37106184534`,
+Windows job `111155063958`, failed at **2026-10-03 07:24:37 UTC** with
+`Git object restoration requires Linux ownership support.` The focused run
+had 32 tests: 15 passed, 16 platform skips and this one causal failure.
+The implementation additionally extracts the existing admission/transport
+protocol into `scripts/deployment/windows-source-security-controller.mjs`
+for both payload and Git clients, rather than duplicating it. All three new
+files are included in the saved recovery engine. The Git scope adds a
+`verify` operation (native `complete` followed by observed metadata equality)
+and rechecks the original newer/excluded file identities, hashes and ACLs.
+Actual Windows tests now cover two broad-inheritance/readonly restores,
+private creation before byte writes, unchanged newer blobs and `info/packs`,
+readonly staged/linked reentry, and saved/current graph refusal before mutation.
+
 **Prerequisite:** Task 5AW full lifecycle acceptance. Keep the project-level
 Git-bearing restore refusal until object, mutable graph and journal-bound
 HEAD/index/ref restoration are all composed.
@@ -11444,7 +11459,7 @@ removal and source metadata only; it must not become a second byte copier.
   in the early Windows restoration step and focused dispatch, removing their
   duplicate entry from the later Windows batch. Full/default remains 34 jobs.
 
-- [ ] **Step 1: publish direct real Windows object recovery coverage.**
+- [x] **Step 1: publish direct real Windows object recovery coverage.**
 
   Import `restoreGitObjects` from `scripts/deployment/git-objects.mjs`, then use
   the existing `fixture(t)`:

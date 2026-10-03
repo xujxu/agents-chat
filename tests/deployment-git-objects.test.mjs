@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import streams from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { chmod, copyFile, link, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -12,11 +15,20 @@ import { restoreProjectSnapshot } from '../scripts/deployment/restore-project.mj
 import { restoreGitObjects } from '../scripts/deployment/git-objects.mjs';
 
 const execute = promisify(execFile);
-async function fixture(t) {
+const securityFixture = fileURLToPath(new URL('./deployment-windows-snapshot-security-fixture.ps1', import.meta.url));
+async function windowsSecurity(file, action = 'inspect') {
+  const { stdout } = await execute('pwsh.exe', [
+    '-NoProfile', '-NonInteractive', '-File', securityFixture, '-File', file, '-Action', action,
+  ], { timeout: 30000, maxBuffer: 65536 });
+  return JSON.parse(stdout);
+}
+
+async function fixture(t, { broad = false } = {}) {
   const root = await temporaryDeployment(t);
-  const project = path.join(root, 'source');
+  const project = path.join(root, broad ? 'app' : 'source');
   const backup = path.join(root, 'backup');
   await mkdir(project);
+  if (broad) await windowsSecurity(project, 'broaden-inheritable');
   const git = async (...args) => (await execute('git', ['-C', project, ...args],
     { timeout: 20000, maxBuffer: 16384 })).stdout.trim();
   await git('init', '--initial-branch=main');
@@ -54,17 +66,56 @@ test('complete Git snapshots bind packed object bytes as well as HEAD/index', as
 test('Windows object recovery restores missing packs offline without moving HEAD', {
   skip: process.platform !== 'win32',
 }, async t => {
-  const f = await fixture(t);
+  const f = await fixture(t, { broad: true });
+  for (const name of await readdir(path.join(f.project, '.git/objects/pack'))) {
+    await chmod(path.join(f.project, '.git/objects/pack', name), 0o400);
+  }
   const manifest = await f.snapshot();
   await writeFile(path.join(f.project, 'source.txt'), 'later source\n');
   await f.git('commit', '-am', 'later');
   const later = await f.git('rev-parse', 'HEAD');
+  const blob = await f.git('rev-parse', 'HEAD:source.txt');
+  const extra = path.join(f.project, '.git/objects', blob.slice(0, 2), blob.slice(2));
+  const excluded = path.join(f.project, '.git/objects/info/packs');
+  const untouched = await Promise.all([extra, excluded].map(async file => ({
+    file, bytes: await readFile(file), security: await windowsSecurity(file),
+  })));
   await rm(path.join(f.project, '.git/objects/pack'), { recursive: true });
   await assert.rejects(f.git('cat-file', '-e', `${f.commit}^{commit}`));
-  await restoreGitObjects({
-    project: f.project, backup: f.backup, manifest,
-    checkStopped: async () => ({ stopped: true, inhibited: true }),
-  });
+  const writeStream = streams.createWriteStream;
+  let privateCopies = 0;
+  streams.createWriteStream = (file, options) => {
+    if (String(file).endsWith('.agents-chat-restore')) {
+      const security = JSON.parse(execFileSync('pwsh.exe', [
+        '-NoProfile', '-NonInteractive', '-File', securityFixture, '-File', file,
+      ], { timeout: 30000, maxBuffer: 65536, encoding: 'utf8' }));
+      assert.doesNotMatch(security.securityDescriptor, /;;;WD\)/);
+      privateCopies++;
+    }
+    return writeStream(file, options);
+  };
+  syncBuiltinESMExports();
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await restoreGitObjects({
+        project: f.project, backup: f.backup, manifest,
+        checkStopped: async () => ({ stopped: true, inhibited: true }),
+      });
+    }
+  } finally {
+    streams.createWriteStream = writeStream;
+    syncBuiltinESMExports();
+  }
+  assert.ok(privateCopies >= 2);
+  for (const { file, bytes, security } of untouched) {
+    assert.deepEqual(await readFile(file), bytes);
+    assert.deepEqual(await windowsSecurity(file), security);
+  }
+  for (const name of await readdir(path.join(f.project, '.git/objects/pack'))) {
+    const restored = await windowsSecurity(path.join(f.project, '.git/objects/pack', name));
+    assert.match(restored.securityDescriptor, /;;;WD\)/);
+    assert.equal(restored.attributes & 1, 1);
+  }
   assert.equal(await f.git('rev-parse', 'HEAD'), later);
   assert.equal(await f.git('show', `${f.commit}:source.txt`), 'original source');
   assert.equal(await f.git('show', `${later}:source.txt`), 'later source');
@@ -78,6 +129,28 @@ test('external object alternates are refused instead of producing a falsely self
   await writeFile(path.join(f.project, '.git/objects/info/alternates'), '/unavailable-object-store\n');
   await assert.rejects(f.snapshot(), /object|alternate|unsupported/i);
 });
+
+for (const boundary of ['saved', 'current']) {
+  test(`Windows immutable object recovery refuses ${boundary} graph pointers before creating missing packs`, {
+    skip: process.platform !== 'win32',
+  }, async t => {
+    const f = await fixture(t);
+    if (boundary === 'saved') await f.git('commit-graph', 'write', '--reachable', '--split');
+    const manifest = await f.snapshot();
+    if (boundary === 'current') await f.git('commit-graph', 'write', '--reachable', '--split');
+    const chain = path.join(f.project, '.git/objects/info/commit-graphs/commit-graph-chain');
+    const bytes = await readFile(chain);
+    const packed = path.join(f.project, '.git/objects/pack');
+    await rm(packed, { recursive: true });
+    await assert.rejects(restoreGitObjects({
+      project: f.project, backup: f.backup, manifest,
+      checkStopped: async () => ({ stopped: true, inhibited: true }),
+    }), /mutable Git graph metadata/i);
+    await assert.rejects(lstat(packed), { code: 'ENOENT' });
+    assert.deepEqual(await readFile(chain), bytes);
+    assert.deepEqual(await verifySnapshot(f.backup), manifest);
+  });
+}
 
 for (const [before, after] of [
   ['split', 'split'], ['split', 'single'], ['single', 'split'], ['absent', 'split'], ['absent', 'single'],
@@ -183,9 +256,10 @@ test('Linux source recovery restores missing packed objects offline while preser
   assert.deepEqual(await verifySnapshot(f.backup), manifest);
 });
 
-for (const boundary of ['staged', 'linked', 'partial', 'conflict', 'alternate']) {
-  test(`Linux object publication reentry classifies ${boundary} evidence before restoring HEAD`, {
-    skip: process.platform !== 'linux',
+for (const [platform, boundary] of ['linux', 'win32'].flatMap(platform =>
+  ['staged', 'linked', 'partial', 'conflict', 'alternate'].map(boundary => [platform, boundary]))) {
+  test(`${platform} object publication reentry classifies ${boundary} evidence before restoring HEAD`, {
+    skip: process.platform !== platform,
   }, async t => {
     const f = await fixture(t);
     const manifest = await f.snapshot();
@@ -204,12 +278,18 @@ for (const boundary of ['staged', 'linked', 'partial', 'conflict', 'alternate'])
     else if (boundary === 'conflict') await writeFile(target, 'foreign existing object');
     else {
       await copyFile(path.join(saved, name), stage);
+      if (platform === 'win32') await chmod(stage, 0o400);
       if (boundary === 'linked') await link(stage, target);
     }
-    const restore = () => restoreProjectSnapshot({
-      project: f.project, backup: f.backup, acceptDataLoss: true, expectedSnapshot: manifest,
-      checkStopped: async () => ({ stopped: true, inhibited: true }),
-    });
+    const restore = () => platform === 'win32'
+      ? restoreGitObjects({
+        project: f.project, backup: f.backup, manifest,
+        checkStopped: async () => ({ stopped: true, inhibited: true }),
+      })
+      : restoreProjectSnapshot({
+        project: f.project, backup: f.backup, acceptDataLoss: true, expectedSnapshot: manifest,
+        checkStopped: async () => ({ stopped: true, inhibited: true }),
+      });
     if (['partial', 'conflict', 'alternate'].includes(boundary)) {
       await assert.rejects(restore(), /object|staged|publication/i);
       assert.equal(await f.git('rev-parse', 'HEAD'), later);
@@ -220,7 +300,8 @@ for (const boundary of ['staged', 'linked', 'partial', 'conflict', 'alternate'])
       assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'), 'later source\n');
     } else {
       await restore();
-      assert.equal(await f.git('show', 'HEAD:source.txt'), 'original source');
+      assert.equal(await f.git('show', `${f.commit}:source.txt`), 'original source');
+      assert.equal(await f.git('rev-parse', 'HEAD'), platform === 'win32' ? later : f.commit);
       assert.equal((await readdir(packed)).some(name => name.endsWith('.agents-chat-restore')), false);
       await f.git('fsck', '--full', '--no-reflogs');
     }

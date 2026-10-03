@@ -8,6 +8,7 @@ import { fileDigest, inventorySnapshot, readSnapshotJson, realDirectory } from '
 import { captureWorkerFields } from './worker-identity.mjs';
 import { syncWorkerDirectory } from './worker-files.mjs';
 import { isGitGraphMetadata, restoreGitGraphMetadata } from './git-graph-metadata.mjs';
+import { prepareWindowsGitObjectSecurity } from './windows-git-object-security.mjs';
 
 const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
 const excludedPaths = ['info/packs'];
@@ -108,7 +109,18 @@ export async function readGitObjectSnapshot(backup, manifest, { signal } = {}) {
 }
 
 export async function restoreGitObjects({ project, backup, manifest, checkStopped, signal }) {
-  if (process.platform !== 'linux') throw new Error('Git object restoration requires Linux ownership support.');
+  const resources = { permissions: null };
+  let failure;
+  try { await restoreObjects({ project, backup, manifest, checkStopped, signal, resources }); }
+  catch (error) { failure = error; }
+  try { await resources.permissions?.close(); }
+  catch (error) { failure = failure ? new AggregateError([failure, error], 'Git object restoration and cleanup failed.') : error; }
+  if (failure) throw failure;
+}
+
+async function restoreObjects({ project, backup, manifest, checkStopped, signal, resources }) {
+  if (!['linux', 'win32'].includes(process.platform)) throw new Error('Git object restoration requires native ownership support.');
+  if (typeof checkStopped !== 'function') throw new Error('Git object restoration requires stopped runtime authority.');
   const saved = await readGitObjectSnapshot(backup, manifest, { signal });
   const git = await realDirectory(path.join(project, '.git'));
   const root = await realDirectory(path.join(git, 'objects'));
@@ -120,15 +132,32 @@ export async function restoreGitObjects({ project, backup, manifest, checkStoppe
       || await realDirectory(root) !== root || !same(identity(await lstat(root, { bigint: true })), original)) {
       throw new Error('Git object restoration authority changed.');
     }
+    signal?.throwIfAborted();
+    await resources.permissions?.check({ signal });
+    signal?.throwIfAborted();
   };
   await check();
   const currentNames = await readdir(root);
   const current = currentNames.length ? await inventorySnapshot(root, currentNames, { signal, excludedPaths }) : [];
   validateEntries(current, manifest.source.commit,
     new Set(saved.entries.filter(entry => entry.kind === 'file').map(entry => entry.path)));
-  for (const entry of saved.entries.filter(entry => entry.kind === 'directory')) {
+  if (process.platform === 'win32') {
+    if ([...saved.entries, ...current].some(entry => isGitGraphMetadata(entry.path))) {
+      throw new Error('Windows mutable Git graph metadata requires its native restoration adapter.');
+    }
+    resources.permissions = await prepareWindowsGitObjectSecurity({
+      project: root, backup: path.join(backup, 'git-objects'), manifest: saved, current, signal,
+    });
+  }
+  const permissions = resources.permissions;
+  for (const entry of saved.entries.filter(entry => entry.kind === 'directory')
+    .sort((a, b) => a.path.split('/').length - b.path.split('/').length)) {
     const directory = path.join(root, entry.path);
     await check();
+    if (permissions) {
+      await permissions.directory({ entry, signal });
+      continue;
+    }
     try { await mkdir(directory, { mode: entry.mode }); }
     catch (error) { if (error.code !== 'EEXIST') throw error; }
     await realDirectory(directory);
@@ -162,30 +191,39 @@ export async function restoreGitObjects({ project, backup, manifest, checkStoppe
       await matches(stage, entry, 2);
       await matches(target, entry, 2);
       await check();
-      await unlink(stage);
+      if (permissions) await permissions.removeStage({ entry, signal });
+      else await unlink(stage);
       await syncWorkerDirectory(parent);
     }
     if (!await matches(target, entry)) {
       if (!await matches(stage, entry)) {
+        if (permissions) await permissions.createStage({ entry, signal });
         await pipeline(
           createReadStream(path.join(backup, 'git-objects/files', entry.path), { flags: constants.O_RDONLY | constants.O_NOFOLLOW }),
-          createWriteStream(stage, { flags: 'wx', mode: 0o600, flush: true }), { signal },
+          createWriteStream(stage, { flags: permissions ? 'r+' : 'wx', mode: 0o600, flush: true }), { signal },
         );
         await matches(stage, entry);
+        if (permissions) await permissions.finishStage({ entry, signal });
       }
-      await chown(stage, entry.uid, entry.gid);
-      await chmod(stage, entry.mode);
-      const handle = await open(stage, constants.O_RDONLY | constants.O_NOFOLLOW);
-      try { await handle.sync(); } finally { await handle.close(); }
+      if (permissions) await permissions.stagePolicy({ entry, signal });
+      else {
+        await chown(stage, entry.uid, entry.gid);
+        await chmod(stage, entry.mode);
+        const handle = await open(stage, constants.O_RDONLY | constants.O_NOFOLLOW);
+        try { await handle.sync(); } finally { await handle.close(); }
+      }
       await check();
       await link(stage, target);
       await syncWorkerDirectory(parent);
-      await unlink(stage);
+      if (permissions) await permissions.removeStage({ entry, signal });
+      else await unlink(stage);
       await syncWorkerDirectory(parent);
     }
     if (!await matches(target, entry)) throw new Error('Restored Git object disappeared.');
+    if (permissions) await permissions.targetPolicy({ entry, signal });
   }
-  await restoreGitGraphMetadata({ root, backup, entries: saved.entries, check, signal });
+  if (permissions) await permissions.verify({ signal });
+  else await restoreGitGraphMetadata({ root, backup, entries: saved.entries, check, signal });
   await check();
   for (const entry of saved.entries.filter(entry => entry.kind === 'file')) {
     await realDirectory(path.dirname(path.join(root, entry.path)));

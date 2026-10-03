@@ -326,6 +326,12 @@ protection flags or file attributes. Root policy remains exact.
 Native payload/privacy/read-only/retry cases and all 34 lifecycle jobs passed
 (`4d5ff70`, Actions `37104965937`). Git/runtime restoration and full Windows
 application acceptance remain separate.
+Windows immutable Git object restoration is implemented separately, pending
+Actions acceptance. It reuses the shared streaming/checksum/hardlink publication
+flow, preserves newer objects and private backups, and restores original ACLs
+and read-only attributes. Mutable graph pointers still refuse before mutation;
+HEAD/index/ref and public Windows restore composition are not enabled by this
+object-store adapter.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and
