@@ -11455,6 +11455,13 @@ Follow-up `dccccb025f8a6d451598e96c67ddb198c30f2106`, focused
 parent rename between private completion and publication. Full `37106839607`
 remains pending behind the retained first implementation full run.
 
+The first immutable-object implementation full run
+`52231cb / 37106634925` completed **2026-10-03 07:55:51 UTC**, **34/34 passed**.
+This accepts the immutable object core and shared transport. The unstarted
+parent follow-up full run `37106839607` was automatically superseded/cancelled
+by the newer graph implementation full run `37107826175`; it is not counted
+as passed. That newest full run must accept the parent and graph additions.
+
 **Prerequisite:** Task 5AW full lifecycle acceptance. Keep the project-level
 Git-bearing restore refusal until object, mutable graph and journal-bound
 HEAD/index/ref restoration are all composed.
@@ -11649,6 +11656,17 @@ saved source policy. Current-only directories now also retain identity/policy
 leases, while mutable pointer files are excluded from unchanged-extra witnesses.
 No HEAD/index/ref or public project restore guard is removed.
 
+First graph implementation
+`af0235cbbf19b8f6e9f66a7b8c10c1d0038c96cb / 37107826349`,
+focused Windows job `111159710933`, passed **2026-10-03 07:55:09 UTC**:
+44 tests, 28 passed, 16 platform skips, zero failures. This includes all five
+layout transitions, partial graph retry observed private before saved ACL
+application, outside hardlink refusal, retained publication parents and all
+previous native payload/object cases. Full `37107826175` is running; Linux
+contracts `111160154262` passed, Windows contracts `111160154273` started.
+Do not mark the parent/graph combination fully accepted before that matrix
+finishes successfully.
+
 **Goal:** Recover the saved single/split/absent commit-graph layout on Windows,
 while retaining newer immutable objects and leaving HEAD/worktree untouched.
 Reuse `git-graph-metadata.mjs` for byte writes and validation. A stopped runtime
@@ -11782,6 +11800,121 @@ known mutable paths.
   backup. Run the focused Windows profile first and then the complete lifecycle
   matrix including Linux graph tests and saved recovery import checks.
   Record SHA/run/time and remaining HEAD/index/ref/public-restore boundaries.
+
+### Task 5AZ: Windows Git metadata permission snapshots
+
+**Goal:** Capture original `.git` root, HEAD/index/ref and parent-directory
+owner/group/DACL/ordinary attributes before implementing their native journal
+restoration. Packed references record absent loose refs/parents explicitly;
+never invent a saved ACL for a name that did not exist.
+
+**Architecture:** Reuse the existing read-only native snapshot observer and its
+required private destination parent. `createSnapshot` already owns both that
+parent and observer cleanup: retain a second observer for `.git`, not a new
+source-only controller or a long-lived process in `inspectGitMetadata`.
+Keep `inspectGitMetadata.record` version 1 for existing callers. Only Windows
+`git.json` snapshots gain version 2, with `windowsSecurity` and `absentPaths`.
+Linux Git records remain version 1. Until journal restoration is implemented,
+version-2 metadata restoration must refuse before mutation.
+
+**Files:**
+- Create `scripts/deployment/windows-git-snapshot-security.mjs`: derive the
+  permitted HEAD/index/ref/parent inventory, validate native security and
+  absence coverage, capture through the supplied observer-retention callback,
+  and recheck recorded absences with the existing `assertSnapshotAbsent`.
+- Modify `scripts/deployment/git-metadata.mjs`: validate both record versions;
+  version 2 requires exact Windows security/absence fields and inventory.
+- Modify `scripts/deployment/snapshot-git.mjs`: return the validated record with
+  its bytes/descriptor, optionally encode captured Windows security as v2,
+  and reject Windows records bound to non-Windows snapshot runtime metadata.
+- Modify `scripts/deployment/snapshot.mjs`: manage all retained observers,
+  enhance the Git record after resolving the private parent, and recheck both
+  original Git bytes and security/absence at the existing completion barriers.
+- Modify `scripts/deployment/restore-git.mjs`: explicitly refuse v2 before any
+  mutation until the native journal adapter can apply the saved policy.
+- Modify `scripts/deployment/saved-recovery-engine.mjs`: include the new helper.
+- Modify `tests/deployment-git-metadata.test.mjs` and the existing ACL fixture:
+  actual attached/packed/detached snapshots, source-index ACL drift,
+  private backup and v2 restore refusal before mutation.
+- Move Git metadata tests into the early/focused Windows restore step, not
+  duplicate them in the later Windows batch. Update README with the boundary.
+
+- [ ] **Step 1: publish actual Windows security capture causal cases.**
+
+  Using the existing real Git fixture, test attached, packed and detached HEAD.
+  Before capture, mark index readonly without changing its bytes. The expected
+  snapshot record assertions are:
+
+  ```javascript
+  const record = JSON.parse(await readFile(path.join(destination, 'git.json'), 'utf8'));
+  assert.equal(record.version, 2);
+  assert.deepEqual(Buffer.from(record.index, 'base64'), originalIndex);
+  const index = record.windowsSecurity.entries.find(entry => entry.path === 'index');
+  assert.equal(index.attributes & 1, 1);
+  assert.equal(record.absentPaths.includes('refs/heads/main'), layout === 'packed');
+  assert.deepEqual(await verifySnapshot(destination), manifest);
+  ```
+
+  Commit test-only `[skip ci]`, push, then explicitly dispatch
+  `windows_restore_only=true`. Require the existing version-1 record to fail
+  these assertions in Actions; preserve the current production full run.
+
+- [ ] **Step 2: add the strict derived-inventory codec and native capture.**
+
+  `windowsGitMetadataInventory(ref)` returns HEAD and index files, plus the
+  attached ref and each parent directory, using validated relative paths.
+  `validateWindowsGitSnapshotSecurity({ windowsSecurity, absentPaths }, ref)`
+  requires absence names to be a unique ordered subset of that inventory;
+  HEAD/index cannot be absent, and an absent directory requires all its
+  descendants absent. Validate the security table against exactly the
+  remaining inventory with `validateWindowsSnapshotSecurity`.
+
+  `prepareWindowsGitSnapshotSecurity({ project, destinationParent, record,
+  retainSecurity, signal })` resolves the original `.git`, classifies only
+  those named files/directories using `lstat`, refuses links or wrong types,
+  and obtains the existing observer:
+
+  ```javascript
+  const observer = await retainSecurity({
+    project: directory, destinationParent, entries, signal,
+  });
+  const captured = validateWindowsGitSnapshotSecurity({
+    windowsSecurity: observer.metadata, absentPaths,
+  }, record.ref);
+  const check = async () => {
+    signal?.throwIfAborted();
+    await assertSnapshotAbsent(directory, captured.absentPaths);
+    await observer.check({ signal });
+    await assertSnapshotAbsent(directory, captured.absentPaths);
+  };
+  return Object.freeze({ ...captured, check });
+  ```
+
+  Version 2 extends the existing exact Git record keys by `windowsSecurity`
+  and `absentPaths`. Preserve base64/index/commit/ref validation before calling
+  the new codec. No new restoration behavior is implied by successful parsing.
+
+- [ ] **Step 3: retain and verify both observers through snapshot completion.**
+
+  Replace the single observer slot in `createSnapshot` with an owned array;
+  close every acquired observer on every exit, preserving primary and all
+  cleanup failures. After project observation, capture `.git` security against
+  the same private parent and serialize the enhanced record. At both existing
+  `gitMetadata.check()` barriers, also call the captured Git security check.
+  Bind the final `git.json` bytes/hash to the existing snapshot descriptor.
+  Add the helper to saved recovery dependencies.
+
+  Direct `restoreGitMetadata` must reject a validated v2 record before guard,
+  lock or file creation. Existing legacy direct-v1 behavior remains unchanged;
+  the public Windows project Git-bearing gate also remains in place.
+
+- [ ] **Step 4: accept snapshots without overstating restoration.**
+
+  Require native attached/packed/detached metadata, readonly index attributes,
+  byte equality, source-only index ACL drift refusal before completion,
+  unchanged private backup policy, v2 refusal before mutation, legacy/Linux
+  compatibility and complete saved recovery closure. Run focused Actions then
+  the complete lifecycle matrix on the production implementation.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

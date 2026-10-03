@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, fork } from 'node:child_process';
 import { promisify } from 'node:util';
-import { lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
@@ -135,6 +135,37 @@ test('complete snapshots bind exact Git metadata and detect payload tampering wi
   await writeFile(path.join(destination, 'git.json'), '{}');
   await assert.rejects(verifySnapshot(destination), /Git|metadata|checksum|integrity/i);
 });
+
+for (const layout of ['attached', 'packed', 'detached']) {
+  test(`Windows ${layout} Git snapshots retain native metadata permissions and explicit absence`, {
+    skip: process.platform !== 'win32',
+  }, async t => {
+    const f = await fixture(t);
+    if (layout === 'packed') await git(f.project, 'pack-refs', '--all');
+    if (layout === 'detached') await git(f.project, 'switch', '--detach', f.commit);
+    const indexPath = path.join(f.project, '.git/index');
+    await chmod(indexPath, 0o400);
+    const originalIndex = await readFile(indexPath);
+    const gitMetadata = await inspectGitMetadata({ project: f.project, commit: f.commit });
+    const destination = path.join(f.root, 'backup');
+    const manifest = await createSnapshot({
+      project: f.project, destination, id: 'git-security', gitMetadata,
+      ...await inspectSnapshotScope({ project: f.project }),
+      source: { commit: f.commit, provenance: 'observed' },
+      runtime: { platform: process.platform, state: 'stopped' },
+    });
+    const record = JSON.parse(await readFile(path.join(destination, 'git.json'), 'utf8'));
+    assert.equal(record.version, 2);
+    assert.deepEqual(Buffer.from(record.index, 'base64'), originalIndex);
+    const index = record.windowsSecurity.entries.find(entry => entry.path === 'index');
+    assert.ok(index);
+    assert.equal(index.attributes & 1, 1);
+    assert.equal(record.absentPaths.includes('refs/heads/main'), layout === 'packed');
+    assert.equal(record.ref, layout === 'detached' ? null : 'refs/heads/main');
+    assert.deepEqual(await readFile(indexPath), originalIndex);
+    assert.deepEqual(await verifySnapshot(destination), manifest);
+  });
+}
 
 test('a source change after Git observation cannot complete a snapshot of mismatched provenance', async t => {
   const f = await fixture(t);
