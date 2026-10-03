@@ -17,6 +17,9 @@ namespace Deployment
         [DllImport("advapi32.dll")]
         static extern uint SetSecurityInfo(SafeFileHandle handle, int objectType, uint information,
             [In] byte[] owner, [In] byte[] group, [In] byte[] dacl, IntPtr sacl);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool SetKernelObjectSecurity(SafeFileHandle file, uint information, [In] byte[] descriptor);
         [StructLayout(LayoutKind.Sequential)]
         struct SourceBasicInformation
         {
@@ -187,6 +190,15 @@ namespace Deployment
                 ((descriptor.ControlFlags & ControlFlags.DiscretionaryAclProtected) != 0 ? 0x80000000u : 0x20000000u);
             uint result = SetSecurityInfo(target.handle, 1, information, owner, group, dacl, IntPtr.Zero);
             if (result != 0) throw new Win32Exception((int)result, "Set original source file security");
+        }
+
+        static void SetSourceKernelSecurity(WindowsPrivateFile target, RawSecurityDescriptor descriptor)
+        {
+            var binary = new byte[descriptor.BinaryLength];
+            descriptor.GetBinaryForm(binary, 0);
+            uint information = 7u | ((descriptor.ControlFlags & ControlFlags.DiscretionaryAclProtected) != 0
+                ? 0x80000000u : 0x20000000u);
+            Native(SetKernelObjectSecurity(target.handle, information, binary), "Restore original source security");
         }
 
         public static SourceSecurityRecord CaptureSourceSecurity(string project, string relative, string kind)
@@ -379,8 +391,8 @@ namespace Deployment
                 ValidateSourceSecurity(Descriptor(source.Target.Security()));
                 if (kind == "file" && source.Target.Information().Links != 1)
                     throw new InvalidDataException("Restored file security requires an unaliased file.");
-                // Exclusive target access prevents implicit propagation outside this explicit entry.
-                SetSourceSecurity(source.Target, new RawSecurityDescriptor(sddl), true);
+                // Restore the captured DACL without synthesizing or propagating inherited entries.
+                SetSourceKernelSecurity(source.Target, new RawSecurityDescriptor(sddl));
                 uint writableAttributes = attributes & ~16u;
                 var basic = new SourceBasicInformation { Attributes = writableAttributes == 0 ? 128u : writableAttributes };
                 Native(SetSourceBasicInformation(source.Target.handle, 0, ref basic,

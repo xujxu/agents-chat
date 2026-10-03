@@ -19,9 +19,6 @@ namespace Deployment
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool SetSourceReparsePoint(SafeFileHandle file, uint code, [In] byte[] input, uint inputBytes,
             IntPtr output, uint outputBytes, out uint returned, IntPtr overlapped);
-        [DllImport("advapi32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        static extern bool SetKernelObjectSecurity(SafeFileHandle file, uint information, [In] byte[] descriptor);
 
         public sealed class SourceReparseLease : IDisposable
         {
@@ -245,12 +242,7 @@ namespace Deployment
         {
             ValidateJunctionPolicy(sddl, attributes);
             var descriptor = new RawSecurityDescriptor(sddl);
-            var binary = new byte[descriptor.BinaryLength];
-            descriptor.GetBinaryForm(binary, 0);
-            uint information = 7u | ((descriptor.ControlFlags & ControlFlags.DiscretionaryAclProtected) != 0
-                ? 0x80000000u : 0x20000000u);
-            // Kernel security updates the retained junction itself, without target-tree propagation.
-            Native(SetKernelObjectSecurity(value.handle, information, binary), "Restore original junction security");
+            SetSourceKernelSecurity(value, descriptor);
             uint ordinary = attributes & ~0x410u;
             var basic = new SourceBasicInformation { Attributes = ordinary == 0 ? 128u : ordinary };
             Native(SetSourceBasicInformation(value.handle, 0, ref basic,

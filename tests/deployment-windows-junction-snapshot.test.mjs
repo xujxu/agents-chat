@@ -8,6 +8,31 @@ import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.m
 import { restoreProjectSnapshot } from '../scripts/deployment/restore-project.mjs';
 import { validateWindowsSnapshotSecurity } from '../scripts/deployment/windows-snapshot-security.mjs';
 
+test('Windows complete snapshot and restoration support canonical source paths beyond MAX_PATH',
+  { skip: process.platform !== 'win32', timeout: 120000 }, async t => {
+    const root = await temporaryDeployment(t);
+    const project = path.join(root, 'app');
+    const directory = path.join(project, ...Array(4).fill('segment-'.repeat(10)));
+    const file = path.join(directory, `${'payload-'.repeat(10)}.txt`);
+    assert.ok(directory.length > 260);
+    await mkdir(directory, { recursive: true });
+    await writeFile(file, 'original long-path payload');
+    const backup = path.join(root, 'backup');
+    const manifest = await createSnapshot({
+      project, destination: backup, id: 'long-source-path',
+      ...await inspectSnapshotScope({ project }),
+      source: { commit: 'a'.repeat(40), provenance: 'observed' },
+      runtime: { platform: 'win32', state: 'stopped' },
+    });
+    await writeFile(file, 'changed');
+    await restoreProjectSnapshot({
+      project, backup, expectedSnapshot: manifest, acceptDataLoss: true,
+      checkStopped: async () => ({ stopped: true, inhibited: true }),
+    });
+    assert.equal(await readFile(file, 'utf8'), 'original long-path payload');
+    assert.deepEqual(await verifySnapshot(backup), manifest);
+  });
+
 for (const missingTarget of [false, true]) {
   test(`Windows directory-link snapshot restores complete project with missing dependency target=${missingTarget}`,
     { skip: process.platform !== 'win32', timeout: 120000 }, async t => {

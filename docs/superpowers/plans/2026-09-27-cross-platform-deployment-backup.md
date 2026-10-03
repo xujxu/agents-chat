@@ -13044,6 +13044,17 @@ boundary, rather than redundantly rechecking every retained link for every
 unrelated eight-entry transport batch. Preserve target/parent leases and final
 source barriers, then measure the same actual workload against the same limits.
 
+**Native-read results:** `2d7b8ac / 37136823227` reached 13,890 entries
+in 20,010 ms instead of 82,393 ms, but stopped at a long Next.js source path
+with native open failure. Add a beyond-MAX_PATH round trip and Win32 error
+codes rather than guessing the failure. Focused `37136816924` also found a
+real raw-DACL mismatch: GetKernelObjectSecurity observes legacy explicit
+entries, while SetSecurityInfo synthesizes duplicate inherited entries during
+restore. Reuse the already proven non-propagating kernel security setter for
+ordinary final policy restoration as well; leave deliberate inheritance and
+temporary removal preparation APIs unchanged. Require existing mixed round
+trips and the long-path causal before further actual-app measurement.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.

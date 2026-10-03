@@ -107,6 +107,11 @@ try {
 } catch {
     $failure = $_.Exception
     [Console]::Error.WriteLine("Snapshot source security observation refused: $stage. $($failure.Message)")
+    for ($cause = $failure; $null -ne $cause; $cause = $cause.InnerException) {
+        if ($cause -is [ComponentModel.Win32Exception]) {
+            [Console]::Error.WriteLine("Native snapshot error code: $($cause.NativeErrorCode).")
+        }
+    }
 } finally {
     foreach ($resource in (@($junctions.Values) + @($destination, $root, $watch))) {
         if ($null -eq $resource) { continue }
