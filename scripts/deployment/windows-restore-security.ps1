@@ -222,6 +222,11 @@ try {
 } catch {
     $failure = $_.Exception
     [Console]::Error.WriteLine("Project security restoration refused: $stage. $($failure.Message)")
+    for ($cause = $failure; $null -ne $cause; $cause = $cause.InnerException) {
+        if ($cause -is [ComponentModel.Win32Exception]) {
+            [Console]::Error.WriteLine("Native restoration error code: $($cause.NativeErrorCode).")
+        }
+    }
 } finally {
     $resources = @($created.Values | ForEach-Object { $_.Lease }) + @($backupLease, $root, $watch)
     foreach ($resource in $resources) {

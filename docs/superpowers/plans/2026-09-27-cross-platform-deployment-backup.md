@@ -11243,6 +11243,16 @@ if it still differs. Move the Windows payload suite to an early dedicated step
 inside the existing contract job (not duplicate coverage) for faster diagnosis.
 Keep the failed implementation run through completion.
 
+The first run finished **33/34 success**, with only Windows contracts failing.
+Correction `5847536 / 37102208268`, early Windows job `111144880796`,
+completed **2026-10-03 06:18:46 UTC**: unchanged-root admission now succeeds,
+and unsupported saved ownership correctly refuses before mutation. Payload
+restoration reaches copying, then exposes Linux-only read-handle `fsync`
+(`EPERM` on Windows). Windows already flushes through its original native
+write-through creation handle at `Finish`; retain the extra read-handle sync
+only for Linux. Also rethrow cancellation after the stopped callback before
+calling the native check, preserving the original cancellation reason.
+
 Apply the accepted version-3 metadata to real restored files, using standard
 Windows handle-based security/attribute APIs. Reuse the existing project byte
 restorer, backup checks, explicit data-loss acknowledgement and stopped/inhibited

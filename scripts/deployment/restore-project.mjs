@@ -70,6 +70,7 @@ async function restoreProject({ project, backup, acceptDataLoss, checkStopped, s
     if (authority?.stopped !== true || authority.inhibited !== true) {
       throw new Error('Project restoration requires a stopped and inhibited managed runtime.');
     }
+    signal?.throwIfAborted();
     await security?.checkRoot({ signal });
     signal?.throwIfAborted();
   };
@@ -160,12 +161,12 @@ async function restoreProject({ project, backup, acceptDataLoss, checkStopped, s
     } else {
       await chown(target, entry.uid, entry.gid);
       await chmod(target, entry.mode);
+      const handle = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+      const errors = [];
+      try { await handle.sync(); }
+      catch (error) { errors.push(error); }
+      await closeWorkerFile(handle, errors);
     }
-    const handle = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const errors = [];
-    try { await handle.sync(); }
-    catch (error) { errors.push(error); }
-    await closeWorkerFile(handle, errors);
   }
   for (const entry of [...directories].reverse()) {
     signal?.throwIfAborted();
