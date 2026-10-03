@@ -276,7 +276,8 @@ serialized until its own exit, even after its Node admission owner exits.
 The consumer, five genuine actor-loss cases and all 31 regression jobs passed
 at `4b1a84f / 37082766145`. Additional coverage that loses admission while a
 recovery bridge remains alive, then kills the recovery actor and resumes
-its acknowledged progress, is awaiting acceptance at `e4c793f`.
+its acknowledged progress, also passed with all 31 jobs at
+`e4c793f / 37083428275`.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

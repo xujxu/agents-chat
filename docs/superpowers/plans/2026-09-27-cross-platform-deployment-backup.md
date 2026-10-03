@@ -10579,7 +10579,7 @@ consumer never starts or adopts another runtime generation.
   rather than requiring the in-memory acknowledgement to survive.
   Errors poison the scope and retain all evidence. Close only drops handles.
 
-- [ ] **Step 4: accept replay, refusal and existing completed cleanup together.**
+- [x] **Step 4: accept replay, refusal and existing completed cleanup together.**
 
   The recovery fixture drives only bounded progress:
 
@@ -10606,7 +10606,7 @@ consumer never starts or adopts another runtime generation.
   acknowledged progress before completing. This tests the admission-loss
   interval and interrupted recovery itself without production fault flags.
 
-- [ ] **Step 5: persist full Actions acceptance, not just recovery-job success.**
+- [x] **Step 5: persist full Actions acceptance, not just recovery-job success.**
 
   Push implementation with the standard co-author trailer. Inspect the exact
   SHA's `deployment-lifecycle.yml` run, preserve implementation failures for
@@ -10622,8 +10622,10 @@ consumer never starts or adopts another runtime generation.
   `111086663264` originally disabled, `111086663268` pre-release refusal,
   and `111086663290` enabled-true completion.
   Supplemental recovery-actor/admission-loss coverage `e4c793f`,
-  Actions `37083428275`, still awaits acceptance; do not mark that case done
-  from the production-baseline run.
+  Actions `37083428275`, passed **31/31**, completed
+  **2026-10-03 01:14:50 UTC**. Native job `111090486325` explicitly proved
+  admission-loss exclusion and subsequent recovery-actor death/replay at
+  **00:56:26 UTC**, then passed existing receipt/worker cleanup and unlock.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
