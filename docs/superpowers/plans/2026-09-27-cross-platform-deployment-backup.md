@@ -11171,7 +11171,7 @@ refused until its actual permission application and native authority are wired.
   observed no rejection after the actual source ACL change. Both failures
   reached their intended assertions, while the existing snapshot cases passed.
 
-- [ ] **Step 2: capture bounded, deduplicated native security metadata.**
+- [x] **Step 2: capture bounded, deduplicated native security metadata.**
 
   ```javascript
   {
@@ -11189,7 +11189,7 @@ refused until its actual permission application and native authority are wired.
   Reinspect actual ACLs before accepting a completed snapshot. Read metadata
   only; do not load large payloads or grant stop/restore authority.
 
-- [ ] **Step 3: integrate snapshot manifests and saved dependency closure.**
+- [x] **Step 3: integrate snapshot manifests and saved dependency closure.**
 
   ```javascript
   await security.check({ signal });
@@ -11205,7 +11205,17 @@ refused until its actual permission application and native authority are wired.
   source ACLs to backup payloads. Close native observation on success, error
   and cancellation, preserving both primary and cleanup failures.
 
-- [ ] **Step 4: accept real Windows metadata and full regression evidence.**
+  Implementation `188ab55d3434e1a9c217ac94b40ceccafe421ff2 / 37098213362`
+  passed Windows contracts `111132379062` at
+  **2026-10-03 05:12:49 UTC**. Actual source ACL metadata, large UTF-16LE
+  payload preservation, private backup ACL, non-private parent refusal,
+  final source ACL drift refusal, version-1/2 readability and nested packed
+  Git-object snapshot cases passed. The native observer uses 8-KiB descriptor,
+  at-most-eight-entry batch and 128-KiB frame bounds, with a 32-MiB aggregate
+  metadata budget. The full workflow passed **34/34 at 05:22:34 UTC**,
+  including the Linux public first-install/two-updates/saved-restore regression.
+
+- [x] **Step 4: accept real Windows metadata and full regression evidence.**
 
   Require the causal cases to pass, saved-recovery import coverage, nested
   Git-object snapshot coverage and all lifecycle jobs. Record the exact SHA,
