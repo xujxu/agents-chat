@@ -125,7 +125,12 @@ namespace Deployment
                         throw new InvalidDataException("Unsupported source reparse namespace.");
                     value = value.Substring(4);
                 }
-                RequirePath(value);
+                try { RequirePath(value); }
+                catch (ArgumentException error)
+                {
+                    throw new InvalidDataException("Noncanonical " + (substitute ? "substitute" : "display") +
+                        " directory link target: " + value, error);
+                }
                 return value;
             }
 

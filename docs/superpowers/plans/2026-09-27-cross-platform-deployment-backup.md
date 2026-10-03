@@ -13000,6 +13000,15 @@ Add malformed-flag refusal before destination creation and separate metadata
 table ordering/count checks. Native creation and full mixed round trips remain
 pending Actions confirmation.
 
+**First symbolic integration:** `98e503a / 37134769323` failed
+**2026-10-03 15:53:20 UTC**: relative native symbolic-link observation,
+recreation, target-policy preservation and malformed-flag refusal passed,
+as did both original junction cases. Absolute native symbolic links and both
+mixed snapshots fail the canonical local target guard. Identify whether the
+substitute or display name differs before admitting another path encoding.
+Native FSCTL symbolic creation already succeeded for relative links; do not
+add speculative privilege changes.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.
