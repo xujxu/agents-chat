@@ -23,6 +23,7 @@ const files = Object.freeze([...new Set([
   'linux-cold-retirement-proof.mjs', 'linux-cold-restore-completion.mjs',
   'linux-cold-restore.mjs',
   'restore-transaction.mjs', 'restore-project.mjs', 'restore-external.mjs',
+  'restore-windows-external.mjs',
   'linux-configuration.mjs', 'configuration-files.mjs', 'configuration-compatibility.mjs',
   'linux-inactive-configuration.mjs', 'linux-inactive-discovery.mjs',
   'snapshot-configuration.mjs',

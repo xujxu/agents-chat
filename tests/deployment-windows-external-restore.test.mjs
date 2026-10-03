@@ -150,3 +150,60 @@ test('Windows external restoration refuses unauthorized or unsafe resources befo
   assert.equal(await readFile(f.missing, 'utf8'), 'new configuration\n');
   assert.deepEqual(await verifySnapshot(f.backup), f.manifest);
 });
+
+test('Windows external restoration rechecks earlier file policy after restoring later parents', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const f = await fixture(t, true);
+  let changed = false;
+  await assert.rejects(restoreExternalSnapshot({
+    ...f.options,
+    checkStopped: async () => {
+      if (!changed) {
+        let info;
+        try { info = await lstat(f.file); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+        if (info && !(info.mode & 0o200) && (await readFile(f.file)).equals(f.saved.get(f.file))) {
+          await chmod(f.file, 0o600);
+          changed = true;
+        }
+      }
+      return { stopped: true, inhibited: true };
+    },
+  }), /security|attributes|policy/i);
+  assert.ok(changed);
+  assert.deepEqual(await verifySnapshot(f.backup), f.manifest);
+  await restoreExternalSnapshot(f.options);
+  await verifyRestored(f);
+});
+
+test('Windows external restoration preserves a root-only absence inventory across retries', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const root = await temporaryDeployment(t);
+  const project = path.join(root, 'app');
+  const directory = path.join(root, 'system');
+  await mkdir(project);
+  await mkdir(directory);
+  const file = path.join(directory, 'absent.env');
+  const unrelated = path.join(directory, 'unrelated.txt');
+  await writeFile(unrelated, 'retained\n');
+  const backup = path.join(root, 'backup');
+  const manifest = await createSnapshot({
+    project, destination: backup, id: 'native-external-absence', files: [],
+    externalFiles: [{ path: file, optional: true }],
+    source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+  });
+  await writeFile(file, 'later\n');
+  await chmod(file, 0o400);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await restoreExternalSnapshot({
+      project, backup, authorizedPaths: [file], acceptDataLoss: true,
+      checkStopped: async () => ({ stopped: true, inhibited: true }),
+    });
+    await assert.rejects(lstat(file), { code: 'ENOENT' });
+    assert.equal(await readFile(unrelated, 'utf8'), 'retained\n');
+    assert.deepEqual(await verifySnapshot(backup), manifest);
+  }
+});

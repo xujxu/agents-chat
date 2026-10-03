@@ -12359,6 +12359,15 @@ runtime scope.
 
 ### Task 5BD: Restore native Windows external configuration through shared source operations
 
+Causal `6a64940 / 37117676485`, job `111187536804`, completed
+**2026-10-03 10:57:10 UTC**: 92 tests, 72 passed, 4 failed, 16 platform
+skips and no cancellations. Both restoration cases reached the Linux-only
+guard; cancellation and acknowledgement cases received that same guard instead
+of their expected operation-specific errors. No new fixture or import failure.
+The shared native source facade and external helper are implemented locally,
+including final cross-parent policy rechecks and root-only absence retry tests,
+but are not yet accepted.
+
 **Goal:** Provide standalone, exactly authorized external restoration from the
 native snapshot. Retain the public Windows project/runtime composition gate.
 Do not modify an installed immutable bundle while a runtime scope retains it.
@@ -12374,7 +12383,7 @@ Do not modify an installed immutable bundle while a runtime scope retains it.
 - Add the new import to `saved-recovery-engine.mjs` and native tests to the
   existing Windows snapshot/restoration job; update the obsolete refusal test.
 
-- [ ] **Step 1: publish real standalone restore cases before implementation.**
+- [x] **Step 1: publish real standalone restore cases before implementation.**
 
   Snapshot readonly external `.env.local` plus an absent sibling, then replace
   the bytes and create that sibling. Preserve unrelated files in both roots.

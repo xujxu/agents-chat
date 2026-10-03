@@ -6,6 +6,7 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { verifySnapshot } from './snapshot.mjs';
 import { realDirectory } from './snapshot-files.mjs';
 import { canonicalWorkerDirectory, closeWorkerFile, readWorkerFile, syncWorkerDirectory } from './worker-files.mjs';
+import { restoreWindowsExternalSnapshot } from './restore-windows-external.mjs';
 
 const identity = info => ({ dev: info.dev, ino: info.ino });
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -24,6 +25,9 @@ async function currentFile(file) {
 export async function restoreExternalSnapshot({
   project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal, expectedSnapshot,
 }) {
+  if (process.platform === 'win32') return restoreWindowsExternalSnapshot({
+    project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal, expectedSnapshot,
+  });
   if (process.platform !== 'linux') throw new Error('External restoration requires Linux metadata; Windows requires native ACL restoration.');
   signal?.throwIfAborted();
   if (acceptDataLoss !== true || typeof checkStopped !== 'function') {

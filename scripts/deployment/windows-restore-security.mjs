@@ -29,7 +29,17 @@ export async function prepareWindowsProjectRestoreSecurity({
   if (manifest.gitMetadata || manifest.gitObjects || manifest.externalFiles?.length) {
     throw new Error('Windows Git and external restoration require their native security adapters.');
   }
-  const metadata = validateWindowsSnapshotSecurity(manifest.windowsSecurity, manifest.entries);
+  return prepareWindowsSourceRestoreSecurity({
+    project, backup, entries: manifest.entries, metadata: manifest.windowsSecurity, current, signal, pwsh,
+  });
+}
+
+export async function prepareWindowsSourceRestoreSecurity({
+  project, backup, entries, metadata: supplied, current, signal, pwsh = 'pwsh.exe',
+}) {
+  signal?.throwIfAborted();
+  if (process.platform !== 'win32') throw new Error('Native source security restoration requires Windows.');
+  const metadata = validateWindowsSnapshotSecurity(supplied, entries);
   const inventory = entries => {
     if (!Array.isArray(entries) || entries.length > 250000) throw new Error('Unsupported Windows restore inventory.');
     const paths = new Set();
@@ -46,9 +56,9 @@ export async function prepareWindowsProjectRestoreSecurity({
       return { path: entry.path, kind: entry.kind };
     });
   };
-  const savedEntries = inventory(manifest.entries).map((entry, index) => ({
+  const savedEntries = inventory(entries).map((entry, index) => ({
     ...entry, securityDescriptor: metadata.descriptors[metadata.entries[index].security],
-    attributes: metadata.entries[index].attributes, bytes: manifest.entries[index].bytes ?? 0,
+    attributes: metadata.entries[index].attributes, bytes: entries[index].bytes ?? 0,
   }));
   const currentEntries = inventory(current);
   if (![project, backup].every(value => typeof value === 'string' && path.isAbsolute(value)
@@ -56,6 +66,36 @@ export async function prepareWindowsProjectRestoreSecurity({
   const { invoke, applyEntries } = await openWindowsSourceSecurityController({
     project, backup, metadata, savedEntries, currentEntries, signal, pwsh, script, refused,
   });
+  const verify = async ({ signal: restoreSignal = signal } = {}) => {
+    await invoke('check', [], restoreSignal);
+    const observed = await inspectWindowsSnapshotSecurity({
+      project, destinationParent: backup, entries, signal: restoreSignal, pwsh,
+    });
+    const errors = [];
+    if (!windowsRestoredSecurityMatches(metadata, observed.metadata, entries)) {
+      const error = new Error('Restored Windows ACL or attributes differ from the snapshot.');
+      for (let index = -1; index < metadata.entries.length; index++) {
+        const expected = index < 0 ? metadata.root : metadata.entries[index];
+        const actual = index < 0 ? observed.metadata.root : observed.metadata.entries[index];
+        const expectedPolicy = metadata.descriptors[expected.security];
+        const actualPolicy = observed.metadata.descriptors[actual.security];
+        if (expected.attributes !== actual.attributes
+          || (index < 0 ? expectedPolicy !== actualPolicy : !restoredPolicyMatches(expectedPolicy, actualPolicy))) {
+          error.comparison = {
+            path: index < 0 ? '.' : expected.path,
+            expectedAttributes: expected.attributes, observedAttributes: actual.attributes,
+            expectedPolicy: redactedPolicy(expectedPolicy), observedPolicy: redactedPolicy(actualPolicy),
+          };
+          break;
+        }
+      }
+      error.message += error.comparison ? ` ${JSON.stringify(error.comparison)}`
+        : ' Descriptor table indexing differs despite matching entry policies.';
+      errors.push(error);
+    }
+    try { await observed.close(); } catch (error) { errors.push(error); }
+    if (errors.length) throw new AggregateError(errors, 'Windows restored security verification failed.');
+  };
   return Object.freeze({
     checkRoot: ({ signal } = {}) => invoke('check', undefined, signal),
     prepareRemoval: async ({ signal } = {}) => {
@@ -68,38 +108,13 @@ export async function prepareWindowsProjectRestoreSecurity({
     createDirectory: ({ entry, signal }) => invoke('mkdir', [{ path: entry.path }], signal),
     createFile: ({ entry, signal }) => invoke('create', [{ path: entry.path }], signal),
     finishFile: ({ entry, signal }) => invoke('finish', [{ path: entry.path }], signal),
+    verify,
     restore: async ({ signal: restoreSignal = signal } = {}) => {
       const ordered = [...savedEntries].sort((a, b) =>
         Number(a.kind === 'file') - Number(b.kind === 'file') || a.path.split('/').length - b.path.split('/').length);
       await applyEntries('restore', ordered, restoreSignal);
       await invoke('finish-restore', [], restoreSignal);
-      const observed = await inspectWindowsSnapshotSecurity({
-        project, destinationParent: backup, entries: manifest.entries, signal: restoreSignal, pwsh,
-      });
-      const errors = [];
-      if (!windowsRestoredSecurityMatches(metadata, observed.metadata, manifest.entries)) {
-        const error = new Error('Restored Windows ACL or attributes differ from the snapshot.');
-        for (let index = -1; index < metadata.entries.length; index++) {
-          const expected = index < 0 ? metadata.root : metadata.entries[index];
-          const actual = index < 0 ? observed.metadata.root : observed.metadata.entries[index];
-          const expectedPolicy = metadata.descriptors[expected.security];
-          const actualPolicy = observed.metadata.descriptors[actual.security];
-          if (expected.attributes !== actual.attributes
-            || (index < 0 ? expectedPolicy !== actualPolicy : !restoredPolicyMatches(expectedPolicy, actualPolicy))) {
-            error.comparison = {
-              path: index < 0 ? '.' : expected.path,
-              expectedAttributes: expected.attributes, observedAttributes: actual.attributes,
-              expectedPolicy: redactedPolicy(expectedPolicy), observedPolicy: redactedPolicy(actualPolicy),
-            };
-            break;
-          }
-        }
-        error.message += error.comparison ? ` ${JSON.stringify(error.comparison)}`
-          : ' Descriptor table indexing differs despite matching entry policies.';
-        errors.push(error);
-      }
-      try { await observed.close(); } catch (error) { errors.push(error); }
-      if (errors.length) throw new AggregateError(errors, 'Windows restored security verification failed.');
+      await verify({ signal: restoreSignal });
     },
     close: () => invoke('close'),
   });

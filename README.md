@@ -360,8 +360,13 @@ Version-3 snapshots add `windowsExternalSecurity`, using the existing
 native security tables for each external parent and its present files, including
 root-only tables for absent resources. Original byte/presence and ACL checks
 remain active until snapshot completion; backups stay private. Linux formats
-are unchanged. Native external restoration and public Windows runtime composition
-remain gated, and installed immutable runtime bundles are not rewritten.
+are unchanged. Standalone native external restoration is implemented but awaiting
+Actions acceptance. It requires exact destination authorization, data-loss
+acknowledgement, a stopped/inhibited runtime and unchanged parent policy. It
+reuses private creation and native source removal/permission restoration;
+interrupted private copies can be retried from the unchanged backup.
+Public Windows project/runtime composition remains gated, and installed immutable
+runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

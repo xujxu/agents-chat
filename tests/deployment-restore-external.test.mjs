@@ -125,8 +125,8 @@ test('external restoration cancellation keeps the backup and permits exact retry
   await assert.rejects(lstat(f.env), { code: 'ENOENT' });
 });
 
-test('Windows external restoration cannot substitute POSIX modes for ACLs', {
+test('Windows external restoration requires explicit acknowledgement and runtime authority', {
   skip: process.platform !== 'win32',
 }, async () => {
-  await assert.rejects(restoreExternalSnapshot({}), /Linux|Windows|ACL/i);
+  await assert.rejects(restoreExternalSnapshot({}), /acknowledgement|stopped/i);
 });
