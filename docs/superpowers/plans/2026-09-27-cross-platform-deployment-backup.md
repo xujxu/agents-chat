@@ -12095,6 +12095,26 @@ top-level cases. Packed-ref cases also compare materialized file/directory
 DACLs and attributes with ordinary-created siblings. Owner/group are not
 asserted equal: private preparation intentionally retains the creating user's
 owner rather than inventing a saved owner for a previously absent node.
+Corrected layout/reentry/inheritance coverage passed at `bc47590`,
+focused `37114975177 / 111179917407`, **2026-10-03 10:06:03 UTC**:
+80 tests, 64 passed, 16 platform skips, no failures or cancellations.
+Expanded coverage `faa26b4`, focused `37115336851 / 111180966063`, passed
+**2026-10-03 10:12:38 UTC**: 81 tests, 65 passed, 16 platform skips,
+no failures or cancellations, approximately 306 seconds. It additionally
+proves cancelled reentry, outside hardlink, config/packed-ref byte drift,
+root/parent attribute drift, foreign writer locks, and incomplete private
+preparation refusal without discarding evidence. Final full `37115682474`
+is pending; do not treat focused results as complete platform acceptance.
+The full `bc47590` Windows job `111179965021` reached its 15-minute deadline
+at **10:16:20 UTC** during the fourth cold-retirement diagnostic repetition.
+Native restoration passed in approximately 307 seconds, the existing private
+contracts passed in 378 seconds, and each successful cold-retirement repetition
+took approximately 58 seconds. This is serial suite budget exhaustion, not
+the earlier single-flight bug. Move the unchanged native restoration step into
+an independent `windows-restore` job; keep all five diagnostic repetitions and
+the unchanged 15-minute limits. Focused dispatch runs this job only; full
+validation now requires **35 jobs**, including the original contract coverage.
+Supersede queued full `37115682474`, whose old layout would repeat the timeout.
 
 **Goal:** Extend the existing `restore-git.mjs` journal, not a second
 transaction engine, to restore validated version-2 metadata with native
@@ -12148,7 +12168,7 @@ complete. Direct v2 restoration requires a canonical private backup root.
   Commit test-only `[skip ci]`, push and dispatch `windows_restore_only=true`.
   Expected failure: the existing native-security-journal guard, not setup errors.
 
-- [ ] **Step 2: provide one native permissions facade for the existing core.**
+- [x] **Step 2: provide one native permissions facade for the existing core.**
 
   Add `prepareWindowsGitMetadataSecurity({ project, backup, record, signal,
   pwsh = 'pwsh.exe' })`. Require Windows v2, canonical disjoint source/backup
@@ -12179,7 +12199,7 @@ complete. Direct v2 restoration requires a canonical private backup root.
   in tests. New loose refs intentionally override packed refs, matching Git's
   normal update behavior; never rewrite unrelated packed records.
 
-- [ ] **Step 3: extend, rather than replace, the persistent journal.**
+- [x] **Step 3: extend, rather than replace, the persistent journal.**
 
   Keep the v1 path unchanged. A v2 call without private backup context must
   still refuse before guard, lock or file creation. For v2, open the facade,

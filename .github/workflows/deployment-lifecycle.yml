@@ -174,14 +174,34 @@ jobs:
           sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
           sudo "$(command -v node)" --test tests/deployment-linux-data-worker.test.mjs tests/deployment-linux-compatibility.test.mjs tests/deployment-linux-snapshot.test.mjs tests/deployment-linux-readiness.test.mjs tests/deployment-linux-restore.test.mjs tests/deployment-linux-cold-restore.test.mjs tests/deployment-linux-acceptance.test.mjs
 
+  windows-restore:
+    name: Native Windows project and Git restoration
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Restore native Windows project payloads and Git state
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-private-tests.ps1 -Tests @(
+            'tests/deployment-restore-project.test.mjs',
+            'tests/deployment-git-objects.test.mjs',
+            'tests/deployment-git-metadata.test.mjs',
+            'tests/deployment-windows-git-journal.test.mjs'
+          )
+
   contracts:
+    if: ${{ !inputs.windows_restore_only }}
     name: Contracts (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.os == 'windows-2022' && 15 || 10 }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ inputs.windows_restore_only && fromJSON('["windows-2022"]') || fromJSON('["ubuntu-24.04", "windows-2022"]') }}
+        os: [ubuntu-24.04, windows-2022]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -221,18 +241,8 @@ jobs:
           tests/deployment-runtime-version.test.mjs
           tests/deployment-diagnostics.test.mjs
           tests/deployment-cold-activation-state.test.mjs
-      - name: Restore native Windows project payloads and Git state
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          ./tests/deployment-windows-private-tests.ps1 -Tests @(
-            'tests/deployment-restore-project.test.mjs',
-            'tests/deployment-git-objects.test.mjs',
-            'tests/deployment-git-metadata.test.mjs',
-            'tests/deployment-windows-git-journal.test.mjs'
-          )
       - name: Run private Windows behavioral contracts
-        if: runner.os == 'Windows' && !inputs.windows_restore_only
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           ./tests/deployment-windows-private-tests.ps1 -Tests @(
@@ -265,7 +275,7 @@ jobs:
             'tests/deployment-cold-activation-state.test.mjs'
           )
       - name: Probe Windows cold retirement stability
-        if: runner.os == 'Windows' && !inputs.windows_restore_only
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           for ($attempt = 1; $attempt -le 5; $attempt++) {
