@@ -1,0 +1,96 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { lstat, readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as stages from '../scripts/deployment/windows-task-transaction.mjs';
+import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
+
+export function createWindowsTaskSnapshotFixture({ observation, control, lock, configuration, recovery, sourceCommit, targetCommit }) {
+  const destination = path.join(control, 'backup');
+  const stageOptions = context => ({ context, control, lock, sourceCommit });
+  const requireStage = () => assert.equal(typeof stages.assertWindowsTaskSnapshotStage, 'function',
+    'Missing original-task copying-stage snapshot authority API');
+  return {
+    async refuseEarly(context) {
+      requireStage();
+      await assert.rejects(stages.assertWindowsTaskSnapshotStage(stageOptions(context)), /copying|stage/i);
+      await assert.rejects(lstat(destination), { code: 'ENOENT' });
+    },
+    async capture(context) {
+      requireStage();
+      const options = stageOptions(context);
+      for (const change of [
+        { context: { ...context } }, { lock: { ...lock, token: randomUUID() } }, { sourceCommit: targetCommit },
+      ]) await assert.rejects(stages.assertWindowsTaskSnapshotStage({ ...options, ...change }));
+      const interrupted = new AbortController();
+      interrupted.abort(new Error('Snapshot stage cancelled'));
+      await assert.rejects(stages.assertWindowsTaskSnapshotStage({
+        ...options, signal: interrupted.signal,
+      }), /Snapshot stage cancelled/);
+      await assert.rejects(lstat(destination), { code: 'ENOENT' });
+      const binding = await stages.assertWindowsTaskSnapshotStage(options);
+      const task = {
+        version: 1, name: observation.taskName, definition: observation.definition,
+        securityDescriptor: observation.securityDescriptor, configuration: observation.configuration,
+        configurationSha256: observation.configurationSha256,
+      };
+      assert.deepEqual(binding, { project: lock.project, sourceCommit, task });
+      const { createWindowsTaskSnapshot } = await import('../scripts/deployment/windows-task-snapshot.mjs');
+      const snapshotOptions = {
+        context, control, lock, configuration, destination, id: 'native-task-snapshot',
+        source: { commit: sourceCommit, provenance: 'observed' }, recoveryEngine: recovery.manifestSha256,
+      };
+      await assert.rejects(createWindowsTaskSnapshot({ ...snapshotOptions, context: { ...context } }));
+      await assert.rejects(createWindowsTaskSnapshot({ ...snapshotOptions, signal: interrupted.signal }),
+        /Snapshot stage cancelled/);
+      await assert.rejects(lstat(destination), { code: 'ENOENT' });
+      const original = await lstat(lock.project, { bigint: true });
+      const manifest = await createWindowsTaskSnapshot(snapshotOptions);
+      assert.equal(manifest.version, 3);
+      assert.equal(manifest.scope, 'project');
+      assert.equal(manifest.source.commit, sourceCommit);
+      assert.equal(manifest.recoveryEngine, recovery.manifestSha256);
+      assert.deepEqual(manifest.runtime, { platform: 'win32', state: 'stopped', task });
+      assert.ok(manifest.windowsSecurity);
+      assert.ok(manifest.gitMetadata);
+      assert.ok(manifest.gitObjects);
+      assert.doesNotMatch(JSON.stringify(manifest), /fixture-private-config/);
+      const bytes = await readFile(observation.configuration);
+      const runtime = JSON.parse(bytes);
+      const expectedFiles = [observation.configuration,
+        ...Object.keys(runtime.helpers).map(name => path.join(path.dirname(observation.configuration), name))];
+      assert.deepEqual(manifest.externalFiles.map(file => file.path).sort(), expectedFiles.sort());
+      assert.equal(manifest.windowsExternalSecurity.parents.length, 1);
+      assert.equal(manifest.windowsExternalSecurity.parents[0].metadata.entries.length, expectedFiles.length);
+      const configIndex = manifest.externalFiles.findIndex(file => file.path === observation.configuration);
+      assert.equal(manifest.externalFiles[configIndex].sha256, observation.configurationSha256);
+      assert.deepEqual(await readFile(path.join(destination, 'external', String(configIndex))), bytes);
+      assert.equal(await readFile(path.join(destination, 'files/source-marker.txt'), 'utf8'), 'old-source\n');
+      assert.deepEqual(await readFile(path.join(destination, 'files/.env.local')), await readFile(path.join(lock.project, '.env.local')));
+      assert.ok(manifest.absentPaths.includes('.env.production.local'));
+      const current = await lstat(lock.project, { bigint: true });
+      assert.equal(current.dev, original.dev);
+      assert.equal(current.ino, original.ino);
+      assert.deepEqual(await verifySnapshot(destination), manifest);
+      await configuration.checkFiles();
+      await context.check();
+      return manifest;
+    },
+  };
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const control = process.argv[2];
+  const manifest = await verifySnapshot(path.join(control, 'backup'));
+  const state = JSON.parse(await readFile(path.join(control, 'state.json')));
+  assert.equal(manifest.id, 'native-task-snapshot');
+  assert.equal(state.phase, 'accepted');
+  assert.equal(state.backupId, manifest.id);
+  assert.equal(state.sourceCommit, manifest.source.commit);
+  assert.notEqual(state.targetCommit, manifest.source.commit);
+  assert.equal(await readFile(path.join(control, 'backup/files/source-marker.txt'), 'utf8'), 'old-source\n');
+  assert.equal(await readFile(path.join(manifest.project, 'source-marker.txt'), 'utf8'), 'new-source\n');
+  await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
+  console.log('PASS: native original-task snapshot remains complete after update, activation and final unlock');
+}

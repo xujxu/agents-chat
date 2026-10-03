@@ -12627,6 +12627,102 @@ not substitute caller-supplied callbacks for the future branded task adapter.
   dependencies unchanged unless implementation adds an import; investigate any
   actual cross-adapter failure rather than broadening unrelated admission.
 
+### Task 5BG: Bind complete snapshots to the original stopped Windows task
+
+**Goal:** Add the native snapshot adapter needed by public deployment without
+inventing another task controller. Reuse the existing branded transaction,
+configuration observer, complete-project/Git snapshot and native external
+capture. Only the original transaction's copying stage may capture a snapshot.
+
+**Files:**
+- Extend `windows-task-transaction.mjs` to retain its original admission
+  path/digest and export `assertWindowsTaskSnapshotStage`.
+- Add `windows-task-snapshot.mjs` exporting `createWindowsTaskSnapshot`.
+- Add the new module to `saved-recovery-engine.mjs`.
+- Add `tests/deployment-windows-task-snapshot.mjs` as a focused fixture,
+  composed by `deployment-windows-source-build.mjs`.
+- Invoke the fixture's refusal hook in the stopped phase and capture hook in
+  the copying phase of `deployment-windows-task-transaction-controller.mjs`.
+- Carry the completed snapshot ID into the next recorded phase, and invoke
+  the fixture's retained-snapshot verifier from
+  `deployment-windows-task-node-cases.ps1` after actual final unlock.
+- In focused `windows-restore` dispatches only, also run the existing
+  `transaction-activate-complete-retirement` runtime-host scenario with
+  `-DiscoverManagedTask -DiscoveredAdmission -OwnedSourceBuild`. Full matrices
+  already run that exact source-build scenario in managed discovery.
+
+- [ ] **Step 1: add native stage/snapshot cases before implementing the adapter.**
+
+  Reuse the source fixture's actual Scheduled Task, retained configuration
+  observer, real Git repository and saved recovery engine. Require the new
+  stage export explicitly so the causal failure identifies the missing API,
+  not an import/setup error. Refuse the stopped (not copying) phase, a cloned
+  context, altered lock token, wrong source commit and an aborted signal.
+  Refusals must not create the backup directory.
+
+  ```javascript
+  await assertWindowsTaskSnapshotStage({
+    context, control, lock, sourceCommit: beforeCommit,
+  });
+  const manifest = await createWindowsTaskSnapshot({
+    context, control, lock, configuration, destination: path.join(control, 'backup'),
+    id: 'native-task-snapshot', source: { commit: beforeCommit, provenance: 'observed' },
+    recoveryEngine: recovery.manifestSha256,
+  });
+  ```
+
+  Require version 3/full-project scope, native project/Git security, all
+  required runtime configuration/helper files, original task XML/security and
+  original source identity. Manifest/log output must not contain fixture
+  secrets; compare the private copied configuration bytes and verify the whole
+  snapshot. Continue the actual source update/build/activation/retirement and
+  prove the completed snapshot remains after unlock.
+
+- [ ] **Step 2: bind copying-stage authority without changing native protocol.**
+
+  Keep `{control, lock, state, admission, sha256}` in the existing WeakMap.
+  Require the exact context/lock and matching operation, original project,
+  start time, source/target commits, runtime generation, null error and
+  `phase === 'copying'`; restore operations are not deployment snapshots.
+  Read/hash the original private admission, call native `context.check()`,
+  recheck state bytes and lock ownership, and return frozen selected task
+  metadata. Never treat an arbitrary `{check()}` object as authority.
+
+- [ ] **Step 3: compose the existing snapshot primitives.**
+
+  The adapter checks stage authority and `configuration.checkFiles`, reads the
+  hash-bound installed runtime JSON privately, and derives every helper from
+  that JSON's native-validated helper map. Validate bounded basenames/digests;
+  hash-check required helpers and configuration at source barriers. Do not
+  duplicate the C# helper list or put command environment values in metadata.
+  Store task metadata as `runtime.task` version 1: name, original definition,
+  security descriptor, configuration path and digest.
+
+  ```javascript
+  createSnapshot({
+    project: lock.project, destination, id, source, recoveryEngine,
+    ...scope, gitMetadata, externalFiles, signal,
+    runtime: { platform: 'win32', state: 'stopped', task },
+    checkSource: async () => {
+      await checkRuntime();
+      await scope.check({ signal });
+    },
+  });
+  ```
+
+  Include configuration JSON and every immutable helper as required external
+  files. Project configuration/absence is already in complete scope. Preserve
+  snapshot cleanup ownership and leave any incomplete capture unaccepted.
+  Recheck branded authority after configuration/bundle observation so neither
+  a changed source nor state transition can be hidden by a callback.
+
+- [ ] **Step 4: require actual native pipeline and complete Actions acceptance.**
+
+  Keep 36 full jobs and all existing cases; focused dispatch adds the already
+  existing source-build scenario only to cover this adapter, avoiding duplicate
+  full-matrix execution. Preserve 15-minute limits. Check retained backup
+  contents after retirement; do not enable public runtime restore/deploy yet.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

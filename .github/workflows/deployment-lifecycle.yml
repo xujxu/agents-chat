@@ -195,6 +195,10 @@ jobs:
             'tests/deployment-windows-external-restore.test.mjs',
             'tests/deployment-windows-combined-restore.test.mjs'
           )
+      - name: Capture original task snapshot through the native owned-source pipeline
+        if: ${{ inputs.windows_restore_only }}
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement -DiscoverManagedTask -DiscoveredAdmission -OwnedSourceBuild
 
   contracts:
     if: ${{ !inputs.windows_restore_only }}

@@ -49,6 +49,7 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
   let built;
   let configuration;
   let buildEnvironment;
+  let snapshotFixture;
   return {
     beforeCommit, targetCommit,
     get operation() { return workers; },
@@ -64,7 +65,11 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
       buildEnvironment = configuration.buildEnvironment(tools.environment);
       const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
       const saved = await saveWorkerEngine({ source, control, project, operationId: lock.operationId });
-      await saveRecoveryEngine({ source, control });
+      const recovery = await saveRecoveryEngine({ source, control });
+      const { createWindowsTaskSnapshotFixture } = await import('./deployment-windows-task-snapshot.mjs');
+      snapshotFixture = createWindowsTaskSnapshotFixture({
+        observation: scope.observation, control, lock, configuration, recovery, sourceCommit: beforeCommit, targetCommit,
+      });
       workers = await createWorkerOperation({ control, lock, saved });
       const options = { scope, control, lock, operation: workers, pwsh, ...tools };
       await assert.rejects(prepareWindowsSourceBuild({ ...options, scope: { ...scope } }));
@@ -75,6 +80,8 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
       assert.equal(await git(['rev-parse', 'HEAD']), beforeCommit);
       await assert.rejects(stages.select({ target, stopped: { check: async () => {} } }));
     },
+    async refuseSnapshot(context) { await snapshotFixture.refuseEarly(context); },
+    async snapshot(context) { return snapshotFixture.capture(context); },
     async refuseEarly(context) {
       await assert.rejects(stages.select({ target, stopped: { ...context } }));
       await assert.rejects(stages.select({ target, stopped: context }));

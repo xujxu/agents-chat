@@ -170,6 +170,10 @@ try {
             -Replacement $replacement -Request $request -Root $Root -Control $control -Directory $directory `
             -TaskName $TaskName -OperationId $hello.operationId -AdmissionSha256 $digest `
             -SecurityDescriptor $record.securityDescriptor
+        if ($OwnedSourceBuild) {
+            & $node (Join-Path $PSScriptRoot 'deployment-windows-task-snapshot.mjs') $control
+            Assert ($LASTEXITCODE -eq 0) 'Original task snapshot was not retained after final unlock'
+        }
         return
     }
     $controller.StandardInput.WriteLine(($request | ConvertTo-Json -Compress))

@@ -98,8 +98,11 @@ for (const phase of ['intent', 'inhibited', 'stop-requested', 'stopped']) {
 await context.check();
 await assert.rejects(writeFile(path.join(control, 'lock', 'owner.json'), 'changed'));
 await context.check();
+await sourceFixture?.refuseSnapshot(context);
 state = { ...state, phase: operation === 'restore' ? 'restore-activating' : 'copying', previousPhase: state.phase };
 await writeState(control, state);
+const snapshot = await sourceFixture?.snapshot(context);
+if (snapshot) state = { ...state, backupId: snapshot.id };
 await context.check();
 await assert.rejects(releaseLock(control, lock, { pwsh }), /maintenance/i);
 assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
