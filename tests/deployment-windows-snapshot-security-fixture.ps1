@@ -1,10 +1,20 @@
 param(
     [Parameter(Mandatory)][string]$File,
-    [ValidateSet('inspect', 'broaden', 'broaden-inheritable', 'broaden-git-index',
+    [ValidateSet('inspect', 'retain-read', 'broaden', 'broaden-inheritable', 'broaden-git-index',
         'broaden-git-index-users', 'unbroaden-git-index-users')][string]$Action = 'inspect'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($Action -ceq 'retain-read') {
+    if ([IO.Path]::GetFileName($File) -cne '.env.local') { throw 'Unsupported retained reader fixture.' }
+    $stream = [IO.File]::Open($File, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        [Console]::Out.WriteLine('{"status":"retained"}')
+        [Console]::Out.Flush()
+        if ([Console]::In.ReadLine() -cne 'release') { throw 'Expected retained reader release.' }
+    } finally { $stream.Dispose() }
+    return
+}
 $acl = Get-Acl -LiteralPath $File
 if ($Action -cne 'inspect') {
     if ($Action -cin @('broaden-git-index', 'broaden-git-index-users', 'unbroaden-git-index-users')) {

@@ -12252,6 +12252,9 @@ complete. Direct v2 restoration requires a canonical private backup root.
 
 ### Task 5BC: Capture native Windows external configuration security
 
+**Accepted:** `712474ee3424c253570ad6c785a4a41deb47b1a1 / 37117066926`,
+all **35 jobs passed**, completed **2026-10-03 11:11:16 UTC**.
+
 Causal `bbd09ed / 37116405435`, job `111184142811`, completed
 **2026-10-03 10:37:02 UTC**: 87 tests, 66 passed, 5 failed, 16 platform
 skips and no cancellations. All three capture cases hit the existing unsupported
@@ -12340,7 +12343,7 @@ runtime scope.
   destination privacy admission before any copying and existing 64-file,
   1-MiB-per-file and 32-MiB-manifest bounds.
 
-- [ ] **Step 3: require native and complete matrix acceptance.**
+- [x] **Step 3: require native and complete matrix acceptance.**
 
   Update the old Windows unsupported-capture test to require rejection of missing
   native metadata, not refusal of newly supported capture. Keep Linux cases
@@ -12374,6 +12377,10 @@ late-policy cases passed. The external absence-only case failed during snapshot
 fixture setup because `files: []` violates the existing explicit project-path
 requirement. Add an ordinary project marker file while retaining the empty
 external-file security inventory; do not loosen snapshot admission.
+Corrected `04dcc44`, focused `37118616991 / 111190173498`, passed
+**2026-10-03 11:12:18 UTC**: 94 tests, 78 passed, 16 platform skips,
+no failures or cancellations. Full `37118616855` is running; the earlier
+queued `d6b9404` full run was explicitly cancelled as superseded, not accepted.
 
 **Goal:** Provide standalone, exactly authorized external restoration from the
 native snapshot. Retain the public Windows project/runtime composition gate.
@@ -12410,7 +12417,7 @@ Do not modify an installed immutable bundle while a runtime scope retains it.
   non-stopped authority without altering original resources. First native
   calls must fail at the existing Linux-only external restoration guard.
 
-- [ ] **Step 2: reuse the existing native source restoration facade.**
+- [x] **Step 2: reuse the existing native source restoration facade.**
 
   Extract the existing implementation behind this data-oriented boundary:
 
@@ -12452,6 +12459,27 @@ Do not modify an installed immutable bundle while a runtime scope retains it.
   success and all 35 full jobs on the final source; record the actual SHA/run.
   Standalone external restoration does not authorize public Windows activation,
   immutable bundle mutation or whole-project Git/runtime composition.
+
+- [ ] **Step 4: preserve already matching external resources before runtime composition.**
+
+  Windows runtime bundles are immutable and may remain retained by read-only
+  native handles. Linux external restoration already leaves matching resources
+  untouched. The initial Windows implementation always replaces files, so a
+  healthy retained bundle would fail unnecessarily. Add causal repeated-restore
+  inode/time assertions and a real native reader denying write/delete sharing.
+  Require exactly one private copy across two restores, not an artificial
+  rewrite of already restored files.
+
+  Before mutating each admitted parent group, compare every selected file's
+  saved bytes/presence and the existing native security table. Reuse
+  `inspectWindowsSnapshotSecurity` and `windowsRestoredSecurityMatches`;
+  a missing file, changed bytes or changed policy selects normal restoration,
+  while observation/cleanup errors remain explicit failures. Skip mutation only
+  if the entire selected group matches. Keep its native root authority and the
+  existing final all-parent/file verification, including late drift refusal.
+  Do not skip a changed file merely because another file is locked; immutable
+  bundle replacement and public task reconfiguration remain separately gated.
+  Run focused and all 35 full jobs on the final no-op implementation.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

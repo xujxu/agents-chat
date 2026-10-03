@@ -354,14 +354,15 @@ on `0f2da811690c718eeac9acb728baae2b45438b5c / 37111501173`.
 It binds original/staged file IDs, checksums, ACLs and attributes
 and uses Windows handle-based rename with readonly-target support; it does
 not fall back to deleting the target or clearing attributes.
-Windows external-file snapshot capture passed focused native Actions at
-`712474e / 37117067414`; full matrix acceptance is pending.
+Windows external-file snapshot capture passed all 35 lifecycle jobs at
+`712474ee3424c253570ad6c785a4a41deb47b1a1 / 37117066926`.
 Version-3 snapshots add `windowsExternalSecurity`, using the existing
 native security tables for each external parent and its present files, including
 root-only tables for absent resources. Original byte/presence and ACL checks
 remain active until snapshot completion; backups stay private. Linux formats
-are unchanged. Standalone native external restoration is implemented but awaiting
-Actions acceptance. It requires exact destination authorization, data-loss
+are unchanged. Standalone native external restoration passed focused Actions at
+`04dcc44 / 37118616991`; full matrix acceptance is pending.
+It requires exact destination authorization, data-loss
 acknowledgement, a stopped/inhibited runtime and unchanged parent policy. It
 reuses private creation and native source removal/permission restoration;
 interrupted private copies can be retried from the unchanged backup.

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import fs, { chmod, link, lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { gitWindowsSecurity as windowsFileSecurity } from './deployment-git-fixture.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
@@ -90,11 +93,16 @@ for (const multiple of [false, true]) {
     syncBuiltinESMExports();
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
+        const before = await lstat(f.file, { bigint: true });
         assert.deepEqual(await restoreExternalSnapshot(f.options), f.manifest);
         await verifyRestored(f);
+        if (attempt) {
+          const after = await lstat(f.file, { bigint: true });
+          for (const key of ['dev', 'ino', 'mode', 'uid', 'gid', 'mtimeNs', 'ctimeNs']) assert.equal(after[key], before[key]);
+        }
       }
     } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
-    assert.equal(privateCopies, 2);
+    assert.equal(privateCopies, 1);
   });
 }
 
@@ -206,5 +214,45 @@ test('Windows external restoration preserves a root-only absence inventory acros
     await assert.rejects(lstat(file), { code: 'ENOENT' });
     assert.equal(await readFile(unrelated, 'utf8'), 'retained\n');
     assert.deepEqual(await verifySnapshot(backup), manifest);
+  }
+});
+
+test('Windows external restoration preserves matching files retained by an immutable reader', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const f = await fixture(t);
+  await restoreExternalSnapshot(f.options);
+  const before = await lstat(f.file, { bigint: true });
+  const child = spawn('pwsh.exe', ['-NoProfile', '-NonInteractive', '-File',
+    fileURLToPath(new URL('./deployment-windows-snapshot-security-fixture.ps1', import.meta.url)),
+    '-File', f.file, '-Action', 'retain-read'], { stdio: ['pipe', 'pipe', 'pipe'] });
+  let diagnostic = '';
+  child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
+  const exited = new Promise(resolve => {
+    child.once('exit', (code, signal) => resolve({ code, signal }));
+    child.once('error', error => resolve({ error }));
+  });
+  const lines = createInterface({ input: child.stdout });
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Native reader did not start: ${diagnostic}`)), 30000);
+      lines.once('line', line => {
+        clearTimeout(timer);
+        if (line !== '{"status":"retained"}') reject(new Error('Unexpected native reader readiness.'));
+        else resolve();
+      });
+      child.once('exit', code => { clearTimeout(timer); reject(new Error(`Native reader exited ${code}: ${diagnostic}`)); });
+      child.once('error', error => { clearTimeout(timer); reject(error); });
+    });
+    await restoreExternalSnapshot(f.options);
+    await verifyRestored(f);
+    const after = await lstat(f.file, { bigint: true });
+    for (const key of ['dev', 'ino', 'mode', 'uid', 'gid', 'mtimeNs', 'ctimeNs']) assert.equal(after[key], before[key]);
+  } finally {
+    lines.close();
+    if (!child.stdin.destroyed) child.stdin.end('release\n');
+    const timer = setTimeout(() => child.kill('SIGKILL'), 10000);
+    try { assert.deepEqual(await exited, { code: 0, signal: null }, diagnostic); }
+    finally { clearTimeout(timer); }
   }
 });
