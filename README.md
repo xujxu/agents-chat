@@ -388,6 +388,16 @@ Combined original-task runtime, configuration and live database admission
 passed all 36 jobs at `e877f2cc0cf52124712a285152e90f2d0c34ae0f / 37127140330`.
 Version and database probes use owned workers with private temporary directories;
 the actual application fixture also verifies repeated data admission.
+Complete Windows application snapshot acceptance is still in progress:
+Next.js generates internal NTFS Junctions for bundled dependencies. Native
+original-handle observation and recreation passed the focused source/snapshot
+gate at `f45f431 / 37132289152`. Snapshot integration stores these links only
+as project-bound reparse metadata (native security payload version 2), not live
+links inside backup files. Restoration reconstructs them after ordinary
+payloads and restores their own ACLs last without propagating into targets.
+Arbitrary reparse tags, external targets and junction chains remain unsupported.
+The complete snapshot/restore integration and actual-application gate are not
+yet accepted.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an

@@ -78,7 +78,9 @@ async function restoreProject({ project, backup, acceptDataLoss, checkStopped, s
   const includedNames = async () => (await readdir(root)).sort().filter(name => !projectSnapshotExclusions.includes(name));
   const names = await includedNames();
   // Inspect caches too: deletion must not traverse hidden mounts or nested worktrees.
-  const current = names.length ? await inventorySnapshot(root, names, { signal }) : [];
+  const current = names.length ? await inventorySnapshot(root, names, {
+    signal, allowInternalWindowsLinks: windows, removingWindowsLinks: windows,
+  }) : [];
   if (windows) security = await prepareSecurity({ project: root, backup: saved, manifest, current, signal });
   const bytes = manifest.entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), manifest.gitObjects?.bytes ?? 0);
   if (!Number.isSafeInteger(bytes)) throw new Error('Restore capacity exceeds safe byte range.');
@@ -180,6 +182,11 @@ async function restoreProject({ project, backup, acceptDataLoss, checkStopped, s
       await checkGroup(entry);
       const target = path.join(root, entry.path);
       await realDirectory(path.dirname(target));
+      if (security) {
+        await security.createJunction({ entry, signal });
+        await syncWorkerDirectory(path.dirname(target));
+        continue;
+      }
       let actual;
       try { actual = await realpath(path.resolve(path.dirname(target), entry.target)); }
       catch (error) {
@@ -216,7 +223,9 @@ async function restoreProject({ project, backup, acceptDataLoss, checkStopped, s
   await check();
   await assertSnapshotAbsent(root, manifest.absentPaths);
   const restoredNames = await includedNames();
-  const observed = restoredNames.length ? await inventorySnapshot(root, restoredNames, { signal }) : [];
+  const observed = restoredNames.length ? await inventorySnapshot(root, restoredNames, {
+    signal, allowInternalWindowsLinks: windows,
+  }) : [];
   if (!same(byPath(observed), byPath(manifest.entries.map(metadata)))
     || !same(await verifySnapshot(saved, { signal }), manifest)) {
     throw new Error('Restored project metadata or retained backup integrity failure.');

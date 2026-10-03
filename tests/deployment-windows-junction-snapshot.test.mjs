@@ -44,6 +44,23 @@ for (const missingTarget of [false, true]) {
       assert.throws(() => validateWindowsSnapshotSecurity(invalid, manifest.entries, project), /junction|reparse/i);
       assert.throws(() => validateWindowsSnapshotSecurity(manifest.windowsSecurity, manifest.entries,
         path.join(root, 'other')), /project|junction/i);
+      for (const mutate of [
+        record => { record.junctions = []; },
+        record => { record.junctions[0].data += '\n'; },
+        record => { record.junctions[0].path = 'node_modules/dependency'; },
+        record => { record.entries.find(entry => entry.path === '.next/node_modules/dependency').attributes = 16; },
+      ]) {
+        const changed = structuredClone(manifest.windowsSecurity);
+        mutate(changed);
+        assert.throws(() => validateWindowsSnapshotSecurity(changed, manifest.entries, project));
+      }
+      const changedTarget = structuredClone(manifest.entries);
+      changedTarget.find(entry => entry.kind === 'link').target = '../../node_modules/other';
+      assert.throws(() => validateWindowsSnapshotSecurity(manifest.windowsSecurity, changedTarget, project), /target/i);
+      const virtualPayload = path.join(backup, 'files/.next/node_modules/dependency');
+      await writeFile(virtualPayload, 'not an archived junction');
+      await assert.rejects(verifySnapshot(backup), /inventory|junction/i);
+      await rm(virtualPayload);
       await writeFile(path.join(project, '.data/state'), 'changed data');
       if (missingTarget) await rm(target, { recursive: true });
       else await writeFile(path.join(target, 'payload'), 'changed module');

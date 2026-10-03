@@ -36,13 +36,13 @@ namespace Deployment
             public string ReparseData { get { Check(); return Convert.ToBase64String(data); } }
             public SourceSecurityRecord Metadata { get { Check(); return new SourceSecurityRecord(source); } }
 
-            internal SourceReparseLease(string project, string relative)
+            internal SourceReparseLease(string project, string relative, bool retainTarget = true, uint access = 0)
             {
                 parents = new SourceParents(project, relative);
                 source = new WindowsPrivateFile { file = parents.Target };
                 try
                 {
-                    source.handle = CreateFileW(source.file, 1 | 0x80 | 0x20000, 1, IntPtr.Zero,
+                    source.handle = CreateFileW(source.file, 1 | 0x80 | 0x20000 | access, access == 0 ? 1u : 0u, IntPtr.Zero,
                         3, 0x2000000 | 0x200000, IntPtr.Zero);
                     if (source.handle.IsInvalid)
                         throw new Win32Exception(Marshal.GetLastWin32Error(), "Open original source reparse point");
@@ -59,9 +59,12 @@ namespace Deployment
                     Kind = "junction";
                     string absolute = DecodeTarget(project, data);
                     string location = Path.GetRelativePath(project, absolute).Replace('\\', '/');
-                    target = new SourceAccess(project, location, "directory", 0, false);
-                    if (target.Target.Information().Volume != info.Volume)
-                        throw new InvalidDataException("Source reparse target crosses the project filesystem.");
+                    if (retainTarget)
+                    {
+                        target = new SourceAccess(project, location, "directory", 0, false);
+                        if (target.Target.Information().Volume != info.Volume)
+                            throw new InvalidDataException("Source reparse target crosses the project filesystem.");
+                    }
                     RelativeTarget = Path.GetRelativePath(Path.GetDirectoryName(source.file), absolute).Replace('\\', '/');
                     Check();
                 }
@@ -127,7 +130,7 @@ namespace Deployment
             {
                 if (disposed) throw new ObjectDisposedException("Source reparse point");
                 parents.Check();
-                target.Check();
+                target?.Check();
                 byte[] current = ReadData();
                 try
                 {
@@ -135,10 +138,35 @@ namespace Deployment
                         !String.Equals(source.FinalPath(), source.file, StringComparison.OrdinalIgnoreCase) ||
                         !CryptographicOperations.FixedTimeEquals(current, data))
                         throw new InvalidDataException("Original source reparse point changed.");
-                    target.Check();
+                    target?.Check();
                     parents.Check();
                 }
                 finally { CryptographicOperations.ZeroMemory(current); }
+            }
+
+            internal void Match(string dev, string ino, string reparseData)
+            {
+                SourceSecurityRecord actual = Metadata;
+                if (actual.Dev != dev || actual.Ino != ino || ReparseData != reparseData)
+                    throw new InvalidDataException("Original junction identity or reparse data differs.");
+            }
+
+            internal void Remove()
+            {
+                Check();
+                uint disposition = 1 | 2 | 4 | 16;
+                Native(SetSourceDisposition(source.handle, 21, ref disposition, 4), "Delete original source junction");
+            }
+
+            internal void RestorePolicy(string sddl, uint attributes)
+            {
+                Check();
+                SetJunctionPolicy(source, sddl, attributes);
+                identity = source.Information().Identity();
+                security = Descriptor(source.Security());
+                if (security != sddl || source.Information().Attributes != attributes)
+                    throw new InvalidDataException("Restored junction policy differs.");
+                Check();
             }
 
             public void Dispose()
@@ -157,16 +185,78 @@ namespace Deployment
             return new SourceReparseLease(project, relative);
         }
 
-        public static SourceReparseLease CreateSourceJunction(string project, string relative, string reparseData,
-            string sddl, uint attributes)
+        // Removal observes only the original junction, even if an interrupted install removed its target.
+        public static SourceReparseLease OpenSourceReparseForRemoval(string project, string relative)
+        {
+            return new SourceReparseLease(project, relative, false);
+        }
+
+        public static void RemoveSourceJunction(string project, string relative, string dev, string ino, string reparseData)
+        {
+            using (var source = new SourceReparseLease(project, relative, false, 0x10000))
+            {
+                source.Match(dev, ino, reparseData);
+                source.Remove();
+            }
+        }
+
+        public static void RestoreSourceJunctionSecurity(string project, string relative, string dev, string ino,
+            string reparseData, string sddl, uint attributes)
+        {
+            ValidateJunctionPolicy(sddl, attributes);
+            using (var source = new SourceReparseLease(project, relative, true, 0x40000 | 0x80000 | 0x100))
+            {
+                source.Match(dev, ino, reparseData);
+                source.RestorePolicy(sddl, attributes);
+            }
+        }
+
+        static void ValidateJunctionPolicy(string sddl, uint attributes)
         {
             ValidateSourceSecurity(sddl);
             if ((attributes & 0x410) != 0x410 || (attributes & ~(SourceAttributes | 0x400u)) != 0 ||
-                (attributes & 128) != 0 || reparseData == null || reparseData.Length > 21848)
+                (attributes & 128) != 0)
+                throw new InvalidDataException("Unsupported restored junction metadata.");
+        }
+
+        static void SetJunctionPolicy(WindowsPrivateFile value, string sddl, uint attributes)
+        {
+            ValidateJunctionPolicy(sddl, attributes);
+            var descriptor = new RawSecurityDescriptor(sddl);
+            var binary = new byte[descriptor.BinaryLength];
+            descriptor.GetBinaryForm(binary, 0);
+            uint information = 7u | ((descriptor.ControlFlags & ControlFlags.DiscretionaryAclProtected) != 0
+                ? 0x80000000u : 0x20000000u);
+            // Kernel security updates the retained junction itself, without target-tree propagation.
+            Native(SetKernelObjectSecurity(value.handle, information, binary), "Restore original junction security");
+            uint ordinary = attributes & ~0x410u;
+            var basic = new SourceBasicInformation { Attributes = ordinary == 0 ? 128u : ordinary };
+            Native(SetSourceBasicInformation(value.handle, 0, ref basic,
+                (uint)Marshal.SizeOf<SourceBasicInformation>()), "Restore original junction attributes");
+        }
+
+        static byte[] DecodeJunctionData(string project, string reparseData)
+        {
+            if (reparseData == null || reparseData.Length > 21848)
                 throw new InvalidDataException("Unsupported restored junction metadata.");
             byte[] bytes = Convert.FromBase64String(reparseData);
             if (Convert.ToBase64String(bytes) != reparseData)
                 throw new InvalidDataException("Noncanonical junction reparse data.");
+            SourceReparseLease.DecodeTarget(project, bytes);
+            return bytes;
+        }
+
+        public static void ValidateSourceJunctionData(string project, string reparseData)
+        {
+            RequirePath(project);
+            DecodeJunctionData(project, reparseData);
+        }
+
+        public static SourceReparseLease CreateSourceJunction(string project, string relative, string reparseData,
+            string sddl, uint attributes)
+        {
+            ValidateJunctionPolicy(sddl, attributes);
+            byte[] bytes = DecodeJunctionData(project, reparseData);
             using (var parents = new SourceParents(project, relative))
             {
                 string absolute = SourceReparseLease.DecodeTarget(project, bytes);
@@ -196,17 +286,7 @@ namespace Deployment
                         uint returned;
                         Native(SetSourceReparsePoint(value.handle, 0x900a4, bytes, (uint)bytes.Length,
                             IntPtr.Zero, 0, out returned, IntPtr.Zero), "Set original junction reparse data");
-                        var descriptor = new RawSecurityDescriptor(sddl);
-                        var binary = new byte[descriptor.BinaryLength];
-                        descriptor.GetBinaryForm(binary, 0);
-                        uint information = 7u | ((descriptor.ControlFlags & ControlFlags.DiscretionaryAclProtected) != 0
-                            ? 0x80000000u : 0x20000000u);
-                        // Kernel security updates the retained junction itself, without target-tree propagation.
-                        Native(SetKernelObjectSecurity(value.handle, information, binary), "Restore original junction security");
-                        uint ordinary = attributes & ~0x410u;
-                        var basic = new SourceBasicInformation { Attributes = ordinary == 0 ? 128u : ordinary };
-                        Native(SetSourceBasicInformation(value.handle, 0, ref basic,
-                            (uint)Marshal.SizeOf<SourceBasicInformation>()), "Restore original junction attributes");
+                        SetJunctionPolicy(value, sddl, attributes);
                         parents.Check();
                         target.Check();
                     }

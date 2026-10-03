@@ -45,7 +45,7 @@ function validateManifest(manifest) {
   }
   if (manifest.version === 3) {
     if (manifest.runtime.platform !== 'win32') throw new Error('Snapshot security metadata requires Windows.');
-    validateWindowsSnapshotSecurity(manifest.windowsSecurity, manifest.entries);
+    validateWindowsSnapshotSecurity(manifest.windowsSecurity, manifest.entries, manifest.project);
   } else if (Object.hasOwn(manifest, 'windowsSecurity')) throw new Error('Unexpected snapshot security metadata.');
   if (manifest.scope !== undefined && !['project', 'selected'].includes(manifest.scope)) {
     throw new Error('Invalid snapshot scope.');
@@ -172,7 +172,7 @@ async function createSnapshotContents({
   absentPaths = snapshotPathList(absentPaths);
   excludedPaths = snapshotPathList(excludedPaths);
   await assertSnapshotAbsent(root, absentPaths);
-  const entries = await captureSnapshotInventory(root, files, { signal, excludedPaths });
+  const entries = await captureSnapshotInventory(root, files, { signal, excludedPaths, allowInternalWindowsLinks: true });
   const security = process.platform === 'win32'
     ? await retainSecurity({ project: root, destinationParent: parent, entries, signal }) : null;
   const gitSecurity = git && security ? await prepareWindowsGitSnapshotSecurity({
@@ -233,7 +233,8 @@ async function createSnapshotContents({
   for (const entry of ordered.filter(item => item.kind === 'link')) {
     signal?.throwIfAborted();
     if (process.platform === 'win32') {
-      throw new Error('Windows snapshot links require native ACL/reparse support before capture.');
+      if (security?.metadata.version !== 2) throw new Error('Windows snapshot links require native ACL/reparse metadata.');
+      continue;
     }
     await symlink(entry.target, path.join(contents, entry.path));
   }
@@ -251,7 +252,7 @@ async function createSnapshotContents({
   await objects?.check();
   await checkProject();
   await assertSnapshotAbsent(root, absentPaths);
-  if (!same(entries, await captureSnapshotInventory(root, files, { signal, excludedPaths }))) {
+  if (!same(entries, await captureSnapshotInventory(root, files, { signal, excludedPaths, allowInternalWindowsLinks: true }))) {
     throw new Error('Snapshot source inventory or metadata changed during capture.');
   }
   for (const entry of manifest.entries.filter(item => item.kind === 'file')) {
@@ -322,10 +323,16 @@ async function verifySnapshotContents(root, manifest, { signal, complete = true 
   await assertSnapshotAbsent(contents, manifest.absentPaths ?? []);
   const observed = await inventorySnapshot(contents, await readdir(contents), { signal });
   const byPath = new Map(observed.map(entry => [entry.path, entry]));
-  if (byPath.size !== manifest.entries.length) throw new Error('Snapshot inventory integrity failure.');
+  const nativeLinks = manifest.version === 3 && manifest.windowsSecurity.version === 2;
+  const physicalEntries = manifest.entries.filter(entry => !nativeLinks || entry.kind !== 'link');
+  if (byPath.size !== physicalEntries.length) throw new Error('Snapshot inventory integrity failure.');
   for (const entry of manifest.entries) {
     signal?.throwIfAborted();
     const actual = byPath.get(entry.path);
+    if (nativeLinks && entry.kind === 'link') {
+      if (actual) throw new Error('Native snapshot junction must be metadata only.');
+      continue;
+    }
     if (!actual || actual.kind !== entry.kind) throw new Error('Snapshot file type integrity failure.');
     const file = path.join(contents, entry.path);
     if (entry.kind === 'file' && (actual.bytes !== entry.bytes || await fileDigest(file, { signal }) !== entry.sha256)) {

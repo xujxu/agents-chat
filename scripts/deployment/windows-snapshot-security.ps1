@@ -9,6 +9,7 @@ Set-StrictMode -Version Latest
 $root = $destination = $watch = $null
 $failure = $null
 $stage = 'bootstrap'
+$junctions = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 function Read-SourceSecurity([string]$Relative, [string]$Kind) {
     $file = $Project
     if ($Relative) {
@@ -41,7 +42,10 @@ function Read-SourceSecurity([string]$Relative, [string]$Kind) {
 }
 try {
     if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7) { throw 'Unsupported snapshot security observer.' }
-    Add-Type -Path @((Join-Path $PSScriptRoot 'WindowsWorkerJob.cs'), (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'))
+    Add-Type -Path @(
+        (Join-Path $PSScriptRoot 'WindowsWorkerJob.cs'), (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'),
+        (Join-Path $PSScriptRoot 'WindowsPrivateFile.SourceSecurity.cs'),
+        (Join-Path $PSScriptRoot 'WindowsPrivateFile.SourceReparse.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-maintenance.ps1')
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'source-and-private-destination'
@@ -70,6 +74,7 @@ try {
         }
         $sequence = $id
         $stage = $method
+        foreach ($lease in $junctions.Values) { $lease.Check() }
         if ($method -ceq 'close') {
             if ($request.entries.GetArrayLength()) { throw 'Unexpected snapshot close payload.' }
             $value = 'close'
@@ -80,9 +85,19 @@ try {
                 $fields = Read-AgentsChatMaintenanceFields $entry.GetRawText() @('path', 'kind')
                 $relative = $fields.path.GetString()
                 $kind = $fields.kind.GetString()
-                if (-not $relative -or $kind -cnotin @('file', 'directory')) { throw 'Unsupported snapshot inventory entry.' }
-                $observed = Read-SourceSecurity $relative $kind
-                @{ path=$relative; kind=$kind; attributes=$observed.attributes; securityDescriptor=$observed.securityDescriptor }
+                if (-not $relative -or $kind -cnotin @('file', 'directory', 'link')) { throw 'Unsupported snapshot inventory entry.' }
+                if ($kind -ceq 'link') {
+                    if (-not $junctions.ContainsKey($relative)) {
+                        $junctions.Add($relative, [Deployment.WindowsPrivateFile]::OpenSourceReparse($Project, $relative))
+                    }
+                    $lease = $junctions[$relative]
+                    $observed = $lease.Metadata
+                    @{ path=$relative; kind=$kind; attributes=$observed.Attributes
+                        securityDescriptor=$observed.SecurityDescriptor; data=$lease.ReparseData }
+                } else {
+                    $observed = Read-SourceSecurity $relative $kind
+                    @{ path=$relative; kind=$kind; attributes=$observed.attributes; securityDescriptor=$observed.securityDescriptor }
+                }
             })
             $root.Check()
             $destination.Check()
@@ -98,7 +113,7 @@ try {
     $failure = $_.Exception
     [Console]::Error.WriteLine("Snapshot source security observation refused: $stage. $($failure.Message)")
 } finally {
-    foreach ($resource in @($destination, $root, $watch)) {
+    foreach ($resource in (@($junctions.Values) + @($destination, $root, $watch))) {
         if ($null -eq $resource) { continue }
         try { $resource.Dispose() }
         catch {

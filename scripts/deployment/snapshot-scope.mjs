@@ -21,7 +21,9 @@ export async function inspectSnapshotScope({ project, signal }) {
   }
   const files = names.filter(name => !excludedRoots.includes(name));
   const absentPaths = optionalPaths.filter(name => !names.includes(name));
-  const entries = await inventorySnapshot(root, files, { signal, excludedPaths: projectSnapshotExclusions });
+  const entries = await inventorySnapshot(root, files, {
+    signal, excludedPaths: projectSnapshotExclusions, allowInternalWindowsLinks: true,
+  });
   let snapshotBytes = 0;
   for (const entry of entries) {
     snapshotBytes += entry.bytes ?? 0;

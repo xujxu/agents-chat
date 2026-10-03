@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual as same } from 'node:util';
 import { openWindowsSourceSecurityController, redactedWindowsPolicy as redactedPolicy } from './windows-source-security-controller.mjs';
 import { inspectWindowsSnapshotSecurity, validateWindowsSnapshotSecurity } from './windows-snapshot-security.mjs';
 
@@ -13,7 +14,8 @@ const restoredPolicyMatches = (expected, observed) => observed === expected
 export function windowsRestoredSecurityMatches(expected, observed, inventory) {
   const saved = validateWindowsSnapshotSecurity(expected, inventory);
   const actual = validateWindowsSnapshotSecurity(observed, inventory);
-  if (saved.root.attributes !== actual.root.attributes
+  if (saved.version !== actual.version || saved.project !== actual.project || !same(saved.junctions, actual.junctions)
+    || saved.root.attributes !== actual.root.attributes
     || saved.descriptors[saved.root.security] !== actual.descriptors[actual.root.security]) return false;
   return saved.entries.every((entry, index) => entry.attributes === actual.entries[index].attributes
     && restoredPolicyMatches(saved.descriptors[entry.security], actual.descriptors[actual.entries[index].security]));
@@ -36,7 +38,8 @@ export async function prepareWindowsSourceRestoreSecurity({
 }) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32') throw new Error('Native source security restoration requires Windows.');
-  const metadata = validateWindowsSnapshotSecurity(supplied, entries);
+  const metadata = validateWindowsSnapshotSecurity(supplied, entries, project);
+  const junctions = new Map(metadata.junctions?.map(entry => [entry.path, entry.data]));
   const inventory = entries => {
     if (!Array.isArray(entries) || entries.length > 250000) throw new Error('Unsupported Windows restore inventory.');
     const paths = new Set();
@@ -46,7 +49,7 @@ export async function prepareWindowsSourceRestoreSecurity({
         || entry.path.split('/').some(part => !part || part === '.' || part === '..' || /[. ]$/.test(part)
           || /^(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|CLOCK\$|COM[0-9\u00b9\u00b2\u00b3]|LPT[0-9\u00b9\u00b2\u00b3])(\.|$)/i.test(part))
         || ['.git', 'logs', '.npm', '.pnpm-store'].includes(entry.path.split('/')[0].toLowerCase())
-        || !['file', 'directory'].includes(entry.kind) || paths.has(entry.path.toLowerCase())) {
+        || !['file', 'directory', 'link'].includes(entry.kind) || paths.has(entry.path.toLowerCase())) {
         throw new Error('Unsupported or aliased Windows restoration path.');
       }
       paths.add(entry.path.toLowerCase());
@@ -56,6 +59,7 @@ export async function prepareWindowsSourceRestoreSecurity({
   const savedEntries = inventory(entries).map((entry, index) => ({
     ...entry, securityDescriptor: metadata.descriptors[metadata.entries[index].security],
     attributes: metadata.entries[index].attributes, bytes: entries[index].bytes ?? 0,
+    ...(entry.kind === 'link' ? { data: junctions.get(entry.path) } : {}),
   }));
   const currentEntries = inventory(current);
   if (![project, backup].every(value => typeof value === 'string' && path.isAbsolute(value)
@@ -104,11 +108,13 @@ export async function prepareWindowsSourceRestoreSecurity({
     remove: ({ entry, signal }) => invoke('remove', [{ path: entry.path }], signal),
     createDirectory: ({ entry, signal }) => invoke('mkdir', [{ path: entry.path }], signal),
     createFile: ({ entry, signal }) => invoke('create', [{ path: entry.path }], signal),
+    createJunction: ({ entry, signal }) => invoke('junction', [{ path: entry.path }], signal),
     finishFile: ({ entry, signal }) => invoke('finish', [{ path: entry.path }], signal),
     verify,
     restore: async ({ signal: restoreSignal = signal } = {}) => {
       const ordered = [...savedEntries].sort((a, b) =>
-        Number(a.kind === 'file') - Number(b.kind === 'file') || a.path.split('/').length - b.path.split('/').length);
+        ['directory', 'file', 'link'].indexOf(a.kind) - ['directory', 'file', 'link'].indexOf(b.kind)
+        || a.path.split('/').length - b.path.split('/').length);
       await applyEntries('restore', ordered, restoreSignal);
       await invoke('finish-restore', [], restoreSignal);
       await verify({ signal: restoreSignal });

@@ -12937,6 +12937,33 @@ recreate junctions by native handles, then restore their own metadata after
 ordinary parent policy restoration. Include the new native helper in the saved
 recovery closure when snapshot/restore imports it.
 
+**Native creation accepted:** `f45f431 / 37132289152`, job `111229627734`,
+passed both original-handle junction cases, the owned-source/task snapshot
+pipeline and all 97 existing component cases (81 passed, 16 platform skips,
+zero failures/cancellations; component duration 418999 ms). Final component
+results were emitted **2026-10-03 15:23:14 UTC**.
+
+**Integration causal:** `ec6de05 / 37132684470`, job `111231879510`,
+failed **2026-10-03 15:24:02 UTC**: both complete-project junction cases
+failed at `External snapshot link: .next/node_modules/dependency`; both native
+observation/recreation cases still passed.
+
+**Integration implementation:** Native deletion-only observation retains the
+original junction and ancestors but never follows its possibly missing target.
+Removal reopens exclusively and matches the original identity and reparse
+buffer. Normal capture, creation and final policy restoration still retain a
+real same-project target. The snapshot observer retains junction leases through
+source barriers, budgets raw buffers in transport frames, and validates native
+security payload version 2 against the original project and captured regular
+directory targets. Backups contain no live junction payloads. Restoration
+removes links first, reconstructs ordinary payloads before native junctions,
+and restores junction policies after all ordinary policies. The saved recovery
+closure includes the partial native helper. Added rejection assertions cover
+altered target, metadata path/count/attributes, noncanonical base64 and a
+physical file inserted at a metadata-only junction path. Push and run the
+focused Windows restore gate before the actual application gate; no local
+validation and no relaxed task/process/job deadlines.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.

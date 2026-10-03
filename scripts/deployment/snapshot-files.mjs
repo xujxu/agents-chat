@@ -74,7 +74,9 @@ export async function assertSnapshotAbsent(root, paths) {
   }
 }
 
-export async function inventorySnapshot(project, files, { signal, excludedPaths = [], allowInternalWindowsLinks = false } = {}) {
+export async function inventorySnapshot(project, files, {
+  signal, excludedPaths = [], allowInternalWindowsLinks = false, removingWindowsLinks = false,
+} = {}) {
   signal?.throwIfAborted();
   const root = await realDirectory(project);
   if (!Array.isArray(files) || !files.length) throw new Error('Snapshot requires explicit paths.');
@@ -104,12 +106,14 @@ export async function inventorySnapshot(project, files, { signal, excludedPaths 
       if (absolute && !(allowInternalWindowsLinks && process.platform === 'win32') || /[\0\r\n]/.test(target)) {
         throw new Error(`External snapshot link: ${relative}`);
       }
-      const actual = await realpath(file);
+      const actual = removingWindowsLinks && process.platform === 'win32'
+        ? path.resolve(path.dirname(file), target) : await realpath(file);
       const location = path.relative(root, actual);
       if (!location || location === '..' || location.startsWith(`..${path.sep}`) || path.isAbsolute(location)) {
         throw new Error(`External snapshot link: ${relative}`);
       }
       if (absolute) target = path.relative(path.dirname(file), actual);
+      if (process.platform === 'win32') target = target.replaceAll('\\', '/');
       entries.push({ ...metadata, kind: 'link', target });
     } else if (info.isDirectory()) {
       await realDirectory(file);
@@ -130,6 +134,7 @@ export async function inventorySnapshot(project, files, { signal, excludedPaths 
   }
   for (const entry of entries.filter(item => item.kind === 'link')) {
     signal?.throwIfAborted();
+    if (removingWindowsLinks && process.platform === 'win32') continue;
     const target = path.relative(root, await realpath(path.join(root, entry.path))).split(path.sep).join('/');
     const identity = process.platform === 'win32' ? target.toLowerCase() : target;
     if (!seen.has(identity)) throw new Error(`Snapshot link target not captured: ${entry.path}`);
