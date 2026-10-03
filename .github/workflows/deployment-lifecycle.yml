@@ -228,7 +228,8 @@ jobs:
           ./tests/deployment-windows-private-tests.ps1 -Tests @(
             'tests/deployment-restore-project.test.mjs',
             'tests/deployment-git-objects.test.mjs',
-            'tests/deployment-git-metadata.test.mjs'
+            'tests/deployment-git-metadata.test.mjs',
+            'tests/deployment-windows-git-journal.test.mjs'
           )
       - name: Run private Windows behavioral contracts
         if: runner.os == 'Windows' && !inputs.windows_restore_only

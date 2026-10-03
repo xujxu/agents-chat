@@ -1,36 +1,19 @@
 import assert from 'node:assert/strict';
 import { execFile, fork } from 'node:child_process';
 import { promisify } from 'node:util';
-import { chmod, lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { temporaryDeployment } from './deployment-fixture.mjs';
+import { git, gitMetadataFixture as fixture } from './deployment-git-fixture.mjs';
 import { inspectGitMetadata, readGitMetadataFile, validateGitMetadata } from '../scripts/deployment/git-metadata.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { inspectSnapshotScope } from '../scripts/deployment/snapshot-scope.mjs';
 import { restoreGitMetadata } from '../scripts/deployment/restore-git.mjs';
 
 const execute = promisify(execFile);
-async function git(project, ...args) {
-  return (await execute('git', ['-C', project, ...args], { maxBuffer: 1024 * 1024 })).stdout.trim();
-}
-
-async function fixture(t) {
-  const root = await temporaryDeployment(t);
-  const project = path.join(root, 'source with spaces');
-  await mkdir(project);
-  await git(project, 'init', '--initial-branch=main');
-  await git(project, 'config', 'user.name', 'Deployment fixture');
-  await git(project, 'config', 'user.email', 'fixture@example.invalid');
-  await git(project, 'config', 'core.autocrlf', 'false');
-  await writeFile(path.join(project, 'app.txt'), 'original\n');
-  await git(project, 'add', 'app.txt');
-  await git(project, 'commit', '-m', 'original');
-  return { root, project, commit: await git(project, 'rev-parse', 'HEAD') };
-}
 
 test('Git file identities preserve all bits above the JavaScript safe integer range', async t => {
   const f = await fixture(t);

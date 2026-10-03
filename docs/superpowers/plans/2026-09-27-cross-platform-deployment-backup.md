@@ -11978,6 +11978,9 @@ handle must share DELETE for Windows replacement, while continuing to deny
 data writers. Keep that original inode retained through publication and verify
 its link count became zero afterward; retain exclusive access to the staged
 inode. Report the actual native error code and message on rename failure.
+Implementation `0f2da811690c718eeac9acb728baae2b45438b5c` passed focused
+`37111501096` at **2026-10-03 09:07:52 UTC**: 73 tests, 57 passed,
+16 platform skips, zero failures. Full `37111501173` is still running.
 
 **Goal:** Provide the native publication operation required by the existing
 HEAD/index/ref journal, without adding another transaction engine or enabling
@@ -12055,6 +12058,135 @@ Do not remove a target first or clear attributes on a potentially aliased inode.
   refusal cases must preserve both names, IDs, bytes and target policy. Run
   focused Actions and the complete production matrix; no local workload.
   This is a journal prerequisite, not acceptance of HEAD/index/ref restoration.
+
+### Task 5BB: Compose native Windows HEAD/index/ref journal restoration
+
+**Goal:** Extend the existing `restore-git.mjs` journal, not a second
+transaction engine, to restore validated version-2 metadata with native
+privacy, saved security and identity-bound interrupted-publication recovery.
+Keep the public Windows project-level Git/runtime gate until composition is
+complete. Direct v2 restoration requires a canonical private backup root.
+
+**Files and responsibilities:**
+- Create `tests/deployment-git-fixture.mjs`: shared real Git fixture extracted
+  from metadata tests, with optional ordinary inherited broad source access.
+- Create `tests/deployment-windows-git-journal.test.mjs`: native journal
+  attached/detached/packed/absent-parent behavior and later reentry/refusal
+  cases. Add it once to the existing focused Windows workflow.
+- Create `scripts/deployment/windows-git-metadata-security.mjs` and `.ps1`:
+  source/backup authority, native observation and private guard/stage lifecycle,
+  policy application, retained proof and native publication/retirement.
+- Modify `windows-source-security-controller.mjs` only for an optional strict
+  response decoder needed by native metadata observations. Keep existing
+  readiness, ownership, sequential framing, bounds and legacy acknowledgement
+  behavior unchanged.
+- Modify `WindowsPrivateFile.SourceSecurity.cs`: native inheritance for nodes
+  whose saved absence has no original policy; reuse existing private creation,
+  capture, policy and `PublishSourceFile`, not another copier.
+- Modify `restore-git.mjs`: retain one journal algorithm with platform-specific
+  filesystem/security operations; native intent version 2 binds policy too.
+- Modify `restore-project.mjs`: forward its existing backup context to Git
+  restoration, without removing the Windows composition gate.
+- Modify `saved-recovery-engine.mjs`: include both new helpers in the saved
+  closure; verify native imports rather than relying on source checkout files.
+- Update README with only the behavior actually accepted by Actions.
+
+- [ ] **Step 1: publish real v2 journal causal cases.**
+
+  The new suite snapshots a readonly, explicitly broadened index under broad
+  inherited source permissions, then makes a real later commit. It restores
+  twice through:
+
+  ```javascript
+  await restoreGitMetadata({
+    project: f.project, backup, record,
+    checkStopped: async () => ({ stopped: true, inhibited: true }),
+  });
+  ```
+
+  Require every lockfile to be private when its writable handle starts copying,
+  private guard/intent under a broad `.git`, intent version 2, exact saved
+  HEAD/index bytes, saved root/file/parent permissions, unchanged working tree,
+  config, packed refs and newer Git objects, successful `git fsck`, and unchanged
+  complete backup. Explicitly remove only empty ref directories for the absent
+  parent case, accepting already-absent directories but no other error.
+  Commit test-only `[skip ci]`, push and dispatch `windows_restore_only=true`.
+  Expected failure: the existing native-security-journal guard, not setup errors.
+
+- [ ] **Step 2: provide one native permissions facade for the existing core.**
+
+  Add `prepareWindowsGitMetadataSecurity({ project, backup, record, signal,
+  pwsh = 'pwsh.exe' })`. Require Windows v2, canonical disjoint source/backup
+  roots, native same-account policy admission and exact saved `.git` root
+  policy/attributes. Reuse the shared controller and private backup retention.
+  Return focused methods for `check`, `observeFile`, `observeDirectory`,
+  `prepareParents`, `createGuard`, `createStage`, `finishStage`, `retainProof`,
+  `publish`, `retire`, `verify` and `close`; every native command accepts only
+  HEAD/index/the selected validated branch, their derived parents and the
+  fixed journal names.
+
+  File observations combine the existing exact Node byte descriptor with native
+  dev/ino/size/owner/group/DACL/attributes, refusing disagreement. Directory
+  observations include original dev/ino and native policy. Keep retained native
+  parent leases after policy application, as in object restoration.
+  Private-create guard/stages before any bytes. Write intent only under the
+  already-retained private guard and retain/check its native identity afterward.
+  Bound the intent size before copying stages; reject unsupported oversized
+  evidence explicitly.
+
+  For existing saved nodes apply their recorded policy. For saved-absent refs
+  or parents, privately create the node and use Windows automatic inheritance,
+  not copied or fabricated parent ACEs. Set an empty explicit DACL with
+  UNPROTECTED_DACL_SECURITY_INFORMATION on the new node after writing bytes
+  (or before adding directory children), preserving its current owner/group.
+  Validate resulting policy against an ordinary native newly created sibling
+  in tests. New loose refs intentionally override packed refs, matching Git's
+  normal update behavior; never rewrite unrelated packed records.
+
+- [ ] **Step 3: extend, rather than replace, the persistent journal.**
+
+  Keep the v1 path unchanged. A v2 call without private backup context must
+  still refuse before guard, lock or file creation. For v2, open the facade,
+  execute the same journal algorithm and always close it, preserving primary
+  and cleanup failures.
+
+  Native intent keeps the existing fields/sequence but changes `version` to 2.
+  Its directory identities and before/staged/config/packed-ref descriptors add:
+
+  ```javascript
+  windowsSecurity: { securityDescriptor, attributes }
+  ```
+
+  Validate exact keys/types and canonical record checksum on read. Bind native
+  root/guard/parent policy, not just Node mode/uid/gid. On fresh preparation,
+  restore/create parents and private guard, copy via existing writable handles,
+  flush, apply final saved/inherited stage policy, then persist complete intent.
+  On reentry do not repeat preparation: verify intent, original controller
+  death, native policy and the same contiguous published/pending identity
+  sequence before any mutation. Native `PublishSourceFile` receives the staged
+  and original records only after exact comparison with that durable proof.
+  Keep original config/packed-ref observations throughout.
+
+  After publication compare the inspector's v1 byte record against the v2
+  record's base fields, then verify saved security with the existing limited
+  DACL-AI normalization and standard inherited policy for newly materialized
+  names. Retire only the original private intent and empty original guard
+  through existing native retirement primitives.
+
+- [ ] **Step 4: prove interruption, drift and complete dual-platform behavior.**
+
+  Extend the existing controller-death fixture for v2 to pause from
+  `checkStopped` after observing durable intent plus the expected published
+  inode, not by mocking `fs.rename` (native publication bypasses that function).
+  Kill the original Node controller after branch, index and HEAD publication;
+  require live-controller refusal followed by successful cold continuation.
+  Mutate policy or replace a same-byte published inode during the interruption:
+  require refusal with unchanged remaining locks/proof. Include private
+  incomplete preparation, foreign lock, cancellation, root/parent/config/
+  packed-ref drift and outside hardlink refusal. Reuse the existing record,
+  process-identity and journal checks; do not weaken assertions for native
+  timing. Run focused and complete Actions, including saved recovery import
+  closure and existing Linux journal tests, before accepting this task.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
