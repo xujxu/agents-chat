@@ -11971,6 +11971,13 @@ Use a canonical absolute destination name for the Win32 rename API.
 Known-failing full runs `37110605858` and `37110919559` are superseded/cancelled,
 not accepted. This test-only sharing correction uses explicit focused Actions
 first; require a fresh complete matrix after the fixture can reach publication.
+Focused `99a80ef / 37111162778` reached the native API: 73 tests,
+56 passed, 16 platform skips, only existing readonly target replacement failed.
+Absent publication and all eleven refusal cases passed. The destination
+handle must share DELETE for Windows replacement, while continuing to deny
+data writers. Keep that original inode retained through publication and verify
+its link count became zero afterward; retain exclusive access to the staged
+inode. Report the actual native error code and message on rename failure.
 
 **Goal:** Provide the native publication operation required by the existing
 HEAD/index/ref journal, without adding another transaction engine or enabling
@@ -12021,7 +12028,9 @@ Do not remove a target first or clear attributes on a potentially aliased inode.
   `relative + ".lock"`. Hold original parents; open source with DELETE access
   and deny other data writers. Match dev/ino/size/attributes/exact SDDL, nlink1
   and SHA256 on the opened handle. Validate the existing destination the same
-  way, or use no-replace publication for saved current absence.
+  way, sharing Read/Delete but not Write, or use no-replace publication for
+  saved current absence. Verify the retained replaced inode has no links
+  after successful publication.
 
   Marshal the native structure using pointer-size-correct offsets:
 

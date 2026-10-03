@@ -103,6 +103,8 @@ namespace Deployment
             readonly string kind;
             readonly EvidenceIdentity identity;
             public SourceAccess(string project, string relative, string kind, uint access, bool exclusive)
+                : this(project, relative, kind, access, exclusive ? 0u : 3u) { }
+            public SourceAccess(string project, string relative, string kind, uint access, uint sharing)
             {
                 if (kind != "file" && kind != "directory") throw new InvalidDataException("Invalid restoration source kind.");
                 this.kind = kind;
@@ -112,7 +114,7 @@ namespace Deployment
                 {
                     const uint readData = 1, readAttributes = 0x80, readControl = 0x20000;
                     Target.handle = CreateFileW(Target.file, readData | readAttributes | readControl | access,
-                        exclusive ? 0u : 3u, IntPtr.Zero, 3, 0x2000000 | 0x200000, IntPtr.Zero);
+                        sharing, IntPtr.Zero, 3, 0x2000000 | 0x200000, IntPtr.Zero);
                     if (Target.handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error(), "Open original restoration source");
                     identity = Target.OriginalIdentity();
                     Check();
@@ -273,7 +275,11 @@ namespace Deployment
                 SourceAccess original = null;
                 try
                 {
-                    try { original = new SourceAccess(project, relative, "file", 0x100, true); }
+                    try
+                    {
+                        // Rename requires delete sharing; retain the original inode without permitting data writers.
+                        original = new SourceAccess(project, relative, "file", 0x100, (uint)(FileShare.Read | FileShare.Delete));
+                    }
                     catch (Win32Exception error) when (before == null && error.NativeErrorCode == 2) { }
                     if (before == null && original != null)
                         throw new InvalidDataException("Expected source publication target is not absent.");
@@ -293,13 +299,20 @@ namespace Deployment
                         Marshal.WriteIntPtr(information, rootOffset, IntPtr.Zero);
                         Marshal.WriteInt32(information, lengthOffset, name.Length);
                         Marshal.Copy(name, 0, IntPtr.Add(information, nameOffset), name.Length);
-                        Native(SetSourceRename(source.Target.handle, 22, information, checked((uint)size)),
-                            "Atomically publish original source lockfile");
+                        if (!SetSourceRename(source.Target.handle, 22, information, checked((uint)size)))
+                        {
+                            int error = Marshal.GetLastWin32Error();
+                            throw new Win32Exception(error,
+                                "Atomically publish original source lockfile (" + error + ": " +
+                                new Win32Exception(error).Message + ")");
+                        }
                     }
                     finally { Marshal.FreeHGlobal(information); }
                     source.Target.file = destination.Target;
                     destination.Check();
                     CheckPublicationFile(source, staged, stagedSha256);
+                    if (original != null && original.Target.Information().Links != 0)
+                        throw new InvalidDataException("Original source publication target was not replaced.");
                 }
                 finally { original?.Dispose(); }
             }
