@@ -62,7 +62,14 @@ export async function prepareWindowsProjectRestoreSecurity({
     }
     const root = captureWorkerFields(ready.root, ['securityDescriptor', 'attributes'], 'restore root security');
     if (root.securityDescriptor !== metadata.descriptors[metadata.root.security] || root.attributes !== metadata.root.attributes) {
-      throw new Error('Original project root security policy or attributes differ from the snapshot.');
+      const error = new Error('Original project root security policy or attributes differ from the snapshot.');
+      const redacted = value => String(value).replace(/S-1-[0-9-]+/g, '<sid>');
+      error.comparison = {
+        expectedAttributes: metadata.root.attributes, observedAttributes: root.attributes,
+        expectedPolicy: redacted(metadata.descriptors[metadata.root.security]),
+        observedPolicy: redacted(root.securityDescriptor),
+      };
+      throw error;
     }
     const request = async (method, entries, requestSignal) => {
       requestSignal?.throwIfAborted();

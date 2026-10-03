@@ -11233,6 +11233,16 @@ Added actual root-policy drift and unsupported saved ownership refusal cases,
 and enabled the existing backup/stopped-authority/cancellation cases on Windows.
 Do not mark this task accepted until native Windows and all lifecycle jobs pass.
 
+First implementation `8e7fea2 / 37101423928` compiled the native helper but
+Windows contracts `111141541723` failed four restore cases at the root-policy
+comparison, before mutation. Linux contracts and both application builds passed.
+The root comparison used a raw native descriptor whereas snapshot capture uses
+the filesystem `Get-Acl` representation. Align the comparison's representation,
+retain the original native root guard, and emit redacted comparison diagnostics
+if it still differs. Move the Windows payload suite to an early dedicated step
+inside the existing contract job (not duplicate coverage) for faster diagnosis.
+Keep the failed implementation run through completion.
+
 Apply the accepted version-3 metadata to real restored files, using standard
 Windows handle-based security/attribute APIs. Reuse the existing project byte
 restorer, backup checks, explicit data-loss acknowledgement and stopped/inhibited

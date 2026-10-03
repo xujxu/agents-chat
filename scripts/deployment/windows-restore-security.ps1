@@ -44,11 +44,15 @@ try {
     $backupLease = [Deployment.WindowsPrivateFile]::OpenDirectory($Backup)
     [Deployment.WindowsPrivateFile]::CheckSourceRootWriteAccess($Project)
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+    $sections = [Security.AccessControl.AccessControlSections]::Owner -bor
+        [Security.AccessControl.AccessControlSections]::Group -bor
+        [Security.AccessControl.AccessControlSections]::Access
+    $rootPolicy = (Get-Acl -LiteralPath $Project).GetSecurityDescriptorSddlForm($sections)
     Check-Roots
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; controllerIdentity=$ControllerIdentity
         project=$Project; backup=$Backup
-        root=@{ securityDescriptor=$root.SecurityDescriptor; attributes=[int](Get-Item -LiteralPath $Project -Force).Attributes }
+        root=@{ securityDescriptor=$rootPolicy; attributes=[int](Get-Item -LiteralPath $Project -Force).Attributes }
     } | ConvertTo-Json -Depth 8 -Compress))
     [Console]::Out.Flush()
     $sequence = 0

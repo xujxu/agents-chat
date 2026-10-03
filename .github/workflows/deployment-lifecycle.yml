@@ -211,6 +211,10 @@ jobs:
           tests/deployment-runtime-version.test.mjs
           tests/deployment-diagnostics.test.mjs
           tests/deployment-cold-activation-state.test.mjs
+      - name: Restore native Windows project payloads
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-restore-project.test.mjs')
       - name: Run private Windows behavioral contracts
         if: runner.os == 'Windows'
         shell: pwsh
@@ -223,7 +227,6 @@ jobs:
             'tests/deployment-snapshot-external.test.mjs',
             'tests/deployment-transaction.test.mjs',
             'tests/deployment-restore-transaction.test.mjs',
-            'tests/deployment-restore-project.test.mjs',
             'tests/deployment-restore-external.test.mjs',
             'tests/deployment-source.test.mjs',
             'tests/deployment-npm-command.test.mjs',
