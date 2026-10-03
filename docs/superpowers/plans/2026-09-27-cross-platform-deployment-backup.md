@@ -10465,6 +10465,10 @@ consumer never starts or adopts another runtime generation.
 - `scripts/deployment/windows-task-completion-proof.ps1`: share runtime,
   bundle and original-listener initialization, retaining separate full-proof
   and recovery policy validation.
+- `scripts/deployment/WindowsPrivateFile.cs`: retain an original evidence file
+  read-only with no sharing and exact identity/length/digest checks. Do not
+  grant delete access or create another marker. Keep the original receipt
+  exclusive in the native recovery bridge until that bridge itself exits.
 - Create `scripts/deployment/windows-task-completion-recovery.ps1`: own the
   distinct retained recovery scope and bounded native replay.
 - Create `scripts/deployment/windows-task-completion-recovery-controller.ps1`
@@ -10479,7 +10483,7 @@ consumer never starts or adopts another runtime generation.
 - `.github/workflows/deployment-lifecycle.yml`: add a bounded native recovery
   matrix; retain every existing regression gate and deadline.
 
-- [ ] **Step 1: require recovery after genuine interrupted native actions.**
+- [x] **Step 1: require recovery after genuine interrupted native actions.**
 
   Extend the existing step fixture with an optional `stopAfter` used only by
   test orchestration. After the selected acknowledged step, return:
@@ -10500,6 +10504,8 @@ consumer never starts or adopts another runtime generation.
       crash: lease-released
     - scenario: transaction-activate-complete-recovery-restore
       crash: permanent-policy-applied
+    - scenario: transaction-activate-complete-recovery
+      crash: enable-applied
     - scenario: transaction-activate-complete-recovery-disabled
       crash: enable-applied
   ```
@@ -10514,6 +10520,14 @@ consumer never starts or adopts another runtime generation.
   Publish the test-only commit. Inspect the new native Actions jobs and
   preserve the causal missing-function failure after actual actor death.
 
+  Test-only `7b11114 / 37082022979`: all four original causal jobs failed on
+  missing `openWindowsTaskCompletionRecovery` after genuine actor loss.
+  Job `111084459218` (released update) reached that assertion at
+  **2026-10-03 00:29:05 UTC**; jobs `111084458985`, `111084459138` and
+  `111084459147` covered disabled, restore and pre-release actor loss.
+  Captured the causal and cancelled only this characterized run.
+  Implementation adds the enabled-true `enable-applied` case as a fifth gate.
+
 - [ ] **Step 2: retain a strictly validated original completion prefix.**
 
   A separate prefix factory derives record names from the actual private
@@ -10522,6 +10536,12 @@ consumer never starts or adopts another runtime generation.
   state checks. Hold original file/directory handles and reject gaps, extras,
   changed evidence, live original actors or a different runtime/listener.
   Require the runtime's actual `lease` reply to equal `released`.
+  Upgrade the retained release-intent receipt to an exclusive read-only
+  handle with the original dev/ino/length/hash pinned across the upgrade.
+  This prevents another recovery bridge from opening its evidence while
+  an earlier bridge is still alive after its Node admission owner exits.
+  The same actual shared admission protects initial acquisition; the receipt
+  is not another lock file, mutation capability, or durable protocol.
 
   Recognized policy states depend on the last durable receipt:
 
@@ -10541,7 +10561,7 @@ consumer never starts or adopts another runtime generation.
 
   The distinct recovery scope exposes `check`, `advance` and `close`; its
   observation uses `status: 'pending' | 'complete'`, the last durable phase,
-  state/completion digests, original runtime, port/providers and released
+  reconciled native step, state/completion digests, original runtime, port/providers and released
   lease. The Node wrapper holds the original admission and native process,
   checks them around every request, and performs existing bounded HTTP
   readiness verification before an advance.
@@ -10577,7 +10597,7 @@ consumer never starts or adopts another runtime generation.
 
   Push implementation with the standard co-author trailer. Inspect the exact
   SHA's `deployment-lifecycle.yml` run, preserve implementation failures for
-  diagnosis, and require all existing 26 gates plus the four recovery cases.
+  diagnosis, and require all existing 26 gates plus the five recovery cases.
   Record exact run/job outcomes in README and this plan. No local validation,
   no new expiry/lock protocol, and no claim of pre-release/reboot recovery or
   completed public Windows deploy/update/restore integration.

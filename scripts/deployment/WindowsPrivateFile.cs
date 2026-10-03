@@ -337,6 +337,22 @@ namespace Deployment
         {
             return OpenFile(file, expectedSha256, true);
         }
+        public static WindowsPrivateFile OpenExclusive(string file, string sha256, string dev, string ino, int bytes)
+        {
+            WindowsPrivateFile retained = OpenFile(file, sha256, true, exclusive: true);
+            try
+            {
+                EvidenceIdentity identity = retained.CaptureIdentity();
+                if (identity.Dev != dev || identity.Ino != ino || retained.ByteLength != bytes)
+                    throw new InvalidDataException("Original exclusive evidence identity or length differs.");
+                return retained;
+            }
+            catch
+            {
+                retained.Dispose();
+                throw;
+            }
+        }
         public sealed class RetirementFile : IDisposable
         {
             readonly WindowsPrivateFile original;
@@ -460,7 +476,8 @@ namespace Deployment
                 }
             }
         }
-        static WindowsPrivateFile OpenFile(string file, string expectedSha256, bool requirePrivate, bool retirement = false)
+        static WindowsPrivateFile OpenFile(string file, string expectedSha256, bool requirePrivate,
+            bool retirement = false, bool exclusive = false)
         {
             RequirePath(file);
             if (expectedSha256 == null || expectedSha256.Length != 64)
@@ -473,7 +490,7 @@ namespace Deployment
             {
                 const uint read = 0x80000000, readControl = 0x20000, shareRead = 1, openExisting = 3, openReparsePoint = 0x200000;
                 uint access = read | readControl | (retirement ? 0x10000u : 0u);
-                uint share = retirement ? 0u : shareRead;
+                uint share = retirement || exclusive ? 0u : shareRead;
                 retained.handle = CreateFileW(file, access, share, IntPtr.Zero,
                     openExisting, openReparsePoint, IntPtr.Zero);
                 if (retained.handle.IsInvalid)

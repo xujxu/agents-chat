@@ -267,8 +267,13 @@ acknowledgements for deterministic write-ahead interruption testing. It keeps
 the existing nine receipt files and the normal all-at-once completion API;
 the update, restore and disabled-task scenarios and all 26 regression jobs
 passed at `6b9e26d / 37080601995`. This remains live-owner authority, not cold
-recovery. Genuine interrupted-completion recovery cases are now queued for
-causal validation; their production consumer is not yet implemented.
+recovery. A separate interrupted-completion consumer now replays only a
+validated receipt prefix for the same surviving, released runtime, after
+fresh native-listener and HTTP checks. It preserves original receipt values
+and reconciles only recognized task-policy states. An exclusive read-only
+handle to the existing release-intent receipt keeps a dying recovery bridge
+serialized until its own exit, even after its Node admission owner exits.
+The consumer and five genuine actor-loss cases are awaiting Actions acceptance.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

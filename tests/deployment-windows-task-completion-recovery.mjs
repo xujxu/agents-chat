@@ -40,7 +40,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   let scope = await api.openWindowsTaskCompletionRecovery(options);
   try {
     assert.equal(scope.observation.status, 'pending');
-    await writeFile(health, 'unavailable');
+    await assert.rejects(readFile(path.join(directory, 'task-complete-release-requested.json')));
+    await refused();
+    await scope.check();
+    await writeFile(health, 'wrong-providers');
     await assert.rejects(scope.advance());
   } finally {
     await writeFile(health, priorHealth);

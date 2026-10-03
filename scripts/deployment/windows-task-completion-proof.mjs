@@ -13,6 +13,7 @@ import { captureWindowsDeploymentRetirement, captureWindowsDeploymentRetirementR
 import { verifyWindowsDeploymentRetirementEvidence } from './windows-deployment-retirement-evidence.mjs';
 
 export { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
+export { openWindowsTaskCompletionRecovery } from './windows-task-completion-recovery.mjs';
 
 const script = fileURLToPath(new URL('./windows-task-completion-controller.ps1', import.meta.url));
 const proofs = new WeakMap();

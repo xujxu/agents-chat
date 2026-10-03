@@ -512,7 +512,7 @@ jobs:
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-disabled
 
   windows-completion-recovery:
-    name: Native Windows completion recovery (${{ matrix.crash }})
+    name: Native Windows completion recovery (${{ matrix.scenario }}, ${{ matrix.crash }})
     runs-on: windows-2022
     timeout-minutes: 15
     strategy:
@@ -525,6 +525,8 @@ jobs:
             crash: lease-released
           - scenario: transaction-activate-complete-recovery-restore
             crash: permanent-policy-applied
+          - scenario: transaction-activate-complete-recovery
+            crash: enable-applied
           - scenario: transaction-activate-complete-recovery-disabled
             crash: enable-applied
     steps:

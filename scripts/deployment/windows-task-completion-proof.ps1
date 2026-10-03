@@ -156,6 +156,61 @@ function Assert-AgentsChatTaskCompletionProof {
     } finally { $Context.Busy = $false }
 }
 
+function Initialize-AgentsChatCompletionRuntime([hashtable]$Context, [hashtable]$Completed) {
+    $context.Stage = 'runtime-record'
+    $runtime = ConvertFrom-AgentsChatCompletionRuntime $completed.runtime.GetRawText()
+    if ($runtime.generation -ceq $context.Admission.generation.GetString() -or
+        $runtime.identity -ceq $context.Admission.ownerIdentity.GetString() -or
+        $runtime.configurationSha256 -cne $context.ConfigurationSha256 -or
+        $runtime.launcherPid -lt 1 -or $runtime.sessionId -lt 0) { throw 'Original completed runtime scope differs.' }
+    $context.Runtime = $runtime
+    $context.Port = $completed.port.GetInt32()
+    if ($context.Port -lt 1 -or $context.Port -gt 65535 -or
+        $completed.providers.GetArrayLength() -lt 1 -or $completed.providers.GetArrayLength() -gt 3) {
+        throw 'Invalid completed readiness scope.'
+    }
+    $context.Providers = [string[]]@($completed.providers.EnumerateArray() | ForEach-Object { $_.GetString() })
+    if (@($context.Providers | Select-Object -Unique).Count -ne $context.Providers.Count -or
+        @($context.Providers | Where-Object { $_ -cnotin @('admin-login', 'azure-ad', 'github') }).Count) {
+        throw 'Unsupported completed readiness providers.'
+    }
+    $context.Stage = 'runtime-bundles'
+    $admission = $context.Admission
+    Open-AgentsChatCompletionBundle $context $admission.configuration.GetString() $admission.configurationSha256.GetString() @{
+        pid=$admission.ownerPid.GetInt32(); identity=$admission.ownerIdentity.GetString()
+        generation=$admission.generation.GetString(); readySha256=$admission.readySha256.GetString()
+    }
+    Open-AgentsChatCompletionBundle $context $context.Configuration $context.ConfigurationSha256 $runtime
+    $context.Stage = 'runtime-owner'
+    $context.Owner = [Diagnostics.Process]::GetProcessById($runtime.pid)
+    $null = $context.Owner.Handle
+    if ($context.Owner.HasExited -or "$($runtime.pid):$($context.Owner.StartTime.ToUniversalTime().Ticks)" -cne $runtime.identity) {
+        throw 'Original completed runtime is unavailable.'
+    }
+    $context.Stage = 'task-policy'
+    $scheduler = New-Object -ComObject 'Schedule.Service'
+    $scheduler.Connect()
+    $context.Folder = $scheduler.GetFolder('\')
+    $task = $context.Folder.GetTask($context.TaskName)
+    if ([string]$task.GetSecurityDescriptor(7) -cne $context.SecurityDescriptor) { throw 'Completion task security differs.' }
+    $context.NativeEnabled = [bool]$task.Enabled
+    $context.NativeDefinition = [string]$task.Xml
+    $instances = $task.GetInstances(0)
+    if ($instances.Count -ne 1) { throw 'Completed task instance is ambiguous.' }
+    $context.Instance = $instances.Item(1)
+    $context.Stage = 'runtime-listener'
+    $listener = [Deployment.WindowsRuntimeListener]::Retain(
+        [guid]$runtime.generation, $runtime.pid, $runtime.identity, $runtime.launcherPid, $context.Port)
+    $context.Files.Add($listener)
+    if ($listener.ListenerPid -ne $completed.listenerPid.GetInt32() -or
+        $listener.ListenerIdentity -cne $completed.listenerIdentity.GetString() -or
+        $listener.CreatedAt -cne $completed.listenerCreatedAt.GetString() -or
+        $listener.Address -cne $completed.listenerAddress.GetString() -or
+        $listener.PairedRecords -ne $completed.listenerPairedRecords.GetBoolean()) {
+        throw 'Listener is not the original completed binding.'
+    }
+}
+
 function Open-AgentsChatTaskCompletionProof {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Control)
@@ -175,60 +230,12 @@ function Open-AgentsChatTaskCompletionProof {
         Read-AgentsChatTaskCompletionRecords $context
         Assert-AgentsChatCompletionInventory $context
         Assert-AgentsChatCompletionControllers $context
-        $context.Stage = 'runtime-record'
-        $completed = $context.Completed
-        $runtime = ConvertFrom-AgentsChatCompletionRuntime $completed.runtime.GetRawText()
-        if ($runtime.generation -ceq $context.Admission.generation.GetString() -or
-            $runtime.identity -ceq $context.Admission.ownerIdentity.GetString() -or
-            $runtime.configurationSha256 -cne $context.ConfigurationSha256 -or
-            $runtime.launcherPid -lt 1 -or $runtime.sessionId -lt 0) { throw 'Original completed runtime scope differs.' }
-        $context.Runtime = $runtime
-        $context.Port = $completed.port.GetInt32()
-        if ($context.Port -lt 1 -or $context.Port -gt 65535 -or
-            $completed.providers.GetArrayLength() -lt 1 -or $completed.providers.GetArrayLength() -gt 3) {
-            throw 'Invalid completed readiness scope.'
-        }
-        $context.Providers = [string[]]@($completed.providers.EnumerateArray() | ForEach-Object { $_.GetString() })
-        if (@($context.Providers | Select-Object -Unique).Count -ne $context.Providers.Count -or
-            @($context.Providers | Where-Object { $_ -cnotin @('admin-login', 'azure-ad', 'github') }).Count) {
-            throw 'Unsupported completed readiness providers.'
-        }
-        $context.Stage = 'runtime-bundles'
-        $admission = $context.Admission
-        Open-AgentsChatCompletionBundle $context $admission.configuration.GetString() $admission.configurationSha256.GetString() @{
-            pid=$admission.ownerPid.GetInt32(); identity=$admission.ownerIdentity.GetString()
-            generation=$admission.generation.GetString(); readySha256=$admission.readySha256.GetString()
-        }
-        Open-AgentsChatCompletionBundle $context $context.Configuration $context.ConfigurationSha256 $runtime
-        $context.Stage = 'runtime-owner'
-        $context.Owner = [Diagnostics.Process]::GetProcessById($runtime.pid)
-        $null = $context.Owner.Handle
-        if ($context.Owner.HasExited -or "$($runtime.pid):$($context.Owner.StartTime.ToUniversalTime().Ticks)" -cne $runtime.identity) {
-            throw 'Original completed runtime is unavailable.'
-        }
+        Initialize-AgentsChatCompletionRuntime $context $context.Completed
         $context.Stage = 'task-policy'
-        $scheduler = New-Object -ComObject 'Schedule.Service'
-        $scheduler.Connect()
-        $context.Folder = $scheduler.GetFolder('\')
-        $task = $context.Folder.GetTask($context.TaskName)
-        if ([bool]$task.Enabled -ne $context.Enabled -or
-            [string]$task.GetSecurityDescriptor(7) -cne $context.SecurityDescriptor) { throw 'Completed task policy differs.' }
-        if ($context.Enabled) { Confirm-AgentsChatTaskInhibition ([string]$task.Xml) $context.Definition }
-        elseif (([xml][string]$task.Xml).OuterXml -cne ([xml]$context.Definition).OuterXml) { throw 'Completed disabled policy differs.' }
-        $context.NativeDefinition = [string]$task.Xml
-        $instances = $task.GetInstances(0)
-        if ($instances.Count -ne 1) { throw 'Completed task instance is ambiguous.' }
-        $context.Instance = $instances.Item(1)
-        $context.Stage = 'runtime-listener'
-        $listener = [Deployment.WindowsRuntimeListener]::Retain(
-            [guid]$runtime.generation, $runtime.pid, $runtime.identity, $runtime.launcherPid, $context.Port)
-        $context.Files.Add($listener)
-        if ($listener.ListenerPid -ne $completed.listenerPid.GetInt32() -or
-            $listener.ListenerIdentity -cne $completed.listenerIdentity.GetString() -or
-            $listener.CreatedAt -cne $completed.listenerCreatedAt.GetString() -or
-            $listener.Address -cne $completed.listenerAddress.GetString() -or
-            $listener.PairedRecords -ne $completed.listenerPairedRecords.GetBoolean()) {
-            throw 'Listener is not the original completed binding.'
+        if ($context.NativeEnabled -ne $context.Enabled) { throw 'Completed task policy differs.' }
+        if ($context.Enabled) { Confirm-AgentsChatTaskInhibition $context.NativeDefinition $context.Definition }
+        elseif (([xml]$context.NativeDefinition).OuterXml -cne ([xml]$context.Definition).OuterXml) {
+            throw 'Completed disabled policy differs.'
         }
         $null = Assert-AgentsChatTaskCompletionProof -Context $context
         return $context

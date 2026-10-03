@@ -62,6 +62,11 @@ function ConvertFrom-AgentsChatCompletionRuntime([string]$Text) {
 }
 
 function Read-AgentsChatTaskCompletionRecords([hashtable]$Context) {
+    Read-AgentsChatTaskCompletionHistory $Context @(Get-AgentsChatCompletionRecordNames)
+    $Context.Completed = $Context.CompletionRecord
+}
+
+function Read-AgentsChatTaskCompletionHistory([hashtable]$Context, [string[]]$RecordNames) {
     $Context.Stage = 'records-admission'
     $admitted = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Directory 'admission.json') ''
     $admission = Read-AgentsChatMaintenanceFields ($admitted.ReadText()) @(
@@ -138,7 +143,7 @@ function Read-AgentsChatTaskCompletionRecords([hashtable]$Context) {
             'definition', 'stagedDefinition', 'enabled', 'port', 'providers', 'listenerPid', 'listenerIdentity',
             'listenerCreatedAt', 'listenerAddress', 'listenerPairedRecords')
     }
-    $Context.RecordNames = @(Get-AgentsChatCompletionRecordNames)
+    $Context.RecordNames = $RecordNames
     $records = @{}
     $previous = $admitted.Sha256
     foreach ($name in $Context.RecordNames) {
@@ -153,9 +158,11 @@ function Read-AgentsChatTaskCompletionRecords([hashtable]$Context) {
         Assert-AgentsChatCompletionFields $record $admission @('operationId', 'securityDescriptor')
         if ($family -cne 'stop') { Assert-AgentsChatCompletionFields $record $admission @('taskName') }
         $records[$name] = $record
+        if ($name -ceq 'complete-release-requested') { $Context.ReleaseIntentFile = $file }
         $previous = $file.Sha256
     }
     $Context.CompletionSha256 = $previous
+    $Context.CompletionText = $file.ReadText()
     $Context.Stage = 'records-policy-history'
     Assert-AgentsChatCompletionFields $records['stop-intent'] $admission @('definition')
     Confirm-AgentsChatTaskInhibition $admission.definition.GetString() $records['stop-inhibited'].definition.GetString()
@@ -233,7 +240,7 @@ function Read-AgentsChatTaskCompletionRecords([hashtable]$Context) {
         $prior.phase -cne $(if ($restore) { 'restore-activating' } else { 'activating' }) -or
         $prior.previousPhase -cne $(if ($restore) { 'restoring' } else { 'configuring' }) -or
         [string]::CompareOrdinal($prior.updatedAt, $initial.updatedAt) -lt 0) { throw 'Original activating snapshot differs.' }
-    $last = $records['complete-complete']
+    $last = $records[$RecordNames[-1]]
     $stateFile = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'state.json') $last.stateSha256.GetString()
     if ((Get-Item -LiteralPath (Join-Path $Context.Control 'state.json')).Length -gt 65536) { throw 'Oversized completed state.' }
     $state = ConvertFrom-AgentsChatTaskTransactionState $scope ($stateFile.ReadText())
@@ -266,7 +273,7 @@ function Read-AgentsChatTaskCompletionRecords([hashtable]$Context) {
     $Context.Project = $project
     $Context.StateSha256 = $stateFile.Sha256
     $Context.Definition = $replacement.definition.GetString()
-    $Context.Completed = $last
+    $Context.CompletionRecord = $last
     $Context.BridgePid = $running.leasePid.GetInt32()
     $Context.BridgeIdentity = $running.leaseIdentity.GetString()
 }
