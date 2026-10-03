@@ -1,12 +1,19 @@
 param(
     [Parameter(Mandatory)][string]$File,
-    [ValidateSet('inspect', 'broaden', 'broaden-inheritable')][string]$Action = 'inspect'
+    [ValidateSet('inspect', 'broaden', 'broaden-inheritable', 'broaden-git-index')][string]$Action = 'inspect'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $acl = Get-Acl -LiteralPath $File
 if ($Action -cne 'inspect') {
-    if ([IO.Path]::GetFileName($File) -cnotin @('.env.local', 'backup-parent', 'app')) { throw 'Unsupported fixture mutation.' }
+    if ($Action -ceq 'broaden-git-index') {
+        if ([IO.Path]::GetFileName($File) -cne 'index' -or
+            [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($File)) -cne '.git') {
+            throw 'Unsupported Git index fixture mutation.'
+        }
+    } elseif ([IO.Path]::GetFileName($File) -cnotin @('.env.local', 'backup-parent', 'app')) {
+        throw 'Unsupported fixture mutation.'
+    }
     $sid = [Security.Principal.SecurityIdentifier]::new('S-1-1-0')
     $rule = if ($Action -ceq 'broaden-inheritable') {
         if ([IO.Path]::GetFileName($File) -cne 'app') { throw 'Unsupported inheritable fixture mutation.' }

@@ -18,6 +18,7 @@ import { projectSnapshotExclusions } from './snapshot-scope.mjs';
 import { captureSnapshotGit, readSnapshotGit, validateSnapshotGit } from './snapshot-git.mjs';
 import { prepareGitObjects, readGitObjectSnapshot, validateGitObjects } from './git-objects.mjs';
 import { inspectWindowsSnapshotSecurity, validateWindowsSnapshotSecurity } from './windows-snapshot-security.mjs';
+import { prepareWindowsGitSnapshotSecurity } from './windows-git-snapshot-security.mjs';
 
 const projectMetadata = info => ({ mode: info.mode & 0o777, uid: info.uid, gid: info.gid });
 
@@ -108,21 +109,26 @@ function validateManifest(manifest) {
 }
 
 export async function createSnapshot(options) {
-  let security;
+  const securityScopes = [];
   let failure;
   try {
     return await createSnapshotContents(options, async scope => {
-      security = await inspectWindowsSnapshotSecurity(scope);
+      const security = await inspectWindowsSnapshotSecurity(scope);
+      securityScopes.push(security);
       return security;
     });
   } catch (error) {
     failure = error;
     throw error;
   } finally {
-    try { await security?.close(); }
-    catch (cleanup) {
-      if (failure) throw new AggregateError([failure, cleanup], 'Snapshot capture and security observation cleanup failed.');
-      throw cleanup;
+    const errors = [];
+    for (const security of securityScopes.reverse()) {
+      try { await security.close(); } catch (error) { errors.push(error); }
+    }
+    if (errors.length) {
+      if (failure) throw new AggregateError([failure, ...errors], 'Snapshot capture and security observation cleanup failed.');
+      if (errors.length === 1) throw errors[0];
+      throw new AggregateError(errors, 'Snapshot security observation cleanup failed.');
     }
   }
 }
@@ -134,7 +140,7 @@ async function createSnapshotContents({
   signal?.throwIfAborted();
   if (checkSource !== undefined && typeof checkSource !== 'function') throw new Error('Snapshot source check must be callable.');
   await checkSource?.();
-  const git = gitMetadata === undefined ? null : await captureSnapshotGit(gitMetadata, source?.commit);
+  let git = gitMetadata === undefined ? null : await captureSnapshotGit(gitMetadata, source?.commit);
   if (runtime?.state !== 'stopped') throw new Error('Snapshot requires a stopped runtime.');
   const root = await realDirectory(project);
   const rootInfo = await lstat(root);
@@ -164,6 +170,10 @@ async function createSnapshotContents({
   const entries = await captureSnapshotInventory(root, files, { signal, excludedPaths });
   const security = process.platform === 'win32'
     ? await retainSecurity({ project: root, destinationParent: parent, entries, signal }) : null;
+  const gitSecurity = git && security ? await prepareWindowsGitSnapshotSecurity({
+    project: root, destinationParent: parent, record: git.record, retainSecurity, signal,
+  }) : null;
+  if (gitSecurity) git = await captureSnapshotGit(gitMetadata, source.commit, gitSecurity);
   const manifest = {
     version: security ? 3 : recoveryEngine === undefined ? 1 : 2,
     ...(recoveryEngine === undefined ? {} : { recoveryEngine }),
@@ -231,6 +241,7 @@ async function createSnapshotContents({
   signal?.throwIfAborted();
   await checkSource?.();
   if (git) await gitMetadata.check();
+  await gitSecurity?.check();
   await objects?.check();
   await checkProject();
   await assertSnapshotAbsent(root, absentPaths);
@@ -257,6 +268,7 @@ async function createSnapshotContents({
   if (external.entries.length) await syncWorkerDirectory(path.join(target, 'external'));
   await syncWorkerDirectory(target);
   if (git) await gitMetadata.check();
+  await gitSecurity?.check();
   await objects?.check();
   await security?.check({ signal });
   signal?.throwIfAborted();

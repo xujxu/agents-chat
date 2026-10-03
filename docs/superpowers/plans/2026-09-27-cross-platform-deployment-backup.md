@@ -11814,6 +11814,21 @@ known mutable paths.
 
 ### Task 5AZ: Windows Git metadata permission snapshots
 
+Implementation is ready for Actions, not accepted. Causal test-only
+`fb4ca1b / 37108883252`, job `111162738917`, completed
+**2026-10-03 08:14:38 UTC**: only the three new native attached/packed/detached
+cases failed (`1 !== 2`); 39 tests passed and 16 platform cases skipped.
+The focused step now includes Git metadata tests once, removed from the later
+Windows batch. Added pure codec coverage for exact/absent-parent inventories,
+a real index-only ACL drift check before `complete.json`, and v2 direct-restore
+refusal before any guard or lock creation.
+
+The implementation reuses the existing private-destination observer, owns all
+observer cleanup in `createSnapshot`, and checks Git security/absence at both
+existing Git byte-check barriers. The new helper is in saved recovery closure;
+the worker engine does not import Git metadata/snapshot helpers. No source-only
+native role or long-lived process is added to direct Git inspection.
+
 **Goal:** Capture original `.git` root, HEAD/index/ref and parent-directory
 owner/group/DACL/ordinary attributes before implementing their native journal
 restoration. Packed references record absent loose refs/parents explicitly;
@@ -11850,7 +11865,7 @@ version-2 metadata restoration must refuse before mutation.
 - Move Git metadata tests into the early/focused Windows restore step, not
   duplicate them in the later Windows batch. Update README with the boundary.
 
-- [ ] **Step 1: publish actual Windows security capture causal cases.**
+- [x] **Step 1: publish actual Windows security capture causal cases.**
 
   Using the existing real Git fixture, test attached, packed and detached HEAD.
   Before capture, mark index readonly without changing its bytes. The expected

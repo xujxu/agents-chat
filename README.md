@@ -334,6 +334,13 @@ shared writable-handle copier with private creation, original-identity deletion
 and retryable missing/partial pointers while stopped; hardlinks refuse before
 object mutation and again at native deletion. HEAD/index/ref and public Windows
 restore composition are not enabled by this object-store adapter.
+Windows Git permission snapshot support is implemented, pending Actions
+acceptance: `git.json` version 2 includes `.git` root and HEAD/index/ref/parent
+ACLs and attributes, plus explicit absent names for packed references. The
+existing native observer rechecks these alongside source bytes and keeps the
+backup private. Linux snapshots and direct Git inspection remain version 1.
+Version-2 HEAD/index/ref restoration refuses before mutation until its native
+security journal adapter is available.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

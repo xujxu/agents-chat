@@ -5,9 +5,10 @@ import { chmod, lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:f
 import fs from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
-import { inspectGitMetadata, readGitMetadataFile } from '../scripts/deployment/git-metadata.mjs';
+import { inspectGitMetadata, readGitMetadataFile, validateGitMetadata } from '../scripts/deployment/git-metadata.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { inspectSnapshotScope } from '../scripts/deployment/snapshot-scope.mjs';
 import { restoreGitMetadata } from '../scripts/deployment/restore-git.mjs';
@@ -79,6 +80,44 @@ test('Git metadata capture pins exact HEAD/index and resolved source without ref
   await assert.rejects(captured.check(), /metadata|index|changed/i);
 });
 
+test('Windows Git metadata codec requires exact security coverage and consistent explicit absence', async t => {
+  const f = await fixture(t);
+  const { record: base } = await inspectGitMetadata(f);
+  const record = {
+    ...base, version: 2, absentPaths: [],
+    windowsSecurity: {
+      version: 1, descriptors: ['O:SYG:SYD:(A;OICI;FA;;;SY)'], root: { security: 0, attributes: 16 },
+      entries: ['HEAD', 'index', 'refs', 'refs/heads', base.ref].map(name => ({
+        path: name, security: 0, attributes: ['refs', 'refs/heads'].includes(name) ? 16 : 128,
+      })),
+    },
+  };
+  assert.deepEqual(validateGitMetadata(record, f.commit), record);
+  const packed = structuredClone(record);
+  packed.absentPaths = [base.ref];
+  packed.windowsSecurity.entries.pop();
+  assert.deepEqual(validateGitMetadata(packed, f.commit), packed);
+  const missingParents = structuredClone(record);
+  missingParents.absentPaths = ['refs', 'refs/heads', base.ref];
+  missingParents.windowsSecurity.entries = missingParents.windowsSecurity.entries.slice(0, 2);
+  assert.deepEqual(validateGitMetadata(missingParents, f.commit), missingParents);
+  for (const change of [
+    value => { value.absentPaths = ['HEAD']; },
+    value => { value.absentPaths = ['config']; },
+    value => { value.absentPaths = ['refs/heads']; },
+    value => { value.absentPaths = [base.ref, base.ref]; },
+    value => { value.windowsSecurity.entries[0].path = 'config'; },
+    value => { value.windowsSecurity.entries[0].attributes = 16; },
+    value => { value.windowsSecurity.extra = true; },
+    value => { delete value.windowsSecurity; },
+    value => { value.version = 1; },
+  ]) {
+    const invalid = structuredClone(record);
+    change(invalid);
+    assert.throws(() => validateGitMetadata(invalid, f.commit), /Git|snapshot|security|field|path|absen/i);
+  }
+});
+
 test('retained Git metadata accepts fresh stage signals but never ignores cancellation', async t => {
   const f = await fixture(t);
   const initial = new AbortController();
@@ -129,7 +168,14 @@ test('complete snapshots bind exact Git metadata and detect payload tampering wi
     runtime: { platform: process.platform, state: 'stopped' },
   });
   assert.equal(snapshot.gitMetadata.version, 1);
-  assert.deepEqual(JSON.parse(await readFile(path.join(destination, 'git.json'), 'utf8')), gitMetadata.record);
+  const saved = JSON.parse(await readFile(path.join(destination, 'git.json'), 'utf8'));
+  if (process.platform === 'win32') {
+    const { windowsSecurity, absentPaths, ...base } = saved;
+    assert.equal(saved.version, 2);
+    assert.ok(windowsSecurity);
+    assert.deepEqual(absentPaths, []);
+    assert.deepEqual({ ...base, version: 1 }, gitMetadata.record);
+  } else assert.deepEqual(saved, gitMetadata.record);
   assert.equal(snapshot.entries.some(entry => entry.path === '.git' || entry.path.startsWith('.git/')), false);
   await verifySnapshot(destination);
   await writeFile(path.join(destination, 'git.json'), '{}');
@@ -164,8 +210,41 @@ for (const layout of ['attached', 'packed', 'detached']) {
     assert.equal(record.ref, layout === 'detached' ? null : 'refs/heads/main');
     assert.deepEqual(await readFile(indexPath), originalIndex);
     assert.deepEqual(await verifySnapshot(destination), manifest);
+    await assert.rejects(restoreGitMetadata({
+      project: f.project, record, checkStopped: async () => ({ stopped: true, inhibited: true }),
+    }), /native security journal adapter/i);
+    await assert.rejects(lstat(path.join(f.project, '.git/agents-chat-restore')), { code: 'ENOENT' });
+    assert.deepEqual(await readFile(path.join(f.project, '.git/HEAD')), Buffer.from(record.head, 'base64'));
+    assert.deepEqual(await readFile(indexPath), originalIndex);
   });
 }
+
+test('Windows Git index ACL drift cannot complete an otherwise unchanged project snapshot', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const f = await fixture(t);
+  const gitMetadata = await inspectGitMetadata(f);
+  const destination = path.join(f.root, 'backup');
+  const indexPath = path.join(f.project, '.git/index');
+  const index = await readFile(indexPath);
+  let checks = 0;
+  await assert.rejects(createSnapshot({
+    project: f.project, destination, id: 'git-acl-drift', gitMetadata,
+    ...await inspectSnapshotScope({ project: f.project }),
+    source: { commit: f.commit, provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+    checkSource: async () => {
+      if (++checks === 2) {
+        await execute('pwsh.exe', ['-NoProfile', '-NonInteractive', '-File',
+          fileURLToPath(new URL('./deployment-windows-snapshot-security-fixture.ps1', import.meta.url)),
+          '-File', indexPath, '-Action', 'broaden-git-index'], { timeout: 30000, maxBuffer: 65536 });
+      }
+    },
+  }), error => /ACL|security|changed/i.test(error.cause?.message ?? error.message));
+  assert.equal(checks, 2);
+  assert.deepEqual(await readFile(indexPath), index);
+  await assert.rejects(readFile(path.join(destination, 'complete.json')), { code: 'ENOENT' });
+});
 
 test('a source change after Git observation cannot complete a snapshot of mismatched provenance', async t => {
   const f = await fixture(t);

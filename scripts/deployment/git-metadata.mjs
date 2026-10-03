@@ -5,6 +5,7 @@ import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
 import { canonicalWorkerDirectory } from './worker-files.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
+import { validateWindowsGitSnapshotSecurity } from './windows-git-snapshot-security.mjs';
 
 const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
 const commitPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
@@ -31,8 +32,10 @@ function validateIndex(indexBytes, commit) {
 }
 
 export function validateGitMetadata(value, commit) {
-  const record = captureWorkerFields(value, ['version', 'commit', 'ref', 'head', 'index'], 'Git metadata');
-  if (record.version !== 1 || !commitPattern.test(record.commit ?? '') || record.commit !== commit) {
+  const windows = Object.getOwnPropertyDescriptor(value ?? {}, 'version')?.value === 2;
+  const record = captureWorkerFields(value, ['version', 'commit', 'ref', 'head', 'index',
+    ...(windows ? ['windowsSecurity', 'absentPaths'] : [])], 'Git metadata');
+  if (![1, 2].includes(record.version) || !commitPattern.test(record.commit ?? '') || record.commit !== commit) {
     throw new Error('Git metadata does not match snapshot source commit.');
   }
   const decode = (value, maximum) => {
@@ -49,6 +52,9 @@ export function validateGitMetadata(value, commit) {
     throw new Error('Git metadata HEAD and branch reference differ.');
   }
   validateIndex(decode(record.index, 16 * 1024 * 1024), commit);
+  if (windows) return Object.freeze({ ...record, ...validateWindowsGitSnapshotSecurity({
+    windowsSecurity: record.windowsSecurity, absentPaths: record.absentPaths,
+  }, record.ref) });
   return Object.freeze(record);
 }
 

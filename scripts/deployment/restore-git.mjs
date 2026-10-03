@@ -23,6 +23,7 @@ async function exists(file) {
 // Git lockfiles protect only metadata. The caller must retain stopped application authority.
 export async function restoreGitMetadata({ project, record: supplied, checkStopped, signal }) {
   const record = validateGitMetadata(supplied, supplied?.commit);
+  if (record.version === 2) throw new Error('Windows Git metadata restoration requires its native security journal adapter.');
   if (typeof checkStopped !== 'function') throw new Error('Git restoration requires stopped runtime authority.');
   const checkAuthority = async () => {
     signal?.throwIfAborted();
