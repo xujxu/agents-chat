@@ -43,8 +43,8 @@ if (admission.discoverTask) {
 } else {
   const record = JSON.parse(await readFile(admission.admission, 'utf8'));
   state = makeState(record.generation);
+  await writeState(control, state);
 }
-await writeState(control, state);
 const options = { ...admission, pwsh, control, lock };
 await assert.rejects(stopWindowsTaskTransaction(options));
 state = { ...state, phase: operation === 'restore' ? 'restoring' : 'stopped', previousPhase: state.phase };
