@@ -27,16 +27,22 @@ on:
       - 'tests/Windows*.cs'
       - '.github/workflows/deployment-lifecycle.yml'
   workflow_dispatch:
+    inputs:
+      windows_restore_only:
+        description: Run only native Windows project restore contracts
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: deployment-lifecycle-${{ github.ref }}
+  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_restore_only && '-windows-restore' || '' }}
   cancel-in-progress: false
 
 jobs:
   linux-first-build:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Linux first-install build
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -59,6 +65,7 @@ jobs:
         run: sudo userdel --remove agents-chat-test
 
   linux-deployment:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Linux deployment (${{ matrix.scenario }})
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -101,6 +108,7 @@ jobs:
         run: sudo userdel --remove agents-chat-test
 
   application-build:
+    if: ${{ !inputs.windows_restore_only }}
     name: Owned application build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
@@ -129,6 +137,7 @@ jobs:
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds'
 
   database-admission:
+    if: ${{ !inputs.windows_restore_only }}
     name: Database admission (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -148,6 +157,7 @@ jobs:
         run: node --test tests/deployment-database-compatibility.test.mjs tests/deployment-target-compatibility.test.mjs tests/deployment-data-content.test.mjs tests/deployment-dotenv-compatibility.test.mjs tests/deployment-database-command.test.mjs tests/deployment-legacy-configuration.test.mjs
 
   linux-data-admission:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Linux database admission
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -171,7 +181,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022]
+        os: ${{ inputs.windows_restore_only && fromJSON('["windows-2022"]') || fromJSON('["ubuntu-24.04", "windows-2022"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -216,7 +226,7 @@ jobs:
         shell: pwsh
         run: ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-restore-project.test.mjs')
       - name: Run private Windows behavioral contracts
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && !inputs.windows_restore_only
         shell: pwsh
         run: |
           ./tests/deployment-windows-private-tests.ps1 -Tests @(
@@ -251,7 +261,7 @@ jobs:
             'tests/deployment-cold-activation-state.test.mjs'
           )
       - name: Probe Windows cold retirement stability
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && !inputs.windows_restore_only
         shell: pwsh
         run: |
           for ($attempt = 1; $attempt -le 5; $attempt++) {
@@ -260,6 +270,7 @@ jobs:
           }
 
   linux-native:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Linux worker domain
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -288,6 +299,7 @@ jobs:
         run: sudo env "DEPLOYMENT_TEST_GIT=$(command -v git)" "DEPLOYMENT_TEST_NPM_CLI=$(readlink -f "$(command -v npm)")" "$(command -v node)" --test tests/deployment-linux-worker.test.mjs tests/deployment-native-operation.test.mjs tests/deployment-linux-runtime.test.mjs tests/deployment-linux-service.test.mjs tests/deployment-linux-configuration.test.mjs tests/deployment-controller-capture.test.mjs tests/deployment-linux-restore-invocation.test.mjs tests/deployment-recovery-engine-retention.test.mjs tests/deployment-linux-first-install.test.mjs
 
   linux-service-recovery:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Linux service recovery
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -300,6 +312,7 @@ jobs:
         run: sudo "$(command -v node)" --test tests/deployment-recovery-admission.test.mjs tests/deployment-linux-service-recovery.test.mjs tests/deployment-linux-cold-service.test.mjs
 
   linux-worker-handoff:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Linux retirement handoff
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -312,6 +325,7 @@ jobs:
         run: sudo "$(command -v node)" --test tests/deployment-linux-worker-handoff.test.mjs
 
   windows-native:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Windows Job ownership
     runs-on: windows-2022
     timeout-minutes: 10
@@ -332,6 +346,7 @@ jobs:
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-worker.test.mjs', 'tests/deployment-native-operation.test.mjs')
 
   windows-task-options:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Windows task options
     runs-on: windows-2022
     timeout-minutes: 10
@@ -429,6 +444,7 @@ jobs:
           ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-argument
 
   windows-runtime-activation:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Windows activation lease
     runs-on: windows-2022
     timeout-minutes: 10
@@ -487,6 +503,7 @@ jobs:
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-owner-exit
 
   windows-completion-proof:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Windows completed task proof
     runs-on: windows-2022
     timeout-minutes: 15
@@ -515,6 +532,7 @@ jobs:
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-disabled
 
   windows-completion-recovery:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Windows completion recovery (${{ matrix.scenario }}, ${{ matrix.crash }})
     runs-on: windows-2022
     timeout-minutes: 15
@@ -542,6 +560,7 @@ jobs:
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -CrashStep '${{ matrix.crash }}'
 
   windows-managed-discovery:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Windows managed discovery (${{ matrix.scenario }})
     runs-on: windows-2022
     timeout-minutes: 15
@@ -564,6 +583,7 @@ jobs:
           ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -DiscoverManagedTask -DiscoveredAdmission -OwnedSourceBuild:$sourceBuild
 
   windows-task-retirement:
+    if: ${{ !inputs.windows_restore_only }}
     name: Native Windows task receipt retirement
     runs-on: windows-2022
     timeout-minutes: 15

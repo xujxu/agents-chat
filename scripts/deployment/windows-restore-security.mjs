@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual as same } from 'node:util';
+import { createHash } from 'node:crypto';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
@@ -8,6 +9,8 @@ import { inspectWindowsSnapshotSecurity, validateWindowsSnapshotSecurity } from 
 
 const script = fileURLToPath(new URL('./windows-restore-security.ps1', import.meta.url));
 const refused = cause => new Error('Windows project security restoration refused.', { cause });
+const redactedPolicy = value => String(value).replace(/S-1-[0-9-]+/g,
+  sid => `<sid:${createHash('sha256').update(sid).digest('hex').slice(0, 12)}>`);
 
 export async function prepareWindowsProjectRestoreSecurity({
   project, backup, manifest, current, signal, pwsh = 'pwsh.exe',
@@ -63,11 +66,10 @@ export async function prepareWindowsProjectRestoreSecurity({
     const root = captureWorkerFields(ready.root, ['securityDescriptor', 'attributes'], 'restore root security');
     if (root.securityDescriptor !== metadata.descriptors[metadata.root.security] || root.attributes !== metadata.root.attributes) {
       const error = new Error('Original project root security policy or attributes differ from the snapshot.');
-      const redacted = value => String(value).replace(/S-1-[0-9-]+/g, '<sid>');
       error.comparison = {
         expectedAttributes: metadata.root.attributes, observedAttributes: root.attributes,
-        expectedPolicy: redacted(metadata.descriptors[metadata.root.security]),
-        observedPolicy: redacted(root.securityDescriptor),
+        expectedPolicy: redactedPolicy(metadata.descriptors[metadata.root.security]),
+        observedPolicy: redactedPolicy(root.securityDescriptor),
       };
       throw error;
     }
@@ -144,7 +146,24 @@ export async function prepareWindowsProjectRestoreSecurity({
           project, destinationParent: backup, entries: manifest.entries, signal: restoreSignal, pwsh,
         });
         const errors = [];
-        if (!same(observed.metadata, metadata)) errors.push(new Error('Restored Windows ACL or attributes differ from the snapshot.'));
+        if (!same(observed.metadata, metadata)) {
+          const error = new Error('Restored Windows ACL or attributes differ from the snapshot.');
+          for (let index = -1; index < metadata.entries.length; index++) {
+            const expected = index < 0 ? metadata.root : metadata.entries[index];
+            const actual = index < 0 ? observed.metadata.root : observed.metadata.entries[index];
+            const expectedPolicy = metadata.descriptors[expected.security];
+            const actualPolicy = observed.metadata.descriptors[actual.security];
+            if (expected.attributes !== actual.attributes || expectedPolicy !== actualPolicy) {
+              error.comparison = {
+                path: index < 0 ? '.' : expected.path,
+                expectedAttributes: expected.attributes, observedAttributes: actual.attributes,
+                expectedPolicy: redactedPolicy(expectedPolicy), observedPolicy: redactedPolicy(actualPolicy),
+              };
+              break;
+            }
+          }
+          errors.push(error);
+        }
         try { await observed.close(); } catch (error) { errors.push(error); }
         if (errors.length) throw new AggregateError(errors, 'Windows restored security verification failed.');
       },

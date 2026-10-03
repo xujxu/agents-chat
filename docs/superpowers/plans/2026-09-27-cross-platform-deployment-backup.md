@@ -11260,6 +11260,25 @@ and retain an outside hard link to the obsolete read-only file. Both restores
 must preserve the outside link's bytes/ACL/attributes and excluded Git policy,
 while still leaving backup payloads private.
 
+`d020d43 / 37102938102`, Windows job `111149246585`, completed
+**2026-10-03 06:48:02 UTC**: the strengthened real payload test passed all
+private-copy, original ACL/attributes, read-only alias, excluded-policy and
+repeat-restore assertions. Six refusal cases also passed. The two interrupted
+restoration retry cases still fail final security equality; add a bounded,
+SID-hashed first-difference diagnostic without weakening equality.
+
+To avoid serializing each native diagnostic behind a 20+ minute full run,
+the existing workflow now has an opt-in `windows_restore_only` boolean:
+
+```bash
+gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+  --ref feat/deployment-backup -f windows_restore_only=true
+```
+
+This manual profile uses its own concurrency group and runs only the Windows
+payload contracts. Push/PR/default dispatch behavior remains the full 34-job
+matrix. Focused success does not replace final full regression acceptance.
+
 Apply the accepted version-3 metadata to real restored files, using standard
 Windows handle-based security/attribute APIs. Reuse the existing project byte
 restorer, backup checks, explicit data-loss acknowledgement and stopped/inhibited
