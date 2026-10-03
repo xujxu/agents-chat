@@ -162,6 +162,8 @@ export async function prepareWindowsProjectRestoreSecurity({
               break;
             }
           }
+          error.message += error.comparison ? ` ${JSON.stringify(error.comparison)}`
+            : ' Descriptor table indexing differs despite matching entry policies.';
           errors.push(error);
         }
         try { await observed.close(); } catch (error) { errors.push(error); }
