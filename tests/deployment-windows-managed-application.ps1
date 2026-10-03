@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory)][string]$Project,
     [Parameter(Mandatory)][string]$Control,
-    [Parameter(Mandatory)][string]$Node
+    [Parameter(Mandatory)][string]$Node,
+    [switch]$CompleteSnapshot
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -62,7 +63,8 @@ $generations = [Collections.Generic.HashSet[string]]::new()
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 
-foreach ($phase in @('create', 'mutate', 'restored')) {
+$phases = if ($CompleteSnapshot) { @('create') } else { @('create', 'mutate', 'restored') }
+foreach ($phase in $phases) {
     $taskName = "Agents-Chat-Application-Test-$([guid]::NewGuid())"
     $registered = $false
     $owner = $null
@@ -117,6 +119,31 @@ foreach ($phase in @('create', 'mutate', 'restored')) {
         & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs') $phase $chatId
         Assert ($LASTEXITCODE -eq 0) "Managed application API $phase failed"
         Assert-OwnedListener $ready $owner $listener $nativeListener
+
+        if ($CompleteSnapshot) {
+            $git = (Get-Command git.exe).Source
+            $snapshotControl = Join-Path $root 'snapshot-control'
+            [Deployment.WindowsPrivateFile]::CreateDirectory($snapshotControl).Dispose()
+            $originalPath = $env:PATH
+            try {
+                $env:PATH = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0'
+                & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-snapshot.mjs') `
+                    $Project $taskName $pwsh $git $snapshotControl
+                Assert ($LASTEXITCODE -eq 0) 'Complete actual application snapshot failed'
+            } finally { $env:PATH = $originalPath }
+            $stopped = [Deployment.WindowsRuntimeControl]::Exchange(
+                [guid]$ready.generation, $ready.pid, $ready.identity, 'observe', 15000) | ConvertFrom-Json
+            Assert ($stopped.quiescent -and @($stopped.members).Count -eq 0 -and -not $owner.HasExited -and
+                $listener.WaitForExit(15000) -and @(Get-Listeners).Count -eq 0 -and
+                -not $scheduler.GetFolder('\').GetTask($taskName).Enabled) `
+                'Snapshot lost original stopped runtime or restart inhibition'
+            $retired = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation,
+                $ready.pid, $ready.identity, 'retire', 15000)
+            Assert ($retired -ceq 'retired' -and $owner.WaitForExit(15000) -and $owner.ExitCode -eq 0) `
+                'Snapshot fixture original owner did not retire'
+            Write-Output 'PASS: complete application snapshot retains quiescence and original-owner cleanup'
+            continue
+        }
 
         if ($phase -eq 'create') {
             $git = (Get-Command git.exe).Source
@@ -179,4 +206,6 @@ foreach ($phase in @('create', 'mutate', 'restored')) {
         if ($registered) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false }
     }
 }
-Write-Output 'PASS: three prebuilt Windows application starts preserve authenticated data and restore the stopped database'
+if (-not $CompleteSnapshot) {
+    Write-Output 'PASS: three prebuilt Windows application starts preserve authenticated data and restore the stopped database'
+}

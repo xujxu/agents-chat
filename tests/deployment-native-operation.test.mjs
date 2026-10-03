@@ -238,6 +238,13 @@ test('actual application source installs and builds inside native ownership', {
     ], { timeout: 240000, maxBuffer: 16384 });
     console.log(stdout.trim());
     await artifacts.check();
+    const snapshot = await execute(f.runtime.pwsh, ['-NoProfile', '-NonInteractive', '-File',
+      path.join(repository, 'tests/deployment-windows-managed-application.ps1'),
+      '-Project', f.project, '-Control', f.control, '-Node', process.execPath,
+      '-CompleteSnapshot',
+    ], { timeout: 240000, maxBuffer: 16384 });
+    console.log(snapshot.stdout.trim());
+    await artifacts.check();
   }
 });
 

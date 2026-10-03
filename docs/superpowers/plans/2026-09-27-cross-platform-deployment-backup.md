@@ -12861,6 +12861,47 @@ configuration observation and the existing captured database inspector.
   snapshot pipeline and full36, preserving all current cases and time limits.
   Do not claim first installation, public orchestration or cold restore yet.
 
+### Task 5BJ: Capture the complete actual Windows application
+
+**Goal:** Exercise the existing task-bound snapshot implementation against the
+real built application, rather than treating a small source fixture as proof
+that dependencies, native modules, build output and live-created data are covered.
+
+**Files:** Add `tests/deployment-windows-application-snapshot.mjs`; extend
+`tests/deployment-windows-managed-application.ps1` and
+`tests/deployment-native-operation.test.mjs`. Keep production snapshot behavior
+unchanged unless this acceptance exposes a concrete defect.
+
+- [ ] Add an opt-in `-CompleteSnapshot` fixture mode with one authenticated
+  application start. Keep the existing default three-start lifecycle intact.
+  Reuse the already built project for a second invocation, without another
+  install/build or increased task/process/job time limits:
+  ```js
+  await execute(f.runtime.pwsh, ['-NoProfile', '-NonInteractive', '-File',
+    path.join(repository, 'tests/deployment-windows-managed-application.ps1'),
+    '-Project', f.project, '-Control', f.control, '-Node', process.execPath,
+    '-CompleteSnapshot',
+  ], { timeout: 240000, maxBuffer: 16384 });
+  ```
+- [ ] In the new Node fixture, use actual managed discovery, explicit Git,
+  configuration observation, original lock/preflight admission and
+  `stopWindowsTaskTransaction`. Advance only through real stop and copying;
+  call `createWindowsTaskSnapshot` and `verifySnapshot`. Require exact source
+  bytes for `.next/BUILD_ID`, `node_modules/next/package.json`, the compiled
+  `better_sqlite3.node`, every `.data` file and all external runtime helpers.
+  Require task XML/SDDL, Git metadata/objects and native security metadata.
+  Do not fabricate an accepted deployment or release an unfinished transaction.
+- [ ] After the snapshot controller closes, the fixture independently checks
+  the original runtime is quiescent, has no members/listener and the same task
+  remains disabled. Retire only that retained fixture owner and unregister
+  the generated test task through existing cleanup. This is snapshot
+  acceptance, not completed-update or restore acceptance.
+- [ ] Push and dispatch `deployment-lifecycle.yml` with
+  `windows_application_only=true`. Diagnose any actual failure from Actions
+  before modifying production. Require original three-start coverage plus
+  complete snapshot coverage; then run the default full matrix and record
+  its SHA/run. No local validation or extra application build.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
