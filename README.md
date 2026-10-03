@@ -290,8 +290,10 @@ admission or lock records, grant stop authority, or infer HTTP health.
 A separate production capture helper now publishes the existing task admission
 record from that retained observer, the original live operation lock and matching
 preflight state under shared native admission. It uses explicit private native
-publication rather than caller-provided runtime metadata; Actions acceptance is
-pending. Public Windows command composition remains unfinished.
+publication rather than caller-provided runtime metadata. Update, custom-security
+restore and originally disabled native scenarios, including refusal cases and
+the complete stop-to-cleanup sequence, passed with all 34 regression jobs at
+`e59b0e9 / 37089382913`. Public Windows command composition remains unfinished.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

@@ -10813,7 +10813,7 @@ binds its original facade through a private WeakMap.
   disabled native job `111101780541`, discovered the actual unguarded task and
   failed on the missing production capture API at **2026-10-03 01:55:11 UTC**.
 
-- [ ] **Step 2: implement capture without granting observation stop authority.**
+- [x] **Step 2: implement capture without granting observation stop authority.**
 
   ```javascript
   await captureWindowsManagedTaskAdmission({ scope, control, lock, admission, signal });
@@ -10853,7 +10853,7 @@ binds its original facade through a private WeakMap.
   and state handles before returning so the Node can advance the state.
   Preserve partial evidence on any failure; close only releases handles.
 
-- [ ] **Step 3: prove refusals and compatibility in all three native scenarios.**
+- [x] **Step 3: prove refusals and compatibility in all three native scenarios.**
 
   ```javascript
   await assert.rejects(capture({ ...options, scope: { ...scope } }));
@@ -10868,12 +10868,22 @@ binds its original facade through a private WeakMap.
   restore, and originally disabled tasks through actual capture, stop,
   replacement, activation, completion, cleanup and post-cleanup discovery.
 
-- [ ] **Step 4: accept in Actions and record the exact boundary.**
+- [x] **Step 4: accept in Actions and record the exact boundary.**
 
   Push implementation and inspect all 34 workflow jobs. Keep existing native
   timeouts and regression gates. Record exact SHA/run/native/full outcomes in
   README and this plan. This completes production admission generation, not
   public scripts, first deployment, source/build adapters or ACL restoration.
+
+  Accepted `e59b0e921b221d0f42961d7e4250d35eee6b645d / 37089382913`:
+  restore `111109698669` completed at **02:42:09 UTC**, update `111109698671`
+  at **02:43:11 UTC**, and disabled `111109698618` at **02:43:40 UTC**.
+  Full regression: **34/34 successful at 2026-10-03 02:59:58 UTC**.
+  Earlier implementation runs were retained through completion:
+  `9c20d5a / 37087990453` exposed the misplaced module export (fixed in
+  `4d0d795`); `4d0d795 / 37088102774` exposed the fixture's illegal repeated
+  preflight write. The final fixture injects and restores exact state bytes
+  only for its negative case, without weakening production state transitions.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
