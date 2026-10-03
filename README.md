@@ -278,7 +278,13 @@ at `4b1a84f / 37082766145`. Additional coverage that loses admission while a
 recovery bridge remains alive, then kills the recovery actor and resumes
 its acknowledged progress, also passed with all 31 jobs at
 `e4c793f / 37083428275`.
-Interrupted completion/recovery and public Windows integration remain unaccepted.
+Pre-release/reboot recovery and public Windows integration remain unaccepted.
+Installed native-task discovery is now implemented as a separate read-only
+observer, awaiting Actions acceptance. It derives the literal installed bundle
+from the actual task, retains original process/instance/account and private
+readiness evidence, and checks that generation's active Job and unguarded or
+released lease. It does not depend on retired operation journals, create
+admission or lock records, grant stop authority, or infer HTTP health.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

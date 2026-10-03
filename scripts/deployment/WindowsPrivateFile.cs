@@ -240,6 +240,11 @@ namespace Deployment
             RequirePath(directory);
             return new DirectoryLease(PublicationDirectory(directory));
         }
+        public static DirectoryLease OpenSourceDirectory(string directory)
+        {
+            RequirePath(directory);
+            return new DirectoryLease(PublicationDirectory(directory, false));
+        }
         public static DirectoryLease CreateDirectory(string directory)
         {
             RequirePath(directory);

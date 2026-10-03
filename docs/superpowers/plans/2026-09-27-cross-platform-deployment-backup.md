@@ -10645,6 +10645,10 @@ creates admission/operation records nor stops, restarts or adopts a runtime.
   original-Node-owned `check`/`close` protocol; no mutation request.
 - Create `scripts/deployment/windows-managed-task.mjs`: strict immutable
   discovery facade and acknowledgement/identity checks.
+- Modify `scripts/deployment/WindowsPrivateFile.cs`: expose read-only retained
+  source-directory identity/security checks without requiring an ordinary
+  checkout to have private-backup ACLs. Private bundle/file checks stay strict;
+  no permissions are repaired or broadened.
 - Modify `scripts/deployment/saved-worker-engine.mjs` and
   `tests/deployment-saved-worker.test.mjs`: include all three helpers in the
   exact saved dependency closure.
@@ -10658,7 +10662,7 @@ creates admission/operation records nor stops, restarts or adopts a runtime.
 - Modify `.github/workflows/deployment-lifecycle.yml`: separate bounded
   update/restore/disabled discovery matrix; preserve all 31 existing gates.
 
-- [ ] **Step 1: publish the missing saved-entry causal after real final unlock.**
+- [x] **Step 1: publish the missing saved-entry causal after real final unlock.**
 
   ```javascript
   const entry = path.join(control, 'recovery-engine', 'windows-managed-task.mjs');
@@ -10673,6 +10677,12 @@ creates admission/operation records nor stops, restarts or adopts a runtime.
   Commit/push and capture the missing-entry failure in Actions before adding
   production discovery. Do not skip saved-closure validation via a checkout
   import fallback.
+
+  Causal `7465d3d / 37085886046`, native job `111095985812`, passed real
+  receipt retirement and final deployment cleanup, then failed on the missing
+  saved discovery entry at **2026-10-03 01:26:22 UTC**. Captured the log and
+  cancelled this characterized causal run; restore/disabled causal jobs were
+  still queued and were cancelled, not executed or accepted.
 
 - [ ] **Step 2: discover and retain the actual installed generation.**
 
