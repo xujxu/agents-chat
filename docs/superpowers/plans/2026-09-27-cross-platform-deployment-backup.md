@@ -10684,7 +10684,7 @@ creates admission/operation records nor stops, restarts or adopts a runtime.
   cancelled this characterized causal run; restore/disabled causal jobs were
   still queued and were cancelled, not executed or accepted.
 
-- [ ] **Step 2: discover and retain the actual installed generation.**
+- [x] **Step 2: discover and retain the actual installed generation.**
 
   Parse exactly one literal executable task action:
 
@@ -10718,7 +10718,7 @@ creates admission/operation records nor stops, restarts or adopts a runtime.
   values never enter this observation or diagnostics. Job membership and
   liveness remain distinct from HTTP readiness.
 
-- [ ] **Step 3: bind lifetime and read-only checks to the original observer.**
+- [x] **Step 3: bind lifetime and read-only checks to the original observer.**
 
   Expose only:
 
@@ -10734,7 +10734,7 @@ creates admission/operation records nor stops, restarts or adopts a runtime.
   and closes native resources; normal close releases handles only.
   Do not acquire or create Windows admission for read-only discovery.
 
-- [ ] **Step 4: verify real discovery and unchanged deployment state.**
+- [x] **Step 4: verify real discovery and unchanged deployment state.**
 
   ```javascript
   assert.equal(scope.observation.runtimeAuthority, false);
@@ -10749,13 +10749,20 @@ creates admission/operation records nor stops, restarts or adopts a runtime.
   must still observe the original active Job and explicitly retire it itself.
   Run update, restore with custom task security, and originally disabled cases.
 
-- [ ] **Step 5: accept the exact implementation and complete regression.**
+- [x] **Step 5: accept the exact implementation and complete regression.**
 
   Push with the normal co-author trailer and require all 34 Actions jobs,
   including the three discovery cases and all 31 prior gates. Preserve failed
   implementation runs for diagnosis. Record exact acceptance in README and
   this plan. This is installed runtime discovery, not completed public command
   composition, account switching, ACL restoration or legacy watchdog adoption.
+
+  Accepted `59281151ff8e4d50df64b4701f0ce635eb4ae428 / 37086347173`.
+  Native update `111097355232` passed at **01:34:09 UTC**, restore
+  `111097355326` at **01:39:44 UTC**, and disabled `111097355364` at
+  **01:39:59 UTC** on **2026-10-03**. The complete regression finished
+  **34/34 successful at 01:52:00 UTC**. Production admission capture and
+  public Windows commands remain separate unfinished integration work.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
