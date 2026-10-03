@@ -68,7 +68,7 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
       const recovery = await saveRecoveryEngine({ source, control });
       const { createWindowsTaskSnapshotFixture } = await import('./deployment-windows-task-snapshot.mjs');
       snapshotFixture = createWindowsTaskSnapshotFixture({
-        observation: scope.observation, control, lock, configuration, recovery, sourceCommit: beforeCommit, targetCommit,
+        observation: scope.observation, control, lock, configuration, recovery, sourceCommit: beforeCommit, targetCommit, pwsh,
       });
       workers = await createWorkerOperation({ control, lock, saved });
       const options = { scope, control, lock, operation: workers, pwsh, ...tools };

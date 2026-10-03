@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import * as stages from '../scripts/deployment/windows-task-transaction.mjs';
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 
-export function createWindowsTaskSnapshotFixture({ observation, control, lock, configuration, recovery, sourceCommit, targetCommit }) {
+export function createWindowsTaskSnapshotFixture({ observation, control, lock, configuration, recovery, sourceCommit, targetCommit, pwsh }) {
   const destination = path.join(control, 'backup');
   const stageOptions = context => ({ context, control, lock, sourceCommit });
   const requireStage = () => assert.equal(typeof stages.assertWindowsTaskSnapshotStage, 'function',
@@ -38,10 +38,13 @@ export function createWindowsTaskSnapshotFixture({ observation, control, lock, c
       assert.deepEqual(binding, { project: lock.project, sourceCommit, task });
       const { createWindowsTaskSnapshot } = await import('../scripts/deployment/windows-task-snapshot.mjs');
       const snapshotOptions = {
-        context, control, lock, configuration, destination, id: 'native-task-snapshot',
+        context, control, lock, configuration, destination, pwsh, id: 'native-task-snapshot',
         source: { commit: sourceCommit, provenance: 'observed' }, recoveryEngine: recovery.manifestSha256,
       };
       await assert.rejects(createWindowsTaskSnapshot({ ...snapshotOptions, context: { ...context } }));
+      for (const executable of [undefined, 'pwsh.exe']) {
+        await assert.rejects(createWindowsTaskSnapshot({ ...snapshotOptions, pwsh: executable }), /PowerShell/);
+      }
       await assert.rejects(createWindowsTaskSnapshot({ ...snapshotOptions, signal: interrupted.signal }),
         /Snapshot stage cancelled/);
       await assert.rejects(lstat(destination), { code: 'ENOENT' });

@@ -13,11 +13,14 @@ import { createSnapshot } from './snapshot.mjs';
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
 export async function createWindowsTaskSnapshot({
-  context, control, lock, configuration, destination, id, source: suppliedSource, recoveryEngine, signal,
+  context, control, lock, configuration, destination, id, source: suppliedSource, recoveryEngine, pwsh, signal,
 }) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || typeof configuration?.checkFiles !== 'function'
-    || !Array.isArray(configuration.files)) throw new Error('Windows task snapshot requires native configuration observation.');
+    || !Array.isArray(configuration.files) || typeof pwsh !== 'string' || !path.isAbsolute(pwsh)
+    || path.resolve(pwsh) !== pwsh || /[\0\r\n]/.test(pwsh)) {
+    throw new Error('Windows task snapshot requires native configuration observation and explicit PowerShell.');
+  }
   const source = Object.freeze(captureWorkerFields(suppliedSource, ['commit', 'provenance'], 'snapshot source'));
   if (!['observed', 'verified'].includes(source.provenance)) throw new Error('Invalid task snapshot source provenance.');
   const authority = { context, control, lock, sourceCommit: source.commit, signal };
@@ -69,7 +72,7 @@ export async function createWindowsTaskSnapshot({
     if (!external.has(file.path)) external.set(file.path, { path: file.path, optional: !file.present });
   }
   return createSnapshot({
-    project, destination, id, source, signal, ...scope, gitMetadata, recoveryEngine,
+    project, destination, id, source, signal, ...scope, gitMetadata, recoveryEngine, pwsh,
     externalFiles: [...external.values()], runtime: { platform: 'win32', state: 'stopped', task: binding.task },
     async checkSource() {
       await checkRuntime();

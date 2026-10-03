@@ -50,7 +50,7 @@ export function validateGitObjects(value) {
   return descriptor;
 }
 
-export async function prepareGitObjects({ project, commit, signal }) {
+export async function prepareGitObjects({ project, commit, signal, pwsh }) {
   const root = await realDirectory(path.join(project, '.git/objects'));
   const original = identity(await lstat(root, { bigint: true }));
   const names = (await readdir(root)).sort();
@@ -79,7 +79,7 @@ export async function prepareGitObjects({ project, commit, signal }) {
       await check();
       await createSnapshot({ project: root, destination, id: 'git-objects', files: names,
         source: { commit, provenance: 'observed' }, runtime: { platform: process.platform, state: 'stopped' },
-        signal, excludedPaths, checkSource: check });
+        signal, pwsh, excludedPaths, checkSource: check });
       await check();
       return validateGitObjects({ version: 1, bytes: totalBytes(entries),
         sha256: await fileDigest(path.join(destination, 'manifest.json'), { signal }) });

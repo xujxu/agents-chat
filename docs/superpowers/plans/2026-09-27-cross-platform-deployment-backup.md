@@ -12660,6 +12660,15 @@ complete project inventory and only outside files through external capture.
 Keep all runtime hash/source barriers, and assert exact backup bytes for every
 helper in either location. Do not relax external-source validation.
 
+`999ad31 / 37123489507`, job `111204082252`, then reached native project
+security observation **12:38:53 UTC** and failed `spawn pwsh.exe ENOENT`.
+The original private controller deliberately has a minimal PATH. Thread its
+explicit PowerShell executable through the task adapter, shared snapshot
+observer factory and nested Git-object snapshot; do not broaden PATH.
+Run the existing task pipeline first in focused dispatches for prompt causal
+feedback, followed by all 97 component cases. Full matrices retain their
+existing independent managed-discovery job and all 36 jobs.
+
 **Goal:** Add the native snapshot adapter needed by public deployment without
 inventing another task controller. Reuse the existing branded transaction,
 configuration observer, complete-project/Git snapshot and native external

@@ -116,7 +116,7 @@ export async function createSnapshot(options) {
   let failure;
   try {
     return await createSnapshotContents(options, async scope => {
-      const security = await inspectWindowsSnapshotSecurity(scope);
+      const security = await inspectWindowsSnapshotSecurity({ ...scope, pwsh: options.pwsh });
       securityScopes.push(security);
       return security;
     });
@@ -138,7 +138,7 @@ export async function createSnapshot(options) {
 
 async function createSnapshotContents({
   project, destination, id, files, source, runtime, signal, absentPaths = [], excludedPaths = [],
-  externalFiles = [], checkSource, projectScope = false, gitMetadata, recoveryEngine,
+  externalFiles = [], checkSource, projectScope = false, gitMetadata, recoveryEngine, pwsh,
 }, retainSecurity) {
   signal?.throwIfAborted();
   if (checkSource !== undefined && typeof checkSource !== 'function') throw new Error('Snapshot source check must be callable.');
@@ -147,7 +147,7 @@ async function createSnapshotContents({
   if (runtime?.state !== 'stopped') throw new Error('Snapshot requires a stopped runtime.');
   const root = await realDirectory(project);
   const rootInfo = await lstat(root);
-  const objects = git ? await prepareGitObjects({ project: root, commit: source.commit, signal }) : null;
+  const objects = git ? await prepareGitObjects({ project: root, commit: source.commit, signal, pwsh }) : null;
   if (rootInfo.mode & 0o7000 || typeof projectScope !== 'boolean') throw new Error('Unsupported project snapshot metadata.');
   const checkProject = async () => {
     signal?.throwIfAborted();
