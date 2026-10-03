@@ -7,6 +7,71 @@ import {
   createSnapshot, verifySnapshot, rotateSnapshot, reconcileSnapshotSlots, estimateRequiredBytes, inventorySnapshot,
 } from '../scripts/deployment/snapshot.mjs';
 import { fileDigest } from '../scripts/deployment/snapshot-files.mjs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
+
+async function inspectSecurity(file, action = 'inspect') {
+  const { stdout } = await promisify(execFile)('pwsh.exe', [
+    '-NoProfile', '-NonInteractive', '-File',
+    fileURLToPath(new URL('./deployment-windows-snapshot-security-fixture.ps1', import.meta.url)),
+    '-File', file, '-Action', action,
+  ], { timeout: 30000, maxBuffer: 65536 });
+  return JSON.parse(stdout);
+}
+
+test('Windows snapshot saves source ACL metadata separately from private large-file backup permissions', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const root = await temporaryDeployment(t);
+  const project = path.join(root, 'app');
+  const destination = path.join(root, 'staging');
+  await mkdir(project);
+  const file = path.join(project, '.env.local');
+  const bytes = Buffer.from('\ufefffixture-only-large-configuration\r\n'.repeat(40000), 'utf16le');
+  assert.ok(bytes.length > 1024 * 1024);
+  await writeFile(file, bytes);
+  const original = await inspectSecurity(file, 'broaden');
+  const manifest = await createSnapshot({
+    project, destination, id: 'windows-security', files: ['.env.local'],
+    source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+  });
+  assert.equal(manifest.version, 3);
+  const security = manifest.windowsSecurity;
+  const entry = security.entries.find(entry => entry.path === '.env.local');
+  assert.equal(security.descriptors[entry.security], original.securityDescriptor);
+  assert.equal(entry.attributes, original.attributes);
+  assert.equal(security.descriptors[security.root.security], (await inspectSecurity(project)).securityDescriptor);
+  assert.match(original.securityDescriptor, /;;;WD\)/);
+  const copy = path.join(destination, 'files', '.env.local');
+  assert.doesNotMatch((await inspectSecurity(copy)).securityDescriptor, /;;;WD\)/);
+  assert.deepEqual(await readFile(copy), bytes);
+  await writeFile(file, 'new live bytes');
+  assert.deepEqual(await readFile(copy), bytes);
+  assert.deepEqual(await verifySnapshot(destination), manifest);
+});
+
+test('Windows snapshot refuses source ACL drift at the final authority boundary', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const root = await temporaryDeployment(t);
+  const project = path.join(root, 'app');
+  const destination = path.join(root, 'staging');
+  await mkdir(project);
+  const file = path.join(project, '.env.local');
+  await writeFile(file, 'fixture-only');
+  let checks = 0;
+  await assert.rejects(createSnapshot({
+    project, destination, id: 'windows-acl-drift', files: ['.env.local'],
+    source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+    async checkSource() {
+      if (++checks === 2) await inspectSecurity(file, 'broaden');
+    },
+  }), /security|ACL|source.*changed/i);
+  await assert.rejects(readFile(path.join(destination, 'complete.json')), { code: 'ENOENT' });
+});
 
 test('snapshot copies data without aliasing live files and detects corruption', async t => {
   const root = await temporaryDeployment(t);

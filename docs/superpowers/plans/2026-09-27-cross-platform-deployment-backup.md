@@ -11122,6 +11122,90 @@ permissions; never copy a broad source DACL onto backup files.
   orchestration; add no cold-recovery build dependency. Record exact SHA/run
   and distinguish ACL observation from future ACL restoration.
 
+### Task 5AV: native Windows snapshot security metadata
+
+Extend the approved snapshot scope, without changing the deployment model.
+Use standard Windows owner/group/DACL descriptors, kept separately from
+private backup permissions. Reuse the shared snapshot engine, including its
+nested Git-object snapshots; do not introduce a second byte-copy engine.
+This stage captures and verifies security metadata. Windows restore remains
+refused until its actual permission application and native authority are wired.
+
+**Files:**
+- Create `scripts/deployment/windows-snapshot-security.mjs`: bounded native
+  metadata capture/check/close, strict descriptor table validation.
+- Create `scripts/deployment/windows-snapshot-security.ps1`: original-controller
+  read-only scope using standard `Get-Acl`, source type/attribute checks,
+  and existing native project directory/lifetime retention.
+- Modify `scripts/deployment/snapshot.mjs`: Windows version-3 manifest with
+  deduplicated security descriptors, source ACL rechecks before completion,
+  private destination admission; preserve Linux version-1/2 behavior.
+- Modify `scripts/deployment/saved-recovery-engine.mjs`: save both new
+  dependencies, because saved snapshot verification imports their codec.
+- Modify `tests/deployment-snapshot.test.mjs`: Windows metadata and ACL-drift
+  tests executed by the existing Windows contracts job.
+- Create `tests/deployment-windows-snapshot-security-fixture.ps1`: inspect
+  actual owner/group/DACL and make fixture-only `.env.local` ACL changes.
+
+- [ ] **Step 1: demonstrate the missing snapshot ACL contract in Actions.**
+
+  ```javascript
+  const manifest = await createSnapshot(options);
+  assert.equal(manifest.version, 3);
+  const source = manifest.windowsSecurity.entries.find(entry => entry.path === '.env.local');
+  assert.equal(manifest.windowsSecurity.descriptors[source.security], original.securityDescriptor);
+  assert.doesNotMatch((await inspectSecurity(backupFile)).securityDescriptor, /;;;WD\)/);
+  ```
+
+  Use a greater-than-1-MiB UTF-16LE byte fixture to distinguish general
+  snapshot metadata from the bounded configuration-content observer. Grant
+  fixture-only Everyone Read on the source, require exact saved source SDDL,
+  and independently inspect the private backup ACL. A second case changes
+  source ACL at the existing final source-check boundary and requires refusal
+  without a completion marker. Push test-only changes and retain the actual
+  Windows failures before production implementation.
+
+- [ ] **Step 2: capture bounded, deduplicated native security metadata.**
+
+  ```javascript
+  {
+    version: 1,
+    descriptors: ['O:...G:...D:...'],
+    root: { security: 0, attributes: 16 },
+    entries: [{ path: '.env.local', security: 0, attributes: 32 }]
+  }
+  ```
+
+  Bind every entry to the existing snapshot inventory. Validate exact fields,
+  descriptor indexes, source kinds, supported attributes and canonical paths.
+  Batch bounded native metadata frames rather than passing a full application
+  inventory through a command line or a single unbounded JSON response.
+  Reinspect actual ACLs before accepting a completed snapshot. Read metadata
+  only; do not load large payloads or grant stop/restore authority.
+
+- [ ] **Step 3: integrate snapshot manifests and saved dependency closure.**
+
+  ```javascript
+  await security.check({ signal });
+  // The normal snapshot engine copies bytes into private new files.
+  await security.check({ signal });
+  await writePrivateFile(completionPath, completionBytes);
+  ```
+
+  Version 3 is Windows-only and requires its security table. Preserve existing
+  version-1/2 verification, recovery-engine digest validation, exact top-level
+  inventory, manifest size budget and complete-marker ordering. Require a
+  private Windows destination parent before copying credentials. Never apply
+  source ACLs to backup payloads. Close native observation on success, error
+  and cancellation, preserving both primary and cleanup failures.
+
+- [ ] **Step 4: accept real Windows metadata and full regression evidence.**
+
+  Require the causal cases to pass, saved-recovery import coverage, nested
+  Git-object snapshot coverage and all lifecycle jobs. Record the exact SHA,
+  run and completion time. Do not label this Windows restoration, full public
+  Windows deployment or application upgrade acceptance.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
