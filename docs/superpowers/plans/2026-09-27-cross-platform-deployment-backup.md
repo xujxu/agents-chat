@@ -12064,14 +12064,29 @@ Do not remove a target first or clear attributes on a potentially aliased inode.
 ### Task 5BB: Compose native Windows HEAD/index/ref journal restoration
 
 Causal `b65e31f / 37112378627`, Windows job `111172641630`, completed
-**2026-10-03 09:18:00 UTC**: 77 tests, 57 passed, 16 platform skips, exactly
-the four new real layout cases failed at the explicit native journal guard.
+**2026-10-03 09:18:00 UTC**: 77 tests, 57 passed, 16 platform skips.
+Three layout cases failed at the explicit native journal guard; the fourth
+failed earlier because removing `.git/refs` prevents Git from recognizing the
+repository. The missing-parent fixture now preserves `.git/refs` and removes
+only empty branch/tag child directories. The earlier four-guard summary was
+incorrect; this correction follows the complete failure detail.
 First implementation is ready for Actions, not accepted. The new native facade
 is shared by the existing journal algorithm; v1 behavior and public Windows
 composition refusal remain. Private intent publication reuses
 `WindowsPrivateFile.Publish`, rather than assuming inherited directory ACLs
 also supply the required private file owner. The saved recovery closure and
 project caller forward the new native helper/backup context.
+First implementation `6ee5515 / 37113324404` exposed a real integration error:
+the existing core's parallel before/policy/parent observations overlapped a
+strict single-command native controller. Its active request also prevented
+cleanup, keeping the test process alive until the unchanged 15-minute job
+deadline. Native observation collection is now sequential; Linux retains its
+parallel reads, and the controller's concurrency rejection is not weakened.
+The three actual stage failures were explicit `Source security restoration is
+active`; the fourth was the fixture issue above. No timeout increase is used.
+Added native post-publication controller-death tests with exact journal IDs,
+live-controller refusal, same-byte inode and index ACL drift refusal, preserved
+proof and successful continuation after restoring the original evidence.
 
 **Goal:** Extend the existing `restore-git.mjs` journal, not a second
 transaction engine, to restore validated version-2 metadata with native

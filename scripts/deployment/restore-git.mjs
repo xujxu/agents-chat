@@ -60,6 +60,12 @@ async function restoreGitMetadataCore({ project, record, checkAuthority, signal,
     const value = identity((await inspectGitDirectory(file, options)).info);
     return permissions ? permissions.observeDirectory(file, value) : value;
   };
+  const collect = async (values, read) => {
+    if (!permissions) return Promise.all(values.map(read));
+    const results = [];
+    for (const value of values) results.push(await read(value));
+    return results;
+  };
   const guard = path.join(directory, 'agents-chat-restore');
   const proofFile = path.join(guard, 'intent.json');
   const files = [...(record.ref ? [record.ref] : []), 'index', 'HEAD'];
@@ -145,11 +151,11 @@ async function restoreGitMetadataCore({ project, record, checkAuthority, signal,
     if (permissions) await permissions.createGuard();
     else if (!await exists(guard)) await mkdir(guard, { mode: 0o700 });
     const guardIdentity = await directoryIdentity(guard, { privateMode: true });
-    const before = await Promise.all(files.map(file => observe(path.join(directory, file))));
-    const policy = await Promise.all(['config', 'packed-refs'].map(async file =>
-      ({ file, identity: await observe(path.join(directory, file)) })));
-    const directories = await Promise.all(parents.map(async file =>
-      ({ file, identity: await directoryIdentity(file) })));
+    const before = await collect(files, file => observe(path.join(directory, file)));
+    const policy = await collect(['config', 'packed-refs'], async file =>
+      ({ file, identity: await observe(path.join(directory, file)) }));
+    const directories = await collect(parents, async file =>
+      ({ file, identity: await directoryIdentity(file) }));
     permissions?.assertIntentBudget({ project: root, owner, files, before, policy, parents: directories });
     const entries = [];
     for (const [index, file] of files.entries()) {
