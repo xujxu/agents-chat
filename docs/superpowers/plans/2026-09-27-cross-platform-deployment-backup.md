@@ -11814,7 +11814,10 @@ known mutable paths.
 
 ### Task 5AZ: Windows Git metadata permission snapshots
 
-Implementation is ready for Actions, not accepted. Causal test-only
+Implementation is accepted at `f1d425c605ed1ccc127440eec07f81d884583ac1`,
+full `37109444922`, all 34 jobs passed, completed
+**2026-10-03 08:43:54 UTC**. This accepts permission capture, not native
+HEAD/index/ref journal restoration. Causal test-only
 `fb4ca1b / 37108883252`, job `111162738917`, completed
 **2026-10-03 08:14:38 UTC**: only the three new native attached/packed/detached
 cases failed (`1 !== 2`); 39 tests passed and 16 platform cases skipped.
@@ -11832,7 +11835,8 @@ native role or long-lived process is added to direct Git inspection.
 Implementation `f1d425c605ed1ccc127440eec07f81d884583ac1` passed focused
 `37109444821 / 111164353352` at **2026-10-03 08:33:00 UTC**:
 60 tests, 44 passed, 16 platform skips, zero failures. Its full run
-`37109444922` is still running; Windows and Linux contracts passed.
+`37109444922` passed all 34 jobs, including Windows/Linux contracts and real
+Linux lifecycle/cold recovery.
 
 **Goal:** Capture original `.git` root, HEAD/index/ref and parent-directory
 owner/group/DACL/ordinary attributes before implementing their native journal
@@ -11890,7 +11894,7 @@ version-2 metadata restoration must refuse before mutation.
   `windows_restore_only=true`. Require the existing version-1 record to fail
   these assertions in Actions; preserve the current production full run.
 
-- [ ] **Step 2: add the strict derived-inventory codec and native capture.**
+- [x] **Step 2: add the strict derived-inventory codec and native capture.**
 
   `windowsGitMetadataInventory(ref)` returns HEAD and index files, plus the
   attached ref and each parent directory, using validated relative paths.
@@ -11925,7 +11929,7 @@ version-2 metadata restoration must refuse before mutation.
   and `absentPaths`. Preserve base64/index/commit/ref validation before calling
   the new codec. No new restoration behavior is implied by successful parsing.
 
-- [ ] **Step 3: retain and verify both observers through snapshot completion.**
+- [x] **Step 3: retain and verify both observers through snapshot completion.**
 
   Replace the single observer slot in `createSnapshot` with an owned array;
   close every acquired observer on every exit, preserving primary and all
@@ -11939,7 +11943,7 @@ version-2 metadata restoration must refuse before mutation.
   lock or file creation. Existing legacy direct-v1 behavior remains unchanged;
   the public Windows project Git-bearing gate also remains in place.
 
-- [ ] **Step 4: accept snapshots without overstating restoration.**
+- [x] **Step 4: accept snapshots without overstating restoration.**
 
   Require native attached/packed/detached metadata, readonly index attributes,
   byte equality, source-only index ACL drift refusal before completion,
@@ -11953,6 +11957,13 @@ Causal `b34190c / 37109889420`, job `111166103691`, completed
 **2026-10-03 08:36:44 UTC**: exactly the nine new native cases failed on the
 missing method; 44 existing tests passed and 16 platform cases skipped.
 The implementation is ready for native validation, not accepted.
+First implementation `e634be8 / 37110605897` reached a fixture sharing
+conflict before publication: `WriteAllBytes` did not share the existing native
+writable lease. Use an explicit existing-file `FileStream` with ReadWrite
+sharing, the same sharing contract as the production Node writable handle.
+Keep the lease retained. Added independent stage/target ACL and attribute
+drift refusal cases; all refusal checks now compare both policies as well.
+Use a canonical absolute destination name for the Win32 rename API.
 
 **Goal:** Provide the native publication operation required by the existing
 HEAD/index/ref journal, without adding another transaction engine or enabling
@@ -12011,7 +12022,7 @@ Do not remove a target first or clear attributes on a potentially aliased inode.
   int rootOffset = IntPtr.Size == 8 ? 8 : 4;
   int lengthOffset = rootOffset + IntPtr.Size;
   int nameOffset = lengthOffset + 4;
-  byte[] name = Encoding.Unicode.GetBytes(Path.GetFileName(relative));
+  byte[] name = Encoding.Unicode.GetBytes(destination.Target);
   ```
 
   Keep the verified existing target retained during the rename; do not release
@@ -12024,7 +12035,7 @@ Do not remove a target first or clear attributes on a potentially aliased inode.
 - [ ] **Step 3: require actual native acceptance before journal composition.**
 
   The two success cases must consume the `.lock` name and retain staged inode,
-  checksum, readonly attribute and exact already-applied policy. All seven
+  checksum, readonly attribute and exact already-applied policy. All eleven
   refusal cases must preserve both names, IDs, bytes and target policy. Run
   focused Actions and the complete production matrix; no local workload.
   This is a journal prerequisite, not acceptance of HEAD/index/ref restoration.

@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][string]$Project,
     [Parameter(Mandatory)][string]$SavedIndex,
     [ValidateSet('replace', 'absent', 'stage-identity', 'target-identity', 'stage-bytes',
-        'target-bytes', 'stage-alias', 'target-alias', 'unexpected-target')]
+        'target-bytes', 'stage-alias', 'target-alias', 'unexpected-target',
+        'stage-policy', 'target-policy', 'stage-attributes', 'target-attributes')]
     [string]$Scenario = 'replace'
 )
 $ErrorActionPreference = 'Stop'
@@ -21,7 +22,12 @@ $originalHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLow
 $bytes = [IO.File]::ReadAllBytes($SavedIndex)
 $lease = [Deployment.WindowsPrivateFile]::CreateSourceFile($root, 'index.lock')
 try {
-    [IO.File]::WriteAllBytes($stage, $bytes)
+    $writer = [IO.FileStream]::new($stage, [IO.FileMode]::Open,
+        [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+    try {
+        $writer.Write($bytes, 0, $bytes.Length)
+        $writer.Flush($true)
+    } finally { $writer.Dispose() }
     $private = $lease.Finish($bytes.Length)
 } finally { $lease.Dispose() }
 [Deployment.WindowsPrivateFile]::RestoreSourceSecurity(
@@ -45,7 +51,23 @@ switch ($Scenario) {
     'stage-alias' { New-Item -ItemType HardLink -Path (Join-Path $Project 'outside-alias') -Target $stage | Out-Null }
     'target-alias' { New-Item -ItemType HardLink -Path (Join-Path $Project 'outside-alias') -Target $target | Out-Null }
     'unexpected-target' { $expectedTarget = $null; $expectedTargetHash = $null }
+    { $_ -cin @('stage-policy', 'target-policy') } {
+        $changed = if ($Scenario -ceq 'stage-policy') { $stage } else { $target }
+        $acl = Get-Acl -LiteralPath $changed
+        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+            [Security.Principal.SecurityIdentifier]::new('S-1-1-0'),
+            [Security.AccessControl.FileSystemRights]::Read, [Security.AccessControl.AccessControlType]::Allow))
+        Set-Acl -LiteralPath $changed -AclObject $acl
+    }
+    { $_ -cin @('stage-attributes', 'target-attributes') } {
+        $changed = if ($Scenario -ceq 'stage-attributes') { $stage } else { $target }
+        [IO.File]::SetAttributes($changed, [IO.File]::GetAttributes($changed) -bor [IO.FileAttributes]::Hidden)
+    }
 }
+$witnessStage = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($root, 'index.lock', 'file')
+$witnessTarget = if ($Scenario -cne 'absent') {
+    [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($root, 'index', 'file')
+} else { $null }
 $refused = $false
 try {
     [Deployment.WindowsPrivateFile]::PublishSourceFile(
@@ -59,9 +81,11 @@ if ($Scenario -cnotin @('replace', 'absent')) {
     if (-not $refused) { throw 'Conflicting Git publication was not refused.' }
     $after = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($root, 'index', 'file')
     $afterStage = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($root, 'index.lock', 'file')
-    if ($after.Dev -cne $original.Dev -or $after.Ino -cne $original.Ino -or
-        $after.SecurityDescriptor -cne $original.SecurityDescriptor -or $after.Attributes -ne $original.Attributes -or
-        $afterStage.Dev -cne $staged.Dev -or $afterStage.Ino -cne $staged.Ino -or
+    if ($after.Dev -cne $witnessTarget.Dev -or $after.Ino -cne $witnessTarget.Ino -or
+        $after.SecurityDescriptor -cne $witnessTarget.SecurityDescriptor -or $after.Attributes -ne $witnessTarget.Attributes -or
+        $afterStage.Dev -cne $witnessStage.Dev -or $afterStage.Ino -cne $witnessStage.Ino -or
+        $afterStage.SecurityDescriptor -cne $witnessStage.SecurityDescriptor -or
+        $afterStage.Attributes -ne $witnessStage.Attributes -or
         (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant() -cne $originalHash -or
         (Get-FileHash -LiteralPath $stage -Algorithm SHA256).Hash.ToLowerInvariant() -cne $stageHash) {
         throw 'Refused Git publication changed original evidence.'

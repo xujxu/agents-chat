@@ -334,8 +334,9 @@ shared writable-handle copier with private creation, original-identity deletion
 and retryable missing/partial pointers while stopped; hardlinks refuse before
 object mutation and again at native deletion. HEAD/index/ref and public Windows
 restore composition are not enabled by this object-store adapter.
-Windows Git permission snapshot support is implemented, pending Actions
-acceptance: `git.json` version 2 includes `.git` root and HEAD/index/ref/parent
+Windows Git permission snapshot support passed all 34 lifecycle jobs on
+`f1d425c605ed1ccc127440eec07f81d884583ac1 / 37109444922`:
+`git.json` version 2 includes `.git` root and HEAD/index/ref/parent
 ACLs and attributes, plus explicit absent names for packed references. The
 existing native observer rechecks these alongside source bytes and keeps the
 backup private. Linux snapshots and direct Git inspection remain version 1.

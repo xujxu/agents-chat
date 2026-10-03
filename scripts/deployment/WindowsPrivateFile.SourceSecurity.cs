@@ -280,7 +280,7 @@ namespace Deployment
                     if (before != null) CheckPublicationFile(original, before, beforeSha256);
                     destination.Check();
                     source.Check();
-                    byte[] name = Encoding.Unicode.GetBytes(Path.GetFileName(destination.Target));
+                    byte[] name = Encoding.Unicode.GetBytes(destination.Target);
                     int rootOffset = IntPtr.Size == 8 ? 8 : 4;
                     int lengthOffset = rootOffset + IntPtr.Size;
                     int nameOffset = lengthOffset + 4;

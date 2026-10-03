@@ -247,7 +247,8 @@ test('Windows Git index ACL drift cannot complete an otherwise unchanged project
 });
 
 for (const scenario of ['replace', 'absent', 'stage-identity', 'target-identity', 'stage-bytes',
-  'target-bytes', 'stage-alias', 'target-alias', 'unexpected-target']) {
+  'target-bytes', 'stage-alias', 'target-alias', 'unexpected-target',
+  'stage-policy', 'target-policy', 'stage-attributes', 'target-attributes']) {
   test(`native Windows Git lockfile publication preserves bound evidence: ${scenario}`, {
     skip: process.platform !== 'win32',
   }, async t => {
