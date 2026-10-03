@@ -56,7 +56,7 @@ namespace Deployment
                         Descriptor = descriptor.AddrOfPinnedObject(), Inherit = 0
                     };
                     const uint readWriteControl = 0xC0020000, openAlways = 4, openReparsePoint = 0x200000;
-                    gate.handle = CreateFileW(gate.file, readWriteControl, 0,
+                    gate.handle = CreateFileW(NativePath(gate.file), readWriteControl, 0,
                         ref attributes, openAlways, openReparsePoint, IntPtr.Zero);
                     if (gate.handle.IsInvalid)
                         throw new Win32Exception(Marshal.GetLastWin32Error(), "Acquire exclusive Windows admission");

@@ -59,9 +59,14 @@ namespace Deployment
                 return String.Join(":", Attributes, CreationLow, CreationHigh, Volume, IndexHigh, IndexLow);
             }
         }
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr attributes,
+        [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern SafeFileHandle CreateNativeFileW(string name, uint access, uint share, IntPtr attributes,
             uint creation, uint flags, IntPtr template);
+        static SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr attributes,
+            uint creation, uint flags, IntPtr template)
+        {
+            return CreateNativeFileW(NativePath(name), access, share, attributes, creation, flags, template);
+        }
         [StructLayout(LayoutKind.Sequential)]
         struct SecurityAttributes
         {
@@ -180,6 +185,11 @@ namespace Deployment
                 !String.Equals(Path.GetFullPath(file), file, StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("A canonical local configuration file path is required.");
         }
+        static string NativePath(string file)
+        {
+            RequirePath(file);
+            return @"\\?\" + file;
+        }
         static WindowsPrivateFile PublicationDirectory(string directory, bool requirePrivate = true, bool retirement = false)
         {
             var parent = new WindowsPrivateFile { file = directory };
@@ -271,7 +281,7 @@ namespace Deployment
                     var attributes = new SecurityAttributes {
                         Length = Marshal.SizeOf<SecurityAttributes>(), Descriptor = descriptor.AddrOfPinnedObject(), Inherit = 0
                     };
-                    Native(CreateDirectoryW(directory, ref attributes), "Create original private directory");
+                    Native(CreateDirectoryW(NativePath(directory), ref attributes), "Create original private directory");
                 }
                 finally { descriptor.Free(); }
                 DirectoryLease created = OpenDirectory(directory);
@@ -327,7 +337,7 @@ namespace Deployment
                     parent.CheckPublicationDirectory();
                     const uint writeThrough = 8;
                     // The generated pending name can exceed MAX_PATH even when the public destination does not.
-                    Native(MoveFileExW(@"\\?\" + pending, file, writeThrough), "Publish original private evidence");
+                    Native(MoveFileExW(NativePath(pending), NativePath(file), writeThrough), "Publish original private evidence");
                     published = Open(file, Digest(bytes));
                     parent.CheckPublicationDirectory();
                     return published;

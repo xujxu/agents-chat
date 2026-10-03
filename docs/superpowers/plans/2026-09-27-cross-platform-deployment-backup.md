@@ -13055,6 +13055,17 @@ ordinary final policy restoration as well; leave deliberate inheritance and
 temporary removal preparation APIs unchanged. Require existing mixed round
 trips and the long-path causal before further actual-app measurement.
 
+**Raw ACL fix and long-path causal:** `7739f09 / 37137410439` passed all
+six original native/mixed snapshot cases; only the new long-path case failed,
+**2026-10-03 16:36:36 UTC**, with Win32 error 3 opening an existing directory
+beyond MAX_PATH. Use the standard extended-length Win32 path syntax only
+after the existing canonical local-drive guard. Keep stored paths and handle
+identity comparison canonical/unprefixed. Route native file opens, private
+directory creation, publication and the admission overload through the same
+encoding so read and reconstruction agree. Do not enable UNC/device inputs or
+relax relative-component validation. Run the long-path complete round trip,
+ordinary regressions and the actual application again.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.
