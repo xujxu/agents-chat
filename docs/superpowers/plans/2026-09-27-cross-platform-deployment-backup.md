@@ -11042,6 +11042,8 @@ permissions; never copy a broad source DACL onto backup files.
   environment case/precedence/conflict cases.
 - Create `tests/deployment-windows-configuration.mjs`: native ACL-change,
   absent-file appearance and retained-file replacement refusals.
+- Create `tests/deployment-windows-configuration-policy.ps1`: fixture-only
+  source DACL change and exact original descriptor restoration.
 - Modify `tests/deployment-windows-source-build.mjs`: use the actual admitted
   configuration's build environment in existing owned npm stages.
 
@@ -11067,7 +11069,7 @@ permissions; never copy a broad source DACL onto backup files.
   both new environment case tests at **04:10:24 UTC**, rejecting supported
   lowercase runtime credentials and equivalent lowercase build overrides.
 
-- [ ] **Step 2: retain native configuration evidence without mutation authority.**
+- [x] **Step 2: retain native configuration evidence without mutation authority.**
 
   Expose only source metadata and `check`/`close` from the native scope:
 
@@ -11084,7 +11086,7 @@ permissions; never copy a broad source DACL onto backup files.
   Use existing source-read checks, not a relaxation of private backup checks.
   Report no environment contents through native readiness or errors.
 
-- [ ] **Step 3: integrate compatibility and actual source/build configuration.**
+- [x] **Step 3: integrate compatibility and actual source/build configuration.**
 
   ```javascript
   const environment = config.buildEnvironment(toolEnvironment);
@@ -11101,7 +11103,18 @@ permissions; never copy a broad source DACL onto backup files.
   explicitly before final fixture retirement. Cross-account execution and
   ACL restoration remain separate work.
 
-- [ ] **Step 4: accept native and full regressions without broadening scope.**
+  Implementation `4cf4e971220db8b2a9cec8cd2b1aa519f40ee3bc / 37095933156`
+  passed native update/source-build `111125767865` at
+  **2026-10-03 04:21:16 UTC**. This includes real ACL change refusal, successful
+  fresh observation of a non-private source ACL, retained-file replacement
+  refusal, higher-priority dotenv appearance, and configuration-derived
+  environment through owned npm and subsequent completion/retirement.
+  Missing entries use directory enumeration rather than target-following
+  existence checks. Native source size is bounded at 1 MiB before hashing.
+  Windows contracts `111125767951` passed at **04:25:06 UTC**.
+  Full workflow acceptance completed **34/34 successful at 04:37:38 UTC**.
+
+- [x] **Step 4: accept native and full regressions without broadening scope.**
 
   Require the extended native update/source-build case and all 34 workflow
   jobs. Preserve Linux configuration behavior, private publication and saved

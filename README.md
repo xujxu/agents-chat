@@ -308,8 +308,8 @@ file identities, content hashes and owner/group/DACL descriptors, including
 explicit absence checks. It reads the installed bundle environment, applies
 case-insensitive Windows dotenv/build precedence, and refuses ambiguous aliases
 without reporting secret values. Native ACL-change and source/build integration
-acceptance is pending; this does not yet implement ACL restoration or broaden
-the private backup policy.
+passed with all 34 lifecycle jobs (`4cf4e97`, Actions `37095933156`). This does
+not yet implement ACL restoration or broaden the private backup policy.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and
