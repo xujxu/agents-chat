@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
-import fs, { chmod, lstat, mkdir, readFile, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
+import fs, { chmod, link, lstat, mkdir, readFile, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
@@ -155,6 +155,7 @@ for (const pause of ['refs/heads/main', 'index', 'HEAD']) {
     const saved = path.join(backup, 'git.json');
     const record = JSON.parse(await readFile(saved, 'utf8'));
     await chmod(index, 0o600);
+    await git(f.project, 'pack-refs', '--all');
     await writeFile(path.join(f.project, 'app.txt'), 'later\n');
     await git(f.project, 'commit', '-am', 'later');
     const child = fork(new URL('./deployment-git-restore-child.mjs', import.meta.url),
@@ -188,6 +189,10 @@ for (const pause of ['refs/heads/main', 'index', 'HEAD']) {
     await assert.rejects(restoreGitMetadata(options), /alive/i);
     child.kill('SIGKILL');
     await exited;
+    const cancelled = new AbortController();
+    cancelled.abort(new Error('Native Git retry cancelled'));
+    await assert.rejects(restoreGitMetadata({ ...options, signal: cancelled.signal }), /Native Git retry cancelled/);
+    assert.deepEqual(await readFile(proofFile), proofBytes);
     if (pause === 'index') {
       const bytes = await readFile(index);
       await rename(index, `${index}.retained`);
@@ -204,6 +209,36 @@ for (const pause of ['refs/heads/main', 'index', 'HEAD']) {
       assert.deepEqual(await readFile(index), bytes);
       await gitWindowsSecurity(index, 'unbroaden-git-index-users');
       assert.deepEqual(await gitWindowsSecurity(index), originalPolicy);
+      const alias = path.join(f.root, 'outside-index');
+      await link(index, alias);
+      await assert.rejects(restoreGitMetadata(options), /links/i);
+      assert.deepEqual(await readFile(proofFile), proofBytes);
+      assert.deepEqual(await readFile(alias), bytes);
+      await unlink(alias);
+      for (const relative of ['config', 'packed-refs']) {
+        const file = path.join(f.project, '.git', relative);
+        const original = await readFile(file);
+        await writeFile(file, Buffer.concat([original, Buffer.from('\n# drift\n')]));
+        await assert.rejects(restoreGitMetadata(options), /configuration or packed refs changed/i);
+        assert.deepEqual(await readFile(proofFile), proofBytes);
+        await writeFile(file, original);
+      }
+      for (const relative of ['', 'refs/heads']) {
+        const file = path.join(f.project, '.git', relative);
+        const original = await gitWindowsSecurity(file);
+        assert.equal(original.attributes & 1, 0);
+        await chmod(file, 0o400);
+        await assert.rejects(restoreGitMetadata(options), /security restoration refused|changed/i);
+        assert.deepEqual(await readFile(proofFile), proofBytes);
+        await chmod(file, 0o700);
+        assert.deepEqual(await gitWindowsSecurity(file), original);
+      }
+      const foreign = path.join(f.project, '.git/config.lock');
+      await writeFile(foreign, 'foreign writer\n');
+      await assert.rejects(restoreGitMetadata(options), /foreign Git writer lock/i);
+      assert.deepEqual(await readFile(proofFile), proofBytes);
+      assert.equal(await readFile(foreign, 'utf8'), 'foreign writer\n');
+      await unlink(foreign);
     }
     await restoreGitMetadata(options);
     assert.equal(await git(f.project, 'rev-parse', 'HEAD'), f.commit);
@@ -213,3 +248,55 @@ for (const pause of ['refs/heads/main', 'index', 'HEAD']) {
     assert.deepEqual(await verifySnapshot(backup), manifest);
   });
 }
+
+test('Windows native Git journal preserves incomplete private preparation and refuses unsafe retry', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const f = await gitMetadataFixture(t, { broad: true });
+  const backup = path.join(f.root, 'backup');
+  const manifest = await createSnapshot({
+    project: f.project, destination: backup, id: 'native-git-incomplete',
+    gitMetadata: await inspectGitMetadata(f), ...await inspectSnapshotScope({ project: f.project }),
+    source: { commit: f.commit, provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+  });
+  const record = JSON.parse(await readFile(path.join(backup, 'git.json'), 'utf8'));
+  await writeFile(path.join(f.project, 'app.txt'), 'later\n');
+  await git(f.project, 'commit', '-am', 'later');
+  const before = await inspectGitMetadata({ project: f.project });
+  const staged = path.join(f.project, '.git', `${record.ref}.lock`);
+  const guard = path.join(f.project, '.git/agents-chat-restore');
+  const options = { project: f.project, backup, record, checkStopped: async () => ({ stopped: true, inhibited: true }) };
+  const originalOpen = fs.open;
+  t.mock.method(fs, 'open', async (file, ...args) => {
+    const handle = await originalOpen(file, ...args);
+    if (file === staged && args[0] === 'r+') {
+      const write = handle.writeFile.bind(handle);
+      t.mock.method(handle, 'writeFile', async (...values) => {
+        await write(...values);
+        throw new Error('Interrupted private Git copy');
+      });
+    }
+    return handle;
+  });
+  syncBuiltinESMExports();
+  try { await assert.rejects(restoreGitMetadata(options), /Interrupted private Git copy/); }
+  finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+  const stagedIdentity = await lstat(staged, { bigint: true });
+  const stagedBytes = await readFile(staged);
+  const stagedPolicy = await gitWindowsSecurity(staged);
+  assert.doesNotMatch(stagedPolicy.securityDescriptor, /;;;WD\)/);
+  assert.doesNotMatch((await gitWindowsSecurity(guard)).securityDescriptor, /;;;WD\)/);
+  await assert.rejects(lstat(path.join(guard, 'intent.json')), { code: 'ENOENT' });
+  await assert.rejects(restoreGitMetadata(options), /lock/i);
+  const retained = await lstat(staged, { bigint: true });
+  assert.equal(retained.dev, stagedIdentity.dev);
+  assert.equal(retained.ino, stagedIdentity.ino);
+  assert.deepEqual(await readFile(staged), stagedBytes);
+  assert.deepEqual(await gitWindowsSecurity(staged), stagedPolicy);
+  for (const [relative, bytes] of [['HEAD', before.record.head], ['index', before.record.index]]) {
+    assert.deepEqual(await readFile(path.join(f.project, '.git', relative)), Buffer.from(bytes, 'base64'));
+  }
+  assert.equal(await readFile(path.join(f.project, '.git', record.ref), 'utf8'), `${before.record.commit}\n`);
+  assert.deepEqual(await verifySnapshot(backup), manifest);
+});
