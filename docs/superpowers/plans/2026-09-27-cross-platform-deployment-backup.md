@@ -12362,6 +12362,10 @@ runtime scope.
 
 ### Task 5BD: Restore native Windows external configuration through shared source operations
 
+**Accepted:** `2b955ac406a811020e62d858f54a295f14385f0d / 37119983194`,
+all **36 jobs passed**, completed **2026-10-03 11:51:58 UTC**. This includes
+native immutable-resource reuse and the complete Linux/Windows matrix.
+
 Causal `6a64940 / 37117676485`, job `111187536804`, completed
 **2026-10-03 10:57:10 UTC**: 92 tests, 72 passed, 4 failed, 16 platform
 skips and no cancellations. Both restoration cases reached the Linux-only
@@ -12452,7 +12456,7 @@ Do not modify an installed immutable bundle while a runtime scope retains it.
   Always close every admitted native facade in reverse order, retaining both
   primary and cleanup errors.
 
-- [ ] **Step 3: require focused and complete Actions acceptance.**
+- [x] **Step 3: require focused and complete Actions acceptance.**
 
   Keep Linux external restoration behavior unchanged and validate its existing
   cases plus the saved recovery dependency closure. Require focused native
@@ -12460,7 +12464,7 @@ Do not modify an installed immutable bundle while a runtime scope retains it.
   Standalone external restoration does not authorize public Windows activation,
   immutable bundle mutation or whole-project Git/runtime composition.
 
-- [ ] **Step 4: preserve already matching external resources before runtime composition.**
+- [x] **Step 4: preserve already matching external resources before runtime composition.**
 
   Causal `bd1f055 / 37119435470`, job `111192525652`, completed
   **2026-10-03 11:29:09 UTC**: 95 tests, 76 passed, 3 failed, 16 platform
@@ -12495,6 +12499,9 @@ Do not modify an installed immutable bundle while a runtime scope retains it.
   Run focused and all 35 full jobs on the final no-op implementation.
 
 ### Task 5BE: Keep native Linux recovery acceptance within bounded CI shards
+
+**Accepted:** `2b955ac406a811020e62d858f54a295f14385f0d / 37119983194`,
+all **36 jobs passed**, completed **2026-10-03 11:51:58 UTC**.
 
 **Native shards passed:** `2b955ac / 37119983194`, jobs `111194236167`
 and `111194236267`, completed **11:42:26 / 11:43:49 UTC**.
@@ -12536,7 +12543,7 @@ as already done for Windows restoration; do not increase timeouts or drop tests.
       - run: sudo "$(command -v node)" --test tests/deployment-linux-service-resumption.test.mjs
   ```
 
-- [ ] **Step 3: require 42+24 native passes and all 36 jobs on the final source.**
+- [x] **Step 3: require 42+24 native passes and all 36 jobs on the final source.**
 
   Push to `feat/deployment-backup`; inspect `deployment-lifecycle.yml` full run
   logs for both counts, zero failures/cancellations and duration under budget.
@@ -12548,6 +12555,18 @@ as already done for Windows restoration; do not increase timeouts or drop tests.
 **2026-10-03 11:49:01 UTC**: 97 tests, 79 passed, 2 failed, 16 platform
 skips and zero cancellations. Both new cases reached the explicit native
 Git/external composition guard; no snapshot fixture or module import failed.
+First implementation `774c66d / 37120940593`, job `111196758164`,
+completed **2026-10-03 11:58:05 UTC**: 97 tests, 79 passed, 2 failed,
+16 platform skips and zero cancellations. Both cases now finish native Git and
+project restoration (including private-copy interruption/retry), then fail the
+final Git comparison: live Git observations are version 1, while the Windows
+snapshot record is version 2 with additional native policy metadata.
+Extract the journal's existing version-1 source projection into
+`gitSourceMetadata` in `git-metadata.mjs`, and reuse it in both journal and
+project final comparisons. Keep all native policy verification and snapshot
+codec validation. Extend the existing cross-platform codec case to prove
+version-1, native version-2 and saved-absent records preserve identical logical
+source fields without changing their policy envelopes.
 
 **Goal:** Verify the existing restoration primitives together before allowing
 Git/external-bearing Windows manifests into the complete-project helper.

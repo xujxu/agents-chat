@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { git, gitMetadataFixture as fixture } from './deployment-git-fixture.mjs';
-import { inspectGitMetadata, readGitMetadataFile, validateGitMetadata } from '../scripts/deployment/git-metadata.mjs';
+import { gitSourceMetadata, inspectGitMetadata, readGitMetadataFile, validateGitMetadata } from '../scripts/deployment/git-metadata.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { inspectSnapshotScope } from '../scripts/deployment/snapshot-scope.mjs';
 import { restoreGitMetadata } from '../scripts/deployment/restore-git.mjs';
@@ -76,10 +76,13 @@ test('Windows Git metadata codec requires exact security coverage and consistent
     },
   };
   assert.deepEqual(validateGitMetadata(record, f.commit), record);
+  assert.deepEqual(gitSourceMetadata(base), base);
+  assert.deepEqual(gitSourceMetadata(validateGitMetadata(record, f.commit)), base);
   const packed = structuredClone(record);
   packed.absentPaths = [base.ref];
   packed.windowsSecurity.entries.pop();
   assert.deepEqual(validateGitMetadata(packed, f.commit), packed);
+  assert.deepEqual(gitSourceMetadata(validateGitMetadata(packed, f.commit)), base);
   const missingParents = structuredClone(record);
   missingParents.absentPaths = ['refs', 'refs/heads', base.ref];
   missingParents.windowsSecurity.entries = missingParents.windowsSecurity.entries.slice(0, 2);

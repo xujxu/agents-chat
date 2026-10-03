@@ -363,16 +363,16 @@ Version-3 snapshots add `windowsExternalSecurity`, using the existing
 native security tables for each external parent and its present files, including
 root-only tables for absent resources. Original byte/presence and ACL checks
 remain active until snapshot completion; backups stay private. Linux formats
-are unchanged. Standalone native external restoration passed focused Actions at
-`04dcc44 / 37118616991`; full matrix acceptance is pending.
+are unchanged. Standalone native external restoration passed all 36 lifecycle
+jobs at `2b955ac406a811020e62d858f54a295f14385f0d / 37119983194`.
 It requires exact destination authorization, data-loss
 acknowledgement, a stopped/inhibited runtime and unchanged parent policy. It
 reuses private creation and native source removal/permission restoration;
 interrupted private copies can be retried from the unchanged backup.
 An admitted external parent whose selected bytes, absence and native policies
 all match is verified without rewriting its files, preserving immutable readers
-and file identities. This reuse path passed native Actions at
-`e768d05 / 37119892937`; final 36-job acceptance is pending.
+and file identities. The accepted matrix includes a real native reader denying
+write/delete sharing, repeated-restore identity checks and private-copy retries.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an

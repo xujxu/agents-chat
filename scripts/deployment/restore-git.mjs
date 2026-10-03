@@ -2,7 +2,7 @@ import { mkdir, lstat, open, readdir, rename, rmdir, unlink } from 'node:fs/prom
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual as same } from 'node:util';
-import { inspectGitDirectory, inspectGitMetadata, readGitMetadataFile, validateGitMetadata } from './git-metadata.mjs';
+import { gitSourceMetadata, inspectGitDirectory, inspectGitMetadata, readGitMetadataFile, validateGitMetadata } from './git-metadata.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
@@ -231,7 +231,7 @@ async function restoreGitMetadataCore({ project, record, checkAuthority, signal,
   }
   await check();
   const restored = await inspectGitMetadata({ project: root, commit: record.commit, signal });
-  const expected = { version: 1, commit: record.commit, ref: record.ref, head: record.head, index: record.index };
+  const expected = gitSourceMetadata(record);
   if (!same(restored.record, expected)) throw new Error('Restored Git metadata differs from saved source.');
   await restored.check();
   await check();

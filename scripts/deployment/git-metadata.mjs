@@ -58,6 +58,10 @@ export function validateGitMetadata(value, commit) {
   return Object.freeze(record);
 }
 
+export function gitSourceMetadata({ commit, ref, head, index }) {
+  return { version: 1, commit, ref, head, index };
+}
+
 export async function readGitMetadataFile(file, maximum, optional = false) {
   let named;
   try { named = await lstat(file, { bigint: true }); }

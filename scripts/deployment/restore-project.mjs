@@ -9,7 +9,7 @@ import { projectSnapshotExclusions } from './snapshot-scope.mjs';
 import { canonicalWorkerDirectory, closeWorkerFile, syncWorkerDirectory } from './worker-files.mjs';
 import { readSnapshotGit } from './snapshot-git.mjs';
 import { restoreGitMetadata } from './restore-git.mjs';
-import { inspectGitMetadata } from './git-metadata.mjs';
+import { gitSourceMetadata, inspectGitMetadata } from './git-metadata.mjs';
 import { restoreGitObjects } from './git-objects.mjs';
 import { prepareWindowsProjectRestoreSecurity } from './windows-restore-security.mjs';
 
@@ -229,7 +229,8 @@ async function restoreProject({ project, backup, acceptDataLoss, checkStopped, s
   await check();
   if (manifest.gitMetadata) {
     const observed = await inspectGitMetadata({ project: root, commit: manifest.source.commit, signal });
-    if (!same(observed.record, await readSnapshotGit(saved, manifest))) throw new Error('Restored Git source metadata changed.');
+    const expected = gitSourceMetadata(await readSnapshotGit(saved, manifest));
+    if (!same(observed.record, expected)) throw new Error('Restored Git source metadata changed.');
     await observed.check();
   }
   await check();
