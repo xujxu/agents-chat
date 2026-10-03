@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
@@ -14,6 +15,13 @@ namespace Deployment
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool DeviceIoControl(SafeFileHandle file, uint code, IntPtr input, uint inputBytes,
             [Out] byte[] output, uint outputBytes, out uint returned, IntPtr overlapped);
+        [DllImport("kernel32.dll", EntryPoint = "DeviceIoControl", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool SetSourceReparsePoint(SafeFileHandle file, uint code, [In] byte[] input, uint inputBytes,
+            IntPtr output, uint outputBytes, out uint returned, IntPtr overlapped);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool SetKernelObjectSecurity(SafeFileHandle file, uint information, [In] byte[] descriptor);
 
         public sealed class SourceReparseLease : IDisposable
         {
@@ -46,20 +54,11 @@ namespace Deployment
                     security = Descriptor(source.Security());
                     ValidateSourceSecurity(security);
                     data = ReadData();
-                    uint tag = BitConverter.ToUInt32(data, 0);
-                    if (tag != 0xa0000003 || (info.Attributes & 16) == 0)
+                    if ((info.Attributes & 16) == 0)
                         throw new InvalidDataException("Only internal directory junction reparse points are supported.");
                     Kind = "junction";
-                    string substitute = ReadName(data, 16, 8);
-                    string display = ReadName(data, 16, 12);
-                    string absolute = ResolveTarget(substitute, true);
-                    if (display.Length != 0 && !String.Equals(absolute,
-                        ResolveTarget(display, false), StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidDataException("Source reparse display and substitute targets differ.");
+                    string absolute = DecodeTarget(project, data);
                     string location = Path.GetRelativePath(project, absolute).Replace('\\', '/');
-                    if (location == "." || location == ".." || location.StartsWith("../", StringComparison.Ordinal) ||
-                        Path.IsPathRooted(location))
-                        throw new InvalidDataException("Source reparse target is outside the project.");
                     target = new SourceAccess(project, location, "directory", 0, false);
                     if (target.Target.Information().Volume != info.Volume)
                         throw new InvalidDataException("Source reparse target crosses the project filesystem.");
@@ -67,6 +66,23 @@ namespace Deployment
                     Check();
                 }
                 catch { Dispose(); throw; }
+            }
+
+            internal static string DecodeTarget(string project, byte[] bytes)
+            {
+                if (bytes == null || bytes.Length < 16 || bytes.Length > 16384 ||
+                    BitConverter.ToUInt16(bytes, 4) + 8 != bytes.Length || BitConverter.ToUInt16(bytes, 6) != 0 ||
+                    BitConverter.ToUInt32(bytes, 0) != 0xa0000003)
+                    throw new InvalidDataException("Unsupported or malformed directory junction reparse buffer.");
+                string absolute = ResolveTarget(ReadName(bytes, 16, 8), true);
+                string display = ReadName(bytes, 16, 12);
+                if (display.Length != 0 && !String.Equals(absolute, ResolveTarget(display, false), StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Source reparse display and substitute targets differ.");
+                string location = Path.GetRelativePath(project, absolute).Replace('\\', '/');
+                if (location == "." || location == ".." || location.StartsWith("../", StringComparison.Ordinal) ||
+                    Path.IsPathRooted(location))
+                    throw new InvalidDataException("Source reparse target is outside the project.");
+                return absolute;
             }
 
             static string ReadName(byte[] bytes, int start, int field)
@@ -139,6 +155,75 @@ namespace Deployment
         public static SourceReparseLease OpenSourceReparse(string project, string relative)
         {
             return new SourceReparseLease(project, relative);
+        }
+
+        public static SourceReparseLease CreateSourceJunction(string project, string relative, string reparseData,
+            string sddl, uint attributes)
+        {
+            ValidateSourceSecurity(sddl);
+            if ((attributes & 0x410) != 0x410 || (attributes & ~(SourceAttributes | 0x400u)) != 0 ||
+                (attributes & 128) != 0 || reparseData == null || reparseData.Length > 21848)
+                throw new InvalidDataException("Unsupported restored junction metadata.");
+            byte[] bytes = Convert.FromBase64String(reparseData);
+            if (Convert.ToBase64String(bytes) != reparseData)
+                throw new InvalidDataException("Noncanonical junction reparse data.");
+            using (var parents = new SourceParents(project, relative))
+            {
+                string absolute = SourceReparseLease.DecodeTarget(project, bytes);
+                string targetRelative = Path.GetRelativePath(project, absolute).Replace('\\', '/');
+                using (var target = new SourceAccess(project, targetRelative, "directory", 0, false))
+                {
+                    parents.Check();
+                    target.Check();
+                    EvidenceIdentity created;
+                    using (var directory = CreateDirectory(parents.Target)) created = directory.CaptureIdentity();
+                    using (var value = new WindowsPrivateFile { file = parents.Target })
+                    {
+                        value.handle = CreateFileW(value.file, 0x40000000 | 0x20000 | 0x40000 | 0x80000 | 0x80,
+                            0, IntPtr.Zero, 3, 0x2000000 | 0x200000, IntPtr.Zero);
+                        if (value.handle.IsInvalid)
+                            throw new Win32Exception(Marshal.GetLastWin32Error(), "Open new private junction directory");
+                        FileInformation info = value.Information();
+                        EvidenceIdentity actual = value.OriginalIdentity();
+                        if ((info.Attributes & 16) == 0 || (info.Attributes & ~SourceAttributes) != 0 ||
+                            actual.Dev != created.Dev || actual.Ino != created.Ino ||
+                            !String.Equals(value.FinalPath(), value.file, StringComparison.OrdinalIgnoreCase) ||
+                            info.Volume != target.Target.Information().Volume)
+                            throw new InvalidDataException("New private junction directory changed.");
+                        RequirePrivate(value.Security());
+                        parents.Check();
+                        target.Check();
+                        uint returned;
+                        Native(SetSourceReparsePoint(value.handle, 0x900a4, bytes, (uint)bytes.Length,
+                            IntPtr.Zero, 0, out returned, IntPtr.Zero), "Set original junction reparse data");
+                        var descriptor = new RawSecurityDescriptor(sddl);
+                        var binary = new byte[descriptor.BinaryLength];
+                        descriptor.GetBinaryForm(binary, 0);
+                        uint information = 7u | ((descriptor.ControlFlags & ControlFlags.DiscretionaryAclProtected) != 0
+                            ? 0x80000000u : 0x20000000u);
+                        // Kernel security updates the retained junction itself, without target-tree propagation.
+                        Native(SetKernelObjectSecurity(value.handle, information, binary), "Restore original junction security");
+                        uint ordinary = attributes & ~0x410u;
+                        var basic = new SourceBasicInformation { Attributes = ordinary == 0 ? 128u : ordinary };
+                        Native(SetSourceBasicInformation(value.handle, 0, ref basic,
+                            (uint)Marshal.SizeOf<SourceBasicInformation>()), "Restore original junction attributes");
+                        parents.Check();
+                        target.Check();
+                    }
+                    var result = OpenSourceReparse(project, relative);
+                    try
+                    {
+                        SourceSecurityRecord actual = result.Metadata;
+                        if (actual.Dev != created.Dev || actual.Ino != created.Ino || result.ReparseData != reparseData ||
+                            actual.Attributes != attributes || actual.SecurityDescriptor != sddl)
+                            throw new InvalidDataException("Restored junction differs from its original metadata.");
+                        parents.Check();
+                        target.Check();
+                        return result;
+                    }
+                    catch { result.Dispose(); throw; }
+                }
+            }
         }
     }
 }

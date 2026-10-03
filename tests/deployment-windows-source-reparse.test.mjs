@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rename, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, rename, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -112,11 +112,21 @@ test('native junction recreation preserves reparse bytes and link ACLs without c
       assert.equal(copied.record.attributes, record.attributes);
       assert.equal(copied.record.securityDescriptor, record.securityDescriptor);
     } finally { await copied.close(); }
-    await assert.rejects(observer(project, '.next/copied', t.signal, { saved }), /already exists|Create private directory/i);
-    const invalid = { ...record, data: Buffer.from('not a reparse buffer').toString('base64') };
-    await writeFile(saved, JSON.stringify(invalid));
-    await assert.rejects(observer(project, '.next/invalid', t.signal, { saved }), /reparse/i);
-    const { lstat } = await import('node:fs/promises');
-    await assert.rejects(lstat(path.join(project, '.next/invalid')), { code: 'ENOENT' });
+    await assert.rejects(observer(project, '.next/copied', t.signal, { saved }), /Create original private directory/i);
+    const outside = Buffer.from(record.data, 'base64');
+    const component = Buffer.from('\\app\\', 'utf16le');
+    let replacements = 0;
+    for (let offset = outside.indexOf(component, 16); offset >= 0; offset = outside.indexOf(component, offset + component.length)) {
+      Buffer.from('\\out\\', 'utf16le').copy(outside, offset);
+      replacements++;
+    }
+    assert.ok(replacements > 0);
+    const unsupported = Buffer.from(record.data, 'base64');
+    unsupported.writeUInt32LE(0xa000000c, 0);
+    for (const data of [Buffer.from('not a reparse buffer'), outside, unsupported]) {
+      await writeFile(saved, JSON.stringify({ ...record, data: data.toString('base64') }));
+      await assert.rejects(observer(project, '.next/invalid', t.signal, { saved }), /reparse/i);
+      await assert.rejects(lstat(path.join(project, '.next/invalid')), { code: 'ENOENT' });
+    }
     assert.equal(await readFile(path.join(target, 'payload'), 'utf8'), 'retained target');
   });

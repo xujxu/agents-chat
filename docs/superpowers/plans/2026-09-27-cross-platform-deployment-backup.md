@@ -12899,8 +12899,11 @@ This read-only helper alone does not enable snapshot or restoration links.
 The next integration must preserve junction metadata and restore it through
 native handles, with capture/restore coverage before lifting the snapshot gate.
 
-The original-junction observation step passed in `81f44e5 / 37131127325`;
-its source/snapshot regression remains in progress. Extend the same native
+The original-junction observation and source/snapshot regression passed in
+`81f44e5 / 37131127325`, job `111226290040`, completed
+**2026-10-03 15:06:40 UTC**: one new native case plus the existing source
+pipeline and **97 component cases, 81 passed, 16 platform skips, zero failures
+or cancellations** (338979 ms). Extend the same native
 fixture first with `CreateSourceJunction(project, relative, data, sddl, attributes)`.
 Require a real round trip with hidden/read-only attributes, a deliberately
 different inheritable link DACL, and unchanged target-directory/file DACLs.
@@ -12909,6 +12912,14 @@ replacing a destination. Run this against the absent creation method before
 implementation. Creation must validate target containment before mutation,
 create only a new private directory, set the mount-point reparse data and
 security by original handle, then return retained identity-checked observation.
+
+**Restoration causal:** `4ccf824 / 37131733556` failed
+**2026-10-03 15:07:26 UTC** at the missing `CreateSourceJunction` method;
+original junction observation still passed. Implement bounded mount-point
+buffer parsing, same-project regular-directory admission, new private creation,
+`FSCTL_SET_REPARSE_POINT`, non-propagating `SetKernelObjectSecurity`, native
+attributes and exact post-publication identity/data/security verification.
+Keep arbitrary tags and external targets refused before destination creation.
 
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
