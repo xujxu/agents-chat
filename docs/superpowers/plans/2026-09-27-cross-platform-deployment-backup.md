@@ -12367,6 +12367,13 @@ of their expected operation-specific errors. No new fixture or import failure.
 The shared native source facade and external helper are implemented locally,
 including final cross-parent policy rechecks and root-only absence retry tests,
 but are not yet accepted.
+First implementation `d6b9404 / 37118147751` completed
+**2026-10-03 11:05:24 UTC**: 94 tests, 77 passed, 1 failed, 16 platform
+skips, no cancellations. All five substantive restore/private-copy/refusal/
+late-policy cases passed. The external absence-only case failed during snapshot
+fixture setup because `files: []` violates the existing explicit project-path
+requirement. Add an ordinary project marker file while retaining the empty
+external-file security inventory; do not loosen snapshot admission.
 
 **Goal:** Provide standalone, exactly authorized external restoration from the
 native snapshot. Retain the public Windows project/runtime composition gate.

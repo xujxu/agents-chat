@@ -187,10 +187,11 @@ test('Windows external restoration preserves a root-only absence inventory acros
   await mkdir(directory);
   const file = path.join(directory, 'absent.env');
   const unrelated = path.join(directory, 'unrelated.txt');
+  await writeFile(path.join(project, 'app.txt'), 'project remains\n');
   await writeFile(unrelated, 'retained\n');
   const backup = path.join(root, 'backup');
   const manifest = await createSnapshot({
-    project, destination: backup, id: 'native-external-absence', files: [],
+    project, destination: backup, id: 'native-external-absence', files: ['app.txt'],
     externalFiles: [{ path: file, optional: true }],
     source: { commit: 'a'.repeat(40), provenance: 'observed' },
     runtime: { platform: process.platform, state: 'stopped' },
