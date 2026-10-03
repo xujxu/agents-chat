@@ -10354,7 +10354,7 @@ add timing-dependent filesystem watchers, or introduce production fault flags.
   original worker/task activation. Captured the log and cancelled only this
   characterized causal run.
 
-- [ ] **Step 2: factor the existing native sequence without changing receipts.**
+- [x] **Step 2: factor the existing native sequence without changing receipts.**
 
   The only durable names remain the existing nine completion receipts.
   Intermediate action acknowledgements are in-memory observations, not new
@@ -10386,7 +10386,7 @@ add timing-dependent filesystem watchers, or introduce production fault flags.
   Original `complete({stateSha256})` drives this same finite sequence and
   remains idempotent. It never accepts a dead original owner.
 
-- [ ] **Step 3: wire exact transport replies and immutable progress.**
+- [x] **Step 3: wire exact transport replies and immutable progress.**
 
   `advance-completion` uses the same bounded request protocol and controller
   process identity. Its reply has a single extra `phase` string. The Node
@@ -10403,7 +10403,7 @@ add timing-dependent filesystem watchers, or introduce production fault flags.
   mismatch, continued original-context checking, and idempotent prepare
   without resetting the acknowledged step.
 
-- [ ] **Step 4: validate actions versus durable receipts on actual Windows.**
+- [x] **Step 4: validate actions versus durable receipts on actual Windows.**
 
   For every tuple above:
 
@@ -10420,13 +10420,19 @@ add timing-dependent filesystem watchers, or introduce production fault flags.
   original lease release, update/restore/disabled behavior, and the complete
   task/worker retirement and final-unlock fixture.
 
-- [ ] **Step 5: publish implementation and accept the full regression.**
+- [x] **Step 5: publish implementation and accept the full regression.**
 
   Push implementation and inspect the existing `deployment-lifecycle.yml`
   run for that exact SHA. Require all native scenarios and all 26 jobs to
   pass; record their run/job IDs and timestamps. No local validation.
   This is the deterministic completion primitive for the next cold replay
   consumer, not a claim that interrupted activation or reboot recovery works.
+
+  Accepted implementation `6b9e26d3607fe48ac5b617f25091e7b254226cd8`,
+  Actions `37080601995`: **26/26 success**, completed
+  **2026-10-03 00:26:00 UTC**. Native job `111080041912` passed update at
+  **00:10:28**, restore at **00:14:22**, and originally disabled task at
+  **00:18:22 UTC**, including downstream task/worker cleanup and final unlock.
 
 ### Task 5AQ: replay interrupted completion for the original released runtime
 

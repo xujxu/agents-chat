@@ -265,8 +265,10 @@ unrelated runtime bundles, passed at `8599304 / 37076374627`. The full
 The live completion controller additionally exposes single-step native
 acknowledgements for deterministic write-ahead interruption testing. It keeps
 the existing nine receipt files and the normal all-at-once completion API;
-this stepwise path is awaiting Actions acceptance and is not cold recovery
-authority.
+the update, restore and disabled-task scenarios and all 26 regression jobs
+passed at `6b9e26d / 37080601995`. This remains live-owner authority, not cold
+recovery. Genuine interrupted-completion recovery cases are now queued for
+causal validation; their production consumer is not yet implemented.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
