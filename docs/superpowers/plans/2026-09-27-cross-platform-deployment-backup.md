@@ -10532,7 +10532,7 @@ consumer never starts or adopts another runtime generation.
   Captured the causal and cancelled only this characterized run.
   Implementation adds the enabled-true `enable-applied` case as a fifth gate.
 
-- [ ] **Step 2: retain a strictly validated original completion prefix.**
+- [x] **Step 2: retain a strictly validated original completion prefix.**
 
   A separate prefix factory derives record names from the actual private
   directory; callers never supply a phase, path or record count. Reuse the
@@ -10561,7 +10561,7 @@ consumer never starts or adopts another runtime generation.
   No live-context owner fields are rebound. Full completed proof remains a
   separate API and refuses every partial prefix.
 
-- [ ] **Step 3: replay only missing existing actions and receipts.**
+- [x] **Step 3: replay only missing existing actions and receipts.**
 
   The distinct recovery scope exposes `check`, `advance` and `close`; its
   observation uses `status: 'pending' | 'complete'`, the last durable phase,
@@ -10614,6 +10614,16 @@ consumer never starts or adopts another runtime generation.
   Record exact run/job outcomes in README and this plan. No local validation,
   no new expiry/lock protocol, and no claim of pre-release/reboot recovery or
   completed public Windows deploy/update/restore integration.
+
+  Production baseline `4b1a84fc1703859d11ade5c6617ae2c00eb074ab`,
+  Actions `37082766145`: **31/31 success**, completed
+  **2026-10-03 00:55:00 UTC**. Native recovery jobs:
+  `111086663153` released update, `111086663224` restore policy,
+  `111086663264` originally disabled, `111086663268` pre-release refusal,
+  and `111086663290` enabled-true completion.
+  Supplemental recovery-actor/admission-loss coverage `e4c793f`,
+  Actions `37083428275`, still awaits acceptance; do not mark that case done
+  from the production-baseline run.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

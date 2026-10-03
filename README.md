@@ -273,7 +273,10 @@ fresh native-listener and HTTP checks. It preserves original receipt values
 and reconciles only recognized task-policy states. An exclusive read-only
 handle to the existing release-intent receipt keeps a dying recovery bridge
 serialized until its own exit, even after its Node admission owner exits.
-The consumer and five genuine actor-loss cases are awaiting Actions acceptance.
+The consumer, five genuine actor-loss cases and all 31 regression jobs passed
+at `4b1a84f / 37082766145`. Additional coverage that loses admission while a
+recovery bridge remains alive, then kills the recovery actor and resumes
+its acknowledged progress, is awaiting acceptance at `e4c793f`.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
