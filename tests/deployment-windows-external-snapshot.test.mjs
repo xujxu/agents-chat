@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, link, lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, link, lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -80,22 +80,26 @@ for (const layout of ['mixed', 'multiple-parents', 'all-absent']) {
   });
 }
 
-for (const change of ['file-acl', 'new-presence']) {
+for (const change of ['file-acl', 'new-presence', 'cancelled']) {
   test(`Windows external snapshot refuses ${change} at the final source boundary`, {
     skip: process.platform !== 'win32',
   }, async t => {
     const f = await fixture(t);
+    const controller = new AbortController();
     let calls = 0;
     await assert.rejects(createSnapshot({
-      ...f.options, externalFiles: [{ path: f.file, optional: false }, { path: f.missing, optional: true }],
+      ...f.options, signal: controller.signal,
+      externalFiles: [{ path: f.file, optional: false }, { path: f.missing, optional: true }],
       checkSource: async () => {
         if (++calls !== 2) return;
         if (change === 'file-acl') await windowsFileSecurity(f.file, 'broaden');
-        else await writeFile(f.missing, 'appeared\n');
+        else if (change === 'new-presence') await writeFile(f.missing, 'appeared\n');
+        else controller.abort(new Error('External capture cancelled'));
       },
     }), /external|source|security|changed/i);
     assert.equal(calls, 2);
     await assert.rejects(lstat(path.join(f.options.destination, 'complete.json')), { code: 'ENOENT' });
+    await rename(f.directory, `${f.directory}-closed`);
   });
 }
 

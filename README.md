@@ -341,13 +341,23 @@ ACLs and attributes, plus explicit absent names for packed references. The
 existing native observer rechecks these alongside source bytes and keeps the
 backup private. Linux snapshots and direct Git inspection remain version 1.
 Version-2 HEAD/index/ref restoration requires a private backup context.
-Its native journal adapter is implemented but awaiting Actions acceptance;
-the public Windows Git/runtime restore composition gate remains closed.
+Its native journal adapter has passed focused native Actions coverage; complete
+matrix acceptance is pending. Native snapshot/restoration now has an independent
+15-minute CI job, retaining all other contracts and five cold-retirement probes;
+the full lifecycle matrix contains 35 jobs.
+The public Windows Git/runtime restore composition gate remains closed.
 The journal's native atomic lockfile publication primitive passed all 34 jobs
 on `0f2da811690c718eeac9acb728baae2b45438b5c / 37111501173`.
 It binds original/staged file IDs, checksums, ACLs and attributes
 and uses Windows handle-based rename with readonly-target support; it does
 not fall back to deleting the target or clearing attributes.
+Windows external-file snapshot capture is implemented but awaiting Actions
+acceptance. Version-3 snapshots add `windowsExternalSecurity`, using the existing
+native security tables for each external parent and its present files, including
+root-only tables for absent resources. Original byte/presence and ACL checks
+remain active until snapshot completion; backups stay private. Linux formats
+are unchanged. Native external restoration and public Windows runtime composition
+remain gated, and installed immutable runtime bundles are not rewritten.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

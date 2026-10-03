@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
+import { validateExternalSnapshot } from '../scripts/deployment/snapshot-external.mjs';
 
 async function fixture(t) {
   const root = await temporaryDeployment(t);
@@ -78,12 +79,12 @@ test('external resource tampering and extra payloads invalidate a complete snaps
   await assert.rejects(verifySnapshot(f.options.destination), /external|inventory/i);
 });
 
-test('Windows external resources require native ACL capture rather than POSIX metadata', {
+test('Windows external resources require native metadata rather than POSIX fields alone', {
   skip: process.platform !== 'win32',
 }, async t => {
   const f = await fixture(t);
-  await assert.rejects(createSnapshot({ ...f.options, externalFiles: [{ path: f.file, optional: false }] }),
-    /Windows|ACL|external/i);
+  assert.throws(() => validateExternalSnapshot([{ path: f.file, kind: 'absent' }], f.project),
+    /Windows|native|security/i);
   assert.equal((await readdir(f.root)).includes('staging'), false);
 });
 

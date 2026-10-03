@@ -60,7 +60,10 @@ function validateManifest(manifest) {
       throw new Error('Invalid snapshot project metadata.');
     }
   }
-  validateExternalSnapshot(manifest.externalFiles ?? [], manifest.project);
+  if (Object.hasOwn(manifest, 'windowsExternalSecurity') && manifest.version !== 3) {
+    throw new Error('External native security requires a version-3 Windows snapshot.');
+  }
+  validateExternalSnapshot(manifest.externalFiles ?? [], manifest.project, manifest.windowsExternalSecurity);
   if (manifest.gitMetadata !== undefined) validateSnapshotGit(manifest.gitMetadata);
   if (manifest.gitObjects !== undefined) {
     if (!manifest.gitMetadata) throw new Error('Git objects require matching snapshot metadata.');
@@ -163,7 +166,9 @@ async function createSnapshotContents({
   if (target === root || target.startsWith(root + path.sep)) {
     throw new Error('Snapshot destination must be outside the application.');
   }
-  const external = await captureExternalSnapshot({ files: externalFiles, project: root, destination: target, signal });
+  const external = await captureExternalSnapshot({
+    files: externalFiles, project: root, destination: target, signal, retainSecurity,
+  });
   absentPaths = snapshotPathList(absentPaths);
   excludedPaths = snapshotPathList(excludedPaths);
   await assertSnapshotAbsent(root, absentPaths);
@@ -178,6 +183,7 @@ async function createSnapshotContents({
     version: security ? 3 : recoveryEngine === undefined ? 1 : 2,
     ...(recoveryEngine === undefined ? {} : { recoveryEngine }),
     ...(security ? { windowsSecurity: security.metadata } : {}),
+    ...(external.windowsSecurity ? { windowsExternalSecurity: external.windowsSecurity } : {}),
     id, project: root, createdAt: new Date().toISOString(), source, runtime, absentPaths, excludedPaths,
     scope: projectScope ? 'project' : 'selected', projectMetadata: projectMetadata(rootInfo),
     externalFiles: external.entries,

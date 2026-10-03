@@ -12246,6 +12246,14 @@ complete. Direct v2 restoration requires a canonical private backup root.
 
 ### Task 5BC: Capture native Windows external configuration security
 
+Causal `bbd09ed / 37116405435`, job `111184142811`, completed
+**2026-10-03 10:37:02 UTC**: 87 tests, 66 passed, 5 failed, 16 platform
+skips and no cancellations. All three capture cases hit the existing unsupported
+Windows ACL guard; the two final-boundary cases failed because that guard
+prevented reaching the second authority callback. The alias/hardlink refusal
+case still passed conservatively. Native implementation and an additional
+cancellation/closed-parent-handle case are ready for Actions, not accepted.
+
 **Goal:** Extend the existing external snapshot format without a second copier.
 Keep external restoration and public Windows composition closed until separately
 accepted. Never rewrite an installed immutable runtime bundle through a retained
@@ -12262,7 +12270,7 @@ runtime scope.
 - Create `tests/deployment-windows-external-snapshot.test.mjs`, and run it once
   in the independent native Windows snapshot/restoration job.
 
-- [ ] **Step 1: publish native capture cases against the existing refusal.**
+- [x] **Step 1: publish native capture cases against the existing refusal.**
 
   Use real external `.env.local` bytes and an optional absent sibling, a readonly
   file, and independent `Get-Acl` observations. The saved shape is:
