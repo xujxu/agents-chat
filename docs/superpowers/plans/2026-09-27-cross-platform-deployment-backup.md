@@ -12974,6 +12974,21 @@ running. Add precise relative-path and raw-tag diagnostics before changing
 supported reparse types. Do not infer that every inventory link has the same
 type as the four printed `.next/node_modules` junctions.
 
+**Actual standalone link identified:** `9fd3822 / 37134022101`, job
+`111234738218`, failed **2026-10-03 15:47:08 UTC** at
+`.next/standalone/.next/node_modules/better-sqlite3-90e2652d1716b047`,
+tag `0xa000000c` (directory symbolic link). Preserve standalone output; do not
+exclude it or replace the build engine. Extend the same no-follow native
+directory-link observer/creator to this one additional standard tag, checking
+the symbolic-link flags and bounded name offsets, relative resolution against
+the original link parent, and a retained regular same-project target. Keep
+file symlinks, arbitrary tags and reparse chains refused. Preserve existing
+version-2 junction metadata; add an optional separate `symlinks` table only
+when directory symbolic links are present, bound to the same original project.
+Cover absolute and relative native round trips with unmodified target ACLs,
+and mixed complete snapshots with intact and missing targets, before enabling
+the codec. Do not claim restoration support until native creation succeeds.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.

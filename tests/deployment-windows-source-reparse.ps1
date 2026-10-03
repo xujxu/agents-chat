@@ -27,8 +27,13 @@ $lease = if ($Saved) {
         [Security.AccessControl.AccessControlSections]::Group -bor [Security.AccessControl.AccessControlSections]::Access
     $targetBefore = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($Project, 'node_modules/dependency', 'directory')
     $fileBefore = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($Project, 'node_modules/dependency/payload', 'file')
-    $created = [Deployment.WindowsPrivateFile]::CreateSourceJunction(
-        $Project, $Relative, $record.data, $policy.GetSddlForm($sections), [uint32]$record.attributes)
+    $created = if ($record.kind -ceq 'junction') {
+        [Deployment.WindowsPrivateFile]::CreateSourceJunction(
+            $Project, $Relative, $record.data, $policy.GetSddlForm($sections), [uint32]$record.attributes)
+    } else {
+        [Deployment.WindowsPrivateFile]::CreateSourceDirectoryLink(
+            $Project, $Relative, $record.data, $policy.GetSddlForm($sections), [uint32]$record.attributes)
+    }
     try {
         $targetAfter = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($Project, 'node_modules/dependency', 'directory')
         $fileAfter = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($Project, 'node_modules/dependency/payload', 'file')

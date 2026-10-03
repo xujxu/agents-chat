@@ -10,6 +10,39 @@ import { temporaryDeployment } from './deployment-fixture.mjs';
 const native = process.platform === 'win32';
 const script = fileURLToPath(new URL('./deployment-windows-source-reparse.ps1', import.meta.url));
 
+for (const relative of [false, true]) {
+  test(`native directory symbolic link preserves original reparse data and target policies: relative=${relative}`,
+    { skip: !native, timeout: 120000 }, async t => {
+      const root = await temporaryDeployment(t);
+      const project = path.join(root, 'app');
+      const target = path.join(project, 'node_modules/dependency');
+      await mkdir(target, { recursive: true });
+      await mkdir(path.join(project, '.next'));
+      await writeFile(path.join(target, 'payload'), 'original module');
+      await symlink(relative ? '../node_modules/dependency' : target, path.join(project, '.next/original'), 'dir');
+      const retained = await observer(project, '.next/original', t.signal);
+      const saved = path.join(root, 'symlink.json');
+      let record;
+      try {
+        record = retained.record;
+        assert.equal(record.kind, 'directory-symlink');
+        const bytes = Buffer.from(record.data, 'base64');
+        assert.equal(bytes.readUInt32LE(0), 0xa000000c);
+        assert.equal(bytes.readUInt32LE(16), relative ? 1 : 0);
+        assert.equal(record.target, '../node_modules/dependency');
+        await assert.rejects(rename(target, `${target}-moved`));
+        await writeFile(saved, JSON.stringify(record), { flag: 'wx', mode: 0o600 });
+      } finally { await retained.close(); }
+      const restored = await observer(project, '.next/restored', t.signal, { saved, decorate: true });
+      try {
+        assert.equal(restored.record.kind, 'directory-symlink');
+        assert.equal(restored.record.data, record.data);
+        assert.equal(restored.record.attributes, record.attributes | 1 | 2);
+        assert.equal(await readFile(path.join(project, '.next/restored/payload'), 'utf8'), 'original module');
+      } finally { await restored.close(); }
+    });
+}
+
 async function observer(project, relative, signal, { saved, decorate = false } = {}) {
   const child = spawn(process.env.DEPLOYMENT_TEST_PWSH ?? 'pwsh.exe', [
     '-NoProfile', '-NonInteractive', '-File', script, '-Project', project, '-Relative', relative,

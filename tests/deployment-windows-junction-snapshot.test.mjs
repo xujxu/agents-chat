@@ -9,7 +9,7 @@ import { restoreProjectSnapshot } from '../scripts/deployment/restore-project.mj
 import { validateWindowsSnapshotSecurity } from '../scripts/deployment/windows-snapshot-security.mjs';
 
 for (const missingTarget of [false, true]) {
-  test(`Windows junction snapshot restores complete project with missing dependency target=${missingTarget}`,
+  test(`Windows directory-link snapshot restores complete project with missing dependency target=${missingTarget}`,
     { skip: process.platform !== 'win32', timeout: 120000 }, async t => {
       const root = await temporaryDeployment(t);
       const project = path.join(root, 'app');
@@ -22,6 +22,9 @@ for (const missingTarget of [false, true]) {
       await writeFile(path.join(project, '.data/state'), 'original data');
       const link = path.join(output, 'dependency');
       await symlink(target, link, 'junction');
+      const symbolicLinks = [path.join(output, 'dependency-absolute'), path.join(output, 'dependency-relative')];
+      await symlink(target, symbolicLinks[0], 'dir');
+      await symlink('../../node_modules/dependency', symbolicLinks[1], 'dir');
       const backup = path.join(root, 'backup');
       const manifest = await createSnapshot({
         project, destination: backup, id: 'junction-project',
@@ -33,9 +36,13 @@ for (const missingTarget of [false, true]) {
       assert.equal(manifest.windowsSecurity.version, 2);
       assert.equal(manifest.windowsSecurity.project, project);
       assert.equal(manifest.windowsSecurity.junctions.length, 1);
+      assert.equal(manifest.windowsSecurity.symlinks.length, 2);
       assert.equal(manifest.windowsSecurity.junctions[0].path, '.next/node_modules/dependency');
       assert.equal(manifest.entries.find(entry => entry.kind === 'link').target, '../../node_modules/dependency');
       await assert.rejects(lstat(path.join(backup, 'files/.next/node_modules/dependency')), { code: 'ENOENT' });
+      for (const file of symbolicLinks) {
+        await assert.rejects(lstat(path.join(backup, 'files', path.relative(project, file))), { code: 'ENOENT' });
+      }
       assert.deepEqual(await verifySnapshot(backup), manifest);
       const invalid = structuredClone(manifest.windowsSecurity);
       const bytes = Buffer.from(invalid.junctions[0].data, 'base64');
@@ -71,6 +78,11 @@ for (const missingTarget of [false, true]) {
       assert.equal((await lstat(link)).isSymbolicLink(), true);
       assert.equal(await realpath(link), await realpath(target));
       assert.equal(await readFile(path.join(link, 'payload'), 'utf8'), 'original module bytes');
+      for (const file of symbolicLinks) {
+        assert.equal((await lstat(file)).isSymbolicLink(), true);
+        assert.equal(await realpath(file), await realpath(target));
+        assert.equal(await readFile(path.join(file, 'payload'), 'utf8'), 'original module bytes');
+      }
       assert.equal(await readFile(path.join(project, '.data/state'), 'utf8'), 'original data');
       assert.deepEqual(await verifySnapshot(backup), manifest);
     });
