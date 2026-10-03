@@ -13,16 +13,8 @@ $junctions = [Collections.Generic.Dictionary[string,object]]::new([StringCompare
 function Read-SourceSecurity([string]$Relative, [string]$Kind) {
     $file = $Project
     if ($Relative) {
-        if ($Relative.Length -gt 4096 -or $Relative -match '[\\:\x00\r\n]' -or
-            @($Relative.Split('/') | Where-Object { -not $_ -or $_ -in @('.', '..') }).Count) {
-            throw 'Unsupported snapshot source path.'
-        }
-        foreach ($part in $Relative.Split('/')) {
-            $file = Join-Path $file $part
-            if ((Get-Item -LiteralPath $file -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
-                throw 'Snapshot source reparse points are unsupported.'
-            }
-        }
+        $observed = [Deployment.WindowsPrivateFile]::ReadSourceSecurity($Project, $Relative, $Kind)
+        return @{ securityDescriptor=$observed.SecurityDescriptor; attributes=$observed.Attributes }
     }
     $item = Get-Item -LiteralPath $file -Force
     $actualKind = if ($item.PSIsContainer) { 'directory' } else { 'file' }
@@ -74,7 +66,9 @@ try {
         }
         $sequence = $id
         $stage = $method
-        foreach ($lease in $junctions.Values) { $lease.Check() }
+        if ($request.entries.GetArrayLength() -eq 0) {
+            foreach ($lease in $junctions.Values) { $lease.Check() }
+        }
         if ($method -ceq 'close') {
             if ($request.entries.GetArrayLength()) { throw 'Unexpected snapshot close payload.' }
             $value = 'close'

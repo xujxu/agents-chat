@@ -13031,6 +13031,19 @@ progress, and print monotonic elapsed times only in the actual application
 fixture. Keep payload/configuration values out of progress. Measure before
 choosing a performance or lifecycle correction; preserve all deadlines.
 
+**Measured bottleneck:** `7872ca6 / 37136032970`, job `111240639380`,
+reported **2026-10-03 16:22:57 UTC**: 27,761 project entries, native security
+capture from 30,961 ms to 199,169 ms (168,208 ms), then file-copy start at
+204,527 ms for 25,256 files before the unchanged 240-second limit. Project
+inventory took roughly 3.5 seconds; replacing inventory is not the first fix.
+Replace per-entry PowerShell parent `Get-Item`/`Get-Acl` calls with the existing
+native `SourceAccess`/kernel descriptor mechanism via a read-only overload.
+Keep restoration's existing WRITE_DAC admission unchanged. Retained directory
+links still check on their own capture and every full observation/close
+boundary, rather than redundantly rechecking every retained link for every
+unrelated eight-entry transport batch. Preserve target/parent leases and final
+source barriers, then measure the same actual workload against the same limits.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.

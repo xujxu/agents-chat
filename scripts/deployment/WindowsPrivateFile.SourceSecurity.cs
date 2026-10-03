@@ -191,7 +191,17 @@ namespace Deployment
 
         public static SourceSecurityRecord CaptureSourceSecurity(string project, string relative, string kind)
         {
-            using (var source = new SourceAccess(project, relative, kind, kind == "directory" ? 0x40000u : 0u, false))
+            return CaptureSourceSecurity(project, relative, kind, kind == "directory" ? 0x40000u : 0u);
+        }
+
+        public static SourceSecurityRecord ReadSourceSecurity(string project, string relative, string kind)
+        {
+            return CaptureSourceSecurity(project, relative, kind, 0);
+        }
+
+        static SourceSecurityRecord CaptureSourceSecurity(string project, string relative, string kind, uint access)
+        {
+            using (var source = new SourceAccess(project, relative, kind, access, false))
             {
                 var result = new SourceSecurityRecord(source.Target);
                 ValidateSourceSecurity(result.SecurityDescriptor);
