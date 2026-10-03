@@ -139,33 +139,11 @@ test('external object alternates are refused instead of producing a falsely self
   await assert.rejects(f.snapshot(), /object|alternate|unsupported/i);
 });
 
-for (const boundary of ['saved', 'current']) {
-  test(`Windows immutable object recovery refuses ${boundary} graph pointers before creating missing packs`, {
-    skip: process.platform !== 'win32',
-  }, async t => {
-    const f = await fixture(t);
-    if (boundary === 'saved') await f.git('commit-graph', 'write', '--reachable', '--split');
-    const manifest = await f.snapshot();
-    if (boundary === 'current') await f.git('commit-graph', 'write', '--reachable', '--split');
-    const chain = path.join(f.project, '.git/objects/info/commit-graphs/commit-graph-chain');
-    const bytes = await readFile(chain);
-    const packed = path.join(f.project, '.git/objects/pack');
-    await rm(packed, { recursive: true });
-    await assert.rejects(restoreGitObjects({
-      project: f.project, backup: f.backup, manifest,
-      checkStopped: async () => ({ stopped: true, inhibited: true }),
-    }), /mutable Git graph metadata/i);
-    await assert.rejects(lstat(packed), { code: 'ENOENT' });
-    assert.deepEqual(await readFile(chain), bytes);
-    assert.deepEqual(await verifySnapshot(f.backup), manifest);
-  });
-}
-
-for (const [before, after] of [
+for (const [platform, before, after] of ['linux', 'win32'].flatMap(platform => [
   ['split', 'split'], ['split', 'single'], ['single', 'split'], ['absent', 'split'], ['absent', 'single'],
-]) {
-  test(`Linux Git graph metadata restores ${before} layout after ${after} history growth`, {
-    skip: process.platform !== 'linux' || process.getuid() !== 0,
+].map(([before, after]) => [platform, before, after]))) {
+  test(`${platform} Git graph metadata restores ${before} layout after ${after} history growth`, {
+    skip: process.platform !== platform || platform === 'linux' && process.getuid() !== 0,
   }, async t => {
     const f = await fixture(t);
     const pointers = ['info/commit-graph', 'info/commit-graphs/commit-graph-chain'];
@@ -182,26 +160,31 @@ for (const [before, after] of [
     await f.git('commit', '-am', 'later graph');
     const later = await f.git('rev-parse', 'HEAD');
     await graph(after);
-    await restoreProjectSnapshot({
-      project: f.project, backup: f.backup, acceptDataLoss: true, expectedSnapshot: manifest,
+    const options = {
+      project: f.project, backup: f.backup, manifest, acceptDataLoss: true, expectedSnapshot: manifest,
       checkStopped: async () => ({ stopped: true, inhibited: true }),
-    });
+    };
+    if (platform === 'win32') await restoreGitObjects(options);
+    else await restoreProjectSnapshot(options);
     for (const [index, name] of pointers.entries()) {
       if (original[index] === null) await assert.rejects(lstat(pointer(name)), { code: 'ENOENT' });
       else assert.deepEqual(await readFile(pointer(name)), original[index]);
     }
-    assert.equal(await f.git('rev-parse', 'HEAD'), f.commit);
-    assert.equal(await f.git('show', 'HEAD:source.txt'), 'original source');
+    assert.equal(await f.git('rev-parse', 'HEAD'), platform === 'win32' ? later : f.commit);
+    assert.equal(await f.git('show', `${f.commit}:source.txt`), 'original source');
     assert.equal(await f.git('show', `${later}:source.txt`), 'later graph source');
+    assert.equal(await readFile(path.join(f.project, 'source.txt'), 'utf8'),
+      platform === 'win32' ? 'later graph source\n' : 'original source\n');
     await f.git('commit-graph', 'verify');
     await f.git('fsck', '--full', '--no-reflogs');
     assert.deepEqual(await verifySnapshot(f.backup), manifest);
   });
 }
 
-for (const boundary of ['partial', 'hardlink']) {
-  test(`Linux Git graph metadata restoration handles ${boundary} pointer evidence`, {
-    skip: process.platform !== 'linux' || process.getuid() !== 0,
+for (const [platform, boundary] of ['linux', 'win32'].flatMap(platform =>
+  ['partial', 'hardlink'].map(boundary => [platform, boundary]))) {
+  test(`${platform} Git graph metadata restoration handles ${boundary} pointer evidence`, {
+    skip: process.platform !== platform || platform === 'linux' && process.getuid() !== 0,
   }, async t => {
     const f = await fixture(t);
     await f.git('commit-graph', 'write', '--reachable', '--split');
@@ -214,10 +197,11 @@ for (const boundary of ['partial', 'hardlink']) {
       await chmod(chain, 0o600);
       await writeFile(chain, 'partial graph pointer');
     }
-    const restore = () => restoreProjectSnapshot({
-      project: f.project, backup: f.backup, acceptDataLoss: true, expectedSnapshot: manifest,
+    const options = {
+      project: f.project, backup: f.backup, manifest, acceptDataLoss: true, expectedSnapshot: manifest,
       checkStopped: async () => ({ stopped: true, inhibited: true }),
-    });
+    };
+    const restore = () => platform === 'win32' ? restoreGitObjects(options) : restoreProjectSnapshot(options);
     if (boundary === 'hardlink') {
       await assert.rejects(restore(), /graph metadata.*links/i);
       assert.deepEqual(await readFile(foreign), original);

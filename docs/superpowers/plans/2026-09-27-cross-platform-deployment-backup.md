@@ -11449,6 +11449,12 @@ after the private write lease has finished and before publication; the retained
 parent must deny replacement. Await focused and full acceptance for this
 follow-up before marking the immutable-object task accepted.
 
+Follow-up `dccccb025f8a6d451598e96c67ddb198c30f2106`, focused
+`37106839709 / 111156923202`, passed **2026-10-03 07:42:37 UTC**:
+39 tests, 23 passed, 16 platform skips, zero failures, including the attempted
+parent rename between private completion and publication. Full `37106839607`
+remains pending behind the retained first implementation full run.
+
 **Prerequisite:** Task 5AW full lifecycle acceptance. Keep the project-level
 Git-bearing restore refusal until object, mutable graph and journal-bound
 HEAD/index/ref restoration are all composed.
@@ -11625,6 +11631,139 @@ removal and source metadata only; it must not become a second byte copier.
   touching objects. Run focused Windows contracts first, then require the
   full lifecycle matrix and saved-recovery dependency closure before recording
   SHA/run/time. Do not call this HEAD/index/ref or public application recovery.
+
+### Task 5AY: native Windows mutable Git graph pointers
+
+**Goal:** Recover the saved single/split/absent commit-graph layout on Windows,
+while retaining newer immutable objects and leaving HEAD/worktree untouched.
+Reuse `git-graph-metadata.mjs` for byte writes and validation. A stopped runtime
+can safely retry a missing or partial mutable pointer; do not invent a second
+copy engine or an immutable-object-style partial-stage refusal for these two
+known mutable paths.
+
+**Files:**
+- Modify `tests/deployment-git-objects.test.mjs`: use the existing five layout
+  combinations and partial/hardlink fixtures on Windows via `restoreGitObjects`.
+  Linux keeps the existing full-project restoration path. Replace the temporary
+  Windows graph-refusal cases only when the actual recovery cases are published.
+- Modify `scripts/deployment/git-graph-metadata.mjs`: export a bounded preflight
+  that validates the two current graph pointers with the existing `observe`;
+  add optional native security operations around the existing writable-handle
+  copier. Retain Linux chown/chmod/open/truncate behavior.
+- Modify `scripts/deployment/git-objects.mjs`: run graph type/link preflight
+  before object mutation, remove the temporary Windows graph guard, run graph
+  restoration before final whole-store native verification.
+- Modify `scripts/deployment/windows-git-object-security.mjs` and `.ps1`:
+  include the two graph names in admission, exclude intentionally restored
+  graph pointers from unchanged-extra witnesses, and expose graph removal,
+  private creation, finish and policy operations. Use the same retained root,
+  original current identities, saved metadata table and directory guards.
+- Modify `scripts/deployment/WindowsPrivateFile.SourceSecurity.cs`: add an
+  explicit unaliased-file deletion entry point using the existing exclusive
+  source handle; leave ordinary readonly-safe deletion semantics unchanged.
+- Update README and this acceptance record. No new runtime files are needed;
+  all changed helpers are already in the saved recovery closure.
+
+- [ ] **Step 1: publish causal layout and interruption coverage.**
+
+  Parameterize existing Linux graph fixtures with
+  `platform` in `['linux', 'win32']`. Skip Linux root-only graph tests when
+  `process.getuid() !== 0`; Windows uses its private native fixture.
+  Restore through the existing platform-appropriate surface:
+
+  ```javascript
+  const options = {
+    project: f.project, backup: f.backup, manifest,
+    acceptDataLoss: true, expectedSnapshot: manifest,
+    checkStopped: async () => ({ stopped: true, inhibited: true }),
+  };
+  if (platform === 'win32') await restoreGitObjects(options);
+  else await restoreProjectSnapshot(options);
+  assert.equal(await f.git('rev-parse', 'HEAD'), platform === 'win32' ? later : f.commit);
+  assert.equal(await f.git('show', `${f.commit}:source.txt`), 'original source');
+  await f.git('commit-graph', 'verify');
+  await f.git('fsck', '--full', '--no-reflogs');
+  assert.deepEqual(await verifySnapshot(f.backup), manifest);
+  ```
+
+  Preserve the existing byte-for-byte checks for both pointer paths, required
+  absence for the other saved layout, partial-pointer recovery and hardlink
+  refusal with the outside alias intact. Require Windows Actions to fail the
+  existing explicit mutable-graph refusal before changing production code.
+  Use the already available focused `windows_restore_only=true` dispatch for
+  this causal test; complete full regression remains required for acceptance.
+  Mark this test-only commit `[skip ci]` to avoid another redundant automatic
+  34-job run, then explicitly dispatch the focused Actions profile:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_restore_only=true
+  ```
+
+  This does not skip validation: the causal result must come from that manual
+  Actions run. Preserve the already running/pending implementation full runs.
+  The production implementation commit must trigger a complete lifecycle run;
+  do not claim final acceptance from a focused run or a skipped automatic run.
+
+- [ ] **Step 2: preflight graph pointers before immutable mutation.**
+
+  Export the following from `git-graph-metadata.mjs`, retaining `observe`'s
+  existing ordinary-file/nlink-one/permission validation:
+
+  ```javascript
+  export async function inspectGitGraphPointers(root) {
+    for (const name of names) await observe(path.join(root, name));
+  }
+  ```
+
+  Invoke it from the Windows branch of `restoreObjects` after inventory
+  validation and before native scope admission/directory writes. Native
+  admission retains original graph file identities, so replacement between
+  preflight and mutation still refuses.
+
+- [ ] **Step 3: share the writable-handle copier and native ownership scope.**
+
+  Add native facade methods `removeGraph`, `createGraph`, `finishGraph`,
+  `graphPolicy`; each sends the existing sequenced single `{ path }` request.
+  Only `info/commit-graph` and `info/commit-graphs/commit-graph-chain` are mutable.
+  For an existing pointer call the new native
+  `RemoveUnaliasedSourceFile(project, relative, dev, ino)`; inside the same
+  exclusive source handle, require `Information().Links == 1` before using the
+  existing readonly-ignore disposition flags. It must not clear attributes
+  on a shared inode or change ordinary object-stage deletion behavior.
+
+  For a saved pointer, create a private file using `CreateSourceFile`, retain
+  its lease while the existing Node `handle.writeFile(createReadStream(...))`
+  copies the checked snapshot bytes, then finish/flush and apply its saved
+  owner/group/DACL/attributes. The Windows `open` uses only `O_RDWR |
+  O_NOFOLLOW`, without creation/truncation; Linux retains its current flags,
+  chmod/truncate/chown and sync. Check the Node handle/path identity on both
+  platforms. Final Windows UID/GID/mode checks are replaced by the existing
+  native descriptor/attribute verification, not silently skipped.
+
+  Native graph state binds original current identity and the saved graph row:
+  removal is allowed once for an admitted current pointer; private creation
+  requires completed removal or admitted absence; finish requires the original
+  creation lease and saved size; policy requires completion and a single link.
+  A current-only pointer must be removed. A saved pointer must finish with its
+  saved bytes and policy. `complete` must account for every saved file and both
+  current-only pointer removals. Dispose graph creation leases during cleanup.
+  Retain the existing directory guards through graph writes and final checks.
+
+  Call `restoreGitGraphMetadata({ root, backup, entries, check, signal,
+  permissions })` before `permissions.verify`. Keep immutable `.graph` files
+  under the existing checked stage/link publication protocol. Preserve current
+  extra graph directories, immutable objects and excluded `info/packs`; only
+  the two intentional pointer mutations are removed from unchanged witnesses.
+
+- [ ] **Step 4: require focused and full native acceptance.**
+
+  Require all five actual layout transitions, partial retry, outside hardlink
+  refusal, read-only/private-copy behavior, unchanged current HEAD/worktree and
+  newer object availability, Git graph verification, `git fsck`, and unchanged
+  backup. Run the focused Windows profile first and then the complete lifecycle
+  matrix including Linux graph tests and saved recovery import checks.
+  Record SHA/run/time and remaining HEAD/index/ref/public-restore boundaries.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
