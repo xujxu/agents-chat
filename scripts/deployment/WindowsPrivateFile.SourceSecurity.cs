@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
+using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
@@ -29,6 +30,9 @@ namespace Deployment
         [DllImport("kernel32.dll", EntryPoint = "SetFileInformationByHandle", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool SetSourceDisposition(SafeFileHandle handle, int informationClass, ref uint flags, uint bytes);
+        [DllImport("kernel32.dll", EntryPoint = "SetFileInformationByHandle", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool SetSourceRename(SafeFileHandle handle, int informationClass, IntPtr information, uint bytes);
 
         public sealed class SourceSecurityRecord
         {
@@ -231,6 +235,74 @@ namespace Deployment
         public static void RemoveUnaliasedSourceFile(string project, string relative, string dev, string ino)
         {
             RemoveSourceEntry(project, relative, "file", dev, ino, true);
+        }
+
+        static void CheckPublicationFile(SourceAccess source, SourceSecurityRecord expected, string sha256)
+        {
+            if (expected == null || sha256 == null ||
+                !System.Text.RegularExpressions.Regex.IsMatch(sha256, @"\A[a-f0-9]{64}\z"))
+                throw new InvalidDataException("Source publication evidence differs.");
+            source.Match(expected.Dev, expected.Ino);
+            var actual = new SourceSecurityRecord(source.Target);
+            ValidateSourceSecurity(actual.SecurityDescriptor);
+            if (source.Target.Information().Links != 1)
+                throw new InvalidDataException("Source publication requires unaliased files.");
+            if (actual.Bytes != expected.Bytes || actual.Attributes != expected.Attributes ||
+                actual.SecurityDescriptor != expected.SecurityDescriptor)
+                throw new InvalidDataException("Source publication metadata changed.");
+            using (var borrowed = new SafeFileHandle(source.Target.handle.DangerousGetHandle(), false))
+            using (var stream = new FileStream(borrowed, FileAccess.Read))
+            using (var algorithm = SHA256.Create())
+            {
+                stream.Position = 0;
+                string hash = BitConverter.ToString(algorithm.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+                if (hash != sha256) throw new InvalidDataException("Source publication bytes changed.");
+            }
+            source.Check();
+        }
+
+        public static void PublishSourceFile(string project, string relative, SourceSecurityRecord staged,
+            SourceSecurityRecord before, string stagedSha256, string beforeSha256)
+        {
+            if (before == null && !String.IsNullOrEmpty(beforeSha256))
+                throw new InvalidDataException("Absent source publication evidence differs.");
+            using (var source = new SourceAccess(project, relative + ".lock", "file", 0x10000, true))
+            using (var destination = new SourceParents(project, relative))
+            {
+                CheckPublicationFile(source, staged, stagedSha256);
+                SourceAccess original = null;
+                try
+                {
+                    try { original = new SourceAccess(project, relative, "file", 0x100, true); }
+                    catch (Win32Exception error) when (before == null && error.NativeErrorCode == 2) { }
+                    if (before == null && original != null)
+                        throw new InvalidDataException("Expected source publication target is not absent.");
+                    if (before != null) CheckPublicationFile(original, before, beforeSha256);
+                    destination.Check();
+                    source.Check();
+                    byte[] name = Encoding.Unicode.GetBytes(Path.GetFileName(destination.Target));
+                    int rootOffset = IntPtr.Size == 8 ? 8 : 4;
+                    int lengthOffset = rootOffset + IntPtr.Size;
+                    int nameOffset = lengthOffset + 4;
+                    int size = nameOffset + name.Length + 2;
+                    IntPtr information = Marshal.AllocHGlobal(size);
+                    try
+                    {
+                        Marshal.Copy(new byte[size], 0, information, size);
+                        Marshal.WriteInt32(information, 0, before == null ? 0 : 1 | 2 | 0x40);
+                        Marshal.WriteIntPtr(information, rootOffset, IntPtr.Zero);
+                        Marshal.WriteInt32(information, lengthOffset, name.Length);
+                        Marshal.Copy(name, 0, IntPtr.Add(information, nameOffset), name.Length);
+                        Native(SetSourceRename(source.Target.handle, 22, information, checked((uint)size)),
+                            "Atomically publish original source lockfile");
+                    }
+                    finally { Marshal.FreeHGlobal(information); }
+                    source.Target.file = destination.Target;
+                    destination.Check();
+                    CheckPublicationFile(source, staged, stagedSha256);
+                }
+                finally { original?.Dispose(); }
+            }
         }
 
         static void RemoveSourceEntry(string project, string relative, string kind, string dev, string ino, bool unaliased)

@@ -341,6 +341,10 @@ existing native observer rechecks these alongside source bytes and keeps the
 backup private. Linux snapshots and direct Git inspection remain version 1.
 Version-2 HEAD/index/ref restoration refuses before mutation until its native
 security journal adapter is available.
+The journal's native atomic lockfile publication primitive is under Actions
+validation. It binds original/staged file IDs, checksums, ACLs and attributes
+and uses Windows handle-based rename with readonly-target support; it does
+not fall back to deleting the target or clearing attributes.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

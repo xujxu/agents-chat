@@ -11829,6 +11829,11 @@ existing Git byte-check barriers. The new helper is in saved recovery closure;
 the worker engine does not import Git metadata/snapshot helpers. No source-only
 native role or long-lived process is added to direct Git inspection.
 
+Implementation `f1d425c605ed1ccc127440eec07f81d884583ac1` passed focused
+`37109444821 / 111164353352` at **2026-10-03 08:33:00 UTC**:
+60 tests, 44 passed, 16 platform skips, zero failures. Its full run
+`37109444922` is still running; Windows and Linux contracts passed.
+
 **Goal:** Capture original `.git` root, HEAD/index/ref and parent-directory
 owner/group/DACL/ordinary attributes before implementing their native journal
 restoration. Packed references record absent loose refs/parents explicitly;
@@ -11944,6 +11949,11 @@ version-2 metadata restoration must refuse before mutation.
 
 ### Task 5BA: Native atomic Git lockfile publication
 
+Causal `b34190c / 37109889420`, job `111166103691`, completed
+**2026-10-03 08:36:44 UTC**: exactly the nine new native cases failed on the
+missing method; 44 existing tests passed and 16 platform cases skipped.
+The implementation is ready for native validation, not accepted.
+
 **Goal:** Provide the native publication operation required by the existing
 HEAD/index/ref journal, without adding another transaction engine or enabling
 public Windows Git restoration prematurely.
@@ -11968,7 +11978,7 @@ Do not remove a target first or clear attributes on a potentially aliased inode.
   against a real Git index before/after a real commit; unchanged private saved
   bytes and exact resulting index. It already runs in the focused workflow.
 
-- [ ] **Step 1: publish native causal coverage.**
+- [x] **Step 1: publish native causal coverage.**
 
   The native fixture must require the production method before testing any
   negative cases, so a missing method cannot produce a false-positive refusal:
