@@ -203,20 +203,20 @@ namespace Deployment
 
         public static SourceSecurityRecord CaptureSourceSecurity(string project, string relative, string kind)
         {
-            return CaptureSourceSecurity(project, relative, kind, kind == "directory" ? 0x40000u : 0u);
+            return CaptureSourceSecurity(project, relative, kind, kind == "directory" ? 0x40000u : 0u, true);
         }
 
         public static SourceSecurityRecord ReadSourceSecurity(string project, string relative, string kind)
         {
-            return CaptureSourceSecurity(project, relative, kind, 0);
+            return CaptureSourceSecurity(project, relative, kind, 0, false);
         }
 
-        static SourceSecurityRecord CaptureSourceSecurity(string project, string relative, string kind, uint access)
+        static SourceSecurityRecord CaptureSourceSecurity(string project, string relative, string kind, uint access, bool restoring)
         {
             using (var source = new SourceAccess(project, relative, kind, access, false))
             {
                 var result = new SourceSecurityRecord(source.Target);
-                ValidateSourceSecurity(result.SecurityDescriptor);
+                if (restoring) ValidateSourceSecurity(result.SecurityDescriptor);
                 source.Check();
                 return result;
             }

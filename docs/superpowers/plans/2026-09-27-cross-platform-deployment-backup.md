@@ -13066,6 +13066,16 @@ encoding so read and reconstruction agree. Do not enable UNC/device inputs or
 relax relative-component validation. Run the long-path complete round trip,
 ordinary regressions and the actual application again.
 
+**Long-path round trip passed:** `ea1242c / 37137564246` passed the first
+seven native/mixed/long-path cases, then its original source/task snapshot
+pipeline failed at `listener-fixture.cjs` because read-only capture had
+incorrectly inherited restoration's same-account ownership admission. Preserve
+the previous Get-Acl capture semantics: native read-only observation records
+the actual owner/group/DACL without requiring future write/ownership authority.
+Restoration admission and native mutation APIs keep their existing ownership
+checks. This separates observation from mutation rather than weakening
+restoration. Actual application `37137573809` is still running.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.
