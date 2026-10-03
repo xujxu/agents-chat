@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
-import fs, { chmod, lstat, readFile, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
+import fs, { chmod, lstat, mkdir, readFile, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
@@ -25,82 +25,6 @@ for (const layout of ['attached', 'packed', 'detached', 'packed-parents-absent']
       for (const relative of ['refs/heads', 'refs/tags']) {
         try { await rmdir(path.join(directory, relative)); }
         catch (error) { if (error.code !== 'ENOENT') throw error; }
-      }
-
-      for (const pause of ['refs/heads/main', 'index', 'HEAD']) {
-        test(`Windows native Git journal resumes after controller death following ${pause}`, {
-          skip: process.platform !== 'win32',
-        }, async t => {
-          const f = await gitMetadataFixture(t, { broad: true });
-          const index = path.join(f.project, '.git/index');
-          await chmod(index, 0o400);
-          const backup = path.join(f.root, 'backup');
-          const manifest = await createSnapshot({
-            project: f.project, destination: backup, id: 'native-git-resume',
-            gitMetadata: await inspectGitMetadata(f), ...await inspectSnapshotScope({ project: f.project }),
-            source: { commit: f.commit, provenance: 'observed' },
-            runtime: { platform: process.platform, state: 'stopped' },
-          });
-          const saved = path.join(backup, 'git.json');
-          const record = JSON.parse(await readFile(saved, 'utf8'));
-          await chmod(index, 0o600);
-          await writeFile(path.join(f.project, 'app.txt'), 'later\n');
-          await git(f.project, 'commit', '-am', 'later');
-          const child = fork(new URL('./deployment-git-restore-child.mjs', import.meta.url),
-            [f.project, saved, pause, backup], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
-          let diagnostic = '';
-          child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
-          const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
-          t.after(async () => {
-            if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-            await exited;
-          });
-          await new Promise((resolve, reject) => {
-            const timer = setTimeout(() => reject(new Error(`Native Git restore did not pause: ${diagnostic}`)), 60000);
-            child.once('message', value => { clearTimeout(timer); resolve(value); });
-            child.once('exit', code => { clearTimeout(timer); reject(new Error(`Native Git restore exited ${code}: ${diagnostic}`)); });
-            child.once('error', error => { clearTimeout(timer); reject(error); });
-          });
-          const options = { project: f.project, backup, record, checkStopped: async () => ({ stopped: true, inhibited: true }) };
-          const proofFile = path.join(f.project, '.git/agents-chat-restore/intent.json');
-          const proofBytes = await readFile(proofFile);
-          const proof = JSON.parse(proofBytes);
-          assert.equal(proof.version, 2);
-          for (const [position, entry] of proof.entries.entries()) {
-            const published = position <= proof.entries.findIndex(entry => entry.file === pause);
-            const file = path.join(f.project, '.git', `${entry.file}${published ? '' : '.lock'}`);
-            const info = await lstat(file, { bigint: true });
-            assert.equal(entry.staged.dev, String(info.dev));
-            assert.equal(entry.staged.ino, String(info.ino));
-            assert.deepEqual(entry.staged.windowsSecurity, await gitWindowsSecurity(file));
-          }
-          await assert.rejects(restoreGitMetadata(options), /alive/i);
-          child.kill('SIGKILL');
-          await exited;
-          if (pause === 'index') {
-            const bytes = await readFile(index);
-            await rename(index, `${index}.retained`);
-            await writeFile(index, bytes);
-            await assert.rejects(restoreGitMetadata(options), /changed|identity/i);
-            assert.deepEqual(await readFile(proofFile), proofBytes);
-            await unlink(index);
-            await rename(`${index}.retained`, index);
-            const originalPolicy = await gitWindowsSecurity(index);
-            await gitWindowsSecurity(index, 'broaden-git-index-users');
-            assert.notDeepEqual(await gitWindowsSecurity(index), originalPolicy);
-            await assert.rejects(restoreGitMetadata(options), /changed|identity/i);
-            assert.deepEqual(await readFile(proofFile), proofBytes);
-            assert.deepEqual(await readFile(index), bytes);
-            await gitWindowsSecurity(index, 'unbroaden-git-index-users');
-            assert.deepEqual(await gitWindowsSecurity(index), originalPolicy);
-          }
-          await restoreGitMetadata(options);
-          assert.equal(await git(f.project, 'rev-parse', 'HEAD'), f.commit);
-          assert.deepEqual(await readFile(index), Buffer.from(record.index, 'base64'));
-          assert.equal(await readFile(path.join(f.project, 'app.txt'), 'utf8'), 'later\n');
-          await assert.rejects(lstat(path.join(f.project, '.git/agents-chat-restore')), { code: 'ENOENT' });
-          assert.deepEqual(await verifySnapshot(backup), manifest);
-        });
       }
     }
     if (layout === 'detached') await git(f.project, 'switch', '--detach', f.commit);
@@ -190,7 +114,102 @@ for (const layout of ['attached', 'packed', 'detached', 'packed-parents-absent']
     const observed = await inspectWindowsSnapshotSecurity({ project: directory, destinationParent: backup, entries });
     try { assert.ok(windowsRestoredSecurityMatches(record.windowsSecurity, observed.metadata, entries)); }
     finally { await observed.close(); }
+    const compareInheritance = async (actual, ordinary) => {
+      const [restored, created] = await Promise.all([gitWindowsSecurity(actual), gitWindowsSecurity(ordinary)]);
+      const dacl = descriptor => descriptor.slice(descriptor.indexOf('D:'));
+      assert.equal(dacl(restored.securityDescriptor), dacl(created.securityDescriptor));
+      assert.equal(restored.attributes, created.attributes);
+    };
+    if (layout.startsWith('packed')) {
+      const reference = path.join(directory, record.ref);
+      const ordinary = `${reference}.permission-probe`;
+      await writeFile(ordinary, 'probe\n');
+      try { await compareInheritance(reference, ordinary); }
+      finally { await unlink(ordinary); }
+    }
+    if (layout === 'packed-parents-absent') {
+      const ordinary = path.join(directory, 'refs/permission-probe');
+      await mkdir(ordinary);
+      try { await compareInheritance(path.join(directory, 'refs/heads'), ordinary); }
+      finally { await rmdir(ordinary); }
+    }
     await assert.rejects(lstat(path.join(directory, 'agents-chat-restore')), { code: 'ENOENT' });
+    assert.deepEqual(await verifySnapshot(backup), manifest);
+  });
+}
+
+for (const pause of ['refs/heads/main', 'index', 'HEAD']) {
+  test(`Windows native Git journal resumes after controller death following ${pause}`, {
+    skip: process.platform !== 'win32',
+  }, async t => {
+    const f = await gitMetadataFixture(t, { broad: true });
+    const index = path.join(f.project, '.git/index');
+    await chmod(index, 0o400);
+    const backup = path.join(f.root, 'backup');
+    const manifest = await createSnapshot({
+      project: f.project, destination: backup, id: 'native-git-resume',
+      gitMetadata: await inspectGitMetadata(f), ...await inspectSnapshotScope({ project: f.project }),
+      source: { commit: f.commit, provenance: 'observed' },
+      runtime: { platform: process.platform, state: 'stopped' },
+    });
+    const saved = path.join(backup, 'git.json');
+    const record = JSON.parse(await readFile(saved, 'utf8'));
+    await chmod(index, 0o600);
+    await writeFile(path.join(f.project, 'app.txt'), 'later\n');
+    await git(f.project, 'commit', '-am', 'later');
+    const child = fork(new URL('./deployment-git-restore-child.mjs', import.meta.url),
+      [f.project, saved, pause, backup], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    let diagnostic = '';
+    child.stderr.on('data', bytes => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
+    const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
+    t.after(async () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await exited;
+    });
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Native Git restore did not pause: ${diagnostic}`)), 60000);
+      child.once('message', value => { clearTimeout(timer); resolve(value); });
+      child.once('exit', code => { clearTimeout(timer); reject(new Error(`Native Git restore exited ${code}: ${diagnostic}`)); });
+      child.once('error', error => { clearTimeout(timer); reject(error); });
+    });
+    const options = { project: f.project, backup, record, checkStopped: async () => ({ stopped: true, inhibited: true }) };
+    const proofFile = path.join(f.project, '.git/agents-chat-restore/intent.json');
+    const proofBytes = await readFile(proofFile);
+    const proof = JSON.parse(proofBytes);
+    assert.equal(proof.version, 2);
+    for (const [position, entry] of proof.entries.entries()) {
+      const published = position <= proof.entries.findIndex(entry => entry.file === pause);
+      const file = path.join(f.project, '.git', `${entry.file}${published ? '' : '.lock'}`);
+      const info = await lstat(file, { bigint: true });
+      assert.equal(entry.staged.dev, String(info.dev));
+      assert.equal(entry.staged.ino, String(info.ino));
+      assert.deepEqual(entry.staged.windowsSecurity, await gitWindowsSecurity(file));
+    }
+    await assert.rejects(restoreGitMetadata(options), /alive/i);
+    child.kill('SIGKILL');
+    await exited;
+    if (pause === 'index') {
+      const bytes = await readFile(index);
+      await rename(index, `${index}.retained`);
+      await writeFile(index, bytes);
+      await assert.rejects(restoreGitMetadata(options), /changed|identity/i);
+      assert.deepEqual(await readFile(proofFile), proofBytes);
+      await unlink(index);
+      await rename(`${index}.retained`, index);
+      const originalPolicy = await gitWindowsSecurity(index);
+      await gitWindowsSecurity(index, 'broaden-git-index-users');
+      assert.notDeepEqual(await gitWindowsSecurity(index), originalPolicy);
+      await assert.rejects(restoreGitMetadata(options), /changed|identity/i);
+      assert.deepEqual(await readFile(proofFile), proofBytes);
+      assert.deepEqual(await readFile(index), bytes);
+      await gitWindowsSecurity(index, 'unbroaden-git-index-users');
+      assert.deepEqual(await gitWindowsSecurity(index), originalPolicy);
+    }
+    await restoreGitMetadata(options);
+    assert.equal(await git(f.project, 'rev-parse', 'HEAD'), f.commit);
+    assert.deepEqual(await readFile(index), Buffer.from(record.index, 'base64'));
+    assert.equal(await readFile(path.join(f.project, 'app.txt'), 'utf8'), 'later\n');
+    await assert.rejects(lstat(path.join(f.project, '.git/agents-chat-restore')), { code: 'ENOENT' });
     assert.deepEqual(await verifySnapshot(backup), manifest);
   });
 }

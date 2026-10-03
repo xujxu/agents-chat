@@ -12087,6 +12087,14 @@ active`; the fourth was the fixture issue above. No timeout increase is used.
 Added native post-publication controller-death tests with exact journal IDs,
 live-controller refusal, same-byte inode and index ACL drift refusal, preserved
 proof and successful continuation after restoring the original evidence.
+Correction `e61d8b4` is pushed: focused `37114773245`, full `37114773164`.
+Both original `6ee5515` runs concluded cancelled; the original full matrix had
+33 successful jobs, not complete acceptance. The follow-up test change moves
+the three interruption cases out of the absent-parent test to independent
+top-level cases. Packed-ref cases also compare materialized file/directory
+DACLs and attributes with ordinary-created siblings. Owner/group are not
+asserted equal: private preparation intentionally retains the creating user's
+owner rather than inventing a saved owner for a previously absent node.
 
 **Goal:** Extend the existing `restore-git.mjs` journal, not a second
 transaction engine, to restore validated version-2 metadata with native
