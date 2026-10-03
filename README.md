@@ -341,8 +341,11 @@ ACLs and attributes, plus explicit absent names for packed references. The
 existing native observer rechecks these alongside source bytes and keeps the
 backup private. Linux snapshots and direct Git inspection remain version 1.
 Version-2 HEAD/index/ref restoration requires a private backup context.
-Its native journal adapter has passed focused native Actions coverage; complete
-matrix acceptance is pending. Native snapshot/restoration now has an independent
+Its native journal adapter passed all 35 lifecycle jobs at
+`f808b8ac7a7918a67c2fc18f318891e579decd7a / 37116174373`, covering attached,
+detached and packed refs, inherited policy for previously absent paths,
+controller-death continuation, drift/alias refusal and incomplete private
+preparation. Native snapshot/restoration now has an independent
 15-minute CI job, retaining all other contracts and five cold-retirement probes;
 the full lifecycle matrix contains 35 jobs.
 The public Windows Git/runtime restore composition gate remains closed.
@@ -351,8 +354,9 @@ on `0f2da811690c718eeac9acb728baae2b45438b5c / 37111501173`.
 It binds original/staged file IDs, checksums, ACLs and attributes
 and uses Windows handle-based rename with readonly-target support; it does
 not fall back to deleting the target or clearing attributes.
-Windows external-file snapshot capture is implemented but awaiting Actions
-acceptance. Version-3 snapshots add `windowsExternalSecurity`, using the existing
+Windows external-file snapshot capture passed focused native Actions at
+`712474e / 37117067414`; full matrix acceptance is pending.
+Version-3 snapshots add `windowsExternalSecurity`, using the existing
 native security tables for each external parent and its present files, including
 root-only tables for absent resources. Original byte/presence and ACL checks
 remain active until snapshot completion; backups stay private. Linux formats

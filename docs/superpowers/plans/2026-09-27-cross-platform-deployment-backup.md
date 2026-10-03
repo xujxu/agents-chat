@@ -12063,6 +12063,12 @@ Do not remove a target first or clear attributes on a potentially aliased inode.
 
 ### Task 5BB: Compose native Windows HEAD/index/ref journal restoration
 
+**Accepted:** `f808b8ac7a7918a67c2fc18f318891e579decd7a / 37116174373`,
+all **35 jobs passed**, completed **2026-10-03 10:44:12 UTC**.
+Focused `37116173965 / 111183322352` passed at **10:27:14 UTC**.
+The independent native job preserves the same 15-minute limit and all test
+coverage; no public Windows project Git/runtime composition gate was removed.
+
 Causal `b65e31f / 37112378627`, Windows job `111172641630`, completed
 **2026-10-03 09:18:00 UTC**: 77 tests, 57 passed, 16 platform skips.
 Three layout cases failed at the explicit native journal guard; the fourth
@@ -12229,7 +12235,7 @@ complete. Direct v2 restoration requires a canonical private backup root.
   names. Retire only the original private intent and empty original guard
   through existing native retirement primitives.
 
-- [ ] **Step 4: prove interruption, drift and complete dual-platform behavior.**
+- [x] **Step 4: prove interruption, drift and complete dual-platform behavior.**
 
   Extend the existing controller-death fixture for v2 to pause from
   `checkStopped` after observing durable intent plus the expected published
@@ -12253,6 +12259,11 @@ Windows ACL guard; the two final-boundary cases failed because that guard
 prevented reaching the second authority callback. The alias/hardlink refusal
 case still passed conservatively. Native implementation and an additional
 cancellation/closed-parent-handle case are ready for Actions, not accepted.
+Implementation `712474e`, focused `37117067414 / 111185809862`, passed
+**2026-10-03 10:43:44 UTC**: 88 tests, 72 passed, 16 platform skips, no
+failures or cancellations. All three capture layouts and ACL/presence/cancel
+boundary cases passed, including post-failure parent rename proving cleanup.
+Full `37117066926` is running; complete capture acceptance remains pending.
 
 **Goal:** Extend the existing external snapshot format without a second copier.
 Keep external restoration and public Windows composition closed until separately
@@ -12291,7 +12302,7 @@ runtime scope.
   boundary. Expected first failure is the existing Windows external ACL guard,
   not a missing import or a fixture error. Do not print source contents.
 
-- [ ] **Step 2: reuse native source observers per external parent.**
+- [x] **Step 2: reuse native source observers per external parent.**
 
   Keep `externalFiles` byte/hash/legacy numeric fields unchanged, matching the
   existing version-3 project format. Native restoration must use native security,
@@ -12345,6 +12356,86 @@ runtime scope.
   Require focused and all 35 full jobs on the final implementation. Record
   source SHA and actual results before describing capture as supported; this
   does not accept native external restoration or public runtime deployment.
+
+### Task 5BD: Restore native Windows external configuration through shared source operations
+
+**Goal:** Provide standalone, exactly authorized external restoration from the
+native snapshot. Retain the public Windows project/runtime composition gate.
+Do not modify an installed immutable bundle while a runtime scope retains it.
+
+**Files:**
+- Create `tests/deployment-windows-external-restore.test.mjs`.
+- Extract `prepareWindowsSourceRestoreSecurity` in `windows-restore-security.mjs`;
+  retain `prepareWindowsProjectRestoreSecurity` as the unchanged version/Git/
+  external admission wrapper. Reuse the same PowerShell controller and C# APIs.
+- Create `restore-windows-external.mjs` for native external scope admission,
+  selected-file replacement and complete-backup retry.
+- Modify `restore-external.mjs` only to dispatch Windows to the new helper.
+- Add the new import to `saved-recovery-engine.mjs` and native tests to the
+  existing Windows snapshot/restoration job; update the obsolete refusal test.
+
+- [ ] **Step 1: publish real standalone restore cases before implementation.**
+
+  Snapshot readonly external `.env.local` plus an absent sibling, then replace
+  the bytes and create that sibling. Preserve unrelated files in both roots.
+
+  ```javascript
+  await restoreExternalSnapshot({
+    project, backup, authorizedPaths: [file, missing], acceptDataLoss: true,
+    checkStopped: async () => ({ stopped: true, inhibited: true }),
+  });
+  ```
+
+  Restore twice, requiring exact saved bytes, absence and native policy.
+  Observe the writable handle to prove private permissions before copying.
+  Abort after a partial private write; retain the partial file and unchanged
+  backup, then retry successfully. Refuse changed parent policy, outside
+  hardlinks, missing authorization, missing data-loss acknowledgement and
+  non-stopped authority without altering original resources. First native
+  calls must fail at the existing Linux-only external restoration guard.
+
+- [ ] **Step 2: reuse the existing native source restoration facade.**
+
+  Extract the existing implementation behind this data-oriented boundary:
+
+  ```javascript
+  prepareWindowsSourceRestoreSecurity({
+    project: parent, backup, entries, metadata, current, signal, pwsh,
+  });
+  ```
+
+  The project wrapper still validates version 3 and refuses Git/external
+  composition; it passes `manifest.entries` and `manifest.windowsSecurity`
+  to the shared facade. No new PowerShell/C# protocol or transaction engine.
+  Preserve sequential framing, native current-inode/ACL admission, private
+  creation, readonly/unalias deletion, final policy verification and cleanup.
+
+  The Windows external helper must validate the complete backup, original
+  project identity, platform/version, exact authorized path set, disjoint roots,
+  every parent security table, all current file kinds/link counts and capacity
+  before removal. Admit every parent before changing any file. Group only
+  explicitly selected basenames; never enumerate unrelated external contents.
+  Recheck stopped/inhibited authority and retained parent policy at each phase.
+
+  Reuse `prepareRemoval`, `remove`, `createFile`, `finishFile`, `restore` and
+  `checkRoot`. For each parent, remove all admitted current selected files
+  before creating saved files, matching the existing controller state machine.
+  Copy bounded, checksum-verified backup bytes through the private-created
+  writable handle, flush and close before applying saved policy. Originally
+  absent paths remain absent. A stopped-runtime interruption may leave a
+  missing/private partial target, recoverable from the unchanged complete
+  backup; do not introduce untracked lockfiles or a second journal.
+  Verify all saved bytes/absence/policies and the unchanged backup before return.
+  Always close every admitted native facade in reverse order, retaining both
+  primary and cleanup errors.
+
+- [ ] **Step 3: require focused and complete Actions acceptance.**
+
+  Keep Linux external restoration behavior unchanged and validate its existing
+  cases plus the saved recovery dependency closure. Require focused native
+  success and all 35 full jobs on the final source; record the actual SHA/run.
+  Standalone external restoration does not authorize public Windows activation,
+  immutable bundle mutation or whole-project Git/runtime composition.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

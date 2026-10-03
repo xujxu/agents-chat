@@ -191,7 +191,8 @@ jobs:
             'tests/deployment-git-objects.test.mjs',
             'tests/deployment-git-metadata.test.mjs',
             'tests/deployment-windows-git-journal.test.mjs',
-            'tests/deployment-windows-external-snapshot.test.mjs'
+            'tests/deployment-windows-external-snapshot.test.mjs',
+            'tests/deployment-windows-external-restore.test.mjs'
           )
 
   contracts:
