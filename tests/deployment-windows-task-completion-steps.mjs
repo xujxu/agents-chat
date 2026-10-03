@@ -1,0 +1,39 @@
+import assert from 'node:assert/strict';
+import { readdir } from 'node:fs/promises';
+import path from 'node:path';
+import { waitWindowsReadiness } from '../scripts/deployment/windows-readiness.mjs';
+
+export async function runWindowsTaskCompletionSteps({ context, control, port, providers, recordAcceptance }) {
+  assert.equal(typeof context.advanceCompletion, 'function', 'Missing native completion step API: advanceCompletion');
+  await waitWindowsReadiness({ context, port, providers });
+  await context.prepareCompletion({ port, providers });
+  const stateSha256 = await recordAcceptance();
+  const steps = [
+    ['policy-requested', 'policy-requested'],
+    ['policy-applied', 'policy-requested'],
+    ['policy-staged', 'policy-staged'],
+    ['release-requested', 'release-requested'],
+    ['lease-released', 'release-requested'],
+    ['released', 'released'],
+    ['policy-restore-requested', 'policy-restore-requested'],
+    ['permanent-policy-applied', 'policy-restore-requested'],
+    ['policy-restored', 'policy-restored'],
+    ['enable-requested', 'enable-requested'],
+    ['enable-applied', 'enable-requested'],
+    ['complete', 'complete'],
+  ];
+  const expected = new Set(['task-complete-prepared.json']);
+  const receipts = async () => (await readdir(path.join(control, 'task-maintenance')))
+    .filter(name => name.startsWith('task-complete-')).sort();
+  for (const [step, durable] of steps) {
+    assert.equal(await context.advanceCompletion({ stateSha256 }), step);
+    await context.check();
+    expected.add(`task-complete-${durable}.json`);
+    assert.deepEqual(await receipts(), [...expected].sort());
+  }
+  assert.equal(expected.size, 9);
+  assert.equal(await context.advanceCompletion({ stateSha256 }), 'complete');
+  await context.complete({ stateSha256 });
+  assert.deepEqual(await receipts(), [...expected].sort());
+  return Object.freeze({ status: 'completed', stateSha256 });
+}

@@ -146,16 +146,19 @@ if (action === 'activate-early') {
         const { readWindowsReadinessEndpoint } = await import('./deployment-windows-readiness-cases.mjs');
         const endpoint = await readWindowsReadinessEndpoint(project);
         await writeFile(path.join(project, 'health-mode'), 'ready');
-        const completion = () => completeWindowsTaskActivation({
-          context, port: endpoint.port, providers: ['admin-login'],
-          recordAcceptance: async () => {
-            state = { ...state, previousPhase: state.phase,
-              phase: operation === 'restore' ? 'restored' : 'accepted', updatedAt: new Date().toISOString() };
-            if (action.endsWith('changed-state')) state.targetCommit = 'c'.repeat(40);
-            await writeState(control, state);
-            return hash(await readFile(stateFile));
-          },
-        });
+        const recordAcceptance = async () => {
+          state = { ...state, previousPhase: state.phase,
+            phase: operation === 'restore' ? 'restored' : 'accepted', updatedAt: new Date().toISOString() };
+          if (action.endsWith('changed-state')) state.targetCommit = 'c'.repeat(40);
+          await writeState(control, state);
+          return hash(await readFile(stateFile));
+        };
+        const completion = async () => {
+          const complete = action === 'activate-complete-retirement'
+            ? (await import('./deployment-windows-task-completion-steps.mjs')).runWindowsTaskCompletionSteps
+            : completeWindowsTaskActivation;
+          return complete({ context, control, port: endpoint.port, providers: ['admin-login'], recordAcceptance });
+        };
         if (action.endsWith('changed-state')) {
           await assert.rejects(completion(), error => error.code === 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED'
             && /completion-state/.test(error.diagnostic));

@@ -10306,6 +10306,116 @@ worker operation, settled journals and the original saved helper manifest.
   pre-completion activation/reboot recovery or public Windows composition.
   Those remain required before deployment PR creation or voice integration.
 
+### Task 5AP: explicit completion steps for genuine write-ahead crash boundaries
+
+Continue the approved native-admission/durable-receipt design. Blindly treating
+accepted state as completed would skip policy/lease work; automatic rollback
+would violate explicit data-restoration acknowledgement. Reconcile and replay
+the exact original native generation instead. First expose the existing live
+completion transitions individually so subsequent recovery acceptance can
+terminate a real actor between native mutation and receipt acknowledgement.
+Do not fabricate partial receipts by deleting records after normal completion,
+add timing-dependent filesystem watchers, or introduce production fault flags.
+
+**Files:**
+- Modify `scripts/deployment/windows-task-completion.ps1`: retain the current
+  state/owner checks, move existing enabled-policy mutation into a focused
+  helper, and expose `Advance-AgentsChatTaskCompletion`. Existing
+  `Complete-AgentsChatTaskActivation` runs those same steps to completion.
+- Modify `scripts/deployment/windows-task-controller.ps1`: accept
+  `advance-completion` with exactly `id`, `method`, `stateSha256`; return
+  exactly `id`, `type`, `value`, `phase`. No caller-supplied phase/path.
+- Modify `scripts/deployment/windows-task-controller.mjs`: expose
+  `advanceCompletion({stateSha256,signal})`, validate each returned step and
+  preserve existing controller identity/lifetime/error behavior.
+- Create `tests/deployment-windows-task-completion-steps.mjs`: genuine live
+  orchestration and exact acknowledgement/receipt-count assertions.
+- Modify `tests/deployment-windows-task-transaction-controller.mjs`: use the
+  step fixture only for genuine retirement scenarios. Other completion cases
+  continue using the unchanged all-at-once API.
+
+- [ ] **Step 1: publish the missing-method causal in the genuine fixture.**
+
+  The fixture requires the method while still holding the real active task:
+
+  ```javascript
+  assert.equal(typeof context.advanceCompletion, 'function',
+    'Missing native completion step API: advanceCompletion');
+  ```
+
+  Then it uses existing `waitWindowsReadiness`, `prepareCompletion` and the
+  original Node owner's `recordAcceptance` callback. No synthetic state,
+  settled worker journal or native receipt is written by the test helper.
+  Commit/push and capture the missing-method failure from the existing native
+  receipt-retirement Actions job before implementing the method.
+
+- [ ] **Step 2: factor the existing native sequence without changing receipts.**
+
+  The only durable names remain the existing nine completion receipts.
+  Intermediate action acknowledgements are in-memory observations, not new
+  evidence files. Use this exact ordered progression:
+
+  ```javascript
+  const steps = [
+    ['policy-requested', 'policy-requested'],
+    ['policy-applied', 'policy-requested'],
+    ['policy-staged', 'policy-staged'],
+    ['release-requested', 'release-requested'],
+    ['lease-released', 'release-requested'],
+    ['released', 'released'],
+    ['policy-restore-requested', 'policy-restore-requested'],
+    ['permanent-policy-applied', 'policy-restore-requested'],
+    ['policy-restored', 'policy-restored'],
+    ['enable-requested', 'enable-requested'],
+    ['enable-applied', 'enable-requested'],
+    ['complete', 'complete'],
+  ];
+  ```
+
+  The first item is the returned step; the second is the last durable receipt.
+  `prepared` precedes the array. At each action-only step, execute the current
+  native mutation and check its exact postcondition before acknowledging.
+  At the following step, publish the existing acknowledgement receipt.
+  Check original live controller, terminal state, runtime, listener and policy
+  before/after each step; poison and retain evidence on any failure.
+  Original `complete({stateSha256})` drives this same finite sequence and
+  remains idempotent. It never accepts a dead original owner.
+
+- [ ] **Step 3: wire exact transport replies and immutable progress.**
+
+  `advance-completion` uses the same bounded request protocol and controller
+  process identity. Its reply has a single extra `phase` string. The Node
+  facade requires the next known step, with repeated `complete` allowed only
+  after completion. Preparing again cannot reset an advanced sequence.
+  Existing all-at-once completion keeps its reply shape and deadlines.
+  Abort, malformed acknowledgement and child death close authority through
+  the existing error path, without inventing completion.
+
+- [ ] **Step 4: validate actions versus durable receipts on actual Windows.**
+
+  For every tuple above:
+
+  ```javascript
+  const phase = await context.advanceCompletion({ stateSha256 });
+  assert.equal(phase, expectedStep);
+  await context.check();
+  assert.deepEqual(actualReceiptNames, expectedDurableReceiptNames);
+  ```
+
+  Require all nine original receipts, no new files during action-only steps,
+  repeated-step terminal idempotency and compatibility with `context.complete`.
+  Preserve the existing outer native assertions for exact Scheduler policy,
+  original lease release, update/restore/disabled behavior, and the complete
+  task/worker retirement and final-unlock fixture.
+
+- [ ] **Step 5: publish implementation and accept the full regression.**
+
+  Push implementation and inspect the existing `deployment-lifecycle.yml`
+  run for that exact SHA. Require all native scenarios and all 26 jobs to
+  pass; record their run/job IDs and timestamps. No local validation.
+  This is the deterministic completion primitive for the next cold replay
+  consumer, not a claim that interrupted activation or reboot recovery works.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
