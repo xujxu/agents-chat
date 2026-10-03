@@ -11,7 +11,7 @@ export async function admitWindowsCompatibility({
     scope, control, lock, node, pwsh, tools: [git], signal,
   });
   const project = authority.observation.project;
-  const environment = { SystemRoot: process.env.SystemRoot };
+  const environment = { SystemRoot: process.env.SystemRoot, TEMP: authority.root, TMP: authority.root };
   const run = async (command, checkSignal = signal) => {
     await authority.check({ signal: checkSignal });
     const result = await operation.run({

@@ -12773,6 +12773,11 @@ capture. Only the original transaction's copying stage may capture a snapshot.
 
 ### Task 5BH: Exercise target admission against the actual managed Windows app
 
+**Focused accepted:** `89b7aa9 / 37125409033`, job `111209597537`,
+completed **2026-10-03 13:18:16 UTC**. Actual target admission, missing-Git
+refusal, original listener ownership and authenticated create/mutate/restored
+database lifecycle passed. Full `37125749351` remains the acceptance gate.
+
 **Causal:** `a98e31b / 37125067304`, job `111208587673`, reached
 `DEPLOYMENT_TARGET_UNSUPPORTED / target-inspection-unavailable`
 **2026-10-03 13:11:08 UTC** after the real application built, started,
@@ -12807,6 +12812,14 @@ as explicit PowerShell now reaches native snapshot observers.
 
 ### Task 5BI: Compose original-task runtime, configuration and data admission
 
+**Initial focused acceptance:** `bbb870f / 37126572652`, job `111212947845`,
+passed the actual application, original-task preflight and three settled
+version/data workers **2026-10-03 13:40:51 UTC**, 429928 ms. The source/snapshot
+pipeline in `37126572761 / 111212949484` passed **13:37:36 UTC**; component
+regression and full-matrix acceptance remain separate gates.
+Keep Node-only probes' temporary files in their private control directory
+with explicit `TEMP`/`TMP`, rather than relying on Windows fallback locations.
+
 **Causal:** `4a44e02 / 37125956367`, job `111211170040`, reached the
 explicit unimplemented admission API **2026-10-03 13:30:10 UTC** after actual
 application build, authentication, target admission, native task discovery and
@@ -12830,7 +12843,7 @@ configuration observation and the existing captured database inspector.
   account, controller session, explicit outside-project tools and
   hash-bound installed Node. Reuse it from source/build and admission.
   Execute version and database probes through the existing worker operation,
-  with a minimal native environment; retain the configuration observer until
+  with only SystemRoot and private control TEMP/TMP; retain the configuration observer until
   the caller closes it. Reuse target/profile and database command/result
   helpers, with explicit errors and cleanup.
 - [ ] Preserve captured dependency closure: these live admission/source-build
