@@ -11222,6 +11222,94 @@ refused until its actual permission application and native authority are wired.
   run and completion time. Do not label this Windows restoration, full public
   Windows deployment or application upgrade acceptance.
 
+### Task 5AW: same-account Windows project payload restoration
+
+Apply the accepted version-3 metadata to real restored files, using standard
+Windows handle-based security/attribute APIs. Reuse the existing project byte
+restorer, backup checks, explicit data-loss acknowledgement and stopped/inhibited
+callback. Preserve the original project directory and its retained native root
+policy. A differing root ACL/owner/attributes, unsupported ownership or a legacy
+Windows snapshot must refuse before deletion. Git-aware and external runtime
+configuration restoration remain explicit subsequent integration, not silently
+skipped prerequisites for a complete Windows application restore.
+
+**Files:**
+- Create `scripts/deployment/WindowsPrivateFile.SourceSecurity.cs`: focused
+  partial native helper for checked, handle-bound source security/attributes.
+  Reuse existing path, identity, parent-directory and descriptor primitives;
+  do not weaken private publication or retirement policy.
+- Create `scripts/deployment/windows-restore-security.ps1`: original Node
+  lifetime, retained project/private backup, same-account descriptor admission,
+  bounded permission/attribute operations and explicit cleanup.
+- Create `scripts/deployment/windows-restore-security.mjs`: strict native
+  restore metadata adapter with root, inventory and snapshot binding.
+- Modify `scripts/deployment/restore-project.mjs`: share existing byte copying,
+  verification and excluded-root preservation; use the Windows adapter for
+  scoped removal preparation and final exact metadata restoration.
+- Modify `scripts/deployment/saved-recovery-engine.mjs`: save all new
+  restoration dependencies, including the native partial class.
+- Modify `tests/deployment-restore-project.test.mjs` and
+  `tests/deployment-windows-snapshot-security-fixture.ps1`: native payload/ACL,
+  read-only-file, retry, root-drift and before-mutation refusal cases.
+
+- [ ] **Step 1: publish a real Windows restoration causal case.**
+
+  ```javascript
+  const restored = await restoreProjectSnapshot(options);
+  assert.equal(restored.id, 'restore-point');
+  assert.equal(await readFile(path.join(project, '.data/chats.db'), 'utf8'), 'saved data');
+  assert.equal((await inspectSecurity(path.join(project, '.env.local'))).securityDescriptor, savedDescriptor);
+  ```
+
+  Use the existing source/data/build/dependency fixture with a broad original
+  `.env.local` source DACL but private backup. Add an obsolete read-only live
+  file, restore twice, and verify byte/ACL/attribute equality, excluded logs
+  and `.git` preservation, unchanged project identity and retained backup.
+  Confirm the present Linux-only restoration guard fails this actual call in
+  Windows Actions before implementing production support.
+
+- [ ] **Step 2: admit metadata before allowing any project mutation.**
+
+  ```javascript
+  const permissions = await prepareWindowsProjectRestoreSecurity({
+    project, backup, manifest, current, signal,
+  });
+  await permissions.checkRoot({ signal });
+  ```
+
+  Require a version-3 Windows complete-project snapshot, actual private backup,
+  exact root policy, validated native owner/group/DACL and supported ordinary
+  attributes. Admit all saved and current source ownership before mutation.
+  Retain the original controller lifetime and project identity. Refuse
+  unsupported cross-account ownership rather than enabling privileges,
+  impersonating accounts or silently rewriting ownership. Reject Git-bearing
+  snapshots before mutation until their separate restore adapter is wired.
+
+- [ ] **Step 3: restore bytes and then exact source security.**
+
+  ```javascript
+  await permissions.prepareRemoval({ signal });
+  // Existing scoped removal, private file creation, byte-copy and checksum work.
+  await permissions.restore({ signal });
+  await permissions.checkRoot({ signal });
+  ```
+
+  Use checked file handles, not a path-following `Set-Acl` write after an
+  independent lookup. Retain relevant ancestors while operating on a target.
+  Clear read-only attributes only on admitted obsolete content; any temporary
+  child-directory access policy is confined to the admitted removal inventory.
+  Never alter excluded roots or the project root policy. Apply saved file and
+  bottom-up directory policy, then verify the whole saved security inventory
+  after Windows inheritance propagation. Keep the authoritative backup private
+  and unchanged. Preserve primary and cleanup failures.
+
+- [ ] **Step 4: accept payload restoration without overstating public support.**
+
+  Require actual Windows payload/ACL/read-only/retry cases, refusal before
+  mutation, saved-dependency import coverage, Linux restore regressions and
+  the full lifecycle workflow. Record exact SHA/run/time. This filesystem
+  adapter is not complete Windows Git/runtime/task/public restore composition.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

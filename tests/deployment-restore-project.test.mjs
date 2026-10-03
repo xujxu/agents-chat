@@ -7,8 +7,11 @@ import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectSnapshotScope } from '../scripts/deployment/snapshot-scope.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { restoreProjectSnapshot } from '../scripts/deployment/restore-project.mjs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
-async function fixture(t, full = true) {
+async function fixture(t, full = true, beforeSnapshot) {
   const root = await temporaryDeployment(t);
   const project = path.join(root, 'app');
   const backup = path.join(root, 'backup');
@@ -27,6 +30,7 @@ async function fixture(t, full = true) {
     await symlink('z-build-link', path.join(project, 'build-link'));
     await symlink('.next/BUILD_ID', path.join(project, 'z-build-link'));
   }
+  await beforeSnapshot?.(project);
   const scope = full ? await inspectSnapshotScope({ project }) : { files: ['package.json'] };
   await createSnapshot({
     project, destination: backup, id: 'restore-point', ...scope,
@@ -45,6 +49,47 @@ async function fixture(t, full = true) {
 }
 
 const linux = { skip: process.platform !== 'linux' };
+
+async function inspectWindowsSecurity(file, action = 'inspect') {
+  const { stdout } = await promisify(execFile)('pwsh.exe', [
+    '-NoProfile', '-NonInteractive', '-File',
+    fileURLToPath(new URL('./deployment-windows-snapshot-security-fixture.ps1', import.meta.url)),
+    '-File', file, '-Action', action,
+  ], { timeout: 30000, maxBuffer: 65536 });
+  return JSON.parse(stdout);
+}
+
+test('Windows project payload restore applies original ACLs, removes read-only obsolete content and is retryable', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const f = await fixture(t, true, project => inspectWindowsSecurity(path.join(project, '.env.local'), 'broaden'));
+  const manifest = await verifySnapshot(f.backup);
+  const security = manifest.windowsSecurity;
+  const saved = security.entries.find(entry => entry.path === '.env.local');
+  const descriptor = security.descriptors[saved.security];
+  assert.match(descriptor, /;;;WD\)/);
+  const original = await lstat(f.project);
+  await writeFile(path.join(f.project, 'obsolete-readonly'), 'obsolete');
+  await chmod(path.join(f.project, 'obsolete-readonly'), 0o400);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.equal((await restoreProjectSnapshot(f.options)).id, 'restore-point');
+    assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'saved data');
+    assert.equal(await readFile(path.join(f.project, '.next/BUILD_ID'), 'utf8'), 'saved build');
+    assert.equal(await readFile(path.join(f.project, 'node_modules/saved'), 'utf8'), 'saved dependency');
+    assert.equal(await readFile(path.join(f.project, 'logs/runtime.log'), 'utf8'), 'new log');
+    assert.equal(await readFile(path.join(f.project, '.git/HEAD'), 'utf8'), 'git metadata');
+    const observed = await inspectWindowsSecurity(path.join(f.project, '.env.local'));
+    assert.equal(observed.securityDescriptor, descriptor);
+    assert.equal(observed.attributes, saved.attributes);
+    for (const name of ['nodes.json', 'new-source', 'obsolete-readonly']) {
+      await assert.rejects(lstat(path.join(f.project, name)), { code: 'ENOENT' });
+    }
+    assert.equal((await lstat(f.project)).ino, original.ino);
+    assert.deepEqual(await verifySnapshot(f.backup), manifest);
+    assert.doesNotMatch((await inspectWindowsSecurity(path.join(f.backup, 'files/.env.local'))).securityDescriptor, /;;;WD\)/);
+    assert.deepEqual((await readdir(f.root)).sort(), ['app', 'backup']);
+  }
+});
 
 test('project mutation refuses a different backup from the one admitted before downtime', linux, async t => {
   const f = await fixture(t);
