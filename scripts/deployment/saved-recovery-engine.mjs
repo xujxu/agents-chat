@@ -28,6 +28,7 @@ const files = Object.freeze([...new Set([
   'snapshot-configuration.mjs',
   'git-metadata.mjs', 'snapshot-git.mjs', 'restore-git.mjs', 'git-objects.mjs', 'git-graph-metadata.mjs',
   'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-scope.mjs', 'snapshot-external.mjs', 'snapshot-rotation.mjs',
+  'windows-snapshot-security.mjs', 'windows-snapshot-security.ps1',
   'linux-readiness.mjs', 'linux-listener.mjs',
 ])]);
 const descriptor = (directory, manifestSha256) => Object.freeze({

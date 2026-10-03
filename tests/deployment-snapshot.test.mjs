@@ -10,6 +10,30 @@ import { fileDigest } from '../scripts/deployment/snapshot-files.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { validateWindowsSnapshotSecurity } from '../scripts/deployment/windows-snapshot-security.mjs';
+
+test('Windows snapshot security tables bind exact inventory, attributes and descriptor references', () => {
+  const inventory = [{ path: 'file', kind: 'file' }];
+  const value = {
+    version: 1, descriptors: ['O:SYG:SYD:P(A;;FA;;;SY)'],
+    root: { security: 0, attributes: 16 }, entries: [{ path: 'file', security: 0, attributes: 32 }],
+  };
+  assert.deepEqual(validateWindowsSnapshotSecurity(value, inventory), value);
+  for (const mutate of [
+    record => { record.version = 2; },
+    record => { record.root.attributes = 32; },
+    record => { record.entries[0].security = 1; },
+    record => { record.entries[0].path = 'other'; },
+    record => { record.entries[0].attributes = 1024; },
+    record => { record.entries[0].extra = true; },
+    record => { record.descriptors.push(record.descriptors[0]); },
+    record => { record.descriptors[0] = 'x'.repeat(8193); },
+  ]) {
+    const changed = structuredClone(value);
+    mutate(changed);
+    assert.throws(() => validateWindowsSnapshotSecurity(changed, inventory));
+  }
+});
 
 async function inspectSecurity(file, action = 'inspect') {
   const { stdout } = await promisify(execFile)('pwsh.exe', [
@@ -50,6 +74,35 @@ test('Windows snapshot saves source ACL metadata separately from private large-f
   await writeFile(file, 'new live bytes');
   assert.deepEqual(await readFile(copy), bytes);
   assert.deepEqual(await verifySnapshot(destination), manifest);
+  const manifestFile = path.join(destination, 'manifest.json');
+  const completeFile = path.join(destination, 'complete.json');
+  const completion = JSON.parse(await readFile(completeFile, 'utf8'));
+  for (const version of [1, 2]) {
+    const legacy = { ...manifest, version };
+    delete legacy.windowsSecurity;
+    if (version === 2) legacy.recoveryEngine = 'b'.repeat(64);
+    await writeFile(manifestFile, JSON.stringify(legacy));
+    await writeFile(completeFile, JSON.stringify({ ...completion, sha256: await fileDigest(manifestFile) }));
+    assert.equal((await verifySnapshot(destination)).version, version);
+  }
+});
+
+test('Windows snapshot refuses a non-private destination parent before copying', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const root = await temporaryDeployment(t);
+  const project = path.join(root, 'app');
+  const parent = path.join(root, 'backup-parent');
+  await mkdir(project);
+  await mkdir(parent);
+  await writeFile(path.join(project, '.env.local'), 'fixture-only');
+  await inspectSecurity(parent, 'broaden');
+  await assert.rejects(createSnapshot({
+    project, destination: path.join(parent, 'staging'), id: 'non-private', files: ['.env.local'],
+    source: { commit: 'a'.repeat(40), provenance: 'observed' },
+    runtime: { platform: process.platform, state: 'stopped' },
+  }), /security|private/i);
+  assert.deepEqual(await readdir(parent), []);
 });
 
 test('Windows snapshot refuses source ACL drift at the final authority boundary', {

@@ -17,6 +17,7 @@ import { syncWorkerDirectory } from './worker-files.mjs';
 import { projectSnapshotExclusions } from './snapshot-scope.mjs';
 import { captureSnapshotGit, readSnapshotGit, validateSnapshotGit } from './snapshot-git.mjs';
 import { prepareGitObjects, readGitObjectSnapshot, validateGitObjects } from './git-objects.mjs';
+import { inspectWindowsSnapshotSecurity, validateWindowsSnapshotSecurity } from './windows-snapshot-security.mjs';
 
 const projectMetadata = info => ({ mode: info.mode & 0o777, uid: info.uid, gid: info.gid });
 
@@ -30,15 +31,21 @@ export function estimateRequiredBytes({ snapshotBytes, metadataBytes, deployment
 }
 
 function validateManifest(manifest) {
-  if (![1, 2].includes(manifest?.version) || !/^[a-zA-Z0-9_-]+$/.test(manifest.id ?? '')
+  if (![1, 2, 3].includes(manifest?.version) || !/^[a-zA-Z0-9_-]+$/.test(manifest.id ?? '')
     || typeof manifest.project !== 'string' || !path.isAbsolute(manifest.project)
     || !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(manifest.source?.commit ?? '')
     || !['observed', 'verified'].includes(manifest.source?.provenance)
     || manifest.runtime?.state !== 'stopped' || !['linux', 'win32'].includes(manifest.runtime?.platform)
     || !Array.isArray(manifest.entries)) throw new Error('Invalid snapshot manifest.');
-  if (manifest.version === 2
-    ? typeof manifest.recoveryEngine !== 'string' || !/^[a-f0-9]{64}$/.test(manifest.recoveryEngine)
-    : Object.hasOwn(manifest, 'recoveryEngine')) throw new Error('Invalid snapshot recovery engine binding.');
+  if (manifest.version === 1 ? Object.hasOwn(manifest, 'recoveryEngine')
+    : (manifest.version === 2 || Object.hasOwn(manifest, 'recoveryEngine'))
+      && (typeof manifest.recoveryEngine !== 'string' || !/^[a-f0-9]{64}$/.test(manifest.recoveryEngine))) {
+    throw new Error('Invalid snapshot recovery engine binding.');
+  }
+  if (manifest.version === 3) {
+    if (manifest.runtime.platform !== 'win32') throw new Error('Snapshot security metadata requires Windows.');
+    validateWindowsSnapshotSecurity(manifest.windowsSecurity, manifest.entries);
+  } else if (Object.hasOwn(manifest, 'windowsSecurity')) throw new Error('Unexpected snapshot security metadata.');
   if (manifest.scope !== undefined && !['project', 'selected'].includes(manifest.scope)) {
     throw new Error('Invalid snapshot scope.');
   }
@@ -100,10 +107,30 @@ function validateManifest(manifest) {
   return manifest;
 }
 
-export async function createSnapshot({
+export async function createSnapshot(options) {
+  let security;
+  let failure;
+  try {
+    return await createSnapshotContents(options, async scope => {
+      security = await inspectWindowsSnapshotSecurity(scope);
+      return security;
+    });
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    try { await security?.close(); }
+    catch (cleanup) {
+      if (failure) throw new AggregateError([failure, cleanup], 'Snapshot capture and security observation cleanup failed.');
+      throw cleanup;
+    }
+  }
+}
+
+async function createSnapshotContents({
   project, destination, id, files, source, runtime, signal, absentPaths = [], excludedPaths = [],
   externalFiles = [], checkSource, projectScope = false, gitMetadata, recoveryEngine,
-}) {
+}, retainSecurity) {
   signal?.throwIfAborted();
   if (checkSource !== undefined && typeof checkSource !== 'function') throw new Error('Snapshot source check must be callable.');
   await checkSource?.();
@@ -135,9 +162,12 @@ export async function createSnapshot({
   excludedPaths = snapshotPathList(excludedPaths);
   await assertSnapshotAbsent(root, absentPaths);
   const entries = await captureSnapshotInventory(root, files, { signal, excludedPaths });
+  const security = process.platform === 'win32'
+    ? await retainSecurity({ project: root, destinationParent: parent, entries, signal }) : null;
   const manifest = {
-    version: recoveryEngine === undefined ? 1 : 2,
+    version: security ? 3 : recoveryEngine === undefined ? 1 : 2,
     ...(recoveryEngine === undefined ? {} : { recoveryEngine }),
+    ...(security ? { windowsSecurity: security.metadata } : {}),
     id, project: root, createdAt: new Date().toISOString(), source, runtime, absentPaths, excludedPaths,
     scope: projectScope ? 'project' : 'selected', projectMetadata: projectMetadata(rootInfo),
     externalFiles: external.entries,
@@ -213,6 +243,7 @@ export async function createSnapshot({
     }
   }
   await external.check();
+  await security?.check({ signal });
   await verifySnapshotContents(target, manifest, { signal, complete: false });
   const manifestDigest = createHash('sha256').update(serialized).digest('hex');
   if (manifestDigest !== await fileDigest(path.join(target, 'manifest.json'), { signal })) {
@@ -227,6 +258,7 @@ export async function createSnapshot({
   await syncWorkerDirectory(target);
   if (git) await gitMetadata.check();
   await objects?.check();
+  await security?.check({ signal });
   signal?.throwIfAborted();
   await writePrivateFile(path.join(target, 'complete.json'), JSON.stringify({
     version: 1, id, sha256: manifestDigest,

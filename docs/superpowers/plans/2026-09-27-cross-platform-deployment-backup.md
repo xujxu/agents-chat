@@ -11147,7 +11147,7 @@ refused until its actual permission application and native authority are wired.
 - Create `tests/deployment-windows-snapshot-security-fixture.ps1`: inspect
   actual owner/group/DACL and make fixture-only `.env.local` ACL changes.
 
-- [ ] **Step 1: demonstrate the missing snapshot ACL contract in Actions.**
+- [x] **Step 1: demonstrate the missing snapshot ACL contract in Actions.**
 
   ```javascript
   const manifest = await createSnapshot(options);
@@ -11164,6 +11164,12 @@ refused until its actual permission application and native authority are wired.
   source ACL at the existing final source-check boundary and requires refusal
   without a completion marker. Push test-only changes and retain the actual
   Windows failures before production implementation.
+
+  Causal `4ed475ba75d1af99b1162deb7bfbbb7ae4ec07f8 / 37097405356`,
+  Windows contracts `111130042436`, completed **2026-10-03 04:47:54 UTC**:
+  the first new case observed version 1 instead of version 3; the second
+  observed no rejection after the actual source ACL change. Both failures
+  reached their intended assertions, while the existing snapshot cases passed.
 
 - [ ] **Step 2: capture bounded, deduplicated native security metadata.**
 

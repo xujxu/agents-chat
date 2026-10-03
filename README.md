@@ -310,6 +310,12 @@ case-insensitive Windows dotenv/build precedence, and refuses ambiguous aliases
 without reporting secret values. Native ACL-change and source/build integration
 passed with all 34 lifecycle jobs (`4cf4e97`, Actions `37095933156`). This does
 not yet implement ACL restoration or broaden the private backup policy.
+Windows snapshot capture now includes deduplicated owner/group/DACL and
+ordinary file-attribute metadata in a version-3 manifest, with source ACL
+rechecks and a private destination requirement. This implementation is pending
+native acceptance. Existing Linux snapshot formats remain unchanged; saved
+recovery includes the new verification dependencies. Windows ACL application
+during restoration is still not implemented.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and
