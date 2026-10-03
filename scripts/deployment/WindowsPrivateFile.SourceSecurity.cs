@@ -225,10 +225,22 @@ namespace Deployment
 
         public static void RemoveSourceEntry(string project, string relative, string kind, string dev, string ino)
         {
+            RemoveSourceEntry(project, relative, kind, dev, ino, false);
+        }
+
+        public static void RemoveUnaliasedSourceFile(string project, string relative, string dev, string ino)
+        {
+            RemoveSourceEntry(project, relative, "file", dev, ino, true);
+        }
+
+        static void RemoveSourceEntry(string project, string relative, string kind, string dev, string ino, bool unaliased)
+        {
             using (var source = new SourceAccess(project, relative, kind, 0x10000, true))
             {
                 source.Match(dev, ino);
                 ValidateSourceSecurity(Descriptor(source.Target.Security()));
+                if (unaliased && source.Target.Information().Links != 1)
+                    throw new InvalidDataException("Mutable source file removal requires an unaliased file.");
                 // Do not clear attributes on an inode that may have another hard link.
                 uint disposition = 1 | 2 | 4 | 16;
                 Native(SetSourceDisposition(source.Target.handle, 21, ref disposition, 4), "Delete original restoration source");

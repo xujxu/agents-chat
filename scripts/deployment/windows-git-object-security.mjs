@@ -5,6 +5,7 @@ import { fileDigest } from './snapshot-files.mjs';
 import { openWindowsSourceSecurityController } from './windows-source-security-controller.mjs';
 import { inspectWindowsSnapshotSecurity, validateWindowsSnapshotSecurity } from './windows-snapshot-security.mjs';
 import { windowsRestoredSecurityMatches } from './windows-restore-security.mjs';
+import { isGitGraphMetadata } from './git-graph-metadata.mjs';
 
 const script = fileURLToPath(new URL('./windows-git-object-security.ps1', import.meta.url));
 const refused = cause => new Error('Windows Git object security restoration refused.', { cause });
@@ -30,7 +31,8 @@ export async function prepareWindowsGitObjectSecurity({
     attributes: metadata.entries[index].attributes,
   }));
   const savedNames = new Set(savedEntries.map(entry => entry.path));
-  const preserved = current.filter(entry => !savedNames.has(entry.path) && !entry.path.endsWith('.agents-chat-restore'));
+  const preserved = current.filter(entry => !savedNames.has(entry.path)
+    && !isGitGraphMetadata(entry.path) && !entry.path.endsWith('.agents-chat-restore'));
   try {
     const info = await lstat(path.join(project, 'info/packs'));
     if (!info.isFile() || info.isSymbolicLink()) throw new Error('Excluded Git pack listing is not an ordinary file.');
@@ -66,6 +68,10 @@ export async function prepareWindowsGitObjectSecurity({
       stagePolicy: entryCommand('stage-policy'),
       removeStage: entryCommand('remove-stage'),
       targetPolicy: entryCommand('target-policy'),
+      removeGraph: entryCommand('remove-graph'),
+      createGraph: entryCommand('create-graph'),
+      finishGraph: entryCommand('finish-graph'),
+      graphPolicy: entryCommand('graph-policy'),
       verify: async ({ signal: verifySignal = signal } = {}) => {
         await invoke('complete', [], verifySignal);
         await unchanged.check({ signal: verifySignal });

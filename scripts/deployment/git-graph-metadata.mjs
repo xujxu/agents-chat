@@ -23,7 +23,11 @@ async function observe(file) {
   return metadata(info);
 }
 
-export async function restoreGitGraphMetadata({ root, backup, entries, check, signal }) {
+export async function inspectGitGraphPointers(root) {
+  for (const name of names) await observe(path.join(root, name));
+}
+
+export async function restoreGitGraphMetadata({ root, backup, entries, check, signal, permissions }) {
   await check();
   const retained = [];
   for (const name of names) {
@@ -33,7 +37,7 @@ export async function restoreGitGraphMetadata({ root, backup, entries, check, si
     if (!entry && !current) continue;
     if (entry && entry.kind !== 'file') throw new Error('Saved Git graph metadata is not a file.');
     const parent = await realDirectory(path.dirname(file));
-    retained.push({ file, parent, parentIdentity: identity(await lstat(parent, { bigint: true })), entry, current });
+    retained.push({ name, file, parent, parentIdentity: identity(await lstat(parent, { bigint: true })), entry, current });
   }
   const checkParent = async item => {
     await check();
@@ -49,31 +53,48 @@ export async function restoreGitGraphMetadata({ root, backup, entries, check, si
     await checkParent(item);
     if (!same(await observe(item.file), item.current)) throw new Error('Git graph metadata changed before writing.');
     if (!item.entry) {
-      await unlink(item.file);
+      if (permissions) await permissions.removeGraph({ entry: { path: item.name }, signal });
+      else await unlink(item.file);
     } else {
       const entry = item.entry;
       const source = path.join(backup, 'git-objects/files', entry.path);
       if (await fileDigest(source, { signal }) !== entry.sha256) throw new Error('Saved Git graph metadata changed.');
+      if (permissions) {
+        if (item.current) await permissions.removeGraph({ entry, signal });
+        await permissions.createGraph({ entry, signal });
+      }
       const handle = await open(item.file, constants.O_RDWR | constants.O_NOFOLLOW
-        | (item.current ? 0 : constants.O_CREAT | constants.O_EXCL), 0o600);
+        | (permissions || item.current ? 0 : constants.O_CREAT | constants.O_EXCL), 0o600);
       const errors = [];
       try {
         const opened = await handle.stat({ bigint: true });
         if (!opened.isFile() || opened.nlink !== 1n
-          || item.current && !same(metadata(opened), item.current)) throw new Error('Git graph metadata changed while opening.');
-        await handle.chmod(0o600);
-        await handle.truncate(0);
+          || !permissions && item.current && !same(metadata(opened), item.current)) {
+          throw new Error('Git graph metadata changed while opening.');
+        }
+        if (!permissions) {
+          await handle.chmod(0o600);
+          await handle.truncate(0);
+        }
         // Only graph pointers are mutable; partial writes are retryable before activation.
         await handle.writeFile(createReadStream(source, { flags: constants.O_RDONLY | constants.O_NOFOLLOW, signal }), { signal });
         signal?.throwIfAborted();
-        await handle.chown(entry.uid, entry.gid);
-        await handle.chmod(entry.mode);
+        if (!permissions) {
+          await handle.chown(entry.uid, entry.gid);
+          await handle.chmod(entry.mode);
+        }
         await handle.sync();
         if (!same(identity(await lstat(item.file, { bigint: true })), identity(opened))) {
           throw new Error('Git graph metadata was replaced during restoration.');
         }
       } catch (error) { errors.push(error); }
       await closeWorkerFile(handle, errors);
+      if (permissions) {
+        await checkParent(item);
+        if (await fileDigest(item.file, { signal }) !== entry.sha256) throw new Error('Restored Git graph checksum differs.');
+        await permissions.finishGraph({ entry, signal });
+        await permissions.graphPolicy({ entry, signal });
+      }
     }
     await syncWorkerDirectory(item.parent);
   }
@@ -82,8 +103,8 @@ export async function restoreGitGraphMetadata({ root, backup, entries, check, si
     const actual = await observe(item.file);
     const entry = item.entry;
     if (entry ? !actual || actual.size !== BigInt(entry.bytes)
-      || actual.uid !== BigInt(entry.uid) || actual.gid !== BigInt(entry.gid)
-      || (actual.mode & 0o777n) !== BigInt(entry.mode)
+      || !permissions && (actual.uid !== BigInt(entry.uid) || actual.gid !== BigInt(entry.gid)
+        || (actual.mode & 0o777n) !== BigInt(entry.mode))
       || await fileDigest(item.file, { signal }) !== entry.sha256 : actual !== null) {
       throw new Error('Restored Git graph metadata differs from the saved layout.');
     }

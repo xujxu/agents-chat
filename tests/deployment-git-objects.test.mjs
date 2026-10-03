@@ -186,7 +186,8 @@ for (const [platform, boundary] of ['linux', 'win32'].flatMap(platform =>
   test(`${platform} Git graph metadata restoration handles ${boundary} pointer evidence`, {
     skip: process.platform !== platform || platform === 'linux' && process.getuid() !== 0,
   }, async t => {
-    const f = await fixture(t);
+    const privateGraphProbe = platform === 'win32' && boundary === 'partial';
+    const f = await fixture(t, { broad: privateGraphProbe });
     await f.git('commit-graph', 'write', '--reachable', '--split');
     const chain = path.join(f.project, '.git/objects/info/commit-graphs/commit-graph-chain');
     const original = await readFile(chain);
@@ -197,9 +198,21 @@ for (const [platform, boundary] of ['linux', 'win32'].flatMap(platform =>
       await chmod(chain, 0o600);
       await writeFile(chain, 'partial graph pointer');
     }
+    let observedPrivateGraph = false;
     const options = {
       project: f.project, backup: f.backup, manifest, acceptDataLoss: true, expectedSnapshot: manifest,
-      checkStopped: async () => ({ stopped: true, inhibited: true }),
+      checkStopped: async () => {
+        if (privateGraphProbe && !observedPrivateGraph) {
+          let current;
+          try { current = await readFile(chain); }
+          catch (error) { if (error.code !== 'ENOENT') throw error; }
+          if (current?.equals(original)) {
+            assert.doesNotMatch((await windowsSecurity(chain)).securityDescriptor, /;;;WD\)/);
+            observedPrivateGraph = true;
+          }
+        }
+        return { stopped: true, inhibited: true };
+      },
     };
     const restore = () => platform === 'win32' ? restoreGitObjects(options) : restoreProjectSnapshot(options);
     if (boundary === 'hardlink') {
@@ -210,6 +223,10 @@ for (const [platform, boundary] of ['linux', 'win32'].flatMap(platform =>
       await restore();
       assert.deepEqual(await readFile(chain), original);
       await f.git('commit-graph', 'verify');
+      if (privateGraphProbe) {
+        assert.equal(observedPrivateGraph, true);
+        assert.match((await windowsSecurity(chain)).securityDescriptor, /;;;WD\)/);
+      }
     }
     assert.deepEqual(await verifySnapshot(f.backup), manifest);
   });

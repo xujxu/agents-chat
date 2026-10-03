@@ -12,6 +12,8 @@ $stage = 'bootstrap'
 $saved = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 $current = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 $stages = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
+$graphs = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
+$graphNames = @('info/commit-graph', 'info/commit-graphs/commit-graph-chain')
 $policies = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
 $directories = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 $directoryLeases = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -21,8 +23,8 @@ function Read-EntryFields($Entry, [string[]]$Names) {
     $fields = Read-AgentsChatMaintenanceFields $Entry.GetRawText() $Names
     $path = $fields.path.GetString()
     if (-not $path -or $path.Length -gt 4096 -or $path -cnotmatch
-        '^(info(?:/commit-graphs)?|pack|[a-f0-9]{2}|(?:[a-f0-9]{2}/(?:[a-f0-9]{38}|[a-f0-9]{62})|pack/pack-(?:[a-f0-9]{40}|[a-f0-9]{64})\.(?:pack|idx|rev|bitmap)|info/commit-graphs/graph-(?:[a-f0-9]{40}|[a-f0-9]{64})\.graph)(?:\.agents-chat-restore)?)$') {
-        throw 'Unsupported immutable Git object restoration path.'
+        '^(info(?:/commit-graphs)?|info/commit-graph|info/commit-graphs/commit-graph-chain|pack|[a-f0-9]{2}|(?:[a-f0-9]{2}/(?:[a-f0-9]{38}|[a-f0-9]{62})|pack/pack-(?:[a-f0-9]{40}|[a-f0-9]{64})\.(?:pack|idx|rev|bitmap)|info/commit-graphs/graph-(?:[a-f0-9]{40}|[a-f0-9]{64})\.graph)(?:\.agents-chat-restore)?)$') {
+        throw 'Unsupported Git object restoration path.'
     }
     return $fields
 }
@@ -40,6 +42,22 @@ function Get-Stage([string]$Path) {
         $stages.Add($Path, @{ Metadata=$current[$name]; Lease=$null; Finished=$true; Policy=$false; Removed=$false })
     }
     return $stages[$Path]
+}
+function Retain-Directory([string]$Path, $Metadata) {
+    $guard = [Deployment.WindowsPrivateFile]::OpenSourceDirectory(
+        [IO.Path]::Combine($Project, $Path.Replace('/', '\')))
+    $directoryLeases.Add($Path, $guard)
+    $identityAfter = $guard.CaptureIdentity()
+    if ($identityAfter.Dev -cne $Metadata.Dev -or $identityAfter.Ino -cne $Metadata.Ino) {
+        throw 'Git directory identity changed before retention.'
+    }
+}
+function Get-Graph([string]$Path) {
+    if ($Path -cnotin $graphNames) { throw 'Unknown mutable Git graph pointer.' }
+    if (-not $graphs.ContainsKey($Path)) {
+        $graphs.Add($Path, @{ Metadata=$null; Lease=$null; Removed=$false; Finished=$false; Restored=$false })
+    }
+    return $graphs[$Path]
 }
 try {
     if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7) { throw 'Unsupported Git object security restoration.' }
@@ -73,7 +91,8 @@ try {
         $method = $request.method.GetString()
         if ($id -ne $sequence + 1 -or $method -cnotin @(
                 'admit-saved', 'admit-current', 'seal', 'directory', 'create-stage', 'finish-stage',
-                'stage-policy', 'remove-stage', 'target-policy', 'complete', 'check', 'close') -or
+                'stage-policy', 'remove-stage', 'target-policy', 'remove-graph', 'create-graph',
+                'finish-graph', 'graph-policy', 'complete', 'check', 'close') -or
             $request.entries.ValueKind -ne [Text.Json.JsonValueKind]::Array -or $request.entries.GetArrayLength() -gt 8 -or
             [Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
             throw 'Original Git object restoration request differs.'
@@ -130,6 +149,11 @@ try {
                 if ($phase -cne 'admitting') { throw 'Git object restoration was already admitted.' }
                 $directoryCount = @($saved.Values | Where-Object { $_.Kind -ceq 'directory' }).Count
                 $fileCount = $saved.Count - $directoryCount
+                foreach ($path in $current.Keys) {
+                    if ($current[$path].Kind -ceq 'directory' -and -not $saved.ContainsKey($path)) {
+                        Retain-Directory $path $current[$path]
+                    }
+                }
                 $phase = 'restoring'
             }
             'directory' {
@@ -149,18 +173,13 @@ try {
                 }
                 [Deployment.WindowsPrivateFile]::RestoreSourceSecurity(
                     $Project, $path, 'directory', $metadata.Dev, $metadata.Ino, $entry.Security, $entry.Attributes)
-                $guard = [Deployment.WindowsPrivateFile]::OpenSourceDirectory((Join-Path $Project $path))
-                $directoryLeases.Add($path, $guard)
-                $identityAfter = $guard.CaptureIdentity()
-                if ($identityAfter.Dev -cne $metadata.Dev -or $identityAfter.Ino -cne $metadata.Ino) {
-                    throw 'Restored Git directory identity changed before retention.'
-                }
+                Retain-Directory $path $metadata
                 [void]$directories.Add($path)
             }
             { $_ -cin @('create-stage', 'finish-stage', 'stage-policy', 'remove-stage', 'target-policy') } {
                 $fields = Read-EntryFields $entries[0] @('path')
                 $path = $fields.path.GetString()
-                if ($directories.Count -ne $directoryCount -or -not $saved.ContainsKey($path) -or
+                if ($path -cin $graphNames -or $directories.Count -ne $directoryCount -or -not $saved.ContainsKey($path) -or
                     $saved[$path].Kind -cne 'file' -or $restored.Contains($path)) { throw 'Git file restoration is not admitted.' }
                 $entry = $saved[$path]
                 $name = $path + $suffix
@@ -213,9 +232,61 @@ try {
                     }
                 }
             }
+            { $_ -cin @('remove-graph', 'create-graph', 'finish-graph', 'graph-policy') } {
+                $fields = Read-EntryFields $entries[0] @('path')
+                $path = $fields.path.GetString()
+                if ($directories.Count -ne $directoryCount -or
+                    (-not $saved.ContainsKey($path) -and -not $current.ContainsKey($path))) {
+                    throw 'Git graph restoration is not admitted.'
+                }
+                $item = Get-Graph $path
+                if ($item.Restored) { throw 'Git graph restoration is already complete.' }
+                if ($method -cne 'remove-graph' -and
+                    (-not $saved.ContainsKey($path) -or $saved[$path].Kind -cne 'file')) {
+                    throw 'Saved Git graph pointer is not admitted.'
+                }
+                switch ($method) {
+                    'remove-graph' {
+                        if (-not $current.ContainsKey($path) -or $current[$path].Kind -cne 'file' -or
+                            $item.Removed -or $item.Lease -or $item.Finished) { throw 'Graph removal is not originally admitted.' }
+                        $original = $current[$path]
+                        [Deployment.WindowsPrivateFile]::RemoveUnaliasedSourceFile(
+                            $Project, $path, $original.Dev, $original.Ino)
+                        $item.Removed = $true
+                        if (-not $saved.ContainsKey($path)) { $item.Restored = $true }
+                    }
+                    'create-graph' {
+                        if (($current.ContainsKey($path) -and -not $item.Removed) -or
+                            $item.Metadata -or $item.Lease -or $item.Finished) { throw 'Private graph creation is not ready.' }
+                        $item.Lease = [Deployment.WindowsPrivateFile]::CreateSourceFile($Project, $path)
+                        $item.Metadata = $item.Lease.CaptureIdentity()
+                    }
+                    'finish-graph' {
+                        if (-not $item.Lease -or $item.Finished) { throw 'Private graph completion is not ready.' }
+                        $item.Metadata = $item.Lease.Finish($saved[$path].Bytes)
+                        $item.Lease.Dispose()
+                        $item.Lease = $null
+                        $item.Finished = $true
+                    }
+                    'graph-policy' {
+                        if (-not $item.Finished) { throw 'Graph policy requires completed private bytes.' }
+                        $entry = $saved[$path]
+                        [Deployment.WindowsPrivateFile]::RestoreSourceSecurity(
+                            $Project, $path, 'file', $item.Metadata.Dev, $item.Metadata.Ino, $entry.Security, $entry.Attributes)
+                        $item.Restored = $true
+                        [void]$restored.Add($path)
+                    }
+                }
+            }
             'complete' {
                 if ($phase -cne 'restoring' -or $directories.Count -ne $directoryCount -or $restored.Count -ne $fileCount) {
                     throw 'Git object security restoration is incomplete.'
+                }
+                foreach ($path in $graphNames) {
+                    if ($current.ContainsKey($path) -and -not $saved.ContainsKey($path) -and
+                        (-not $graphs.ContainsKey($path) -or -not $graphs[$path].Restored)) {
+                        throw 'Current-only Git graph removal is incomplete.'
+                    }
                 }
                 $phase = 'complete'
             }
@@ -236,6 +307,7 @@ try {
     }
 } finally {
     foreach ($resource in (@($stages.Values | ForEach-Object { $_.Lease }) +
+        @($graphs.Values | ForEach-Object { $_.Lease }) +
         @($directoryLeases.Values) + @($backupLease, $root, $watch))) {
         if ($null -eq $resource) { continue }
         try { $resource.Dispose() }

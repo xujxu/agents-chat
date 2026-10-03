@@ -7,7 +7,7 @@ import { createSnapshot, verifySnapshot } from './snapshot.mjs';
 import { fileDigest, inventorySnapshot, readSnapshotJson, realDirectory } from './snapshot-files.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { syncWorkerDirectory } from './worker-files.mjs';
-import { isGitGraphMetadata, restoreGitGraphMetadata } from './git-graph-metadata.mjs';
+import { inspectGitGraphPointers, isGitGraphMetadata, restoreGitGraphMetadata } from './git-graph-metadata.mjs';
 import { prepareWindowsGitObjectSecurity } from './windows-git-object-security.mjs';
 
 const identity = info => ({ dev: String(info.dev), ino: String(info.ino) });
@@ -142,9 +142,7 @@ async function restoreObjects({ project, backup, manifest, checkStopped, signal,
   validateEntries(current, manifest.source.commit,
     new Set(saved.entries.filter(entry => entry.kind === 'file').map(entry => entry.path)));
   if (process.platform === 'win32') {
-    if ([...saved.entries, ...current].some(entry => isGitGraphMetadata(entry.path))) {
-      throw new Error('Windows mutable Git graph metadata requires its native restoration adapter.');
-    }
+    await inspectGitGraphPointers(root);
     resources.permissions = await prepareWindowsGitObjectSecurity({
       project: root, backup: path.join(backup, 'git-objects'), manifest: saved, current, signal,
     });
@@ -222,8 +220,8 @@ async function restoreObjects({ project, backup, manifest, checkStopped, signal,
     if (!await matches(target, entry)) throw new Error('Restored Git object disappeared.');
     if (permissions) await permissions.targetPolicy({ entry, signal });
   }
+  await restoreGitGraphMetadata({ root, backup, entries: saved.entries, check, signal, permissions });
   if (permissions) await permissions.verify({ signal });
-  else await restoreGitGraphMetadata({ root, backup, entries: saved.entries, check, signal });
   await check();
   for (const entry of saved.entries.filter(entry => entry.kind === 'file')) {
     await realDirectory(path.dirname(path.join(root, entry.path)));

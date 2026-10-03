@@ -11634,6 +11634,21 @@ removal and source metadata only; it must not become a second byte copier.
 
 ### Task 5AY: native Windows mutable Git graph pointers
 
+Implementation is ready for Actions, not accepted. Test-only causal commit
+`9967802`, explicitly dispatched as `37107381884 / 111158471821`,
+completed **2026-10-03 07:47:15 UTC** with the seven new Windows graph cases
+failing the existing mutable-graph refusal. The other 21 active tests passed;
+16 platform skips remained. No automatic full run was scheduled for that
+test-only commit. Both existing immutable-object full runs remain retained.
+
+The implementation adds original-identity, nlink-one native graph deletion,
+private creation/finish/policy transitions and complete current-only removal
+accounting to the existing Git security scope. The original writable-handle
+copier is shared; checksum verification happens before private bytes gain their
+saved source policy. Current-only directories now also retain identity/policy
+leases, while mutable pointer files are excluded from unchanged-extra witnesses.
+No HEAD/index/ref or public project restore guard is removed.
+
 **Goal:** Recover the saved single/split/absent commit-graph layout on Windows,
 while retaining newer immutable objects and leaving HEAD/worktree untouched.
 Reuse `git-graph-metadata.mjs` for byte writes and validation. A stopped runtime
@@ -11664,7 +11679,7 @@ known mutable paths.
 - Update README and this acceptance record. No new runtime files are needed;
   all changed helpers are already in the saved recovery closure.
 
-- [ ] **Step 1: publish causal layout and interruption coverage.**
+- [x] **Step 1: publish causal layout and interruption coverage.**
 
   Parameterize existing Linux graph fixtures with
   `platform` in `['linux', 'win32']`. Skip Linux root-only graph tests when
@@ -11704,6 +11719,9 @@ known mutable paths.
   Actions run. Preserve the already running/pending implementation full runs.
   The production implementation commit must trigger a complete lifecycle run;
   do not claim final acceptance from a focused run or a skipped automatic run.
+  The workflow may automatically replace an unstarted pending full run with
+  the newest production full run; record that cancellation rather than count
+  it as acceptance. The newest complete run must cover all preceding changes.
 
 - [ ] **Step 2: preflight graph pointers before immutable mutation.**
 
