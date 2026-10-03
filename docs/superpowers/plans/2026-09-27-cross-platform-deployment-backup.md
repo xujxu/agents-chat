@@ -12567,6 +12567,16 @@ project final comparisons. Keep all native policy verification and snapshot
 codec validation. Extend the existing cross-platform codec case to prove
 version-1, native version-2 and saved-absent records preserve identical logical
 source fields without changing their policy envelopes.
+Projection fix `f8e3d6e / 37121444943`, job `111198194293`,
+completed **2026-10-03 12:06:56 UTC**: 97 tests, 79 passed, 2 failed,
+16 skips, no cancellations. Both production restore calls now return; failures
+are the fixture's index-byte assertion after its own Git diagnostic commands.
+Git v2.55.0 `builtin/diff.c:237-249,525,645-646` refreshes the index via
+`diff.autoRefreshIndex`/`skip_stat_unmatch`; the prior `--no-optional-locks`
+alone did not keep this fixture observational. Disable that refresh explicitly
+and assert original index bytes immediately after each restoration stage and
+each diagnostic command. Do not weaken exact index or policy assertions.
+Reference: https://github.com/git/git/blob/v2.55.0/builtin/diff.c .
 
 **Goal:** Verify the existing restoration primitives together before allowing
 Git/external-bearing Windows manifests into the complete-project helper.

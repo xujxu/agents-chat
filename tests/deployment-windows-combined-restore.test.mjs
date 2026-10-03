@@ -48,6 +48,7 @@ async function fixture(t) {
     runtime: { platform: 'win32', state: 'stopped' },
   });
   const original = await lstat(f.project, { bigint: true });
+  const savedIndex = await readFile(index);
   await chmod(app, 0o600);
   await chmod(index, 0o600);
   await writeFile(app, 'updated\n');
@@ -63,7 +64,7 @@ async function fixture(t) {
   await chmod(external, 0o600);
   await writeFile(external, 'updated external\n');
   await writeFile(absent, 'later external\n');
-  return { ...f, app, index, backup, manifest, original, payload, external, absent, newer, options: {
+  return { ...f, app, index, savedIndex, backup, manifest, original, payload, external, absent, newer, options: {
     project: f.project, backup, expectedSnapshot: manifest, acceptDataLoss: true,
     checkStopped: async () => ({ stopped: true, inhibited: true }),
   } };
@@ -71,22 +72,29 @@ async function fixture(t) {
 
 async function restore(f) {
   assert.deepEqual(await restoreProjectSnapshot(f.options), f.manifest);
+  assert.deepEqual(await readFile(f.index), f.savedIndex, 'Project restoration changed the saved index.');
   assert.equal(await readFile(f.external, 'utf8'), 'updated external\n');
   assert.deepEqual(await restoreExternalSnapshot({
     ...f.options, authorizedPaths: [f.external, f.absent],
   }), f.manifest);
+  assert.deepEqual(await readFile(f.index), f.savedIndex, 'External restoration changed the saved index.');
 }
 
 async function verify(f) {
+  const readGit = async (...args) => {
+    const output = await git(f.project, '--no-optional-locks', '-c', 'diff.autoRefreshIndex=false', ...args);
+    assert.deepEqual(await readFile(f.index), f.savedIndex, `Git verification changed the saved index: ${args[0]}`);
+    return output;
+  };
   for (const [name, bytes] of Object.entries(f.payload)) assert.equal(await readFile(path.join(f.project, name), 'utf8'), bytes);
   assert.equal(await readFile(path.join(f.project, 'logs/runtime.log'), 'utf8'), 'retained later log\n');
   await assert.rejects(lstat(path.join(f.project, 'obsolete-readonly')), { code: 'ENOENT' });
   assert.equal(await readFile(f.external, 'utf8'), 'TOKEN=external-fixture-only\n');
   await assert.rejects(lstat(f.absent), { code: 'ENOENT' });
-  assert.equal(await git(f.project, 'rev-parse', 'HEAD'), f.commit);
-  assert.equal(await git(f.project, 'rev-parse', 'retained-newer'), f.newer);
-  assert.equal(await git(f.project, '--no-optional-locks', 'diff', '--exit-code'), '');
-  await git(f.project, 'fsck', '--no-dangling');
+  assert.equal(await readGit('rev-parse', 'HEAD'), f.commit);
+  assert.equal(await readGit('rev-parse', 'retained-newer'), f.newer);
+  assert.equal(await readGit('diff', '--exit-code'), '');
+  await readGit('fsck', '--no-dangling');
   const original = await lstat(f.project, { bigint: true });
   assert.equal(original.dev, f.original.dev);
   assert.equal(original.ino, f.original.ino);
