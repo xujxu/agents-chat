@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $acl = Get-Acl -LiteralPath $File
 if ($Action -ceq 'broaden') {
-    if ([IO.Path]::GetFileName($File) -cnotin @('.env.local', 'backup-parent')) { throw 'Unsupported fixture mutation.' }
+    if ([IO.Path]::GetFileName($File) -cnotin @('.env.local', 'backup-parent', 'app')) { throw 'Unsupported fixture mutation.' }
     $rule = [Security.AccessControl.FileSystemAccessRule]::new(
         [Security.Principal.SecurityIdentifier]::new('S-1-1-0'),
         [Security.AccessControl.FileSystemRights]::Read,

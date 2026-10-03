@@ -314,8 +314,13 @@ Windows snapshot capture now includes deduplicated owner/group/DACL and
 ordinary file-attribute metadata in a version-3 manifest, with source ACL
 rechecks and a private destination requirement. Native cases and all 34 lifecycle
 jobs passed (`188ab55`, Actions `37098213362`). Existing Linux snapshot formats remain unchanged; saved
-recovery includes the new verification dependencies. Windows ACL application
-during restoration is still not implemented.
+recovery includes the new verification dependencies. Windows project payload
+restoration now uses private creation before copying, identity-bound deletion
+including read-only files, and standard handle-based owner/group/DACL and
+attribute restoration. It requires version-3 metadata and unchanged root policy;
+legacy, cross-account, Git-bearing and external-runtime snapshots refuse before
+project mutation. This implementation is awaiting Windows Actions acceptance;
+Git/runtime restoration and full Windows application acceptance remain separate.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

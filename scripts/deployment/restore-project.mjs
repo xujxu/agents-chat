@@ -11,6 +11,7 @@ import { readSnapshotGit } from './snapshot-git.mjs';
 import { restoreGitMetadata } from './restore-git.mjs';
 import { inspectGitMetadata } from './git-metadata.mjs';
 import { restoreGitObjects } from './git-objects.mjs';
+import { prepareWindowsProjectRestoreSecurity } from './windows-restore-security.mjs';
 
 const inside = (parent, child) => child === parent || child.startsWith(parent + path.sep);
 const depth = entry => entry.path.split('/').length;
@@ -20,9 +21,28 @@ const metadata = entry => {
 };
 const byPath = entries => [...entries].sort((a, b) => a.path.localeCompare(b.path));
 
-export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, checkStopped, signal, expectedSnapshot }) {
+export async function restoreProjectSnapshot(options) {
+  let security;
+  let result;
+  const errors = [];
+  try {
+    result = await restoreProject(options, async scope => {
+      security = await prepareWindowsProjectRestoreSecurity(scope);
+      return security;
+    });
+  } catch (error) { errors.push(error); }
+  if (security) {
+    try { await security.close(); } catch (error) { errors.push(error); }
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length) throw new AggregateError(errors, 'Project restoration and native security cleanup failed.');
+  return result;
+}
+
+async function restoreProject({ project, backup, acceptDataLoss, checkStopped, signal, expectedSnapshot }, prepareSecurity) {
   signal?.throwIfAborted();
-  if (process.platform !== 'linux') throw new Error('Project restoration requires Linux metadata; Windows requires native ACL restoration.');
+  const windows = process.platform === 'win32';
+  if (!windows && process.platform !== 'linux') throw new Error('Unsupported project restoration platform.');
   if (acceptDataLoss !== true || typeof checkStopped !== 'function') {
     throw new Error('Project restore requires data-loss acknowledgement and stopped runtime authority.');
   }
@@ -32,15 +52,16 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
   if (inside(root, saved) || inside(saved, root)) throw new Error('Restore backup must be outside the project.');
   const manifest = await verifySnapshot(saved, { signal });
   if (expectedSnapshot !== undefined && !same(manifest, expectedSnapshot)) throw new Error('Admitted project restore backup changed.');
-  if (manifest.project !== root || manifest.runtime.platform !== 'linux') throw new Error('Restore backup project owner or platform differs.');
+  if (manifest.project !== root || manifest.runtime.platform !== process.platform) throw new Error('Restore backup project owner or platform differs.');
   if (manifest.scope !== 'project' || !manifest.projectMetadata
     || !same(manifest.excludedPaths, projectSnapshotExclusions)) {
     throw new Error('Restoration requires a complete-project snapshot scope.');
   }
-  if (process.getuid() !== 0 && [manifest.projectMetadata, ...manifest.entries].some(entry =>
+  if (!windows && process.getuid() !== 0 && [manifest.projectMetadata, ...manifest.entries].some(entry =>
     entry.uid !== process.getuid() || ![process.getgid(), ...process.getgroups()].includes(entry.gid))) {
     throw new Error('Saved ownership requires root privileges for project restoration.');
   }
+  let security;
   const check = async () => {
     signal?.throwIfAborted();
     const current = await lstat(await realDirectory(project));
@@ -49,6 +70,7 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
     if (authority?.stopped !== true || authority.inhibited !== true) {
       throw new Error('Project restoration requires a stopped and inhibited managed runtime.');
     }
+    await security?.checkRoot({ signal });
     signal?.throwIfAborted();
   };
   await check();
@@ -56,6 +78,7 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
   const names = await includedNames();
   // Inspect caches too: deletion must not traverse hidden mounts or nested worktrees.
   const current = names.length ? await inventorySnapshot(root, names, { signal }) : [];
+  if (windows) security = await prepareSecurity({ project: root, backup: saved, manifest, current, signal });
   const bytes = manifest.entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), manifest.gitObjects?.bytes ?? 0);
   if (!Number.isSafeInteger(bytes)) throw new Error('Restore capacity exceeds safe byte range.');
   const capacity = await statfs(root, { bigint: true });
@@ -74,11 +97,15 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
       return { stopped: true, inhibited: true };
     }, signal });
   }
-  await chmod(root, (original.mode & 0o777) | 0o700);
-  for (const entry of current.filter(entry => entry.kind === 'directory').sort((a, b) => depth(a) - depth(b))) {
-    signal?.throwIfAborted();
-    const directory = await realDirectory(path.join(root, entry.path));
-    await chmod(directory, entry.mode | 0o700);
+  if (security) {
+    await security.prepareRemoval({ signal });
+  } else {
+    await chmod(root, (original.mode & 0o777) | 0o700);
+    for (const entry of current.filter(entry => entry.kind === 'directory').sort((a, b) => depth(a) - depth(b))) {
+      signal?.throwIfAborted();
+      const directory = await realDirectory(path.join(root, entry.path));
+      await chmod(directory, entry.mode | 0o700);
+    }
   }
   const remove = async entry => {
     signal?.throwIfAborted();
@@ -87,6 +114,7 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
     const info = await lstat(file);
     const kind = info.isSymbolicLink() ? 'link' : info.isDirectory() ? 'directory' : info.isFile() ? 'file' : 'unsupported';
     if (kind !== entry.kind || info.dev !== original.dev) throw new Error('Restore removal path changed type or filesystem.');
+    if (security) return security.remove({ entry, signal });
     if (kind === 'directory') await rmdir(file);
     else await unlink(file);
   };
@@ -112,7 +140,8 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
   for (const entry of directories) {
     signal?.throwIfAborted();
     await realDirectory(path.dirname(path.join(root, entry.path)));
-    await mkdir(path.join(root, entry.path), { mode: 0o700 });
+    if (security) await security.createDirectory({ entry, signal });
+    else await mkdir(path.join(root, entry.path), { mode: 0o700 });
   }
   for (const entry of manifest.entries.filter(entry => entry.kind === 'file')) {
     await checkGroup(entry);
@@ -120,13 +149,18 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
     const target = path.join(root, entry.path);
     await realDirectory(path.dirname(source));
     await realDirectory(path.dirname(target));
+    if (security) await security.createFile({ entry, signal });
     await pipeline(
       createReadStream(source, { flags: constants.O_RDONLY | constants.O_NOFOLLOW }),
-      createWriteStream(target, { flags: 'wx', mode: 0o600, flush: true }), { signal },
+      createWriteStream(target, { flags: security ? 'r+' : 'wx', mode: 0o600, flush: true }), { signal },
     );
     if (await fileDigest(target, { signal }) !== entry.sha256) throw new Error('Restored project checksum integrity failure.');
-    await chown(target, entry.uid, entry.gid);
-    await chmod(target, entry.mode);
+    if (security) {
+      await security.finishFile({ entry, signal });
+    } else {
+      await chown(target, entry.uid, entry.gid);
+      await chmod(target, entry.mode);
+    }
     const handle = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
     const errors = [];
     try { await handle.sync(); }
@@ -163,15 +197,20 @@ export async function restoreProjectSnapshot({ project, backup, acceptDataLoss, 
     if (deferred.length === pendingLinks.length) throw new Error('Restored links have missing or circular targets.');
     pendingLinks = deferred;
   }
-  for (const entry of [...directories].reverse()) {
-    signal?.throwIfAborted();
-    const directory = path.join(root, entry.path);
-    await chown(directory, entry.uid, entry.gid);
-    await chmod(directory, entry.mode);
-    await syncWorkerDirectory(directory);
+  if (security) {
+    await check();
+    await security.restore({ signal });
+  } else {
+    for (const entry of [...directories].reverse()) {
+      signal?.throwIfAborted();
+      const directory = path.join(root, entry.path);
+      await chown(directory, entry.uid, entry.gid);
+      await chmod(directory, entry.mode);
+      await syncWorkerDirectory(directory);
+    }
+    await chown(root, manifest.projectMetadata.uid, manifest.projectMetadata.gid);
+    await chmod(root, manifest.projectMetadata.mode);
   }
-  await chown(root, manifest.projectMetadata.uid, manifest.projectMetadata.gid);
-  await chmod(root, manifest.projectMetadata.mode);
   await syncWorkerDirectory(root);
   await check();
   await assertSnapshotAbsent(root, manifest.absentPaths);

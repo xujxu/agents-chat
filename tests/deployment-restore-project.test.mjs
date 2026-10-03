@@ -7,6 +7,7 @@ import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectSnapshotScope } from '../scripts/deployment/snapshot-scope.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { restoreProjectSnapshot } from '../scripts/deployment/restore-project.mjs';
+import { fileDigest } from '../scripts/deployment/snapshot-files.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -49,6 +50,7 @@ async function fixture(t, full = true, beforeSnapshot) {
 }
 
 const linux = { skip: process.platform !== 'linux' };
+const supported = { skip: !['linux', 'win32'].includes(process.platform) };
 
 async function inspectWindowsSecurity(file, action = 'inspect') {
   const { stdout } = await promisify(execFile)('pwsh.exe', [
@@ -91,7 +93,34 @@ test('Windows project payload restore applies original ACLs, removes read-only o
   }
 });
 
-test('project mutation refuses a different backup from the one admitted before downtime', linux, async t => {
+test('Windows root policy drift refuses before deleting current data', { skip: process.platform !== 'win32' }, async t => {
+  const f = await fixture(t);
+  await inspectWindowsSecurity(f.project, 'broaden');
+  await assert.rejects(restoreProjectSnapshot(f.options), error =>
+    /root security policy|root.*attributes/i.test(error.cause?.message ?? error.message));
+  assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'post-backup data');
+  assert.equal(await readFile(path.join(f.project, 'new-source'), 'utf8'), 'new source');
+});
+
+test('Windows unsupported saved ownership refuses before deleting current data', { skip: process.platform !== 'win32' }, async t => {
+  const f = await fixture(t);
+  const manifestFile = path.join(f.backup, 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestFile, 'utf8'));
+  const descriptor = manifest.windowsSecurity.descriptors[manifest.windowsSecurity.entries[0].security];
+  const foreign = descriptor.replace(/^O:.*?G:/, 'O:S-1-5-21-101-102-103-1001G:');
+  assert.notEqual(foreign, descriptor);
+  manifest.windowsSecurity.entries[0].security = manifest.windowsSecurity.descriptors.length;
+  manifest.windowsSecurity.descriptors.push(foreign);
+  await writeFile(manifestFile, JSON.stringify(manifest));
+  const completeFile = path.join(f.backup, 'complete.json');
+  const complete = JSON.parse(await readFile(completeFile, 'utf8'));
+  complete.sha256 = await fileDigest(manifestFile);
+  await writeFile(completeFile, JSON.stringify(complete));
+  await assert.rejects(restoreProjectSnapshot(f.options), error => /same-account ownership/i.test(error.diagnostic));
+  assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'post-backup data');
+});
+
+test('project mutation refuses a different backup from the one admitted before downtime', supported, async t => {
   const f = await fixture(t);
   const expectedSnapshot = await verifySnapshot(f.backup);
   expectedSnapshot.source.commit = 'b'.repeat(40);
@@ -124,7 +153,7 @@ test('project restore replaces source/data/artifacts directly, preserves backup 
   }
 });
 
-test('restore refusal without acknowledgement, stopped authority or full scope never changes live data', linux, async t => {
+test('restore refusal without acknowledgement, stopped authority or full scope never changes live data', supported, async t => {
   const f = await fixture(t);
   for (const overrides of [
     { acceptDataLoss: false }, { checkStopped: undefined },
@@ -139,7 +168,7 @@ test('restore refusal without acknowledgement, stopped authority or full scope n
   assert.equal(await readFile(path.join(partial.project, '.data/chats.db'), 'utf8'), 'post-backup data');
 });
 
-test('corrupt backup and foreign project refuse before any deletion', linux, async t => {
+test('corrupt backup and foreign project refuse before any deletion', supported, async t => {
   const f = await fixture(t);
   const foreign = path.join(f.root, 'foreign');
   await mkdir(foreign);
@@ -159,7 +188,7 @@ test('links out of the current installation refuse without touching the outside 
   assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'post-backup data');
 });
 
-test('lost stopped authority leaves the authoritative backup intact for retry', linux, async t => {
+test('lost stopped authority leaves the authoritative backup intact for retry', supported, async t => {
   const f = await fixture(t);
   let checks = 0;
   await assert.rejects(restoreProjectSnapshot({ ...f.options, checkStopped: async () => {
@@ -171,7 +200,7 @@ test('lost stopped authority leaves the authoritative backup intact for retry', 
   assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'saved data');
 });
 
-test('cancelled project restoration leaves the backup unchanged and can be retried', linux, async t => {
+test('cancelled project restoration leaves the backup unchanged and can be retried', supported, async t => {
   const f = await fixture(t);
   const controller = new AbortController();
   let checks = 0;
@@ -211,10 +240,18 @@ test('interruption after creating any restored link never leaves a dangling link
   assert.equal((await verifySnapshot(f.backup)).id, 'restore-point');
 });
 
-test('Windows project restoration refuses until a native ACL adapter is supplied', {
+test('Windows project restoration refuses legacy snapshots without native ACL metadata before mutation', {
   skip: process.platform !== 'win32',
 }, async t => {
   const f = await fixture(t);
-  await assert.rejects(restoreProjectSnapshot(f.options), /Linux|Windows|ACL/i);
+  const manifestFile = path.join(f.backup, 'manifest.json');
+  const completeFile = path.join(f.backup, 'complete.json');
+  const manifest = await verifySnapshot(f.backup);
+  const complete = JSON.parse(await readFile(completeFile, 'utf8'));
+  manifest.version = 1;
+  delete manifest.windowsSecurity;
+  await writeFile(manifestFile, JSON.stringify(manifest));
+  await writeFile(completeFile, JSON.stringify({ ...complete, sha256: await fileDigest(manifestFile) }));
+  await assert.rejects(restoreProjectSnapshot(f.options), /Windows|ACL|security|version/i);
   assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'post-backup data');
 });

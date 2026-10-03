@@ -11224,6 +11224,15 @@ refused until its actual permission application and native authority are wired.
 
 ### Task 5AW: same-account Windows project payload restoration
 
+Implementation is wired and awaiting Actions acceptance: dedicated native
+security partial/controller, bounded eight-entry admission and policy batches,
+strict JS adapter, shared project copier integration and complete saved-engine
+dependency closure. The private file creation lease remains open while Node
+streams through `r+`; source SDDL is applied only after private writes finish.
+Added actual root-policy drift and unsupported saved ownership refusal cases,
+and enabled the existing backup/stopped-authority/cancellation cases on Windows.
+Do not mark this task accepted until native Windows and all lifecycle jobs pass.
+
 Apply the accepted version-3 metadata to real restored files, using standard
 Windows handle-based security/attribute APIs. Reuse the existing project byte
 restorer, backup checks, explicit data-loss acknowledgement and stopped/inhibited
@@ -11232,6 +11241,20 @@ policy. A differing root ACL/owner/attributes, unsupported ownership or a legacy
 Windows snapshot must refuse before deletion. Git-aware and external runtime
 configuration restoration remain explicit subsequent integration, not silently
 skipped prerequisites for a complete Windows application restore.
+
+**Native API constraints verified against Microsoft documentation:**
+- [SetSecurityInfo](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-setsecurityinfo)
+  accepts the checked file handle and is the recommended filesystem API.
+  Do not use `SetKernelObjectSecurity` for filesystem security.
+- Directory ACL writes can propagate to children. Open mutation targets
+  exclusively to suppress that implicit propagation; restore every admitted
+  entry explicitly, directories top-down before files, and verify the final
+  whole inventory. Never allow a directory policy write to act as an
+  unbounded recursive permission operation.
+- [Extended file disposition](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_file_disposition_information_ex)
+  supports deleting a read-only file without changing a possibly shared
+  inode's attributes. Use checked original handles, DELETE access and image
+  section checks; do not fall back to path-based force deletion.
 
 **Files:**
 - Create `scripts/deployment/WindowsPrivateFile.SourceSecurity.cs`: focused
@@ -11252,7 +11275,7 @@ skipped prerequisites for a complete Windows application restore.
   `tests/deployment-windows-snapshot-security-fixture.ps1`: native payload/ACL,
   read-only-file, retry, root-drift and before-mutation refusal cases.
 
-- [ ] **Step 1: publish a real Windows restoration causal case.**
+- [x] **Step 1: publish a real Windows restoration causal case.**
 
   ```javascript
   const restored = await restoreProjectSnapshot(options);
@@ -11267,6 +11290,12 @@ skipped prerequisites for a complete Windows application restore.
   and `.git` preservation, unchanged project identity and retained backup.
   Confirm the present Linux-only restoration guard fails this actual call in
   Windows Actions before implementing production support.
+
+  Causal `60ab1fbe82cc0d1023cee8145eb718d53089bec2 / 37099949439`,
+  Windows contracts `111137367159`, completed **2026-10-03 05:40:16 UTC**:
+  the actual payload restore call reached `restore-project.mjs:25` and failed
+  its Linux-only/native-ACL-required guard. Snapshot creation and the fixture
+  setup succeeded. The characterized causal run was then cancelled.
 
 - [ ] **Step 2: admit metadata before allowing any project mutation.**
 
@@ -11289,19 +11318,27 @@ skipped prerequisites for a complete Windows application restore.
 
   ```javascript
   await permissions.prepareRemoval({ signal });
-  // Existing scoped removal, private file creation, byte-copy and checksum work.
+  await permissions.remove({ entry, signal });
+  await permissions.createDirectory({ entry: directory, signal });
+  await permissions.createFile({ entry: file, signal });
+  // The existing byte copier opens this retained private file without O_CREAT.
+  await permissions.finishFile({ entry: file, signal });
   await permissions.restore({ signal });
   await permissions.checkRoot({ signal });
   ```
 
   Use checked file handles, not a path-following `Set-Acl` write after an
   independent lookup. Retain relevant ancestors while operating on a target.
-  Clear read-only attributes only on admitted obsolete content; any temporary
-  child-directory access policy is confined to the admitted removal inventory.
-  Never alter excluded roots or the project root policy. Apply saved file and
-  bottom-up directory policy, then verify the whole saved security inventory
-  after Windows inheritance propagation. Keep the authoritative backup private
-  and unchanged. Preserve primary and cleanup failures.
+  Delete read-only obsolete entries by their checked original handles; any
+  temporary child-directory access policy is confined to the admitted removal
+  inventory. Never alter excluded roots or the project root policy. Create
+  new source directories/files with explicit private native ACLs before
+  copying, including files directly under a broader project root. Retain
+  identities and deny replacement while the Node copier writes. Apply saved
+  directory policy top-down, then file policy, with implicit propagation
+  suppressed; verify the entire final saved security inventory. Keep the
+  authoritative backup private and unchanged. Preserve primary and cleanup
+  failures.
 
 - [ ] **Step 4: accept payload restoration without overstating public support.**
 
