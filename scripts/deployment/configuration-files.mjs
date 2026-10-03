@@ -12,6 +12,7 @@ const buildOperationalNames = new Set([
   'NPM_CONFIG_CACHE', 'NEXT_TELEMETRY_DISABLED', 'CI',
 ]);
 const maxBytes = 1024 * 1024;
+const environmentKey = name => process.platform === 'win32' ? name.toUpperCase() : name;
 const identity = info => ({
   dev: info.dev, ino: info.ino, size: info.size, mode: info.mode, nlink: info.nlink,
   uid: info.uid, gid: info.gid, mtimeNs: info.mtimeNs, ctimeNs: info.ctimeNs,
@@ -56,6 +57,7 @@ async function observe(file, optional) {
 
 function assignments(bytes, kind) {
   const result = Object.create(null);
+  const spellings = new Map();
   if (kind === 'systemd' && bytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]))) {
     throw refusal('configuration-syntax');
   }
@@ -75,7 +77,10 @@ function assignments(bytes, kind) {
       }
       value = value.slice(1, -1);
     } else if (/[\s#'"]/.test(value)) throw refusal('configuration-syntax');
-    result[match[1]] = value;
+    const key = environmentKey(match[1]);
+    if (spellings.has(key) && spellings.get(key) !== match[1]) throw refusal('configuration-case-collision');
+    spellings.set(key, match[1]);
+    result[key] = value;
   }
   return result;
 }
@@ -92,7 +97,9 @@ function copyEnvironment(environment) {
       || /[\0\r\n]/.test(descriptor.value)) throw refusal('environment');
     bytes += Buffer.byteLength(name) + Buffer.byteLength(descriptor.value);
     if (bytes > maxBytes) throw refusal('environment-budget');
-    result[name] = descriptor.value;
+    const key = environmentKey(name);
+    if (Object.hasOwn(result, key)) throw refusal('environment-case-collision');
+    result[key] = descriptor.value;
   }
   return result;
 }

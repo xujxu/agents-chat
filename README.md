@@ -303,6 +303,13 @@ acceptance. Build workers use the installed task's account in the controller's
 actual session, which may differ from an S4U service's session zero; native
 worker account/session checks remain enforced. Cross-account execution is
 refused before worker enrollment. Cold recovery does not gain a rebuild dependency.
+Windows configuration inspection is implemented with retained native source
+file identities, content hashes and owner/group/DACL descriptors, including
+explicit absence checks. It reads the installed bundle environment, applies
+case-insensitive Windows dotenv/build precedence, and refuses ambiguous aliases
+without reporting secret values. Native ACL-change and source/build integration
+acceptance is pending; this does not yet implement ACL restoration or broaden
+the private backup policy.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

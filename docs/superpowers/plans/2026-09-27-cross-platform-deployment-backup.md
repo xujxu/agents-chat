@@ -11045,7 +11045,7 @@ permissions; never copy a broad source DACL onto backup files.
 - Modify `tests/deployment-windows-source-build.mjs`: use the actual admitted
   configuration's build environment in existing owned npm stages.
 
-- [ ] **Step 1: publish configuration causal coverage in Actions.**
+- [x] **Step 1: publish configuration causal coverage in Actions.**
 
   ```javascript
   const { inspectWindowsConfiguration } = await import('../scripts/deployment/windows-configuration.mjs');
@@ -11060,6 +11060,12 @@ permissions; never copy a broad source DACL onto backup files.
   the fixture's exact original permissions/files, then reopen successfully.
   Capture the missing adapter and Windows case-semantics failures before
   adding production implementation.
+
+  Causal `28585b776a5fbaaa457ea49a0b780a105733cdfb / 37095310651`:
+  native update `111123916444` failed on the missing configuration adapter at
+  **2026-10-03 04:05:44 UTC**. Windows contracts `111123916396` also failed
+  both new environment case tests at **04:10:24 UTC**, rejecting supported
+  lowercase runtime credentials and equivalent lowercase build overrides.
 
 - [ ] **Step 2: retain native configuration evidence without mutation authority.**
 

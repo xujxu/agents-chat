@@ -42,6 +42,7 @@ namespace Deployment
             return result;
         }
         public int ByteLength { get { Check(); return content.Length; } }
+        public string SecurityDescriptor { get { Check(); return security; } }
 
         [StructLayout(LayoutKind.Sequential)]
         struct FileInformation
@@ -233,6 +234,7 @@ namespace Deployment
                 Check();
                 return result;
             }
+            public string SecurityDescriptor { get { Check(); return directory.security; } }
             public void Dispose() { directory.Dispose(); }
         }
         public static DirectoryLease OpenDirectory(string directory)
@@ -480,6 +482,10 @@ namespace Deployment
                     throw;
                 }
             }
+        }
+        public static WindowsPrivateFile OpenSourceFile(string source, string expectedSha256)
+        {
+            return OpenFile(source, expectedSha256, false);
         }
         static WindowsPrivateFile OpenFile(string file, string expectedSha256, bool requirePrivate,
             bool retirement = false, bool exclusive = false)

@@ -30,6 +30,12 @@ export async function prepareWindowsConfigurationFixture({ scope, pwsh }) {
     await assert.rejects(rename(file, `${file}-moved`));
     await policy('broaden');
     await assert.rejects(config.checkFiles());
+    await config.close();
+    const broadSource = await inspectWindowsConfiguration(options);
+    try {
+      assert.notEqual(broadSource.files.find(source => source.path === file).securityDescriptor, entry.securityDescriptor);
+      await broadSource.checkFiles();
+    } finally { await broadSource.close(); }
   } finally {
     await config.close();
     await policy('restore', entry.securityDescriptor);
