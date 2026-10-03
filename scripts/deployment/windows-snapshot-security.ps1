@@ -94,7 +94,7 @@ try {
                     $lease = $junctions[$relative]
                     $observed = $lease.Metadata
                     @{ path=$relative; kind=$kind; attributes=$observed.Attributes
-                        securityDescriptor=$observed.SecurityDescriptor; data=$lease.ReparseData }
+                        securityDescriptor=$observed.SecurityDescriptor; data=$lease.ReparseData; linkKind=$lease.Kind }
                 } else {
                     $observed = Read-SourceSecurity $relative $kind
                     @{ path=$relative; kind=$kind; attributes=$observed.attributes; securityDescriptor=$observed.securityDescriptor }

@@ -112,7 +112,7 @@ export async function inventorySnapshot(project, files, {
       if (!location || location === '..' || location.startsWith(`..${path.sep}`) || path.isAbsolute(location)) {
         throw new Error(`External snapshot link: ${relative}`);
       }
-      if (absolute) target = path.relative(path.dirname(file), actual);
+      if (absolute || process.platform === 'win32') target = path.relative(path.dirname(file), actual);
       if (process.platform === 'win32') target = target.replaceAll('\\', '/');
       entries.push({ ...metadata, kind: 'link', target });
     } else if (info.isDirectory()) {

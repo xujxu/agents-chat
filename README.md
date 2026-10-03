@@ -395,7 +395,10 @@ gate at `f45f431 / 37132289152`. Snapshot integration stores these links only
 as project-bound reparse metadata (native security payload version 2), not live
 links inside backup files. Restoration reconstructs them after ordinary
 payloads and restores their own ACLs last without propagating into targets.
-Arbitrary reparse tags, external targets and junction chains remain unsupported.
+The standalone build also contains directory symbolic links. Their integration
+uses a separate optional `symlinks` metadata table, validates absolute/relative
+target encoding and retains the same ordinary-directory target protections.
+Other reparse tags, file symbolic links, external targets and link chains remain unsupported.
 The complete snapshot/restore integration and actual-application gate are not
 yet accepted.
 Public Windows task-backed runtime composition remains gated, and installed immutable

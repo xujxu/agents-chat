@@ -53,6 +53,13 @@ for (const missingTarget of [false, true]) {
         path.join(root, 'other')), /project|junction/i);
       for (const mutate of [
         record => { record.junctions = []; },
+        record => { record.symlinks = []; },
+        record => { record.symlinks.reverse(); },
+        record => {
+          const data = Buffer.from(record.symlinks[0].data, 'base64');
+          data.writeUInt32LE(2, 16);
+          record.symlinks[0].data = data.toString('base64');
+        },
         record => { record.junctions[0].data += '\n'; },
         record => { record.junctions[0].path = 'node_modules/dependency'; },
         record => { record.entries.find(entry => entry.path === '.next/node_modules/dependency').attributes = 16; },

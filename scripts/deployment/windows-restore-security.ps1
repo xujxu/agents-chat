@@ -104,7 +104,7 @@ try {
                     $data = $null
                     if ($kind -ceq 'link') {
                         $data = $fields.data.GetString()
-                        [Deployment.WindowsPrivateFile]::ValidateSourceJunctionData($Project, $data)
+                        [Deployment.WindowsPrivateFile]::ValidateSourceDirectoryLinkData($Project, $path, $data)
                     }
                     $saved.Add($path, @{ Path=$path; Kind=$kind; Security=$sddl; Attributes=$attributes; Bytes=$bytes; Data=$data })
                 }
@@ -159,7 +159,7 @@ try {
                     if (-not $current.ContainsKey($path) -or $removed.Contains($path)) { throw 'Removal is not originally admitted.' }
                     $original = $current[$path]
                     if ($original.Kind -ceq 'link') {
-                        [Deployment.WindowsPrivateFile]::RemoveSourceJunction(
+                        [Deployment.WindowsPrivateFile]::RemoveSourceDirectoryLink(
                             $Project, $path, $original.Metadata.Dev, $original.Metadata.Ino, $original.Data)
                     } else {
                         [Deployment.WindowsPrivateFile]::RemoveSourceEntry(
@@ -187,7 +187,7 @@ try {
                             $_.Kind -cne 'link' -and (-not $created.ContainsKey($_.Path) -or -not $created[$_.Path].Finished)
                         }).Count) { throw 'Junction creation requires all ordinary payloads.' }
                         $original = $saved[$path]
-                        [Deployment.WindowsPrivateFile]::CreateSourceJunction(
+                        [Deployment.WindowsPrivateFile]::CreateSourceDirectoryLink(
                             $Project, $path, $original.Data, $original.Security, $original.Attributes)
                     } else { [Deployment.WindowsPrivateFile]::CreateSourceFile($Project, $path) }
                     $created.Add($path, @{ Lease=$lease; Metadata=$null; Finished=($kind -cne 'file') })
@@ -236,7 +236,7 @@ try {
                         if (@($saved.Values | Where-Object { $_.Kind -cne 'link' -and -not $restored.Contains($_.Path) }).Count) {
                             throw 'Junction policy requires completed ordinary source policies.'
                         }
-                        [Deployment.WindowsPrivateFile]::RestoreSourceJunctionSecurity($Project, $entry.Path,
+                        [Deployment.WindowsPrivateFile]::RestoreSourceDirectoryLinkSecurity($Project, $entry.Path,
                             $metadata.Dev, $metadata.Ino, $entry.Data, $entry.Security, $entry.Attributes)
                     } else {
                         [Deployment.WindowsPrivateFile]::RestoreSourceSecurity($Project, $entry.Path, $entry.Kind,

@@ -15,6 +15,7 @@ export function windowsRestoredSecurityMatches(expected, observed, inventory) {
   const saved = validateWindowsSnapshotSecurity(expected, inventory);
   const actual = validateWindowsSnapshotSecurity(observed, inventory);
   if (saved.version !== actual.version || saved.project !== actual.project || !same(saved.junctions, actual.junctions)
+    || !same(saved.symlinks, actual.symlinks)
     || saved.root.attributes !== actual.root.attributes
     || saved.descriptors[saved.root.security] !== actual.descriptors[actual.root.security]) return false;
   return saved.entries.every((entry, index) => entry.attributes === actual.entries[index].attributes
@@ -39,7 +40,7 @@ export async function prepareWindowsSourceRestoreSecurity({
   signal?.throwIfAborted();
   if (process.platform !== 'win32') throw new Error('Native source security restoration requires Windows.');
   const metadata = validateWindowsSnapshotSecurity(supplied, entries, project);
-  const junctions = new Map(metadata.junctions?.map(entry => [entry.path, entry.data]));
+  const junctions = new Map([...(metadata.junctions ?? []), ...(metadata.symlinks ?? [])].map(entry => [entry.path, entry.data]));
   const inventory = entries => {
     if (!Array.isArray(entries) || entries.length > 250000) throw new Error('Unsupported Windows restore inventory.');
     const paths = new Set();

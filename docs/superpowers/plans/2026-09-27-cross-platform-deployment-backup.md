@@ -12989,6 +12989,17 @@ Cover absolute and relative native round trips with unmodified target ACLs,
 and mixed complete snapshots with intact and missing targets, before enabling
 the codec. Do not claim restoration support until native creation succeeds.
 
+**Directory symlink causal:** `45c1b14 / 37134610283`, job `111236482763`,
+failed **2026-10-03 15:50:42 UTC**, with four failures at the unsupported
+`0xa000000c` tag and the two original junction cases still passing. Extend
+the existing parser with the 20-byte symbolic header and only flags 0/1;
+resolve relative names from the original source parent and reject rooted
+relative names. Reuse exact raw-buffer creation, metadata-only backups and
+non-propagating ACL restoration; retain the junction-only API for its callers.
+Add malformed-flag refusal before destination creation and separate metadata
+table ordering/count checks. Native creation and full mixed round trips remain
+pending Actions confirmation.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.

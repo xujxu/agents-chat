@@ -56,8 +56,8 @@ namespace Deployment
                     data = ReadData();
                     if ((info.Attributes & 16) == 0)
                         throw new InvalidDataException("Only internal directory junction reparse points are supported.");
-                    Kind = "junction";
-                    string absolute = DecodeTarget(project, data);
+                    string absolute = DecodeTarget(project, relative, data);
+                    Kind = BitConverter.ToUInt32(data, 0) == 0xa0000003 ? "junction" : "directory-symlink";
                     string location = Path.GetRelativePath(project, absolute).Replace('\\', '/');
                     if (retainTarget)
                     {
@@ -71,17 +71,25 @@ namespace Deployment
                 catch { Dispose(); throw; }
             }
 
-            internal static string DecodeTarget(string project, byte[] bytes)
+            internal static string DecodeTarget(string project, string relative, byte[] bytes)
             {
                 if (bytes == null || bytes.Length < 16 || bytes.Length > 16384 ||
                     BitConverter.ToUInt16(bytes, 4) + 8 != bytes.Length || BitConverter.ToUInt16(bytes, 6) != 0)
                     throw new InvalidDataException("Unsupported or malformed directory junction reparse buffer.");
-                if (BitConverter.ToUInt32(bytes, 0) != 0xa0000003)
+                uint tag = BitConverter.ToUInt32(bytes, 0);
+                if (tag != 0xa0000003 && tag != 0xa000000c)
                     throw new InvalidDataException("Unsupported source junction reparse tag: 0x" +
-                        BitConverter.ToUInt32(bytes, 0).ToString("x8") + ".");
-                string absolute = ResolveTarget(ReadName(bytes, 16, 8), true);
-                string display = ReadName(bytes, 16, 12);
-                if (display.Length != 0 && !String.Equals(absolute, ResolveTarget(display, false), StringComparison.OrdinalIgnoreCase))
+                        tag.ToString("x8") + ".");
+                bool symbolic = tag == 0xa000000c;
+                if (symbolic && (bytes.Length < 20 || BitConverter.ToUInt32(bytes, 16) > 1))
+                    throw new InvalidDataException("Unsupported symbolic link reparse flags.");
+                bool relativeTarget = symbolic && BitConverter.ToUInt32(bytes, 16) == 1;
+                int start = symbolic ? 20 : 16;
+                string parent = Path.GetDirectoryName(Path.Combine(project, relative.Replace('/', '\\')));
+                string absolute = ResolveTarget(ReadName(bytes, start, 8), true, relativeTarget, parent);
+                string display = ReadName(bytes, start, 12);
+                if (display.Length != 0 && !String.Equals(absolute,
+                    ResolveTarget(display, false, relativeTarget, parent), StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Source reparse display and substitute targets differ.");
                 string location = Path.GetRelativePath(project, absolute).Replace('\\', '/');
                 if (location == "." || location == ".." || location.StartsWith("../", StringComparison.Ordinal) ||
@@ -102,10 +110,16 @@ namespace Deployment
                 return value;
             }
 
-            static string ResolveTarget(string value, bool substitute)
+            static string ResolveTarget(string value, bool substitute, bool relative, string parent)
             {
                 if (String.IsNullOrEmpty(value)) throw new InvalidDataException("Empty source reparse target.");
-                if (substitute)
+                if (relative)
+                {
+                    if (Path.IsPathRooted(value) || value.IndexOf(':') >= 0)
+                        throw new InvalidDataException("Rooted relative symbolic link reparse target.");
+                    value = Path.GetFullPath(Path.Combine(parent, value));
+                }
+                else if (substitute)
                 {
                     if (!value.StartsWith(@"\??\", StringComparison.Ordinal))
                         throw new InvalidDataException("Unsupported source reparse namespace.");
@@ -193,7 +207,7 @@ namespace Deployment
             return new SourceReparseLease(project, relative, false);
         }
 
-        public static void RemoveSourceJunction(string project, string relative, string dev, string ino, string reparseData)
+        public static void RemoveSourceDirectoryLink(string project, string relative, string dev, string ino, string reparseData)
         {
             using (var source = new SourceReparseLease(project, relative, false, 0x10000))
             {
@@ -202,7 +216,7 @@ namespace Deployment
             }
         }
 
-        public static void RestoreSourceJunctionSecurity(string project, string relative, string dev, string ino,
+        public static void RestoreSourceDirectoryLinkSecurity(string project, string relative, string dev, string ino,
             string reparseData, string sddl, uint attributes)
         {
             ValidateJunctionPolicy(sddl, attributes);
@@ -237,31 +251,40 @@ namespace Deployment
                 (uint)Marshal.SizeOf<SourceBasicInformation>()), "Restore original junction attributes");
         }
 
-        static byte[] DecodeJunctionData(string project, string reparseData)
+        static byte[] DecodeDirectoryLinkData(string project, string relative, string reparseData)
         {
             if (reparseData == null || reparseData.Length > 21848)
                 throw new InvalidDataException("Unsupported restored junction metadata.");
             byte[] bytes = Convert.FromBase64String(reparseData);
             if (Convert.ToBase64String(bytes) != reparseData)
                 throw new InvalidDataException("Noncanonical junction reparse data.");
-            SourceReparseLease.DecodeTarget(project, bytes);
+            SourceReparseLease.DecodeTarget(project, relative, bytes);
             return bytes;
         }
 
-        public static void ValidateSourceJunctionData(string project, string reparseData)
+        public static void ValidateSourceDirectoryLinkData(string project, string relative, string reparseData)
         {
             RequirePath(project);
-            DecodeJunctionData(project, reparseData);
+            DecodeDirectoryLinkData(project, relative, reparseData);
         }
 
         public static SourceReparseLease CreateSourceJunction(string project, string relative, string reparseData,
             string sddl, uint attributes)
         {
+            byte[] bytes = DecodeDirectoryLinkData(project, relative, reparseData);
+            if (BitConverter.ToUInt32(bytes, 0) != 0xa0000003)
+                throw new InvalidDataException("Expected original junction reparse data.");
+            return CreateSourceDirectoryLink(project, relative, reparseData, sddl, attributes);
+        }
+
+        public static SourceReparseLease CreateSourceDirectoryLink(string project, string relative, string reparseData,
+            string sddl, uint attributes)
+        {
             ValidateJunctionPolicy(sddl, attributes);
-            byte[] bytes = DecodeJunctionData(project, reparseData);
+            byte[] bytes = DecodeDirectoryLinkData(project, relative, reparseData);
             using (var parents = new SourceParents(project, relative))
             {
-                string absolute = SourceReparseLease.DecodeTarget(project, bytes);
+                string absolute = SourceReparseLease.DecodeTarget(project, relative, bytes);
                 string targetRelative = Path.GetRelativePath(project, absolute).Replace('\\', '/');
                 using (var target = new SourceAccess(project, targetRelative, "directory", 0, false))
                 {

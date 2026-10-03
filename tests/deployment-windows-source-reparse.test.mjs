@@ -40,6 +40,11 @@ for (const relative of [false, true]) {
         assert.equal(restored.record.attributes, record.attributes | 1 | 2);
         assert.equal(await readFile(path.join(project, '.next/restored/payload'), 'utf8'), 'original module');
       } finally { await restored.close(); }
+      const malformed = Buffer.from(record.data, 'base64');
+      malformed.writeUInt32LE(2, 16);
+      await writeFile(saved, JSON.stringify({ ...record, data: malformed.toString('base64') }));
+      await assert.rejects(observer(project, '.next/invalid', t.signal, { saved }), /reparse/i);
+      await assert.rejects(lstat(path.join(project, '.next/invalid')), { code: 'ENOENT' });
     });
 }
 
