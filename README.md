@@ -340,10 +340,12 @@ Windows Git permission snapshot support passed all 34 lifecycle jobs on
 ACLs and attributes, plus explicit absent names for packed references. The
 existing native observer rechecks these alongside source bytes and keeps the
 backup private. Linux snapshots and direct Git inspection remain version 1.
-Version-2 HEAD/index/ref restoration refuses before mutation until its native
-security journal adapter is available.
-The journal's native atomic lockfile publication primitive is under Actions
-validation. It binds original/staged file IDs, checksums, ACLs and attributes
+Version-2 HEAD/index/ref restoration requires a private backup context.
+Its native journal adapter is implemented but awaiting Actions acceptance;
+the public Windows Git/runtime restore composition gate remains closed.
+The journal's native atomic lockfile publication primitive passed all 34 jobs
+on `0f2da811690c718eeac9acb728baae2b45438b5c / 37111501173`.
+It binds original/staged file IDs, checksums, ACLs and attributes
 and uses Windows handle-based rename with readonly-target support; it does
 not fall back to deleting the target or clearing attributes.
 First registration defaults to the current Windows account, or accepts an

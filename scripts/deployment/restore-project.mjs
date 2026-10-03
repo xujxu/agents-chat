@@ -93,7 +93,7 @@ async function restoreProject({ project, backup, acceptDataLoss, checkStopped, s
       project: root, backup: saved, manifest, checkStopped, signal,
     });
     const record = await readSnapshotGit(saved, manifest);
-    await restoreGitMetadata({ project: root, record, checkStopped: async () => {
+    await restoreGitMetadata({ project: root, backup: saved, record, checkStopped: async () => {
       await check();
       return { stopped: true, inhibited: true };
     }, signal });

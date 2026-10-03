@@ -7,7 +7,7 @@ export const redactedWindowsPolicy = value => String(value).replace(/S-1-[0-9-]+
   sid => `<sid:${createHash('sha256').update(sid).digest('hex').slice(0, 12)}>`);
 
 export async function openWindowsSourceSecurityController({
-  project, backup, metadata, savedEntries, currentEntries, signal, pwsh, script, refused,
+  project, backup, metadata, savedEntries, currentEntries, signal, pwsh, script, refused, decodeReply,
 }) {
   signal?.throwIfAborted();
   const controllerIdentity = await processIdentity(process.pid);
@@ -44,9 +44,11 @@ export async function openWindowsSourceSecurityController({
       await wire.send({ id, method, entries });
       const reply = captureWorkerFields(await wire.receive({ signal: requestSignal, timeoutMs: 60000 }),
         ['id', 'type', 'processIdentity', 'value'], 'restore security acknowledgement');
-      if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== ready.processIdentity || reply.value !== method) {
+      if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== ready.processIdentity) {
         throw new Error('Unexpected source security acknowledgement.');
       }
+      if (decodeReply) return decodeReply(method, reply.value);
+      if (reply.value !== method) throw new Error('Unexpected source security acknowledgement.');
     };
     const batch = async (method, entries) => {
       for (let offset = 0; offset < entries.length;) {
@@ -72,13 +74,14 @@ export async function openWindowsSourceSecurityController({
       }
       busy = true;
       try {
-        await request(method, entries, method === 'close' ? undefined : requestSignal);
+        const result = await request(method, entries, method === 'close' ? undefined : requestSignal);
         if (method === 'close') {
           const result = await waitForExit();
           if (result.code !== 0 || result.signal !== null) throw new Error('Source security controller close failed.');
           closed = true;
           wire.close();
         }
+        return result;
       } catch (cause) {
         closed = true;
         throw await abandon(cause);

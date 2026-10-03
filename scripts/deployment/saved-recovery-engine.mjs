@@ -32,6 +32,7 @@ const files = Object.freeze([...new Set([
   'windows-restore-security.mjs', 'windows-restore-security.ps1', 'WindowsPrivateFile.SourceSecurity.cs',
   'windows-source-security-controller.mjs', 'windows-git-object-security.mjs', 'windows-git-object-security.ps1',
   'windows-git-snapshot-security.mjs',
+  'windows-git-metadata-security.mjs', 'windows-git-metadata-security.ps1',
   'linux-readiness.mjs', 'linux-listener.mjs',
 ])]);
 const descriptor = (directory, manifestSha256) => Object.freeze({

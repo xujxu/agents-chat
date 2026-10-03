@@ -200,6 +200,30 @@ namespace Deployment
             }
         }
 
+        public static SourceSecurityRecord CaptureOptionalSourceSecurity(string project, string relative, string kind)
+        {
+            try { return CaptureSourceSecurity(project, relative, kind); }
+            catch (Win32Exception error) when (error.NativeErrorCode == 2 || error.NativeErrorCode == 3) { return null; }
+        }
+
+        public static void InheritSourceSecurity(string project, string relative, string kind, string dev, string ino)
+        {
+            using (var source = new SourceAccess(project, relative, kind, 0x40000, true))
+            {
+                source.Match(dev, ino);
+                RequirePrivate(source.Target.Security());
+                if (kind == "file" && source.Target.Information().Links != 1)
+                    throw new InvalidDataException("Inherited source policy requires an unaliased file.");
+                var descriptor = source.Target.Security();
+                descriptor.DiscretionaryAcl = new RawAcl(GenericAcl.AclRevision, 0);
+                descriptor.SetFlags((descriptor.ControlFlags & ~ControlFlags.DiscretionaryAclProtected) |
+                    ControlFlags.DiscretionaryAclPresent);
+                SetSourceSecurity(source.Target, descriptor, false);
+                source.Check();
+                ValidateSourceSecurity(Descriptor(source.Target.Security()));
+            }
+        }
+
         public static void CheckSourceRootWriteAccess(string project)
         {
             RequirePath(project);

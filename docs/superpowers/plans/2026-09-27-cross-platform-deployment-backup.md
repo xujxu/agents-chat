@@ -11980,7 +11980,9 @@ its link count became zero afterward; retain exclusive access to the staged
 inode. Report the actual native error code and message on rename failure.
 Implementation `0f2da811690c718eeac9acb728baae2b45438b5c` passed focused
 `37111501096` at **2026-10-03 09:07:52 UTC**: 73 tests, 57 passed,
-16 platform skips, zero failures. Full `37111501173` is still running.
+16 platform skips, zero failures. Full `37111501173` passed all 34 jobs at
+**2026-10-03 09:19:21 UTC**, including native Windows/Linux contracts,
+application builds and Linux lifecycle/cold recovery.
 
 **Goal:** Provide the native publication operation required by the existing
 HEAD/index/ref journal, without adding another transaction engine or enabling
@@ -12023,7 +12025,7 @@ Do not remove a target first or clear attributes on a potentially aliased inode.
   Expect exactly the nine new cases to fail on the missing method, while
   existing native permission snapshot/graph/payload coverage remains green.
 
-- [ ] **Step 2: implement original-handle publication.**
+- [x] **Step 2: implement original-handle publication.**
 
   Implement `PublishSourceFile(string project, string relative,
   SourceSecurityRecord staged, SourceSecurityRecord before,
@@ -12051,7 +12053,7 @@ Do not remove a target first or clear attributes on a potentially aliased inode.
   attributes at the destination afterward. Surface unsupported native behavior,
   not a delete-plus-rename fallback.
 
-- [ ] **Step 3: require actual native acceptance before journal composition.**
+- [x] **Step 3: require actual native acceptance before journal composition.**
 
   The two success cases must consume the `.lock` name and retain staged inode,
   checksum, readonly attribute and exact already-applied policy. All eleven
@@ -12060,6 +12062,16 @@ Do not remove a target first or clear attributes on a potentially aliased inode.
   This is a journal prerequisite, not acceptance of HEAD/index/ref restoration.
 
 ### Task 5BB: Compose native Windows HEAD/index/ref journal restoration
+
+Causal `b65e31f / 37112378627`, Windows job `111172641630`, completed
+**2026-10-03 09:18:00 UTC**: 77 tests, 57 passed, 16 platform skips, exactly
+the four new real layout cases failed at the explicit native journal guard.
+First implementation is ready for Actions, not accepted. The new native facade
+is shared by the existing journal algorithm; v1 behavior and public Windows
+composition refusal remain. Private intent publication reuses
+`WindowsPrivateFile.Publish`, rather than assuming inherited directory ACLs
+also supply the required private file owner. The saved recovery closure and
+project caller forward the new native helper/backup context.
 
 **Goal:** Extend the existing `restore-git.mjs` journal, not a second
 transaction engine, to restore validated version-2 metadata with native
@@ -12091,7 +12103,7 @@ complete. Direct v2 restoration requires a canonical private backup root.
   closure; verify native imports rather than relying on source checkout files.
 - Update README with only the behavior actually accepted by Actions.
 
-- [ ] **Step 1: publish real v2 journal causal cases.**
+- [x] **Step 1: publish real v2 journal causal cases.**
 
   The new suite snapshots a readonly, explicitly broadened index under broad
   inherited source permissions, then makes a real later commit. It restores
@@ -12121,7 +12133,7 @@ complete. Direct v2 restoration requires a canonical private backup root.
   policy/attributes. Reuse the shared controller and private backup retention.
   Return focused methods for `check`, `observeFile`, `observeDirectory`,
   `prepareParents`, `createGuard`, `createStage`, `finishStage`, `retainProof`,
-  `publish`, `retire`, `verify` and `close`; every native command accepts only
+  `writeProof`, `publish`, `retire`, `verify` and `close`; every native command accepts only
   HEAD/index/the selected validated branch, their derived parents and the
   fixed journal names.
 
@@ -12129,8 +12141,9 @@ complete. Direct v2 restoration requires a canonical private backup root.
   dev/ino/size/owner/group/DACL/attributes, refusing disagreement. Directory
   observations include original dev/ino and native policy. Keep retained native
   parent leases after policy application, as in object restoration.
-  Private-create guard/stages before any bytes. Write intent only under the
-  already-retained private guard and retain/check its native identity afterward.
+  Private-create guard/stages before any bytes. Publish intent through the
+  existing native private publisher under the already-retained private guard,
+  and retain/check its native identity afterward.
   Bound the intent size before copying stages; reject unsupported oversized
   evidence explicitly.
 
