@@ -11942,6 +11942,83 @@ version-2 metadata restoration must refuse before mutation.
   compatibility and complete saved recovery closure. Run focused Actions then
   the complete lifecycle matrix on the production implementation.
 
+### Task 5BA: Native atomic Git lockfile publication
+
+**Goal:** Provide the native publication operation required by the existing
+HEAD/index/ref journal, without adding another transaction engine or enabling
+public Windows Git restoration prematurely.
+
+**Industry precedent:** Git's [lockfile API](https://raw.githubusercontent.com/git/git/master/lockfile.h)
+creates an exclusive `.lock`, writes it, then atomically renames it.
+[Packed refs](https://git-scm.com/docs/git-pack-refs) are overridden by new
+loose branch files on subsequent updates; preserve unrelated packed records.
+Windows [FILE_RENAME_INFORMATION](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information)
+supports replace (`0x1`), POSIX semantics (`0x2`) and readonly-target replacement
+(`0x40`). The last value is **not `0x20`**, which has unrelated storage semantics.
+Do not remove a target first or clear attributes on a potentially aliased inode.
+
+**Files:**
+- Modify `scripts/deployment/WindowsPrivateFile.SourceSecurity.cs`: add the
+  same-directory, handle-based publication primitive beside existing original
+  source capture/removal operations. Reuse `SourceAccess`/`SourceParents`.
+- Create `tests/deployment-windows-git-publication-fixture.ps1`: actual readonly
+  index replacement, absent target, wrong original/stage identity/hash,
+  aliased target/stage and unexpected target, with unchanged refusal evidence.
+- Modify `tests/deployment-git-metadata.test.mjs`: drive the native fixture
+  against a real Git index before/after a real commit; unchanged private saved
+  bytes and exact resulting index. It already runs in the focused workflow.
+
+- [ ] **Step 1: publish native causal coverage.**
+
+  The native fixture must require the production method before testing any
+  negative cases, so a missing method cannot produce a false-positive refusal:
+
+  ```powershell
+  if ('PublishSourceFile' -cnotin [Deployment.WindowsPrivateFile].GetMethods().Name) {
+      throw 'Native Git lockfile publication is not implemented.'
+  }
+  [Deployment.WindowsPrivateFile]::PublishSourceFile(
+      $root, 'index', $expectedStage, $expectedTarget, $expectedStageHash, $expectedTargetHash)
+  ```
+
+  Commit test-only `[skip ci]`, push, dispatch the focused Windows workflow.
+  Expect exactly the nine new cases to fail on the missing method, while
+  existing native permission snapshot/graph/payload coverage remains green.
+
+- [ ] **Step 2: implement original-handle publication.**
+
+  Implement `PublishSourceFile(string project, string relative,
+  SourceSecurityRecord staged, SourceSecurityRecord before,
+  string stagedSha256, string beforeSha256)`. Derive the source strictly as
+  `relative + ".lock"`. Hold original parents; open source with DELETE access
+  and deny other data writers. Match dev/ino/size/attributes/exact SDDL, nlink1
+  and SHA256 on the opened handle. Validate the existing destination the same
+  way, or use no-replace publication for saved current absence.
+
+  Marshal the native structure using pointer-size-correct offsets:
+
+  ```csharp
+  int rootOffset = IntPtr.Size == 8 ? 8 : 4;
+  int lengthOffset = rootOffset + IntPtr.Size;
+  int nameOffset = lengthOffset + 4;
+  byte[] name = Encoding.Unicode.GetBytes(Path.GetFileName(relative));
+  ```
+
+  Keep the verified existing target retained during the rename; do not release
+  it and introduce an unchecked replacement interval. Use FileRenameInfoEx,
+  replace/POSIX/ignore-readonly only for an expected existing target, and no
+  replacement flags for absence. Require the exact staged inode, bytes, ACL and
+  attributes at the destination afterward. Surface unsupported native behavior,
+  not a delete-plus-rename fallback.
+
+- [ ] **Step 3: require actual native acceptance before journal composition.**
+
+  The two success cases must consume the `.lock` name and retain staged inode,
+  checksum, readonly attribute and exact already-applied policy. All seven
+  refusal cases must preserve both names, IDs, bytes and target policy. Run
+  focused Actions and the complete production matrix; no local workload.
+  This is a journal prerequisite, not acceptance of HEAD/index/ref restoration.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

@@ -246,6 +246,31 @@ test('Windows Git index ACL drift cannot complete an otherwise unchanged project
   await assert.rejects(readFile(path.join(destination, 'complete.json')), { code: 'ENOENT' });
 });
 
+for (const scenario of ['replace', 'absent', 'stage-identity', 'target-identity', 'stage-bytes',
+  'target-bytes', 'stage-alias', 'target-alias', 'unexpected-target']) {
+  test(`native Windows Git lockfile publication preserves bound evidence: ${scenario}`, {
+    skip: process.platform !== 'win32',
+  }, async t => {
+    const f = await fixture(t);
+    const index = path.join(f.project, '.git/index');
+    const saved = await readFile(index);
+    const savedFile = path.join(f.root, 'saved-index');
+    await writeFile(savedFile, saved);
+    await writeFile(path.join(f.project, 'app.txt'), 'updated\n');
+    await git(f.project, 'commit', '-am', 'updated');
+    const current = await readFile(index);
+    assert.notDeepEqual(saved, current);
+    await chmod(index, 0o400);
+    const { stdout } = await execute('pwsh.exe', ['-NoProfile', '-NonInteractive', '-File',
+      fileURLToPath(new URL('./deployment-windows-git-publication-fixture.ps1', import.meta.url)),
+      '-Project', f.project, '-SavedIndex', savedFile, '-Scenario', scenario],
+    { timeout: 30000, maxBuffer: 65536 });
+    assert.equal(stdout.trim(), 'accepted');
+    assert.deepEqual(await readFile(index), ['replace', 'absent'].includes(scenario) ? saved : current);
+    assert.deepEqual(await readFile(savedFile), saved);
+  });
+}
+
 test('a source change after Git observation cannot complete a snapshot of mismatched provenance', async t => {
   const f = await fixture(t);
   const gitMetadata = await inspectGitMetadata({ project: f.project, commit: f.commit });
