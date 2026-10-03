@@ -37,7 +37,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   finally { await writeFile(stateFile, state); }
   const health = path.join(project, 'health-mode');
   const priorHealth = await readFile(health);
-  let scope = await api.openWindowsTaskCompletionRecovery(options);
+  const scope = await api.openWindowsTaskCompletionRecovery(options);
   try {
     assert.equal(scope.observation.status, 'pending');
     await assert.rejects(readFile(path.join(directory, 'task-complete-release-requested.json')));
@@ -49,9 +49,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     await writeFile(health, priorHealth);
     await scope.close();
   }
-  scope = await api.openWindowsTaskCompletionRecovery(options);
+});
+const finish = async (admission, previous) => {
+  const options = { control, pwsh, admission };
+  const scope = await api.openWindowsTaskCompletionRecovery(options);
   const initial = scope.observation;
   try {
+    if (previous) assert.deepEqual(initial, previous, 'Recovery actor loss changed acknowledged original progress');
     for (let count = 0; scope.observation.status !== 'complete'; count++) {
       assert.ok(count < 9, 'Recovery exceeded its finite completion sequence');
       await scope.advance();
@@ -67,7 +71,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     assert.deepEqual(observed.runtime, initial.runtime);
     assert.equal(observed.stateSha256, initial.stateSha256);
   } finally { await proof.close(); }
-});
+};
+if (crashStep === 'lease-released') {
+  const { recoverAfterActorLoss } = await import('./deployment-windows-completion-recovery-actor.mjs');
+  await recoverAfterActorLoss({ control, pwsh, finish });
+} else if (crashStep !== 'release-requested') {
+  await withWindowsAdmission(control, { pwsh }, finish);
+}
 assert.deepEqual(await readFile(stateFile), state);
 for (const original of originals) {
   const file = path.join(directory, original.name);

@@ -10458,6 +10458,10 @@ consumer never starts or adopts another runtime generation.
 - Create `tests/deployment-windows-task-completion-recovery.mjs`: use the
   independently saved engine and real shared admission to exercise refusal,
   replay, unchanged original runtime/state, and full completed proof.
+- Create `tests/deployment-windows-completion-recovery-actor.mjs`: interrupt
+  a real recovery actor after publishing `released`, explicitly lose its
+  admission bridge first, and require its still-live native evidence handle
+  to exclude another recovery before actor death.
 - `scripts/deployment/windows-task-completion-records.ps1`: factor the shared
   strict history validator. The full reader still requires all 21 task
   records; a separate prefix reader accepts only a contiguous prefix ending
@@ -10592,6 +10596,15 @@ consumer never starts or adopts another runtime generation.
   all original receipt identities and state bytes. Reopen full completed
   proof, then exercise existing receipt/worker retirement and final unlock
   on the recovered released cases. Keep disabled tasks disabled.
+
+  For the released-update case, start an independent recovery actor and let
+  it publish the genuine next `released` receipt. Terminate its exact admission
+  bridge, acquire admission in another actor, and require recovery to fail at
+  the exclusively retained original release-intent file while the first native
+  recovery bridge remains alive. Kill the first recovery Node actor, require
+  its original native bridge to settle, then reopen and compare the exact
+  acknowledged progress before completing. This tests the admission-loss
+  interval and interrupted recovery itself without production fault flags.
 
 - [ ] **Step 5: persist full Actions acceptance, not just recovery-job success.**
 
