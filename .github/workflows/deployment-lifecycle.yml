@@ -554,9 +554,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Discover the installed original runtime after final unlock
+      - name: Capture actual admission and discover the runtime after final unlock
         shell: pwsh
-        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -DiscoverManagedTask
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -DiscoverManagedTask -DiscoveredAdmission
 
   windows-task-retirement:
     name: Native Windows task receipt retirement

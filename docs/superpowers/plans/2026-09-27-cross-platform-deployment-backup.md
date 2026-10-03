@@ -10764,6 +10764,113 @@ creates admission/operation records nor stops, restarts or adopts a runtime.
   **34/34 successful at 01:52:00 UTC**. Production admission capture and
   public Windows commands remain separate unfinished integration work.
 
+### Task 5AS: capture production task admission from a retained managed scope
+
+Continue the approved shared-native-admission and write-ahead transaction
+design. Reuse the existing version-1 admission record and stop consumer;
+do not introduce another lock, recovery protocol, or caller-supplied runtime
+authority. Discovery remains read-only. A separate explicit capture helper
+binds its original facade through a private WeakMap.
+
+**Files:**
+- Modify `scripts/deployment/windows-managed-task.mjs`: original-scope capture
+  binding, actual shared-admission/live-lock checks, strict reply codec.
+- Modify `scripts/deployment/windows-managed-task-controller.ps1`: bounded
+  `capture-admission` dispatch with control and lock/state digests only.
+- Create `scripts/deployment/windows-task-admission.ps1`: private native
+  lock/state validation and publication using retained actual task facts.
+- Modify `scripts/deployment/saved-worker-engine.mjs` and
+  `tests/deployment-saved-worker.test.mjs`: exact added native dependency.
+- Create `tests/deployment-windows-managed-admission.mjs`: real discovery,
+  preflight capture, forged-scope/admission/lock/state refusals and preservation.
+- Modify `tests/deployment-windows-task-transaction-controller.mjs`,
+  `tests/deployment-windows-task-node-cases.ps1`,
+  `tests/deployment-windows-runtime-host.ps1` and
+  `.github/workflows/deployment-lifecycle.yml`: optional `DiscoveredAdmission`
+  fixture path in the existing three discovery jobs; keep the manual baseline.
+
+- [ ] **Step 1: establish the native causal without a manually written record.**
+
+  The parent sends `{ discoverTask: taskName }` instead of publishing
+  `admission.json`. The original Node discovers the unguarded runtime:
+
+  ```javascript
+  const api = await import('../scripts/deployment/windows-managed-task.mjs');
+  const scope = await api.inspectWindowsManagedTask({ taskName, project, pwsh });
+  assert.equal(scope.observation.lease, 'unguarded');
+  assert.equal(typeof api.captureWindowsManagedTaskAdmission, 'function',
+    'Missing production managed-task admission capture');
+  ```
+
+  Write preflight from that observed generation, call the production capture
+  helper under `withWindowsAdmission`, then return only the admission path/hash
+  to the parent. The parent reads it privately and compares every field with
+  the actual task/owner/configuration before acknowledging the ordinary
+  admission message. Continue the existing stop-to-final-unlock pipeline.
+  Push test-only changes; inspect the native missing-API failure in Actions.
+
+- [ ] **Step 2: implement capture without granting observation stop authority.**
+
+  ```javascript
+  await captureWindowsManagedTaskAdmission({ scope, control, lock, admission, signal });
+  // Exactly { admission: <control>/task-maintenance/admission.json, sha256 }.
+  ```
+
+  Reject copied/closed scopes, foreign admission, foreign or dead lock owners,
+  changed project/generation, non-preflight phase or non-null previous phase.
+  Reuse `captureLockOwner`, `assertLockOwner`, `validateState`,
+  `externalWorkerDirectory`, `readWorkerFile` and `assertWindowsAdmission`.
+  Pin exact lock/state digests; only those digests and control cross the native
+  request boundary. The original controller PID/creation identity comes from
+  the native observer's existing lifetime watch, not request data.
+
+  Native capture retains private control/lock directories and lock/state files,
+  rejects recovery/retirement evidence, and reuses
+  `ConvertFrom-AgentsChatTaskTransactionState`. Verify the actual current Node,
+  project, operation ID, start time, running prior runtime and discovered
+  generation. Require `preflight` or `restore-preflight`, previous phase null.
+  Recheck the retained managed task before and after publishing:
+
+  ```powershell
+  $record = [ordered]@{
+      version=1; operationId=$operationId
+      controllerPid=$ControllerPid; controllerIdentity=$ControllerIdentity
+      taskName=$Context.TaskName; definition=$Context.NativeDefinition
+      securityDescriptor=$Context.SecurityDescriptor
+      configuration=$Context.Configuration; configurationSha256=$Context.ConfigurationSha256
+      readySha256=$Context.Runtime.readySha256; ownerPid=$Context.Runtime.pid
+      ownerIdentity=$Context.Runtime.identity; generation=$Context.Runtime.generation
+      instanceGuid=$Context.Runtime.instanceGuid
+  }
+  ```
+
+  Use native `CreateDirectory` and `Publish`; refuse existing maintenance
+  directories rather than adopting/overwriting them. Release temporary lock
+  and state handles before returning so the Node can advance the state.
+  Preserve partial evidence on any failure; close only releases handles.
+
+- [ ] **Step 3: prove refusals and compatibility in all three native scenarios.**
+
+  ```javascript
+  await assert.rejects(capture({ ...options, scope: { ...scope } }));
+  await assert.rejects(capture({ ...options, admission: { ...admission } }));
+  await assert.rejects(capture({ ...options, lock: { ...lock, token: randomUUID() } }));
+  ```
+
+  Also reject wrong-generation preflight before publication, restore the exact
+  original state, capture successfully, then refuse a second capture while
+  preserving the original record bytes. Existing native private-state and
+  stopped-phase negatives continue unchanged. Run update, custom-security
+  restore, and originally disabled tasks through actual capture, stop,
+  replacement, activation, completion, cleanup and post-cleanup discovery.
+
+- [ ] **Step 4: accept in Actions and record the exact boundary.**
+
+  Push implementation and inspect all 34 workflow jobs. Keep existing native
+  timeouts and regression gates. Record exact SHA/run/native/full outcomes in
+  README and this plan. This completes production admission generation, not
+  public scripts, first deployment, source/build adapters or ACL restoration.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

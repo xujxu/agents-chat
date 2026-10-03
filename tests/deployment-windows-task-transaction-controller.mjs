@@ -22,15 +22,28 @@ const receive = async () => {
   return JSON.parse(result.value);
 };
 console.log(JSON.stringify({ pid: process.pid, identity: lock.processIdentity, operationId: lock.operationId }));
-const admission = await receive();
-const record = JSON.parse(await readFile(admission.admission, 'utf8'));
-let state = {
+let admission = await receive();
+const makeState = generation => ({
   version: 1, operationId: lock.operationId, project, operation,
   phase: operation === 'restore' ? 'restore-preflight' : 'preflight',
   previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
-  backupId: null, priorRuntime: 'running', runtimeIdentity: record.generation,
+  backupId: null, priorRuntime: 'running', runtimeIdentity: generation,
   startedAt: lock.createdAt, updatedAt: new Date().toISOString(), errorCode: null,
-};
+});
+let state;
+if (admission.discoverTask) {
+  const { captureManagedAdmission } = await import('./deployment-windows-managed-admission.mjs');
+  const captured = await captureManagedAdmission({
+    taskName: admission.discoverTask, project, pwsh, control, lock, makeState,
+  });
+  state = captured.state;
+  console.log(JSON.stringify({ phase: 'admitted', ...captured.admission }));
+  admission = await receive();
+  assert.deepEqual(admission, captured.admission);
+} else {
+  const record = JSON.parse(await readFile(admission.admission, 'utf8'));
+  state = makeState(record.generation);
+}
 await writeState(control, state);
 const options = { ...admission, pwsh, control, lock };
 await assert.rejects(stopWindowsTaskTransaction(options));

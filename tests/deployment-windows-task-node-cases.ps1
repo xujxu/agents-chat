@@ -13,6 +13,7 @@ param(
         'activate-complete-recovery')][string]$Action,
     [string]$CrashStep,
     [switch]$DiscoverManagedTask,
+    [switch]$DiscoveredAdmission,
     [switch]$Transactional,
     [switch]$Restore
 )
@@ -85,8 +86,6 @@ try {
     }
     $readyFile = Join-Path $Root "runtime-$($Ready.identity.Replace(':', '-')).json"
     $directory = Join-Path $controllerRoot $(if ($Transactional) { 'task-maintenance' } else { 'node-maintenance' })
-    $maintenanceDirectory = [Deployment.WindowsPrivateFile]::CreateDirectory($directory)
-    $maintenanceDirectory.Dispose()
     $record = [ordered]@{
         version=1; operationId=$(if ($Transactional) { $hello.operationId } else { [guid]::NewGuid().ToString('D') })
         controllerPid=$hello.pid; controllerIdentity=$hello.identity
@@ -96,9 +95,26 @@ try {
         ownerPid=$Owner.Id; ownerIdentity=$Ready.identity; generation=$Ready.generation; instanceGuid=$Binding.instanceGuid
     }
     $file = Join-Path $directory 'admission.json'
-    $published = [Deployment.WindowsPrivateFile]::Publish($file, ($record | ConvertTo-Json -Depth 8 -Compress))
-    try { $digest = $published.Sha256 }
-    finally { $published.Dispose() }
+    if ($DiscoveredAdmission) {
+        Assert ($Transactional) 'Discovered admission requires the original transaction controller'
+        $controller.StandardInput.WriteLine((@{ discoverTask=$TaskName } | ConvertTo-Json -Compress))
+        $controller.StandardInput.Flush()
+        $admitted = Receive-Controller
+        Assert ($admitted.phase -ceq 'admitted' -and $admitted.admission -ceq $file) 'Production admission path differs'
+        $digest = $admitted.sha256
+        $published = [Deployment.WindowsPrivateFile]::Open($file, $digest)
+        try {
+            $actual = $published.ReadText() | ConvertFrom-Json -AsHashtable
+            Assert ($actual.Count -eq $record.Count) 'Production admission schema differs'
+            foreach ($key in $record.Keys) { Assert ($actual[$key] -ceq $record[$key]) "Production admission differs: $key" }
+        } finally { $published.Dispose() }
+    } else {
+        $maintenanceDirectory = [Deployment.WindowsPrivateFile]::CreateDirectory($directory)
+        $maintenanceDirectory.Dispose()
+        $published = [Deployment.WindowsPrivateFile]::Publish($file, ($record | ConvertTo-Json -Depth 8 -Compress))
+        try { $digest = $published.Sha256 }
+        finally { $published.Dispose() }
+    }
     $controller.StandardInput.WriteLine((@{ admission=$file; sha256=$digest } | ConvertTo-Json -Compress))
     $controller.StandardInput.Flush()
     $stopped = Receive-Controller
