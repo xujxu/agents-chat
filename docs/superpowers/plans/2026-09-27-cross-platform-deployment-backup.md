@@ -12469,6 +12469,11 @@ Do not modify an installed immutable bundle while a runtime scope retains it.
   violation **32**; reader setup and cleanup succeeded. The implementation now
   compares complete groups and skips only verified matches, using existing
   native observers and retaining final verification. Native acceptance pending.
+  Implementation `e768d05 / 37119892937`, job `111193802573`, passed
+  **2026-10-03 11:37:53 UTC**: 95 tests, 79 passed, 16 platform skips,
+  zero failures/cancellations, 405997 ms. Real immutable-reader, identity,
+  private-copy, cancellation/retry and late-policy cases all passed.
+  Final combined source `2b955ac / 37119983194` is running all 36 jobs.
 
   Windows runtime bundles are immutable and may remain retained by read-only
   native handles. Linux external restoration already leaves matching resources
@@ -12531,6 +12536,67 @@ as already done for Windows restoration; do not increase timeouts or drop tests.
   Push to `feat/deployment-backup`; inspect `deployment-lifecycle.yml` full run
   logs for both counts, zero failures/cancellations and duration under budget.
   Focused Windows restoration remains a separate single-job dispatch.
+
+### Task 5BF: Compose native Windows project, Git and external restoration
+
+**Goal:** Verify the existing restoration primitives together before allowing
+Git/external-bearing Windows manifests into the complete-project helper.
+Public task-backed restore/deploy orchestration remains closed; this task does
+not substitute caller-supplied callbacks for the future branded task adapter.
+
+**Files:**
+- Create `tests/deployment-windows-combined-restore.test.mjs`, using existing
+  `gitMetadataFixture`, `inspectSnapshotScope`, native policy observers and
+  complete snapshot verification.
+- Add that file to the existing `windows-restore` job.
+- Remove only the now-obsolete Git/external manifest refusal in
+  `prepareWindowsProjectRestoreSecurity`, once real causal failures confirm it.
+  Preserve the Windows/version-3/native-policy admission and existing project,
+  Git object/journal, external authorization and complete-backup checks.
+- Update README after focused/full acceptance; no new production coordinator
+  or native protocol is required for this component-level composition.
+
+- [ ] **Step 1: publish complete native composition cases and causal Actions.**
+
+  Capture a real Git repository with project data, build/dependency files,
+  readonly source policy and external readonly configuration plus an absent
+  sibling. Change Git/source/data/build and external files; retain log contents
+  as excluded state. Restore through the existing APIs:
+
+  ```javascript
+  await restoreProjectSnapshot({ project, backup, expectedSnapshot: manifest,
+    acceptDataLoss: true, checkStopped });
+  await restoreExternalSnapshot({ project, backup, expectedSnapshot: manifest,
+    authorizedPaths: [external, absent], acceptDataLoss: true, checkStopped });
+  ```
+
+  Require original HEAD/index/tracked bytes, data/build/dependencies, native
+  project and external security, original root identity, saved external absence,
+  unchanged complete backup and retained excluded logs. Also abort at the
+  project private-copy stage after Git recovery, prove the external destination
+  has not yet changed, and retry the same complete snapshot successfully.
+  Expect the initial run to fail at the explicit native Git/external guard.
+
+- [ ] **Step 2: remove only the obsolete component-composition guard.**
+
+  Keep this original admission before all project/Git mutation:
+
+  ```javascript
+  if (process.platform !== 'win32' || manifest.version !== 3 || manifest.runtime.platform !== 'win32') {
+    throw new Error('Windows project restoration requires a snapshot with native ACL metadata.');
+  }
+  ```
+
+  Continue passing the full manifest's project entries and native table into
+  `prepareWindowsSourceRestoreSecurity`. External destinations still require
+  their separate exact authorization; project restoration must not touch them.
+
+- [ ] **Step 3: require native composition and complete matrix acceptance.**
+
+  Dispatch `deployment-lifecycle.yml` with `windows_restore_only=true` for the
+  causal/focused runs, then require all 36 jobs on final source. Keep saved-entry
+  dependencies unchanged unless implementation adds an import; investigate any
+  actual cross-adapter failure rather than broadening unrelated admission.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch

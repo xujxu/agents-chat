@@ -370,7 +370,8 @@ reuses private creation and native source removal/permission restoration;
 interrupted private copies can be retried from the unchanged backup.
 An admitted external parent whose selected bytes, absence and native policies
 all match is verified without rewriting its files, preserving immutable readers
-and file identities. This reuse path is awaiting native Actions acceptance.
+and file identities. This reuse path passed native Actions at
+`e768d05 / 37119892937`; final 36-job acceptance is pending.
 Public Windows project/runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an
