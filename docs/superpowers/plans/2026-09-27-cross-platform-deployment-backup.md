@@ -12805,6 +12805,34 @@ as explicit PowerShell now reaches native snapshot observers.
   builds. It takes precedence over `windows_restore_only`; full dispatches and
   push/PR matrices retain all 36 jobs and existing time budgets.
 
+### Task 5BI: Compose original-task runtime, configuration and data admission
+
+**Goal:** Add the read-only preflight required by public Windows deployment,
+reusing managed task scope, lock-bound native workers, reviewed target profiles,
+configuration observation and the existing captured database inspector.
+
+- [ ] Extend the existing real application preflight fixture before
+  implementation. Create a private external worker control, acquire its
+  original lock, and call a clearly unimplemented admission API only after
+  real task discovery/target admission and worker setup. Reject cloned scope
+  and changed lock without enrolling workers. Require actual Node version,
+  admin provider and the authenticated app's populated chat database.
+  Recheck admission, seal exactly three settled workers (version, data,
+  repeated data), preserve original listener, and keep the existing three
+  authenticated application starts. No fake positive observation.
+- [ ] Extract the existing Windows source-build worker authority checks into
+  a shared focused helper: original scope/lock/project, same installed
+  account, controller session, explicit outside-project tools and
+  hash-bound installed Node. Reuse it from source/build and admission.
+  Execute version and database probes through the existing worker operation,
+  with a minimal native environment; retain the configuration observer until
+  the caller closes it. Reuse target/profile and database command/result
+  helpers, with explicit errors and cleanup.
+- [ ] Update saved recovery dependencies for the shared authority/admission
+  modules. Require focused actual-app admission, the existing owned-source
+  snapshot pipeline and full36, preserving all current cases and time limits.
+  Do not claim first installation, public orchestration or cold restore yet.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
