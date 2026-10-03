@@ -121,6 +121,11 @@ foreach ($phase in $phases) {
         Assert-OwnedListener $ready $owner $listener $nativeListener
 
         if ($CompleteSnapshot) {
+            foreach ($entry in Get-ChildItem -LiteralPath (Join-Path $Project '.next/node_modules') -Force) {
+                if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                    Write-Output "Generated build link: $($entry.Name); native type=$($entry.LinkType)"
+                }
+            }
             $git = (Get-Command git.exe).Source
             $snapshotControl = Join-Path $root 'snapshot-control'
             [Deployment.WindowsPrivateFile]::CreateDirectory($snapshotControl).Dispose()

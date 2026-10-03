@@ -12870,6 +12870,16 @@ create succeeded. The application job used default shallow checkout; its local
 clone inherited that shallow history. Use full checkout and assert non-shallow
 source before building. Do not relax the production complete-history guard.
 
+**Full-history run:** `384fbd3 / 37129876106`, job `111222701818`,
+failed **2026-10-03 14:36:09 UTC** at
+`.next/node_modules/better-sqlite3-90e2652d1716b047`: the actual build
+contains an absolute Windows link. Existing snapshot inventory/native ACL
+capture deliberately reject these links. The original build/preflight/three
+authenticated starts remain green. Complete application backup is not accepted.
+Inspect the generated native link type before choosing a supported reparse
+codec. Do not change build engines, remove dependencies from the backup or
+dereference arbitrary reparse points to obtain a passing test.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.
