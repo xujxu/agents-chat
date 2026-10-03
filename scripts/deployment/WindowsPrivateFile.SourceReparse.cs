@@ -125,6 +125,7 @@ namespace Deployment
                         throw new InvalidDataException("Unsupported source reparse namespace.");
                     value = value.Substring(4);
                 }
+                else if (value.StartsWith(@"\\?\", StringComparison.Ordinal)) value = value.Substring(4);
                 try { RequirePath(value); }
                 catch (ArgumentException error)
                 {

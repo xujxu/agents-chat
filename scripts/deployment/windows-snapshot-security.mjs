@@ -44,7 +44,7 @@ function directoryLinkTarget(project, name, data, kind) {
     } else if (substitute) {
       if (!value.startsWith('\\??\\')) throw new Error('Unsupported junction reparse namespace.');
       value = value.slice(4);
-    }
+    } else if (value.startsWith('\\\\?\\')) value = value.slice(4);
     if (!/^[a-z]:\\/i.test(value) || path.win32.resolve(value) !== value) throw new Error('Invalid directory link target.');
     return value;
   };

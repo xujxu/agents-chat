@@ -13009,6 +13009,14 @@ substitute or display name differs before admitting another path encoding.
 Native FSCTL symbolic creation already succeeded for relative links; do not
 add speculative privilege changes.
 
+**Absolute-name diagnosis:** `3897245 / 37134898684` confirmed
+**2026-10-03 15:55:16 UTC** that Node stores the absolute symbolic link's
+display name with the standard Win32 `\\?\` prefix. Strip only that exact
+display-name prefix in both native and metadata codecs, then require the
+remaining canonical local drive path to match the substitute target. UNC,
+device/non-drive names and outside-project targets remain refused; original
+raw buffers remain unchanged in snapshots and recreated links.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.
