@@ -3,8 +3,6 @@ import {
   lstat, mkdir, readdir, readlink, statfs, symlink,
 } from 'node:fs/promises';
 import path from 'node:path';
-import { constants, createReadStream, createWriteStream } from 'node:fs';
-import { pipeline } from 'node:stream/promises';
 import { isDeepStrictEqual as same } from 'node:util';
 import {
   assertSnapshotAbsent, captureSnapshotInventory, fileDigest, inventorySnapshot, readSnapshotJson, realDirectory,
@@ -19,6 +17,7 @@ import { captureSnapshotGit, readSnapshotGit, validateSnapshotGit } from './snap
 import { prepareGitObjects, readGitObjectSnapshot, validateGitObjects } from './git-objects.mjs';
 import { inspectWindowsSnapshotSecurity, validateWindowsSnapshotSecurity } from './windows-snapshot-security.mjs';
 import { prepareWindowsGitSnapshotSecurity } from './windows-git-snapshot-security.mjs';
+import { copySnapshotFiles } from './snapshot-copy.mjs';
 
 const projectMetadata = info => ({ mode: info.mode & 0o777, uid: info.uid, gid: info.gid });
 
@@ -222,29 +221,7 @@ async function createSnapshotContents({
     await mkdir(path.join(contents, entry.path), { mode: 0o700 });
   }
   const copiedFiles = ordered.filter(item => item.kind === 'file');
-  let copied = 0;
-  onProgress?.({ phase: 'snapshot-copy-files', completed: copied, total: copiedFiles.length });
-  for (const entry of copiedFiles) {
-    signal?.throwIfAborted();
-    const from = path.join(root, entry.path);
-    const to = path.join(contents, entry.path);
-    await realDirectory(path.dirname(from));
-    const info = await lstat(from);
-    if (!info.isFile() || info.isSymbolicLink() || info.size !== entry.bytes) {
-      throw new Error('Snapshot source changed during copying.');
-    }
-    signal?.throwIfAborted();
-    await pipeline(
-      createReadStream(from, { flags: constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) }),
-      createWriteStream(to, { flags: 'wx', mode: 0o600, flush: true }), { signal },
-    );
-    entry.sha256 = await fileDigest(to, { signal });
-    if (entry.sha256 !== await fileDigest(from, { signal })) throw new Error('Snapshot source checksum changed during copying.');
-    copied++;
-    if (copied === copiedFiles.length || copied % Math.max(1, Math.ceil(copiedFiles.length / 4)) === 0) {
-      onProgress?.({ phase: 'snapshot-copy-files', completed: copied, total: copiedFiles.length });
-    }
-  }
+  await copySnapshotFiles({ project: root, destination: contents, entries: copiedFiles, signal, onProgress });
   for (const entry of ordered.filter(item => item.kind === 'link')) {
     signal?.throwIfAborted();
     if (process.platform === 'win32') {

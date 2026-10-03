@@ -46,3 +46,18 @@ test('failed snapshot batch settles its three peers and never starts the next fo
   }
   assert.ok(scope.entries.slice(4).every(entry => entry.sha256 === '0'.repeat(64)));
 });
+
+test('in-flight snapshot cancellation settles the active batch without scheduling more files', async t => {
+  const scope = await fixture(t);
+  const controller = new AbortController();
+  await assert.rejects(copySnapshotFiles({
+    ...scope, signal: controller.signal,
+    onProgress({ completed }) {
+      if (completed === 2) controller.abort(new Error('cancelled snapshot batch'));
+    },
+  }), /abort|cancelled snapshot batch/i);
+  const files = await readdir(scope.destination);
+  assert.ok(files.length >= 2 && files.length <= 4);
+  assert.ok(files.every(name => Number(name.slice('file-'.length)) < 4));
+  assert.ok(scope.entries.slice(4).every(entry => entry.sha256 === '0'.repeat(64)));
+});

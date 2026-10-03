@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { execFile } from 'node:child_process';
 import { lstat, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectSnapshotScope } from '../scripts/deployment/snapshot-scope.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
@@ -64,6 +67,13 @@ for (const missingTarget of [false, true]) {
       assert.equal(manifest.windowsSecurity.project, project);
       assert.equal(manifest.windowsSecurity.junctions.length, 1);
       assert.equal(manifest.windowsSecurity.symlinks.length, 2);
+      const { stdout } = await promisify(execFile)(process.env.DEPLOYMENT_TEST_PWSH ?? 'pwsh.exe', [
+        '-NoProfile', '-NonInteractive', '-File',
+        fileURLToPath(new URL('./deployment-windows-snapshot-security-fixture.ps1', import.meta.url)),
+        '-File', path.join(project, '.data/state'), '-Action', 'inspect',
+      ], { timeout: 30000, maxBuffer: 16384 });
+      const filePolicy = manifest.windowsSecurity.entries.find(entry => entry.path === '.data/state');
+      assert.equal(manifest.windowsSecurity.descriptors[filePolicy.security], JSON.parse(stdout).securityDescriptor);
       assert.equal(progress.find(record => record.phase === 'snapshot-source-security').total, manifest.entries.length);
       const copies = progress.filter(record => record.phase === 'snapshot-copy-files');
       assert.equal(copies.at(-1).completed, manifest.entries.filter(entry => entry.kind === 'file').length);

@@ -13092,6 +13092,25 @@ next four. Wire the helper into the explicit saved recovery closure and run
 these cases on both contract platforms; no new configurable concurrency or
 deadline increases.
 
+**Full regression remains required:** native reader `60df413 / 37138153734`
+passed the original source/task pipeline but its 97-case suite failed 19
+cases (**2026-10-03 16:59:02 UTC**), chiefly Git/external ACL equivalence and
+inheritance flags. Kernel-object ACL observation is not equivalent to the
+existing file-security API's inherited-ACE view, and changing ordinary
+restoration to the kernel setter loses its auto-inherited flags. Read ordinary
+file security with `GetSecurityInfo(SE_FILE_OBJECT)` through the original
+retained handle; preserve ordinary `SetSecurityInfo` restoration and the
+separate non-propagating kernel setter for directory links. Add a direct
+Get-Acl equality assertion to the small mixed snapshot cases, then rerun all
+97 cases. Do not broaden descriptor equality to conceal inheritance changes.
+
+**Bounded-copy causal:** `93c803d / 37138348535` failed
+**2026-10-03 17:00:20 UTC** at the absent `snapshot-copy.mjs`; the seven
+native/mixed/long-path cases passed. Implement the fixed four-file settled
+batches, add in-flight cancellation coverage, and include the helper in saved
+recovery files. Validate with the file-security correction above, retaining
+the existing 240-second actual snapshot invocation.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.

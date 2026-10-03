@@ -28,7 +28,7 @@ const files = Object.freeze([...new Set([
   'linux-inactive-configuration.mjs', 'linux-inactive-discovery.mjs',
   'snapshot-configuration.mjs',
   'git-metadata.mjs', 'snapshot-git.mjs', 'restore-git.mjs', 'git-objects.mjs', 'git-graph-metadata.mjs',
-  'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-scope.mjs', 'snapshot-external.mjs', 'snapshot-rotation.mjs',
+  'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-copy.mjs', 'snapshot-scope.mjs', 'snapshot-external.mjs', 'snapshot-rotation.mjs',
   'windows-snapshot-security.mjs', 'windows-snapshot-security.ps1',
   'windows-external-snapshot-security.mjs',
   'windows-task-snapshot.mjs',
