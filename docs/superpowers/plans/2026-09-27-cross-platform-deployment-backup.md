@@ -11959,11 +11959,18 @@ missing method; 44 existing tests passed and 16 platform cases skipped.
 The implementation is ready for native validation, not accepted.
 First implementation `e634be8 / 37110605897` reached a fixture sharing
 conflict before publication: `WriteAllBytes` did not share the existing native
-writable lease. Use an explicit existing-file `FileStream` with ReadWrite
-sharing, the same sharing contract as the production Node writable handle.
+writable lease. Use an explicit existing-file `FileStream` with
+ReadWrite/Delete sharing, the same sharing contract as the production Node
+writable handle. Second focused `87538e0 / 37110920418` exposed the missing
+Delete sharing as well: the native creator requests FullControl, including
+DELETE. Its retained handle still denies deletion; the temporary writer must
+share all access already held by that handle.
 Keep the lease retained. Added independent stage/target ACL and attribute
 drift refusal cases; all refusal checks now compare both policies as well.
 Use a canonical absolute destination name for the Win32 rename API.
+Known-failing full runs `37110605858` and `37110919559` are superseded/cancelled,
+not accepted. This test-only sharing correction uses explicit focused Actions
+first; require a fresh complete matrix after the fixture can reach publication.
 
 **Goal:** Provide the native publication operation required by the existing
 HEAD/index/ref journal, without adding another transaction engine or enabling

@@ -23,7 +23,7 @@ $bytes = [IO.File]::ReadAllBytes($SavedIndex)
 $lease = [Deployment.WindowsPrivateFile]::CreateSourceFile($root, 'index.lock')
 try {
     $writer = [IO.FileStream]::new($stage, [IO.FileMode]::Open,
-        [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+        [IO.FileAccess]::Write, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
     try {
         $writer.Write($bytes, 0, $bytes.Length)
         $writer.Flush($true)
