@@ -1,16 +1,22 @@
 param(
     [Parameter(Mandatory)][string]$File,
-    [ValidateSet('inspect', 'broaden')][string]$Action = 'inspect'
+    [ValidateSet('inspect', 'broaden', 'broaden-inheritable')][string]$Action = 'inspect'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $acl = Get-Acl -LiteralPath $File
-if ($Action -ceq 'broaden') {
+if ($Action -cne 'inspect') {
     if ([IO.Path]::GetFileName($File) -cnotin @('.env.local', 'backup-parent', 'app')) { throw 'Unsupported fixture mutation.' }
-    $rule = [Security.AccessControl.FileSystemAccessRule]::new(
-        [Security.Principal.SecurityIdentifier]::new('S-1-1-0'),
-        [Security.AccessControl.FileSystemRights]::Read,
-        [Security.AccessControl.AccessControlType]::Allow)
+    $sid = [Security.Principal.SecurityIdentifier]::new('S-1-1-0')
+    $rule = if ($Action -ceq 'broaden-inheritable') {
+        if ([IO.Path]::GetFileName($File) -cne 'app') { throw 'Unsupported inheritable fixture mutation.' }
+        [Security.AccessControl.FileSystemAccessRule]::new($sid, [Security.AccessControl.FileSystemRights]::Read,
+            ([Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit),
+            [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Allow)
+    } else {
+        [Security.AccessControl.FileSystemAccessRule]::new($sid, [Security.AccessControl.FileSystemRights]::Read,
+            [Security.AccessControl.AccessControlType]::Allow)
+    }
     $acl.AddAccessRule($rule)
     Set-Acl -LiteralPath $File -AclObject $acl
     $acl = Get-Acl -LiteralPath $File

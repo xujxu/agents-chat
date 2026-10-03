@@ -11253,6 +11253,13 @@ write-through creation handle at `Finish`; retain the extra read-handle sync
 only for Linux. Also rethrow cancellation after the stopped callback before
 calling the native check, preserving the original cancellation reason.
 
+Strengthen the actual Windows fixture before acceptance: use an inheritable
+Everyone-read source root, observe the private `.env.local` target immediately
+before the byte stream opens, restore an originally read-only source file,
+and retain an outside hard link to the obsolete read-only file. Both restores
+must preserve the outside link's bytes/ACL/attributes and excluded Git policy,
+while still leaving backup payloads private.
+
 Apply the accepted version-3 metadata to real restored files, using standard
 Windows handle-based security/attribute APIs. Reuse the existing project byte
 restorer, backup checks, explicit data-loss acknowledgement and stopped/inhibited
