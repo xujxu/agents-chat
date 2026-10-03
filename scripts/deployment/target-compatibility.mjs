@@ -32,7 +32,7 @@ function refusal(check) {
   });
 }
 
-export async function inspectTargetCompatibility({ project, commit, nodeVersion, platform, signal }) {
+export async function inspectTargetCompatibility({ project, commit, nodeVersion, platform, signal, git: executable = 'git' }) {
   signal?.throwIfAborted();
   if (!/^[a-f0-9]{40}$/.test(commit ?? '')) throw refusal('literal-commit');
   if (!['linux', 'win32'].includes(platform) || !/^24\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(nodeVersion ?? '')) {
@@ -46,7 +46,7 @@ export async function inspectTargetCompatibility({ project, commit, nodeVersion,
       GIT_NO_REPLACE_OBJECTS: '1', GIT_LITERAL_PATHSPECS: '1' });
     const git = async (args, maxBuffer = 16384) => {
       signal?.throwIfAborted();
-      return (await execute('git', ['--no-replace-objects', '-c', `safe.directory=${root}`, '-C', root, ...args], {
+      return (await execute(executable, ['--no-replace-objects', '-c', `safe.directory=${root}`, '-C', root, ...args], {
         env, signal, timeout: 30000, maxBuffer, windowsHide: true, encoding: 'buffer',
       })).stdout;
     };

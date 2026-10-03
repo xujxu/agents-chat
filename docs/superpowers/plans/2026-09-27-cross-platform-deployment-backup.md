@@ -12636,7 +12636,7 @@ not substitute caller-supplied callbacks for the future branded task adapter.
   `prepareWindowsSourceRestoreSecurity`. External destinations still require
   their separate exact authorization; project restoration must not touch them.
 
-- [ ] **Step 3: require native composition and complete matrix acceptance.**
+- [x] **Step 3: require native composition and complete matrix acceptance.**
 
   Dispatch `deployment-lifecycle.yml` with `windows_restore_only=true` for the
   causal/focused runs, then require all 36 jobs on final source. Keep saved-entry
@@ -12644,6 +12644,14 @@ not substitute caller-supplied callbacks for the future branded task adapter.
   actual cross-adapter failure rather than broadening unrelated admission.
 
 ### Task 5BG: Bind complete snapshots to the original stopped Windows task
+
+**Accepted:** `201133577d1a680aa380ea9be991a081d3244c9c / 37124027076`
+passed **all 36 jobs**, completed **2026-10-03 13:10:55 UTC**. This also
+completes Task 5BF's combined project/Git/external restoration gate.
+Focused `37123752823 / 111204833920` passed the actual task pipeline
+**12:47:09 UTC** and all **97 component cases, 81 passed, 16 platform skips,
+zero failures/cancellations**, 363462 ms, **12:53:14 UTC**. The complete backup
+survives source update, build, guarded activation, retirement and final unlock.
 
 **Causal:** `2062d65 / 37121963189`, job `111199733452`, completed
 the owned-source pipeline step **2026-10-03 12:17:26 UTC**. The actual task
@@ -12756,7 +12764,7 @@ capture. Only the original transaction's copying stage may capture a snapshot.
   Recheck branded authority after configuration/bundle observation so neither
   a changed source nor state transition can be hidden by a callback.
 
-- [ ] **Step 4: require actual native pipeline and complete Actions acceptance.**
+- [x] **Step 4: require actual native pipeline and complete Actions acceptance.**
 
   Keep 36 full jobs and all existing cases; focused dispatch adds the already
   existing source-build scenario only to cover this adapter, avoiding duplicate
@@ -12765,19 +12773,27 @@ capture. Only the original transaction's copying stage may capture a snapshot.
 
 ### Task 5BH: Exercise target admission against the actual managed Windows app
 
+**Causal:** `a98e31b / 37125067304`, job `111208587673`, reached
+`DEPLOYMENT_TARGET_UNSUPPORTED / target-inspection-unavailable`
+**2026-10-03 13:11:08 UTC** after the real application built, started,
+authenticated and was discovered through its original native task scope.
+Explicit Git successfully resolved HEAD in the fixture; the existing target
+reader ignored that executable and tried PATH. This was not an import,
+application-build or discovery failure.
+
 **Goal:** Continue public-controller integration with the existing target
 compatibility reader, not another target protocol. The original private
 Windows controller has a minimal PATH; explicit Git must reach the reader just
 as explicit PowerShell now reaches native snapshot observers.
 
-- [ ] Add a causal read-only preflight to the existing real application
+- [x] Add a causal read-only preflight to the existing real application
   fixture's first authenticated start. Discover the actual installed task,
   bind the controller Node to its retained runtime configuration, and inspect
   the cloned application's literal commit with an explicit Git executable
   under minimal PATH. Require the reviewed declared profile and preserve
   original task/listener ownership. A missing supplied Git must fail rather
   than fall back to PATH. Do not add another application build or native job.
-- [ ] After observing the actual failure, thread the explicit executable
+- [x] After observing the actual failure, thread the explicit executable
   through `inspectTargetCompatibility`, preserving Linux/default callers,
   exact source-profile hashes, literal commit, no replacement objects and
   read-only Git options. Do not broaden PATH or weaken profile checks.
