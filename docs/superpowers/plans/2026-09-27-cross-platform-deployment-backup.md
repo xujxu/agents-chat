@@ -12244,6 +12244,100 @@ complete. Direct v2 restoration requires a canonical private backup root.
   timing. Run focused and complete Actions, including saved recovery import
   closure and existing Linux journal tests, before accepting this task.
 
+### Task 5BC: Capture native Windows external configuration security
+
+**Goal:** Extend the existing external snapshot format without a second copier.
+Keep external restoration and public Windows composition closed until separately
+accepted. Never rewrite an installed immutable runtime bundle through a retained
+runtime scope.
+
+**Files:**
+- Create `scripts/deployment/windows-external-snapshot-security.mjs` for grouping
+  canonical external parents, exact security-table validation and native capture.
+- Modify `snapshot-external.mjs` for Windows admission and sequential native
+  source rechecks; preserve existing Linux entries and byte-copy logic.
+- Modify `snapshot.mjs` for optional version-3 `windowsExternalSecurity` and
+  ownership of external observers through its existing `retainSecurity` factory.
+- Modify `saved-recovery-engine.mjs` for the new imported helper.
+- Create `tests/deployment-windows-external-snapshot.test.mjs`, and run it once
+  in the independent native Windows snapshot/restoration job.
+
+- [ ] **Step 1: publish native capture cases against the existing refusal.**
+
+  Use real external `.env.local` bytes and an optional absent sibling, a readonly
+  file, and independent `Get-Acl` observations. The saved shape is:
+
+  ```javascript
+  const manifest = await createSnapshot({
+    ...options,
+    externalFiles: [{ path: file, optional: false }, { path: missing, optional: true }],
+  });
+  assert.equal(manifest.version, 3);
+  assert.equal(manifest.windowsExternalSecurity.version, 1);
+  assert.equal(manifest.windowsExternalSecurity.parents[0].path, path.dirname(file));
+  assert.deepEqual(await verifySnapshot(options.destination), manifest);
+  ```
+
+  Test a wholly absent parent inventory, multiple distinct parents, case aliases,
+  outside hardlinks, source ACL changes and new presence at the final authority
+  boundary. Expected first failure is the existing Windows external ACL guard,
+  not a missing import or a fixture error. Do not print source contents.
+
+- [ ] **Step 2: reuse native source observers per external parent.**
+
+  Keep `externalFiles` byte/hash/legacy numeric fields unchanged, matching the
+  existing version-3 project format. Native restoration must use native security,
+  not those incidental Windows POSIX fields. Add one optional manifest field:
+
+  ```javascript
+  {
+    version: 1,
+    parents: [{
+      path: canonicalParent,
+      metadata: { version: 1, descriptors, root, entries },
+    }],
+  }
+  ```
+
+  Derive the complete ordered parent inventory from `externalFiles`; each
+  parent's file inventory contains exactly its present files as basenames.
+  Keep a root-only table for wholly absent inventories. Reuse
+  `validateWindowsSnapshotSecurity(metadata, inventory)` for each table; reject
+  missing/extra/duplicate/reordered parent or file entries, case aliases,
+  invalid canonical paths and native metadata on legacy/Linux manifests.
+  Require metadata for every nonempty Windows external inventory.
+
+  Acquire each observer through:
+
+  ```javascript
+  const observer = await retainSecurity({
+    project: parent, destinationParent: path.dirname(destination), entries: inventory, signal,
+  });
+  ```
+
+  The caller's existing reverse-order cleanup owns all observers, including
+  partial admission failures. Recheck native policy and original bytes/presence
+  sequentially at both existing external snapshot completion barriers. Keep
+  destination privacy admission before any copying and existing 64-file,
+  1-MiB-per-file and 32-MiB-manifest bounds.
+
+- [ ] **Step 3: require native and complete matrix acceptance.**
+
+  Update the old Windows unsupported-capture test to require rejection of missing
+  native metadata, not refusal of newly supported capture. Keep Linux cases
+  unchanged. Check private backup bytes, readonly policy, root/file descriptors,
+  explicit absence, integrity/tamper refusal, cleanup after cancelled capture
+  and saved recovery import closure.
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_restore_only=true
+  ```
+
+  Require focused and all 35 full jobs on the final implementation. Record
+  source SHA and actual results before describing capture as supported; this
+  does not accept native external restoration or public runtime deployment.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

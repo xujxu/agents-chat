@@ -29,7 +29,7 @@ on:
   workflow_dispatch:
     inputs:
       windows_restore_only:
-        description: Run only native Windows project and Git restore contracts
+        description: Run only native Windows snapshot and restoration contracts
         type: boolean
         default: false
 
@@ -175,7 +175,7 @@ jobs:
           sudo "$(command -v node)" --test tests/deployment-linux-data-worker.test.mjs tests/deployment-linux-compatibility.test.mjs tests/deployment-linux-snapshot.test.mjs tests/deployment-linux-readiness.test.mjs tests/deployment-linux-restore.test.mjs tests/deployment-linux-cold-restore.test.mjs tests/deployment-linux-acceptance.test.mjs
 
   windows-restore:
-    name: Native Windows project and Git restoration
+    name: Native Windows snapshot and restoration
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
@@ -183,14 +183,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Restore native Windows project payloads and Git state
+      - name: Capture native Windows snapshots and restore project and Git state
         shell: pwsh
         run: |
           ./tests/deployment-windows-private-tests.ps1 -Tests @(
             'tests/deployment-restore-project.test.mjs',
             'tests/deployment-git-objects.test.mjs',
             'tests/deployment-git-metadata.test.mjs',
-            'tests/deployment-windows-git-journal.test.mjs'
+            'tests/deployment-windows-git-journal.test.mjs',
+            'tests/deployment-windows-external-snapshot.test.mjs'
           )
 
   contracts:
