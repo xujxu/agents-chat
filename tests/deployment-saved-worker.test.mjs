@@ -35,6 +35,7 @@ const files = [
   'windows-task-completion-recovery.ps1', 'windows-task-completion-recovery-controller.ps1',
   'windows-task-completion-recovery.mjs',
   'windows-managed-task.ps1', 'windows-managed-task-controller.ps1', 'windows-managed-task.mjs',
+  'windows-task-admission.ps1',
   'windows-task-completion-record.mjs', 'windows-task-retirement-record.mjs', 'windows-task-retirement-intent.ps1',
   'windows-task-retirement-checkpoint.mjs', 'windows-task-retirement-checkpoint.ps1',
   'windows-task-retirement-records.ps1', 'windows-task-retirement-scope.ps1', 'windows-task-retirement-scope.mjs',

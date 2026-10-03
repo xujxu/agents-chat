@@ -287,6 +287,11 @@ from the actual task, retains original process/instance/account and private
 readiness evidence, and checks that generation's active Job and unguarded or
 released lease. It does not depend on retired operation journals, create
 admission or lock records, grant stop authority, or infer HTTP health.
+A separate production capture helper now publishes the existing task admission
+record from that retained observer, the original live operation lock and matching
+preflight state under shared native admission. It uses explicit private native
+publication rather than caller-provided runtime metadata; Actions acceptance is
+pending. Public Windows command composition remains unfinished.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

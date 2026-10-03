@@ -1,12 +1,17 @@
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { captureActivatedRuntime } from './windows-task-controller.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
+import { assertLockOwner, captureLockOwner, validateState } from './state.mjs';
+import { externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
+import { assertWindowsAdmission } from './windows-admission.mjs';
 
 const script = fileURLToPath(new URL('./windows-managed-task-controller.ps1', import.meta.url));
+const scopes = new WeakMap();
 const canonical = value => typeof value === 'string' && value.length <= 4096
   && path.isAbsolute(value) && path.resolve(value) === value && !/[\0\r\n]/.test(value);
 const task = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(value);
@@ -61,7 +66,7 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
       || ready.processIdentity !== await processIdentity(child.pid)) throw new Error('Original managed task observer differs.');
     const observation = capture(ready.value, project, taskName);
     const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity });
-    const request = async (method, requestSignal) => {
+    const request = async (method, requestSignal, payload = {}) => {
       if (busy) throw refused(new Error('A managed task observation request is already active.'));
       if (failure) throw failure;
       if (closed) throw refused(new Error('Managed task observation is closed.'));
@@ -70,7 +75,7 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
         requestSignal?.throwIfAborted();
         if (child.exitCode !== null || child.signalCode !== null) throw new Error('Original managed task observer exited.');
         const id = ++sequence;
-        await wire.send({ id, method });
+        await wire.send({ id, method, ...payload });
         const reply = captureWorkerFields(await wire.receive({ signal: requestSignal, timeoutMs: 30000 }),
           ['id', 'type', 'value', 'processIdentity'], 'managed task reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== identity.processIdentity) {
@@ -84,6 +89,14 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
           wire.close();
           return;
         }
+        if (method === 'capture-admission') {
+          const result = captureWorkerFields(reply.value, ['admission', 'sha256'], 'managed task admission');
+          if (result.admission !== path.join(payload.control, 'task-maintenance', 'admission.json')
+            || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
+            throw new Error('Unexpected managed task admission acknowledgement.');
+          }
+          return Object.freeze(result);
+        }
         if (!isDeepStrictEqual(capture(reply.value, project, taskName), observation)) {
           throw new Error('Original managed task observation changed.');
         }
@@ -94,13 +107,45 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
         throw failure;
       } finally { busy = false; }
     };
-    return Object.freeze({
+    const scope = Object.freeze({
       identity, observation,
       check: ({ signal: requestSignal } = {}) => request('check', requestSignal),
       close: async () => { if (!closed) await request('close'); },
     });
+    scopes.set(scope, { observation, request });
+    return scope;
   } catch (cause) {
     closed = true;
     throw await abandon(cause);
+  }
+
+  export async function captureWindowsManagedTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }) {
+    signal?.throwIfAborted();
+    const retained = scopes.get(scope);
+    if (!retained) throw refused(new Error('Original retained managed task scope is required.'));
+    const lock = captureLockOwner(suppliedLock);
+    const { root } = await externalWorkerDirectory(control, lock.project);
+    if (retained.observation.project !== lock.project) throw refused(new Error('Managed task project differs.'));
+    await assertWindowsAdmission(root, admission, { signal });
+    await assertLockOwner(root, lock);
+    const lockBytes = await readWorkerFile(path.join(root, 'lock', 'owner.json'), 65536, { privateMode: true });
+    const capturedLock = captureLockOwner(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(lockBytes)));
+    if (!isDeepStrictEqual(capturedLock, lock)) throw refused(new Error('Original admission lock changed.'));
+    const stateBytes = await readWorkerFile(path.join(root, 'state.json'), 65536, { privateMode: true });
+    const state = validateState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(stateBytes)));
+    if (state.project !== lock.project || state.operationId !== lock.operationId || state.startedAt !== lock.createdAt
+      || state.priorRuntime !== 'running' || state.runtimeIdentity !== retained.observation.runtime.generation
+      || state.errorCode !== null || state.previousPhase !== null
+      || state.phase !== (state.operation === 'restore' ? 'restore-preflight' : 'preflight')) {
+      throw refused(new Error('Managed task admission requires matching original preflight state.'));
+    }
+    await assertLockOwner(root, lock);
+    await assertWindowsAdmission(root, admission, { signal });
+    const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+    const result = await retained.request('capture-admission', signal, {
+      control: root, lockSha256: digest(lockBytes), stateSha256: digest(stateBytes),
+    });
+    await assertWindowsAdmission(root, admission, { signal });
+    return result;
   }
 }

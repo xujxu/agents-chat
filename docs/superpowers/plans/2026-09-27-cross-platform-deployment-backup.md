@@ -10789,7 +10789,7 @@ binds its original facade through a private WeakMap.
   `.github/workflows/deployment-lifecycle.yml`: optional `DiscoveredAdmission`
   fixture path in the existing three discovery jobs; keep the manual baseline.
 
-- [ ] **Step 1: establish the native causal without a manually written record.**
+- [x] **Step 1: establish the native causal without a manually written record.**
 
   The parent sends `{ discoverTask: taskName }` instead of publishing
   `admission.json`. The original Node discovers the unguarded runtime:
@@ -10808,6 +10808,10 @@ binds its original facade through a private WeakMap.
   the actual task/owner/configuration before acknowledging the ordinary
   admission message. Continue the existing stop-to-final-unlock pipeline.
   Push test-only changes; inspect the native missing-API failure in Actions.
+
+  Causal `0f628b86e507ca2e8b7e9b0fbbda3b98d23b7f0e / 37087869149`,
+  disabled native job `111101780541`, discovered the actual unguarded task and
+  failed on the missing production capture API at **2026-10-03 01:55:11 UTC**.
 
 - [ ] **Step 2: implement capture without granting observation stop authority.**
 
