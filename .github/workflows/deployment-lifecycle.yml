@@ -556,7 +556,9 @@ jobs:
           node-version: 24
       - name: Capture actual admission and discover the runtime after final unlock
         shell: pwsh
-        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -DiscoverManagedTask -DiscoveredAdmission
+        run: |
+          $sourceBuild = '${{ matrix.scenario }}' -ceq 'transaction-activate-complete-retirement'
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -DiscoverManagedTask -DiscoveredAdmission -OwnedSourceBuild:$sourceBuild
 
   windows-task-retirement:
     name: Native Windows task receipt retirement

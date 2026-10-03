@@ -10885,6 +10885,109 @@ binds its original facade through a private WeakMap.
   preflight write. The final fixture injects and restores exact state bytes
   only for its negative case, without weakening production state transitions.
 
+### Task 5AT: owned Windows source selection and npm stages
+
+Reuse the already accepted source/build orchestration, rather than copying
+Linux service assumptions into Windows. Keep native account/session checks,
+the original operation lock, and task transaction phase checks. The adapter
+must refuse source/build mutation after activation or outside its designated
+phase, even though a task controller's general `check()` can remain valid.
+
+**Files:**
+- Create `scripts/deployment/owned-source-build.mjs`: shared existing
+  inspect/resolve/select/npm implementation with a captured runtime descriptor.
+- Modify `scripts/deployment/linux-source-build.mjs`: retain both Linux public
+  functions and existing authority callbacks; delegate common orchestration.
+- Create `scripts/deployment/windows-source-build.mjs`: real observer binding,
+  installed Node/configuration match, original principal/session worker runtime,
+  and original stopped transaction mutation checks.
+- Modify `scripts/deployment/windows-managed-task.mjs`: export a read-only
+  original-scope assertion using the existing private scope map.
+- Modify `scripts/deployment/windows-task-transaction.mjs`: retain actual
+  returned transaction contexts in a private map and assert source-stage
+  project/operation/lock/generation/target/phase before and after native checks.
+- Modify `scripts/deployment/saved-worker-engine.mjs` and
+  `tests/deployment-saved-worker.test.mjs`: exact new saved module closure.
+- Create `tests/deployment-windows-source-build.mjs`: a real local Git
+  repository, two commits, actual owned Git/npm commands, small fixture build,
+  manifest/artifact checks and stage/forged-context negatives.
+- Modify `tests/deployment-windows-managed-admission.mjs`,
+  `tests/deployment-windows-task-transaction-controller.mjs`,
+  `tests/deployment-windows-task-node-cases.ps1`,
+  `tests/deployment-windows-runtime-host.ps1` and
+  `.github/workflows/deployment-lifecycle.yml`: opt-in source/build coverage
+  within the existing native update discovery case.
+
+- [ ] **Step 1: publish an actual Windows source-adapter causal.**
+
+  Add fixture-only `OwnedSourceBuild`. Obtain canonical Git, Node and
+  `npm-cli.js` paths from Actions tooling; pass literal paths, never cmd
+  wrappers, to the original Node fixture. Initialize a two-commit repository
+  in the runtime project, ignoring runtime evidence but tracking package/lock,
+  build script and a source marker. The test imports:
+
+  ```javascript
+  const { prepareWindowsSourceBuild } = await import('../scripts/deployment/windows-source-build.mjs');
+  ```
+
+  Capture the missing module in Actions before implementing the adapter.
+  The original runtime remains active during read/target resolution. This
+  fixture is source/build integration coverage, not full Next application
+  deployment or first-install acceptance.
+
+- [ ] **Step 2: reuse orchestration and bind native source authority.**
+
+  ```javascript
+  const stages = await prepareWindowsSourceBuild({
+    scope, control, lock, operation, node, npmCli, git, environment, pwsh, signal,
+  });
+  await stages.inspect();
+  const target = await stages.resolve({ options: { revision } });
+  await stages.select({ target, stopped });
+  await stages.npm({ stage: 'dependencies', commit: target.commit, stopped });
+  const build = await stages.npm({ stage: 'build', commit: target.commit, stopped });
+  ```
+
+  The shared implementation retains package/lock byte checks, exact Git
+  metadata and build artifact capture. Linux keeps its existing guard and
+  `{uid, gid}` worker runtime; Windows derives `{pwsh, accountSid, sessionId}`
+  from the actual retained managed task and validates the configured Node
+  against the explicit Node command. Cross-account launch is not assumed:
+  existing native workers must validate their actual account/session.
+
+  The stopped-context map records the original factory's control, lock and
+  generation. Reject copied contexts and mismatching supplied locks. Require
+  the current state target to equal the requested commit, no error, running
+  original history, and exact phase `source-selected`, `dependencies` or
+  `building` for select, dependencies or build respectively. Check the real
+  native task context before and after reading state. Restore operations may
+  not rebuild through this update adapter.
+
+- [ ] **Step 3: run actual commands through the original worker operation.**
+
+  ```javascript
+  await assert.rejects(stages.select({ target, stopped: { ...context } }));
+  await assert.rejects(stages.select({ target, stopped: context })); // copying
+  const selected = await stages.select({ target, stopped: context }); // source-selected
+  assert.equal(selected.commit, target.commit);
+  await stages.npm({ stage: 'dependencies', commit: target.commit, stopped: context });
+  const built = await stages.npm({ stage: 'build', commit: target.commit, stopped: context });
+  await built.artifacts.check();
+  ```
+
+  Exercise each positive call only after the corresponding real state
+  transition. Refuse build again at configuring; preserve package/lock and
+  source marker, seal the same worker operation, then continue the accepted
+  replacement/activation/completion/final-retirement sequence. Keep all
+  existing restore/disabled scenarios and Linux gates intact.
+
+- [ ] **Step 4: accept full regression and record scope accurately.**
+
+  Push and run all validation in Actions. Require the extended native update
+  case plus all 34 existing jobs. Do not describe a small fixture npm build as
+  actual application deployment; public scripts, configuration/ACL adapters,
+  snapshot restoration and real first-install/application acceptance remain.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

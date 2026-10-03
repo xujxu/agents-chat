@@ -14,6 +14,7 @@ param(
     [string]$CrashStep,
     [switch]$DiscoverManagedTask,
     [switch]$DiscoveredAdmission,
+    [switch]$OwnedSourceBuild,
     [switch]$Transactional,
     [switch]$Restore
 )
@@ -97,7 +98,20 @@ try {
     $file = Join-Path $directory 'admission.json'
     if ($DiscoveredAdmission) {
         Assert ($Transactional) 'Discovered admission requires the original transaction controller'
-        $controller.StandardInput.WriteLine((@{ discoverTask=$TaskName } | ConvertTo-Json -Compress))
+        $discovery = @{ discoverTask=$TaskName }
+        if ($OwnedSourceBuild) {
+            Assert (-not $Restore -and $Action -ceq 'activate-complete-retirement') 'Source build requires normal update completion'
+            $git = & $node -p "require('node:fs').realpathSync.native(process.argv[1])" (Get-Command git.exe).Source
+            Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize Git executable'
+            $npmCli = & $node -p "require('node:fs').realpathSync.native(process.argv[1])" `
+                (Join-Path ([IO.Path]::GetDirectoryName($node)) 'node_modules/npm/bin/npm-cli.js')
+            Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize npm CLI'
+            $discovery.sourceBuild = @{
+                node=$node; git=$git; npmCli=$npmCli
+                environment=@{ SystemRoot=$env:SystemRoot; PATH=$env:PATH; TEMP=$controllerRoot; TMP=$controllerRoot; ComSpec=$env:ComSpec }
+            }
+        }
+        $controller.StandardInput.WriteLine(($discovery | ConvertTo-Json -Depth 5 -Compress))
         $controller.StandardInput.Flush()
         $admitted = Receive-Controller
         Assert ($admitted.phase -ceq 'admitted' -and $admitted.admission -ceq $file) 'Production admission path differs'

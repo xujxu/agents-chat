@@ -14,7 +14,8 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     [ValidateSet('release-requested', 'lease-released', 'permanent-policy-applied', 'enable-applied')]
     [string]$CrashStep = 'lease-released',
     [switch]$DiscoverManagedTask,
-    [switch]$DiscoveredAdmission)
+    [switch]$DiscoveredAdmission,
+    [switch]$OwnedSourceBuild)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -271,7 +272,7 @@ if (process.argv[2] === 'child') {
         & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $root -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
             -Action $transactionAction -Transactional -Restore:$restoreTransaction -CrashStep $CrashStep `
-            -DiscoverManagedTask:$DiscoverManagedTask -DiscoveredAdmission:$DiscoveredAdmission
+            -DiscoverManagedTask:$DiscoverManagedTask -DiscoveredAdmission:$DiscoveredAdmission -OwnedSourceBuild:$OwnedSourceBuild
         if ($transactionAction -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
             'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state',
             'activate-complete-proof', 'activate-complete-retirement', 'activate-complete-recovery')) {

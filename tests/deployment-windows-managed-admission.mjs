@@ -5,7 +5,7 @@ import path from 'node:path';
 import { writeState } from '../scripts/deployment/state.mjs';
 import { withWindowsAdmission } from '../scripts/deployment/windows-admission.mjs';
 
-export async function captureManagedAdmission({ taskName, project, pwsh, control, lock, makeState }) {
+export async function captureManagedAdmission({ taskName, project, pwsh, control, lock, makeState, prepareSource }) {
   const api = await import('../scripts/deployment/windows-managed-task.mjs');
   const scope = await api.inspectWindowsManagedTask({ taskName, project, pwsh });
   try {
@@ -15,6 +15,7 @@ export async function captureManagedAdmission({ taskName, project, pwsh, control
     const capture = api.captureWindowsManagedTaskAdmission;
     const state = makeState(scope.observation.runtime.generation);
     await writeState(control, state);
+    await prepareSource?.(scope);
     const result = await withWindowsAdmission(control, { pwsh }, async admission => {
       const options = { scope, control, lock, admission };
       await assert.rejects(capture({ ...options, scope: { ...scope } }));

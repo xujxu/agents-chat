@@ -23,10 +23,17 @@ const receive = async () => {
 };
 console.log(JSON.stringify({ pid: process.pid, identity: lock.processIdentity, operationId: lock.operationId }));
 let admission = await receive();
+let sourceFixture;
+let workerOperation;
+if (admission.sourceBuild) {
+  const { createWindowsSourceFixture } = await import('./deployment-windows-source-build.mjs');
+  sourceFixture = await createWindowsSourceFixture({ project, control, lock, pwsh, tools: admission.sourceBuild });
+}
 const makeState = generation => ({
   version: 1, operationId: lock.operationId, project, operation,
   phase: operation === 'restore' ? 'restore-preflight' : 'preflight',
-  previousPhase: null, sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40),
+  previousPhase: null, sourceCommit: sourceFixture?.beforeCommit ?? 'a'.repeat(40),
+  targetCommit: sourceFixture?.targetCommit ?? 'b'.repeat(40),
   backupId: null, priorRuntime: 'running', runtimeIdentity: generation,
   startedAt: lock.createdAt, updatedAt: new Date().toISOString(), errorCode: null,
 });
@@ -34,9 +41,10 @@ let state;
 if (admission.discoverTask) {
   const { captureManagedAdmission } = await import('./deployment-windows-managed-admission.mjs');
   const captured = await captureManagedAdmission({
-    taskName: admission.discoverTask, project, pwsh, control, lock, makeState,
+    taskName: admission.discoverTask, project, pwsh, control, lock, makeState, prepareSource: sourceFixture?.prepare,
   });
   state = captured.state;
+  workerOperation = sourceFixture?.operation;
   console.log(JSON.stringify({ phase: 'admitted', ...captured.admission }));
   admission = await receive();
   assert.deepEqual(admission, captured.admission);
@@ -97,8 +105,7 @@ await assert.rejects(releaseLock(control, lock, { pwsh }), /maintenance/i);
 assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
 console.log(JSON.stringify({ phase: 'stopped', bridge: context.identity }));
 const { action, configuration, sha256, crashStep } = await receive();
-let workerOperation;
-if (['activate-complete-retirement', 'activate-complete-recovery'].includes(action)) {
+if (!sourceFixture && ['activate-complete-retirement', 'activate-complete-recovery'].includes(action)) {
   const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
   const saved = await saveWorkerEngine({ source, control, project, operationId: lock.operationId });
   await saveRecoveryEngine({ source, control });
@@ -130,10 +137,12 @@ if (action === 'activate-early') {
   'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state',
   'activate-complete-proof', 'activate-complete-retirement', 'activate-complete-recovery'].includes(action)) {
   if (operation !== 'restore') {
+    await sourceFixture?.refuseEarly(context);
     for (const phase of ['rotating', 'backup-ready', 'source-selected', 'dependencies', 'building', 'configuring', 'activating']) {
       state = { ...state, previousPhase: state.phase, phase };
       await writeState(control, state);
       await context.check();
+      await sourceFixture?.advance(phase, context);
     }
   }
   await context.retire();
