@@ -12863,6 +12863,13 @@ configuration observation and the existing captured database inspector.
 
 ### Task 5BJ: Capture the complete actual Windows application
 
+**First actual run:** `a925d58 / 37129490826`, job `111221585010`,
+failed **2026-10-03 14:30:09 UTC** at the existing Git metadata refusal
+after the original three-start lifecycle and the snapshot mode's authenticated
+create succeeded. The application job used default shallow checkout; its local
+clone inherited that shallow history. Use full checkout and assert non-shallow
+source before building. Do not relax the production complete-history guard.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.

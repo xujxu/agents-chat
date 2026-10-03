@@ -205,6 +205,10 @@ test('actual application source installs and builds inside native ownership', {
   assert.ok(git && npmCli, 'Actual application build requires explicit Git/npm paths.');
   await execute(git, ['-c', `safe.directory=${repository}`, 'clone', '--no-hardlinks', repository, f.project],
     { timeout: 120000, maxBuffer: 8192 });
+  if (process.platform === 'win32') {
+    assert.equal((await execute(git, ['-C', f.project, 'rev-parse', '--is-shallow-repository'])).stdout.trim(),
+      'false', 'Complete Windows application snapshot requires full source history before building.');
+  }
   const commit = (await execute(git, ['-C', f.project, 'rev-parse', 'HEAD'])).stdout.trim();
   const environment = {};
   const permitted = new Set(['PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA']);
