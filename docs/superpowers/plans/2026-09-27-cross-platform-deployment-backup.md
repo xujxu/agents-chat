@@ -12651,6 +12651,15 @@ was discovered/admitted/stopped and reached
 `Missing original-task copying-stage snapshot authority API`. The earlier
 97-test restoration step passed; no module-import or fixture-setup failure.
 
+First implementation `9a10db0 / 37122677556`, native job `111201737520`,
+reached complete snapshot capture but failed **12:23:56 UTC** at
+`Invalid external snapshot source`. The installed fixture intentionally keeps
+its immutable bundle inside the project. Classify configuration/helpers by
+their actual project-relative paths: capture co-located files through the
+complete project inventory and only outside files through external capture.
+Keep all runtime hash/source barriers, and assert exact backup bytes for every
+helper in either location. Do not relax external-source validation.
+
 **Goal:** Add the native snapshot adapter needed by public deployment without
 inventing another task controller. Reuse the existing branded transaction,
 configuration observer, complete-project/Git snapshot and native external

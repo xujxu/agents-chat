@@ -60,12 +60,26 @@ export function createWindowsTaskSnapshotFixture({ observation, control, lock, c
       const runtime = JSON.parse(bytes);
       const expectedFiles = [observation.configuration,
         ...Object.keys(runtime.helpers).map(name => path.join(path.dirname(observation.configuration), name))];
-      assert.deepEqual(manifest.externalFiles.map(file => file.path).sort(), expectedFiles.sort());
-      assert.equal(manifest.windowsExternalSecurity.parents.length, 1);
-      assert.equal(manifest.windowsExternalSecurity.parents[0].metadata.entries.length, expectedFiles.length);
-      const configIndex = manifest.externalFiles.findIndex(file => file.path === observation.configuration);
-      assert.equal(manifest.externalFiles[configIndex].sha256, observation.configurationSha256);
-      assert.deepEqual(await readFile(path.join(destination, 'external', String(configIndex))), bytes);
+      const external = [];
+      for (const file of expectedFiles) {
+        const relative = path.relative(lock.project, file);
+        if (path.isAbsolute(relative) || relative === '..' || relative.startsWith(`..${path.sep}`)) {
+          external.push(file);
+          const index = manifest.externalFiles.findIndex(entry => entry.path === file);
+          assert.ok(index >= 0);
+          assert.deepEqual(await readFile(path.join(destination, 'external', String(index))), await readFile(file));
+        } else {
+          assert.ok(manifest.entries.some(entry => entry.path === relative.split(path.sep).join('/')));
+          assert.deepEqual(await readFile(path.join(destination, 'files', relative)), await readFile(file));
+        }
+      }
+      assert.deepEqual(manifest.externalFiles.map(file => file.path).sort(), external.sort());
+      if (external.length) {
+        assert.equal(manifest.windowsExternalSecurity.parents.length, 1);
+        assert.equal(manifest.windowsExternalSecurity.parents[0].metadata.entries.length, external.length);
+      } else {
+        assert.equal(manifest.windowsExternalSecurity, undefined);
+      }
       assert.equal(await readFile(path.join(destination, 'files/source-marker.txt'), 'utf8'), 'old-source\n');
       assert.deepEqual(await readFile(path.join(destination, 'files/.env.local')), await readFile(path.join(lock.project, '.env.local')));
       assert.ok(manifest.absentPaths.includes('.env.production.local'));

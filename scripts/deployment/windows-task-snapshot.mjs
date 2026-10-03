@@ -62,10 +62,10 @@ export async function createWindowsTaskSnapshot({
   catch (error) { if (error.code !== 'ENOENT') throw error; hasGit = false; }
   const gitMetadata = hasGit ? await inspectGitMetadata({ project, commit: source.commit, signal }) : undefined;
   const scope = await inspectSnapshotScope({ project, signal });
-  const external = new Map(files.map(file => [file.path, { path: file.path, optional: false }]));
-  for (const file of configuration.files) {
+  const external = new Map();
+  for (const file of [...files.map(file => ({ ...file, present: true })), ...configuration.files]) {
     const relative = path.relative(project, file.path);
-    if (relative && !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`)) continue;
+    if (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`)) continue;
     if (!external.has(file.path)) external.set(file.path, { path: file.path, optional: !file.present });
   }
   return createSnapshot({
