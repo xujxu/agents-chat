@@ -347,7 +347,9 @@ detached and packed refs, inherited policy for previously absent paths,
 controller-death continuation, drift/alias refusal and incomplete private
 preparation. Native snapshot/restoration now has an independent
 15-minute CI job, retaining all other contracts and five cold-retirement probes;
-the full lifecycle matrix contains 35 jobs.
+the full lifecycle matrix contains 36 jobs. Linux service recovery and
+interrupted-recovery resumption run separately under unchanged 10-minute
+limits, preserving all 66 existing cases without name-based filtering.
 The public Windows Git/runtime restore composition gate remains closed.
 The journal's native atomic lockfile publication primitive passed all 34 jobs
 on `0f2da811690c718eeac9acb728baae2b45438b5c / 37111501173`.

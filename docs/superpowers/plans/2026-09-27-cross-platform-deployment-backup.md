@@ -12489,6 +12489,49 @@ Do not modify an installed immutable bundle while a runtime scope retains it.
   bundle replacement and public task reconfiguration remain separately gated.
   Run focused and all 35 full jobs on the final no-op implementation.
 
+### Task 5BE: Keep native Linux recovery acceptance within bounded CI shards
+
+**Evidence:** `04dcc44 / 37118616855`, Linux service recovery job
+`111190851440`, completed **2026-10-03 11:21:26 UTC** as cancelled.
+All **66 tests passed**, none failed/cancelled in Node, but the command lasted
+**603591 ms** and exceeded the existing 10-minute job budget. This run is not
+full acceptance. Preserve the budget and split by focused test responsibility,
+as already done for Windows restoration; do not increase timeouts or drop tests.
+
+**Files:**
+- Move the 24 existing recovery-resumption/live-unlock cases from
+  `tests/deployment-linux-service-recovery.test.mjs` into
+  `tests/deployment-linux-service-resumption.test.mjs`, retaining assertions and
+  existing fixture imports unchanged.
+- Add `linux-service-resumption` in `.github/workflows/deployment-lifecycle.yml`;
+  preserve the original recovery job with its remaining 42 cases across three
+  files. Both jobs retain `ubuntu-24.04`, Node 24, sudo and 10-minute limits.
+- Update README current matrix count to **36**; earlier 35-job acceptance
+  records remain historical. Final Task 5BD acceptance now requires all 36.
+
+- [x] **Step 1: separate existing resumption cases without changing behavior.**
+- [x] **Step 2: wire the second native job and update current documentation.**
+
+  ```yaml
+  linux-service-resumption:
+    if: ${{ !inputs.windows_restore_only }}
+    name: Native Linux service recovery resumption
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: sudo "$(command -v node)" --test tests/deployment-linux-service-resumption.test.mjs
+  ```
+
+- [ ] **Step 3: require 42+24 native passes and all 36 jobs on the final source.**
+
+  Push to `feat/deployment-backup`; inspect `deployment-lifecycle.yml` full run
+  logs for both counts, zero failures/cancellations and duration under budget.
+  Focused Windows restoration remains a separate single-job dispatch.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

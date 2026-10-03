@@ -327,6 +327,19 @@ jobs:
       - name: Recover interrupted actual service retirement
         run: sudo "$(command -v node)" --test tests/deployment-recovery-admission.test.mjs tests/deployment-linux-service-recovery.test.mjs tests/deployment-linux-cold-service.test.mjs
 
+  linux-service-resumption:
+    if: ${{ !inputs.windows_restore_only }}
+    name: Native Linux service recovery resumption
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Resume interrupted actual service recovery and unlock
+        run: sudo "$(command -v node)" --test tests/deployment-linux-service-resumption.test.mjs
+
   linux-worker-handoff:
     if: ${{ !inputs.windows_restore_only }}
     name: Native Linux retirement handoff
