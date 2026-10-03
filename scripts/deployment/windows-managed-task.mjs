@@ -118,34 +118,34 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
     closed = true;
     throw await abandon(cause);
   }
+}
 
-  export async function captureWindowsManagedTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }) {
-    signal?.throwIfAborted();
-    const retained = scopes.get(scope);
-    if (!retained) throw refused(new Error('Original retained managed task scope is required.'));
-    const lock = captureLockOwner(suppliedLock);
-    const { root } = await externalWorkerDirectory(control, lock.project);
-    if (retained.observation.project !== lock.project) throw refused(new Error('Managed task project differs.'));
-    await assertWindowsAdmission(root, admission, { signal });
-    await assertLockOwner(root, lock);
-    const lockBytes = await readWorkerFile(path.join(root, 'lock', 'owner.json'), 65536, { privateMode: true });
-    const capturedLock = captureLockOwner(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(lockBytes)));
-    if (!isDeepStrictEqual(capturedLock, lock)) throw refused(new Error('Original admission lock changed.'));
-    const stateBytes = await readWorkerFile(path.join(root, 'state.json'), 65536, { privateMode: true });
-    const state = validateState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(stateBytes)));
-    if (state.project !== lock.project || state.operationId !== lock.operationId || state.startedAt !== lock.createdAt
-      || state.priorRuntime !== 'running' || state.runtimeIdentity !== retained.observation.runtime.generation
-      || state.errorCode !== null || state.previousPhase !== null
-      || state.phase !== (state.operation === 'restore' ? 'restore-preflight' : 'preflight')) {
-      throw refused(new Error('Managed task admission requires matching original preflight state.'));
-    }
-    await assertLockOwner(root, lock);
-    await assertWindowsAdmission(root, admission, { signal });
-    const digest = bytes => createHash('sha256').update(bytes).digest('hex');
-    const result = await retained.request('capture-admission', signal, {
-      control: root, lockSha256: digest(lockBytes), stateSha256: digest(stateBytes),
-    });
-    await assertWindowsAdmission(root, admission, { signal });
-    return result;
+export async function captureWindowsManagedTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }) {
+  signal?.throwIfAborted();
+  const retained = scopes.get(scope);
+  if (!retained) throw refused(new Error('Original retained managed task scope is required.'));
+  const lock = captureLockOwner(suppliedLock);
+  const { root } = await externalWorkerDirectory(control, lock.project);
+  if (retained.observation.project !== lock.project) throw refused(new Error('Managed task project differs.'));
+  await assertWindowsAdmission(root, admission, { signal });
+  await assertLockOwner(root, lock);
+  const lockBytes = await readWorkerFile(path.join(root, 'lock', 'owner.json'), 65536, { privateMode: true });
+  const capturedLock = captureLockOwner(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(lockBytes)));
+  if (!isDeepStrictEqual(capturedLock, lock)) throw refused(new Error('Original admission lock changed.'));
+  const stateBytes = await readWorkerFile(path.join(root, 'state.json'), 65536, { privateMode: true });
+  const state = validateState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(stateBytes)));
+  if (state.project !== lock.project || state.operationId !== lock.operationId || state.startedAt !== lock.createdAt
+    || state.priorRuntime !== 'running' || state.runtimeIdentity !== retained.observation.runtime.generation
+    || state.errorCode !== null || state.previousPhase !== null
+    || state.phase !== (state.operation === 'restore' ? 'restore-preflight' : 'preflight')) {
+    throw refused(new Error('Managed task admission requires matching original preflight state.'));
   }
+  await assertLockOwner(root, lock);
+  await assertWindowsAdmission(root, admission, { signal });
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  const result = await retained.request('capture-admission', signal, {
+    control: root, lockSha256: digest(lockBytes), stateSha256: digest(stateBytes),
+  });
+  await assertWindowsAdmission(root, admission, { signal });
+  return result;
 }
