@@ -12921,6 +12921,22 @@ buffer parsing, same-project regular-directory admission, new private creation,
 attributes and exact post-publication identity/data/security verification.
 Keep arbitrary tags and external targets refused before destination creation.
 
+**Snapshot/restore integration:** Add
+`tests/deployment-windows-junction-snapshot.test.mjs` before enabling capture.
+Require complete project/data/module restoration both with an intact target
+and after a failed dependency change has removed that target. Preserve snapshot
+format 3; version its native security payload to 2 only when junctions exist.
+Bind the native metadata to its original project and store exact junction
+buffers alongside the existing entry ACL/attribute table. Store junctions as
+archive metadata, not live links inside the backup; verify their bounded raw
+codec, contained captured directory target and missing physical payload entry.
+Keep version-1 native metadata and Linux link behavior unchanged.
+During restore, inspect/remove current junctions without traversing targets,
+including missing dependency targets; create directory/file payloads first,
+recreate junctions by native handles, then restore their own metadata after
+ordinary parent policy restoration. Include the new native helper in the saved
+recovery closure when snapshot/restore imports it.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.

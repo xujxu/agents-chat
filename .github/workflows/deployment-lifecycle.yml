@@ -192,7 +192,11 @@ jobs:
           node-version: 24
       - name: Retain internal junction metadata without following foreign reparse points
         shell: pwsh
-        run: ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-source-reparse.test.mjs')
+        run: |
+          ./tests/deployment-windows-private-tests.ps1 -Tests @(
+            'tests/deployment-windows-source-reparse.test.mjs',
+            'tests/deployment-windows-junction-snapshot.test.mjs'
+          )
       - name: Capture original task snapshot through the native owned-source pipeline
         if: ${{ inputs.windows_restore_only }}
         shell: pwsh
