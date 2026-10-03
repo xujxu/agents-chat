@@ -47,6 +47,8 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
   let stages;
   let target;
   let built;
+  let configuration;
+  let buildEnvironment;
   return {
     beforeCommit, targetCommit,
     get operation() { return workers; },
@@ -57,6 +59,9 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
       assert.equal(scope.identity.sessionId, Number(observedSession.stdout.trim()));
       assert.equal(scope.identity.accountSid, scope.observation.principalSid);
       assert.equal(scope.observation.runtime.sessionId, 0);
+      const { prepareWindowsConfigurationFixture } = await import('./deployment-windows-configuration.mjs');
+      configuration = await prepareWindowsConfigurationFixture({ scope, pwsh });
+      buildEnvironment = configuration.buildEnvironment(tools.environment);
       const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
       const saved = await saveWorkerEngine({ source, control, project, operationId: lock.operationId });
       await saveRecoveryEngine({ source, control });
@@ -81,13 +86,14 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
       await built.artifacts.check();
     },
     async advance(phase, context) {
+      if (['source-selected', 'dependencies', 'building', 'configuring'].includes(phase)) await configuration.checkFiles();
       if (phase === 'source-selected') {
         assert.equal((await stages.select({ target, stopped: context })).commit, targetCommit);
       } else if (phase === 'dependencies') {
-        await stages.npm({ stage: 'dependencies', commit: targetCommit, stopped: context });
+        await stages.npm({ stage: 'dependencies', commit: targetCommit, stopped: context, environment: buildEnvironment });
       } else if (phase === 'building') {
         await assert.rejects(stages.npm({ stage: 'build', commit: beforeCommit, stopped: context }));
-        built = await stages.npm({ stage: 'build', commit: targetCommit, stopped: context });
+        built = await stages.npm({ stage: 'build', commit: targetCommit, stopped: context, environment: buildEnvironment });
         assert.equal(built.sourceCommit, targetCommit);
         assert.equal(built.artifacts.identity.buildId, 'new-source');
         await built.artifacts.check();
@@ -96,7 +102,9 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
         await built.artifacts.check();
         assert.equal(await readFile(path.join(project, 'source-marker.txt'), 'utf8'), 'new-source\n');
         await workers.seal();
+        await configuration.close();
       }
+      if (['source-selected', 'dependencies', 'building'].includes(phase)) await configuration.checkFiles();
     },
   };
 }

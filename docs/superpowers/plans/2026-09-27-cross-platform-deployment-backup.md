@@ -11014,6 +11014,95 @@ phase, even though a task controller's general `check()` can remain valid.
   implementation run `37092203062` was retained through completion with
   33 passes and its one diagnosed worker-session failure.
 
+### Task 5AU: retained Windows configuration and source ACL observation
+
+Bind configuration compatibility to the installed private runtime bundle,
+production dotenv precedence and the original source files. This is read-only
+configuration/ACL observation, not permission repair or completed Windows
+snapshot restoration. Source permissions may differ from private backup
+permissions; never copy a broad source DACL onto backup files.
+
+**Files:**
+- Modify `scripts/deployment/configuration-files.mjs`: Windows-only
+  case-insensitive environment keys; refuse ambiguous case aliases, preserve
+  Linux case sensitivity and existing secret-safe diagnostics.
+- Modify `scripts/deployment/WindowsPrivateFile.cs`: expose read-only source
+  file retention using the existing non-private source read implementation,
+  plus checked original owner/group/DACL descriptors for files/directories.
+  Keep private `Open`, publication, retirement and admission policy unchanged.
+- Create `scripts/deployment/windows-configuration-files.ps1`: current
+  Node-owned read-only native scope, retained project/configuration and fixed
+  dotenv/agents source inventory, exact identity/hash/ACL/absence rechecks.
+- Create `scripts/deployment/windows-configuration-files.mjs`: strict bounded
+  native protocol and immutable source metadata; no secret values in reports.
+- Create `scripts/deployment/windows-configuration.mjs`: original managed
+  scope binding, installed environment and generic compatibility adapter,
+  file checks independent of the application's running/stopped state.
+- Modify `tests/deployment-configuration-files.test.mjs`: real platform
+  environment case/precedence/conflict cases.
+- Create `tests/deployment-windows-configuration.mjs`: native ACL-change,
+  absent-file appearance and retained-file replacement refusals.
+- Modify `tests/deployment-windows-source-build.mjs`: use the actual admitted
+  configuration's build environment in existing owned npm stages.
+
+- [ ] **Step 1: publish configuration causal coverage in Actions.**
+
+  ```javascript
+  const { inspectWindowsConfiguration } = await import('../scripts/deployment/windows-configuration.mjs');
+  const config = await inspectWindowsConfiguration({ scope, pwsh, profile: 'agents-chat-auth-638c553' });
+  await config.checkFiles();
+  assert.deepEqual(config.providers, ['admin-login']);
+  ```
+
+  Use fixture-only credentials in `.env.local`, including lowercase keys on
+  Windows. Assert no values appear in serialized reports. Exercise an actual
+  source ACL change and newly appearing higher-priority dotenv file, restore
+  the fixture's exact original permissions/files, then reopen successfully.
+  Capture the missing adapter and Windows case-semantics failures before
+  adding production implementation.
+
+- [ ] **Step 2: retain native configuration evidence without mutation authority.**
+
+  Expose only source metadata and `check`/`close` from the native scope:
+
+  ```javascript
+  { project, configuration, configurationSha256, projectSecurityDescriptor, files }
+  // files: { path, present, sha256, bytes, dev, ino, securityDescriptor }
+  // Absent entries have null metadata and remain explicitly checked.
+  ```
+
+  Retain the project directory, private bundle configuration and every
+  present `.env.production.local`, `.env.local`, `.env.production`, `.env`
+  and `agents.json`. Reject links/reparse redirection, excess bytes, changed
+  identity/content/owner/group/DACL, and previously absent files appearing.
+  Use existing source-read checks, not a relaxation of private backup checks.
+  Report no environment contents through native readiness or errors.
+
+- [ ] **Step 3: integrate compatibility and actual source/build configuration.**
+
+  ```javascript
+  const environment = config.buildEnvironment(toolEnvironment);
+  await config.checkFiles();
+  await stages.npm({ stage: 'build', commit, stopped, environment });
+  await config.checkFiles();
+  ```
+
+  Derive runtime environment from the digest-bound installed configuration,
+  never from controller secrets. Reuse `inspectConfigurationFiles`; normalize
+  Windows environment names consistently for runtime, dotenv and build
+  overrides, while refusing case collisions rather than choosing silently.
+  Keep the native file scope usable after stopping the old task. Close it
+  explicitly before final fixture retirement. Cross-account execution and
+  ACL restoration remain separate work.
+
+- [ ] **Step 4: accept native and full regressions without broadening scope.**
+
+  Require the extended native update/source-build case and all 34 workflow
+  jobs. Preserve Linux configuration behavior, private publication and saved
+  recovery import coverage. The new configuration adapter is live
+  orchestration; add no cold-recovery build dependency. Record exact SHA/run
+  and distinguish ACL observation from future ACL restoration.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

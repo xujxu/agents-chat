@@ -12,6 +12,32 @@ const environment = {
 };
 const inspect = (project, extra = {}) => inspectConfigurationFiles({ project, profile, environment, ...extra });
 
+test('runtime environment follows platform case sensitivity', async t => {
+  const project = await temporaryDeployment(t);
+  const lower = Object.fromEntries(Object.entries(environment).map(([name, value]) => [name.toLowerCase(), value]));
+  if (process.platform === 'win32') {
+    const result = await inspect(project, { environment: lower });
+    assert.deepEqual(result.providers, ['admin-login']);
+    assert.equal(result.buildEnvironment({}).NEXTAUTH_SECRET, environment.NEXTAUTH_SECRET);
+  } else {
+    await assert.rejects(inspect(project, { environment: lower }), { check: 'NEXTAUTH_SECRET' });
+  }
+});
+
+test('Windows dotenv and build overrides use case-insensitive precedence without aliases',
+  { skip: process.platform !== 'win32' }, async t => {
+    const project = await temporaryDeployment(t);
+    await writeFile(path.join(project, '.env.local'), 'admin_password=lower-priority\n');
+    const result = await inspect(project);
+    const build = result.buildEnvironment({ admin_password: environment.ADMIN_PASSWORD });
+    assert.equal(build.ADMIN_PASSWORD, environment.ADMIN_PASSWORD);
+    assert.equal(Object.hasOwn(build, 'admin_password'), false);
+    await assert.rejects(inspect(project, { environment: { ...environment, node_env: 'development' } }),
+      { code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED' });
+    await writeFile(path.join(project, '.env.local'), 'CUSTOM_VALUE=first\ncustom_value=second\n');
+    await assert.rejects(inspect(project), { code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED' });
+  });
+
 test('explicit runtime environment is inspected without consulting controller secrets', async t => {
   const project = await temporaryDeployment(t);
   const result = await inspect(project);
