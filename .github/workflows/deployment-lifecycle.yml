@@ -195,6 +195,7 @@ jobs:
         run: |
           ./tests/deployment-windows-private-tests.ps1 -Tests @(
             'tests/deployment-windows-source-reparse.test.mjs',
+            'tests/deployment-snapshot-copy.test.mjs',
             'tests/deployment-windows-junction-snapshot.test.mjs'
           )
       - name: Capture original task snapshot through the native owned-source pipeline
@@ -235,6 +236,7 @@ jobs:
           tests/deployment-state.test.mjs
           tests/deployment-cli.test.mjs
           tests/deployment-snapshot.test.mjs
+          tests/deployment-snapshot-copy.test.mjs
           tests/deployment-snapshot-scope.test.mjs
           tests/deployment-snapshot-external.test.mjs
           tests/deployment-transaction.test.mjs
@@ -270,6 +272,7 @@ jobs:
             'tests/deployment-state.test.mjs',
             'tests/deployment-cli.test.mjs',
             'tests/deployment-snapshot.test.mjs',
+            'tests/deployment-snapshot-copy.test.mjs',
             'tests/deployment-snapshot-scope.test.mjs',
             'tests/deployment-snapshot-external.test.mjs',
             'tests/deployment-transaction.test.mjs',

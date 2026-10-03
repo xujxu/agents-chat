@@ -13076,6 +13076,22 @@ Restoration admission and native mutation APIs keep their existing ownership
 checks. This separates observation from mutation rather than weakening
 restoration. Actual application `37137573809` is still running.
 
+**Copy throughput measured:** `ea1242c / 37137573809`, job `111245118089`,
+reported **2026-10-03 16:46:35 UTC**. All 27,761 ACL entries were captured
+between 19,497 and 43,589 ms (24,092 ms versus the original 168,208 ms).
+Serial copying of 25,256 files took 156,604 ms (46,831 to 203,435 ms);
+the unchanged 240-second invocation reached backup verification after the
+second full ACL observation. Keep the faster native reader. Extract the
+existing source/destination/hash/flush procedure to `snapshot-copy.mjs` and
+process fixed batches of four independent files, using `Promise.allSettled`
+before returning any failure or starting another batch. Keep exclusive writes,
+per-file flush, both hashes, all later source/backup verification and signal
+propagation. Add direct filesystem tests proving eight exact copies and a
+failed first batch that settles exactly its three peers without starting the
+next four. Wire the helper into the explicit saved recovery closure and run
+these cases on both contract platforms; no new configurable concurrency or
+deadline increases.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.
