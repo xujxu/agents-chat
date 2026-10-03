@@ -12776,7 +12776,9 @@ capture. Only the original transaction's copying stage may capture a snapshot.
 **Focused accepted:** `89b7aa9 / 37125409033`, job `111209597537`,
 completed **2026-10-03 13:18:16 UTC**. Actual target admission, missing-Git
 refusal, original listener ownership and authenticated create/mutate/restored
-database lifecycle passed. Full `37125749351` remains the acceptance gate.
+database lifecycle passed.
+**Full accepted:** `89b7aa933c534ea4475360083b2f5d76d837f9fa / 37125749351`
+passed **all 36 jobs**, completed **2026-10-03 13:42:29 UTC**.
 
 **Causal:** `a98e31b / 37125067304`, job `111208587673`, reached
 `DEPLOYMENT_TARGET_UNSUPPORTED / target-inspection-unavailable`
@@ -12802,7 +12804,7 @@ as explicit PowerShell now reaches native snapshot observers.
   through `inspectTargetCompatibility`, preserving Linux/default callers,
   exact source-profile hashes, literal commit, no replacement objects and
   read-only Git options. Do not broaden PATH or weaken profile checks.
-- [ ] Require the Windows application job and full 36-job matrix. Continue
+- [x] Require the Windows application job and full 36-job matrix. Continue
   runtime/configuration/database preflight and public transaction composition;
   this read-only admission alone does not implement public deployment.
   Add `windows_application_only` dispatch to select the existing Windows
@@ -12816,9 +12818,15 @@ as explicit PowerShell now reaches native snapshot observers.
 passed the actual application, original-task preflight and three settled
 version/data workers **2026-10-03 13:40:51 UTC**, 429928 ms. The source/snapshot
 pipeline in `37126572761 / 111212949484` passed **13:37:36 UTC**; component
-regression and full-matrix acceptance remain separate gates.
+regression then passed **13:43:35 UTC** with **97 cases, 81 passed, 16 platform
+skips, zero failures/cancellations**, 357638 ms.
 Keep Node-only probes' temporary files in their private control directory
 with explicit `TEMP`/`TMP`, rather than relying on Windows fallback locations.
+
+**Final accepted:** `e877f2cc0cf52124712a285152e90f2d0c34ae0f` passed the
+focused actual-application run `37127140294 / 111214624200`, completed
+**2026-10-03 13:56:51 UTC**, 317239 ms, and full run `37127140330`
+with **all 36 jobs successful**, completed **2026-10-03 14:06:12 UTC**.
 
 **Causal:** `4a44e02 / 37125956367`, job `111211170040`, reached the
 explicit unimplemented admission API **2026-10-03 13:30:10 UTC** after actual
@@ -12846,7 +12854,7 @@ configuration observation and the existing captured database inspector.
   with only SystemRoot and private control TEMP/TMP; retain the configuration observer until
   the caller closes it. Reuse target/profile and database command/result
   helpers, with explicit errors and cleanup.
-- [ ] Preserve captured dependency closure: these live admission/source-build
+- [x] Preserve captured dependency closure: these live admission/source-build
   modules are not imported by current saved recovery entries, so do not add an
   unused live-preflight module with incomplete transitive dependencies.
   Require focused actual-app admission, the existing owned-source

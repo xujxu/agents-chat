@@ -380,6 +380,14 @@ keeps configuration values only in private backup payloads. Co-located runtime
 files remain in the project inventory; outside files use native external
 capture. Explicit PowerShell reaches every native observer, including nested
 Git-object snapshots, without broadening the private controller's PATH.
+Read-only target admission against the actual managed Windows application
+passed all 36 jobs at `89b7aa933c534ea4475360083b2f5d76d837f9fa / 37125749351`.
+It uses the selected Git executable under a minimal PATH while retaining exact
+source-profile checks and original task/listener ownership.
+Combined original-task runtime, configuration and live database admission
+passed all 36 jobs at `e877f2cc0cf52124712a285152e90f2d0c34ae0f / 37127140330`.
+Version and database probes use owned workers with private temporary directories;
+the actual application fixture also verifies repeated data admission.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an
