@@ -227,6 +227,11 @@ try {
             Assert ($LASTEXITCODE -eq 0) 'Native checkpoint-backed receipt retirement failed'
             & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-deployment-retirement.mjs') $Control $pwsh
             Assert ($LASTEXITCODE -eq 0) 'Native deployment retirement and final unlock failed'
+            if ($Request.ContainsKey('discoverManagedTask') -and $Request.discoverManagedTask) {
+                & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-managed-task.mjs') `
+                    $Control $pwsh $TaskName $Root $runtime.identity $runtime.generation
+                Assert ($LASTEXITCODE -eq 0) 'Installed managed-task discovery failed'
+            }
         }
         $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
             $runtime.pid, $runtime.identity, 'observe', 15000) | ConvertFrom-Json

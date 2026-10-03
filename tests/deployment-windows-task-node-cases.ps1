@@ -12,6 +12,7 @@ param(
         'activate-complete', 'activate-complete-changed-state', 'activate-complete-proof', 'activate-complete-retirement',
         'activate-complete-recovery')][string]$Action,
     [string]$CrashStep,
+    [switch]$DiscoverManagedTask,
     [switch]$Transactional,
     [switch]$Restore
 )
@@ -108,6 +109,10 @@ try {
         'Native bridge process identity differs'
     $stoppedDefinition = [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml
     $request = @{ action=$Action }
+    if ($DiscoverManagedTask) {
+        Assert ($Action -ceq 'activate-complete-retirement') 'Discovery requires completed final retirement'
+        $request.discoverManagedTask = $true
+    }
     if ($Action -ceq 'activate-complete-recovery') { $request.crashStep = $CrashStep }
     $replacement = $null
     if ($Action.StartsWith('replace') -or $Action -in @('activate', 'activate-exit', 'activate-state-change', 'activate-readiness',

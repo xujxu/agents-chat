@@ -538,6 +538,26 @@ jobs:
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -CrashStep '${{ matrix.crash }}'
 
+  windows-managed-discovery:
+    name: Native Windows managed discovery (${{ matrix.scenario }})
+    runs-on: windows-2022
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - transaction-activate-complete-retirement
+          - transaction-activate-complete-retirement-restore
+          - transaction-activate-complete-retirement-disabled
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Discover the installed original runtime after final unlock
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -DiscoverManagedTask
+
   windows-task-retirement:
     name: Native Windows task receipt retirement
     runs-on: windows-2022

@@ -12,7 +12,8 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     'transaction-activate-complete-recovery', 'transaction-activate-complete-recovery-restore', 'transaction-activate-complete-recovery-disabled',
     'guarded-owner-exit', 'guarded-release', 'listener-v4', 'listener-v6', 'listener-independent-pair')][string]$Scenario = 'stop',
     [ValidateSet('release-requested', 'lease-released', 'permanent-policy-applied', 'enable-applied')]
-    [string]$CrashStep = 'lease-released')
+    [string]$CrashStep = 'lease-released',
+    [switch]$DiscoverManagedTask)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
@@ -268,7 +269,8 @@ if (process.argv[2] === 'child') {
             elseif ($Scenario -in @('transaction-activate-complete-restore', 'transaction-activate-complete-disabled')) { 'activate-complete' } else { $Scenario.Substring(12) }
         & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $root -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
-            -Action $transactionAction -Transactional -Restore:$restoreTransaction -CrashStep $CrashStep
+            -Action $transactionAction -Transactional -Restore:$restoreTransaction -CrashStep $CrashStep `
+            -DiscoverManagedTask:$DiscoverManagedTask
         if ($transactionAction -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
             'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state',
             'activate-complete-proof', 'activate-complete-retirement', 'activate-complete-recovery')) {

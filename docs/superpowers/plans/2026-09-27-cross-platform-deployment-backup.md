@@ -10627,6 +10627,126 @@ consumer never starts or adopts another runtime generation.
   admission-loss exclusion and subsequent recovery-actor death/replay at
   **00:56:26 UTC**, then passed existing receipt/worker cleanup and unlock.
 
+### Task 5AR: discover an installed native Windows task without retired journals
+
+Continue public Windows integration under the approved ownership contract.
+The existing legacy inspector reports task XML but explicitly has no runtime
+authority. Do not substitute Scheduler state, an engine PID or port ownership
+for the actual managed runtime. Discover the literal installed bundle and
+private readiness evidence, retain the original native process and instance,
+and query that generation's Job and lease. This read-only prerequisite neither
+creates admission/operation records nor stops, restarts or adopts a runtime.
+
+**Files:**
+- Create `scripts/deployment/windows-managed-task.ps1`: retained native
+  discovery and repeated checks of literal task action, bundle/configuration,
+  private ready record, principal, process/instance and active Job.
+- Create `scripts/deployment/windows-managed-task-controller.ps1`: bounded
+  original-Node-owned `check`/`close` protocol; no mutation request.
+- Create `scripts/deployment/windows-managed-task.mjs`: strict immutable
+  discovery facade and acknowledgement/identity checks.
+- Modify `scripts/deployment/saved-worker-engine.mjs` and
+  `tests/deployment-saved-worker.test.mjs`: include all three helpers in the
+  exact saved dependency closure.
+- Create `tests/deployment-windows-managed-task.mjs` and
+  `tests/deployment-windows-managed-task-policy.ps1`: saved-engine discovery,
+  read-only preservation, invalid binding and changed-policy refusal.
+- Modify `tests/deployment-windows-runtime-host.ps1`,
+  `tests/deployment-windows-task-node-cases.ps1` and
+  `tests/deployment-windows-task-activation-cases.ps1`: optional fixture-only
+  `DiscoverManagedTask` switch, running discovery after existing final unlock.
+- Modify `.github/workflows/deployment-lifecycle.yml`: separate bounded
+  update/restore/disabled discovery matrix; preserve all 31 existing gates.
+
+- [ ] **Step 1: publish the missing saved-entry causal after real final unlock.**
+
+  ```javascript
+  const entry = path.join(control, 'recovery-engine', 'windows-managed-task.mjs');
+  await assert.doesNotReject(access(entry), 'Missing saved managed-task discovery entry');
+  const { inspectWindowsManagedTask } = await import(pathToFileURL(entry).href);
+  const scope = await inspectWindowsManagedTask({ taskName, project, pwsh });
+  ```
+
+  Invoke this only after actual task/worker evidence and the old operation lock
+  have been retired. Assert the returned original runtime identity/generation
+  match the still-running fixture, and that no retired journal is recreated.
+  Commit/push and capture the missing-entry failure in Actions before adding
+  production discovery. Do not skip saved-closure validation via a checkout
+  import fallback.
+
+- [ ] **Step 2: discover and retain the actual installed generation.**
+
+  Parse exactly one literal executable task action:
+
+  ```text
+  -NoProfile -NonInteractive -File "<bundle>\windows-runtime-host.ps1" -Configuration "<bundle>\configuration.json" -Sha256 <64 lowercase hex>
+  ```
+
+  Reject variables, redirected paths, unknown arguments, multiple actions or
+  instances and guarded activation policy. Derive the owner from the actual
+  Scheduler instance, retain its process handle and creation identity, then
+  reuse `Get-AgentsChatTaskOwnerBinding` to verify its image/account/session.
+  Reuse `WindowsRuntimeHost.Open` and the private-file helpers to validate
+  every installed helper and the configuration digest. Require the configured
+  command working directory to be the requested canonical project.
+  Derive the private ready filename from the retained original identity,
+  validate its exact schema, generation, configuration, session, launcher and
+  Job name, then query that original generation. Permit only an unguarded
+  normal start or a released activation; reject a guarded lease.
+
+  The immutable observation contains exactly:
+
+  ```javascript
+  {
+    status: 'managed-task-observed', runtimeAuthority: false,
+    project, taskName, definition, securityDescriptor, principalSid, enabled,
+    configuration, configurationSha256, runtime, lease
+  }
+  ```
+
+  `runtime` uses the existing activated-runtime codec. Configuration secret
+  values never enter this observation or diagnostics. Job membership and
+  liveness remain distinct from HTTP readiness.
+
+- [ ] **Step 3: bind lifetime and read-only checks to the original observer.**
+
+  Expose only:
+
+  ```javascript
+  Object.freeze({ identity, observation, check, close });
+  ```
+
+  Use the existing bounded controller transport and native original-Node
+  lifetime watch. A check revalidates all retained file/directory handles,
+  exact task XML/security/enabled value, original process/instance/principal,
+  ready identity, lease and active Job membership. Reject changed replies,
+  process loss and unknown request/reply fields. Failure poisons the observer
+  and closes native resources; normal close releases handles only.
+  Do not acquire or create Windows admission for read-only discovery.
+
+- [ ] **Step 4: verify real discovery and unchanged deployment state.**
+
+  ```javascript
+  assert.equal(scope.observation.runtimeAuthority, false);
+  assert.deepEqual(await scope.check(), scope.observation);
+  await assert.rejects(inspectWindowsManagedTask({ taskName, project: `${project}-foreign`, pwsh }));
+  ```
+
+  Exercise changed native enabled policy against a retained observer, restore
+  the exact original value, then reopen successfully. Compare control entries,
+  state bytes and retained runtime identity before/after. Verify no operation
+  lock or task-maintenance directory is created. The existing outer fixture
+  must still observe the original active Job and explicitly retire it itself.
+  Run update, restore with custom task security, and originally disabled cases.
+
+- [ ] **Step 5: accept the exact implementation and complete regression.**
+
+  Push with the normal co-author trailer and require all 34 Actions jobs,
+  including the three discovery cases and all 31 prior gates. Preserve failed
+  implementation runs for diagnosis. Record exact acceptance in README and
+  this plan. This is installed runtime discovery, not completed public command
+  composition, account switching, ACL restoration or legacy watchdog adoption.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.
