@@ -11418,6 +11418,10 @@ skipped prerequisites for a complete Windows application restore.
 
 ### Task 5AX: native Windows immutable Git object recovery
 
+Accepted, including the parent-retention follow-up, together with graph
+restoration at `af0235c / 37107826175`, all 34 jobs passed
+**2026-10-03 08:18:40 UTC**. The following intermediate run history is retained.
+
 Implementation is drafted for Actions, not accepted. Causal
 `ad3da4bacb45e35236aacb28f7893073de566a37 / 37106184534`,
 Windows job `111155063958`, failed at **2026-10-03 07:24:37 UTC** with
@@ -11535,7 +11539,7 @@ removal and source metadata only; it must not become a second byte copier.
   `windows_restore_only=true`, and require the direct Windows call to fail
   its existing Linux-ownership guard before adding production support.
 
-- [ ] **Step 2: implement the dedicated native metadata scope.**
+- [x] **Step 2: implement the dedicated native metadata scope.**
 
   The JavaScript factory is `prepareWindowsGitObjectSecurity` with
   `{ project, backup, manifest, current, signal, pwsh }`, where `project` is
@@ -11594,7 +11598,7 @@ removal and source metadata only; it must not become a second byte copier.
   Refuse unknown paths, stale/repeated transitions, owner/identity changes and
   invalid replies; aggregate primary/cleanup failures and close every lease.
 
-- [ ] **Step 3: wire metadata operations around the existing Git copier.**
+- [x] **Step 3: wire metadata operations around the existing Git copier.**
 
   Capture the native scope after `readGitObjectSnapshot` and current inventory
   validation. Require Windows version-3 metadata. For this immutable-object
@@ -11628,7 +11632,7 @@ removal and source metadata only; it must not become a second byte copier.
   contents and policies were not changed by directory propagation.
   Always close the native scope on success, cancellation and failure.
 
-- [ ] **Step 4: accept this bounded object-store capability in Actions.**
+- [x] **Step 4: accept this bounded object-store capability in Actions.**
 
   Require actual missing-pack resurrection, unchanged current HEAD/worktree,
   retained newer loose objects, `git fsck`, original object ACL/readonly
@@ -11640,6 +11644,13 @@ removal and source metadata only; it must not become a second byte copier.
   SHA/run/time. Do not call this HEAD/index/ref or public application recovery.
 
 ### Task 5AY: native Windows mutable Git graph pointers
+
+Accepted at `af0235cbbf19b8f6e9f66a7b8c10c1d0038c96cb`,
+full `37107826175`, **34/34 passed**, completed
+**2026-10-03 08:18:40 UTC**. Linux contracts `111160154262`, Windows contracts
+`111160154273`, saved recovery and both application build regressions passed.
+HEAD/index/ref and public Windows restoration remain separate.
+The following causal/implementation history predates this final acceptance.
 
 Implementation is ready for Actions, not accepted. Test-only causal commit
 `9967802`, explicitly dispatched as `37107381884 / 111158471821`,
@@ -11741,7 +11752,7 @@ known mutable paths.
   the newest production full run; record that cancellation rather than count
   it as acceptance. The newest complete run must cover all preceding changes.
 
-- [ ] **Step 2: preflight graph pointers before immutable mutation.**
+- [x] **Step 2: preflight graph pointers before immutable mutation.**
 
   Export the following from `git-graph-metadata.mjs`, retaining `observe`'s
   existing ordinary-file/nlink-one/permission validation:
@@ -11757,7 +11768,7 @@ known mutable paths.
   admission retains original graph file identities, so replacement between
   preflight and mutation still refuses.
 
-- [ ] **Step 3: share the writable-handle copier and native ownership scope.**
+- [x] **Step 3: share the writable-handle copier and native ownership scope.**
 
   Add native facade methods `removeGraph`, `createGraph`, `finishGraph`,
   `graphPolicy`; each sends the existing sequenced single `{ path }` request.
@@ -11792,7 +11803,7 @@ known mutable paths.
   extra graph directories, immutable objects and excluded `info/packs`; only
   the two intentional pointer mutations are removed from unchanged witnesses.
 
-- [ ] **Step 4: require focused and full native acceptance.**
+- [x] **Step 4: require focused and full native acceptance.**
 
   Require all five actual layout transitions, partial retry, outside hardlink
   refusal, read-only/private-copy behavior, unchanged current HEAD/worktree and

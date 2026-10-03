@@ -326,8 +326,8 @@ protection flags or file attributes. Root policy remains exact.
 Native payload/privacy/read-only/retry cases and all 34 lifecycle jobs passed
 (`4d5ff70`, Actions `37104965937`). Git/runtime restoration and full Windows
 application acceptance remain separate.
-Windows Git object restoration is implemented separately, pending
-Actions acceptance. It reuses the shared streaming/checksum/hardlink publication
+Windows Git object restoration passed native cases and all 34 lifecycle jobs
+(`af0235c`, Actions `37107826175`). It reuses the shared streaming/checksum/hardlink publication
 flow, preserves newer objects and private backups, and restores original ACLs
 and read-only attributes. Mutable single/split commit-graph pointers use the
 shared writable-handle copier with private creation, original-identity deletion
