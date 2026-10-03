@@ -298,7 +298,10 @@ Windows owned source/build stages now share the existing Linux orchestration
 and bind mutations to the original native task transaction, selected commit
 and designated phase. Actions acceptance is pending; the new native fixture
 runs actual Git/npm commands and a small fixture build, not a full application
-deployment. Cold recovery does not gain a rebuild dependency.
+deployment. Build workers use the installed task's account in the controller's
+actual session, which may differ from an S4U service's session zero; native
+worker account/session checks remain enforced. Cross-account execution is
+refused before worker enrollment. Cold recovery does not gain a rebuild dependency.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

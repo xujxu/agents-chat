@@ -51,6 +51,12 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
     beforeCommit, targetCommit,
     get operation() { return workers; },
     async prepare(scope) {
+      const observedSession = await promisify(execFile)(pwsh, [
+        '-NoProfile', '-NonInteractive', '-Command', '[Diagnostics.Process]::GetCurrentProcess().SessionId',
+      ], { timeout: 30000, maxBuffer: 4096 });
+      assert.equal(scope.identity.sessionId, Number(observedSession.stdout.trim()));
+      assert.equal(scope.identity.accountSid, scope.observation.principalSid);
+      assert.equal(scope.observation.runtime.sessionId, 0);
       const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
       const saved = await saveWorkerEngine({ source, control, project, operationId: lock.operationId });
       await saveRecoveryEngine({ source, control });

@@ -25,6 +25,8 @@ try {
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; project=$Project; taskName=$TaskName
+        accountSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        sessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId
         controllerIdentity=$ControllerIdentity; value=(Assert-AgentsChatManagedTask $scope)
     } | ConvertTo-Json -Depth 8 -Compress))
     [Console]::Out.Flush()

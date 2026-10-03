@@ -10958,10 +10958,20 @@ phase, even though a task controller's general `check()` can remain valid.
 
   The shared implementation retains package/lock byte checks, exact Git
   metadata and build artifact capture. Linux keeps its existing guard and
-  `{uid, gid}` worker runtime; Windows derives `{pwsh, accountSid, sessionId}`
-  from the actual retained managed task and validates the configured Node
-  against the explicit Node command. Cross-account launch is not assumed:
-  existing native workers must validate their actual account/session.
+  `{uid, gid}` worker runtime. Windows pins the installed task account and the
+  actual controller/observer session in `{pwsh, accountSid, sessionId}`. An
+  S4U application runs in session zero while its same-account deployment
+  controller may be interactive; source workers need not enter the service's
+  session. Read the observer account/session from native readiness, reject a
+  different task account before enrollment, and retain all existing native
+  worker account/session checks. Validate configured Node against the explicit
+  Node command.
+
+  First implementation `4ae1ade / 37092203062`, native update `111114764711`,
+  exposed the mistaken task-session assumption at **03:09:31 UTC**:
+  `windows-worker-owner.ps1:31` refused the first source inspection worker's
+  actual account/session. Correct the source adapter's session choice rather
+  than relaxing the native worker guard or moving a worker into session zero.
 
   The stopped-context map records the original factory's control, lock and
   generation. Reject copied contexts and mismatching supplied locks. Require

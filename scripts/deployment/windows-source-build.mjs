@@ -20,6 +20,9 @@ export async function prepareWindowsSourceBuild({
   await assertLockOwner(root, lock);
   const observation = await assertWindowsManagedTaskScope(scope, { signal });
   if (observation.project !== lock.project) throw new Error('Source task and locked project differ.');
+  if (scope.identity.accountSid !== observation.principalSid) {
+    throw new Error('Source/build workers require the installed task account; cross-account execution is unsupported.');
+  }
   const project = observation.project;
   for (const file of [node, npmCli, git]) {
     if (typeof file !== 'string' || !path.isAbsolute(file) || /[\0\r\n]/.test(file)) {
@@ -40,7 +43,7 @@ export async function prepareWindowsSourceBuild({
   }
   return prepareOwnedSourceBuild({
     project, node, npmCli, operation, git, environment, signal,
-    runtime: { pwsh, accountSid: observation.principalSid, sessionId: observation.runtime.sessionId },
+    runtime: { pwsh, accountSid: observation.principalSid, sessionId: scope.identity.sessionId },
     checkRead: async ({ signal: stageSignal }) => {
       await assertLockOwner(root, lock);
       await assertWindowsManagedTaskScope(scope, { signal: stageSignal });

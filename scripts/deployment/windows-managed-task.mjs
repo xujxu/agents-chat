@@ -60,12 +60,18 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
   let failure;
   try {
     const ready = captureWorkerFields(await wire.receive({ signal, timeoutMs: 60000 }),
-      ['type', 'pid', 'processIdentity', 'project', 'taskName', 'controllerIdentity', 'value'], 'managed task readiness');
+      ['type', 'pid', 'processIdentity', 'project', 'taskName', 'controllerIdentity', 'accountSid', 'sessionId', 'value'],
+      'managed task readiness');
     if (ready.type !== 'ready' || ready.pid !== child.pid || ready.project !== project || ready.taskName !== taskName
       || ready.controllerIdentity !== controllerIdentity
-      || ready.processIdentity !== await processIdentity(child.pid)) throw new Error('Original managed task observer differs.');
+      || ready.processIdentity !== await processIdentity(child.pid)
+      || typeof ready.accountSid !== 'string' || !/^S-1-[0-9]+(?:-[0-9]+)+$/.test(ready.accountSid)
+      || !Number.isSafeInteger(ready.sessionId) || ready.sessionId < 0 || ready.sessionId > 2147483647) {
+      throw new Error('Original managed task observer differs.');
+    }
     const observation = capture(ready.value, project, taskName);
-    const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity });
+    const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity,
+      accountSid: ready.accountSid, sessionId: ready.sessionId });
     const request = async (method, requestSignal, payload = {}) => {
       if (busy) throw refused(new Error('A managed task observation request is already active.'));
       if (failure) throw failure;
