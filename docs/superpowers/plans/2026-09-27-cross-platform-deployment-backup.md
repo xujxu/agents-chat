@@ -12577,6 +12577,12 @@ alone did not keep this fixture observational. Disable that refresh explicitly
 and assert original index bytes immediately after each restoration stage and
 each diagnostic command. Do not weaken exact index or policy assertions.
 Reference: https://github.com/git/git/blob/v2.55.0/builtin/diff.c .
+Corrected fixture `2062d65 / 37121963189`, job `111199733452`, completed
+the native restoration step **2026-10-03 12:16:38 UTC**: **97 tests,
+81 passed, 16 platform skips, zero failures/cancellations**, 377053 ms.
+Both combined cases, exact index checks and independent native policy checks
+passed. The workflow subsequently failed at Task 5BG's intentional missing-API
+case; this is native step acceptance, not complete workflow acceptance.
 
 **Goal:** Verify the existing restoration primitives together before allowing
 Git/external-bearing Windows manifests into the complete-project helper.
@@ -12639,6 +12645,12 @@ not substitute caller-supplied callbacks for the future branded task adapter.
 
 ### Task 5BG: Bind complete snapshots to the original stopped Windows task
 
+**Causal:** `2062d65 / 37121963189`, job `111199733452`, completed
+the owned-source pipeline step **2026-10-03 12:17:26 UTC**. The actual task
+was discovered/admitted/stopped and reached
+`Missing original-task copying-stage snapshot authority API`. The earlier
+97-test restoration step passed; no module-import or fixture-setup failure.
+
 **Goal:** Add the native snapshot adapter needed by public deployment without
 inventing another task controller. Reuse the existing branded transaction,
 configuration observer, complete-project/Git snapshot and native external
@@ -12661,7 +12673,7 @@ capture. Only the original transaction's copying stage may capture a snapshot.
   `-DiscoverManagedTask -DiscoveredAdmission -OwnedSourceBuild`. Full matrices
   already run that exact source-build scenario in managed discovery.
 
-- [ ] **Step 1: add native stage/snapshot cases before implementing the adapter.**
+- [x] **Step 1: add native stage/snapshot cases before implementing the adapter.**
 
   Reuse the source fixture's actual Scheduled Task, retained configuration
   observer, real Git repository and saved recovery engine. Require the new
@@ -12688,7 +12700,7 @@ capture. Only the original transaction's copying stage may capture a snapshot.
   snapshot. Continue the actual source update/build/activation/retirement and
   prove the completed snapshot remains after unlock.
 
-- [ ] **Step 2: bind copying-stage authority without changing native protocol.**
+- [x] **Step 2: bind copying-stage authority without changing native protocol.**
 
   Keep `{control, lock, state, admission, sha256}` in the existing WeakMap.
   Require the exact context/lock and matching operation, original project,
@@ -12698,7 +12710,7 @@ capture. Only the original transaction's copying stage may capture a snapshot.
   recheck state bytes and lock ownership, and return frozen selected task
   metadata. Never treat an arbitrary `{check()}` object as authority.
 
-- [ ] **Step 3: compose the existing snapshot primitives.**
+- [x] **Step 3: compose the existing snapshot primitives.**
 
   The adapter checks stage authority and `configuration.checkFiles`, reads the
   hash-bound installed runtime JSON privately, and derives every helper from

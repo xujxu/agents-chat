@@ -351,7 +351,8 @@ the full lifecycle matrix contains 36 jobs. Linux service recovery and
 interrupted-recovery resumption run separately under unchanged 10-minute
 limits, preserving all 66 existing cases without name-based filtering.
 Public Windows task-backed restore composition remains gated. Component-level
-project/Git/external restoration is undergoing combined native acceptance.
+project/Git/external restoration passed the 97-case native step in
+`2062d65 / 37121963189`; complete-matrix acceptance is pending.
 The journal's native atomic lockfile publication primitive passed all 34 jobs
 on `0f2da811690c718eeac9acb728baae2b45438b5c / 37111501173`.
 It binds original/staged file IDs, checksums, ACLs and attributes
@@ -373,6 +374,10 @@ An admitted external parent whose selected bytes, absence and native policies
 all match is verified without rewriting its files, preserving immutable readers
 and file identities. The accepted matrix includes a real native reader denying
 write/delete sharing, repeated-restore identity checks and private-copy retries.
+The original-task snapshot adapter is implemented and awaiting Actions
+acceptance. It binds the original transaction's copying phase and admission,
+captures complete project/Git state plus every immutable runtime helper, and
+keeps configuration values only in private backup payloads.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an
