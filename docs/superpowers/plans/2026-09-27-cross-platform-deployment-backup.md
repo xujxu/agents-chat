@@ -12496,6 +12496,11 @@ Do not modify an installed immutable bundle while a runtime scope retains it.
 
 ### Task 5BE: Keep native Linux recovery acceptance within bounded CI shards
 
+**Native shards passed:** `2b955ac / 37119983194`, jobs `111194236167`
+and `111194236267`, completed **11:42:26 / 11:43:49 UTC**.
+Exactly **24 + 42** tests passed, zero failures/cancellations/skips,
+**246622 / 270316 ms**. Complete 36-job acceptance is still pending.
+
 **Evidence:** `04dcc44 / 37118616855`, Linux service recovery job
 `111190851440`, completed **2026-10-03 11:21:26 UTC** as cancelled.
 All **66 tests passed**, none failed/cancelled in Node, but the command lasted
@@ -12539,6 +12544,11 @@ as already done for Windows restoration; do not increase timeouts or drop tests.
 
 ### Task 5BF: Compose native Windows project, Git and external restoration
 
+**Causal:** `c03fbe5 / 37120494425`, job `111195488762`, completed
+**2026-10-03 11:49:01 UTC**: 97 tests, 79 passed, 2 failed, 16 platform
+skips and zero cancellations. Both new cases reached the explicit native
+Git/external composition guard; no snapshot fixture or module import failed.
+
 **Goal:** Verify the existing restoration primitives together before allowing
 Git/external-bearing Windows manifests into the complete-project helper.
 Public task-backed restore/deploy orchestration remains closed; this task does
@@ -12556,7 +12566,7 @@ not substitute caller-supplied callbacks for the future branded task adapter.
 - Update README after focused/full acceptance; no new production coordinator
   or native protocol is required for this component-level composition.
 
-- [ ] **Step 1: publish complete native composition cases and causal Actions.**
+- [x] **Step 1: publish complete native composition cases and causal Actions.**
 
   Capture a real Git repository with project data, build/dependency files,
   readonly source policy and external readonly configuration plus an absent
@@ -12577,7 +12587,7 @@ not substitute caller-supplied callbacks for the future branded task adapter.
   has not yet changed, and retry the same complete snapshot successfully.
   Expect the initial run to fail at the explicit native Git/external guard.
 
-- [ ] **Step 2: remove only the obsolete component-composition guard.**
+- [x] **Step 2: remove only the obsolete component-composition guard.**
 
   Keep this original admission before all project/Git mutation:
 

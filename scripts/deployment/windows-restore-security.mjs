@@ -26,9 +26,6 @@ export async function prepareWindowsProjectRestoreSecurity({
   if (process.platform !== 'win32' || manifest.version !== 3 || manifest.runtime.platform !== 'win32') {
     throw new Error('Windows project restoration requires a snapshot with native ACL metadata.');
   }
-  if (manifest.gitMetadata || manifest.gitObjects || manifest.externalFiles?.length) {
-    throw new Error('Windows Git and external restoration require their native security adapters.');
-  }
   return prepareWindowsSourceRestoreSecurity({
     project, backup, entries: manifest.entries, metadata: manifest.windowsSecurity, current, signal, pwsh,
   });
