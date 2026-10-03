@@ -77,6 +77,13 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
   let busy = false;
   let sequence = 0;
   let activeRuntime;
+  let completionStep;
+  let completionStateSha256;
+  const completionSteps = [
+    'prepared', 'policy-requested', 'policy-applied', 'policy-staged', 'release-requested', 'lease-released',
+    'released', 'policy-restore-requested', 'permanent-policy-applied', 'policy-restored',
+    'enable-requested', 'enable-applied', 'complete',
+  ];
   let failure;
   const abandon = async cause => {
     closed = true;
@@ -106,9 +113,12 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
           throw new Error('Listener observation requires active runtime authority and an explicit port.');
         }
         if (method === 'prepare-completion') validateReadinessProviders(payload.providers);
-        if (method === 'complete' && (!activeRuntime || typeof payload.stateSha256 !== 'string'
+        if (['complete', 'advance-completion'].includes(method) && (!activeRuntime || typeof payload.stateSha256 !== 'string'
           || !/^[a-f0-9]{64}$/.test(payload.stateSha256))) {
           throw new Error('Completion requires original runtime and explicit state digest.');
+        }
+        if (method === 'advance-completion' && !completionSteps.includes(completionStep)) {
+          throw new Error('Completion steps require original prepared readiness.');
         }
         if (method === 'replace' && (typeof payload.configuration !== 'string'
           || !path.isAbsolute(payload.configuration) || /[\0\r\n]/.test(payload.configuration)
@@ -127,7 +137,8 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
         const reply = captureWorkerFields(await wire.receive({
           signal: requestSignal, timeoutMs: ['activate', 'complete'].includes(method) ? 90000 : method === 'retire' ? 60000 : 30000,
         }),
-          ['id', 'type', 'value', ...(method === 'activate' ? ['runtime'] : method === 'listener' ? ['listener'] : [])], 'task controller reply');
+          ['id', 'type', 'value', ...(method === 'activate' ? ['runtime'] : method === 'listener' ? ['listener']
+            : method === 'advance-completion' ? ['phase'] : [])], 'task controller reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.value !== method) {
           throw new Error('Unexpected task controller acknowledgement.');
         }
@@ -136,6 +147,19 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
           return activeRuntime;
         }
         if (method === 'listener') return captureTaskListener(reply.listener, activeRuntime, payload.port);
+        if (method === 'prepare-completion') completionStep ??= 'prepared';
+        if (method === 'complete') {
+          completionStep = 'complete';
+          completionStateSha256 ??= payload.stateSha256;
+        }
+        if (method === 'advance-completion') {
+          const expected = completionStep === 'complete' ? 'complete'
+            : completionSteps[completionSteps.indexOf(completionStep) + 1];
+          if (reply.phase !== expected) throw new Error('Original completion step acknowledgement differs.');
+          completionStep = reply.phase;
+          completionStateSha256 ??= payload.stateSha256;
+          return completionStep;
+        }
         if (method === 'close') {
           const result = await waitForExit();
           if (result.code !== 0 || result.signal !== null) throw new Error('Native task controller close failed.');
@@ -144,6 +168,12 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
         }
       } catch (cause) { throw await abandon(cause); }
       finally { busy = false; }
+    };
+    const completionRequest = async (method, { stateSha256, signal: completionSignal }) => {
+      if (completionStateSha256 && stateSha256 !== completionStateSha256) {
+        throw uncertain(new Error('Original completion digest differs.'));
+      }
+      return request(method, completionSignal, { stateSha256 });
     };
     return Object.freeze({
       identity,
@@ -155,8 +185,8 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
       listener: ({ port, signal: listenerSignal } = {}) => request('listener', listenerSignal, { port }),
       prepareCompletion: ({ port, providers, signal: completionSignal } = {}) =>
         request('prepare-completion', completionSignal, { port, providers }),
-      complete: ({ stateSha256, signal: completionSignal } = {}) =>
-        request('complete', completionSignal, { stateSha256 }),
+      complete: (options = {}) => completionRequest('complete', options),
+      advanceCompletion: (options = {}) => completionRequest('advance-completion', options),
       async close() {
         if (busy) throw uncertain(new Error('Cannot close an active task controller request.'));
         if (failure) throw failure;

@@ -27,6 +27,13 @@ export async function runWindowsTaskCompletionSteps({ context, control, port, pr
     .filter(name => name.startsWith('task-complete-')).sort();
   for (const [step, durable] of steps) {
     assert.equal(await context.advanceCompletion({ stateSha256 }), step);
+    if (step === 'policy-requested') {
+      for (const method of ['complete', 'advanceCompletion']) {
+        await assert.rejects(context[method]({ stateSha256: '0'.repeat(64) }),
+          error => /original completion digest/i.test(error.cause?.message ?? ''));
+      }
+    }
+    if (step === 'policy-applied') await context.prepareCompletion({ port, providers });
     await context.check();
     expected.add(`task-complete-${durable}.json`);
     assert.deepEqual(await receipts(), [...expected].sort());

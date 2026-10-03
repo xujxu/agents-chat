@@ -66,18 +66,22 @@ try {
         if ($method -ceq 'replace') { $fields += @('configuration', 'sha256') }
         if ($method -ceq 'listener') { $fields += @('port') }
         if ($method -ceq 'prepare-completion') { $fields += @('port', 'providers') }
-        if ($method -ceq 'complete') { $fields += @('stateSha256') }
+        if ($method -cin @('complete', 'advance-completion')) { $fields += @('stateSha256') }
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
         if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire', 'replace', 'activate', 'listener',
-            'prepare-completion', 'complete')) { throw 'Invalid controller request.' }
+            'prepare-completion', 'complete', 'advance-completion')) { throw 'Invalid controller request.' }
         $sequence = $id
         $stage = 'check'
         $retained.Check()
         if ($method -ceq 'complete') {
             $stage = 'complete'
             Complete-AgentsChatTaskActivation -Context $context -StateSha256 $request.stateSha256.GetString()
+        }
+        elseif ($method -ceq 'advance-completion') {
+            $stage = 'advance-completion'
+            $completionStep = Advance-AgentsChatTaskCompletion -Context $context -StateSha256 $request.stateSha256.GetString()
         }
         elseif ($context.Activated) { $null = Assert-AgentsChatTaskActive -Context $context }
         elseif ($context.Retired) { $null = Assert-AgentsChatTaskRetired -Context $context }
@@ -92,6 +96,7 @@ try {
                 -Configuration $request.configuration.GetString() -Sha256 $request.sha256.GetString()
         }
         $reply = @{ id=$id; type='reply'; value=$method }
+        if ($method -ceq 'advance-completion') { $reply.phase = $completionStep }
         if ($method -ceq 'activate') {
             $stage = 'activate'
             $reply.runtime = Start-AgentsChatTaskReplacement -Context $context

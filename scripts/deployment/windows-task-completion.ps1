@@ -18,6 +18,7 @@ function Write-AgentsChatTaskCompletionReceipt([hashtable]$Context, [string]$Pha
         (Join-Path $Context.Directory "task-complete-$Phase.json"), ($record | ConvertTo-Json -Depth 5 -Compress))
     $Context.Files.Add($receipt)
     $Context.CompletionSha256 = $receipt.Sha256
+    $Context.CompletionStep = $Phase
 }
 
 function Prepare-AgentsChatTaskCompletion {
@@ -89,7 +90,30 @@ function Publish-AgentsChatTaskCompletionPolicy([hashtable]$Context, [string]$De
     Test-AgentsChatActiveTaskContext $Context
 }
 
-function Complete-AgentsChatTaskActivation {
+function Set-AgentsChatTaskCompletionEnabled([hashtable]$Context) {
+    Test-AgentsChatActiveTaskContext $Context
+    $disabledDefinition = $Context.CompletionDefinition
+    $Context.Stage = 'completion-enable-write'
+    $task = $Context.Folder.GetTask($Context.Data.taskName)
+    $task.Enabled = $Context.CompletionTargetEnabled
+    $Context.Stage = 'completion-enable-read'
+    $task = $Context.Folder.GetTask($Context.Data.taskName)
+    $Context.Stage = 'completion-enable-value'
+    if ([bool]$task.Enabled -ne $Context.CompletionTargetEnabled) { throw 'Permanent enabled value differs.' }
+    $Context.Stage = 'completion-enable-definition'
+    if ($Context.CompletionTargetEnabled) {
+        Confirm-AgentsChatTaskInhibition ([string]$task.Xml) $disabledDefinition
+    } elseif ([string]$task.Xml -cne $disabledDefinition) {
+        throw 'Permanent disabled definition differs.'
+    }
+    $Context.Stage = 'completion-enable-security'
+    if ([string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor) { throw 'Permanent security differs.' }
+    $Context.CompletionDefinition = [string]$task.Xml
+    $Context.CompletionEnabled = $Context.CompletionTargetEnabled
+    Test-AgentsChatActiveTaskContext $Context
+}
+
+function Advance-AgentsChatTaskCompletion {
     [CmdletBinding()]
     param([Parameter(Mandatory)][hashtable]$Context, [Parameter(Mandatory)][string]$StateSha256)
     $ErrorActionPreference = 'Stop'
@@ -101,10 +125,12 @@ function Complete-AgentsChatTaskActivation {
         if (-not $Context.CompletionPrepared -or $StateSha256 -cnotmatch '^[a-f0-9]{64}$') {
             throw 'Completion requires prepared native readiness and an explicit state digest.'
         }
+        if ($Context.CompletionStateSha256 -and $StateSha256 -cne $Context.CompletionStateSha256) {
+            throw 'Original completion digest differs.'
+        }
         if ($Context.Completed) {
-            if ($StateSha256 -cne $Context.CompletionStateSha256) { throw 'Original completion digest differs.' }
             Test-AgentsChatActiveTaskContext $Context
-            return
+            return 'complete'
         }
         $prior = $Context.CompletionPriorState
         $state = Read-AgentsChatTaskTransactionState $Context.Transaction ''
@@ -122,46 +148,55 @@ function Complete-AgentsChatTaskActivation {
         $Context.CompletionStateSha256 = $StateSha256
         $Context.Transaction.CompletionStateSha256 = $StateSha256
         Test-AgentsChatActiveTaskContext $Context
-        Write-AgentsChatTaskCompletionReceipt $Context 'policy-requested'
-        Publish-AgentsChatTaskCompletionPolicy $Context $Context.CompletionStagedDefinition
-        Write-AgentsChatTaskCompletionReceipt $Context 'policy-staged'
-        Write-AgentsChatTaskCompletionReceipt $Context 'release-requested'
-        Test-AgentsChatActiveTaskContext $Context
-        $Context.Stage = 'completion-release'
-        $runtime = $Context.ActivationRuntime
-        $reply = [Deployment.WindowsRuntimeControl]::Exchange(
-            [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'release', 15000)
-        if ($reply -cne 'released') { throw 'Original runtime lease release was not acknowledged.' }
-        Test-AgentsChatActiveTaskContext $Context
-        Write-AgentsChatTaskCompletionReceipt $Context 'released'
-        Write-AgentsChatTaskCompletionReceipt $Context 'policy-restore-requested'
-        Publish-AgentsChatTaskCompletionPolicy $Context $Context.ReplacementDefinition
-        Write-AgentsChatTaskCompletionReceipt $Context 'policy-restored'
-        Write-AgentsChatTaskCompletionReceipt $Context 'enable-requested'
-        Test-AgentsChatActiveTaskContext $Context
-        $disabledDefinition = $Context.CompletionDefinition
-        $Context.Stage = 'completion-enable-write'
-        $task = $Context.Folder.GetTask($Context.Data.taskName)
-        $task.Enabled = $Context.CompletionTargetEnabled
-        $Context.Stage = 'completion-enable-read'
-        $task = $Context.Folder.GetTask($Context.Data.taskName)
-        $Context.Stage = 'completion-enable-value'
-        if ([bool]$task.Enabled -ne $Context.CompletionTargetEnabled) { throw 'Permanent enabled value differs.' }
-        $Context.Stage = 'completion-enable-definition'
-        if ($Context.CompletionTargetEnabled) {
-            Confirm-AgentsChatTaskInhibition ([string]$task.Xml) $disabledDefinition
-        } elseif ([string]$task.Xml -cne $disabledDefinition) {
-            throw 'Permanent disabled definition differs.'
+        switch -CaseSensitive ($Context.CompletionStep) {
+            'prepared' { Write-AgentsChatTaskCompletionReceipt $Context 'policy-requested' }
+            'policy-requested' {
+                Publish-AgentsChatTaskCompletionPolicy $Context $Context.CompletionStagedDefinition
+                $Context.CompletionStep = 'policy-applied'
+            }
+            'policy-applied' { Write-AgentsChatTaskCompletionReceipt $Context 'policy-staged' }
+            'policy-staged' { Write-AgentsChatTaskCompletionReceipt $Context 'release-requested' }
+            'release-requested' {
+                $Context.Stage = 'completion-release'
+                $runtime = $Context.ActivationRuntime
+                $reply = [Deployment.WindowsRuntimeControl]::Exchange(
+                    [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'release', 15000)
+                if ($reply -cne 'released') { throw 'Original runtime lease release was not acknowledged.' }
+                Test-AgentsChatActiveTaskContext $Context
+                $Context.CompletionStep = 'lease-released'
+            }
+            'lease-released' { Write-AgentsChatTaskCompletionReceipt $Context 'released' }
+            'released' { Write-AgentsChatTaskCompletionReceipt $Context 'policy-restore-requested' }
+            'policy-restore-requested' {
+                Publish-AgentsChatTaskCompletionPolicy $Context $Context.ReplacementDefinition
+                $Context.CompletionStep = 'permanent-policy-applied'
+            }
+            'permanent-policy-applied' { Write-AgentsChatTaskCompletionReceipt $Context 'policy-restored' }
+            'policy-restored' { Write-AgentsChatTaskCompletionReceipt $Context 'enable-requested' }
+            'enable-requested' {
+                Set-AgentsChatTaskCompletionEnabled $Context
+                $Context.CompletionStep = 'enable-applied'
+            }
+            'enable-applied' {
+                Write-AgentsChatTaskCompletionReceipt $Context 'complete'
+                $Context.Completed = $true
+            }
+            default { throw 'Unsupported original completion step.' }
         }
-        $Context.Stage = 'completion-enable-security'
-        if ([string]$task.GetSecurityDescriptor(7) -cne $Context.Data.securityDescriptor) { throw 'Permanent security differs.' }
-        $Context.CompletionDefinition = [string]$task.Xml
-        $Context.CompletionEnabled = $Context.CompletionTargetEnabled
         Test-AgentsChatActiveTaskContext $Context
-        Write-AgentsChatTaskCompletionReceipt $Context 'complete'
-        $Context.Completed = $true
+        return $Context.CompletionStep
     } catch {
         $Context.Poisoned = $true
         throw "Task maintenance refused: $($Context.Stage)."
     } finally { $Context.Busy = $false }
+}
+
+function Complete-AgentsChatTaskActivation {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][hashtable]$Context, [Parameter(Mandatory)][string]$StateSha256)
+    for ($index = 0; $index -lt 12; $index++) {
+        if ((Advance-AgentsChatTaskCompletion -Context $Context -StateSha256 $StateSha256) -ceq 'complete') { return }
+    }
+    $Context.Poisoned = $true
+    throw 'Task completion exceeded its finite step sequence.'
 }

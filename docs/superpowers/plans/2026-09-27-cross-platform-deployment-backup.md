@@ -10334,7 +10334,7 @@ add timing-dependent filesystem watchers, or introduce production fault flags.
   step fixture only for genuine retirement scenarios. Other completion cases
   continue using the unchanged all-at-once API.
 
-- [ ] **Step 1: publish the missing-method causal in the genuine fixture.**
+- [x] **Step 1: publish the missing-method causal in the genuine fixture.**
 
   The fixture requires the method while still holding the real active task:
 
@@ -10348,6 +10348,11 @@ add timing-dependent filesystem watchers, or introduce production fault flags.
   settled worker journal or native receipt is written by the test helper.
   Commit/push and capture the missing-method failure from the existing native
   receipt-retirement Actions job before implementing the method.
+
+  Causal `d767631 / 37080347166`, native job `111079267484`, failed at
+  **2026-10-03 00:03:50 UTC** on missing `advanceCompletion` after the genuine
+  original worker/task activation. Captured the log and cancelled only this
+  characterized causal run.
 
 - [ ] **Step 2: factor the existing native sequence without changing receipts.**
 
@@ -10390,6 +10395,13 @@ add timing-dependent filesystem watchers, or introduce production fault flags.
   Existing all-at-once completion keeps its reply shape and deadlines.
   Abort, malformed acknowledgement and child death close authority through
   the existing error path, without inventing completion.
+
+  Pin the accepted state digest at the first successful completion step.
+  Both live native and Node layers reject rebinding it between steps, not
+  just after completion. Node binding mismatch does not send a request or
+  poison an otherwise valid context. Test both all-at-once and step API
+  mismatch, continued original-context checking, and idempotent prepare
+  without resetting the acknowledged step.
 
 - [ ] **Step 4: validate actions versus durable receipts on actual Windows.**
 

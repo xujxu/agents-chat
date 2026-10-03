@@ -156,7 +156,7 @@ function Stop-AgentsChatManagedTask {
         ActivationDefinition=$null; ActivationEnabledDefinition=$null; ActivationDemandDefinition=$null
         ActivationLeasePid=0; ActivationLeaseIdentity=$null
         CompletionPrepared=$false; Completed=$false; CompletionPriorState=$null; CompletionStateSha256=$null
-        CompletionSha256=$null; CompletionPort=0; CompletionProviders=$null
+        CompletionSha256=$null; CompletionStep=$null; CompletionPort=0; CompletionProviders=$null
         CompletionDefinition=$null; CompletionStagedDefinition=$null; CompletionEnabled=$false; CompletionTargetEnabled=$false
         AdmissionSha256=$Sha256; PreviousSha256=$Sha256; Definition=$null; LauncherPid=0
         Transaction=$Transaction

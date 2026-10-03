@@ -262,6 +262,11 @@ All three native scenarios (update, restore and originally disabled task),
 including two destructive crash prefixes, final unlock and preservation of
 unrelated runtime bundles, passed at `8599304 / 37076374627`. The full
 26-job Linux/Windows regression also passed.
+The live completion controller additionally exposes single-step native
+acknowledgements for deterministic write-ahead interruption testing. It keeps
+the existing nine receipt files and the normal all-at-once completion API;
+this stepwise path is awaiting Actions acceptance and is not cold recovery
+authority.
 Interrupted completion/recovery and public Windows integration remain unaccepted.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
