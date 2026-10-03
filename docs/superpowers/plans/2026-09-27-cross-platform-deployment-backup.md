@@ -12462,6 +12462,14 @@ Do not modify an installed immutable bundle while a runtime scope retains it.
 
 - [ ] **Step 4: preserve already matching external resources before runtime composition.**
 
+  Causal `bd1f055 / 37119435470`, job `111192525652`, completed
+  **2026-10-03 11:29:09 UTC**: 95 tests, 76 passed, 3 failed, 16 platform
+  skips, no cancellations. Both repeated-restore cases failed on changed file
+  IDs. The retained reader reached native removal and failed with sharing
+  violation **32**; reader setup and cleanup succeeded. The implementation now
+  compares complete groups and skips only verified matches, using existing
+  native observers and retaining final verification. Native acceptance pending.
+
   Windows runtime bundles are immutable and may remain retained by read-only
   native handles. Linux external restoration already leaves matching resources
   untouched. The initial Windows implementation always replaces files, so a

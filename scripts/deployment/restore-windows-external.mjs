@@ -5,7 +5,8 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { verifySnapshot } from './snapshot.mjs';
 import { realDirectory } from './snapshot-files.mjs';
 import { canonicalWorkerDirectory, closeWorkerFile, readWorkerFile, syncWorkerDirectory } from './worker-files.mjs';
-import { prepareWindowsSourceRestoreSecurity } from './windows-restore-security.mjs';
+import { prepareWindowsSourceRestoreSecurity, windowsRestoredSecurityMatches } from './windows-restore-security.mjs';
+import { inspectWindowsSnapshotSecurity } from './windows-snapshot-security.mjs';
 
 const identity = info => ({ dev: info.dev, ino: info.ino });
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -25,6 +26,27 @@ async function currentFile(file) {
     ...identity(info), bytes: info.size, mode: info.mode, uid: info.uid, gid: info.gid,
     mtimeNs: info.mtimeNs, ctimeNs: info.ctimeNs,
   };
+}
+
+async function matchesSavedFiles(scope, backup, signal) {
+  for (const item of scope.items) {
+    signal?.throwIfAborted();
+    const current = await currentFile(item.entry.path);
+    if (!same(current, item.current)) throw new Error('External restore target changed before comparison.');
+    if (item.entry.kind === 'absent') {
+      if (current) return false;
+    } else if (!current || !item.bytes.equals(await readWorkerFile(item.entry.path, 1024 * 1024))) return false;
+  }
+  const observed = await inspectWindowsSnapshotSecurity({
+    project: scope.parent, destinationParent: backup, entries: scope.entries, signal,
+  });
+  const errors = [];
+  let matches;
+  try { matches = windowsRestoredSecurityMatches(scope.metadata, observed.metadata, scope.entries); }
+  catch (error) { errors.push(error); }
+  try { await observed.close(); } catch (error) { errors.push(error); }
+  if (errors.length) throw new AggregateError(errors, 'External restore comparison or native cleanup failed.');
+  return matches;
 }
 
 export async function restoreWindowsExternalSnapshot(options) {
@@ -93,13 +115,14 @@ async function restoreExternal({
     const capacity = await statfs(parent.path, { bigint: true });
     if (capacity.bavail * capacity.bsize < required) throw new Error('Insufficient space for external restoration.');
     const relative = item => ({ ...item.entry, path: path.basename(item.entry.path) });
+    const savedEntries = items.filter(item => item.entry.kind === 'file').map(relative);
     const security = await prepareWindowsSourceRestoreSecurity({
       project: parent.path, backup: saved, metadata: parent.metadata,
-      entries: items.filter(item => item.entry.kind === 'file').map(relative),
+      entries: savedEntries,
       current: items.filter(item => item.current).map(item => ({ path: path.basename(item.entry.path), kind: 'file' })),
       signal,
     });
-    scopes.push({ parent: parent.path, items, security });
+    scopes.push({ parent: parent.path, metadata: parent.metadata, entries: savedEntries, items, security });
   }
   await check();
   for (const item of retained) {
@@ -107,6 +130,8 @@ async function restoreExternal({
   }
   if (!same(await verifySnapshot(saved, { signal }), manifest)) throw new Error('Admitted external restore backup changed before mutation.');
   for (const scope of scopes) {
+    await check();
+    if (await matchesSavedFiles(scope, saved, signal)) continue;
     await check();
     await scope.security.prepareRemoval({ signal });
     for (const item of scope.items) {
