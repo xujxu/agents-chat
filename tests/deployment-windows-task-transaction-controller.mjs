@@ -161,6 +161,7 @@ if (action === 'activate-early') {
       const runtime = await context.activate();
       assert.deepEqual(await context.activate(), runtime);
       await context.check();
+      await sourceFixture?.refuseActive(context);
       console.log(JSON.stringify({ phase: 'activated', runtime }));
       let next = await receive();
       if (action.startsWith('activate-complete')) {

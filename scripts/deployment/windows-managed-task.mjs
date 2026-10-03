@@ -120,6 +120,12 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
   }
 }
 
+export async function assertWindowsManagedTaskScope(scope, { signal } = {}) {
+  const retained = scopes.get(scope);
+  if (!retained) throw refused(new Error('Original retained managed task scope is required.'));
+  return retained.request('check', signal);
+}
+
 export async function captureWindowsManagedTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }) {
   signal?.throwIfAborted();
   const retained = scopes.get(scope);

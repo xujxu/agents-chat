@@ -69,12 +69,18 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
       await assert.rejects(stages.select({ target, stopped: context }));
       assert.equal(await git(['rev-parse', 'HEAD']), beforeCommit);
     },
+    async refuseActive(context) {
+      await context.check();
+      await assert.rejects(stages.npm({ stage: 'build', commit: targetCommit, stopped: context }));
+      await built.artifacts.check();
+    },
     async advance(phase, context) {
       if (phase === 'source-selected') {
         assert.equal((await stages.select({ target, stopped: context })).commit, targetCommit);
       } else if (phase === 'dependencies') {
         await stages.npm({ stage: 'dependencies', commit: targetCommit, stopped: context });
       } else if (phase === 'building') {
+        await assert.rejects(stages.npm({ stage: 'build', commit: beforeCommit, stopped: context }));
         built = await stages.npm({ stage: 'build', commit: targetCommit, stopped: context });
         assert.equal(built.sourceCommit, targetCommit);
         assert.equal(built.artifacts.identity.buildId, 'new-source');

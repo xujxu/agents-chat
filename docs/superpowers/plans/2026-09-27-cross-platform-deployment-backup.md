@@ -10906,8 +10906,11 @@ phase, even though a task controller's general `check()` can remain valid.
 - Modify `scripts/deployment/windows-task-transaction.mjs`: retain actual
   returned transaction contexts in a private map and assert source-stage
   project/operation/lock/generation/target/phase before and after native checks.
-- Modify `scripts/deployment/saved-worker-engine.mjs` and
-  `tests/deployment-saved-worker.test.mjs`: exact new saved module closure.
+- Preserve `scripts/deployment/saved-worker-engine.mjs` and the existing saved
+  import tests: only the already-saved task modules gain built-in-only guard
+  functions. Source/build adapters are live orchestration, just like the
+  existing Linux adapter; cold recovery must not rebuild. Do not expand the
+  worker/recovery closure with unrelated build modules.
 - Create `tests/deployment-windows-source-build.mjs`: a real local Git
   repository, two commits, actual owned Git/npm commands, small fixture build,
   manifest/artifact checks and stage/forged-context negatives.
@@ -10918,7 +10921,7 @@ phase, even though a task controller's general `check()` can remain valid.
   `.github/workflows/deployment-lifecycle.yml`: opt-in source/build coverage
   within the existing native update discovery case.
 
-- [ ] **Step 1: publish an actual Windows source-adapter causal.**
+- [x] **Step 1: publish an actual Windows source-adapter causal.**
 
   Add fixture-only `OwnedSourceBuild`. Obtain canonical Git, Node and
   `npm-cli.js` paths from Actions tooling; pass literal paths, never cmd
@@ -10934,6 +10937,11 @@ phase, even though a task controller's general `check()` can remain valid.
   The original runtime remains active during read/target resolution. This
   fixture is source/build integration coverage, not full Next application
   deployment or first-install acceptance.
+
+  Causal `2e2710f46454910a0c8ecc6873bbe97b1705e7b3 / 37091974243`,
+  native update job `111114042912`, failed on the missing
+  `windows-source-build.mjs` at **2026-10-03 03:05:40 UTC** after the actual
+  original task startup. The Git/npm stages had not yet executed.
 
 - [ ] **Step 2: reuse orchestration and bind native source authority.**
 

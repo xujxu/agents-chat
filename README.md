@@ -294,6 +294,11 @@ publication rather than caller-provided runtime metadata. Update, custom-securit
 restore and originally disabled native scenarios, including refusal cases and
 the complete stop-to-cleanup sequence, passed with all 34 regression jobs at
 `e59b0e9 / 37089382913`. Public Windows command composition remains unfinished.
+Windows owned source/build stages now share the existing Linux orchestration
+and bind mutations to the original native task transaction, selected commit
+and designated phase. Actions acceptance is pending; the new native fixture
+runs actual Git/npm commands and a small fixture build, not a full application
+deployment. Cold recovery does not gain a rebuild dependency.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and
