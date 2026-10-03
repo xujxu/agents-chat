@@ -4,7 +4,7 @@ import streams from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { chmod, copyFile, link, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, link, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -84,6 +84,7 @@ test('Windows object recovery restores missing packs offline without moving HEAD
   await assert.rejects(f.git('cat-file', '-e', `${f.commit}^{commit}`));
   const writeStream = streams.createWriteStream;
   let privateCopies = 0;
+  let checkedPublicationParent = false;
   streams.createWriteStream = (file, options) => {
     if (String(file).endsWith('.agents-chat-restore')) {
       const security = JSON.parse(execFileSync('pwsh.exe', [
@@ -99,7 +100,14 @@ test('Windows object recovery restores missing packs offline without moving HEAD
     for (let attempt = 0; attempt < 2; attempt++) {
       await restoreGitObjects({
         project: f.project, backup: f.backup, manifest,
-        checkStopped: async () => ({ stopped: true, inhibited: true }),
+        checkStopped: async () => {
+          if (privateCopies && !checkedPublicationParent) {
+            await assert.rejects(rename(path.join(f.project, '.git/objects/pack'), path.join(f.root, 'displaced-pack')),
+              error => ['EPERM', 'EACCES', 'EBUSY'].includes(error.code));
+            checkedPublicationParent = true;
+          }
+          return { stopped: true, inhibited: true };
+        },
       });
     }
   } finally {
@@ -107,6 +115,7 @@ test('Windows object recovery restores missing packs offline without moving HEAD
     syncBuiltinESMExports();
   }
   assert.ok(privateCopies >= 2);
+  assert.equal(checkedPublicationParent, true);
   for (const { file, bytes, security } of untouched) {
     assert.deepEqual(await readFile(file), bytes);
     assert.deepEqual(await windowsSecurity(file), security);

@@ -14,6 +14,7 @@ $current = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]
 $stages = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 $policies = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
 $directories = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+$directoryLeases = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
 $restored = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 $suffix = '.agents-chat-restore'
 function Read-EntryFields($Entry, [string[]]$Names) {
@@ -28,6 +29,7 @@ function Read-EntryFields($Entry, [string[]]$Names) {
 function Check-Roots {
     $root.Check()
     $backupLease.Check()
+    foreach ($lease in $directoryLeases.Values) { $lease.Check() }
 }
 function Get-Stage([string]$Path) {
     if (-not $stages.ContainsKey($Path)) {
@@ -147,6 +149,12 @@ try {
                 }
                 [Deployment.WindowsPrivateFile]::RestoreSourceSecurity(
                     $Project, $path, 'directory', $metadata.Dev, $metadata.Ino, $entry.Security, $entry.Attributes)
+                $guard = [Deployment.WindowsPrivateFile]::OpenSourceDirectory((Join-Path $Project $path))
+                $directoryLeases.Add($path, $guard)
+                $identityAfter = $guard.CaptureIdentity()
+                if ($identityAfter.Dev -cne $metadata.Dev -or $identityAfter.Ino -cne $metadata.Ino) {
+                    throw 'Restored Git directory identity changed before retention.'
+                }
                 [void]$directories.Add($path)
             }
             { $_ -cin @('create-stage', 'finish-stage', 'stage-policy', 'remove-stage', 'target-policy') } {
@@ -227,7 +235,8 @@ try {
         }
     }
 } finally {
-    foreach ($resource in (@($stages.Values | ForEach-Object { $_.Lease }) + @($backupLease, $root, $watch))) {
+    foreach ($resource in (@($stages.Values | ForEach-Object { $_.Lease }) +
+        @($directoryLeases.Values) + @($backupLease, $root, $watch))) {
         if ($null -eq $resource) { continue }
         try { $resource.Dispose() }
         catch {

@@ -11433,6 +11433,22 @@ Actual Windows tests now cover two broad-inheritance/readonly restores,
 private creation before byte writes, unchanged newer blobs and `info/packs`,
 readonly staged/linked reentry, and saved/current graph refusal before mutation.
 
+First implementation `52231cb1c430f3e2291ef11cabce577c03f3d92c`,
+focused `37106636372 / 111156345481`, passed **2026-10-03 07:33:33 UTC**:
+39 tests, 23 passed, 16 platform skips, zero failures. This includes the
+unchanged project-payload contracts through the shared transport extraction.
+Full push regression `37106634925` has not yet completed. The redundant
+test-only causal full run `37106184364` was cancelled after the exact focused
+causal failure was recorded; implementation full runs are retained.
+
+A follow-up closes the interval between private file completion and hardlink
+publication: retain each restored Git directory's native lease after applying
+its policy, bind that lease to the original directory identity, and recheck it
+for every command. The strengthened native fixture attempts to rename `pack`
+after the private write lease has finished and before publication; the retained
+parent must deny replacement. Await focused and full acceptance for this
+follow-up before marking the immutable-object task accepted.
+
 **Prerequisite:** Task 5AW full lifecycle acceptance. Keep the project-level
 Git-bearing restore refusal until object, mutable graph and journal-bound
 HEAD/index/ref restoration are all composed.
