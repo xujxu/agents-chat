@@ -118,6 +118,17 @@ foreach ($phase in @('create', 'mutate', 'restored')) {
         Assert ($LASTEXITCODE -eq 0) "Managed application API $phase failed"
         Assert-OwnedListener $ready $owner $listener $nativeListener
 
+        if ($phase -eq 'create') {
+            $git = (Get-Command git.exe).Source
+            $originalPath = $env:PATH
+            try {
+                $env:PATH = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0'
+                & $Node (Join-Path $PSScriptRoot 'deployment-windows-target-preflight.mjs') $Project $taskName $pwsh $git
+                Assert ($LASTEXITCODE -eq 0) 'Original managed application target preflight failed'
+            } finally { $env:PATH = $originalPath }
+            Assert-OwnedListener $ready $owner $listener $nativeListener
+        }
+
         $directory = Join-Path $root $phase
         [Deployment.WindowsPrivateFile]::CreateDirectory($directory).Dispose()
         $record = [ordered]@{

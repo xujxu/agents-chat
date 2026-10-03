@@ -12707,7 +12707,7 @@ capture. Only the original transaction's copying stage may capture a snapshot.
   const manifest = await createWindowsTaskSnapshot({
     context, control, lock, configuration, destination: path.join(control, 'backup'),
     id: 'native-task-snapshot', source: { commit: beforeCommit, provenance: 'observed' },
-    recoveryEngine: recovery.manifestSha256,
+    recoveryEngine: recovery.manifestSha256, pwsh,
   });
   ```
 
@@ -12741,7 +12741,7 @@ capture. Only the original transaction's copying stage may capture a snapshot.
   ```javascript
   createSnapshot({
     project: lock.project, destination, id, source, recoveryEngine,
-    ...scope, gitMetadata, externalFiles, signal,
+    ...scope, gitMetadata, externalFiles, signal, pwsh,
     runtime: { platform: 'win32', state: 'stopped', task },
     checkSource: async () => {
       await checkRuntime();
@@ -12750,8 +12750,8 @@ capture. Only the original transaction's copying stage may capture a snapshot.
   });
   ```
 
-  Include configuration JSON and every immutable helper as required external
-  files. Project configuration/absence is already in complete scope. Preserve
+  Include configuration JSON and every immutable helper in complete project
+  scope when co-located, or as required external files when outside. Preserve
   snapshot cleanup ownership and leave any incomplete capture unaccepted.
   Recheck branded authority after configuration/bundle observation so neither
   a changed source nor state transition can be hidden by a callback.
@@ -12762,6 +12762,32 @@ capture. Only the original transaction's copying stage may capture a snapshot.
   existing source-build scenario only to cover this adapter, avoiding duplicate
   full-matrix execution. Preserve 15-minute limits. Check retained backup
   contents after retirement; do not enable public runtime restore/deploy yet.
+
+### Task 5BH: Exercise target admission against the actual managed Windows app
+
+**Goal:** Continue public-controller integration with the existing target
+compatibility reader, not another target protocol. The original private
+Windows controller has a minimal PATH; explicit Git must reach the reader just
+as explicit PowerShell now reaches native snapshot observers.
+
+- [ ] Add a causal read-only preflight to the existing real application
+  fixture's first authenticated start. Discover the actual installed task,
+  bind the controller Node to its retained runtime configuration, and inspect
+  the cloned application's literal commit with an explicit Git executable
+  under minimal PATH. Require the reviewed declared profile and preserve
+  original task/listener ownership. A missing supplied Git must fail rather
+  than fall back to PATH. Do not add another application build or native job.
+- [ ] After observing the actual failure, thread the explicit executable
+  through `inspectTargetCompatibility`, preserving Linux/default callers,
+  exact source-profile hashes, literal commit, no replacement objects and
+  read-only Git options. Do not broaden PATH or weaken profile checks.
+- [ ] Require the Windows application job and full 36-job matrix. Continue
+  runtime/configuration/database preflight and public transaction composition;
+  this read-only admission alone does not implement public deployment.
+  Add `windows_application_only` dispatch to select the existing Windows
+  application job for causal/implementation runs without repeating unrelated
+  builds. It takes precedence over `windows_restore_only`; full dispatches and
+  push/PR matrices retain all 36 jobs and existing time budgets.
 
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
