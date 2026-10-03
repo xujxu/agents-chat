@@ -323,8 +323,9 @@ project mutation. Windows may add the DACL `AI` flag when its standard security
 API converts a legacy descriptor to automatic inheritance; restoration permits
 only that addition, not changes to owners, groups, ACE order/rights/inheritance,
 protection flags or file attributes. Root policy remains exact.
-This implementation is awaiting Windows Actions acceptance;
-Git/runtime restoration and full Windows application acceptance remain separate.
+Native payload/privacy/read-only/retry cases and all 34 lifecycle jobs passed
+(`4d5ff70`, Actions `37104965937`). Git/runtime restoration and full Windows
+application acceptance remain separate.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
 options preserve the existing supported task settings. Foreign task actions and

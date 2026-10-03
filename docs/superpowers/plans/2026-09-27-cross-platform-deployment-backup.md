@@ -11224,14 +11224,21 @@ refused until its actual permission application and native authority are wired.
 
 ### Task 5AW: same-account Windows project payload restoration
 
-Implementation is wired and awaiting Actions acceptance: dedicated native
+Accepted at `4d5ff70a6fdabc4ad7f33e852ab3ded953b43fc0`, full Actions
+`37104965937`, **34/34 jobs passed**, completed **2026-10-03 07:28:53 UTC**.
+Windows contracts `111152591980` and Linux service recovery `111152591916`
+both passed; no timeout increase was needed. Focused native acceptance was
+`37104966065 / 111151568520`, 14 tests with 11 passed and 3 Linux-only skips.
+This acceptance covers the payload adapter, not complete Windows application
+restoration. The following implementation history is retained as evidence.
+
+Implementation includes a dedicated native
 security partial/controller, bounded eight-entry admission and policy batches,
 strict JS adapter, shared project copier integration and complete saved-engine
 dependency closure. The private file creation lease remains open while Node
 streams through `r+`; source SDDL is applied only after private writes finish.
 Added actual root-policy drift and unsupported saved ownership refusal cases,
 and enabled the existing backup/stopped-authority/cancellation cases on Windows.
-Do not mark this task accepted until native Windows and all lifecycle jobs pass.
 
 First implementation `8e7fea2 / 37101423928` compiled the native helper but
 Windows contracts `111141541723` failed four restore cases at the root-policy
@@ -11359,7 +11366,7 @@ skipped prerequisites for a complete Windows application restore.
   its Linux-only/native-ACL-required guard. Snapshot creation and the fixture
   setup succeeded. The characterized causal run was then cancelled.
 
-- [ ] **Step 2: admit metadata before allowing any project mutation.**
+- [x] **Step 2: admit metadata before allowing any project mutation.**
 
   ```javascript
   const permissions = await prepareWindowsProjectRestoreSecurity({
@@ -11376,7 +11383,7 @@ skipped prerequisites for a complete Windows application restore.
   impersonating accounts or silently rewriting ownership. Reject Git-bearing
   snapshots before mutation until their separate restore adapter is wired.
 
-- [ ] **Step 3: restore bytes and then exact source security.**
+- [x] **Step 3: restore bytes and then exact source security.**
 
   ```javascript
   await permissions.prepareRemoval({ signal });
@@ -11402,7 +11409,7 @@ skipped prerequisites for a complete Windows application restore.
   authoritative backup private and unchanged. Preserve primary and cleanup
   failures.
 
-- [ ] **Step 4: accept payload restoration without overstating public support.**
+- [x] **Step 4: accept payload restoration without overstating public support.**
 
   Require actual Windows payload/ACL/read-only/retry cases, refusal before
   mutation, saved-dependency import coverage, Linux restore regressions and
