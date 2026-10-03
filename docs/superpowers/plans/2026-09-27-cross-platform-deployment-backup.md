@@ -11279,6 +11279,22 @@ This manual profile uses its own concurrency group and runs only the Windows
 payload contracts. Push/PR/default dispatch behavior remains the full 34-job
 matrix. Focused success does not replace final full regression acceptance.
 
+Focused `5bcf1c3 / 37104650163`, job `111150697448`, exposed the exact
+difference at **2026-10-03 06:57:01 UTC**: `.data` retained identical
+owner/group, ACE sequence and attributes, but Windows added `AI` to its legacy
+`D:` header. Microsoft documents that `SetSecurityInfo` converts legacy ACLs to
+the current inheritance model and sets `SE_DACL_AUTO_INHERITED`, while preserving
+the descriptor's access semantics:
+[automatic propagation](https://learn.microsoft.com/en-us/windows/win32/secauthz/automatic-propagation-of-inheritable-aces).
+Use this standard API normalization rather than replacing filesystem security
+with unsupported kernel-object APIs. Final comparison permits only addition of
+the DACL-header `AI` bit on restored entries; root policy, ownership, group,
+ACE ordering/type/rights/inheritance, DACL protection/request flags and ordinary
+attributes remain exact. Removal of an existing `AI` bit remains a refusal.
+Compare validated per-entry descriptors, not deduplication indexes, because
+system-added `AI` can split a descriptor previously shared with the unchanged root.
+Add platform-independent positive/negative contracts for this precise boundary.
+
 Apply the accepted version-3 metadata to real restored files, using standard
 Windows handle-based security/attribute APIs. Reuse the existing project byte
 restorer, backup checks, explicit data-loss acknowledgement and stopped/inhibited

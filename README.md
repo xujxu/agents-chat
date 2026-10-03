@@ -319,7 +319,11 @@ restoration now uses private creation before copying, identity-bound deletion
 including read-only files, and standard handle-based owner/group/DACL and
 attribute restoration. It requires version-3 metadata and unchanged root policy;
 legacy, cross-account, Git-bearing and external-runtime snapshots refuse before
-project mutation. This implementation is awaiting Windows Actions acceptance;
+project mutation. Windows may add the DACL `AI` flag when its standard security
+API converts a legacy descriptor to automatic inheritance; restoration permits
+only that addition, not changes to owners, groups, ACE order/rights/inheritance,
+protection flags or file attributes. Root policy remains exact.
+This implementation is awaiting Windows Actions acceptance;
 Git/runtime restoration and full Windows application acceptance remain separate.
 First registration defaults to the current Windows account, or accepts an
 explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel

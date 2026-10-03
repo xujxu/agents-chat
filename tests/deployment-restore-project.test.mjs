@@ -8,10 +8,57 @@ import { temporaryDeployment } from './deployment-fixture.mjs';
 import { inspectSnapshotScope } from '../scripts/deployment/snapshot-scope.mjs';
 import { createSnapshot, verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { restoreProjectSnapshot } from '../scripts/deployment/restore-project.mjs';
+import { windowsRestoredSecurityMatches } from '../scripts/deployment/windows-restore-security.mjs';
 import { fileDigest } from '../scripts/deployment/snapshot-files.mjs';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+
+function policyFixture() {
+  const policy = 'O:SYG:SYD:(A;OICIID;FA;;;SY)(A;OICIID;FR;;;BA)';
+  const inventory = [{ path: 'folder', kind: 'directory' }];
+  const saved = { version: 1, descriptors: [policy], root: { security: 0, attributes: 16 },
+    entries: [{ path: 'folder', security: 0, attributes: 16 }] };
+  const observed = structuredClone(saved);
+  observed.descriptors.push(policy.replace('D:', 'D:AI'));
+  observed.entries[0].security = 1;
+  return { inventory, saved, observed };
+}
+
+test('Windows restored policy accepts only system-added DACL auto-inheritance bookkeeping', () => {
+  const { inventory, saved, observed } = policyFixture();
+  assert.equal(windowsRestoredSecurityMatches(saved, saved, inventory), true);
+  assert.equal(windowsRestoredSecurityMatches(saved, observed, inventory), true);
+  assert.equal(windowsRestoredSecurityMatches(observed, saved, inventory), false);
+  const rootChanged = structuredClone(observed);
+  rootChanged.root.security = 1;
+  rootChanged.entries[0].security = 0;
+  assert.equal(windowsRestoredSecurityMatches(saved, rootChanged, inventory), false);
+});
+
+test('Windows restored policy still requires exact owner, group, ACE order, rights, inheritance and attributes', () => {
+  const { inventory, saved, observed } = policyFixture();
+  for (const change of [
+    policy => policy.replace('O:SY', 'O:BA'),
+    policy => policy.replace('G:SY', 'G:BA'),
+    policy => policy.replace('D:AI', 'D:PAI'),
+    policy => policy.replace('D:AI', 'D:ARAI'),
+    policy => policy.replace(';FA;', ';FR;'),
+    policy => policy.replace('OICIID', 'OICI'),
+    policy => policy.replace('(A;', '(D;'),
+    policy => policy.replace(/(\(A;[^)]+\))(\(A;[^)]+\))$/, '$2$1'),
+  ]) {
+    const different = structuredClone(observed);
+    different.descriptors[1] = change(different.descriptors[1]);
+    assert.equal(windowsRestoredSecurityMatches(saved, different, inventory), false);
+  }
+  const attributes = structuredClone(observed);
+  attributes.entries[0].attributes = 18;
+  assert.equal(windowsRestoredSecurityMatches(saved, attributes, inventory), false);
+  const pathChanged = structuredClone(observed);
+  pathChanged.entries[0].path = 'foreign';
+  assert.throws(() => windowsRestoredSecurityMatches(saved, pathChanged, inventory), /inventory/i);
+});
 
 async function fixture(t, full = true, beforeSnapshot) {
   const root = await temporaryDeployment(t);

@@ -1,6 +1,5 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isDeepStrictEqual as same } from 'node:util';
 import { createHash } from 'node:crypto';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
@@ -11,6 +10,19 @@ const script = fileURLToPath(new URL('./windows-restore-security.ps1', import.me
 const refused = cause => new Error('Windows project security restoration refused.', { cause });
 const redactedPolicy = value => String(value).replace(/S-1-[0-9-]+/g,
   sid => `<sid:${createHash('sha256').update(sid).digest('hex').slice(0, 12)}>`);
+
+// SetSecurityInfo can mark a legacy DACL auto-inherited without changing its ACEs.
+const restoredPolicyMatches = (expected, observed) => observed === expected
+  || observed.replace(/D:([A-Z]*)(?=\(|$)/, (_, flags) => `D:${flags.replace(/AI/g, '')}`) === expected;
+
+export function windowsRestoredSecurityMatches(expected, observed, inventory) {
+  const saved = validateWindowsSnapshotSecurity(expected, inventory);
+  const actual = validateWindowsSnapshotSecurity(observed, inventory);
+  if (saved.root.attributes !== actual.root.attributes
+    || saved.descriptors[saved.root.security] !== actual.descriptors[actual.root.security]) return false;
+  return saved.entries.every((entry, index) => entry.attributes === actual.entries[index].attributes
+    && restoredPolicyMatches(saved.descriptors[entry.security], actual.descriptors[actual.entries[index].security]));
+}
 
 export async function prepareWindowsProjectRestoreSecurity({
   project, backup, manifest, current, signal, pwsh = 'pwsh.exe',
@@ -146,14 +158,15 @@ export async function prepareWindowsProjectRestoreSecurity({
           project, destinationParent: backup, entries: manifest.entries, signal: restoreSignal, pwsh,
         });
         const errors = [];
-        if (!same(observed.metadata, metadata)) {
+        if (!windowsRestoredSecurityMatches(metadata, observed.metadata, manifest.entries)) {
           const error = new Error('Restored Windows ACL or attributes differ from the snapshot.');
           for (let index = -1; index < metadata.entries.length; index++) {
             const expected = index < 0 ? metadata.root : metadata.entries[index];
             const actual = index < 0 ? observed.metadata.root : observed.metadata.entries[index];
             const expectedPolicy = metadata.descriptors[expected.security];
             const actualPolicy = observed.metadata.descriptors[actual.security];
-            if (expected.attributes !== actual.attributes || expectedPolicy !== actualPolicy) {
+            if (expected.attributes !== actual.attributes
+              || (index < 0 ? expectedPolicy !== actualPolicy : !restoredPolicyMatches(expectedPolicy, actualPolicy))) {
               error.comparison = {
                 path: index < 0 ? '.' : expected.path,
                 expectedAttributes: expected.attributes, observedAttributes: actual.attributes,
