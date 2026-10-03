@@ -116,7 +116,7 @@ export async function createSnapshot(options) {
   let failure;
   try {
     return await createSnapshotContents(options, async scope => {
-      const security = await inspectWindowsSnapshotSecurity({ ...scope, pwsh: options.pwsh });
+      const security = await inspectWindowsSnapshotSecurity({ ...scope, pwsh: options.pwsh, onProgress: options.onProgress });
       securityScopes.push(security);
       return security;
     });
@@ -138,15 +138,18 @@ export async function createSnapshot(options) {
 
 async function createSnapshotContents({
   project, destination, id, files, source, runtime, signal, absentPaths = [], excludedPaths = [],
-  externalFiles = [], checkSource, projectScope = false, gitMetadata, recoveryEngine, pwsh,
+  externalFiles = [], checkSource, projectScope = false, gitMetadata, recoveryEngine, pwsh, onProgress,
 }, retainSecurity) {
   signal?.throwIfAborted();
   if (checkSource !== undefined && typeof checkSource !== 'function') throw new Error('Snapshot source check must be callable.');
+  if (onProgress !== undefined && typeof onProgress !== 'function') throw new Error('Snapshot progress reporter must be callable.');
+  onProgress?.({ phase: 'snapshot-admission' });
   await checkSource?.();
   let git = gitMetadata === undefined ? null : await captureSnapshotGit(gitMetadata, source?.commit);
   if (runtime?.state !== 'stopped') throw new Error('Snapshot requires a stopped runtime.');
   const root = await realDirectory(project);
   const rootInfo = await lstat(root);
+  onProgress?.({ phase: 'snapshot-git-objects-admission' });
   const objects = git ? await prepareGitObjects({ project: root, commit: source.commit, signal, pwsh }) : null;
   if (rootInfo.mode & 0o7000 || typeof projectScope !== 'boolean') throw new Error('Unsupported project snapshot metadata.');
   const checkProject = async () => {
@@ -166,15 +169,19 @@ async function createSnapshotContents({
   if (target === root || target.startsWith(root + path.sep)) {
     throw new Error('Snapshot destination must be outside the application.');
   }
+  onProgress?.({ phase: 'snapshot-external-admission' });
   const external = await captureExternalSnapshot({
     files: externalFiles, project: root, destination: target, signal, retainSecurity,
   });
   absentPaths = snapshotPathList(absentPaths);
   excludedPaths = snapshotPathList(excludedPaths);
   await assertSnapshotAbsent(root, absentPaths);
+  onProgress?.({ phase: 'snapshot-project-inventory' });
   const entries = await captureSnapshotInventory(root, files, { signal, excludedPaths, allowInternalWindowsLinks: true });
+  onProgress?.({ phase: 'snapshot-source-security', total: entries.length });
   const security = process.platform === 'win32'
     ? await retainSecurity({ project: root, destinationParent: parent, entries, signal }) : null;
+  onProgress?.({ phase: 'snapshot-git-security' });
   const gitSecurity = git && security ? await prepareWindowsGitSnapshotSecurity({
     project: root, destinationParent: parent, record: git.record, retainSecurity, signal,
   }) : null;
@@ -205,6 +212,7 @@ async function createSnapshotContents({
   await mkdir(target, { mode: 0o700 });
   await writePrivateFile(path.join(target, 'owner.json'), JSON.stringify({ version: 1, project: root, id }));
   if (git) await writePrivateFile(path.join(target, 'git.json'), git.bytes);
+  onProgress?.({ phase: 'snapshot-copy-git' });
   if (objects) manifest.gitObjects = await objects.copy(path.join(target, 'git-objects'));
   const contents = path.join(target, 'files');
   await mkdir(contents, { mode: 0o700 });
@@ -213,7 +221,10 @@ async function createSnapshotContents({
     signal?.throwIfAborted();
     await mkdir(path.join(contents, entry.path), { mode: 0o700 });
   }
-  for (const entry of ordered.filter(item => item.kind === 'file')) {
+  const copiedFiles = ordered.filter(item => item.kind === 'file');
+  let copied = 0;
+  onProgress?.({ phase: 'snapshot-copy-files', completed: copied, total: copiedFiles.length });
+  for (const entry of copiedFiles) {
     signal?.throwIfAborted();
     const from = path.join(root, entry.path);
     const to = path.join(contents, entry.path);
@@ -229,6 +240,10 @@ async function createSnapshotContents({
     );
     entry.sha256 = await fileDigest(to, { signal });
     if (entry.sha256 !== await fileDigest(from, { signal })) throw new Error('Snapshot source checksum changed during copying.');
+    copied++;
+    if (copied === copiedFiles.length || copied % Math.max(1, Math.ceil(copiedFiles.length / 4)) === 0) {
+      onProgress?.({ phase: 'snapshot-copy-files', completed: copied, total: copiedFiles.length });
+    }
   }
   for (const entry of ordered.filter(item => item.kind === 'link')) {
     signal?.throwIfAborted();
@@ -238,6 +253,7 @@ async function createSnapshotContents({
     }
     await symlink(entry.target, path.join(contents, entry.path));
   }
+  onProgress?.({ phase: 'snapshot-copy-external' });
   await external.copy();
   const serialized = JSON.stringify(manifest);
   if (Buffer.byteLength(serialized) > 32 * 1024 * 1024) throw new Error('Snapshot manifest exceeds size limit.');
@@ -252,9 +268,11 @@ async function createSnapshotContents({
   await objects?.check();
   await checkProject();
   await assertSnapshotAbsent(root, absentPaths);
+  onProgress?.({ phase: 'snapshot-verify-source-inventory' });
   if (!same(entries, await captureSnapshotInventory(root, files, { signal, excludedPaths, allowInternalWindowsLinks: true }))) {
     throw new Error('Snapshot source inventory or metadata changed during capture.');
   }
+  onProgress?.({ phase: 'snapshot-verify-source-checksums' });
   for (const entry of manifest.entries.filter(item => item.kind === 'file')) {
     if (entry.sha256 !== await fileDigest(path.join(root, entry.path), { signal })) {
       throw new Error('Snapshot source checksum changed before completion.');
@@ -262,11 +280,13 @@ async function createSnapshotContents({
   }
   await external.check();
   await security?.check({ signal });
+  onProgress?.({ phase: 'snapshot-verify-backup' });
   await verifySnapshotContents(target, manifest, { signal, complete: false });
   const manifestDigest = createHash('sha256').update(serialized).digest('hex');
   if (manifestDigest !== await fileDigest(path.join(target, 'manifest.json'), { signal })) {
     throw new Error('Snapshot manifest integrity failure before completion.');
   }
+  onProgress?.({ phase: 'snapshot-sync' });
   for (const entry of ordered.filter(item => item.kind === 'directory').reverse()) {
     signal?.throwIfAborted();
     await syncWorkerDirectory(path.join(contents, entry.path));
@@ -284,6 +304,7 @@ async function createSnapshotContents({
   }));
   await syncWorkerDirectory(target);
   await syncWorkerDirectory(parent);
+  onProgress?.({ phase: 'snapshot-verify-completed' });
   return verifySnapshot(target, { signal });
 }
 

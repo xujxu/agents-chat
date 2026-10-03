@@ -13017,6 +13017,20 @@ remaining canonical local drive path to match the substitute target. UNC,
 device/non-drive names and outside-project targets remain refused; original
 raw buffers remain unchanged in snapshots and recreated links.
 
+**Directory links accepted:** `90eb699 / 37135004705`, job `111237650054`,
+passed six native/mixed snapshot cases, the original source/task pipeline,
+and 97 regressions (81 passed, 16 platform skips, zero failures/cancellations).
+Final component output was **2026-10-03 16:07:02 UTC** (352589 ms).
+Actual application `37135214157 / 111238267491` passed its original three
+starts but the separate complete snapshot invocation reached its existing
+240000 ms deadline, reported **16:08:53 UTC** with no snapshot completion.
+This is not acceptance and does not justify raising limits without evidence.
+Use the existing deployment `onProgress` convention for optional snapshot
+phase/count reports, include quarter-interval large native ACL inventory
+progress, and print monotonic elapsed times only in the actual application
+fixture. Keep payload/configuration values out of progress. Measure before
+choosing a performance or lifecycle correction; preserve all deadlines.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.

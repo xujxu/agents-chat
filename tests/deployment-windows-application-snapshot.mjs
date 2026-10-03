@@ -16,6 +16,9 @@ import { saveRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 
 const [project, taskName, pwsh, git, control] = process.argv.slice(2);
+const started = performance.now();
+const progress = record => console.log(`SNAPSHOT ${Math.round(performance.now() - started)}ms ${JSON.stringify(record)}`);
+progress({ phase: 'managed-observation' });
 const scope = await inspectWindowsManagedTask({ project, taskName, pwsh });
 let configuration;
 let context;
@@ -33,9 +36,11 @@ try {
   const target = await inspectTargetCompatibility({
     project, commit, nodeVersion: process.versions.node, platform: process.platform, git,
   });
+  progress({ phase: 'configuration-admission' });
   configuration = await inspectWindowsConfiguration({ scope, pwsh, profile: target.configurationProfile });
   assert.deepEqual(configuration.providers, ['admin-login']);
   const lock = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
+  progress({ phase: 'save-recovery-engine' });
   const recovery = await saveRecoveryEngine({
     source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)), control,
   });
@@ -46,17 +51,19 @@ try {
     startedAt: lock.createdAt, updatedAt: new Date().toISOString(), errorCode: null,
   };
   await writeState(control, state);
+  progress({ phase: 'native-admission' });
   const captured = await withWindowsAdmission(control, { pwsh }, admission =>
     captureWindowsManagedTaskAdmission({ scope, control, lock, admission }));
   state = { ...state, phase: 'stopped', previousPhase: state.phase, updatedAt: new Date().toISOString() };
   await writeState(control, state);
+  progress({ phase: 'stop-original-runtime' });
   context = await stopWindowsTaskTransaction({ control, lock, pwsh, ...captured });
   state = { ...state, phase: 'copying', previousPhase: state.phase, updatedAt: new Date().toISOString() };
   await writeState(control, state);
   const destination = path.join(control, 'backup');
   const manifest = await createWindowsTaskSnapshot({
     context, control, lock, configuration, destination, pwsh, id: 'actual-application-snapshot',
-    source: { commit, provenance: 'observed' }, recoveryEngine: recovery.manifestSha256,
+    source: { commit, provenance: 'observed' }, recoveryEngine: recovery.manifestSha256, onProgress: progress,
   });
   assert.equal(manifest.version, 3);
   assert.equal(manifest.scope, 'project');

@@ -134,10 +134,11 @@ function nativeMetadata(value, kind, keys) {
   return record;
 }
 
-export async function inspectWindowsSnapshotSecurity({ project, destinationParent, entries, signal, pwsh = 'pwsh.exe' }) {
+export async function inspectWindowsSnapshotSecurity({ project, destinationParent, entries, signal, pwsh = 'pwsh.exe', onProgress }) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![project, destinationParent].every(canonical)
-    || !Array.isArray(entries) || entries.length > 250000) throw refused(new Error('Invalid Windows snapshot scope.'));
+    || !Array.isArray(entries) || entries.length > 250000
+    || onProgress !== undefined && typeof onProgress !== 'function') throw refused(new Error('Invalid Windows snapshot scope.'));
   const inventory = entries.map(({ path: name, kind }) => {
     if (typeof name !== 'string' || !name || name.length > 4096 || /[\\:\0\r\n]/.test(name)
       || name.split('/').some(part => !part || part === '.' || part === '..')
@@ -182,6 +183,8 @@ export async function inspectWindowsSnapshotSecurity({ project, destinationParen
       const junctions = [];
       const symlinks = [];
       let metadataBytes = Buffer.byteLength(root.securityDescriptor);
+      let reported = 0;
+      if (inventory.length >= 1024) onProgress?.({ phase: 'snapshot-native-security', completed: 0, total: inventory.length });
       for (let offset = 0; offset < inventory.length;) {
         const batch = [];
         let budget = 0;
@@ -215,6 +218,10 @@ export async function inspectWindowsSnapshotSecurity({ project, destinationParen
           metadataBytes += Buffer.byteLength(JSON.stringify(record));
           if (metadataBytes > 32 * 1024 * 1024) throw new Error('Snapshot source security metadata exceeds its budget.');
           records.push(record);
+        }
+        if (inventory.length >= 1024 && (offset === inventory.length || offset - reported >= Math.ceil(inventory.length / 4))) {
+          onProgress?.({ phase: 'snapshot-native-security', completed: offset, total: inventory.length });
+          reported = offset;
         }
       }
       const final = await request('capture', [], requestSignal);

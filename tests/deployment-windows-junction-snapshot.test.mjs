@@ -26,17 +26,23 @@ for (const missingTarget of [false, true]) {
       await symlink(target, symbolicLinks[0], 'dir');
       await symlink('../../node_modules/dependency', symbolicLinks[1], 'dir');
       const backup = path.join(root, 'backup');
+      const progress = [];
       const manifest = await createSnapshot({
         project, destination: backup, id: 'junction-project',
         ...await inspectSnapshotScope({ project }),
         source: { commit: 'a'.repeat(40), provenance: 'observed' },
         runtime: { platform: 'win32', state: 'stopped' },
+        onProgress: record => progress.push(record),
       });
       assert.equal(manifest.version, 3);
       assert.equal(manifest.windowsSecurity.version, 2);
       assert.equal(manifest.windowsSecurity.project, project);
       assert.equal(manifest.windowsSecurity.junctions.length, 1);
       assert.equal(manifest.windowsSecurity.symlinks.length, 2);
+      assert.equal(progress.find(record => record.phase === 'snapshot-source-security').total, manifest.entries.length);
+      const copies = progress.filter(record => record.phase === 'snapshot-copy-files');
+      assert.equal(copies.at(-1).completed, manifest.entries.filter(entry => entry.kind === 'file').length);
+      assert.equal(progress.at(-1).phase, 'snapshot-verify-completed');
       assert.equal(manifest.windowsSecurity.junctions[0].path, '.next/node_modules/dependency');
       assert.equal(manifest.entries.find(entry => entry.kind === 'link').target, '../../node_modules/dependency');
       await assert.rejects(lstat(path.join(backup, 'files/.next/node_modules/dependency')), { code: 'ENOENT' });

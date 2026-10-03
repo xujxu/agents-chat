@@ -13,12 +13,13 @@ import { createSnapshot } from './snapshot.mjs';
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
 export async function createWindowsTaskSnapshot({
-  context, control, lock, configuration, destination, id, source: suppliedSource, recoveryEngine, pwsh, signal,
+  context, control, lock, configuration, destination, id, source: suppliedSource, recoveryEngine, pwsh, signal, onProgress,
 }) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || typeof configuration?.checkFiles !== 'function'
     || !Array.isArray(configuration.files) || typeof pwsh !== 'string' || !path.isAbsolute(pwsh)
-    || path.resolve(pwsh) !== pwsh || /[\0\r\n]/.test(pwsh)) {
+    || path.resolve(pwsh) !== pwsh || /[\0\r\n]/.test(pwsh)
+    || onProgress !== undefined && typeof onProgress !== 'function') {
     throw new Error('Windows task snapshot requires native configuration observation and explicit PowerShell.');
   }
   const source = Object.freeze(captureWorkerFields(suppliedSource, ['commit', 'provenance'], 'snapshot source'));
@@ -63,7 +64,9 @@ export async function createWindowsTaskSnapshot({
   let hasGit = true;
   try { await lstat(path.join(project, '.git')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; hasGit = false; }
+  onProgress?.({ phase: 'task-git-inventory' });
   const gitMetadata = hasGit ? await inspectGitMetadata({ project, commit: source.commit, signal }) : undefined;
+  onProgress?.({ phase: 'task-project-scope' });
   const scope = await inspectSnapshotScope({ project, signal });
   const external = new Map();
   for (const file of [...files.map(file => ({ ...file, present: true })), ...configuration.files]) {
@@ -72,7 +75,7 @@ export async function createWindowsTaskSnapshot({
     if (!external.has(file.path)) external.set(file.path, { path: file.path, optional: !file.present });
   }
   return createSnapshot({
-    project, destination, id, source, signal, ...scope, gitMetadata, recoveryEngine, pwsh,
+    project, destination, id, source, signal, ...scope, gitMetadata, recoveryEngine, pwsh, onProgress,
     externalFiles: [...external.values()], runtime: { platform: 'win32', state: 'stopped', task: binding.task },
     async checkSource() {
       await checkRuntime();
