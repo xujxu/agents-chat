@@ -12964,6 +12964,16 @@ physical file inserted at a metadata-only junction path. Push and run the
 focused Windows restore gate before the actual application gate; no local
 validation and no relaxed task/process/job deadlines.
 
+**Actual application integration:** `3d01a0b / 37133399654`, job
+`111232890484`, failed **2026-10-03 15:35:00 UTC** during native source
+capture with an unsupported/malformed junction buffer. The existing three
+application starts and runtime/configuration/database admission passed. The
+focused `37133192021` already passed all four junction native/roundtrip cases
+and the owned-source/task snapshot pipeline; ordinary regressions are still
+running. Add precise relative-path and raw-tag diagnostics before changing
+supported reparse types. Do not infer that every inventory link has the same
+type as the four printed `.next/node_modules` junctions.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.

@@ -74,9 +74,11 @@ namespace Deployment
             internal static string DecodeTarget(string project, byte[] bytes)
             {
                 if (bytes == null || bytes.Length < 16 || bytes.Length > 16384 ||
-                    BitConverter.ToUInt16(bytes, 4) + 8 != bytes.Length || BitConverter.ToUInt16(bytes, 6) != 0 ||
-                    BitConverter.ToUInt32(bytes, 0) != 0xa0000003)
+                    BitConverter.ToUInt16(bytes, 4) + 8 != bytes.Length || BitConverter.ToUInt16(bytes, 6) != 0)
                     throw new InvalidDataException("Unsupported or malformed directory junction reparse buffer.");
+                if (BitConverter.ToUInt32(bytes, 0) != 0xa0000003)
+                    throw new InvalidDataException("Unsupported source junction reparse tag: 0x" +
+                        BitConverter.ToUInt32(bytes, 0).ToString("x8") + ".");
                 string absolute = ResolveTarget(ReadName(bytes, 16, 8), true);
                 string display = ReadName(bytes, 16, 12);
                 if (display.Length != 0 && !String.Equals(absolute, ResolveTarget(display, false), StringComparison.OrdinalIgnoreCase))

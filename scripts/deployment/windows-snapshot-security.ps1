@@ -85,6 +85,7 @@ try {
                 $fields = Read-AgentsChatMaintenanceFields $entry.GetRawText() @('path', 'kind')
                 $relative = $fields.path.GetString()
                 $kind = $fields.kind.GetString()
+                $stage = "${method}:$relative"
                 if (-not $relative -or $kind -cnotin @('file', 'directory', 'link')) { throw 'Unsupported snapshot inventory entry.' }
                 if ($kind -ceq 'link') {
                     if (-not $junctions.ContainsKey($relative)) {
