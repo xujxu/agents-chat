@@ -3,7 +3,7 @@ import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { waitWindowsReadiness } from '../scripts/deployment/windows-readiness.mjs';
 
-export async function runWindowsTaskCompletionSteps({ context, control, port, providers, recordAcceptance }) {
+export async function runWindowsTaskCompletionSteps({ context, control, port, providers, recordAcceptance, stopAfter }) {
   assert.equal(typeof context.advanceCompletion, 'function', 'Missing native completion step API: advanceCompletion');
   await waitWindowsReadiness({ context, port, providers });
   await context.prepareCompletion({ port, providers });
@@ -37,6 +37,7 @@ export async function runWindowsTaskCompletionSteps({ context, control, port, pr
     await context.check();
     expected.add(`task-complete-${durable}.json`);
     assert.deepEqual(await receipts(), [...expected].sort());
+    if (step === stopAfter) return Object.freeze({ status: 'interrupted', step, stateSha256 });
   }
   assert.equal(expected.size, 9);
   assert.equal(await context.advanceCompletion({ stateSha256 }), 'complete');

@@ -511,6 +511,31 @@ jobs:
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-disabled
 
+  windows-completion-recovery:
+    name: Native Windows completion recovery (${{ matrix.crash }})
+    runs-on: windows-2022
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scenario: transaction-activate-complete-recovery
+            crash: release-requested
+          - scenario: transaction-activate-complete-recovery
+            crash: lease-released
+          - scenario: transaction-activate-complete-recovery-restore
+            crash: permanent-policy-applied
+          - scenario: transaction-activate-complete-recovery-disabled
+            crash: enable-applied
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Recover or refuse after genuine completion actor death
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -CrashStep '${{ matrix.crash }}'
+
   windows-task-retirement:
     name: Native Windows task receipt retirement
     runs-on: windows-2022

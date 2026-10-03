@@ -83,9 +83,9 @@ await context.check();
 await assert.rejects(releaseLock(control, lock, { pwsh }), /maintenance/i);
 assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
 console.log(JSON.stringify({ phase: 'stopped', bridge: context.identity }));
-const { action, configuration, sha256 } = await receive();
+const { action, configuration, sha256, crashStep } = await receive();
 let workerOperation;
-if (action === 'activate-complete-retirement') {
+if (['activate-complete-retirement', 'activate-complete-recovery'].includes(action)) {
   const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
   const saved = await saveWorkerEngine({ source, control, project, operationId: lock.operationId });
   await saveRecoveryEngine({ source, control });
@@ -115,7 +115,7 @@ if (action === 'activate-early') {
   await assert.rejects(context.retire(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
 } else if (['retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
   'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state',
-  'activate-complete-proof', 'activate-complete-retirement'].includes(action)) {
+  'activate-complete-proof', 'activate-complete-retirement', 'activate-complete-recovery'].includes(action)) {
   if (operation !== 'restore') {
     for (const phase of ['rotating', 'backup-ready', 'source-selected', 'dependencies', 'building', 'configuring', 'activating']) {
       state = { ...state, previousPhase: state.phase, phase };
@@ -130,7 +130,8 @@ if (action === 'activate-early') {
       { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
   } else {
     if (['replace', 'activate', 'activate-exit', 'activate-state-change', 'activate-readiness',
-      'activate-complete', 'activate-complete-changed-state', 'activate-complete-proof', 'activate-complete-retirement'].includes(action)) {
+      'activate-complete', 'activate-complete-changed-state', 'activate-complete-proof', 'activate-complete-retirement',
+      'activate-complete-recovery'].includes(action)) {
       await context.replace({ configuration, sha256 });
       await context.replace({ configuration, sha256 });
     }
@@ -154,10 +155,11 @@ if (action === 'activate-early') {
           return hash(await readFile(stateFile));
         };
         const completion = async () => {
-          const complete = action === 'activate-complete-retirement'
+          const complete = ['activate-complete-retirement', 'activate-complete-recovery'].includes(action)
             ? (await import('./deployment-windows-task-completion-steps.mjs')).runWindowsTaskCompletionSteps
             : completeWindowsTaskActivation;
-          return complete({ context, control, port: endpoint.port, providers: ['admin-login'], recordAcceptance });
+          return complete({ context, control, port: endpoint.port, providers: ['admin-login'], recordAcceptance,
+            stopAfter: action === 'activate-complete-recovery' ? crashStep : undefined });
         };
         if (action.endsWith('changed-state')) {
           await assert.rejects(completion(), error => error.code === 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED'
@@ -165,7 +167,13 @@ if (action === 'activate-early') {
           console.log(JSON.stringify({ phase: 'closed' }));
           process.exit(0);
         }
-        await completion();
+        const result = await completion();
+        if (action === 'activate-complete-recovery') {
+          assert.equal(result.status, 'interrupted');
+          console.log(JSON.stringify({ ...result, phase: 'interrupted' }));
+          await receive();
+          throw new Error('Parent must kill the original actor at the acknowledged completion boundary.');
+        }
         await context.check();
         await context.complete({ stateSha256: hash(await readFile(stateFile)) });
         console.log(JSON.stringify({ phase: 'completed' }));

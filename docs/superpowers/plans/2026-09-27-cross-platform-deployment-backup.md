@@ -10428,6 +10428,154 @@ add timing-dependent filesystem watchers, or introduce production fault flags.
   This is the deterministic completion primitive for the next cold replay
   consumer, not a claim that interrupted activation or reboot recovery works.
 
+### Task 5AQ: replay interrupted completion for the original released runtime
+
+Continue the approved OS-admission and write-ahead reconciliation design.
+Prefer replay of the existing receipt chain over inventing another recovery
+marker or treating terminal state as success. Automatic rollback is not an
+alternative: it would bypass the explicit data-loss acknowledgement. This
+consumer never starts or adopts another runtime generation.
+
+**Files and boundaries:**
+- `tests/deployment-windows-runtime-host.ps1` and
+  `tests/deployment-windows-task-node-cases.ps1`: select genuine update,
+  restore and disabled-task recovery cases and pass an explicit fixture-only
+  crash step.
+- `tests/deployment-windows-task-transaction-controller.mjs` and
+  `tests/deployment-windows-task-completion-steps.mjs`: run the normal original
+  transaction to the selected acknowledged native boundary and wait for the
+  parent to kill the actual Node actor.
+- `tests/deployment-windows-task-activation-cases.ps1`: kill that actor, require
+  native bridge settlement, and distinguish guarded-runtime death from a
+  surviving released runtime. Continue the existing permanent-policy and
+  final-cleanup assertions after recovery.
+- Create `tests/deployment-windows-task-completion-recovery.mjs`: use the
+  independently saved engine and real shared admission to exercise refusal,
+  replay, unchanged original runtime/state, and full completed proof.
+- `scripts/deployment/windows-task-completion-records.ps1`: factor the shared
+  strict history validator. The full reader still requires all 21 task
+  records; a separate prefix reader accepts only a contiguous prefix ending
+  at or after `complete-release-requested`, with no unknown entries.
+- `scripts/deployment/windows-task-completion-proof.ps1`: share runtime,
+  bundle and original-listener initialization, retaining separate full-proof
+  and recovery policy validation.
+- Create `scripts/deployment/windows-task-completion-recovery.ps1`: own the
+  distinct retained recovery scope and bounded native replay.
+- Create `scripts/deployment/windows-task-completion-recovery-controller.ps1`
+  and `scripts/deployment/windows-task-completion-recovery.mjs`: bind the
+  native scope to the current recovery actor and actual shared admission,
+  strictly decode acknowledgements and verify HTTP readiness before replay.
+- `scripts/deployment/windows-task-completion-proof.mjs`: re-export the
+  recovery factory without converting pending evidence into completed proof.
+- `scripts/deployment/saved-worker-engine.mjs` and
+  `tests/deployment-saved-worker.test.mjs`: include every new production helper
+  in the exact saved closure.
+- `.github/workflows/deployment-lifecycle.yml`: add a bounded native recovery
+  matrix; retain every existing regression gate and deadline.
+
+- [ ] **Step 1: require recovery after genuine interrupted native actions.**
+
+  Extend the existing step fixture with an optional `stopAfter` used only by
+  test orchestration. After the selected acknowledged step, return:
+
+  ```javascript
+  return Object.freeze({ status: 'interrupted', step, stateSha256 });
+  ```
+
+  The original actor sends that result and waits; the parent kills the actual
+  process and waits for the bound native bridge to exit. It does not delete
+  post-completion receipts to synthesize a prefix. Exercise these cases:
+
+  ```yaml
+  include:
+    - scenario: transaction-activate-complete-recovery
+      crash: release-requested
+    - scenario: transaction-activate-complete-recovery
+      crash: lease-released
+    - scenario: transaction-activate-complete-recovery-restore
+      crash: permanent-policy-applied
+    - scenario: transaction-activate-complete-recovery-disabled
+      crash: enable-applied
+  ```
+
+  The saved recovery fixture first requires:
+
+  ```javascript
+  assert.equal(typeof api.openWindowsTaskCompletionRecovery, 'function',
+    'Missing original-runtime completion recovery');
+  ```
+
+  Publish the test-only commit. Inspect the new native Actions jobs and
+  preserve the causal missing-function failure after actual actor death.
+
+- [ ] **Step 2: retain a strictly validated original completion prefix.**
+
+  A separate prefix factory derives record names from the actual private
+  directory; callers never supply a phase, path or record count. Reuse the
+  admission, original lock, transaction, entire policy history and terminal
+  state checks. Hold original file/directory handles and reject gaps, extras,
+  changed evidence, live original actors or a different runtime/listener.
+  Require the runtime's actual `lease` reply to equal `released`.
+
+  Recognized policy states depend on the last durable receipt:
+
+  | Last receipt | Allowed observed task policy | Next work |
+  |---|---|---|
+  | release-requested | staged, disabled | publish released |
+  | released | staged, disabled | publish policy-restore-requested |
+  | policy-restore-requested | staged or permanent, disabled | apply permanent if needed, then acknowledge |
+  | policy-restored | permanent, disabled | publish enable-requested |
+  | enable-requested | permanent, disabled or original enabled value | apply original enabled value if needed, then complete |
+  | complete | exact permanent original enabled value | verify only |
+
+  No live-context owner fields are rebound. Full completed proof remains a
+  separate API and refuses every partial prefix.
+
+- [ ] **Step 3: replay only missing existing actions and receipts.**
+
+  The distinct recovery scope exposes `check`, `advance` and `close`; its
+  observation uses `status: 'pending' | 'complete'`, the last durable phase,
+  state/completion digests, original runtime, port/providers and released
+  lease. The Node wrapper holds the original admission and native process,
+  checks them around every request, and performs existing bounded HTTP
+  readiness verification before an advance.
+
+  Publish the same version 1 receipt schema without changing original
+  field values: preserve validated JSON property values, replace only
+  `phase` and `previousSha256`, and atomically publish the next fixed name.
+  Native policy mutation checks exact XML, original enabled value, security,
+  instance and released runtime before/after. An action acknowledgement can
+  precede its receipt; reopening reconciles the recognized native result
+  rather than requiring the in-memory acknowledgement to survive.
+  Errors poison the scope and retain all evidence. Close only drops handles.
+
+- [ ] **Step 4: accept replay, refusal and existing completed cleanup together.**
+
+  The recovery fixture drives only bounded progress:
+
+  ```javascript
+  for (let count = 0; scope.observation.status !== 'complete'; count++) {
+    assert.ok(count < 9, 'Recovery exceeded its finite completion sequence');
+    await scope.advance();
+  }
+  ```
+
+  Require refusal after pre-release actor loss, a missing earlier receipt,
+  changed terminal state or incompatible HTTP health. After restoring negative
+  fixture inputs, reopen from intact original evidence and finish. Preserve
+  all original receipt identities and state bytes. Reopen full completed
+  proof, then exercise existing receipt/worker retirement and final unlock
+  on the recovered released cases. Keep disabled tasks disabled.
+
+- [ ] **Step 5: persist full Actions acceptance, not just recovery-job success.**
+
+  Push implementation with the standard co-author trailer. Inspect the exact
+  SHA's `deployment-lifecycle.yml` run, preserve implementation failures for
+  diagnosis, and require all existing 26 gates plus the four recovery cases.
+  Record exact run/job outcomes in README and this plan. No local validation,
+  no new expiry/lock protocol, and no claim of pre-release/reboot recovery or
+  completed public Windows deploy/update/restore integration.
+
 - [ ] Share installed literal npm command discovery in
   `linux-service-inspection.mjs`; keep running discovery intact and dispatch
   inactive/failed runtime accounts to a focused inactive discovery helper.

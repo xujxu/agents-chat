@@ -124,7 +124,34 @@ try {
                 'Changed completion state altered permanent policy'
             return
         }
-        Assert ((Receive).phase -ceq 'completed') 'Healthy task completion was not acknowledged'
+        $completion = Receive
+        $recovering = $Request.action -ceq 'activate-complete-recovery'
+        if ($recovering) {
+            Assert ($completion.phase -ceq 'interrupted' -and $completion.step -ceq $Request.crashStep) `
+                'Original completion did not reach the requested native boundary'
+            $Controller.Kill()
+            Assert ($Controller.WaitForExit(15000) -and $Bridge.WaitForExit(15000)) 'Interrupted completion actors survived'
+            $beforeRelease = $Request.crashStep -ceq 'release-requested'
+            if ($beforeRelease) {
+                Assert ($owner.WaitForExit(15000) -and $owner.ExitCode -eq 1 -and $member.WaitForExit(15000)) `
+                    'Unreleased runtime survived original actor loss'
+            } else {
+                Assert (-not $owner.HasExited -and -not $member.HasExited -and
+                    [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
+                        $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') `
+                    'Released completion did not preserve its original runtime'
+            }
+            $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+            & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-task-completion-recovery.mjs') `
+                $Control $pwsh $Request.crashStep
+            Assert ($LASTEXITCODE -eq 0) 'Original-runtime completion recovery failed'
+            if ($beforeRelease) {
+                Assert (-not $scheduler.GetFolder('\').GetTask($TaskName).Enabled -and
+                    -not (Test-Path -LiteralPath (Join-Path $Directory 'task-complete-released.json'))) `
+                    'Pre-release recovery invented completion or enabled automation'
+                return
+            }
+        } else { Assert ($completion.phase -ceq 'completed') 'Healthy task completion was not acknowledged' }
         $terminal = Read-Receipt (Join-Path $Control 'state.json')
         Assert ($terminal.Data.phase -ceq $(if ($terminal.Data.operation -ceq 'restore') { 'restored' } else { 'accepted' })) `
             'Completion did not bind the expected terminal state'
@@ -180,10 +207,12 @@ try {
             Assert ($LASTEXITCODE -eq 0 -and (($refused -join "`n") | ConvertFrom-Json).status -ceq 'refused') `
                 'Fresh proof must refuse the still-live original controller'
         }
-        $Controller.StandardInput.WriteLine('{"action":"close"}')
-        Assert ((Receive).phase -ceq 'closed') 'Completed controller close was not acknowledged'
-        Assert ($Controller.WaitForExit(15000) -and $Controller.ExitCode -eq 0 -and
-            $Bridge.WaitForExit(15000) -and $Bridge.ExitCode -eq 0) 'Completed controller did not settle'
+        if (-not $recovering) {
+            $Controller.StandardInput.WriteLine('{"action":"close"}')
+            Assert ((Receive).phase -ceq 'closed') 'Completed controller close was not acknowledged'
+            Assert ($Controller.WaitForExit(15000) -and $Controller.ExitCode -eq 0 -and
+                $Bridge.WaitForExit(15000) -and $Bridge.ExitCode -eq 0) 'Completed controller did not settle'
+        }
         Start-Sleep -Milliseconds 750
         Assert (-not $owner.HasExited -and -not $member.HasExited) 'Completed original runtime died with its controller'
         Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
@@ -192,7 +221,7 @@ try {
             & (Join-Path $PSScriptRoot 'deployment-windows-task-completion-proof-cases.ps1') -Control $Control `
                 -Root $Root -Directory $Directory -TaskName $TaskName -OperationId $OperationId -Runtime $runtime `
                 -StateSha256 $terminal.Sha256 -CompletionSha256 $previous -Port $receipt.Data.port -Owner $owner -Member $member
-        } elseif ($Request.action -ceq 'activate-complete-retirement') {
+        } elseif ($Request.action -cin @('activate-complete-retirement', 'activate-complete-recovery')) {
             $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
             & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-task-retirement.mjs') $Control $pwsh
             Assert ($LASTEXITCODE -eq 0) 'Native checkpoint-backed receipt retirement failed'
