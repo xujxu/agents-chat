@@ -12880,6 +12880,25 @@ Inspect the generated native link type before choosing a supported reparse
 codec. Do not change build engines, remove dependencies from the backup or
 dereference arbitrary reparse points to obtain a passing test.
 
+**Native type confirmed:** `10aa3a5 / 37130627807`, job `111224847936`,
+reported **2026-10-03 14:49:46 UTC** that all four generated dependency links
+(better-sqlite3, hyco-ws, node-cron, pino) are NTFS Junctions. It retains the
+expected unsupported-link failure; this diagnostic run is not acceptance.
+
+**Junction implementation sequence:** Keep general reparse refusal. Add
+`WindowsPrivateFile.SourceReparse.cs` as a focused partial helper reusing
+`SourceParents`, no-follow native file handles, kernel security descriptors and
+`SourceAccess`. Admit only mount-point-tag directory junctions whose canonical
+target is a regular directory inside the same project/filesystem. Retain the
+original link, target and ancestors through each observation. Tests in
+`deployment-windows-source-reparse.test.mjs` and its PowerShell fixture must
+prove raw tag/data and ACL capture, denied renames while retained, external
+target/root-target/chained-junction refusal, and successful release. Run this
+small native case before existing source/snapshot tests for prompt feedback.
+This read-only helper alone does not enable snapshot or restoration links.
+The next integration must preserve junction metadata and restore it through
+native handles, with capture/restore coverage before lifting the snapshot gate.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.
