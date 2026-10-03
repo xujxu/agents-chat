@@ -10,9 +10,10 @@ import { temporaryDeployment } from './deployment-fixture.mjs';
 const native = process.platform === 'win32';
 const script = fileURLToPath(new URL('./deployment-windows-source-reparse.ps1', import.meta.url));
 
-async function observer(project, relative, signal) {
+async function observer(project, relative, signal, { saved, decorate = false } = {}) {
   const child = spawn(process.env.DEPLOYMENT_TEST_PWSH ?? 'pwsh.exe', [
     '-NoProfile', '-NonInteractive', '-File', script, '-Project', project, '-Relative', relative,
+    ...(saved ? ['-Saved', saved] : []), ...(decorate ? ['-Decorate'] : []),
   ], { stdio: ['pipe', 'pipe', 'pipe'], signal });
   let error = '';
   child.stderr.setEncoding('utf8');
@@ -70,7 +71,7 @@ test('native source reparse observation retains an internal junction and its tar
     await mkdir(outside);
     await writeFile(path.join(outside, 'sentinel'), 'untouched');
     await symlink(outside, link, 'junction');
-    await assert.rejects(observer(project, '.next/dependency', t.signal), /outside|project|reparse/i);
+    await assert.rejects(observer(project, '.next/dependency', t.signal), /target is outside the project/i);
     assert.equal(await readFile(path.join(outside, 'sentinel'), 'utf8'), 'untouched');
     await assert.rejects(observer(project, '.next/dependency-moved/payload', t.signal), /reparse|redirected/i);
     await assert.rejects(observer(project, 'node_modules/dependency/payload', t.signal), /reparse/i);
@@ -78,4 +79,44 @@ test('native source reparse observation retains an internal junction and its tar
     await assert.rejects(observer(project, '.next/root-link', t.signal), /outside|project|reparse/i);
     await symlink(`${link}-moved`, path.join(output, 'chain'), 'junction');
     await assert.rejects(observer(project, '.next/chain', t.signal), /reparse|source changed/i);
+  });
+
+test('native junction recreation preserves reparse bytes and link ACLs without changing the target',
+  { skip: !native, timeout: 120000 }, async t => {
+    const root = await temporaryDeployment(t);
+    const project = path.join(root, 'app');
+    const target = path.join(project, 'node_modules/dependency');
+    await mkdir(target, { recursive: true });
+    await mkdir(path.join(project, '.next'));
+    await writeFile(path.join(target, 'payload'), 'retained target');
+    await symlink(target, path.join(project, '.next/original'), 'junction');
+    const original = await observer(project, '.next/original', t.signal);
+    const saved = path.join(root, 'junction.json');
+    try { await writeFile(saved, JSON.stringify(original.record), { flag: 'wx', mode: 0o600 }); }
+    finally { await original.close(); }
+    const restored = await observer(project, '.next/restored', t.signal, { saved, decorate: true });
+    let record;
+    try {
+      record = restored.record;
+      assert.equal(record.kind, 'junction');
+      assert.equal(record.data, original.record.data);
+      assert.equal(record.attributes, original.record.attributes | 1 | 2);
+      assert.match(record.securityDescriptor, /(?:WD|S-1-1-0)/);
+      await assert.rejects(rename(path.join(project, '.next/restored'), path.join(project, '.next/moved')));
+      assert.equal(await readFile(path.join(project, '.next/restored/payload'), 'utf8'), 'retained target');
+    } finally { await restored.close(); }
+    await writeFile(saved, JSON.stringify(record));
+    const copied = await observer(project, '.next/copied', t.signal, { saved });
+    try {
+      assert.equal(copied.record.data, record.data);
+      assert.equal(copied.record.attributes, record.attributes);
+      assert.equal(copied.record.securityDescriptor, record.securityDescriptor);
+    } finally { await copied.close(); }
+    await assert.rejects(observer(project, '.next/copied', t.signal, { saved }), /already exists|Create private directory/i);
+    const invalid = { ...record, data: Buffer.from('not a reparse buffer').toString('base64') };
+    await writeFile(saved, JSON.stringify(invalid));
+    await assert.rejects(observer(project, '.next/invalid', t.signal, { saved }), /reparse/i);
+    const { lstat } = await import('node:fs/promises');
+    await assert.rejects(lstat(path.join(project, '.next/invalid')), { code: 'ENOENT' });
+    assert.equal(await readFile(path.join(target, 'payload'), 'utf8'), 'retained target');
   });

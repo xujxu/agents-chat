@@ -12899,6 +12899,17 @@ This read-only helper alone does not enable snapshot or restoration links.
 The next integration must preserve junction metadata and restore it through
 native handles, with capture/restore coverage before lifting the snapshot gate.
 
+The original-junction observation step passed in `81f44e5 / 37131127325`;
+its source/snapshot regression remains in progress. Extend the same native
+fixture first with `CreateSourceJunction(project, relative, data, sddl, attributes)`.
+Require a real round trip with hidden/read-only attributes, a deliberately
+different inheritable link DACL, and unchanged target-directory/file DACLs.
+Existing destinations and malformed buffers must fail without creating or
+replacing a destination. Run this against the absent creation method before
+implementation. Creation must validate target containment before mutation,
+create only a new private directory, set the mount-point reparse data and
+security by original handle, then return retained identity-checked observation.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.
