@@ -40,10 +40,11 @@ try {
         finally { $document.Dispose() }
         $fields = @('id', 'method')
         if ($method -ceq 'capture-admission') { $fields += @('control', 'lockSha256', 'stateSha256') }
+        if ($method -ceq 'listener') { $fields += 'port' }
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'capture-admission')) { throw 'Invalid managed task observation request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'capture-admission', 'listener')) { throw 'Invalid managed task observation request.' }
         $sequence = $id
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
             throw 'Original managed task observer changed.'
@@ -53,6 +54,8 @@ try {
             Close-AgentsChatTaskCompletionProof $scope
             $scope = $null
             $value = 'close'
+        } elseif ($method -ceq 'listener') {
+            $value = Open-AgentsChatManagedTaskListener -Context $scope -Port $request.port.GetInt32()
         } elseif ($method -ceq 'capture-admission') {
             $value = New-AgentsChatManagedTaskAdmission -Context $scope -Control $request.control.GetString() `
                 -LockSha256 $request.lockSha256.GetString() -StateSha256 $request.stateSha256.GetString() `

@@ -27,7 +27,7 @@ export function captureActivatedRuntime(value) {
   return runtime;
 }
 
-function captureTaskListener(value, runtime, port) {
+export function captureTaskListener(value, runtime, port) {
   if (value?.status === 'not-ready') return captureWorkerFields(value, ['status'], 'absent listener');
   const listener = captureWorkerFields(value,
     ['status', 'generation', 'port', 'pid', 'identity', 'address', 'createdAt', 'pairedRecords'], 'retained listener');

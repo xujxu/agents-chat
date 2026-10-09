@@ -415,6 +415,11 @@ Completed Windows update/restore closeout through the manifest-verified saved
 entry passed the full 37-job gate at `7d854de / 37938609145`. It requires the
 original controller to have exited, retains native runtime/policy checks, and
 can resume partial task-receipt or final deployment-manifest retirement.
+Native pre-source runtime recovery passed all 41 lifecycle jobs at
+`d844b66 / 37942832825`. It requires the unchanged original configuration
+in a distinct bundle, refuses post-source or changed-configuration recovery,
+and retains `prior-runtime-restored` with the original update failure rather
+than claiming a new accepted deployment.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an

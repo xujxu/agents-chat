@@ -13293,9 +13293,9 @@ consumed part of that budget. Run that exact source pipeline in the existing
 managed-discovery job instead: focused runs select its update case, while
 default full runs retain all three existing cases. Keep both 15-minute job
 budgets and every test unchanged; the default matrix remains 41 jobs.
-Full gate `37942832825` is running independently at `d844b66`.
+Full gate `37942832825` passed all 41 jobs at `d844b66`.
 
-- [ ] Add copying/backup-ready successful recovery and source-selected refusal
+- [x] Add copying/backup-ready successful recovery and source-selected refusal
   cases in Actions. Require `context.retirePriorRuntime()` before any source
   mutation; repeat it idempotently, activate the exact original configuration,
   verify owned readiness and native policy, retain the original failure state,
@@ -13303,16 +13303,16 @@ Full gate `37942832825` is running independently at `d844b66`.
   Also reject a valid new bundle whose environment differs from the original,
   using its correct new digest (not a deliberately malformed hash).
   These four isolated native jobs bring the default matrix to 41 jobs.
-- [ ] Run the cases against the missing explicit native API.
-- [ ] Implement explicit recovery-purpose admission and original phase/commit
+- [x] Run the cases against the missing explicit native API.
+- [x] Implement explicit recovery-purpose admission and original phase/commit
   checks; freeze that native phase/digest throughout retirement/replacement/
   activation. Preserve the ordinary deploy/restore phase restrictions.
-- [ ] Extend live and independently reopened completion validation consistently:
+- [x] Extend live and independently reopened completion validation consistently:
   prior-runtime terminal state may change only phase, previous phase, updated
   time and the required error code. Require identical original configuration
   digest in both live replacement and saved proof. Do not accept a source-selected
   phase, restored backup payload or modified command as pre-source recovery.
-- [ ] Validate all new cases, unchanged completion/crash/retirement cases and
+- [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
 ### Task 5BO: Observe original managed readiness before update admission
@@ -13328,13 +13328,22 @@ a deployment lock, write a journal, stop a task or grant runtime authority.
 `scripts/deployment/windows-task-controller.mjs`,
 `tests/deployment-windows-managed-task.mjs`.
 
-- [ ] Extend the existing saved managed-discovery fixture with repeated
+**Causal:** `e2cb50b / 37945657744 / 113873689682` passed the original
+source/task pipeline and final retirement, then failed on 2026-10-09 at
+14:49:16 UTC with `TypeError: context.listener is not a function` from
+the saved `windows-readiness.mjs`. The same run's completed-closeout job
+`113873689653` passed all 30 shared transaction contracts and both native
+saved closeout cases, accepting the original-error-code callback fix.
+The separate `2340193 / 37944924734` run was replaced while pending;
+it did not execute and is not counted as acceptance.
+
+- [x] Extend the existing saved managed-discovery fixture with repeated
   `verifyWindowsReadiness({ context: scope, port, providers: ['admin-login'] })`,
   wrong-provider refusal and a real foreign TCP listener refusal. Reopen
   the scope after refusal and retain original task-policy, runtime, control
   directory and state-byte assertions. Run the existing focused native job
   before implementation; expect missing `context.listener`.
-- [ ] Export/reuse the existing strict `captureTaskListener` decoder.
+- [x] Export/reuse the existing strict `captureTaskListener` decoder.
   Add only `listener({ port, signal })` to the managed scope and strict
   `listener`/integer-port dispatch to its native bridge. In the native
   managed scope, assert the original task/domain/lease before and after

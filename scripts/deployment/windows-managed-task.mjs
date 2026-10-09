@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
-import { captureActivatedRuntime } from './windows-task-controller.mjs';
+import { captureActivatedRuntime, captureTaskListener } from './windows-task-controller.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { assertLockOwner, captureLockOwner, validateState } from './state.mjs';
 import { externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
@@ -79,6 +79,9 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
       busy = true;
       try {
         requestSignal?.throwIfAborted();
+        if (method === 'listener' && (!Number.isSafeInteger(payload.port) || payload.port < 1 || payload.port > 65535)) {
+          throw new Error('Managed readiness requires an explicit valid port.');
+        }
         if (child.exitCode !== null || child.signalCode !== null) throw new Error('Original managed task observer exited.');
         const id = ++sequence;
         await wire.send({ id, method, ...payload });
@@ -95,6 +98,7 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
           wire.close();
           return;
         }
+        if (method === 'listener') return captureTaskListener(reply.value, observation.runtime, payload.port);
         if (method === 'capture-admission') {
           const result = captureWorkerFields(reply.value, ['admission', 'sha256'], 'managed task admission');
           if (result.admission !== path.join(payload.control, 'task-maintenance', 'admission.json')
@@ -116,6 +120,7 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
     const scope = Object.freeze({
       identity, observation,
       check: ({ signal: requestSignal } = {}) => request('check', requestSignal),
+      listener: ({ port, signal: requestSignal } = {}) => request('listener', requestSignal, { port }),
       close: async () => { if (!closed) await request('close'); },
     });
     scopes.set(scope, { observation, request });

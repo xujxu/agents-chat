@@ -38,10 +38,47 @@ function Assert-AgentsChatManagedTask([hashtable]$Context) {
     } finally { $Context.Busy = $false }
 }
 
+function Open-AgentsChatManagedTaskListener {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$Context,
+        [Parameter(Mandatory)][int]$Port
+    )
+    if ($Port -lt 1 -or $Port -gt 65535) { throw 'Managed readiness requires an explicit valid port.' }
+    $null = Assert-AgentsChatManagedTask $Context
+    $Context.Busy = $true
+    try {
+        $Context.Stage = 'managed-listener'
+        $runtime = $Context.Runtime
+        if ($Context.Listener) {
+            if ($Context.Listener.Port -ne $Port) { throw 'Original managed listener port differs.' }
+            $Context.Listener.Check()
+        } else {
+            try {
+                $Context.Listener = [Deployment.WindowsRuntimeListener]::Retain(
+                    [guid]$runtime.generation, $runtime.pid, $runtime.identity, $runtime.launcherPid, $Port)
+            } catch {
+                if ($_.Exception.GetBaseException() -isnot [Deployment.WindowsRuntimeListenerNotReadyException]) { throw }
+            }
+            if ($Context.Listener) { $Context.Files.Add($Context.Listener) }
+        }
+    } catch {
+        $Context.Poisoned = $true
+        throw [InvalidOperationException]::new('Original managed listener observation refused.', $_.Exception)
+    } finally { $Context.Busy = $false }
+    $null = Assert-AgentsChatManagedTask $Context
+    if (-not $Context.Listener) { return [pscustomobject]@{ status='not-ready' } }
+    return [pscustomobject][ordered]@{
+        status='retained'; generation=$runtime.generation; port=$Port
+        pid=$Context.Listener.ListenerPid; identity=$Context.Listener.ListenerIdentity
+        address=$Context.Listener.Address; createdAt=$Context.Listener.CreatedAt; pairedRecords=$Context.Listener.PairedRecords
+    }
+}
+
 function Open-AgentsChatManagedTask([string]$TaskName, [string]$Project) {
     $context = @{
         Project=$Project; TaskName=$TaskName; Files=[Collections.Generic.List[IDisposable]]::new()
-        Closed=$false; Poisoned=$false; Busy=$false; Owner=$null; Instance=$null; Folder=$null; Stage='input'
+        Closed=$false; Poisoned=$false; Busy=$false; Owner=$null; Instance=$null; Folder=$null; Listener=$null; Stage='input'
     }
     try {
         if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7 -or
