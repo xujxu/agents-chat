@@ -13315,6 +13315,37 @@ Full gate `37942832825` is running independently at `d844b66`.
 - [ ] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BO: Observe original managed readiness before update admission
+
+Public Windows current-deployment admission must verify the original native
+listener and expected authentication providers, not infer readiness from a
+commit or PID. Extend the existing read-only managed scope; do not acquire
+a deployment lock, write a journal, stop a task or grant runtime authority.
+
+**Files:** `scripts/deployment/windows-managed-task.mjs`,
+`scripts/deployment/windows-managed-task-controller.ps1`,
+`scripts/deployment/windows-managed-task.ps1`,
+`scripts/deployment/windows-task-controller.mjs`,
+`tests/deployment-windows-managed-task.mjs`.
+
+- [ ] Extend the existing saved managed-discovery fixture with repeated
+  `verifyWindowsReadiness({ context: scope, port, providers: ['admin-login'] })`,
+  wrong-provider refusal and a real foreign TCP listener refusal. Reopen
+  the scope after refusal and retain original task-policy, runtime, control
+  directory and state-byte assertions. Run the existing focused native job
+  before implementation; expect missing `context.listener`.
+- [ ] Export/reuse the existing strict `captureTaskListener` decoder.
+  Add only `listener({ port, signal })` to the managed scope and strict
+  `listener`/integer-port dispatch to its native bridge. In the native
+  managed scope, assert the original task/domain/lease before and after
+  `[Deployment.WindowsRuntimeListener]::Retain(...)`, retaining the result
+  in the scope's existing disposable file list. Repeated requests check
+  the same listener; only the native not-ready exception is retryable.
+- [ ] Require original-listener/provider success, wrong-provider and foreign
+  listener refusal with no task or journal mutation in focused Actions.
+  Then cover all three update/restore/disabled managed scenarios in the
+  unchanged full dual-platform matrix.
+
 ### Task 5BN: Carry the original failure into native recovery callbacks
 
 Windows native recovery publishes its failed-update terminal state before

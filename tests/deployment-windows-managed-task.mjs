@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { once } from 'node:events';
 import { access, readFile, readdir } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { readWindowsReadinessEndpoint } from './deployment-windows-readiness-cases.mjs';
 
 const [control, pwsh, taskName, project, runtimeIdentity, generation] = process.argv.slice(2);
 const entry = path.join(control, 'recovery-engine', 'windows-managed-task.mjs');
 await assert.doesNotReject(access(entry), 'Missing saved managed-task discovery entry');
 const { inspectWindowsManagedTask } = await import(pathToFileURL(entry).href);
+const { verifyWindowsReadiness } = await import(pathToFileURL(path.join(control, 'recovery-engine', 'windows-readiness.mjs')).href);
 const before = (await readdir(control)).sort();
 const state = await readFile(path.join(control, 'state.json'));
 assert.ok(!before.includes('lock') && !before.includes('task-maintenance'));
@@ -25,8 +29,31 @@ try {
   assert.equal(observed.lease, 'released');
   assert.equal(observed.configuration, path.join(control, 'replacement', 'configuration.json'));
   assert.deepEqual(await scope.check(), observed);
+  const endpoint = await readWindowsReadinessEndpoint(project);
+  const readiness = { context: scope, port: endpoint.port, providers: ['admin-login'] };
+  assert.deepEqual(await verifyWindowsReadiness(readiness), {
+    status: 'ready', generation, port: endpoint.port, providers: ['admin-login'],
+  });
+  assert.deepEqual(await verifyWindowsReadiness(readiness), {
+    status: 'ready', generation, port: endpoint.port, providers: ['admin-login'],
+  });
+  await assert.rejects(verifyWindowsReadiness({ ...readiness, providers: ['azure-ad'] }), /providers do not match/i);
+  assert.deepEqual(await scope.check(), observed);
   await assert.rejects(inspectWindowsManagedTask({ ...options, project: `${project}-foreign` }));
 } finally { await scope.close(); }
+const foreign = createServer();
+try {
+  foreign.listen(0, '127.0.0.1');
+  await once(foreign, 'listening');
+  scope = await inspectWindowsManagedTask(options);
+  try {
+    await assert.rejects(scope.listener({ port: foreign.address().port }), {
+      code: 'DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED',
+    });
+  } finally { await scope.close(); }
+} finally {
+  await new Promise((resolve, reject) => foreign.close(error => error ? reject(error) : resolve()));
+}
 const setEnabled = enabled => promisify(execFile)(pwsh, [
   '-NoProfile', '-NonInteractive', '-File',
   fileURLToPath(new URL('./deployment-windows-managed-task-policy.ps1', import.meta.url)),
@@ -45,4 +72,4 @@ try { assert.deepEqual(scope.observation, observed); }
 finally { await scope.close(); }
 assert.deepEqual((await readdir(control)).sort(), before);
 assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
-console.log('PASS: saved managed-task discovery retains original runtime without retired journals or mutations');
+console.log('PASS: saved managed-task discovery verifies original listener and providers, refuses foreign listeners and retains runtime without retired journals or mutations');
