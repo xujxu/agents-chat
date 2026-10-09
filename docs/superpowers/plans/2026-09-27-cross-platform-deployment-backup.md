@@ -13336,6 +13336,16 @@ owned-source fixture and its completion/retirement callers.
 The original task/source pipeline reached the real acceptance boundary;
 no fabricated accepted state or new lock was used.
 
+**Fixture lifetime correction:** `37c53d6 / 37950810260 / 113889953318`
+published the checked receipt under the original lock and completed native
+retirement plus saved managed discovery. Its subsequent current-deployment
+check ran after the enclosing activation fixture had deliberately stopped
+and retired the runtime; native discovery correctly refused the absent
+running instance at 15:27:32 UTC on 2026-10-09. Move only that current
+check inside the activation fixture, after final receipt retirement and
+before its existing runtime cleanup. Keep absent/stopped-runtime refusal
+and all original cleanup assertions unchanged.
+
 - [x] Before implementation, extend the actual owned-source update fixture:
   after `context.complete(...)`, publish a checked receipt using its original
   lock and actual `built.source`/`built.artifacts`. After native final unlock,

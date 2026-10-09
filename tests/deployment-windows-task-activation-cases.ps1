@@ -11,7 +11,8 @@ param(
     [Parameter(Mandatory)][string]$TaskName,
     [Parameter(Mandatory)][string]$OperationId,
     [Parameter(Mandatory)][string]$AdmissionSha256,
-    [Parameter(Mandatory)][string]$SecurityDescriptor
+    [Parameter(Mandatory)][string]$SecurityDescriptor,
+    [switch]$VerifyDeploymentReceipt
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -248,6 +249,11 @@ try {
                 & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-managed-task.mjs') `
                     $Control $pwsh $TaskName $Root $runtime.identity $runtime.generation
                 Assert ($LASTEXITCODE -eq 0) 'Installed managed-task discovery failed'
+            }
+            if ($VerifyDeploymentReceipt) {
+                & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-deployment-acceptance.mjs') `
+                    $Control $pwsh $TaskName $Root
+                Assert ($LASTEXITCODE -eq 0) 'Saved accepted-deployment inspection failed after native retirement'
             }
         }
         $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
