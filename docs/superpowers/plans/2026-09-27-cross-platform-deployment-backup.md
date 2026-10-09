@@ -13347,8 +13347,14 @@ no-op requirements.
   fixture exercises the production actor and manifest-bound saved closeout.
 - [ ] Accept native protocol fixtures, real supervised update/automatic
   closeout/data/no-op, then complete dual-platform regression.
-  Implementation `0f0b8a3 / 37996451178` is queued; no supervisor
-  implementation acceptance is claimed yet.
+  Implementation `0f0b8a3 / 37996451178 / 114048948349` passed all ten
+  contracts and all six native supervisor protocol cases at 22:14:44 UTC
+  on 2026-10-09. It then failed before the real application build because
+  the protocol fixture and private test runner loaded different assemblies
+  defining `Deployment.WindowsPrivateFile` in the same PowerShell process.
+  Run the protocol fixture in a fresh PowerShell process and check its exit
+  status. Do not suppress duplicate-type errors or reuse an unknown assembly.
+  Real supervised application acceptance remains pending.
 - [ ] Wire public PowerShell commands and creation/cleanup policy after
   supervisor acceptance. Do not claim first-install or cold-restore support.
 
