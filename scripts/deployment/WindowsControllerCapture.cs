@@ -13,6 +13,8 @@ namespace Deployment
         readonly List<IDisposable> resources = new List<IDisposable>();
         readonly List<WindowsPrivateFile.DirectoryLease> directories = new List<WindowsPrivateFile.DirectoryLease>();
         readonly List<WindowsPrivateFile> files = new List<WindowsPrivateFile>();
+        readonly List<string> directoryPaths = new List<string>();
+        readonly List<string> filePaths = new List<string>();
         string[] names;
         bool disposed;
         public string Directory { get; private set; }
@@ -65,6 +67,7 @@ namespace Deployment
             WindowsPrivateFile.DirectoryLease retained = WindowsPrivateFile.CreateDirectory(directory);
             resources.Add(retained);
             directories.Add(retained);
+            directoryPaths.Add(directory);
         }
 
         public static WindowsControllerCapture Create(string source, string project, string directory)
@@ -116,6 +119,7 @@ namespace Deployment
                         original, hash, Path.Combine(directory, relative));
                     capture.resources.Add(copy);
                     capture.files.Add(copy);
+                    capture.filePaths.Add(Path.Combine(directory, relative));
                 }
                 foreach (WindowsPrivateFile.DirectoryLease original in originalDirectories) original.Check();
                 foreach (WindowsPrivateFile original in originalFiles) original.Check();
@@ -154,6 +158,36 @@ namespace Deployment
             ExactEntries(Path.Combine(Directory, "scripts", "deployment"), names);
             foreach (WindowsPrivateFile file in files) file.Check();
             foreach (WindowsPrivateFile.DirectoryLease directory in directories) directory.Check();
+        }
+
+        public void Retire()
+        {
+            Check();
+            var originalFiles = files.Select((file, index) => new {
+                Path = filePaths[index], Identity = file.CaptureIdentity(),
+                Hash = file.Sha256, Bytes = file.ByteLength
+            }).ToArray();
+            var originalDirectories = directories.Select((directory, index) => new {
+                Path = directoryPaths[index], Identity = directory.CaptureIdentity()
+            }).ToArray();
+            Dispose();
+            // Refuse a retained actor CWD before deleting any captured bytes.
+            var root = originalDirectories[0];
+            using (var retained = WindowsPrivateFile.RetainDirectoryForRetirement(
+                root.Path, root.Identity.Dev, root.Identity.Ino))
+                retained.Check();
+            foreach (var file in originalFiles)
+            {
+                using (var retained = WindowsPrivateFile.RetainForRetirement(
+                    file.Path, file.Hash, file.Identity.Dev, file.Identity.Ino, file.Bytes))
+                    retained.Delete();
+            }
+            foreach (var directory in originalDirectories.Reverse())
+            {
+                using (var retained = WindowsPrivateFile.RetainDirectoryForRetirement(
+                    directory.Path, directory.Identity.Dev, directory.Identity.Ino))
+                    retained.Delete();
+            }
         }
 
         public void Dispose()

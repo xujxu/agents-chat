@@ -117,6 +117,10 @@ try {
     $stage = 'capture-check'
     $capture.Check()
     $temporary.Check()
+    if ($outcome.Code -eq 0) {
+        $stage = 'capture-retire'
+        $capture.Retire()
+    }
 } catch {
     $failure = $_
 } finally {

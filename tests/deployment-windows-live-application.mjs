@@ -31,13 +31,15 @@ if (mode === 'verify-closed') {
     throw error;
   }), 'Missing captured Windows command supervisor');
   const runWindowsDeploymentCommand = async ({ args, supervise = false }) => {
+    const supervisorDirectory = supervise
+      ? path.join(path.dirname(control), `supervisor-${randomUUID()}`) : null;
     let output;
     let failure;
     try {
       output = await promisify(execFile)(supervise ? pwsh : process.execPath,
         supervise ? ['-NoProfile', '-NonInteractive', '-File', supervisor,
           '-Operation', 'update', '-Source', directory, '-Project', project, '-Control', control,
-          '-Directory', path.join(path.dirname(control), `supervisor-${randomUUID()}`),
+          '-Directory', supervisorDirectory,
           '-TemporaryDirectory', path.dirname(control), '-TaskName', taskName,
           '-Node', process.execPath, '-PowerShell', pwsh, '-Git', git, '-NpmCli', npmCli,
           '-ArgumentsJson', JSON.stringify(args),
@@ -57,6 +59,7 @@ if (mode === 'verify-closed') {
       throw Object.assign(new Error(result.message), result);
     }
     assert.notEqual(result.status, 'failed');
+    if (supervise) await assert.rejects(lstat(supervisorDirectory), { code: 'ENOENT' });
     return result;
   };
   const beforeRefusal = (await readdir(control)).sort();

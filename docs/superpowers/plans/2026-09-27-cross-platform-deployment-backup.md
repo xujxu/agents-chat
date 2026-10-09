@@ -13315,6 +13315,31 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BW: Retire only original completed controller captures
+
+**Files:** Extend `WindowsControllerCapture.cs`,
+`windows-command-supervisor.ps1`, the native capture/protocol fixtures and
+the real live application fixture. Keep `Dispose` nondeleting.
+
+- [x] Push native retirement requirements at `1bc60c5`; causal
+  application-only run `38001982826` is queued.
+- [x] Capture exact file hashes, sizes and original volume/file identities,
+  plus original directory identities while all retained handles are valid.
+  Check the complete inventory before releasing capture handles.
+- [x] Preflight exclusive original-root retirement access before deleting
+  any file. Refuse an actor's retained CWD handle. Delete only exact original
+  files through native retirement handles, then original directories in
+  reverse creation order; never recursively delete by an unchecked pathname.
+- [x] Retire supervisor captures only after a successful actor/finalizer
+  outcome and confirmed whole-Job settlement/disposal. Failed operations,
+  including recovered failed updates, retain their capture for inspection.
+  Cleanup failure reports failure without stopping the accepted application.
+- [x] Require refusal without deletion for unexpected inventory and an
+  active actor CWD; preserve source, project and unrelated captures. Assert
+  success/no-op captures disappear and failed-command captures remain.
+- [ ] Accept native contracts and actual supervised upgrade/no-op cleanup,
+  then the complete dual-platform regression before public-wrapper wiring.
+
 ### Task 5BV: Supervise original Windows command and saved finalizer processes
 
 **Files:** Add `scripts/deployment/windows-command-supervisor.ps1`,
@@ -13354,7 +13379,12 @@ no-op requirements.
   defining `Deployment.WindowsPrivateFile` in the same PowerShell process.
   Run the protocol fixture in a fresh PowerShell process and check its exit
   status. Do not suppress duplicate-type errors or reuse an unknown assembly.
-  Real supervised application acceptance remains pending.
+  The corrected `a0b98db / 37998307576` passed both application jobs.
+  Live job `114053292864` passed at 22:54:50 UTC on 2026-10-09:
+  supervised update with automatic saved closeout 1,111,642 ms,
+  independent closed-state verification 643 ms, no-op 182,092 ms.
+  Ten contracts, six native protocol cases and authenticated data assertions
+  passed. Full `bec7c7c / 38001799703` is running.
 - [ ] Wire public PowerShell commands and creation/cleanup policy after
   supervisor acceptance. Do not claim first-install or cold-restore support.
 
