@@ -411,6 +411,10 @@ Rejected live Windows preflight closeout passed the actual application gate
 at `04152de / 37929432101`: settled workers and the original lock are retired
 without stopping the running application, and a subsequent lock can be acquired.
 The full dual-platform gate `04faac8 / 37931331942` passed all 36 jobs.
+Completed Windows update/restore closeout through the manifest-verified saved
+entry passed the full 37-job gate at `7d854de / 37938609145`. It requires the
+original controller to have exited, retains native runtime/policy checks, and
+can resume partial task-receipt or final deployment-manifest retirement.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an

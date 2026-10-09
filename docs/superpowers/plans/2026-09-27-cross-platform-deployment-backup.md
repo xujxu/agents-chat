@@ -13251,7 +13251,7 @@ entry. Keep the original creator-death/bridge-death requirement unchanged.
 **Focused saved-entry acceptance:** `7d854de / 37937461415` passed both
 jobs: original source/task snapshot and restoration regressions, fresh update
 closeout, and restored-state closeout resumed after the separate checkpoint
-creator exited. Full 37-job gate `37938609145` is running at the same commit.
+creator exited. Full 37-job gate `37938609145` passed at the same commit.
 
 ### Task 5BM: Recover the original Windows runtime before source mutation
 
@@ -13276,6 +13276,15 @@ advancing to `activating`. Freeze the entire original recovery-state digest
 at purpose admission, before retirement starts; final completion alone may
 advance to `prior-runtime-restored`. Existing normal activation stays unchanged.
 
+**Implementation fixture correction:** `cd92064 / 37940529836` passed
+source-selected and valid-but-changed configuration refusal. Both positive
+paths completed native recovery and saved retirement, then the reused
+closeout fixture wrongly expected reconciliation status `idle` instead of
+the intentionally preserved `prior-runtime-restored` (2026-10-09,
+14:05:34 and 14:06:21 UTC). Assert that distinct failed-update status,
+operation/phase and "No new deployment was accepted" message, then require
+fresh lock acquisition. Do not change production reconciliation semantics.
+
 - [ ] Add copying/backup-ready successful recovery and source-selected refusal
   cases in Actions. Require `context.retirePriorRuntime()` before any source
   mutation; repeat it idempotently, activate the exact original configuration,
@@ -13296,19 +13305,19 @@ advance to `prior-runtime-restored`. Existing normal activation stays unchanged.
 - [ ] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
-- [ ] Add the saved-helper native fixture and run the Windows restore gate
+- [x] Add the saved-helper native fixture and run the Windows restore gate
   before implementation. Call `closeCompletedWindowsDeployment({ control,
   project, operationId, pwsh })` before original-controller exit and require
   refusal with unchanged evidence. After exit, reject wrong project,
   operation and cancellation, then require complete task/worker retirement,
   unchanged accepted state/unrelated files/runtime, and fresh lock acquisition.
-- [ ] Under exclusive Windows admission, bind exact completed state and
+- [x] Under exclusive Windows admission, bind exact completed state and
   requested operation/project before native proof. Reuse original proof ->
   task-retirement -> deployment-retirement scope transfers and their ordered
   native deletion APIs. Resume valid checkpoint/manifest prefixes rather
   than replacing receipts or synthesizing success. Preserve causes and
   retain evidence on uncertainty; never retire a still-live transaction.
-- [ ] Include the helper in the saved recovery closure; reuse the existing
+- [x] Include the helper in the saved recovery closure; reuse the existing
   crash-prefix fixture to call it for final-manifest closeout. Run focused
   native acceptance followed by the full matrix. Keep all existing cold
   tamper/crash tests and original-controller lifetime invariants.

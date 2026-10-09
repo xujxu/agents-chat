@@ -87,7 +87,15 @@ if (mode === 'checkpoint') {
     }
   }
   assert.deepEqual(await readFile(path.join(control, 'state.json')), bytes);
-  assert.equal((await reconcileInterruptedOperation(control)).status, 'idle');
+  const reconciled = await reconcileInterruptedOperation(control);
+  if (state.phase === 'prior-runtime-restored') {
+    assert.equal(reconciled.status, 'prior-runtime-restored');
+    assert.equal(reconciled.operationId, state.operationId);
+    assert.equal(reconciled.phase, state.phase);
+    assert.match(reconciled.message, /No new deployment was accepted/);
+  } else {
+    assert.equal(reconciled.status, 'idle');
+  }
   const lock = await acquireLock(control, { project: state.project, operationId: randomUUID(), pwsh });
   await releaseLock(control, lock, { pwsh });
   console.log('PASS: saved completed closeout composes native proof, task and worker retirement, and unlock without replacing the accepted runtime');
