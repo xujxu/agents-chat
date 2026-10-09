@@ -13133,6 +13133,35 @@ original-owner retirement. No production timeout or snapshot scope changes.
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.
 
+### Task 5BK: Close rejected live Windows preflight before public orchestration
+
+The public controller must not leave a lock and worker receipts behind after
+a compatibility refusal that never stopped the application. Do not route this
+through completed-task retirement: no task-maintenance authority exists yet.
+Reuse the original live worker operation's seal/retire protocol, the retained
+managed-scope check, and native admission-guarded lock release.
+
+**Files:** `scripts/deployment/windows-preflight-refusal.mjs` and the existing
+`tests/deployment-windows-target-preflight.mjs` actual-application fixture.
+
+- [ ] In the existing application preflight fixture, record original preflight
+  state before worker admission; after three settled compatibility workers,
+  invoke `closeRejectedWindowsPreflight({ control, lock, scope, operation, pwsh })`.
+  First prove cloned scopes, forged locks, cancellation, wrong generation,
+  non-preflight phase and changed start time leave admission unsealed.
+- [ ] Run the application-only Actions gate against the missing helper.
+- [ ] Implement original lock/project/state/generation/start-time checks,
+  explicit absence of service/task maintenance, retained scope checks before
+  and after worker sealing, and an unchanged-state recheck before publishing
+  `preflight-refused`. Retire only the original sealed worker operation and
+  release through `releaseLock(..., { pwsh })`. Preserve errors as causes and
+  retain evidence if closeout becomes uncertain.
+- [ ] Require unchanged original running task/listener, absent worker and
+  lock evidence, and successful subsequent lock acquisition/release. Keep
+  existing three-start and complete-snapshot actual-application acceptance.
+  Do not expose mutating public entrypoints before transaction/recovery
+  composition and first-install admission are complete.
+
 **Files:** Add `tests/deployment-windows-application-snapshot.mjs`; extend
 `tests/deployment-windows-managed-application.ps1` and
 `tests/deployment-native-operation.test.mjs`. Keep production snapshot behavior
