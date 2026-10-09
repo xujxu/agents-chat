@@ -13325,25 +13325,32 @@ ownership from a successful HTTP response.
 
 **Files:** Add `windows-deployment-acceptance.mjs` and
 `windows-current-deployment.mjs` under `scripts/deployment/`; include both
-and `deployment-receipt.mjs` in the explicit saved recovery closure.
+and `deployment-receipt.mjs` in the explicit saved recovery closure, together
+with `build-artifacts.mjs` and the three Windows configuration observer files.
 Add `tests/deployment-windows-deployment-acceptance.mjs`; extend the existing
 owned-source fixture and its completion/retirement callers.
 
-- [ ] Before implementation, extend the actual owned-source update fixture:
+**Causal:** `d3cc998 / 37949180311 / 113883214652` failed on
+2026-10-09 at 15:16:14 UTC after native completion, exactly at
+`Missing saved Windows acceptance module: windows-deployment-acceptance.mjs`.
+The original task/source pipeline reached the real acceptance boundary;
+no fabricated accepted state or new lock was used.
+
+- [x] Before implementation, extend the actual owned-source update fixture:
   after `context.complete(...)`, publish a checked receipt using its original
   lock and actual `built.source`/`built.artifacts`. After native final unlock,
   invoke saved current inspection and require the same receipt/identity,
   readiness and no new lock/state/receipt mutation. Changing `BUILD_ID` must
   invalidate both retained acceptance and fresh current inspection; restore
   its exact original bytes in `finally`.
-- [ ] Capture the original managed scope with `assertWindowsManagedTaskScope`,
+- [x] Capture the original managed scope with `assertWindowsManagedTaskScope`,
   retained configuration/source/artifact checks and `waitWindowsReadiness`.
   Recheck before/after readiness and return `{ identity, checkAccepted }`.
   Stable service identity binds task name/definition/permissions/principal/
   enabled policy/configuration hash, not transient PIDs or generations.
   Configuration identity binds profile, providers, project permissions and
   each configuration path/presence/content hash/permissions.
-- [ ] Match the accepted state, receipt, target commit, built artifacts and
+- [x] Match the accepted state, receipt, target commit, built artifacts and
   fresh native/HTTP observation before returning the shared `current` shape.
   Missing or changed accepted artifacts are not a no-op; invalid receipts
   and failed authority/readiness checks remain explicit errors.

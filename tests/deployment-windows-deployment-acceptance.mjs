@@ -66,6 +66,9 @@ async function verifyCurrent(options) {
       verified: true, running: true, identity: current.current.receipt.identity,
     });
     await current.check();
+    await assert.rejects(inspectCurrentWindowsDeployment({
+      ...input, state: { ...state, project: `${options.project}-foreign` },
+    }), /another project/);
     assert.equal(await inspectCurrentWindowsDeployment({ ...input, commit: '0'.repeat(40) }), null);
     const buildFile = path.join(options.project, '.next', 'BUILD_ID');
     const buildBytes = await readFile(buildFile);
