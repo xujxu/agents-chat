@@ -13285,6 +13285,16 @@ the intentionally preserved `prior-runtime-restored` (2026-10-09,
 operation/phase and "No new deployment was accepted" message, then require
 fresh lock acquisition. Do not change production reconciliation semantics.
 
+**Focused recovery outcomes and fixture scheduling:** `d844b66 /
+37941852310` passed all four prior-runtime cases and the saved completed
+closeout job. The combined snapshot job hit its 15-minute limit on
+2026-10-09 at 14:30:41 UTC after the focused-only owned-source pipeline had
+consumed part of that budget. Run that exact source pipeline in the existing
+managed-discovery job instead: focused runs select its update case, while
+default full runs retain all three existing cases. Keep both 15-minute job
+budgets and every test unchanged; the default matrix remains 41 jobs.
+Full gate `37942832825` is running independently at `d844b66`.
+
 - [ ] Add copying/backup-ready successful recovery and source-selected refusal
   cases in Actions. Require `context.retirePriorRuntime()` before any source
   mutation; repeat it idempotently, activate the exact original configuration,
@@ -13314,6 +13324,11 @@ publication. Keep the original thrown error and callback order unchanged.
 
 **Files:** `scripts/deployment/transaction.mjs`,
 `tests/deployment-transaction.test.mjs`, existing Actions closeout job.
+
+**Causal:** `6687664 / 37942906933 / 113867892686` ran all 30
+transaction cases on 2026-10-09 at 14:31:04 UTC: 29 passed and only the
+new callback contract failed because both recovery callbacks received
+`errorCode: undefined` instead of `DEPLOYMENT_SNAPSHOT_FAILED`.
 
 - [ ] Add a contract that makes `snapshot` throw a coded or plain error,
   collects `errorCode`, `recovering` and `activationPurpose` from `start` and

@@ -198,10 +198,6 @@ jobs:
             'tests/deployment-snapshot-copy.test.mjs',
             'tests/deployment-windows-junction-snapshot.test.mjs'
           )
-      - name: Capture original task snapshot through the native owned-source pipeline
-        if: ${{ inputs.windows_restore_only }}
-        shell: pwsh
-        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement -DiscoverManagedTask -DiscoveredAdmission -OwnedSourceBuild
       - name: Capture native Windows snapshots and restore project and Git state
         shell: pwsh
         run: |
@@ -611,17 +607,14 @@ jobs:
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -CrashStep '${{ matrix.crash }}'
 
   windows-managed-discovery:
-    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    if: ${{ !inputs.windows_application_only }}
     name: Native Windows managed discovery (${{ matrix.scenario }})
     runs-on: windows-2022
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        scenario:
-          - transaction-activate-complete-retirement
-          - transaction-activate-complete-retirement-restore
-          - transaction-activate-complete-retirement-disabled
+        scenario: ${{ fromJSON(inputs.windows_restore_only && '["transaction-activate-complete-retirement"]' || '["transaction-activate-complete-retirement","transaction-activate-complete-retirement-restore","transaction-activate-complete-retirement-disabled"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

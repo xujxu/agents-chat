@@ -108,6 +108,7 @@ export async function runDeployment(options, operations) {
   } catch (error) {
     if (!preflightComplete && !hasUnsettledWorker(error)) throw error;
     const errors = [error];
+    context.errorCode = error?.code ?? 'DEPLOYMENT_FAILED';
     let priorRuntimeRestored = false;
     try {
       if (!hasUnsettledWorker(error)) {
@@ -123,7 +124,7 @@ export async function runDeployment(options, operations) {
       errors.push(recoveryError);
     }
     const blocked = errors.some(hasUnsettledWorker);
-    context.errorCode = blocked ? 'DEPLOYMENT_WORKER_UNSETTLED' : error?.code ?? 'DEPLOYMENT_FAILED';
+    if (blocked) context.errorCode = 'DEPLOYMENT_WORKER_UNSETTLED';
     try { await record(blocked ? 'blocked' : priorRuntimeRestored ? 'prior-runtime-restored' : 'recovery-required'); }
     catch (stateError) { errors.push(stateError); }
     if (errors.length > 1) {
