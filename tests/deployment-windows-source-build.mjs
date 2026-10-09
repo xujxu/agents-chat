@@ -50,10 +50,12 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
   let configuration;
   let buildEnvironment;
   let snapshotFixture;
+  let taskName;
   return {
     beforeCommit, targetCommit,
     get operation() { return workers; },
     async prepare(scope) {
+      taskName = scope.observation.taskName;
       const observedSession = await promisify(execFile)(pwsh, [
         '-NoProfile', '-NonInteractive', '-Command', '[Diagnostics.Process]::GetCurrentProcess().SessionId',
       ], { timeout: 30000, maxBuffer: 4096 });
@@ -81,6 +83,10 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
       await assert.rejects(stages.select({ target, stopped: { check: async () => {} } }));
     },
     async refuseSnapshot(context) { await snapshotFixture.refuseEarly(context); },
+    async accept(context) {
+      const { publishWindowsFixtureAcceptance } = await import('./deployment-windows-deployment-acceptance.mjs');
+      await publishWindowsFixtureAcceptance({ project, control, lock, pwsh, taskName, built, context });
+    },
     async snapshot(context) { return snapshotFixture.capture(context); },
     async refuseEarly(context) {
       await assert.rejects(stages.select({ target, stopped: { ...context } }));

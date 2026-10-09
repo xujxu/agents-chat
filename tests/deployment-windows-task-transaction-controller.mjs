@@ -222,6 +222,7 @@ if (action === 'activate-early') {
         }
         await context.check();
         await context.complete({ stateSha256: hash(await readFile(stateFile)) });
+        await sourceFixture?.accept(context);
         console.log(JSON.stringify({ phase: 'completed' }));
         next = await receive();
       }

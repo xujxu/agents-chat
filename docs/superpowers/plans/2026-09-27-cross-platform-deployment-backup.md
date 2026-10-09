@@ -13315,6 +13315,41 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BP: Compose checked Windows acceptance and current-deployment receipts
+
+Reuse the shared receipt schema and Linux acceptance/current-deployment pattern.
+Capture a fresh original managed scope after real native completion has restored
+policy and released the runtime lease. Keep the original transaction lock while
+publishing the receipt. Do not manufacture an accepted state or derive runtime
+ownership from a successful HTTP response.
+
+**Files:** Add `windows-deployment-acceptance.mjs` and
+`windows-current-deployment.mjs` under `scripts/deployment/`; include both
+and `deployment-receipt.mjs` in the explicit saved recovery closure.
+Add `tests/deployment-windows-deployment-acceptance.mjs`; extend the existing
+owned-source fixture and its completion/retirement callers.
+
+- [ ] Before implementation, extend the actual owned-source update fixture:
+  after `context.complete(...)`, publish a checked receipt using its original
+  lock and actual `built.source`/`built.artifacts`. After native final unlock,
+  invoke saved current inspection and require the same receipt/identity,
+  readiness and no new lock/state/receipt mutation. Changing `BUILD_ID` must
+  invalidate both retained acceptance and fresh current inspection; restore
+  its exact original bytes in `finally`.
+- [ ] Capture the original managed scope with `assertWindowsManagedTaskScope`,
+  retained configuration/source/artifact checks and `waitWindowsReadiness`.
+  Recheck before/after readiness and return `{ identity, checkAccepted }`.
+  Stable service identity binds task name/definition/permissions/principal/
+  enabled policy/configuration hash, not transient PIDs or generations.
+  Configuration identity binds profile, providers, project permissions and
+  each configuration path/presence/content hash/permissions.
+- [ ] Match the accepted state, receipt, target commit, built artifacts and
+  fresh native/HTTP observation before returning the shared `current` shape.
+  Missing or changed accepted artifacts are not a no-op; invalid receipts
+  and failed authority/readiness checks remain explicit errors.
+- [ ] Run focused native acceptance, then all 41 lifecycle jobs, preserving
+  existing task completion, original-controller lifetime and saved retirement.
+
 ### Task 5BO: Observe original managed readiness before update admission
 
 Public Windows current-deployment admission must verify the original native
