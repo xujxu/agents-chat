@@ -137,6 +137,14 @@ For persistent deployment on a Windows machine, use `scripts\deploy.ps1` which m
 
 On this development branch, Windows transaction/backup/recovery integration is
 still incomplete; do not use it as the final cross-platform deployment release.
+The existing-managed-task transaction now passed the full 42-job
+Linux/Windows regression at `86f2928` (Actions `37980766655`). Its real
+Windows application case upgrades to a different commit, retains the original
+source snapshot, closes the completed transaction through saved recovery code
+after controller exit, preserves authenticated chat data, and confirms that a
+second update does not restart the task or replace its backup or receipt.
+Public Windows command composition, first installation and cold restore
+remain incomplete; this is not acceptance of those entrypoints.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

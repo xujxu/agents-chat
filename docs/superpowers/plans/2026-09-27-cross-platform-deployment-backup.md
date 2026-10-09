@@ -13364,9 +13364,14 @@ same-phase rewrite.
   using that explicit revision. Assert the selected target marker and commit
   differ from the original snapshot source; rebuilding the same commit alone
   does not constitute source-upgrade acceptance.
-- [ ] Accept the complete real application flow and full dual-platform
+- [x] Accept the complete real application flow and full dual-platform
   regression before wiring public command-line entrypoints. Existing-task
   composition does not implement absent-task installation or cold restore.
+  Full `86f2928 / 37980766655` passed all 42 jobs. Live job
+  `113990385624` passed at 20:00:29 UTC on 2026-10-09: distinct-revision
+  update 1,040,767 ms, saved closeout 118,499 ms and already-current
+  173,039 ms. Original snapshot source, selected target, unchanged accepted
+  task/receipt/backup on no-op and authenticated data assertions all passed.
 
 **Measured whole-flow budget correction:** Diagnostic run
 `eb37991 / 37974894132 / 113970586177` recorded preflight at 18:45:30,
