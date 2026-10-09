@@ -13355,8 +13355,11 @@ must never be treated as a safely settled preflight refusal.
   it. Keep handles until an explicit close request, settle the helper before
   returning, and retain any incomplete directory on failure. Never overwrite
   a destination, mutate the running task or grant runtime mutation authority.
-- [ ] Require native focused acceptance and the full dual-platform regression
+- [x] Require native focused acceptance and the full dual-platform regression
   before wiring the publisher into the public Windows controller.
+  Focused `b6f53b4 / 37955892930` passed all seven jobs. Full
+  `bce3d99 / 37957395127` passed all 41 jobs, including the additional
+  unconfirmed-helper-exit guard from `4c548e5`.
 
 ### Task 5BP: Compose checked Windows acceptance and current-deployment receipts
 

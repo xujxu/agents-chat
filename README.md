@@ -429,6 +429,11 @@ passed all 41 lifecycle jobs at `a3f1125 / 37953717734`. Receipts are published
 after real native completion under the original lock and remain verifiable
 after final retirement. Wrong project/source and changed build artifacts
 cannot produce an already-current result.
+Original Windows runtime bundle publication passed the focused seven-job gate
+at `b6f53b4 / 37955892930` and all 41 lifecycle jobs at
+`bce3d99 / 37957395127`, including helper-exit settlement checks. The publisher
+copies the exact installed command, environment and helpers into a distinct
+private bundle before task admission, without starting or changing the runtime.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an
