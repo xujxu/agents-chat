@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][string]$TaskName,
     [Parameter(Mandatory)][string]$Root,
     [Parameter(Mandatory)][string]$Node,
-    [Parameter(Mandatory)][string]$ChatId
+    [Parameter(Mandatory)][string]$ChatId,
+    [Parameter(Mandatory)][string]$TargetCommit
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -39,7 +40,7 @@ try {
         $originalInstance = $before.Item(1).InstanceGuid
         $actor = [Deployment.WindowsControllerProcess]::Start($Node,
             @((Join-Path $PSScriptRoot 'deployment-windows-live-application.mjs'),
-                $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm), $directory, $environment)
+                $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
         $actorTimeout = if ($mode -eq 'update') { 1200000 } else { 300000 }

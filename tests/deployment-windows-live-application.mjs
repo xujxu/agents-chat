@@ -6,10 +6,11 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
-const [mode, directory, project, control, taskName, pwsh, git, npmCli] = process.argv.slice(2);
+const [mode, directory, project, control, taskName, pwsh, git, npmCli, targetCommit] = process.argv.slice(2);
 const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)).href);
 const { loadState, acquireLock } = await captured('state.mjs');
 assert.ok(['update', 'finalize', 'current'].includes(mode));
+assert.match(targetCommit, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 if (mode === 'finalize') {
   const { verifyRecoveryEngine, retirementRecoveryInvocation } = await captured('saved-recovery-engine.mjs');
   const state = await loadState(control);
@@ -47,12 +48,14 @@ if (mode === 'finalize') {
     const result = await runWindowsLiveDeployment({
       scope, control, lock, node: process.execPath, pwsh, git, npmCli,
       environment: configuration.command.environment, port: 3010, deploymentBytes: 2 * 1024 ** 3,
-      operation: 'update', noPull: true, waitSeconds: 120, timeoutSeconds: 900,
+      operation: 'update', revision: targetCommit, waitSeconds: 120, timeoutSeconds: 900,
       onProgress: ({ phase }) => console.error(`${new Date().toISOString()} Windows live controller: ${phase}`),
     });
     assert.equal(result.status, mode === 'current' ? 'already-current' : 'accepted');
     const state = await loadState(control);
     assert.equal(state.phase, result.status);
+    assert.equal(state.targetCommit, targetCommit);
+    assert.equal((await readFile(path.join(project, 'deployment-live-target.txt'), 'utf8')).trim(), 'Actual Windows live target');
     if (prior) {
       await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
       assert.deepEqual(await readFile(path.join(control, 'deployment.json')), prior.receipt);
@@ -65,6 +68,9 @@ if (mode === 'finalize') {
       assert.equal(state.backupId, lock.operationId);
       assert.equal(result.backupCreated, true);
       assert.equal(result.closeoutRequired, true);
+      assert.notEqual(state.sourceCommit, targetCommit);
+      const snapshot = JSON.parse(await readFile(path.join(control, 'latest', 'manifest.json')));
+      assert.equal(snapshot.source.commit, state.sourceCommit);
       assert.equal(JSON.parse(await readFile(path.join(control, 'deployment.json'))).operationId, lock.operationId);
     }
     console.log(JSON.stringify(result));

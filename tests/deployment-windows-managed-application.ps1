@@ -3,11 +3,15 @@ param(
     [Parameter(Mandatory)][string]$Control,
     [Parameter(Mandatory)][string]$Node,
     [switch]$CompleteSnapshot,
-    [switch]$LiveDeployment
+    [switch]$LiveDeployment,
+    [string]$TargetCommit
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 Set-StrictMode -Version Latest
+if ($LiveDeployment -and $TargetCommit -cnotmatch '^(?:[a-f0-9]{40}|[a-f0-9]{64})$') {
+    throw 'Live application acceptance requires an explicit target commit.'
+}
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment'))
 Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
     (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'),
@@ -130,7 +134,7 @@ foreach ($phase in $phases) {
             $owner.Dispose()
             $owner = $null
             & $pwsh -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deployment-windows-live-application.ps1') `
-                -Project $Project -TaskName $taskName -Root $root -Node $Node -ChatId $chatId
+                -Project $Project -TaskName $taskName -Root $root -Node $Node -ChatId $chatId -TargetCommit $TargetCommit
             Assert ($LASTEXITCODE -eq 0) 'Actual Windows live deployment composition failed'
             continue
         }

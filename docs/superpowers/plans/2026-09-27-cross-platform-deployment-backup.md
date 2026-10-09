@@ -13359,7 +13359,11 @@ same-phase rewrite.
   closeout, check authenticated chat data, then run a second update. Require
   already-current without runtime replacement, new backup/runtime bundle,
   receipt mutation or a remaining lock. Exercise normal dependency install,
-  not only `noInstall`.
+  not only `noInstall`. Prepare a distinct local target commit in the isolated
+  fixture, reset to the original source before the initial build, and update
+  using that explicit revision. Assert the selected target marker and commit
+  differ from the original snapshot source; rebuilding the same commit alone
+  does not constitute source-upgrade acceptance.
 - [ ] Accept the complete real application flow and full dual-platform
   regression before wiring public command-line entrypoints. Existing-task
   composition does not implement absent-task installation or cold restore.

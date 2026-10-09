@@ -210,6 +210,17 @@ test('actual application source installs and builds inside native ownership', {
       'false', 'Complete Windows application snapshot requires full source history before building.');
   }
   const commit = (await execute(git, ['-C', f.project, 'rev-parse', 'HEAD'])).stdout.trim();
+  let liveRevision;
+  if (process.platform === 'win32' && process.env.DEPLOYMENT_TEST_WINDOWS_LIVE === '1') {
+    await execute(git, ['-C', f.project, 'config', 'user.name', 'Deployment fixture']);
+    await execute(git, ['-C', f.project, 'config', 'user.email', 'fixture@example.invalid']);
+    await writeFile(path.join(f.project, 'deployment-live-target.txt'), 'Actual Windows live target\n');
+    await execute(git, ['-C', f.project, 'add', '--force', 'deployment-live-target.txt']);
+    await execute(git, ['-c', 'commit.gpgsign=false', '-C', f.project, 'commit', '-m', 'Live deployment target fixture']);
+    liveRevision = (await execute(git, ['-C', f.project, 'rev-parse', 'HEAD'])).stdout.trim();
+    assert.notEqual(liveRevision, commit);
+    await execute(git, ['-C', f.project, 'switch', '--detach', commit]);
+  }
   const environment = {};
   const permitted = new Set(['PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA']);
   for (const [key, value] of Object.entries(process.env)) if (permitted.has(key.toUpperCase())) environment[key] = value;
@@ -240,6 +251,7 @@ test('actual application source installs and builds inside native ownership', {
       const live = await execute(f.runtime.pwsh, ['-NoProfile', '-NonInteractive', '-File',
         path.join(repository, 'tests/deployment-windows-managed-application.ps1'),
         '-Project', f.project, '-Control', f.control, '-Node', process.execPath, '-LiveDeployment',
+        '-TargetCommit', liveRevision,
       ], { timeout: 1500000, maxBuffer: 32768 });
       console.log(live.stdout.trim());
       return;
