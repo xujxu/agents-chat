@@ -13315,6 +13315,38 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BV: Supervise original Windows command and saved finalizer processes
+
+**Files:** Add `scripts/deployment/windows-command-supervisor.ps1`,
+`scripts/deployment/windows-command-finalize-entry.mjs` and
+`tests/deployment-windows-command-supervisor.ps1`. Extend the existing
+real application fixture; preserve its distinct-source, snapshot, data and
+no-op requirements.
+
+- [x] Push causal fixture `692f26d` and dispatch `37995817147`. Require the
+  production supervisor rather than fixture-owned finalizer scheduling.
+- [x] Capture the complete controller tree privately outside mutable source.
+  Run the original actor with explicit tools and a minimal environment in
+  its native Job. Await root exit, confirm whole-Job settlement, drain pipes
+  and dispose original CWD handles before interpreting a qualified result.
+- [x] Start a separate private finalizer only for an original completed
+  outcome carrying the exact operation ID and recovery manifest. Verify the
+  original state and saved engine; require the exact completion result.
+  Preserve failed-update status after successful prior-runtime closeout.
+- [x] Refuse invalid result/exit combinations and uncertain settlement;
+  preserve evidence. Close retained capture and temporary-directory handles
+  before publishing the final result. Completed/incomplete capture trees
+  remain retained: targeted cleanup and public wrapper policy are separate.
+- [x] Add native protocol fixtures for accepted, recovered-failure, no-op,
+  invalid-result, failed-finalizer and unexpected-exit cases. Synthetic
+  actor/finalizer payloads test supervisor ordering and exit propagation,
+  not actual runtime recovery authority; the separate real application
+  fixture exercises the production actor and manifest-bound saved closeout.
+- [ ] Accept native protocol fixtures, real supervised update/automatic
+  closeout/data/no-op, then complete dual-platform regression.
+- [ ] Wire public PowerShell commands and creation/cleanup policy after
+  supervisor acceptance. Do not claim first-install or cold-restore support.
+
 ### Task 5BU: Return private Windows actor outcomes and exact recovery bindings
 
 **Files:** Add `scripts/deployment/windows-command-entry.mjs` and
@@ -13338,8 +13370,12 @@ result and the existing real application fixture.
   entry, retaining the surrounding original native controller Job. Pass its
   returned manifest hash through the supervisor fixture to saved closeout
   and compare it with the original backup manifest.
-- [ ] Accept portable process result/refusal contracts and real distinct
+- [x] Accept portable process result/refusal contracts and real distinct
   source update, exact saved finalization, data preservation and no-op.
+  `d05107c / 37991214491` passed both application jobs. Live job
+  `114032594148` passed at 21:44:36 UTC on 2026-10-09: ten contracts,
+  update 763,267 ms, exact saved finalization 72,489 ms and no-op 94,697 ms.
+- [ ] Complete the full regression; `f47a8a7 / 37995338592` is running.
 - [ ] Integrate this accepted actor protocol with the production private
   supervisor. The current fixture still owns capture, Job settlement and
   finalizer scheduling; no public-wrapper acceptance is claimed.
