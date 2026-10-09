@@ -53,6 +53,13 @@ try {
     try { [Deployment.WindowsControllerCapture]::Create($source, $project, $destination).Dispose() }
     catch { $refused = $true }
     Assert $refused 'Controller capture overwrote an existing destination'
+    $extra = Join-Path $destination 'unexpected'
+    [IO.File]::WriteAllText($extra, 'unrelated')
+    $refused = $false
+    try { $capture.Check() } catch { $refused = $true }
+    Assert $refused 'Controller capture ignored an unexpected file'
+    [IO.File]::Delete($extra)
+    $capture.Check()
 
     $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
     $environment.Add('SystemRoot', $env:SystemRoot)
@@ -85,6 +92,14 @@ process.stdout.write('captured-dependencies-loaded');
     try { [Deployment.WindowsControllerCapture]::Create($source, $project, (Join-Path $root 'invalid')).Dispose() }
     catch { $refused = $true }
     Assert ($refused -and -not (Test-Path -LiteralPath (Join-Path $root 'invalid'))) 'Unsupported inventory created a capture'
+    [IO.File]::Delete($unsupported)
+    $linked = Join-Path $source 'scripts/deployment/linked.mjs'
+    New-Item -ItemType HardLink -Path $linked -Target $original | Out-Null
+    $refused = $false
+    try { [Deployment.WindowsControllerCapture]::Create($source, $project, (Join-Path $root 'linked')).Dispose() }
+    catch { $refused = $true }
+    Assert $refused 'Controller capture accepted hardlinked source'
+    Assert ((Get-Item -LiteralPath $original).Length -gt 0) 'Capture refusal removed original source'
     Write-Output 'PASS: private external controller captures complete dependencies, survives source replacement and refuses mutation or overwrite'
 } finally {
     if ($controller) { $controller.Dispose() }
