@@ -91,6 +91,26 @@ test('backup failure restarts the unchanged previously running application', asy
   assert.equal(phases.at(-1), 'prior-runtime-restored');
 });
 
+test('native recovery callbacks receive the original failure code before publishing completion', async () => {
+  for (const code of ['DEPLOYMENT_SNAPSHOT_FAILED', undefined]) {
+    const f = fixture();
+    const failure = Object.assign(new Error('backup failed before source mutation'), code ? { code } : {});
+    const observed = [];
+    f.operations.snapshot = async () => { throw failure; };
+    for (const stage of ['start', 'verify']) {
+      f.operations[stage] = async context => {
+        observed.push({ stage, errorCode: context.errorCode, purpose: context.activationPurpose, recovering: context.recovering });
+      };
+    }
+    await assert.rejects(runDeployment({ operation: 'update' }, f.operations), error => error === failure);
+    assert.deepEqual(observed, ['start', 'verify'].map(stage => ({
+      stage, errorCode: code ?? 'DEPLOYMENT_FAILED', purpose: 'prior-runtime', recovering: true,
+    })));
+    assert.equal(f.phases.at(-1), 'prior-runtime-restored');
+    assert.equal(f.phases.includes('accepted'), false);
+  }
+});
+
 test('verified prior-runtime restart remains a failed update even with no-wait or cancelled caller', async () => {
   const f = fixture('snapshot');
   const controller = new AbortController();

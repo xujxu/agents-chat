@@ -643,6 +643,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Preserve original failure context through native recovery callbacks
+        shell: pwsh
+        run: node --test tests/deployment-transaction.test.mjs
       - name: Close completed Windows deployment through its saved entry
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement -CompletedCloseout

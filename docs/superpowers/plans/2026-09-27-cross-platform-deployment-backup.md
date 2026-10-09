@@ -13305,6 +13305,27 @@ fresh lock acquisition. Do not change production reconciliation semantics.
 - [ ] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BN: Carry the original failure into native recovery callbacks
+
+Windows native recovery publishes its failed-update terminal state before
+releasing the runtime lease. The shared transaction currently populates
+`context.errorCode` only after recovery callbacks finish, too late for that
+publication. Keep the original thrown error and callback order unchanged.
+
+**Files:** `scripts/deployment/transaction.mjs`,
+`tests/deployment-transaction.test.mjs`, existing Actions closeout job.
+
+- [ ] Add a contract that makes `snapshot` throw a coded or plain error,
+  collects `errorCode`, `recovering` and `activationPurpose` from `start` and
+  `verify`, and requires the original error still to be thrown. Run it in
+  the existing native closeout job and existing dual-platform contracts.
+- [ ] Set `context.errorCode = error?.code ?? 'DEPLOYMENT_FAILED'` at the start
+  of the recovery branch, before callbacks. After cleanup, override it with
+  `DEPLOYMENT_WORKER_UNSETTLED` only if any original/cleanup error is unsettled.
+- [ ] Require the new contract and all existing transaction cases to pass,
+  including aborted callers, no-wait, originally stopped services and cleanup
+  failure. Retain `prior-runtime-restored` rather than accepting the update.
+
 - [x] Add the saved-helper native fixture and run the Windows restore gate
   before implementation. Call `closeCompletedWindowsDeployment({ control,
   project, operationId, pwsh })` before original-controller exit and require
