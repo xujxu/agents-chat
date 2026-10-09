@@ -388,7 +388,7 @@ Combined original-task runtime, configuration and live database admission
 passed all 36 jobs at `e877f2cc0cf52124712a285152e90f2d0c34ae0f / 37127140330`.
 Version and database probes use owned workers with private temporary directories;
 the actual application fixture also verifies repeated data admission.
-Complete Windows application snapshot acceptance is still in progress:
+Complete Windows application snapshot acceptance passed:
 Next.js generates internal NTFS Junctions for bundled dependencies. Native
 original-handle observation and recreation passed the focused source/snapshot
 gate at `f45f431 / 37132289152`. Snapshot integration stores these links only
@@ -401,9 +401,15 @@ target encoding and retains the same ordinary-directory target protections.
 Other reparse tags, file symbolic links, external targets and link chains remain unsupported.
 The native snapshot/restore integration, long-path handling and bounded-copy
 contracts passed the focused gate at `f8ba0b4 / 37139096350`, including all
-97 existing regression cases. Actual-application snapshot acceptance remains
-pending; its full-backup fixture has a separate bounded maintenance budget
+97 existing regression cases. The actual application snapshot passed at
+`106c96e / 37925456181`, verifying 27,765 entries, Git, native dependencies,
+build output, data and external runtime files; the full dual-platform gate
+`37926962784` passed all 36 jobs at the same commit.
+Its full-backup fixture has a separate bounded maintenance budget
 rather than reusing the short three-start smoke-test deadline.
+Rejected live Windows preflight closeout passed the actual application gate
+at `04152de / 37929432101`: settled workers and the original lock are retired
+without stopping the running application, and a subsequent lock can be acquired.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an

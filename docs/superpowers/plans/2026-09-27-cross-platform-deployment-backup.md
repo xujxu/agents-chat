@@ -13129,6 +13129,14 @@ authority requirement. Do not claim success from reaching a progress stage:
 require complete manifest/payload verification, quiescence, inhibition and
 original-owner retirement. No production timeout or snapshot scope changes.
 
+**Complete application and dual-platform acceptance:** `106c96e /
+37925456181` passed the real Windows application snapshot on 2026-10-09:
+27,765 entries, Git, native dependencies, build output, data, external runtime
+files, quiescence and original-owner retirement. Full gate `37926962784`
+then passed all 36 jobs at the same commit. This supersedes the pending
+snapshot acceptance status and old short-budget requirement below; it does
+not claim public Windows update/restore composition is complete.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.
@@ -13155,19 +13163,26 @@ correctly refuses identity transitions. Inject corrupted bytes directly into
 the original fixture file and restore its exact original bytes in `finally`;
 do not weaken state transition validation to exercise closeout rejection.
 
-- [ ] In the existing application preflight fixture, record original preflight
+**Actual application acceptance:** `04152de / 37929432101` passed on
+2026-10-09 at 12:37:14 UTC. Original runtime/configuration/live database
+admission, all refusal cases, settled-worker retirement, lock removal and
+subsequent lock acquisition passed without stopping the original application.
+The original three-start lifecycle and complete 27,767-entry snapshot also
+passed. Run the full dual-platform matrix before closing this task.
+
+- [x] In the existing application preflight fixture, record original preflight
   state before worker admission; after three settled compatibility workers,
   invoke `closeRejectedWindowsPreflight({ control, lock, scope, operation, pwsh })`.
   First prove cloned scopes, forged locks, cancellation, wrong generation,
   non-preflight phase and changed start time leave admission unsealed.
-- [ ] Run the application-only Actions gate against the missing helper.
-- [ ] Implement original lock/project/state/generation/start-time checks,
+- [x] Run the application-only Actions gate against the missing helper.
+- [x] Implement original lock/project/state/generation/start-time checks,
   explicit absence of service/task maintenance, retained scope checks before
   and after worker sealing, and an unchanged-state recheck before publishing
   `preflight-refused`. Retire only the original sealed worker operation and
   release through `releaseLock(..., { pwsh })`. Preserve errors as causes and
   retain evidence if closeout becomes uncertain.
-- [ ] Require unchanged original running task/listener, absent worker and
+- [x] Require unchanged original running task/listener, absent worker and
   lock evidence, and successful subsequent lock acquisition/release. Keep
   existing three-start and complete-snapshot actual-application acceptance.
   Do not expose mutating public entrypoints before transaction/recovery
