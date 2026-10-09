@@ -9,34 +9,39 @@ import { promisify } from 'node:util';
 const [mode, directory, project, control, taskName, pwsh, git, npmCli, targetCommit, recoveryEngine] = process.argv.slice(2);
 const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)).href);
 const { loadState, acquireLock, releaseLock } = await captured('state.mjs');
-assert.ok(['update', 'finalize', 'current'].includes(mode));
+assert.ok(['update', 'verify-closed', 'current'].includes(mode));
 assert.match(targetCommit, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
-if (mode === 'finalize') {
-  const { verifyRecoveryEngine, retirementRecoveryInvocation } = await captured('saved-recovery-engine.mjs');
+if (mode === 'verify-closed') {
+  const { verifyRecoveryEngine } = await captured('saved-recovery-engine.mjs');
   const state = await loadState(control);
   assert.equal(state.phase, 'accepted');
   assert.match(recoveryEngine, /^[a-f0-9]{64}$/);
-  const engine = await verifyRecoveryEngine({ control, manifestSha256: recoveryEngine });
-  const command = retirementRecoveryInvocation(engine, { control, project, operationId: state.operationId, pwsh, kind: 'task' });
-  const result = await promisify(execFile)(command.file, command.args, {
-    cwd: directory, env: command.env, timeout: 180000, maxBuffer: 16384,
-  });
-  assert.equal(result.stderr, '');
-  assert.deepEqual(JSON.parse(result.stdout), { status: 'completed', operationId: state.operationId, phase: 'accepted' });
+  await verifyRecoveryEngine({ control, manifestSha256: recoveryEngine });
   await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
-  console.log(result.stdout.trim());
+  console.log(JSON.stringify({ status: 'completed', operationId: state.operationId, phase: state.phase }));
 } else {
   const modulePath = path.join(directory, 'scripts/deployment/windows-command-entry.mjs');
   assert.ok(await lstat(modulePath).then(() => true, error => {
     if (error.code === 'ENOENT') return false;
     throw error;
   }), 'Missing captured Windows command process entry');
-  const runWindowsDeploymentCommand = async ({ args }) => {
+  const supervisor = path.join(directory, 'scripts/deployment/windows-command-supervisor.ps1');
+  assert.ok(await lstat(supervisor).then(() => true, error => {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }), 'Missing captured Windows command supervisor');
+  const runWindowsDeploymentCommand = async ({ args, supervise = false }) => {
     let output;
     let failure;
     try {
-      output = await promisify(execFile)(process.execPath,
-        [modulePath, 'update', project, control, taskName, pwsh, git, npmCli, ...args],
+      output = await promisify(execFile)(supervise ? pwsh : process.execPath,
+        supervise ? ['-NoProfile', '-NonInteractive', '-File', supervisor,
+          '-Operation', 'update', '-Source', directory, '-Project', project, '-Control', control,
+          '-Directory', path.join(path.dirname(control), `supervisor-${randomUUID()}`),
+          '-TemporaryDirectory', path.dirname(control), '-TaskName', taskName,
+          '-Node', process.execPath, '-PowerShell', pwsh, '-Git', git, '-NpmCli', npmCli,
+          '-ArgumentsJson', JSON.stringify(args),
+        ] : [modulePath, 'update', project, control, taskName, pwsh, git, npmCli, ...args],
         { cwd: directory, env: process.env, timeout: 1200000, maxBuffer: 16384 });
     } catch (error) {
       assert.equal(error.killed, false);
@@ -85,6 +90,7 @@ if (mode === 'finalize') {
   } : null;
   const result = await runWindowsDeploymentCommand({
     args: ['--revision', targetCommit, '--wait', '120', '--timeout', '900'],
+    supervise: true,
   });
   assert.equal(result.status, mode === 'current' ? 'already-current' : 'accepted');
   const state = await loadState(control);
@@ -103,7 +109,9 @@ if (mode === 'finalize') {
   } else {
     assert.equal(state.backupId, result.operationId);
     assert.equal(result.backupCreated, true);
-    assert.equal(result.closeoutRequired, true);
+    assert.equal(result.closeoutRequired, false);
+    assert.equal(result.closeoutStatus, 'completed');
+    await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
     assert.notEqual(state.sourceCommit, targetCommit);
     const snapshot = JSON.parse(await readFile(path.join(control, 'backup', 'manifest.json')));
     assert.equal(snapshot.source.commit, state.sourceCommit);

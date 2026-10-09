@@ -32,7 +32,7 @@ try {
     $environment.Add('TEMP', $Root)
     $environment.Add('TMP', $Root)
     $recoveryEngine = ''
-    foreach ($mode in @('update', 'finalize', 'current')) {
+    foreach ($mode in @('update', 'verify-closed', 'current')) {
         $elapsed = [Diagnostics.Stopwatch]::StartNew()
         $capture.Check()
         $before = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
@@ -55,7 +55,7 @@ try {
         Assert $exited "Live application controller $mode exceeded its bound; output: $text"
         Assert ($code -eq 0) "Live controller $mode failed: $text"
         $result = $text | ConvertFrom-Json
-        $expected = switch ($mode) { update { 'accepted' } finalize { 'completed' } current { 'already-current' } }
+        $expected = switch ($mode) { update { 'accepted' } verify-closed { 'completed' } current { 'already-current' } }
         Assert ($result.status -ceq $expected) "Unexpected live controller $mode status"
         $actor.Dispose()
         $actor = $null
