@@ -6,6 +6,7 @@ import { readWorkerFile } from './worker-files.mjs';
 import { requireNoServiceMaintenance, validateState } from './state.mjs';
 import { inspectWindowsWorkerScope } from './windows-worker-scope.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
+import { journalUncertain } from './evidence-journal.mjs';
 
 const script = fileURLToPath(new URL('./windows-runtime-publication.ps1', import.meta.url));
 function refused(cause) {
@@ -71,6 +72,11 @@ export async function prepareWindowsRuntimeBundle({ scope, control, lock: suppli
     await authority();
     return Object.freeze({ directory, configuration, sha256: observation.configurationSha256 });
   } catch (cause) {
-    throw bridge ? await bridge.abandon(cause) : refused(cause);
+    if (!bridge) throw refused(cause);
+    const error = await bridge.abandon(cause);
+    if (bridge.child.pid && bridge.child.exitCode === null && bridge.child.signalCode === null) {
+      throw journalUncertain(error);
+    }
+    throw error;
   }
 }

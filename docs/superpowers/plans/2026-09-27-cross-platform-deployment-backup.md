@@ -13333,6 +13333,9 @@ existing owned-source fixture before task admission.
 `Missing saved original runtime bundle publisher`. Use the original
 preflight state bytes and `requireNoServiceMaintenance` alongside the
 original scope/lock checks; publication is not a maintenance-time fallback.
+If transport abandonment cannot confirm the spawned helper has exited,
+wrap that failure with `journalUncertain`; a possibly live file publisher
+must never be treated as a safely settled preflight refusal.
 
 - [x] Run the saved publisher fixture before implementation. Require abort,
   cloned scope and wrong-lock refusal before destination creation. Under
