@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
@@ -25,7 +26,12 @@ export async function processIdentity(pid) {
     return `${boot}:${pid}:${fields[19]}`;
   }
   if (process.platform === 'win32') {
-    const { stdout } = await execute('powershell.exe', [
+    const root = process.env.SystemRoot;
+    if (typeof root !== 'string' || !path.isAbsolute(root) || /[\0\r\n]/.test(root)) {
+      throw new Error('Windows process identity requires an explicit absolute SystemRoot.');
+    }
+    const powershell = path.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const { stdout } = await execute(powershell, [
       '-NoProfile', '-NonInteractive', '-Command',
       `$ErrorActionPreference = 'Stop'; try { $p = [System.Diagnostics.Process]::GetProcessById(${pid}); ` +
       `[Console]::Write($p.StartTime.ToUniversalTime().Ticks.ToString()) } ` +

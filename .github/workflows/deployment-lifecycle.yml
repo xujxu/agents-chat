@@ -157,6 +157,8 @@ jobs:
       - name: Update actual application, close original transaction and verify no-op
         shell: pwsh
         run: |
+          node --test tests/deployment-process-identity.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Native process identity contracts failed.' }
           $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
           $env:DEPLOYMENT_TEST_WINDOWS_LIVE = '1'
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
@@ -252,6 +254,7 @@ jobs:
         run: >-
           node --test
           tests/deployment-state.test.mjs
+          tests/deployment-process-identity.test.mjs
           tests/deployment-cli.test.mjs
           tests/deployment-snapshot.test.mjs
           tests/deployment-snapshot-copy.test.mjs
@@ -288,6 +291,7 @@ jobs:
         run: |
           ./tests/deployment-windows-private-tests.ps1 -Tests @(
             'tests/deployment-state.test.mjs',
+            'tests/deployment-process-identity.test.mjs',
             'tests/deployment-cli.test.mjs',
             'tests/deployment-snapshot.test.mjs',
             'tests/deployment-snapshot-copy.test.mjs',
