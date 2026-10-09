@@ -153,8 +153,16 @@ try {
             }
         } else { Assert ($completion.phase -ceq 'completed') 'Healthy task completion was not acknowledged' }
         $terminal = Read-Receipt (Join-Path $Control 'state.json')
-        Assert ($terminal.Data.phase -ceq $(if ($terminal.Data.operation -ceq 'restore') { 'restored' } else { 'accepted' })) `
+        $expectedPhase = if ($Request.ContainsKey('priorRuntimePhase')) { 'prior-runtime-restored' } `
+            elseif ($terminal.Data.operation -ceq 'restore') { 'restored' } else { 'accepted' }
+        Assert ($terminal.Data.phase -ceq $expectedPhase) `
             'Completion did not bind the expected terminal state'
+        if ($Request.ContainsKey('priorRuntimePhase')) {
+            Assert ($terminal.Data.previousPhase -ceq $Request.priorRuntimePhase -and
+                $terminal.Data.errorCode -ceq 'DEPLOYMENT_SNAPSHOT_FAILED' -and
+                $Replacement.Sha256 -ceq $OriginalReady.configurationSha256) `
+                'Prior-runtime recovery lost original failure phase or configuration'
+        }
         $permanent = [xml]$published.Data.definition
         $admitted = Read-Receipt (Join-Path $Directory 'admission.json')
         $originalTask = [xml]$admitted.Data.definition

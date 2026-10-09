@@ -650,6 +650,29 @@ jobs:
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-restore -CompletedCloseout
 
+  windows-prior-runtime-recovery:
+    if: ${{ !inputs.windows_application_only }}
+    name: Native Windows prior runtime recovery (${{ matrix.phase }})
+    runs-on: windows-2022
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: [copying, backup-ready, source-selected]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Recover only before source mutation and retain the original failure
+        shell: pwsh
+        run: |
+          if ('${{ matrix.phase }}' -ceq 'source-selected') {
+            ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-retire-refused -PriorRuntimeRecovery source-selected
+          } else {
+            ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement -CompletedCloseout -PriorRuntimeRecovery '${{ matrix.phase }}'
+          }
+
   windows-task-retirement:
     if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
     name: Native Windows task receipt retirement

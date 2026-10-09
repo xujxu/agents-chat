@@ -13248,6 +13248,39 @@ correctly forbids that cross-controller adoption. Create the three-receipt
 prefix in a separate bounded child, await its exit, then invoke the saved
 entry. Keep the original creator-death/bridge-death requirement unchanged.
 
+### Task 5BM: Recover the original Windows runtime before source mutation
+
+Do not use a fabricated `activating` phase to retire and restart the original
+runtime after a backup failure. Add an explicit native `retirePriorRuntime`
+request, restricted to `stopped`, `copying`, `rotating` and `backup-ready`
+under the original transaction. Bind its original source/target identity and
+fixed pre-source phase/digest. Replacement must use a distinct installed bundle
+with exactly the original configuration digest; it cannot change the command,
+environment or helper content. Completion records `prior-runtime-restored`
+with the original failed phase and a non-null failure code, not `accepted`.
+
+**Files:** Extend `windows-task-controller.mjs/.ps1`, native task maintenance,
+transaction, retirement, replacement, completion and completion-proof record
+validation, plus `windows-completed-closeout.mjs`. Reuse existing native
+transaction/activation and saved-entry fixtures with `-PriorRuntimeRecovery`.
+
+- [ ] Add copying/backup-ready successful recovery and source-selected refusal
+  cases in Actions. Require `context.retirePriorRuntime()` before any source
+  mutation; repeat it idempotently, activate the exact original configuration,
+  verify owned readiness and native policy, retain the original failure state,
+  and complete saved closeout only after the original controller exits.
+- [ ] Run the cases against the missing explicit native API.
+- [ ] Implement explicit recovery-purpose admission and original phase/commit
+  checks; freeze that native phase/digest throughout retirement/replacement/
+  activation. Preserve the ordinary deploy/restore phase restrictions.
+- [ ] Extend live and independently reopened completion validation consistently:
+  prior-runtime terminal state may change only phase, previous phase, updated
+  time and the required error code. Require identical original configuration
+  digest in both live replacement and saved proof. Do not accept a source-selected
+  phase, restored backup payload or modified command as pre-source recovery.
+- [ ] Validate all new cases, unchanged completion/crash/retirement cases and
+  the full dual-platform matrix before exposing public orchestration.
+
 - [ ] Add the saved-helper native fixture and run the Windows restore gate
   before implementation. Call `closeCompletedWindowsDeployment({ control,
   project, operationId, pwsh })` before original-controller exit and require

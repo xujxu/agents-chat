@@ -107,7 +107,19 @@ await context.check();
 await assert.rejects(releaseLock(control, lock, { pwsh }), /maintenance/i);
 assert.equal((await reconcileInterruptedOperation(control)).status, 'blocked');
 console.log(JSON.stringify({ phase: 'stopped', bridge: context.identity }));
-const { action, configuration, sha256, crashStep } = await receive();
+const { action, configuration, sha256, crashStep, priorRuntimePhase } = await receive();
+if (priorRuntimePhase) {
+  assert.equal(typeof context.retirePriorRuntime, 'function', 'Missing original pre-source runtime recovery API');
+  assert.equal(operation, 'update');
+  assert.ok(['copying', 'backup-ready', 'source-selected'].includes(priorRuntimePhase));
+  for (const phase of ['rotating', 'backup-ready', 'source-selected']) {
+    if (state.phase === priorRuntimePhase) break;
+    state = { ...state, previousPhase: state.phase, phase };
+    await writeState(control, state);
+    await context.check();
+  }
+  assert.equal(state.phase, priorRuntimePhase);
+}
 if (!sourceFixture && ['activate-complete-retirement', 'activate-complete-recovery'].includes(action)) {
   const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
   const saved = await saveWorkerEngine({ source, control, project, operationId: lock.operationId });
@@ -135,11 +147,12 @@ if (action === 'activate-early') {
 } else if (action === 'replace-early') {
   await assert.rejects(context.replace({ configuration, sha256 }), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
 } else if (action === 'retire-refused') {
-  await assert.rejects(context.retire(), { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
+  await assert.rejects(priorRuntimePhase ? context.retirePriorRuntime() : context.retire(),
+    { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
 } else if (['retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
   'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state',
   'activate-complete-proof', 'activate-complete-retirement', 'activate-complete-recovery'].includes(action)) {
-  if (operation !== 'restore') {
+  if (operation !== 'restore' && !priorRuntimePhase) {
     await sourceFixture?.refuseEarly(context);
     for (const phase of ['rotating', 'backup-ready', 'source-selected', 'dependencies', 'building', 'configuring', 'activating']) {
       state = { ...state, previousPhase: state.phase, phase };
@@ -148,8 +161,13 @@ if (action === 'activate-early') {
       await sourceFixture?.advance(phase, context);
     }
   }
-  await context.retire();
-  await context.retire();
+  if (priorRuntimePhase) {
+    await context.retirePriorRuntime();
+    await context.retirePriorRuntime();
+  } else {
+    await context.retire();
+    await context.retire();
+  }
   if (['replace-refused', 'replace-variable', 'replace-argument'].includes(action)) {
     await assert.rejects(context.replace({ configuration, sha256: action === 'replace-refused' ? '0'.repeat(64) : sha256 }),
       { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
@@ -175,7 +193,8 @@ if (action === 'activate-early') {
         await writeFile(path.join(project, 'health-mode'), 'ready');
         const recordAcceptance = async () => {
           state = { ...state, previousPhase: state.phase,
-            phase: operation === 'restore' ? 'restored' : 'accepted', updatedAt: new Date().toISOString() };
+            phase: priorRuntimePhase ? 'prior-runtime-restored' : operation === 'restore' ? 'restored' : 'accepted',
+            errorCode: priorRuntimePhase ? 'DEPLOYMENT_SNAPSHOT_FAILED' : null, updatedAt: new Date().toISOString() };
           if (action.endsWith('changed-state')) state.targetCommit = 'c'.repeat(40);
           await writeState(control, state);
           return hash(await readFile(stateFile));

@@ -16,6 +16,8 @@ param(
     [switch]$DiscoveredAdmission,
     [switch]$OwnedSourceBuild,
     [switch]$CompletedCloseout,
+    [AllowEmptyString()][ValidateSet('', 'copying', 'backup-ready', 'source-selected')]
+    [string]$PriorRuntimeRecovery = '',
     [switch]$Transactional,
     [switch]$Restore
 )
@@ -140,6 +142,11 @@ try {
         'Native bridge process identity differs'
     $stoppedDefinition = [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml
     $request = @{ action=$Action }
+    if ($PriorRuntimeRecovery) {
+        Assert (-not $Restore -and -not $OwnedSourceBuild -and
+            $Action -cin @('activate-complete-retirement', 'retire-refused')) 'Unsupported prior-runtime fixture'
+        $request.priorRuntimePhase = $PriorRuntimeRecovery
+    }
     if ($CompletedCloseout) {
         Assert ($Action -ceq 'activate-complete-retirement') 'Completed closeout requires sealed workers and completed activation'
         $request.completedCloseout = $true
@@ -164,6 +171,10 @@ try {
         $replacement = New-AgentsChatRuntimeBundle -Source ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment'))) `
             -Directory (Join-Path $controllerRoot $candidateName) -File $original.command.file `
             -Arguments ([string[]]$original.command.args) -WorkingDirectory $original.command.cwd -Environment $candidateEnvironment
+        if ($PriorRuntimeRecovery) {
+            [IO.File]::WriteAllBytes($replacement.Configuration, [IO.File]::ReadAllBytes($Configuration))
+            $replacement.Sha256 = $Sha256
+        }
         $request.configuration = $replacement.Configuration
         $request.sha256 = $replacement.Sha256
     }
