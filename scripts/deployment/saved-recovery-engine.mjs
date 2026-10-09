@@ -36,6 +36,7 @@ const files = Object.freeze([...new Set([
   'windows-deployment-acceptance.mjs', 'windows-current-deployment.mjs', 'deployment-receipt.mjs',
   'windows-configuration.mjs', 'windows-configuration-files.mjs', 'windows-configuration-files.ps1',
   'build-artifacts.mjs',
+  'windows-runtime-publication.mjs', 'windows-runtime-publication.ps1', 'windows-worker-scope.mjs',
   'windows-restore-security.mjs', 'windows-restore-security.ps1', 'WindowsPrivateFile.SourceSecurity.cs',
   'WindowsPrivateFile.SourceReparse.cs',
   'windows-source-security-controller.mjs', 'windows-git-object-security.mjs', 'windows-git-object-security.ps1',

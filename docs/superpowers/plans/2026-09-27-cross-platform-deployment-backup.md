@@ -13328,18 +13328,24 @@ Include both and `windows-worker-scope.mjs` in the saved recovery closure.
 Add `tests/deployment-windows-runtime-publication.mjs`; invoke it in the
 existing owned-source fixture before task admission.
 
-- [ ] Run the saved publisher fixture before implementation. Require abort,
+**Causal:** `a3e61be / 37954606282 / 113901824564` failed at
+15:54:28 UTC on 2026-10-09, before task admission, with
+`Missing saved original runtime bundle publisher`. Use the original
+preflight state bytes and `requireNoServiceMaintenance` alongside the
+original scope/lock checks; publication is not a maintenance-time fallback.
+
+- [x] Run the saved publisher fixture before implementation. Require abort,
   cloned scope and wrong-lock refusal before destination creation. Under
   actual original managed authority, publish only to
   `control/runtime-${lock.operationId}`. Require exact original configuration
   bytes/hash, exactly the helper files plus configuration (no old runtime
   readiness receipts), unchanged original state/configuration/task, and refusal
   to overwrite an existing bundle.
-- [ ] Use `inspectWindowsWorkerScope` to bind the original managed task,
+- [x] Use `inspectWindowsWorkerScope` to bind the original managed task,
   original lock, Node and PowerShell. Launch an original-controller-bound
   native helper through the existing bounded transport; recheck retained
   authority before and after publication and after helper exit.
-- [ ] In the helper, retain the original source directory and validate the
+- [x] In the helper, retain the original source directory and validate the
   original bundle using `WindowsRuntimeHost.Open`. Copy only its verified
   helpers and exact configuration using private creation/copy primitives;
   validate the destination with the same native host loader without starting
