@@ -77,7 +77,8 @@ foreach ($phase in $phases) {
             "-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$configFile`" -Sha256 $digest")
         $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) `
             -LogonType S4U -RunLevel Highest
-        $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 3)
+        $runtimeMinutes = if ($CompleteSnapshot) { 12 } else { 3 }
+        $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes $runtimeMinutes)
         Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Settings $settings | Out-Null
         $registered = $true
         Start-ScheduledTask -TaskName $taskName

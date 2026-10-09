@@ -61,9 +61,10 @@ try {
   state = { ...state, phase: 'copying', previousPhase: state.phase, updatedAt: new Date().toISOString() };
   await writeState(control, state);
   const destination = path.join(control, 'backup');
+  const signal = AbortSignal.timeout(600000);
   const manifest = await createWindowsTaskSnapshot({
     context, control, lock, configuration, destination, pwsh, id: 'actual-application-snapshot',
-    source: { commit, provenance: 'observed' }, recoveryEngine: recovery.manifestSha256, onProgress: progress,
+    source: { commit, provenance: 'observed' }, recoveryEngine: recovery.manifestSha256, onProgress: progress, signal,
   });
   assert.equal(manifest.version, 3);
   assert.equal(manifest.scope, 'project');
@@ -97,7 +98,7 @@ try {
     const index = manifest.externalFiles.findIndex(entry => entry.path === file);
     assert.deepEqual(await readFile(path.join(destination, 'external', String(index))), await readFile(file));
   }
-  assert.deepEqual(await verifySnapshot(destination), manifest);
+  assert.deepEqual(await verifySnapshot(destination, { signal }), manifest);
   await configuration.checkFiles();
   await context.check();
   // This fixture stops at a verified snapshot, not a fabricated completed update.

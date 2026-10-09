@@ -13111,6 +13111,24 @@ batches, add in-flight cancellation coverage, and include the helper in saved
 recovery files. Validate with the file-security correction above, retaining
 the existing 240-second actual snapshot invocation.
 
+**Settled-copy and file-security accepted:** `f8ba0b4 / 37139096350`
+passed ten focused cases, the source/task snapshot pipeline and all 97 existing
+regressions (81 passed, 16 platform skips, zero failures). The actual application
+run `37139098326` still reached the 240-second wrapper limit: native security
+completed at 70,360 ms, copying began at 75,326 ms and reached 18,945 of
+25,260 files at 213,694 ms. Four-way copies do not reliably make this complete,
+flushed backup fit a short startup fixture on hosted Windows storage.
+
+**Evidence-based fixture budget correction:** Keep the existing three-start
+fixture at a three-minute task lifetime and 240-second invocation. Only
+`-CompleteSnapshot` uses a twelve-minute task/wrapper lifetime and a ten-minute
+abortable snapshot/verification budget, leaving room for setup and cleanup.
+The enclosing 25-minute Actions job remains unchanged. This supersedes the
+earlier shared short-fixture deadline requirement, not any integrity or
+authority requirement. Do not claim success from reaching a progress stage:
+require complete manifest/payload verification, quiescence, inhibition and
+original-owner retirement. No production timeout or snapshot scope changes.
+
 **Goal:** Exercise the existing task-bound snapshot implementation against the
 real built application, rather than treating a small source fixture as proof
 that dependencies, native modules, build output and live-created data are covered.

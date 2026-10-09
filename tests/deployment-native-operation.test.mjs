@@ -246,7 +246,7 @@ test('actual application source installs and builds inside native ownership', {
       path.join(repository, 'tests/deployment-windows-managed-application.ps1'),
       '-Project', f.project, '-Control', f.control, '-Node', process.execPath,
       '-CompleteSnapshot',
-    ], { timeout: 240000, maxBuffer: 16384 });
+    ], { timeout: 720000, maxBuffer: 16384 });
     console.log(snapshot.stdout.trim());
     await artifacts.check();
   }

@@ -399,8 +399,11 @@ The standalone build also contains directory symbolic links. Their integration
 uses a separate optional `symlinks` metadata table, validates absolute/relative
 target encoding and retains the same ordinary-directory target protections.
 Other reparse tags, file symbolic links, external targets and link chains remain unsupported.
-The complete snapshot/restore integration and actual-application gate are not
-yet accepted.
+The native snapshot/restore integration, long-path handling and bounded-copy
+contracts passed the focused gate at `f8ba0b4 / 37139096350`, including all
+97 existing regression cases. Actual-application snapshot acceptance remains
+pending; its full-backup fixture has a separate bounded maintenance budget
+rather than reusing the short three-start smoke-test deadline.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an
