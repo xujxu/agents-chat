@@ -13320,7 +13320,7 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 **Files:** Add `scripts/deployment/windows-deployment.mjs`,
 `tests/deployment-windows-live-application.mjs/.ps1`. Extend the existing
 actual native application build fixture with a separate `-LiveDeployment`
-mode and a separate 25-minute Windows Actions job. Do not remove the
+mode and a separate 35-minute Windows Actions job. Do not remove the
 existing actual application/snapshot acceptance. Full matrix now has 42
 jobs; application-only has two; focused native regression remains seven.
 
@@ -13363,6 +13363,22 @@ same-phase rewrite.
 - [ ] Accept the complete real application flow and full dual-platform
   regression before wiring public command-line entrypoints. Existing-task
   composition does not implement absent-task installation or cold restore.
+
+**Measured whole-flow budget correction:** Diagnostic run
+`eb37991 / 37974894132 / 113970586177` recorded preflight at 18:45:30,
+copying at 18:46:15, rotating at 18:53:28, dependencies at 18:54:03,
+building at 18:57:07 and terminal-state publication at 18:58:57 UTC.
+The 15-minute actor limit then interrupted the still-pending completion/
+receipt path at 19:00:59. Terminal-state publication alone is not completed
+acceptance. Full artifact checks remain required during accepted identity
+capture and each receipt publication check; do not remove those checks.
+
+Separate the whole-update test budget from the unchanged 15-minute
+production stage budget: update actor 20 minutes, finalizer/current actors
+five minutes each, enclosing live fixture 25 minutes, existing private test
+runner 30 minutes, new live Actions job 35 minutes. Other Actions job budgets
+are unchanged. Preserve timeout diagnostics and report each actor's measured
+elapsed time; only a complete successful flow can accept this adjustment.
 
 ### Task 5BR: Capture Windows controller code outside mutable source
 

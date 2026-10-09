@@ -31,6 +31,7 @@ try {
     $environment.Add('TEMP', $Root)
     $environment.Add('TMP', $Root)
     foreach ($mode in @('update', 'finalize', 'current')) {
+        $elapsed = [Diagnostics.Stopwatch]::StartNew()
         $capture.Check()
         $before = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
         Assert ($before.Count -eq 1) 'Live application must have one original task instance'
@@ -41,7 +42,8 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        $exited = $actor.WaitForExit(900000)
+        $actorTimeout = if ($mode -eq 'update') { 1200000 } else { 300000 }
+        $exited = $actor.WaitForExit($actorTimeout)
         $actor.Kill()
         Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'
         $code = $actor.ExitCode
@@ -67,7 +69,7 @@ try {
             & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs') restored $ChatId
             Assert ($LASTEXITCODE -eq 0) "Authenticated data was lost during $mode"
         }
-        Write-Output "PASS: real Windows live deployment $mode with captured controller and preserved task/data"
+        Write-Output "PASS: real Windows live deployment $mode with captured controller and preserved task/data; elapsedMs=$($elapsed.ElapsedMilliseconds)"
     }
 } finally {
     if ($actor) { $actor.Dispose() }
