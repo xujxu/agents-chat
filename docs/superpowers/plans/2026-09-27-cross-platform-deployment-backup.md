@@ -13342,9 +13342,15 @@ the real live application fixture. Keep `Dispose` nondeleting.
   success/no-op captures disappear and failed-command captures remain.
 - [ ] Accept native contracts and actual supervised upgrade/no-op cleanup,
   then the complete dual-platform regression before public-wrapper wiring.
-  Implementation `b5fc1d2 / 38002317915` is running, live job
-  `114068093014` and companion application job `114068093335`;
-  its native contracts and real application result are not yet accepted.
+  Implementation `b5fc1d2 / 38002317915` passed both application jobs.
+  Live job `114068093014` completed at 23:46:29 UTC on 2026-10-09;
+  companion application job `114068093335` passed at 23:34:12 UTC.
+  Ten contracts, original-capture retirement cases and all six supervisor
+  protocol cases passed. Real supervised update/finalization/cleanup took
+  1,086,701 ms, closed-state verification 643 ms and no-op/cleanup 177,088 ms.
+  Authenticated data and original task/receipt/backup invariants passed.
+  Full `26bcf7e / 38006102348` is dispatched; do not count the complete
+  regression accepted until all required jobs finish successfully.
 
 ### Task 5BV: Supervise original Windows command and saved finalizer processes
 
