@@ -112,6 +112,10 @@ export async function runWindowsLiveDeployment({
       return;
     }
     await writePhase(phase, context);
+    if (stopped && !['blocked', 'recovery-required'].includes(phase)) {
+      // The native controller must observe every edge, including phases without task work.
+      await stopped.check();
+    }
   };
   const seal = async () => {
     if (!sealed) { await workers.seal(); sealed = true; }
