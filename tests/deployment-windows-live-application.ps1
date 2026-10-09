@@ -41,12 +41,14 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        Assert ($actor.WaitForExit(900000)) 'Live application controller exceeded its bound'
-        $code = $actor.ExitCode
+        $exited = $actor.WaitForExit(900000)
         $actor.Kill()
+        Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'
+        $code = $actor.ExitCode
         Assert ($output.Wait(15000) -and $diagnostic.Wait(15000)) 'Live controller streams did not settle'
         [Console]::Error.Write($diagnostic.GetAwaiter().GetResult())
         $text = $output.GetAwaiter().GetResult()
+        Assert $exited "Live application controller $mode exceeded its bound; output: $text"
         Assert ($code -eq 0) "Live controller $mode failed: $text"
         $result = $text | ConvertFrom-Json
         $expected = switch ($mode) { update { 'accepted' } finalize { 'completed' } current { 'already-current' } }

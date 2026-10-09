@@ -48,7 +48,7 @@ if (mode === 'finalize') {
       scope, control, lock, node: process.execPath, pwsh, git, npmCli,
       environment: configuration.command.environment, port: 3010, deploymentBytes: 2 * 1024 ** 3,
       operation: 'update', noPull: true, waitSeconds: 120, timeoutSeconds: 900,
-      onProgress: ({ phase }) => console.error(`Windows live controller: ${phase}`),
+      onProgress: ({ phase }) => console.error(`${new Date().toISOString()} Windows live controller: ${phase}`),
     });
     assert.equal(result.status, mode === 'current' ? 'already-current' : 'accepted');
     const state = await loadState(control);
