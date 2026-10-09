@@ -13149,6 +13149,12 @@ at the missing `windows-preflight-refusal.mjs`, after original compatibility
 workers had settled successfully. Implement the retained-scope closeout and
 rerun the same real application lifecycle, not a mocked controller.
 
+**Fixture correction:** `4951fd7 / 37928718334` failed at the fixture's
+attempt to publish an intentionally invalid state through `writeState`, which
+correctly refuses identity transitions. Inject corrupted bytes directly into
+the original fixture file and restore its exact original bytes in `finally`;
+do not weaken state transition validation to exercise closeout rejection.
+
 - [ ] In the existing application preflight fixture, record original preflight
   state before worker admission; after three settled compatibility workers,
   invoke `closeRejectedWindowsPreflight({ control, lock, scope, operation, pwsh })`.

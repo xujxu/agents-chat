@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, readdir, realpath } from 'node:fs/promises';
+import { lstat, readdir, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -89,11 +89,14 @@ try {
     { runtimeIdentity: randomUUID() }, { phase: 'stopped', previousPhase: 'preflight' },
     { startedAt: new Date(Date.parse(state.startedAt) + 1000).toISOString() },
   ]) {
-    await writeState(control, { ...state, ...changed });
-    await assert.rejects(closeRejectedWindowsPreflight(closeOptions));
-    assert.notEqual((await readWorkerOperation(control)).at(-1).phase, 'sealed');
+    const stateFile = path.join(control, 'state.json');
+    const original = await readWorkerFile(stateFile, 65536, { privateMode: true });
+    try {
+      await writeFile(stateFile, JSON.stringify({ ...state, ...changed }));
+      await assert.rejects(closeRejectedWindowsPreflight(closeOptions));
+      assert.notEqual((await readWorkerOperation(control)).at(-1).phase, 'sealed');
+    } finally { await writeFile(stateFile, original); }
   }
-  await writeState(control, state);
   await admission.configuration.close();
   admission = undefined;
   const closed = await closeRejectedWindowsPreflight(closeOptions);
