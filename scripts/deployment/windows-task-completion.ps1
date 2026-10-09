@@ -134,14 +134,17 @@ function Advance-AgentsChatTaskCompletion {
         }
         $prior = $Context.CompletionPriorState
         $state = Read-AgentsChatTaskTransactionState $Context.Transaction ''
-        $terminal = if ($prior.operation -ceq 'restore') { 'restored' } else { 'accepted' }
+        $recoveringPrior = $Context.Transaction.PriorRuntimeRecovery
+        $terminal = if ($recoveringPrior) { 'prior-runtime-restored' } `
+            elseif ($prior.operation -ceq 'restore') { 'restored' } else { 'accepted' }
         if ($Context.Transaction.StateSha256 -cne $StateSha256 -or $state.phase -cne $terminal -or
             $state.previousPhase -cne $prior.phase -or
             [string]::CompareOrdinal($state.updatedAt, $prior.updatedAt) -lt 0) {
             throw 'Completion state does not follow the original activation.'
         }
         foreach ($key in $prior.Keys) {
-            if ($key -cnotin @('phase', 'previousPhase', 'updatedAt') -and $state[$key] -cne $prior[$key]) {
+            if ($key -cnotin @('phase', 'previousPhase', 'updatedAt') -and
+                -not ($recoveringPrior -and $key -ceq 'errorCode') -and $state[$key] -cne $prior[$key]) {
                 throw 'Completion changed original transaction fields.'
             }
         }

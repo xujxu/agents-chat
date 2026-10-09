@@ -658,7 +658,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        phase: [copying, backup-ready, source-selected]
+        phase: [copying, backup-ready, source-selected, changed-configuration]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -669,6 +669,8 @@ jobs:
         run: |
           if ('${{ matrix.phase }}' -ceq 'source-selected') {
             ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-retire-refused -PriorRuntimeRecovery source-selected
+          } elseif ('${{ matrix.phase }}' -ceq 'changed-configuration') {
+            ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-refused -PriorRuntimeRecovery copying
           } else {
             ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement -CompletedCloseout -PriorRuntimeRecovery '${{ matrix.phase }}'
           }

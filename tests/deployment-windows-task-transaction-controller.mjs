@@ -169,7 +169,8 @@ if (action === 'activate-early') {
     await context.retire();
   }
   if (['replace-refused', 'replace-variable', 'replace-argument'].includes(action)) {
-    await assert.rejects(context.replace({ configuration, sha256: action === 'replace-refused' ? '0'.repeat(64) : sha256 }),
+    await assert.rejects(context.replace({ configuration,
+      sha256: action === 'replace-refused' && !priorRuntimePhase ? '0'.repeat(64) : sha256 }),
       { code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED' });
   } else {
     if (['replace', 'activate', 'activate-exit', 'activate-state-change', 'activate-readiness',

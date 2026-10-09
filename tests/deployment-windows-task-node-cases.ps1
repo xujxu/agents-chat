@@ -144,7 +144,7 @@ try {
     $request = @{ action=$Action }
     if ($PriorRuntimeRecovery) {
         Assert (-not $Restore -and -not $OwnedSourceBuild -and
-            $Action -cin @('activate-complete-retirement', 'retire-refused')) 'Unsupported prior-runtime fixture'
+            $Action -cin @('activate-complete-retirement', 'retire-refused', 'replace-refused')) 'Unsupported prior-runtime fixture'
         $request.priorRuntimePhase = $PriorRuntimeRecovery
     }
     if ($CompletedCloseout) {
@@ -163,6 +163,9 @@ try {
         $original = [IO.File]::ReadAllText($Configuration) | ConvertFrom-Json -AsHashtable
         $candidateEnvironment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($key in $original.command.environment.Keys) { $candidateEnvironment.Add($key, $original.command.environment[$key]) }
+        if ($PriorRuntimeRecovery -and $Action -ceq 'replace-refused') {
+            $candidateEnvironment.Add('DEPLOYMENT_PRIOR_RECOVERY_FIXTURE', 'changed')
+        }
         $candidateName = switch ($Action) {
             'replace-variable' { 'replacement%SystemRoot%' }
             'replace-argument' { 'replacement$(Arg0)' }
@@ -171,7 +174,7 @@ try {
         $replacement = New-AgentsChatRuntimeBundle -Source ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment'))) `
             -Directory (Join-Path $controllerRoot $candidateName) -File $original.command.file `
             -Arguments ([string[]]$original.command.args) -WorkingDirectory $original.command.cwd -Environment $candidateEnvironment
-        if ($PriorRuntimeRecovery) {
+        if ($PriorRuntimeRecovery -and $Action -cne 'replace-refused') {
             [IO.File]::WriteAllBytes($replacement.Configuration, [IO.File]::ReadAllBytes($Configuration))
             $replacement.Sha256 = $Sha256
         }
@@ -218,7 +221,8 @@ try {
                 $receipt.generation -ceq $Ready.generation -and $receipt.instanceGuid -ceq $Binding.instanceGuid -and
                 $receipt.definition -ceq $stoppedDefinition -and
                 $receipt.securityDescriptor -ceq [string]$task.GetSecurityDescriptor(7) -and
-                $receipt.statePhase -ceq $(if ($Restore) { 'restore-activating' } else { 'activating' })) `
+                $receipt.statePhase -ceq $(if ($PriorRuntimeRecovery) { $PriorRuntimeRecovery } `
+                    elseif ($Restore) { 'restore-activating' } else { 'activating' })) `
                 'Retirement evidence lost original authority or task policy'
             $previous = $hash
         }

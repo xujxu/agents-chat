@@ -1,3 +1,13 @@
+function Get-AgentsChatPriorRuntimePreviousPhase([string]$Phase) {
+    switch -CaseSensitive ($Phase) {
+        'stopped' { return 'preflight' }
+        'copying' { return 'stopped' }
+        'rotating' { return 'copying' }
+        'backup-ready' { return 'rotating' }
+        default { return $null }
+    }
+}
+
 function ConvertFrom-AgentsChatTaskTransactionState([hashtable]$Transaction, [string]$Text) {
     $fields = Read-AgentsChatMaintenanceFields $Text @(
         'version', 'operationId', 'project', 'operation', 'phase', 'previousPhase', 'sourceCommit',
@@ -6,10 +16,15 @@ function ConvertFrom-AgentsChatTaskTransactionState([hashtable]$Transaction, [st
     foreach ($name in $fields.Keys) {
         if ($name -cne 'version') { $state[$name] = $fields[$name].GetString() }
     }
+    $errorValid = if ($state.phase -ceq 'prior-runtime-restored') {
+        $state.operation -cne 'restore' -and
+            $null -ne (Get-AgentsChatPriorRuntimePreviousPhase $state.previousPhase) -and
+            $state.errorCode -cmatch '^[a-zA-Z0-9_.:-]+$'
+    } else { $null -eq $state.errorCode }
     if ($state.version -ne 1 -or $state.project -cne $Transaction.Project -or
         $state.operationId -cne $Transaction.OperationId -or $state.priorRuntime -cne 'running' -or
         $state.runtimeIdentity -cne $Transaction.Generation -or $state.startedAt -cne $Transaction.StartedAt -or
-        $state.operation -cnotin @('deploy', 'update', 'restore') -or $null -ne $state.errorCode) {
+        $state.operation -cnotin @('deploy', 'update', 'restore') -or -not $errorValid) {
         throw 'Transaction state identity differs.'
     }
     foreach ($name in @('sourceCommit', 'targetCommit')) {
@@ -63,8 +78,10 @@ function Assert-AgentsChatTaskTransaction([hashtable]$Transaction) {
         }
         $Transaction.Stage = 'transaction-phase'
         if ($Transaction.CompletionStateSha256) {
-            $terminal = if ($Transaction.Operation -ceq 'restore') { 'restored' } else { 'accepted' }
-            $previous = if ($Transaction.Operation -ceq 'restore') { 'restore-activating' } else { 'activating' }
+            $terminal = if ($Transaction.PriorRuntimeRecovery) { 'prior-runtime-restored' } `
+                elseif ($Transaction.Operation -ceq 'restore') { 'restored' } else { 'accepted' }
+            $previous = if ($Transaction.PriorRuntimeRecovery) { $Transaction.RecoveryPhase } `
+                elseif ($Transaction.Operation -ceq 'restore') { 'restore-activating' } else { 'activating' }
             if ($Transaction.StateSha256 -cne $Transaction.CompletionStateSha256 -or $state.phase -cne $terminal -or
                 $state.previousPhase -cne $previous -or $state.operation -cne $Transaction.Operation) {
                 throw 'Original completion state changed.'
@@ -120,6 +137,7 @@ function Open-AgentsChatTaskTransaction {
         InitialStateSha256=$StateSha256; StateSha256=$null; ReceiptSha256=$null
         InitialState=$null; Control=$Control; Stage='transaction-admission'
         CompletionStateSha256=$null
+        PriorRuntimeRecovery=$false; RecoveryPhase=$null; RecoveryStateSha256=$null
     }
     try {
         $transaction.Lock = [Deployment.WindowsPrivateFile]::Open((Join-Path $Control 'lock/owner.json'), $LockSha256)

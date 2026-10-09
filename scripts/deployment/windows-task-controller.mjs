@@ -135,7 +135,8 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
         if (Buffer.byteLength(JSON.stringify(frame)) > 4096) throw new Error('Task controller request exceeds its bound.');
         await wire.send(frame);
         const reply = captureWorkerFields(await wire.receive({
-          signal: requestSignal, timeoutMs: ['activate', 'complete'].includes(method) ? 90000 : method === 'retire' ? 60000 : 30000,
+          signal: requestSignal, timeoutMs: ['activate', 'complete'].includes(method) ? 90000
+            : ['retire', 'retire-prior-runtime'].includes(method) ? 60000 : 30000,
         }),
           ['id', 'type', 'value', ...(method === 'activate' ? ['runtime'] : method === 'listener' ? ['listener']
             : method === 'advance-completion' ? ['phase'] : [])], 'task controller reply');
@@ -179,6 +180,7 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
       identity,
       check: ({ signal: checkSignal } = {}) => request('check', checkSignal),
       retire: ({ signal: retireSignal } = {}) => request('retire', retireSignal),
+      retirePriorRuntime: ({ signal: retireSignal } = {}) => request('retire-prior-runtime', retireSignal),
       replace: ({ configuration, sha256, signal: replaceSignal } = {}) =>
         request('replace', replaceSignal, { configuration, sha256 }),
       activate: ({ signal: activateSignal } = {}) => request('activate', activateSignal),

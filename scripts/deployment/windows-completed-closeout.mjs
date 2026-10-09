@@ -36,8 +36,10 @@ export async function closeCompletedWindowsDeployment({ control, project, operat
       const stateFile = path.join(control, 'state.json');
       const bytes = await readWorkerFile(stateFile, 65536, { privateMode: true });
       const state = validateState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+      const recoveredPrior = state.phase === 'prior-runtime-restored';
       if (state.project !== project || state.operationId !== operationId
-        || !['accepted', 'restored'].includes(state.phase) || state.errorCode !== null) {
+        || !['accepted', 'restored', 'prior-runtime-restored'].includes(state.phase)
+        || !recoveredPrior && state.errorCode !== null) {
         throw new Error('Completed Windows closeout state differs from the requested operation.');
       }
       const stateSha256 = createHash('sha256').update(bytes).digest('hex');

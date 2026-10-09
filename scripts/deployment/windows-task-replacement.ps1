@@ -75,6 +75,9 @@ function Publish-AgentsChatTaskReplacement {
         if (-not $Context.Retired) { throw 'Original owner must retire before replacement.' }
         Test-AgentsChatRetiredTaskContext $Context
         $Context.Stage = 'replacement-candidate'
+        if ($Context.Transaction.PriorRuntimeRecovery -and $Sha256 -cne $Context.Data.configurationSha256) {
+            throw 'Prior runtime recovery requires the exact original configuration and helper digests.'
+        }
         if ($Context.ReplacementPrepared) {
             if ($Configuration -cne $Context.ReplacementConfiguration -or
                 $Sha256 -cne $Context.ReplacementConfigurationSha256) { throw 'Original replacement differs.' }

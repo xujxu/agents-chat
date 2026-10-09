@@ -15,8 +15,13 @@ function Test-AgentsChatRetirementTransaction([hashtable]$Context) {
     if (-not $Context.Transaction) { throw 'Retirement requires original transaction authority.' }
     Assert-AgentsChatTaskTransaction $Context.Transaction
     $Context.Stage = 'retirement-phase'
-    $expected = if ($Context.Transaction.Operation -ceq 'restore') { 'restore-activating' } else { 'activating' }
+    $expected = if ($Context.Transaction.PriorRuntimeRecovery) { $Context.Transaction.RecoveryPhase } `
+        elseif ($Context.Transaction.Operation -ceq 'restore') { 'restore-activating' } else { 'activating' }
     if ($Context.Transaction.Phase -cne $expected) { throw 'Transaction is not ready for activation.' }
+    if ($Context.Transaction.PriorRuntimeRecovery -and
+        $Context.Transaction.StateSha256 -cne $Context.Transaction.RecoveryStateSha256) {
+        throw 'Original pre-source recovery state changed.'
+    }
     if ($Context.RetirementRequested -and $Context.Transaction.StateSha256 -cne $Context.RetirementStateSha256) {
         throw 'Original activation state changed during retirement.'
     }
@@ -81,15 +86,37 @@ function Assert-AgentsChatTaskRetired {
 
 function Retire-AgentsChatTaskOwner {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][hashtable]$Context)
+    param([Parameter(Mandatory)][hashtable]$Context, [switch]$PriorRuntime)
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
     if ($Context.Busy) { throw 'Task maintenance refused: busy.' }
+    if ($Context.RetirementRequested -and
+        $Context.Transaction.PriorRuntimeRecovery -ne [bool]$PriorRuntime) {
+        throw 'Original task retirement purpose changed.'
+    }
     if ($Context.Retired) { return Assert-AgentsChatTaskRetired -Context $Context }
     $Context.Busy = $true
     try {
         if (-not $Context.Stopped -or -not $Context.Inhibited) { throw 'Original task is not stopped.' }
         Test-AgentsChatMaintenanceContext $Context $true
+        if ($PriorRuntime) {
+            $Context.Stage = 'retirement-prior-runtime'
+            if (-not $Context.Transaction) { throw 'Prior runtime recovery requires original transaction authority.' }
+            $transaction = $Context.Transaction
+            Assert-AgentsChatTaskTransaction $transaction
+            $state = Read-AgentsChatTaskTransactionState $transaction ''
+            $initial = ConvertFrom-AgentsChatTaskTransactionState $transaction $transaction.InitialState
+            $previous = Get-AgentsChatPriorRuntimePreviousPhase $state.phase
+            if ($transaction.Operation -ceq 'restore' -or -not $previous -or $state.previousPhase -cne $previous -or
+                -not $initial.sourceCommit -or -not $initial.targetCommit -or
+                $state.sourceCommit -cne $initial.sourceCommit -or $state.targetCommit -cne $initial.targetCommit -or
+                [string]::CompareOrdinal($state.updatedAt, $initial.updatedAt) -lt 0) {
+                throw 'Prior runtime recovery is only valid before source mutation with unchanged original commits.'
+            }
+            $transaction.PriorRuntimeRecovery = $true
+            $transaction.RecoveryPhase = $state.phase
+            $transaction.RecoveryStateSha256 = $transaction.StateSha256
+        }
         Test-AgentsChatRetirementTransaction $Context
         $Context.RetirementSha256 = $Context.PreviousSha256
         $Context.RetirementStateSha256 = $Context.Transaction.StateSha256

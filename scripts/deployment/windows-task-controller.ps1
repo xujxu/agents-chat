@@ -70,7 +70,7 @@ try {
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire', 'replace', 'activate', 'listener',
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'retire', 'retire-prior-runtime', 'replace', 'activate', 'listener',
             'prepare-completion', 'complete', 'advance-completion')) { throw 'Invalid controller request.' }
         $sequence = $id
         $stage = 'check'
@@ -86,9 +86,9 @@ try {
         elseif ($context.Activated) { $null = Assert-AgentsChatTaskActive -Context $context }
         elseif ($context.Retired) { $null = Assert-AgentsChatTaskRetired -Context $context }
         else { $null = Assert-AgentsChatTaskStopped -Context $context }
-        if ($method -ceq 'retire') {
+        if ($method -cin @('retire', 'retire-prior-runtime')) {
             $stage = 'retire'
-            $null = Retire-AgentsChatTaskOwner -Context $context
+            $null = Retire-AgentsChatTaskOwner -Context $context -PriorRuntime:($method -ceq 'retire-prior-runtime')
         }
         if ($method -ceq 'replace') {
             $stage = 'replace'

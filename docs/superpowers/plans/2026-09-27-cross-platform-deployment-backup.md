@@ -13248,6 +13248,11 @@ correctly forbids that cross-controller adoption. Create the three-receipt
 prefix in a separate bounded child, await its exit, then invoke the saved
 entry. Keep the original creator-death/bridge-death requirement unchanged.
 
+**Focused saved-entry acceptance:** `7d854de / 37937461415` passed both
+jobs: original source/task snapshot and restoration regressions, fresh update
+closeout, and restored-state closeout resumed after the separate checkpoint
+creator exited. Full 37-job gate `37938609145` is running at the same commit.
+
 ### Task 5BM: Recover the original Windows runtime before source mutation
 
 Do not use a fabricated `activating` phase to retire and restart the original
@@ -13264,11 +13269,21 @@ transaction, retirement, replacement, completion and completion-proof record
 validation, plus `windows-completed-closeout.mjs`. Reuse existing native
 transaction/activation and saved-entry fixtures with `-PriorRuntimeRecovery`.
 
+**Causal:** `95c643e / 37938766664` failed all three initial cases at
+`Missing original pre-source runtime recovery API` (2026-10-09,
+13:50:56 through 13:51:45 UTC). Implement the explicit request without
+advancing to `activating`. Freeze the entire original recovery-state digest
+at purpose admission, before retirement starts; final completion alone may
+advance to `prior-runtime-restored`. Existing normal activation stays unchanged.
+
 - [ ] Add copying/backup-ready successful recovery and source-selected refusal
   cases in Actions. Require `context.retirePriorRuntime()` before any source
   mutation; repeat it idempotently, activate the exact original configuration,
   verify owned readiness and native policy, retain the original failure state,
   and complete saved closeout only after the original controller exits.
+  Also reject a valid new bundle whose environment differs from the original,
+  using its correct new digest (not a deliberately malformed hash).
+  These four isolated native jobs bring the default matrix to 41 jobs.
 - [ ] Run the cases against the missing explicit native API.
 - [ ] Implement explicit recovery-purpose admission and original phase/commit
   checks; freeze that native phase/digest throughout retirement/replacement/

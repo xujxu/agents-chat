@@ -173,13 +173,22 @@ function Read-AgentsChatTaskCompletionHistory([hashtable]$Context, [string[]]$Re
         }
     }
     $prepared = $records['complete-prepared']
+    $prior = ConvertFrom-AgentsChatTaskTransactionState $scope $prepared.activatingState.GetRawText()
+    $recoveryPrevious = Get-AgentsChatPriorRuntimePreviousPhase $prior.phase
+    $recoveringPrior = -not $restore -and $null -ne $recoveryPrevious
+    $activationPhase = if ($recoveringPrior) { $prior.phase } elseif ($restore) { 'restore-activating' } else { 'activating' }
+    $activationPrevious = if ($recoveringPrior) { $recoveryPrevious } elseif ($restore) { 'restoring' } else { 'configuring' }
+    if ($recoveringPrior -and (-not $initial.sourceCommit -or -not $initial.targetCommit -or
+        $prior.sourceCommit -cne $initial.sourceCommit -or $prior.targetCommit -cne $initial.targetCommit)) {
+        throw 'Prior runtime recovery changed the original source or target.'
+    }
     $running = $records['activate-running']
     $replacement = $records['replace-complete']
     foreach ($name in @('retire-requested', 'retire-complete')) {
         $record = $records[$name]
         Assert-AgentsChatCompletionFields $record $records['stop-stopped'] @('definition')
         Assert-AgentsChatCompletionFields $record $admission @('ownerPid', 'ownerIdentity', 'generation', 'instanceGuid')
-        if ($record.statePhase.GetString() -cne $(if ($restore) { 'restore-activating' } else { 'activating' }) -or
+        if ($record.statePhase.GetString() -cne $activationPhase -or
             $record.stateSha256.GetString() -cne $prepared.activatingStateSha256.GetString()) { throw 'Retirement state differs.' }
     }
     foreach ($name in @('replace-requested', 'replace-complete')) {
@@ -192,6 +201,9 @@ function Read-AgentsChatTaskCompletionHistory([hashtable]$Context, [string[]]$Re
     Confirm-AgentsChatTaskReplacementPolicy $records['stop-stopped'].definition.GetString() $replacement.definition.GetString() $Context
     $Context.Configuration = $replacement.configuration.GetString()
     $Context.ConfigurationSha256 = $replacement.configurationSha256.GetString()
+    if ($recoveringPrior -and $Context.ConfigurationSha256 -cne $admission.configurationSha256.GetString()) {
+        throw 'Prior runtime recovery changed the original configuration.'
+    }
     $bundle = [IO.Path]::GetDirectoryName($Context.Configuration)
     if ([IO.Path]::GetFileName($Context.Configuration) -cne 'configuration.json' -or $Context.Configuration -match '%|\$\(' -or
         [string]::Equals($bundle, [IO.Path]::GetDirectoryName($admission.configuration.GetString()), [StringComparison]::OrdinalIgnoreCase)) {
@@ -234,22 +246,22 @@ function Read-AgentsChatTaskCompletionHistory([hashtable]$Context, [string[]]$Re
         }
     }
     $Context.Stage = 'records-completion-state'
-    $prior = ConvertFrom-AgentsChatTaskTransactionState $scope $prepared.activatingState.GetRawText()
     if ($prepared.activatingStateSha256.GetString() -cnotmatch '^[a-f0-9]{64}$' -or
         $prior.operation -cne $initial.operation -or
-        $prior.phase -cne $(if ($restore) { 'restore-activating' } else { 'activating' }) -or
-        $prior.previousPhase -cne $(if ($restore) { 'restoring' } else { 'configuring' }) -or
+        $prior.phase -cne $activationPhase -or $prior.previousPhase -cne $activationPrevious -or
         [string]::CompareOrdinal($prior.updatedAt, $initial.updatedAt) -lt 0) { throw 'Original activating snapshot differs.' }
     $last = $records[$RecordNames[-1]]
     $stateFile = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'state.json') $last.stateSha256.GetString()
     if ((Get-Item -LiteralPath (Join-Path $Context.Control 'state.json')).Length -gt 65536) { throw 'Oversized completed state.' }
     $state = ConvertFrom-AgentsChatTaskTransactionState $scope ($stateFile.ReadText())
-    if ($state.phase -cne $(if ($restore) { 'restored' } else { 'accepted' }) -or
+    $terminal = if ($recoveringPrior) { 'prior-runtime-restored' } elseif ($restore) { 'restored' } else { 'accepted' }
+    if ($state.phase -cne $terminal -or
         $state.previousPhase -cne $prior.phase -or [string]::CompareOrdinal($state.updatedAt, $prior.updatedAt) -lt 0) {
         throw 'Terminal state does not follow original activation.'
     }
     foreach ($key in $prior.Keys) {
-        if ($key -cnotin @('phase', 'previousPhase', 'updatedAt') -and $state[$key] -cne $prior[$key]) {
+        if ($key -cnotin @('phase', 'previousPhase', 'updatedAt') -and
+            -not ($recoveringPrior -and $key -ceq 'errorCode') -and $state[$key] -cne $prior[$key]) {
             throw 'Terminal state changed original activation fields.'
         }
     }
