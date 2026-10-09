@@ -13389,6 +13389,10 @@ check inside the activation fixture, after final receipt retirement and
 before its existing runtime cleanup. Keep absent/stopped-runtime refusal
 and all original cleanup assertions unchanged.
 
+**Acceptance:** `a3f1125 / 37952419859` passed all seven focused jobs,
+including the saved post-retirement current check at 15:37:55 UTC.
+Full gate `37953717734` passed all 41 lifecycle jobs at the same commit.
+
 - [x] Before implementation, extend the actual owned-source update fixture:
   after `context.complete(...)`, publish a checked receipt using its original
   lock and actual `built.source`/`built.artifacts`. After native final unlock,
@@ -13407,7 +13411,7 @@ and all original cleanup assertions unchanged.
   fresh native/HTTP observation before returning the shared `current` shape.
   Missing or changed accepted artifacts are not a no-op; invalid receipts
   and failed authority/readiness checks remain explicit errors.
-- [ ] Run focused native acceptance, then all 41 lifecycle jobs, preserving
+- [x] Run focused native acceptance, then all 41 lifecycle jobs, preserving
   existing task completion, original-controller lifetime and saved retirement.
 
 ### Task 5BO: Observe original managed readiness before update admission

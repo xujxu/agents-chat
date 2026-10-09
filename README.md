@@ -424,6 +424,11 @@ Read-only managed readiness and original failure-code propagation passed all
 41 lifecycle jobs at `c728c0e / 37948844066`. Original task/Job listener
 ownership and authentication providers are verified without mutating task
 policy or journals; foreign listeners and mismatched providers are refused.
+Checked Windows deployment receipts and saved current-deployment inspection
+passed all 41 lifecycle jobs at `a3f1125 / 37953717734`. Receipts are published
+after real native completion under the original lock and remain verifiable
+after final retirement. Wrong project/source and changed build artifacts
+cannot produce an already-current result.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an
