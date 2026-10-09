@@ -13168,7 +13168,7 @@ do not weaken state transition validation to exercise closeout rejection.
 admission, all refusal cases, settled-worker retirement, lock removal and
 subsequent lock acquisition passed without stopping the original application.
 The original three-start lifecycle and complete 27,767-entry snapshot also
-passed. Run the full dual-platform matrix before closing this task.
+passed. Full dual-platform gate `04faac8 / 37931331942` passed all 36 jobs.
 
 - [x] In the existing application preflight fixture, record original preflight
   state before worker admission; after three settled compatibility workers,
@@ -13212,6 +13212,14 @@ uses existing native ordered deletion, and reopens checkpoint/manifest
 prefixes under exclusive admission. Extend the negative cases with unfinished
 or modified accepted state; use the independent two-crash fixture to exercise
 the saved helper at the final manifest boundary.
+
+The same finalizer must be callable by the outer process through the existing
+manifest-verified saved entry, not only by importing a module in a test.
+Extend `retirementRecoveryInvocation` and `retirement-recovery-entry.mjs`
+with a Windows-only `task` kind; preserve existing worker/service behavior.
+The native closeout fixture executes that exact saved invocation and requires
+one successful JSON result. Linux refuses `task` before execution; Windows
+continues requiring an explicit canonical PowerShell path.
 
 - [ ] Add the saved-helper native fixture and run the Windows restore gate
   before implementation. Call `closeCompletedWindowsDeployment({ control,

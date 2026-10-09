@@ -410,6 +410,7 @@ rather than reusing the short three-start smoke-test deadline.
 Rejected live Windows preflight closeout passed the actual application gate
 at `04152de / 37929432101`: settled workers and the original lock are retired
 without stopping the running application, and a subsequent lock can be acquired.
+The full dual-platform gate `04faac8 / 37931331942` passed all 36 jobs.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an

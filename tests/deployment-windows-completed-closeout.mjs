@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
 import { lstat, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 
 const [control, pwsh, mode] = process.argv.slice(2);
 const saved = name => import(pathToFileURL(path.join(control, 'recovery-engine', name)).href);
 const { closeCompletedWindowsDeployment } = await saved('windows-completed-closeout.mjs');
 const { acquireLock, releaseLock, reconcileInterruptedOperation } = await saved('state.mjs');
+const { verifyRecoveryEngine, retirementRecoveryInvocation } = await saved('saved-recovery-engine.mjs');
 const bytes = await readFile(path.join(control, 'state.json'));
 const state = JSON.parse(bytes);
 const options = { control, pwsh, project: state.project, operationId: state.operationId };
@@ -39,7 +42,16 @@ if (mode === 'live') {
       assert.deepEqual(await inventory(), initial);
     } finally { await writeFile(path.join(control, 'state.json'), bytes); }
   }
-  assert.deepEqual(await closeCompletedWindowsDeployment(options), {
+  const manifest = await readFile(path.join(control, 'recovery-engine', 'manifest.json'));
+  const engine = await verifyRecoveryEngine({
+    control, manifestSha256: createHash('sha256').update(manifest).digest('hex'),
+  });
+  const command = retirementRecoveryInvocation(engine, { ...options, kind: 'task' });
+  const result = await promisify(execFile)(command.file, command.args, {
+    env: command.env, cwd: path.dirname(control), timeout: 120000, maxBuffer: 8192,
+  });
+  assert.equal(result.stderr, '');
+  assert.deepEqual(JSON.parse(result.stdout), {
     status: 'completed', operationId: state.operationId, phase: state.phase,
   });
   const remaining = await inventory();

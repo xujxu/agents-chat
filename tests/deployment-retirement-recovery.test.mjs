@@ -28,6 +28,13 @@ test('changed recovery controllers publish an immutable generation without repla
     assert.throws(() => direct(legacy, options), /explicit canonical PowerShell/);
     assert.deepEqual(retirementRecoveryInvocation(legacy, options).args.slice(-2),
       ['worker', process.env.DEPLOYMENT_TEST_PWSH]);
+    assert.deepEqual(direct(legacy, {
+      ...options, kind: 'task', pwsh: process.env.DEPLOYMENT_TEST_PWSH,
+    }).args.slice(-2), ['task', process.env.DEPLOYMENT_TEST_PWSH]);
+  } else {
+    assert.throws(() => retirementRecoveryInvocation(legacy, {
+      control, project: path.join(root, 'app'), operationId: 'runtime-binding', kind: 'task',
+    }), /Invalid saved recovery invocation/);
   }
   const original = await readFile(path.join(legacy.directory, 'manifest.json'));
   const helper = path.join(source, 'linux-readiness.mjs');
