@@ -13384,6 +13384,17 @@ runner 30 minutes, new live Actions job 35 minutes. Other Actions job budgets
 are unchanged. Preserve timeout diagnostics and report each actor's measured
 elapsed time; only a complete successful flow can accept this adjustment.
 
+**Measured completion and fixture correction:** Application-only run
+`2816c97 / 37977749390` completed the real update actor in 1,028,051 ms
+and the separate saved finalizer in 115,077 ms, preserving authenticated
+chat data and the accepted runtime. The original application/snapshot job
+also passed. The new live job failed at 19:29:39 UTC on 2026-10-09 before
+the current-version update: its fixture inspected nonexistent `latest`
+instead of the actual retained `backup` slot. Correct all three fixture
+references, including the pending distinct-revision snapshot assertion.
+Do not rename the production slot or count this partial flow as full
+acceptance; rerun with the distinct target revision and full regression.
+
 ### Task 5BR: Capture Windows controller code outside mutable source
 
 **Files:** Add `scripts/deployment/WindowsControllerCapture.cs` and

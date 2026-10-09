@@ -41,7 +41,7 @@ if (mode === 'finalize') {
     const configuration = JSON.parse(await readFile(scope.observation.configuration, 'utf8'));
     const prior = mode === 'current' ? {
       receipt: await readFile(path.join(control, 'deployment.json')),
-      snapshot: await lstat(path.join(control, 'latest'), { bigint: true }),
+      snapshot: await lstat(path.join(control, 'backup'), { bigint: true }),
       inventory: (await readdir(control)).filter(name => name.startsWith('runtime-')).sort(),
     } : null;
     const lock = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
@@ -59,7 +59,7 @@ if (mode === 'finalize') {
     if (prior) {
       await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
       assert.deepEqual(await readFile(path.join(control, 'deployment.json')), prior.receipt);
-      const snapshot = await lstat(path.join(control, 'latest'), { bigint: true });
+      const snapshot = await lstat(path.join(control, 'backup'), { bigint: true });
       assert.equal(snapshot.dev, prior.snapshot.dev);
       assert.equal(snapshot.ino, prior.snapshot.ino);
       assert.deepEqual((await readdir(control)).filter(name => name.startsWith('runtime-')).sort(), prior.inventory);
@@ -69,7 +69,7 @@ if (mode === 'finalize') {
       assert.equal(result.backupCreated, true);
       assert.equal(result.closeoutRequired, true);
       assert.notEqual(state.sourceCommit, targetCommit);
-      const snapshot = JSON.parse(await readFile(path.join(control, 'latest', 'manifest.json')));
+      const snapshot = JSON.parse(await readFile(path.join(control, 'backup', 'manifest.json')));
       assert.equal(snapshot.source.commit, state.sourceCommit);
       assert.equal(JSON.parse(await readFile(path.join(control, 'deployment.json'))).operationId, lock.operationId);
     }
