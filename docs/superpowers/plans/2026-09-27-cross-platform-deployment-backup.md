@@ -13325,6 +13325,9 @@ no-op requirements.
 
 - [x] Push causal fixture `692f26d` and dispatch `37995817147`. Require the
   production supervisor rather than fixture-owned finalizer scheduling.
+  Live job `114041502618` failed at 22:02:22 UTC on 2026-10-09 with
+  `Missing captured Windows command supervisor`, after ten existing
+  contracts passed and the real application was built and started.
 - [x] Capture the complete controller tree privately outside mutable source.
   Run the original actor with explicit tools and a minimal environment in
   its native Job. Await root exit, confirm whole-Job settlement, drain pipes
@@ -13344,6 +13347,8 @@ no-op requirements.
   fixture exercises the production actor and manifest-bound saved closeout.
 - [ ] Accept native protocol fixtures, real supervised update/automatic
   closeout/data/no-op, then complete dual-platform regression.
+  Implementation `0f0b8a3 / 37996451178` is queued; no supervisor
+  implementation acceptance is claimed yet.
 - [ ] Wire public PowerShell commands and creation/cleanup policy after
   supervisor acceptance. Do not claim first-install or cold-restore support.
 
