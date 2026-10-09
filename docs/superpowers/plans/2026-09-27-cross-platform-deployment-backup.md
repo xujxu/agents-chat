@@ -13324,7 +13324,9 @@ assertions and job budgets.
 
 - [x] Replace the fixture's direct scope/lock acquisition with the production
   command boundary. Push `66b9247` and dispatch application-only run
-  `37986060449`; require the missing-command failure before acceptance.
+  `37986060449`. Live job `114008238062` failed at 20:23:00 UTC on
+  2026-10-09 with `Missing captured Windows deployment command admission`,
+  after building and starting the real application.
 - [x] Parse the shared deploy/update flags before native work. Refuse no-wait,
   verify and preview explicitly, without silently delegating to legacy code.
   Require an explicit canonical project, external private control, task and
@@ -13341,6 +13343,8 @@ assertions and job budgets.
   lock refusal that preserves owner bytes and operation state.
 - [ ] Require the actual distinct-revision update, saved closeout and no-op
   through this command boundary, then the complete dual-platform regression.
+  Implementation `64df9cf` is queued in application-only run `37986716849`;
+  do not count its new command admission and refusal assertions as accepted.
 - [ ] Wire the external private supervisor and public wrappers only after
   command admission passes. It must wait for actor settlement/disposal before
   saved finalization, preserve a failed update's exit status even after prior
