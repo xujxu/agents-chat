@@ -13386,7 +13386,12 @@ result and the existing real application fixture.
   `d05107c / 37991214491` passed both application jobs. Live job
   `114032594148` passed at 21:44:36 UTC on 2026-10-09: ten contracts,
   update 763,267 ms, exact saved finalization 72,489 ms and no-op 94,697 ms.
-- [ ] Complete the full regression; `f47a8a7 / 37995338592` is running.
+- [x] Complete the full regression. `f47a8a7 / 37995338592` completed
+  successfully on attempt 2. Attempt 1 passed 41 jobs but cancelled the
+  Linux worker job near its unchanged ten-minute limit. Rerunning only that
+  job (`114049648833`) passed at 22:25:03 UTC on 2026-10-09, including
+  112 passed tests, one skip and no failures in its final test step.
+  No production code, checks or timeout budgets were changed for the retry.
 - [ ] Integrate this accepted actor protocol with the production private
   supervisor. The current fixture still owns capture, Job settlement and
   finalizer scheduling; no public-wrapper acceptance is claimed.
