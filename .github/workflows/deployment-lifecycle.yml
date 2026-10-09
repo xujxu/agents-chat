@@ -142,6 +142,28 @@ jobs:
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds'
 
+  windows-live-deployment:
+    if: ${{ inputs.windows_application_only || !inputs.windows_restore_only }}
+    name: Actual Windows live deployment
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Update actual application, close original transaction and verify no-op
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
+          $env:DEPLOYMENT_TEST_WINDOWS_LIVE = '1'
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds'
+
   database-admission:
     if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
     name: Database admission (${{ matrix.os }})

@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][string]$Project,
     [Parameter(Mandatory)][string]$Control,
     [Parameter(Mandatory)][string]$Node,
-    [switch]$CompleteSnapshot
+    [switch]$CompleteSnapshot,
+    [switch]$LiveDeployment
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -63,7 +64,7 @@ $generations = [Collections.Generic.HashSet[string]]::new()
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 
-$phases = if ($CompleteSnapshot) { @('create') } else { @('create', 'mutate', 'restored') }
+$phases = if ($CompleteSnapshot -or $LiveDeployment) { @('create') } else { @('create', 'mutate', 'restored') }
 foreach ($phase in $phases) {
     $taskName = "Agents-Chat-Application-Test-$([guid]::NewGuid())"
     $registered = $false
@@ -77,7 +78,7 @@ foreach ($phase in $phases) {
             "-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$configFile`" -Sha256 $digest")
         $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) `
             -LogonType S4U -RunLevel Highest
-        $runtimeMinutes = if ($CompleteSnapshot) { 12 } else { 3 }
+        $runtimeMinutes = if ($LiveDeployment) { 20 } elseif ($CompleteSnapshot) { 12 } else { 3 }
         $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes $runtimeMinutes)
         Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Settings $settings | Out-Null
         $registered = $true
@@ -120,6 +121,19 @@ foreach ($phase in $phases) {
         & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs') $phase $chatId
         Assert ($LASTEXITCODE -eq 0) "Managed application API $phase failed"
         Assert-OwnedListener $ready $owner $listener $nativeListener
+
+        if ($LiveDeployment) {
+            $nativeListener.Dispose()
+            $nativeListener = $null
+            $listener.Dispose()
+            $listener = $null
+            $owner.Dispose()
+            $owner = $null
+            & $pwsh -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deployment-windows-live-application.ps1') `
+                -Project $Project -TaskName $taskName -Root $root -Node $Node -ChatId $chatId
+            Assert ($LASTEXITCODE -eq 0) 'Actual Windows live deployment composition failed'
+            continue
+        }
 
         if ($CompleteSnapshot) {
             foreach ($entry in Get-ChildItem -LiteralPath (Join-Path $Project '.next/node_modules') -Force) {
@@ -212,6 +226,6 @@ foreach ($phase in $phases) {
         if ($registered) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false }
     }
 }
-if (-not $CompleteSnapshot) {
+if (-not $CompleteSnapshot -and -not $LiveDeployment) {
     Write-Output 'PASS: three prebuilt Windows application starts preserve authenticated data and restore the stopped database'
 }

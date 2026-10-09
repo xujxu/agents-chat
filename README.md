@@ -434,6 +434,10 @@ at `b6f53b4 / 37955892930` and all 41 lifecycle jobs at
 `bce3d99 / 37957395127`, including helper-exit settlement checks. The publisher
 copies the exact installed command, environment and helpers into a distinct
 private bundle before task admission, without starting or changing the runtime.
+External Windows controller capture passed all 41 lifecycle jobs at
+`4893130 / 37963608037`. It retains private copies of the complete controller
+module tree and workflow schema outside mutable source, so replacing source
+cannot alter an in-flight controller. Public supervisor wiring remains pending.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an
