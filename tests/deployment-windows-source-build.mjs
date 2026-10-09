@@ -73,6 +73,8 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
         observation: scope.observation, control, lock, configuration, recovery, sourceCommit: beforeCommit, targetCommit, pwsh,
       });
       workers = await createWorkerOperation({ control, lock, saved });
+      const { verifyWindowsRuntimePublication } = await import('./deployment-windows-runtime-publication.mjs');
+      await verifyWindowsRuntimePublication({ project, control, lock, pwsh, taskName, node: tools.node });
       const options = { scope, control, lock, operation: workers, pwsh, ...tools };
       await assert.rejects(prepareWindowsSourceBuild({ ...options, scope: { ...scope } }));
       stages = await prepareWindowsSourceBuild(options);

@@ -13315,6 +13315,40 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BQ: Publish a distinct immutable copy of the original Windows runtime
+
+The public update controller needs a distinct runtime bundle without changing
+the installed startup command, environment or runtime helper version. Publish
+it while the original task is still running and before task admission/stop,
+so an ordinary rejected preflight can retain the original runtime and use
+the existing preflight closeout path. Do not regenerate configuration JSON.
+
+**Files:** Add `scripts/deployment/windows-runtime-publication.mjs/.ps1`.
+Include both and `windows-worker-scope.mjs` in the saved recovery closure.
+Add `tests/deployment-windows-runtime-publication.mjs`; invoke it in the
+existing owned-source fixture before task admission.
+
+- [ ] Run the saved publisher fixture before implementation. Require abort,
+  cloned scope and wrong-lock refusal before destination creation. Under
+  actual original managed authority, publish only to
+  `control/runtime-${lock.operationId}`. Require exact original configuration
+  bytes/hash, exactly the helper files plus configuration (no old runtime
+  readiness receipts), unchanged original state/configuration/task, and refusal
+  to overwrite an existing bundle.
+- [ ] Use `inspectWindowsWorkerScope` to bind the original managed task,
+  original lock, Node and PowerShell. Launch an original-controller-bound
+  native helper through the existing bounded transport; recheck retained
+  authority before and after publication and after helper exit.
+- [ ] In the helper, retain the original source directory and validate the
+  original bundle using `WindowsRuntimeHost.Open`. Copy only its verified
+  helpers and exact configuration using private creation/copy primitives;
+  validate the destination with the same native host loader without starting
+  it. Keep handles until an explicit close request, settle the helper before
+  returning, and retain any incomplete directory on failure. Never overwrite
+  a destination, mutate the running task or grant runtime mutation authority.
+- [ ] Require native focused acceptance and the full dual-platform regression
+  before wiring the publisher into the public Windows controller.
+
 ### Task 5BP: Compose checked Windows acceptance and current-deployment receipts
 
 Reuse the shared receipt schema and Linux acceptance/current-deployment pattern.
