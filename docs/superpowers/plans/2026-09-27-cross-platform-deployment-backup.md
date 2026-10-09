@@ -13345,6 +13345,9 @@ Do not reuse Linux `/tmp` or POSIX permission assumptions.
   after deliberately replacing the original source helper. Confirm the
   captured bytes remain immutable and readable after original actor exit.
 - [ ] Require focused and complete dual-platform Actions acceptance.
+  Focused `a83ab09 / 37962045280` passed all seven jobs; native capture
+  job `113928260093` passed at 16:59:53 UTC on 2026-10-09. Full
+  `4893130 / 37963608037` is dispatched; do not claim full acceptance yet.
 - [ ] Wire capture into the public supervisor. `Dispose` only releases
   handles, never deletes evidence or an incomplete capture. The supervisor
   must wait for both the original actor and saved finalizer to exit and
