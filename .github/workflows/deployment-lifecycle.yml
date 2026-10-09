@@ -625,6 +625,10 @@ jobs:
         run: |
           $sourceBuild = '${{ matrix.scenario }}' -ceq 'transaction-activate-complete-retirement'
           ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -DiscoverManagedTask -DiscoveredAdmission -OwnedSourceBuild:$sourceBuild
+      - name: Capture private Windows controller outside mutable source
+        if: matrix.scenario == 'transaction-activate-complete-retirement'
+        shell: pwsh
+        run: ./tests/deployment-windows-controller-capture.ps1
 
   windows-completed-closeout:
     if: ${{ !inputs.windows_application_only }}
