@@ -15,6 +15,7 @@ const { withWindowsAdmission } = await savedImport('windows-admission.mjs');
 const { processIdentity } = await savedImport('process-identity.mjs');
 const { acquireLock, releaseLock, reconcileInterruptedOperation } = await savedImport('state.mjs');
 const { captureWindowsDeploymentRetirement } = await savedImport('windows-deployment-retirement-record.mjs');
+const { closeCompletedWindowsDeployment } = await savedImport('windows-completed-closeout.mjs');
 for (const name of ['beginWindowsDeploymentRetirement',
   'openWindowsDeploymentRetirement', 'retireNextWindowsDeploymentEntry']) {
   assert.equal(typeof api[name], 'function', `Missing native deployment retirement API: ${name}`);
@@ -148,10 +149,11 @@ if (mode === 'hold') {
   assert.deepEqual(beforeCommit.manifest, original.manifest);
   assert.deepEqual(await useScope(scope => scope.check()), beforeCommit);
   assert.deepEqual((await readdir(control)).sort(), [...preserved, 'worker-retirement.json'].sort());
-  const completed = await useScope((scope, admission) => api.retireNextWindowsDeploymentEntry(control, scope, admission));
-  assert.equal(completed.status, 'retired');
-  assert.deepEqual(completed.manifest, original.manifest);
-  assert.equal(completed.retiredEntries, beforeCommit.retiredEntries);
+  const accepted = JSON.parse(state);
+  const completed = await closeCompletedWindowsDeployment({
+    control, pwsh, project: accepted.project, operationId: accepted.operationId,
+  });
+  assert.deepEqual(completed, { status: 'completed', operationId: accepted.operationId, phase: accepted.phase });
   assert.deepEqual((await readdir(control)).sort(), preserved);
   for (const name of preserved) {
     const info = await lstat(path.join(control, name), { bigint: true });

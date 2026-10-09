@@ -32,6 +32,7 @@ const files = Object.freeze([...new Set([
   'windows-snapshot-security.mjs', 'windows-snapshot-security.ps1',
   'windows-external-snapshot-security.mjs',
   'windows-task-snapshot.mjs',
+  'windows-completed-closeout.mjs',
   'windows-restore-security.mjs', 'windows-restore-security.ps1', 'WindowsPrivateFile.SourceSecurity.cs',
   'WindowsPrivateFile.SourceReparse.cs',
   'windows-source-security-controller.mjs', 'windows-git-object-security.mjs', 'windows-git-object-security.ps1',

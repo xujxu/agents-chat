@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { lstat, readFile, readdir } from 'node:fs/promises';
+import { lstat, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -28,6 +28,16 @@ if (mode === 'live') {
     await assert.rejects(closeCompletedWindowsDeployment({ ...options, ...change }), { recoveryAllowed: false });
     assert.deepEqual(await inventory(), initial);
     assert.deepEqual(await readFile(path.join(control, 'state.json')), bytes);
+  }
+  for (const changed of [
+    { phase: 'activation-unverified' },
+    { updatedAt: new Date(Date.parse(state.updatedAt) + 1000).toISOString() },
+  ]) {
+    try {
+      await writeFile(path.join(control, 'state.json'), JSON.stringify({ ...state, ...changed }));
+      await assert.rejects(closeCompletedWindowsDeployment(options), { recoveryAllowed: false });
+      assert.deepEqual(await inventory(), initial);
+    } finally { await writeFile(path.join(control, 'state.json'), bytes); }
   }
   assert.deepEqual(await closeCompletedWindowsDeployment(options), {
     status: 'completed', operationId: state.operationId, phase: state.phase,

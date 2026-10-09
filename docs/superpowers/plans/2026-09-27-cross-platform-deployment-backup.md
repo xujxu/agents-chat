@@ -13204,6 +13204,15 @@ worker retirement while task-maintenance receipts still exist.
 `tests/deployment-windows-completed-closeout.mjs`; extend the existing native
 completion fixture with `-CompletedCloseout`, and the saved recovery closure.
 
+**Causal:** `16afe3a / 37931569131` failed 2026-10-09 at
+12:55:03 UTC at the missing saved `windows-completed-closeout.mjs`, after
+the original source/task pipeline and native completion succeeded.
+The implementation binds the expected state digest before scope transfer,
+uses existing native ordered deletion, and reopens checkpoint/manifest
+prefixes under exclusive admission. Extend the negative cases with unfinished
+or modified accepted state; use the independent two-crash fixture to exercise
+the saved helper at the final manifest boundary.
+
 - [ ] Add the saved-helper native fixture and run the Windows restore gate
   before implementation. Call `closeCompletedWindowsDeployment({ control,
   project, operationId, pwsh })` before original-controller exit and require
