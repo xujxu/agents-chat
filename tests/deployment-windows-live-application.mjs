@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 
 const [mode, directory, project, control, taskName, pwsh, git, npmCli, targetCommit] = process.argv.slice(2);
 const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)).href);
-const { loadState } = await captured('state.mjs');
+const { loadState, acquireLock, releaseLock } = await captured('state.mjs');
 assert.ok(['update', 'finalize', 'current'].includes(mode));
 assert.match(targetCommit, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 if (mode === 'finalize') {
@@ -41,6 +41,24 @@ if (mode === 'finalize') {
       { code: 'DEPLOYMENT_COMMAND_MODE_UNSUPPORTED' });
   }
   assert.deepEqual((await readdir(control)).sort(), beforeRefusal);
+  const beforeStatus = await loadState(control);
+  const status = await runWindowsDeploymentCommand({ ...context, args: ['--status'] });
+  assert.equal(status.status, 'idle');
+  assert.equal(status.phase, beforeStatus?.phase ?? null);
+  assert.deepEqual(await loadState(control), beforeStatus);
+  assert.deepEqual((await readdir(control)).sort(), beforeRefusal);
+  if (mode === 'current') {
+    const busy = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
+    try {
+      const owner = await readFile(path.join(control, 'lock', 'owner.json'));
+      await assert.rejects(runWindowsDeploymentCommand({ ...context, args: ['--revision', targetCommit] }),
+        { code: 'DEPLOYMENT_RECOVERY_REQUIRED' });
+      assert.deepEqual(await readFile(path.join(control, 'lock', 'owner.json')), owner);
+      assert.deepEqual(await loadState(control), beforeStatus);
+    } finally {
+      await releaseLock(control, busy, { pwsh });
+    }
+  }
   const prior = mode === 'current' ? {
     receipt: await readFile(path.join(control, 'deployment.json')),
     snapshot: await lstat(path.join(control, 'backup'), { bigint: true }),

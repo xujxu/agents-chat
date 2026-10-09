@@ -13315,6 +13315,38 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BT: Admit captured Windows commands before supervisor wiring
+
+**Files:** Add `scripts/deployment/windows-deployment-command.mjs` and
+`tests/deployment-windows-command.test.mjs`. Extend the actual live fixture
+and existing contract jobs; preserve all existing real source/backup/data
+assertions and job budgets.
+
+- [x] Replace the fixture's direct scope/lock acquisition with the production
+  command boundary. Push `66b9247` and dispatch application-only run
+  `37986060449`; require the missing-command failure before acceptance.
+- [x] Parse the shared deploy/update flags before native work. Refuse no-wait,
+  verify and preview explicitly, without silently delegating to legacy code.
+  Require an explicit canonical project, external private control, task and
+  tools. Read status without creating files or acquiring a lock.
+- [x] Refuse foreign/unbound control state and interrupted operation evidence
+  before opening the running managed task. Hash-check original runtime
+  configuration, acquire the original lock, compare pre-lock state again,
+  then call the accepted live composition with the installed environment.
+  Keep the original error and closeout requirement; observer cleanup
+  uncertainty must forbid recovery. Release an unused lock only while state
+  and the original managed task remain unchanged.
+- [x] Add portable help/argument/context refusals. Extend the real native
+  test with side-effect-free unsupported modes/status and a live competing
+  lock refusal that preserves owner bytes and operation state.
+- [ ] Require the actual distinct-revision update, saved closeout and no-op
+  through this command boundary, then the complete dual-platform regression.
+- [ ] Wire the external private supervisor and public wrappers only after
+  command admission passes. It must wait for actor settlement/disposal before
+  saved finalization, preserve a failed update's exit status even after prior
+  runtime recovery, and retain evidence on uncertain settlement. This task
+  does not implement first installation or cold restoration.
+
 ### Task 5BS: Compose the existing-task Windows live deployment transaction
 
 **Files:** Add `scripts/deployment/windows-deployment.mjs`,
