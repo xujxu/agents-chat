@@ -47,7 +47,7 @@ if (mode === 'finalize') {
     const result = await runWindowsLiveDeployment({
       scope, control, lock, node: process.execPath, pwsh, git, npmCli,
       environment: configuration.command.environment, port: 3010, deploymentBytes: 2 * 1024 ** 3,
-      operation: 'update', noPull: true, noInstall: true, waitSeconds: 120, timeoutSeconds: 900,
+      operation: 'update', noPull: true, waitSeconds: 120, timeoutSeconds: 900,
       onProgress: ({ phase }) => console.error(`Windows live controller: ${phase}`),
     });
     assert.equal(result.status, mode === 'current' ? 'already-current' : 'accepted');

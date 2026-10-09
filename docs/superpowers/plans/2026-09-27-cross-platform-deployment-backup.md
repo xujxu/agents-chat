@@ -13315,6 +13315,55 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BS: Compose the existing-task Windows live deployment transaction
+
+**Files:** Add `scripts/deployment/windows-deployment.mjs`,
+`tests/deployment-windows-live-application.mjs/.ps1`. Extend the existing
+actual native application build fixture with a separate `-LiveDeployment`
+mode and a separate 25-minute Windows Actions job. Do not remove the
+existing actual application/snapshot acceptance. Full matrix now has 42
+jobs; application-only has two; focused native regression remains seven.
+
+The production composition takes an original managed scope and lock plus
+explicit Node/npm/Git/PowerShell paths. Keep all controller helpers outside
+the mutable installed project. Initial preflight state is written once;
+resolved commits enter the subsequent stopped state, not a fabricated
+same-phase rewrite.
+
+- [x] Run the actual application contract before implementation.
+  `6b5c678 / 37966698037 / 113942746299` built and started the real app,
+  then failed at 17:34:15 UTC on 2026-10-09 with
+  `Missing captured Windows live deployment controller`. The unrelated
+  original application/snapshot job remains a separate outcome.
+- [x] Compose retained source resolution, full live compatibility,
+  already-current receipt/readiness inspection, capacity and saved recovery
+  code before downtime. Publish the distinct original runtime bundle and
+  capture task admission only after these checks. Close the original
+  read-only scope before task mutation.
+- [x] Compose original native stop, complete snapshot, verification and
+  rotation before source selection. Use owned source/npm stages, original
+  configuration checks and sealed workers before native replacement/start.
+  Preserve pre-source recovery with the original error and configuration.
+- [x] Publish native terminal state inside completion, then make the generic
+  terminal record idempotent only after native completion actually succeeded.
+  Never rewrite terminal bytes following incomplete completion. Capture
+  fresh accepted identity and publish the deployment receipt outside the
+  generic transaction failure handler.
+- [x] Mark successful activation as requiring closeout after original actor
+  exit. Failed pre-source recovery retains failed-update outcome while
+  carrying the closeout requirement. A failed unaccepted activation keeps
+  blocked evidence: helper exit is not by itself a synchronous proof that
+  the application Job has settled. Do not claim automatic cold recovery.
+- [x] In the real fixture, launch the actor from the retained external
+  controller tree; wait for original actor exit, run manifest-verified saved
+  closeout, check authenticated chat data, then run a second update. Require
+  already-current without runtime replacement, new backup/runtime bundle,
+  receipt mutation or a remaining lock. Exercise normal dependency install,
+  not only `noInstall`.
+- [ ] Accept the complete real application flow and full dual-platform
+  regression before wiring public command-line entrypoints. Existing-task
+  composition does not implement absent-task installation or cold restore.
+
 ### Task 5BR: Capture Windows controller code outside mutable source
 
 **Files:** Add `scripts/deployment/WindowsControllerCapture.cs` and

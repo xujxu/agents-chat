@@ -76,6 +76,7 @@ export async function runWindowsLiveDeployment({
   let result;
   const errors = [];
   const authority = async () => {
+    await externalWorkerDirectory(helperSource, project);
     await externalWorkerDirectory(control, project);
     if (lock.project !== project) throw new Error('Deployment lock differs from the installed Windows project.');
     await assertLockOwner(control, lock);
