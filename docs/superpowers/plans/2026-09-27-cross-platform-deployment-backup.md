@@ -13144,6 +13144,11 @@ managed-scope check, and native admission-guarded lock release.
 **Files:** `scripts/deployment/windows-preflight-refusal.mjs` and the existing
 `tests/deployment-windows-target-preflight.mjs` actual-application fixture.
 
+**Causal:** `f420f46 / 37928046240` failed **2026-10-09 12:13:14 UTC**
+at the missing `windows-preflight-refusal.mjs`, after original compatibility
+workers had settled successfully. Implement the retained-scope closeout and
+rerun the same real application lifecycle, not a mocked controller.
+
 - [ ] In the existing application preflight fixture, record original preflight
   state before worker admission; after three settled compatibility workers,
   invoke `closeRejectedWindowsPreflight({ control, lock, scope, operation, pwsh })`.
