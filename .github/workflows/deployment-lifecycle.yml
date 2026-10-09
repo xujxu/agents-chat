@@ -202,9 +202,6 @@ jobs:
         if: ${{ inputs.windows_restore_only }}
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement -DiscoverManagedTask -DiscoveredAdmission -OwnedSourceBuild
-      - name: Close completed Windows deployment through its saved engine
-        shell: pwsh
-        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement -CompletedCloseout
       - name: Capture native Windows snapshots and restore project and Git state
         shell: pwsh
         run: |
@@ -635,6 +632,23 @@ jobs:
         run: |
           $sourceBuild = '${{ matrix.scenario }}' -ceq 'transaction-activate-complete-retirement'
           ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -DiscoverManagedTask -DiscoveredAdmission -OwnedSourceBuild:$sourceBuild
+
+  windows-completed-closeout:
+    if: ${{ !inputs.windows_application_only }}
+    name: Native Windows completed deployment closeout
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Close completed Windows deployment through its saved entry
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement -CompletedCloseout
+      - name: Resume completed Windows restore from partial receipt retirement
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-restore -CompletedCloseout
 
   windows-task-retirement:
     if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}

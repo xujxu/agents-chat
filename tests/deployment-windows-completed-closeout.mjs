@@ -42,6 +42,20 @@ if (mode === 'live') {
       assert.deepEqual(await inventory(), initial);
     } finally { await writeFile(path.join(control, 'state.json'), bytes); }
   }
+  if (state.operation === 'restore') {
+    const { withWindowsAdmission } = await saved('windows-admission.mjs');
+    const api = await saved('windows-task-completion-proof.mjs');
+    await withWindowsAdmission(control, { pwsh }, async admission => {
+      let scope = await api.openWindowsTaskCompletionProof({ control, pwsh, admission });
+      try {
+        scope = await api.beginWindowsTaskRetirement(control, scope, admission);
+        for (let count = 1; count <= 3; count++) {
+          const observed = await api.retireNextWindowsTaskFile(control, scope, admission);
+          assert.equal(observed.retiredFiles, count);
+        }
+      } finally { await scope.close(); }
+    });
+  }
   const manifest = await readFile(path.join(control, 'recovery-engine', 'manifest.json'));
   const engine = await verifyRecoveryEngine({
     control, manifestSha256: createHash('sha256').update(manifest).digest('hex'),

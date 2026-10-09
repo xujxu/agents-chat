@@ -112,13 +112,14 @@ export async function saveRecoveryEngine({ source, control, allowVersionChange =
 
 export function retirementRecoveryInvocation(saved, { control, project, operationId, kind = 'worker', pwsh }) {
   const fields = captureWorkerFields(saved, ['directory', 'entrypoint', 'manifestSha256'], 'saved recovery engine');
-  if (!['worker', 'service'].includes(kind) || !path.isAbsolute(control) || path.resolve(control) !== control
+  const kinds = process.platform === 'win32' ? ['worker', 'task'] : ['worker', 'service'];
+  if (!kinds.includes(kind) || !path.isAbsolute(control) || path.resolve(control) !== control
     || !path.isAbsolute(project) || path.resolve(project) !== project
     || typeof operationId !== 'string' || !operationId || operationId.length > 4096 || /[\0\r\n]/.test(operationId)
     || !['recovery-engine', `recovery-engine-${fields.manifestSha256}`].some(name => fields.directory === path.join(control, name))
     || fields.entrypoint !== path.join(fields.directory, 'retirement-recovery-entry.mjs')
     || !/^[a-f0-9]{64}$/.test(fields.manifestSha256)) throw new Error('Invalid saved recovery invocation.');
-  if (process.platform === 'win32' && (kind !== 'worker' || typeof pwsh !== 'string'
+  if (process.platform === 'win32' && (typeof pwsh !== 'string'
     || !path.isAbsolute(pwsh) || path.resolve(pwsh) !== pwsh || pwsh.length > 4096 || /[\0\r\n]/.test(pwsh))) {
     throw new Error('Saved Windows recovery requires an explicit canonical PowerShell path.');
   }

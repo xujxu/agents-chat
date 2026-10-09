@@ -13221,6 +13221,24 @@ The native closeout fixture executes that exact saved invocation and requires
 one successful JSON result. Linux refuses `task` before execution; Windows
 continues requiring an explicit canonical PowerShell path.
 
+**Native helper acceptance and job budget:** `dc3abf5 / 37933295878`
+passed the original source/task pipeline, two-crash final-manifest resumption,
+live-controller refusal, fresh completed closeout, unchanged runtime and
+fresh lock acquisition by 13:04:33 UTC on 2026-10-09. The combined job then
+hit its existing 15-minute limit during the final old restoration suite at
+13:10:53 UTC; this is not a fully passed gate. Put the new two-minute native
+closeout case in its own 10-minute job, keeping the old snapshot/restoration
+job and its full suite at 15 minutes. The default matrix now has 37 jobs.
+No production deadline or native ownership check changes.
+
+**Saved-entry causal:** `d033f73 / 37934783401` reached native completed
+state and live-controller refusal, then failed at `Invalid saved recovery
+invocation` on 2026-10-09 at 13:18:39 UTC. Implement Windows-only `task`
+dispatch and require the executing saved entry to match the verified engine.
+The separate closeout job runs both fresh update cleanup and restore cleanup
+resumed after three native task receipts have already been retired; the
+original source pipeline retains the final-manifest crash-resumption case.
+
 - [ ] Add the saved-helper native fixture and run the Windows restore gate
   before implementation. Call `closeCompletedWindowsDeployment({ control,
   project, operationId, pwsh })` before original-controller exit and require
