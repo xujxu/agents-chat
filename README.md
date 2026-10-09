@@ -420,6 +420,10 @@ Native pre-source runtime recovery passed all 41 lifecycle jobs at
 in a distinct bundle, refuses post-source or changed-configuration recovery,
 and retains `prior-runtime-restored` with the original update failure rather
 than claiming a new accepted deployment.
+Read-only managed readiness and original failure-code propagation passed all
+41 lifecycle jobs at `c728c0e / 37948844066`. Original task/Job listener
+ownership and authentication providers are verified without mutating task
+policy or journals; foreign listeners and mismatched providers are refused.
 Public Windows task-backed runtime composition remains gated, and installed immutable
 runtime bundles are not rewritten through retained runtime scopes.
 First registration defaults to the current Windows account, or accepts an

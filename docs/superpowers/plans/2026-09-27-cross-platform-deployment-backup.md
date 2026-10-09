@@ -13379,6 +13379,11 @@ saved closeout cases, accepting the original-error-code callback fix.
 The separate `2340193 / 37944924734` run was replaced while pending;
 it did not execute and is not counted as acceptance.
 
+**Acceptance:** `c728c0e / 37947538368` passed all seven focused jobs;
+`37948844066` passed all 41 lifecycle jobs at the same commit. This
+accepts both the original managed listener API and Task 5BN's shared
+original-error-context fix, including all three managed task scenarios.
+
 - [x] Extend the existing saved managed-discovery fixture with repeated
   `verifyWindowsReadiness({ context: scope, port, providers: ['admin-login'] })`,
   wrong-provider refusal and a real foreign TCP listener refusal. Reopen
@@ -13392,7 +13397,7 @@ it did not execute and is not counted as acceptance.
   `[Deployment.WindowsRuntimeListener]::Retain(...)`, retaining the result
   in the scope's existing disposable file list. Repeated requests check
   the same listener; only the native not-ready exception is retryable.
-- [ ] Require original-listener/provider success, wrong-provider and foreign
+- [x] Require original-listener/provider success, wrong-provider and foreign
   listener refusal with no task or journal mutation in focused Actions.
   Then cover all three update/restore/disabled managed scenarios in the
   unchanged full dual-platform matrix.
@@ -13412,14 +13417,14 @@ transaction cases on 2026-10-09 at 14:31:04 UTC: 29 passed and only the
 new callback contract failed because both recovery callbacks received
 `errorCode: undefined` instead of `DEPLOYMENT_SNAPSHOT_FAILED`.
 
-- [ ] Add a contract that makes `snapshot` throw a coded or plain error,
+- [x] Add a contract that makes `snapshot` throw a coded or plain error,
   collects `errorCode`, `recovering` and `activationPurpose` from `start` and
   `verify`, and requires the original error still to be thrown. Run it in
   the existing native closeout job and existing dual-platform contracts.
-- [ ] Set `context.errorCode = error?.code ?? 'DEPLOYMENT_FAILED'` at the start
+- [x] Set `context.errorCode = error?.code ?? 'DEPLOYMENT_FAILED'` at the start
   of the recovery branch, before callbacks. After cleanup, override it with
   `DEPLOYMENT_WORKER_UNSETTLED` only if any original/cleanup error is unsettled.
-- [ ] Require the new contract and all existing transaction cases to pass,
+- [x] Require the new contract and all existing transaction cases to pass,
   including aborted callers, no-wait, originally stopped services and cleanup
   failure. Retain `prior-runtime-restored` rather than accepting the update.
 
