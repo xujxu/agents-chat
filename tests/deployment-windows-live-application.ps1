@@ -31,6 +31,7 @@ try {
     $environment.Add('SystemRoot', $env:SystemRoot)
     $environment.Add('TEMP', $Root)
     $environment.Add('TMP', $Root)
+    $recoveryEngine = ''
     foreach ($mode in @('update', 'finalize', 'current')) {
         $elapsed = [Diagnostics.Stopwatch]::StartNew()
         $capture.Check()
@@ -40,7 +41,7 @@ try {
         $originalInstance = $before.Item(1).InstanceGuid
         $actor = [Deployment.WindowsControllerProcess]::Start($Node,
             @((Join-Path $PSScriptRoot 'deployment-windows-live-application.mjs'),
-                $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit), $directory, $environment)
+                $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
         $actorTimeout = if ($mode -eq 'update') { 1200000 } else { 300000 }
@@ -62,6 +63,8 @@ try {
         $after = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
         Assert ($after.Count -eq 1) 'Live deployment lost the application task'
         if ($mode -eq 'update') {
+            Assert ($result.recoveryEngine -cmatch '^[a-f0-9]{64}$') 'Live deployment returned no exact saved recovery binding'
+            $recoveryEngine = $result.recoveryEngine
             Assert ($after.Item(1).EnginePID -ne $originalPid -and $after.Item(1).InstanceGuid -cne $originalInstance) `
                 'Live deployment did not activate a new original runtime'
         } else {

@@ -13315,6 +13315,33 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BU: Return private Windows actor outcomes and exact recovery bindings
+
+**Files:** Add `scripts/deployment/windows-command-entry.mjs` and
+`tests/deployment-windows-command-entry.test.mjs`. Extend the live composition
+result and the existing real application fixture.
+
+- [x] Push process-level contracts at `cd2ef08` and dispatch causal run
+  `37990872882`. Require a missing private process entry before acceptance.
+- [x] Emit one JSON result on stdout and bounded, sanitized failure
+  diagnostics; progress goes to stderr. Every failure retains nonzero process
+  exit status, including an update that recovered its previous runtime.
+  Do not echo rejected arguments or raw configuration-bearing errors.
+- [x] Return the exact saved recovery manifest hash whenever completed
+  native deployment requires post-exit closeout, including recovered
+  pre-source failures. A missing/uncertain binding forbids automatic closeout.
+  Do not guess the engine from the original `recovery-engine` directory:
+  newer deployments can retain a hash-suffixed engine.
+- [x] Run the real fixture through a fresh captured production process
+  entry, retaining the surrounding original native controller Job. Pass its
+  returned manifest hash through the supervisor fixture to saved closeout
+  and compare it with the original backup manifest.
+- [ ] Accept portable process result/refusal contracts and real distinct
+  source update, exact saved finalization, data preservation and no-op.
+- [ ] Integrate this accepted actor protocol with the production private
+  supervisor. The current fixture still owns capture, Job settlement and
+  finalizer scheduling; no public-wrapper acceptance is claimed.
+
 ### Task 5BT: Admit captured Windows commands before supervisor wiring
 
 **Files:** Add `scripts/deployment/windows-deployment-command.mjs` and
@@ -13343,8 +13370,11 @@ assertions and job budgets.
   lock refusal that preserves owner bytes and operation state.
 - [ ] Require the actual distinct-revision update, saved closeout and no-op
   through this command boundary, then the complete dual-platform regression.
-  Implementation `64df9cf` is queued in application-only run `37986716849`;
-  do not count its new command admission and refusal assertions as accepted.
+  Implementation `64df9cf / 37986716849` passed both application jobs.
+  Live job `114013623452` passed at 20:58:33 UTC on 2026-10-09:
+  update 989,514 ms, saved closeout 107,547 ms and no-op 154,747 ms.
+  All four new portable command contracts and three process identity
+  contracts passed. Full regression `8334efd / 37990590341` is running.
 - [ ] Wire the external private supervisor and public wrappers only after
   command admission passes. It must wait for actor settlement/disposal before
   saved finalization, preserve a failed update's exit status even after prior

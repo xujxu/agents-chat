@@ -303,8 +303,12 @@ export async function runWindowsLiveDeployment({
     if (closeoutRequired) {
       error.closeoutRequired = true;
       error.operationId = lock.operationId;
+      error.recoveryEngine = recovery.manifestSha256;
     }
     throw error;
   }
-  return Object.freeze({ ...result, closeoutRequired });
+  return Object.freeze({
+    ...result, closeoutRequired,
+    ...(closeoutRequired ? { recoveryEngine: recovery.manifestSha256 } : {}),
+  });
 }
