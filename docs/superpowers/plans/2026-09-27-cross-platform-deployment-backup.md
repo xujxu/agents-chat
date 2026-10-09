@@ -13322,7 +13322,9 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 result and the existing real application fixture.
 
 - [x] Push process-level contracts at `cd2ef08` and dispatch causal run
-  `37990872882`. Require a missing private process entry before acceptance.
+  `37990872882`. Live job `114024399032` failed at 21:09:26 UTC on
+  2026-10-09: all three new contracts reported the missing private process
+  entry; the existing seven contracts passed.
 - [x] Emit one JSON result on stdout and bounded, sanitized failure
   diagnostics; progress goes to stderr. Every failure retains nonzero process
   exit status, including an update that recovered its previous runtime.
@@ -13368,13 +13370,15 @@ assertions and job budgets.
 - [x] Add portable help/argument/context refusals. Extend the real native
   test with side-effect-free unsupported modes/status and a live competing
   lock refusal that preserves owner bytes and operation state.
-- [ ] Require the actual distinct-revision update, saved closeout and no-op
+- [x] Require the actual distinct-revision update, saved closeout and no-op
   through this command boundary, then the complete dual-platform regression.
   Implementation `64df9cf / 37986716849` passed both application jobs.
   Live job `114013623452` passed at 20:58:33 UTC on 2026-10-09:
   update 989,514 ms, saved closeout 107,547 ms and no-op 154,747 ms.
   All four new portable command contracts and three process identity
-  contracts passed. Full regression `8334efd / 37990590341` is running.
+  contracts passed. Full regression `8334efd / 37990590341` passed all 42
+  jobs. Live job `114023440455` passed at 21:29:32 UTC on 2026-10-09:
+  update 880,050 ms, closeout 74,098 ms and no-op 116,893 ms.
 - [ ] Wire the external private supervisor and public wrappers only after
   command admission passes. It must wait for actor settlement/disposal before
   saved finalization, preserve a failed update's exit status even after prior

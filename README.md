@@ -145,6 +145,11 @@ after controller exit, preserves authenticated chat data, and confirms that a
 second update does not restart the task or replace its backup or receipt.
 Public Windows command composition, first installation and cold restore
 remain incomplete; this is not acceptance of those entrypoints.
+The captured Windows command-admission layer subsequently passed all 42
+jobs at `8334efd` (Actions `37990590341`), including read-only status,
+unsupported-mode refusals, competing-lock preservation and the real upgrade/
+closeout/no-op flow. The private process entry and production supervisor are
+separate integration gates; the public PowerShell scripts are not yet accepted.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
