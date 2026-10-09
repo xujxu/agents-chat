@@ -86,6 +86,45 @@ process.stdout.write('captured-dependencies-loaded');
     $private = [Deployment.WindowsPrivateFile]::Open($saved, $digest.ToLowerInvariant())
     $private.Dispose()
 
+    Assert ($null -ne [Deployment.WindowsControllerCapture].GetMethod('Retire')) 'Missing original controller capture retirement'
+    $retiring = Join-Path $root 'retiring-capture'
+    $capture = [Deployment.WindowsControllerCapture]::Create($source, $project, $retiring)
+    $unexpected = Join-Path $retiring 'unexpected'
+    [IO.File]::WriteAllText($unexpected, 'retain this unrelated file')
+    $refused = $false
+    try { $capture.Retire() } catch { $refused = $true }
+    Assert ($refused -and (Test-Path -LiteralPath (Join-Path $retiring 'lib/workflow/workflowSchema.mjs'))) `
+        'Unexpected capture content was silently removed'
+    Assert ([IO.File]::ReadAllText($unexpected) -ceq 'retain this unrelated file') 'Capture retirement removed unrelated content'
+    [IO.File]::Delete($unexpected)
+    $capture.Check()
+    $capture.Retire()
+    $capture.Dispose()
+    $capture = $null
+    Assert (-not (Test-Path -LiteralPath $retiring)) 'Completed capture was not retired'
+    Assert ((Test-Path -LiteralPath $source) -and (Test-Path -LiteralPath $project) -and
+        (Test-Path -LiteralPath $saved)) 'Capture retirement changed source, project or another capture'
+
+    $held = Join-Path $root 'held-capture'
+    $capture = [Deployment.WindowsControllerCapture]::Create($source, $project, $held)
+    $controller = [Deployment.WindowsControllerProcess]::Start($node,
+        @('-e', "process.stdout.write('held\n');setInterval(()=>{},1000)"), $held, $environment)
+    $ready = $controller.StandardOutput.ReadLineAsync()
+    Assert ($ready.Wait(15000) -and $ready.GetAwaiter().GetResult() -ceq 'held') 'Original capture holder did not start'
+    $refused = $false
+    try { $capture.Retire() } catch { $refused = $true }
+    Assert $refused 'Capture retirement ignored an original actor CWD lease'
+    Assert (@(Get-ChildItem -LiteralPath (Join-Path $held 'scripts/deployment') -File).Count -eq
+        @(Get-ChildItem -LiteralPath (Join-Path $source 'scripts/deployment') -File).Count) `
+        'Capture retirement deleted files before confirming original actor handles closed'
+    Assert (Test-Path -LiteralPath (Join-Path $held 'lib/workflow/workflowSchema.mjs')) 'Active capture lost its schema'
+    $controller.Kill()
+    Assert ($controller.WaitForExit(15000)) 'Original capture holder did not settle'
+    $controller.Dispose()
+    $controller = $null
+    $capture.Dispose()
+    $capture = $null
+
     $unsupported = Join-Path $source 'scripts/deployment/unsupported.txt'
     [IO.File]::WriteAllText($unsupported, 'unsupported')
     $refused = $false
@@ -100,7 +139,7 @@ process.stdout.write('captured-dependencies-loaded');
     catch { $refused = $true }
     Assert $refused 'Controller capture accepted hardlinked source'
     Assert ((Get-Item -LiteralPath $original).Length -gt 0) 'Capture refusal removed original source'
-    Write-Output 'PASS: private external controller captures complete dependencies, survives source replacement and refuses mutation or overwrite'
+    Write-Output 'PASS: private external controller captures immutable dependencies and retires only original captures after actor handles close'
 } finally {
     if ($controller) { $controller.Dispose() }
     if ($capture) { $capture.Dispose() }

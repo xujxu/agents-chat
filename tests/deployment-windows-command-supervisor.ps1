@@ -76,6 +76,8 @@ if (actor.scenario === 'closeout-failed') {
         $result = ($text -join "`n") | ConvertFrom-Json
         $expectedCode = if ($scenario -in @('accepted', 'current')) { 0 } else { 1 }
         Assert ($code -eq $expectedCode) "Supervisor lost original $scenario exit status"
+        Assert ((Test-Path -LiteralPath (Join-Path $case 'capture')) -eq ($expectedCode -ne 0)) `
+            'Supervisor must retire successful captures and retain failed command evidence'
         if ($scenario -in @('accepted', 'prior')) {
             $phase = if ($scenario -eq 'prior') { 'prior-runtime-restored' } else { 'accepted' }
             $status = if ($scenario -eq 'prior') { 'failed' } else { 'accepted' }
