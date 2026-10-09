@@ -13239,6 +13239,15 @@ The separate closeout job runs both fresh update cleanup and restore cleanup
 resumed after three native task receipts have already been retired; the
 original source pipeline retains the final-manifest crash-resumption case.
 
+**Partial-prefix fixture correction:** `aadbe0b / 37936016326` passed
+the original snapshot/restoration job and fresh update saved-entry closeout.
+Restore-prefix closeout refused at 13:23:52 UTC on 2026-10-09 because its
+fixture created the checkpoint in the still-live parent before launching
+the separate saved entry. Native `Assert-AgentsChatRetirementCreator`
+correctly forbids that cross-controller adoption. Create the three-receipt
+prefix in a separate bounded child, await its exit, then invoke the saved
+entry. Keep the original creator-death/bridge-death requirement unchanged.
+
 - [ ] Add the saved-helper native fixture and run the Windows restore gate
   before implementation. Call `closeCompletedWindowsDeployment({ control,
   project, operationId, pwsh })` before original-controller exit and require

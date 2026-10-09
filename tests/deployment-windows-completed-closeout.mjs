@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 const [control, pwsh, mode] = process.argv.slice(2);
@@ -19,7 +19,21 @@ const inventory = async () => new Map(await Promise.all((await readdir(control))
   return [name, { dev: info.dev, ino: info.ino }];
 })));
 const initial = await inventory();
-if (mode === 'live') {
+if (mode === 'checkpoint') {
+  const { withWindowsAdmission } = await saved('windows-admission.mjs');
+  const api = await saved('windows-task-completion-proof.mjs');
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    let scope = await api.openWindowsTaskCompletionProof({ control, pwsh, admission });
+    try {
+      scope = await api.beginWindowsTaskRetirement(control, scope, admission);
+      for (let count = 1; count <= 3; count++) {
+        const observed = await api.retireNextWindowsTaskFile(control, scope, admission);
+        assert.equal(observed.retiredFiles, count);
+      }
+    } finally { await scope.close(); }
+  });
+  console.log(JSON.stringify({ retiredFiles: 3 }));
+} else if (mode === 'live') {
   await assert.rejects(closeCompletedWindowsDeployment(options), { recoveryAllowed: false });
   assert.deepEqual(await inventory(), initial);
   assert.deepEqual(await readFile(path.join(control, 'state.json')), bytes);
@@ -43,18 +57,13 @@ if (mode === 'live') {
     } finally { await writeFile(path.join(control, 'state.json'), bytes); }
   }
   if (state.operation === 'restore') {
-    const { withWindowsAdmission } = await saved('windows-admission.mjs');
-    const api = await saved('windows-task-completion-proof.mjs');
-    await withWindowsAdmission(control, { pwsh }, async admission => {
-      let scope = await api.openWindowsTaskCompletionProof({ control, pwsh, admission });
-      try {
-        scope = await api.beginWindowsTaskRetirement(control, scope, admission);
-        for (let count = 1; count <= 3; count++) {
-          const observed = await api.retireNextWindowsTaskFile(control, scope, admission);
-          assert.equal(observed.retiredFiles, count);
-        }
-      } finally { await scope.close(); }
+    const checkpoint = await promisify(execFile)(process.execPath, [
+      fileURLToPath(import.meta.url), control, pwsh, 'checkpoint',
+    ], {
+      cwd: path.dirname(control), timeout: 120000, maxBuffer: 8192,
     });
+    assert.equal(checkpoint.stderr, '');
+    assert.deepEqual(JSON.parse(checkpoint.stdout), { retiredFiles: 3 });
   }
   const manifest = await readFile(path.join(control, 'recovery-engine', 'manifest.json'));
   const engine = await verifyRecoveryEngine({
