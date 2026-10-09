@@ -15,6 +15,7 @@ param(
     [switch]$DiscoverManagedTask,
     [switch]$DiscoveredAdmission,
     [switch]$OwnedSourceBuild,
+    [switch]$CompletedCloseout,
     [switch]$Transactional,
     [switch]$Restore
 )
@@ -139,6 +140,10 @@ try {
         'Native bridge process identity differs'
     $stoppedDefinition = [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml
     $request = @{ action=$Action }
+    if ($CompletedCloseout) {
+        Assert ($Action -ceq 'activate-complete-retirement') 'Completed closeout requires sealed workers and completed activation'
+        $request.completedCloseout = $true
+    }
     if ($DiscoverManagedTask) {
         Assert ($Action -ceq 'activate-complete-retirement') 'Discovery requires completed final retirement'
         $request.discoverManagedTask = $true

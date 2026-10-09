@@ -13193,6 +13193,34 @@ passed. Run the full dual-platform matrix before closing this task.
 `tests/deployment-native-operation.test.mjs`. Keep production snapshot behavior
 unchanged unless this acceptance exposes a concrete defect.
 
+### Task 5BL: Compose saved completed Windows closeout
+
+Public Windows entrypoints need an outer finalizer after the original
+transaction controller exits. A fresh completed-task proof deliberately
+refuses a live original controller; do not weaken that check or call generic
+worker retirement while task-maintenance receipts still exist.
+
+**Files:** Add `scripts/deployment/windows-completed-closeout.mjs`,
+`tests/deployment-windows-completed-closeout.mjs`; extend the existing native
+completion fixture with `-CompletedCloseout`, and the saved recovery closure.
+
+- [ ] Add the saved-helper native fixture and run the Windows restore gate
+  before implementation. Call `closeCompletedWindowsDeployment({ control,
+  project, operationId, pwsh })` before original-controller exit and require
+  refusal with unchanged evidence. After exit, reject wrong project,
+  operation and cancellation, then require complete task/worker retirement,
+  unchanged accepted state/unrelated files/runtime, and fresh lock acquisition.
+- [ ] Under exclusive Windows admission, bind exact completed state and
+  requested operation/project before native proof. Reuse original proof ->
+  task-retirement -> deployment-retirement scope transfers and their ordered
+  native deletion APIs. Resume valid checkpoint/manifest prefixes rather
+  than replacing receipts or synthesizing success. Preserve causes and
+  retain evidence on uncertainty; never retire a still-live transaction.
+- [ ] Include the helper in the saved recovery closure; reuse the existing
+  crash-prefix fixture to call it for final-manifest closeout. Run focused
+  native acceptance followed by the full matrix. Keep all existing cold
+  tamper/crash tests and original-controller lifetime invariants.
+
 - [ ] Add an opt-in `-CompleteSnapshot` fixture mode with one authenticated
   application start. Keep the existing default three-start lifecycle intact.
   Reuse the already built project for a second invocation, without another

@@ -208,6 +208,11 @@ try {
                 'Fresh proof must refuse the still-live original controller'
         }
         if (-not $recovering) {
+            if ($Request.ContainsKey('completedCloseout')) {
+                $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+                & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-completed-closeout.mjs') $Control $pwsh live
+                Assert ($LASTEXITCODE -eq 0) 'Completed closeout did not refuse original live controller'
+            }
             $Controller.StandardInput.WriteLine('{"action":"close"}')
             Assert ((Receive).phase -ceq 'closed') 'Completed controller close was not acknowledged'
             Assert ($Controller.WaitForExit(15000) -and $Controller.ExitCode -eq 0 -and
@@ -221,6 +226,10 @@ try {
             & (Join-Path $PSScriptRoot 'deployment-windows-task-completion-proof-cases.ps1') -Control $Control `
                 -Root $Root -Directory $Directory -TaskName $TaskName -OperationId $OperationId -Runtime $runtime `
                 -StateSha256 $terminal.Sha256 -CompletionSha256 $previous -Port $receipt.Data.port -Owner $owner -Member $member
+        } elseif ($Request.ContainsKey('completedCloseout')) {
+            $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+            & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-completed-closeout.mjs') $Control $pwsh
+            Assert ($LASTEXITCODE -eq 0) 'Saved completed deployment closeout failed'
         } elseif ($Request.action -cin @('activate-complete-retirement', 'activate-complete-recovery')) {
             $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
             & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-task-retirement.mjs') $Control $pwsh
