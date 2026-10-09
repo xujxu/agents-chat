@@ -13322,7 +13322,10 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 the real live application fixture. Keep `Dispose` nondeleting.
 
 - [x] Push native retirement requirements at `1bc60c5`; causal
-  application-only run `38001982826` is queued.
+  application-only run `38001982826`, live job `114061967426`, failed
+  at 23:06:44 UTC on 2026-10-09 with
+  `Missing original controller capture retirement`. All ten existing
+  process/admission contracts passed before the missing-method assertion.
 - [x] Capture exact file hashes, sizes and original volume/file identities,
   plus original directory identities while all retained handles are valid.
   Check the complete inventory before releasing capture handles.
@@ -13339,6 +13342,9 @@ the real live application fixture. Keep `Dispose` nondeleting.
   success/no-op captures disappear and failed-command captures remain.
 - [ ] Accept native contracts and actual supervised upgrade/no-op cleanup,
   then the complete dual-platform regression before public-wrapper wiring.
+  Implementation `b5fc1d2 / 38002317915` is running, live job
+  `114068093014` and companion application job `114068093335`;
+  its native contracts and real application result are not yet accepted.
 
 ### Task 5BV: Supervise original Windows command and saved finalizer processes
 
@@ -13370,7 +13376,7 @@ no-op requirements.
   actor/finalizer payloads test supervisor ordering and exit propagation,
   not actual runtime recovery authority; the separate real application
   fixture exercises the production actor and manifest-bound saved closeout.
-- [ ] Accept native protocol fixtures, real supervised update/automatic
+- [x] Accept native protocol fixtures, real supervised update/automatic
   closeout/data/no-op, then complete dual-platform regression.
   Implementation `0f0b8a3 / 37996451178 / 114048948349` passed all ten
   contracts and all six native supervisor protocol cases at 22:14:44 UTC
@@ -13384,7 +13390,13 @@ no-op requirements.
   supervised update with automatic saved closeout 1,111,642 ms,
   independent closed-state verification 643 ms, no-op 182,092 ms.
   Ten contracts, six native protocol cases and authenticated data assertions
-  passed. Full `bec7c7c / 38001799703` is running.
+  passed. Full `bec7c7c / 38001799703` passed all 42 jobs. Live job
+  `114061370243` completed at 23:19:20 UTC on 2026-10-09:
+  supervised update and automatic finalization 983,621 ms,
+  closed-state verification 635 ms and no-op 153,028 ms.
+  All ten contracts, six native protocol cases and authenticated data
+  assertions passed. This is the accepted supervisor baseline; the newer
+  capture-retirement implementation has its own outstanding gate.
 - [ ] Wire public PowerShell commands and creation/cleanup policy after
   supervisor acceptance. Do not claim first-install or cold-restore support.
 
