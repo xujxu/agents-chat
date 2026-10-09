@@ -13315,6 +13315,41 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BR: Capture Windows controller code outside mutable source
+
+**Files:** Add `scripts/deployment/WindowsControllerCapture.cs` and
+`tests/deployment-windows-controller-capture.ps1`. Run the native test in the
+existing owned-source managed-discovery job, after its original acceptance
+pipeline. Keep its existing 15-minute budget and full/focused job counts.
+
+The public supervisor must not import controller modules from the project
+after checkout. Reuse `WindowsPrivateFile` for private creation before any
+bytes are written, retained source verification and exact copied hashes.
+Capture all bounded top-level deployment helpers plus
+`lib/workflow/workflowSchema.mjs`, preserving relative module paths.
+Do not reuse Linux `/tmp` or POSIX permission assumptions.
+
+- [x] Push the native contract before implementation. Causal
+  `5365373 / 37961298473 / 113924515974` passed the original managed pipeline,
+  then failed at 16:50:15 UTC on 2026-10-09 with
+  `Missing native external Windows controller capture`.
+- [x] Implement `WindowsControllerCapture.Create(source, project, directory)`.
+  Refuse overlapping source/project/destination, existing destinations,
+  redirected or hardlinked source, unsupported inventories, files over 1 MiB
+  and aggregate capture over 16 MiB. Recheck retained original files and
+  inventory before releasing source handles. Retain private copied files
+  and directories until `Dispose`; `Check` verifies exact inventory and bytes
+  independently of subsequently changed source.
+- [x] Extend the native contract with unexpected-file and hardlink refusals.
+  Load actual copied module dependencies using `WindowsControllerProcess`,
+  after deliberately replacing the original source helper. Confirm the
+  captured bytes remain immutable and readable after original actor exit.
+- [ ] Require focused and complete dual-platform Actions acceptance.
+- [ ] Wire capture into the public supervisor. `Dispose` only releases
+  handles, never deletes evidence or an incomplete capture. The supervisor
+  must wait for both the original actor and saved finalizer to exit and
+  dispose their CWD handles before targeted capture cleanup.
+
 ### Task 5BQ: Publish a distinct immutable copy of the original Windows runtime
 
 The public update controller needs a distinct runtime bundle without changing
