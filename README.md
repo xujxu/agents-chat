@@ -268,8 +268,10 @@ scope, the surviving completed original runtime, and current source/build/
 dependency/configuration matching the retained original identity. It rejects
 incomplete publication evidence, validates the service digest against retained
 native task evidence, and creates only the receipt; it does not release the
-original operation lock or retire evidence. Saved closeout integration is not
-yet enabled.
+original operation lock or retire evidence. Saved closeout now invokes this
+operation before ordinary first-deployment retirement when the receipt is
+missing; that composition and genuine application actor-loss acceptance are
+pending their Actions gates.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

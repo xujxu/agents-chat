@@ -5,6 +5,7 @@ import { withWindowsAdmission } from './windows-admission.mjs';
 import { externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 import { validateState } from './state.mjs';
 import { openWindowsFirstDeploymentRetirement } from './windows-first-deployment-retirement.mjs';
+import { recoverWindowsFirstDeploymentReceipt } from './windows-first-receipt-recovery.mjs';
 import {
   openWindowsTaskCompletionProof, beginWindowsTaskRetirement, openWindowsTaskRetirement,
   retireNextWindowsTaskFile, beginWindowsDeploymentRetirement, openWindowsDeploymentRetirement,
@@ -63,6 +64,11 @@ export async function closeCompletedWindowsDeployment({ control, project, operat
             || state.previousPhase !== 'activating' || state.runtimeIdentity !== 'first-install-absent'
             || state.backupId !== null || state.errorCode !== null) {
             throw new Error('First deployment closeout requires its exact accepted absent-prior state.');
+          }
+          if (!await hasMarker(control, 'deployment.json')) {
+            await checkState();
+            await recoverWindowsFirstDeploymentReceipt({ control, project, operationId, pwsh, admission, signal });
+            await checkState();
           }
           scope = await openWindowsFirstDeploymentRetirement({ control, pwsh, admission, signal });
           checkProof(scope.observation);

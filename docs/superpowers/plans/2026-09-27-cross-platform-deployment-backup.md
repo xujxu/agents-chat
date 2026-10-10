@@ -13722,7 +13722,7 @@ unknown staging, a replaced runtime, or a dead first runtime.
   after death. Require the new receipt to match original metadata/identity,
   original state/runtime/data continuity, evidence retirement and fresh lock
   reuse. Preserve the existing byte-identical warm-receipt assertions.
-- [ ] Push the causal fixture and dispatch the focused nine-case Actions gate:
+- [x] Push the causal fixture and dispatch the focused nine-case Actions gate:
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_application_only=true \
@@ -13730,7 +13730,12 @@ unknown staging, a replaced runtime, or a dead first runtime.
   ```
   Require the new saved invocation to fail because its original completed first
   history has no deployment receipt; the existing eight cases must pass.
-- [ ] In the already admitted absent-prior branch, only when the receipt is
+  At `215ad3c / 38072276806`, job `114271980084`, eight existing cases passed
+  and `cold-first-saved-receipt-publication` reached saved invocation then failed
+  with `DEPLOYMENT_WINDOWS_FIRST_RETIREMENT_REFUSED` at
+  `2026-10-10 17:54:03 UTC` (73,489 ms). The fixture had explicitly required
+  the receipt absent and retained the original completed accepted identity.
+- [x] In the already admitted absent-prior branch, only when the receipt is
   absent, call the accepted recovery helper before existing first retirement:
   ```js
   if (!await hasMarker(control, 'deployment.json')) {
@@ -13790,6 +13795,12 @@ job in `.github/workflows/deployment-lifecycle.yml`.
   ```
   Before Task 5CX production integration, the crash case must reach saved
   closeout and fail only for its missing receipt; the normal case must pass.
+  Initial actual crash `a0e8ac9 / 38072512874`, job `114272683641`, reached
+  saved finalization with original actor/publisher absent, receipt absent,
+  original real runtime observable and authenticated chat saved. It failed
+  with `DEPLOYMENT_WINDOWS_FIRST_RETIREMENT_REFUSED` at `17:47:36 UTC`
+  (569,675 ms), matching the native missing-receipt boundary. The normal
+  matrix job remains pending observation; no actual recovery pass is claimed.
   After that integration, repeat until both actual cases pass. Record their
   independent job IDs and exact outcomes; never call a native-only pass actual
   application crash acceptance.
