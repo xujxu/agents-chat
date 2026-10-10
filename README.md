@@ -248,6 +248,11 @@ The same first-created application also passed the actual public update no-op
 at `4768b9a` (Actions `38057969008`), preserving its runtime, task triggers,
 authenticated data and original receipt without creating a backup or leaving
 operation locks or successful controller captures behind.
+The latest complete Linux/Windows regression passed all 43 jobs at `5e15139`
+(Actions `38057686717`), including both real first-install and existing-task
+application lifecycles. Real default-tunnel acceptance still needs a suitable
+Actions test environment; public first installation and cold restore remain
+unfinished.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
@@ -550,8 +555,8 @@ External Windows controller capture passed all 41 lifecycle jobs at
 module tree and workflow schema outside mutable source, so replacing source
 cannot alter an in-flight controller. The private supervisor and exact successful
 capture retirement passed all 42 jobs at `26bcf7e / 38006102348`.
-The public existing-task update/no-op path below passed all 42 jobs at
-`389e20f / 38050578461`. First installation and public cold restore remain
+The public existing-task update/no-op path below passed all 43 jobs at
+`5e15139 / 38057686717`. Public first installation and cold restore remain
 separate, unfinished integration gates.
 Installed immutable runtime bundles are not rewritten through retained scopes.
 The separate task installer defaults registration to the current Windows account.

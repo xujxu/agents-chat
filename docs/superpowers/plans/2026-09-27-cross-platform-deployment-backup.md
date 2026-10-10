@@ -13492,6 +13492,11 @@ Files:
   The original 120-second verification budget was retained. This accepts the
   internal first-deployment driver and its saved finalization, not public
   default-policy or tunnel integration.
+  Full regression `5e15139 / 38057686717` subsequently passed **43/43**.
+  Windows native40 passed at `14:28:46 UTC`; the real existing-application
+  update/closeout/no-op case passed in 1,561,511 ms at `14:54:50 UTC`
+  (job `114229396966`, success `14:54:54`). The real first-application job
+  `114229397094` also passed, completing at `14:12:28 UTC`.
 - [x] Add a separate actual-first-application job and focused dispatch input;
   keep existing application and native-first regressions unchanged.
   This is core orchestration with explicit S4U/AtStartup for the fixture,
@@ -13522,7 +13527,14 @@ Files:
   `2026-10-10 14:26:08 UTC` (job success at `14:26:12`). The existing public
   update implementation handled the first-created installation without a
   production fix, runtime restart, backup creation or receipt replacement.
-  Full43 `5e15139 / 38057686717` remains in progress separately.
+  Full43 `5e15139 / 38057686717` passed separately; its revision predates this
+  additional interoperability assertion.
+
+Real default-tunnel acceptance is still pending. Repository inspection found
+no self-hosted Actions runners and no repository secrets with names containing
+TUNNEL/WINDOWS/DEPLOY. The user selected "no resources yet; continue other work."
+Do not treat mocked tunnel behavior as real tunnel acceptance, change the
+default to tunnel-disabled, or enable public first deployment prematurely.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
