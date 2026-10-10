@@ -13365,6 +13365,15 @@ directory preparation, real live fixture, lifecycle workflow and README.
   PATH for tool discovery; it must not supply transaction/cleanup callbacks.
 - [ ] Accept native public contracts and the real public update/no-op, then
   all 42 lifecycle jobs before describing this public path as accepted.
+  Implementation `b005b0a / 38008709220`, live job `114085683461`,
+  passed ten portable contracts, native capture/supervisor cases and public
+  help/mode refusals. Public read-only status failed at 00:32:42 UTC on
+  2026-10-10, before application build. Preserve and print its existing
+  sanitized structured diagnostics in the fixture, rather than guessing.
+  Use both `-f windows_application_only=true -f windows_commands_only=true`
+  for the existing native command contracts without either application build.
+  This opt-in diagnostic mode has its own concurrency group; default full
+  and real application acceptance remain unchanged and required.
 
 ### Task 5BW: Retire only original completed controller captures
 

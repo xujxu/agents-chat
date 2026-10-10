@@ -40,7 +40,7 @@ try {
         $env:NODE_OPTIONS = $nodeOptions
         $env:NODE_PATH = $nodePath
     }
-    Assert ($statusCode -eq 0) 'Read-only public status failed or inherited Node hooks'
+    Assert ($statusCode -eq 0) "Read-only public status failed or inherited Node hooks: $($text -join '`n')"
     $result = ($text -join "`n") | ConvertFrom-Json
     Assert ($result.status -ceq 'unmanaged' -and $null -eq $result.phase) 'Fresh public status was not unmanaged'
     Assert (-not (Test-Path -LiteralPath (Join-Path $root '.project.deployment'))) 'Status created control files'

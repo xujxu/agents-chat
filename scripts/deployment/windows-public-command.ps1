@@ -132,6 +132,13 @@ must be retained for inspection. Never manually remove an operation lock.
         } else { $result.status }
         [Console]::Out.WriteLine($message)
     }
-    if ($code -ne 0) { [Console]::Error.WriteLine("$($result.message) ($($result.code))") }
+    if ($code -ne 0) {
+        [Console]::Error.WriteLine("$($result.message) ($($result.code))")
+        if ($result -is [Collections.IDictionary] -and $result.Contains('diagnostics')) {
+            foreach ($diagnostic in $result.diagnostics) {
+                [Console]::Error.WriteLine("Diagnostic: $stage $($diagnostic.type) line=$($diagnostic.line)")
+            }
+        }
+    }
     return $code
 }

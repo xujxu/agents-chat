@@ -36,12 +36,16 @@ on:
         description: Run only the real Windows application lifecycle (takes precedence)
         type: boolean
         default: false
+      windows_commands_only:
+        description: With windows_application_only, run native command contracts without application builds
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}
+  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -112,7 +116,7 @@ jobs:
         run: sudo userdel --remove agents-chat-test
 
   application-build:
-    if: ${{ inputs.windows_application_only || !inputs.windows_restore_only }}
+    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !(inputs.windows_application_only && inputs.windows_commands_only) }}
     name: Owned application build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
@@ -154,7 +158,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Update actual application, close original transaction and verify no-op
+      - name: Verify native Windows command contracts
         shell: pwsh
         run: |
           node --test tests/deployment-process-identity.test.mjs tests/deployment-windows-command.test.mjs tests/deployment-windows-command-entry.test.mjs
@@ -165,6 +169,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native supervisor protocol contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-public-command.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Public Windows command contracts failed.' }
+      - name: Verify public task-option refusals in Windows PowerShell
+        if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
+        shell: powershell
+        run: ./tests/deployment-windows-task-options.ps1
+      - name: Update actual application, close original transaction and verify no-op
+        if: ${{ !(inputs.windows_application_only && inputs.windows_commands_only) }}
+        shell: pwsh
+        run: |
           $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
           $env:DEPLOYMENT_TEST_WINDOWS_LIVE = '1'
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
