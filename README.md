@@ -275,8 +275,8 @@ missing. At `41317ee`, all nine focused cases passed in Actions `38073750577`;
 Actions `38073752429` also passed both real-application cases: normal first
 deployment and original actor loss before receipt publication, followed by
 saved recovery and public update no-op with the same runtime and chat data.
-Saved closeout also now composes the existing recovery steps for earlier
-released first-runtime prefixes, pending Actions acceptance. It checks original
+Saved closeout's earlier released-prefix composition passed all 12 focused
+cases at `dd9d4d5 / 38077869010`. It checks original
 build/configuration provenance before restoring task policy or enabling the
 task; guarded or dead runtimes and missing provenance are not admitted by this
 composition.

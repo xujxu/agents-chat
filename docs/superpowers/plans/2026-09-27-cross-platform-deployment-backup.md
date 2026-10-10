@@ -13889,9 +13889,23 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 - [x] In the missing-receipt branch, complete the retained prefix before the
   already accepted receipt recovery and retirement. Keep original state checks
   before/after each orchestration.
-- [ ] Push and accept all 12 focused cases and
-  saved dependency closure; then rerun actual normal/receipt-loss application
-  cases for the complete-prefix fast path. Earlier native prefix acceptance
+- [x] Push and accept all 12 focused cases and saved dependency closure.
+  `dd9d4d5 / 38077869010`, job `114288532210`, passed 12/12 at
+  `2026-10-10 19:28:56 UTC`. Earlier saved prefixes passed in 200,283 ms
+  (lease released), 199,657 ms (permanent policy applied), and 207,347 ms
+  (enable applied), including changed-build refusal without policy/history
+  mutation. Saved dependency closure passed in 3,194 ms.
+- [ ] Rerun all 45 native first-install cases for the changed recovery readiness
+  envelope and actual normal/receipt-loss application cases for the
+  complete-prefix fast path:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true -f windows_commands_only=true
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_commands_only=true -f windows_first_application_only=true
+  ```
+  Earlier native prefix acceptance
   must not be mislabeled actual application interruption at those earlier edges.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
