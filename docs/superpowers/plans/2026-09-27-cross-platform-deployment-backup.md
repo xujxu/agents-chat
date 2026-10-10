@@ -14045,6 +14045,22 @@ inspection/configuration/lock/first-deployment composition.
   Fix `16ccba0 / 38088777804` passed the command-contract step, including
   both runner diagnostics cases, in job `114320739555`; the later actual
   application and the complete 48-job regression are still running.
+- [x] Remove mutable-journal polling from the first-application crash fixture.
+  Run `16ccba0 / 38088777804` passed native foundations37/37
+  (`114320739457`, `22:04:31 UTC`, 1,171,760 ms) and the real existing
+  application lifecycle (`114320739555`, test completed `22:12:44 UTC`,
+  1,526,836 ms). Its receipt-loss case failed before the crash boundary:
+  `state.json` replacement returned `EPERM` while recording `building`.
+  The observer was reading that replaceable file every 100 ms. This is a
+  possible interference source, not a proven explanation of the native error.
+  The parent now chooses the original operation UUID, the actor acquires
+  that exact lock, and observation reads only its atomically published
+  immutable `completion-complete.json`. Accepted-state assertions after actor
+  death remain unchanged; production state writes still fail explicitly.
+  Causal `a501490 / 38090650915` failed the new observer contract in all four
+  matrix jobs before application setup: the old observer parsed the deliberately
+  invalid mutable journal instead of reporting the original fixture actor exit.
+  Fix `6388ddc / 38090723610` is rerunning all four actual applications.
 - [ ] Push and run the complete 48-job workflow. Require native37+9 and the
   existing actual update lifecycle, all four first applications, both
   configuration-policy contract jobs, and all Linux regressions to pass.
