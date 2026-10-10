@@ -24,6 +24,7 @@ function firstEnvironment({ node, git, pwsh }) {
     PATH: [path.dirname(node), path.dirname(git), path.dirname(pwsh),
       path.join(SystemRoot, 'System32'), SystemRoot, path.join(SystemRoot, 'System32', 'Wbem')].join(path.delimiter),
     npm_config_cache: path.join(home, 'AppData', 'Local', 'npm-cache'),
+    NODE_DISABLE_COMPILE_CACHE: '1',
     NEXT_TELEMETRY_DISABLED: '1',
   };
 }

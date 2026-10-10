@@ -100,6 +100,22 @@ test('build environment refuses conflicting or unconfigured controller settings 
   assert.equal(result.buildEnvironment({ ...environment }).NEXTAUTH_URL, environment.NEXTAUTH_URL);
 });
 
+test('build environment permits disabling compile cache but not enabling or redirecting it', async t => {
+  const project = await temporaryDeployment(t);
+  const result = await inspect(project);
+  assert.equal(result.buildEnvironment({ NODE_DISABLE_COMPILE_CACHE: '1' }).NODE_DISABLE_COMPILE_CACHE, '1');
+  for (const supplied of [
+    { NODE_DISABLE_COMPILE_CACHE: '0' }, { NODE_DISABLE_COMPILE_CACHE: '' },
+    { NODE_DISABLE_COMPILE_CACHE: 'true' }, { NODE_COMPILE_CACHE: '/controller/cache' },
+  ]) {
+    assert.throws(() => result.buildEnvironment(supplied), {
+      code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED', check: 'build-environment-conflict',
+    });
+  }
+  const installed = await inspect(project, { environment: { ...environment, NODE_DISABLE_COMPILE_CACHE: '0' } });
+  assert.equal(installed.buildEnvironment({ NODE_DISABLE_COMPILE_CACHE: '0' }).NODE_DISABLE_COMPILE_CACHE, '0');
+});
+
 test('unsupported installed Node injection is refused before preparing a build', async t => {
   const project = await temporaryDeployment(t);
   const result = await inspect(project, { environment: { ...environment, NODE_OPTIONS: '--require=private-hook' } });

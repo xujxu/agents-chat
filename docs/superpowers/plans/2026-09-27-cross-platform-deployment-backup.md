@@ -13950,6 +13950,9 @@ inspection/configuration/lock/first-deployment composition.
   cleanup, preserving other errors. Add `windows_first_public_only=true`
   with a separate concurrency suffix to rerun this one case without rebuilding
   the three independent internal cases or superseding their pending evidence.
+  The original causal matrix later completed: its existing receipt-loss
+  (`114305719826`), default-policy (`114305719995`) and normal
+  (`114305720016`) cases all passed, last at `20:44:51 UTC`.
   Isolated `75120b6 / 38083931013`, job `114306356599`, completed at
   `2026-10-10 20:29:40 UTC`: real public entry failed explicitly with
   `DEPLOYMENT_COMMAND_MODE_UNSUPPORTED` (1,738 ms), with no cleanup masking.
@@ -13996,6 +13999,19 @@ inspection/configuration/lock/first-deployment composition.
   allowlist. Remove that key; retain native-derived HOME and explicit npm
   cache, as the accepted internal actor does. Do not broaden the shared
   configuration allowlist to accommodate an unnecessary environment entry.
+  `3093a0b / 38084304257`, job `114307453364`, then passed actual deployment,
+  default policy, supervisor closeout, authenticated chat and public update
+  no-op, but failed the final empty-controller-directory assertion after
+  1,004,569 ms: npm's Node compile cache left `node-compile-cache`.
+  Use documented `NODE_DISABLE_COMPILE_CACHE=1` in the new first environment,
+  not broad cache deletion or relaxed cleanup assertions. The existing build
+  environment admits only this disabling value as a new operational override;
+  tests reject enabling/redirecting cache and preserve already installed
+  settings. Node 24 documents the default cache as
+  `path.join(os.tmpdir(), 'node-compile-cache')` and this disable control:
+  https://nodejs.org/docs/latest-v24.x/api/module.html#moduleenablecompilecacheoptions
+  Since this touches shared configuration handling, run the full dual-platform
+  workflow (46 jobs including four actual first-application cases).
 - [ ] Update public help/README with the exact accepted fresh NoTunnel route
   and remaining gates. Do not label no-tunnel acceptance default tunnel
   acceptance or claim other-user/legacy-task adoption.

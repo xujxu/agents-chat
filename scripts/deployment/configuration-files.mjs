@@ -175,9 +175,11 @@ export async function inspectConfigurationFiles({
         throw refusal('build-environment-policy');
       }
       for (const [name, value] of Object.entries(overrides)) {
+        const operational = buildOperationalNames.has(name.toUpperCase())
+          || name.toUpperCase() === 'NODE_DISABLE_COMPILE_CACHE' && value === '1';
         if (Object.hasOwn(installed, name)
           ? installed[name] !== value
-          : !buildOperationalNames.has(name.toUpperCase())) throw refusal('build-environment-conflict');
+          : !operational) throw refusal('build-environment-conflict');
       }
       return Object.freeze({ ...overrides, ...installed });
     };
