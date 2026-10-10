@@ -190,7 +190,8 @@ try {
             -TaskName $TaskName -OperationId $hello.operationId -AdmissionSha256 $digest `
             -SecurityDescriptor $record.securityDescriptor -VerifyDeploymentReceipt:$OwnedSourceBuild
         if ($OwnedSourceBuild) {
-            & $node (Join-Path $PSScriptRoot 'deployment-windows-task-snapshot.mjs') $control
+            & $node (Join-Path $PSScriptRoot 'deployment-windows-task-snapshot.mjs') $control `
+                ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
             Assert ($LASTEXITCODE -eq 0) 'Original task snapshot was not retained after final unlock'
         }
         return

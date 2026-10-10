@@ -13915,6 +13915,40 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DD: Compare archived task policy against the original live observation
+
+**Scope:** read-only policy compatibility for the approved Windows restore
+path. Reuse `Confirm-AgentsChatTaskReplacementPolicy`; allow different literal
+runtime actions, but require unchanged task identity, security, enabled state,
+principal, triggers and other settings. This does not authorize activation or
+restore a changed account/policy implicitly.
+
+**Files:** add `windows-restore-task-policy.mjs/.ps1` to deployment helpers and
+the saved recovery inventory; add `tests/deployment-windows-restore-policy.mjs`;
+extend the existing native task snapshot post-update check and its PowerShell
+caller to pass explicit PowerShell.
+
+- [ ] After original update/retirement, load both managed discovery and the
+  new policy inspector from the saved engine. Require compatibility with the
+  archived task despite a distinct live bundle. Reject foreign task/security,
+  changed enabled state, trigger, principal, settings, malformed XML, forged
+  scope and cancellation. Recheck identical live observation and absence of
+  a new lock after every refusal.
+- [ ] Push and run `windows_restore_only=true`; require the missing saved
+  policy module as causal failure, retaining the existing six native jobs.
+- [ ] Implement a controller-bound read-only native comparator using the
+  existing transport and `Read-AgentsChatMaintenanceFields`. Send current and
+  archived definitions in separate bounded frames, not one doubled XML frame.
+  Require equal explicit enabled policy before temporarily normalizing both
+  parsed documents to inhibited form for the shared comparator. Never call
+  Scheduler registration, task control or filesystem publication.
+- [ ] Recheck the original branded managed scope before and after comparison;
+  validate original child/controller identity and clean close acknowledgement.
+  Return `same-task-policy` with `runtimeAuthority: false`. Preserve native
+  refusal and cleanup errors and include both new files in saved recovery.
+- [ ] Repeat the seven native Actions jobs and record the limited compatibility
+  acceptance before composing archive publication/restoration.
+
 ### Task 5DC: Read archived Windows runtime inputs without consulting the live bundle
 
 **Scope:** the first implementation step of the already approved Explicit
@@ -13964,12 +13998,15 @@ not task-policy admission, mutation authority, publication or public restore.
   re-verifies the original manifest. Use existing `captureWorkerFields`,
   `relativeSnapshotPath`, `readWorkerFile` and `verifySnapshot`; do not add
   an alternative native runtime protocol parser.
-- [ ] Add the reader to the explicit saved recovery inventory and repeat the
+- [x] Add the reader to the explicit saved recovery inventory and repeat the
   same Actions selector. Require native snapshot/restore, saved reader import,
   unchanged source/data/task assertions and existing recovery regressions.
   Implementation and inventory are pushed at `b8f4f48`; run `38092612846`
-  is executing this seven-job gate.
-- [ ] Record this limited acceptance, then continue native archived-policy
+  passed all seven jobs. Managed discovery `114331967518` completed at
+  `22:51:45 UTC`, including the saved reader import after original update,
+  activation and final unlock; native files/restore `114331967324` completed
+  at `22:54:54 UTC`. Existing closeout and all four prior-recovery cases passed.
+- [x] Record this limited acceptance, then continue native archived-policy
   admission and distinct restored-runtime publication. Do not claim public
   no-build restore from a successful inventory reader.
 

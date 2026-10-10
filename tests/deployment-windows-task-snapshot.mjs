@@ -132,6 +132,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assert.deepEqual(archived.task, manifest.runtime.task);
   assert.equal(archived.configuration.command.cwd, manifest.project);
   await archived.check();
+  const { verifyWindowsRestorePolicy } = await import('./deployment-windows-restore-policy.mjs');
+  await verifyWindowsRestorePolicy({
+    directory: saved.directory, control, project: manifest.project, task: archived.task, pwsh: process.argv[3],
+  });
   assert.equal(await readFile(path.join(control, 'backup/files/source-marker.txt'), 'utf8'), 'old-source\n');
   assert.equal(await readFile(path.join(manifest.project, 'source-marker.txt'), 'utf8'), 'new-source\n');
   await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
