@@ -238,6 +238,12 @@ history, and preserves the final receipt, original runtime and recovery engine.
 The combined implementation passed all 42 Linux/Windows jobs at `389e20f`
 (Actions `38050578461`), including 40 native first-install cases and the real
 Windows application update, closeout and no-op lifecycle.
+The internal first-deployment driver passed a real fresh Windows application
+at `856b624` (Actions `38056610253`): owned dependency installation/build,
+authenticated chat data before and after the original actor exits, saved
+finalization, unchanged runtime and receipt, and fresh lock reuse without a
+backup. This uses explicit S4U/AtStartup in the fixture; public first deployment
+remains gated pending default task-policy and tunnel integration.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

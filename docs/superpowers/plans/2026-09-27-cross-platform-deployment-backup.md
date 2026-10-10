@@ -13483,10 +13483,15 @@ Files:
   request and again after validating the original completion handoff. Remove
   the immediately repeated full-tree check from the orchestrator, preserving
   all retained-authority checks and the original readiness/stage deadlines.
-- [ ] In Actions install/build real Next source, observe the resulting managed
+- [x] In Actions install/build real Next source, observe the resulting managed
   runtime and use authenticated chat API data before/after original-actor exit
   and saved finalization. Require exact accepted receipt, unchanged runtime,
   no backup, retired operation evidence and fresh lock reuse.
+  `856b624 / 38056610253`, job `114226306381`, passed the actual application
+  case in 919,735 ms at `2026-10-10 13:55:53 UTC` (job success at `13:55:57`).
+  The original 120-second verification budget was retained. This accepts the
+  internal first-deployment driver and its saved finalization, not public
+  default-policy or tunnel integration.
 - [x] Add a separate actual-first-application job and focused dispatch input;
   keep existing application and native-first regressions unchanged.
   This is core orchestration with explicit S4U/AtStartup for the fixture,
