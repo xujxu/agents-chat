@@ -37,6 +37,7 @@ const files = Object.freeze([...new Set([
   'windows-configuration.mjs', 'windows-configuration-files.mjs', 'windows-configuration-files.ps1',
   'windows-first-install.mjs', 'windows-first-install-controller.ps1',
   'windows-first-runtime.mjs', 'windows-first-runtime.ps1',
+  'windows-first-task.ps1', 'windows-first-task-registration.ps1',
   'build-artifacts.mjs',
   'windows-runtime-publication.mjs', 'windows-runtime-publication.ps1', 'windows-worker-scope.mjs',
   'windows-restore-security.mjs', 'windows-restore-security.ps1', 'WindowsPrivateFile.SourceSecurity.cs',

@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$Project,
     [Parameter(Mandatory)][string]$Control,
+    [Parameter(Mandatory)][string]$TaskName,
     [Parameter(Mandatory)][string]$Node,
     [Parameter(Mandatory)][int]$Port,
     [Parameter(Mandatory)][string]$LockSha256,
@@ -14,6 +15,7 @@ $resources = [Collections.Generic.List[IDisposable]]::new()
 $checks = [Collections.Generic.List[object]]::new()
 $failure = $null
 $stage = 'bootstrap'
+$firstTask = $null
 function Retain-FirstRuntimeResource($Resource) {
     $resources.Add($Resource)
     $checks.Add($Resource)
@@ -24,6 +26,7 @@ function Assert-FirstRuntimePublication {
         throw 'Original first-runtime controller changed.'
     }
     foreach ($resource in $checks) { $resource.Check() }
+    if ($null -ne $firstTask) { Assert-AgentsChatFirstTaskRegistration $firstTask }
     foreach ($name in @('recovery-lock', 'deployment.json', 'task-maintenance', 'backup')) {
         if ([IO.Directory]::GetFileSystemEntries($Control, $name).Length -ne 0) {
             throw 'Existing deployment or recovery evidence is not a first publication.'
@@ -31,7 +34,8 @@ function Assert-FirstRuntimePublication {
     }
 }
 try {
-    if (-not $IsWindows -or $PSVersionTable.PSVersion -lt [version]'7.4' -or $Port -lt 1 -or $Port -gt 65535) {
+    if (-not $IsWindows -or $PSVersionTable.PSVersion -lt [version]'7.4' -or $Port -lt 1 -or $Port -gt 65535 -or
+        $TaskName -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$') {
         throw 'Unsupported first-runtime publication context.'
     }
     Add-Type -Path @(
@@ -41,6 +45,8 @@ try {
         (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-maintenance.ps1')
     . (Join-Path $PSScriptRoot 'windows-runtime-bundle.ps1')
+    . (Join-Path $PSScriptRoot 'windows-first-task.ps1')
+    . (Join-Path $PSScriptRoot 'windows-first-task-registration.ps1')
     $resources.Add([Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity))
     $stage = 'original-authority'
     if ($Control -cne (Join-Path (Split-Path -Parent $Project) ".$(Split-Path -Leaf $Project).deployment")) {
@@ -97,6 +103,14 @@ try {
     $null = Retain-FirstRuntimeResource ([Deployment.WindowsRuntimeHost]::Open($bundle.Configuration, $bundle.Sha256, $directory))
     Assert-FirstRuntimePublication
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+    $process = [Diagnostics.Process]::GetCurrentProcess()
+    try { $pwsh = $process.MainModule.FileName }
+    finally { $process.Dispose() }
+    $context = @{
+        Resources=$resources; Checks=$checks; Project=$Project; Control=$Control; TaskName=$TaskName
+        OperationId=$operationId; LockSha256=$LockSha256; StateSha256=$StateSha256
+        Bundle=$bundle; Identity=$identity; Pwsh=$pwsh
+    }
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; controllerIdentity=$ControllerIdentity
         directory=$directory; configuration=$bundle.Configuration; sha256=$bundle.Sha256
@@ -106,13 +120,27 @@ try {
     while ($true) {
         $stage = 'request'
         $line = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync([Console]::In, 4096)
-        $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
+        $text = $line.GetAwaiter().GetResult()
+        $document = [Text.Json.JsonDocument]::Parse($text)
+        try { $method = $document.RootElement.GetProperty('method').GetString() }
+        finally { $document.Dispose() }
+        $fields = if ($method -ceq 'register-task') { @('id', 'method', 'logonType', 'triggerType') } else { @('id', 'method') }
+        $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close')) { throw 'Unexpected first-runtime request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task')) { throw 'Unexpected first-runtime request.' }
         $sequence = $id
         Assert-FirstRuntimePublication
-        [Console]::Out.WriteLine((@{ id=$id; type='reply'; processIdentity=$identity; value=$method } | ConvertTo-Json -Compress))
+        $value = $method
+        if ($method -ceq 'register-task') {
+            if ($null -ne $firstTask) { throw 'Original first task is already registered.' }
+            $stage = 'first-task-registration'
+            $firstTask = New-AgentsChatFirstTaskRegistration -Context $context `
+                -LogonType $request.logonType.GetString() -TriggerType $request.triggerType.GetString()
+            Assert-FirstRuntimePublication
+            $value = $firstTask.Observation
+        }
+        [Console]::Out.WriteLine((@{ id=$id; type='reply'; processIdentity=$identity; value=$value } | ConvertTo-Json -Depth 6 -Compress))
         [Console]::Out.Flush()
         if ($method -ceq 'close') { break }
     }
@@ -120,7 +148,7 @@ try {
     $failure = $_.Exception
     $kind = $failure.GetBaseException().GetType().Name
     $line = $_.InvocationInfo.ScriptLineNumber
-    [Console]::Error.WriteLine("First-runtime publication refused: $stage; type=$kind; line=$line. Retain any incomplete bundle.")
+    [Console]::Error.WriteLine("First-runtime preparation refused: $stage; type=$kind; line=$line. Retain the bundle and any inhibited task evidence.")
 } finally {
     for ($index = $resources.Count - 1; $index -ge 0; $index--) {
         try { $resources[$index].Dispose() }

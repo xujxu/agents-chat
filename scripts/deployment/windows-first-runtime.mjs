@@ -17,7 +17,7 @@ const script = fileURLToPath(new URL('./windows-first-runtime.ps1', import.meta.
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const operational = new Set(['PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP', 'HOME', 'NEXT_TELEMETRY_DISABLED']);
 function refused(cause) {
-  return Object.assign(new Error('First Windows runtime publication refused; retain any incomplete bundle.', { cause }), {
+  return Object.assign(new Error('First Windows runtime preparation refused; retain its bundle and any inhibited task evidence.', { cause }), {
     code: 'DEPLOYMENT_WINDOWS_FIRST_RUNTIME_REFUSED', runtimeAuthority: false,
   });
 }
@@ -86,7 +86,7 @@ export async function prepareWindowsFirstRuntime({
     const directory = path.join(control, `first-runtime-${lock.operationId}`);
     bridge = windowsControllerTransport({
       pwsh, refused, label: 'Native first-runtime publisher',
-      args: ['-NoProfile', '-NonInteractive', '-File', script, '-Project', project, '-Control', control,
+      args: ['-NoProfile', '-NonInteractive', '-File', script, '-Project', project, '-Control', control, '-TaskName', observed.taskName,
         '-Node', node, '-Port', String(port), '-LockSha256', digest(lockBytes), '-StateSha256', digest(stateBytes),
         '-ControllerPid', String(process.pid), '-ControllerIdentity', lock.processIdentity],
     });
@@ -111,17 +111,40 @@ export async function prepareWindowsFirstRuntime({
     let sequence = 1;
     let busy = false;
     let failure;
-    const request = async (method, requestSignal) => {
+    let registered = false;
+    let registering = false;
+    const request = async (method, requestSignal, options = {}) => {
       if (busy || closed) throw failure ?? refused(new Error('Original first-runtime publication is busy or closed.'));
       busy = true;
       try {
-        if (method === 'check') await authority(requestSignal);
+        if (method !== 'close') await authority(requestSignal);
         const id = ++sequence;
-        await bridge.wire.send({ id, method });
+        await bridge.wire.send({ id, method, ...options });
         const reply = captureWorkerFields(await bridge.wire.receive({ signal: requestSignal, timeoutMs: 30000 }),
           ['id', 'type', 'processIdentity', 'value'], 'first-runtime reply');
-        if (reply.id !== id || reply.type !== 'reply' || reply.value !== method || reply.processIdentity !== ready.processIdentity) {
+        if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== ready.processIdentity
+          || method !== 'register-task' && reply.value !== method) {
           throw new Error('Unexpected first-runtime acknowledgement.');
+        }
+        if (method === 'register-task') {
+          const task = captureWorkerFields(reply.value, [
+            'status', 'runtimeAuthority', 'project', 'operationId', 'taskName', 'accountSid', 'logonType', 'triggerType',
+            'controllerPid', 'controllerIdentity', 'configuration', 'configurationSha256', 'definition', 'permanentDefinition',
+            'securityDescriptor', 'taskFileSha256', 'taskFileDev', 'taskFileIno', 'taskFileSecurityDescriptor',
+          ], 'first-task registration');
+          if (task.status !== 'first-task-prepared' || task.runtimeAuthority !== false || task.project !== project
+            || task.operationId !== lock.operationId || task.taskName !== observed.taskName || task.accountSid !== observed.accountSid
+            || task.logonType !== options.logonType || task.triggerType !== options.triggerType
+            || task.controllerPid !== ready.pid || task.controllerIdentity !== ready.processIdentity
+            || task.configuration !== bundle.configuration || task.configurationSha256 !== bundle.sha256
+            || typeof task.taskFileSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(task.taskFileSha256)
+            || ![task.taskFileDev, task.taskFileIno].every(value => typeof value === 'string' && /^[0-9]{1,20}$/.test(value))
+            || ![task.definition, task.permanentDefinition, task.securityDescriptor, task.taskFileSecurityDescriptor]
+              .every(value => typeof value === 'string' && value.length > 0 && value.length <= 65536 && !value.includes('\0'))) {
+            throw new Error('First-task registration differs from the original publisher.');
+          }
+          await authority(requestSignal);
+          return Object.freeze(task);
         }
         if (method === 'close') {
           const result = await bridge.waitForExit();
@@ -138,6 +161,19 @@ export async function prepareWindowsFirstRuntime({
     return Object.freeze({
       status: 'runtime-prepared', runtimeAuthority: false, bundle,
       checkFiles: ({ signal: requestSignal } = {}) => request('check', requestSignal),
+      registerTask: async ({ logonType = 'Interactive', triggerType = 'AtLogOn', signal: requestSignal } = {}) => {
+        if (closed || busy || registered || registering || !['Interactive', 'S4U'].includes(logonType)
+          || !['AtLogOn', 'AtStartup'].includes(triggerType)) {
+          throw refused(new Error('Unsupported, repeated or unavailable first-task registration.'));
+        }
+        registering = true;
+        try {
+          await assertWindowsFirstInstallScope(scope, { fresh: false, signal: requestSignal });
+          const task = await request('register-task', requestSignal, { logonType, triggerType });
+          registered = true;
+          return task;
+        } finally { registering = false; }
+      },
       close: async () => { if (!closed) await request('close'); },
     });
   } catch (cause) {

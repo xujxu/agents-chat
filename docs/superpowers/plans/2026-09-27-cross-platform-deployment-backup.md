@@ -13330,9 +13330,15 @@ Keep native task construction/checking in
   task with an original-controller lease; the permanent policy is recorded but
   not activated; repeat registration refuses without poisoning the retained
   publisher; a competitor appearing after publication is preserved unchanged.
-- [ ] Push causal cases and require the explicit missing-method assertion in
+- [x] Push causal cases and require the explicit missing-method assertion in
   the command-only Actions gate. Do not substitute primitive creation acceptance
   for original publication/configuration/lock authority.
+  `6d55190 / 38021896169`, job `114124493054`, confirmed both
+  `Missing original-publisher first-task registration` assertions at
+  `2026-10-10 03:54:06 UTC`; the prior eleven cases passed. The independent
+  primitive step also exposed a legitimate-profile refusal. Resolve task
+  principal names to SIDs using the existing admission convention and report
+  only failed invariant names, never account/command/environment contents.
 - [ ] Implement the original-capability method:
 
   ```js

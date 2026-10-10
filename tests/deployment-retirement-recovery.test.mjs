@@ -106,6 +106,8 @@ test('saved recovery bundle closes module dependencies after its source disappea
   }
   assert.ok(names.has('windows-first-install-controller.ps1'));
   assert.ok(names.has('windows-first-runtime.ps1'));
+  assert.ok(names.has('windows-first-task.ps1'));
+  assert.ok(names.has('windows-first-task-registration.ps1'));
   const modules = [
     'linux-restore.mjs', 'linux-service-recovery.mjs', 'retirement-recovery.mjs',
     'windows-configuration.mjs', 'windows-first-install.mjs', 'windows-first-runtime.mjs',
