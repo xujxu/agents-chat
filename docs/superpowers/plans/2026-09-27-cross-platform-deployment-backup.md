@@ -13844,14 +13844,19 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   enabled setting and runtime instance. Restore fixture bytes, then require
   successful saved receipt/retirement with the original prepared identity.
   Add these three names to the focused selector (12 cases; native first45).
-- [ ] Push and run the focused Actions gate with
+- [x] Push and run the focused Actions gate with
   `windows_application_only=true`, `windows_commands_only=true` and
   `windows_receipt_only=true`. Require all nine existing cases to pass and the
   three new saved paths to refuse their incomplete completion prefix.
-- [ ] Expose frozen/null `recovery.deploymentIdentity` from the original
+  Causal `667c1bb / 38076466781`, job `114284373585`, finished at
+  `2026-10-10 18:54:14 UTC`: existing nine passed, all three new cases reached
+  saved finalization then refused with `DEPLOYMENT_WINDOWS_FIRST_RECEIPT_PUBLICATION_REFUSED`
+  (49,622 / 53,172 / 55,076 ms). Their altered-build prechecks preserved
+  original history, state and task policy.
+- [x] Expose frozen/null `recovery.deploymentIdentity` from the original
   native context, using existing four-field validation. Keep
   `recovery.observation`, native step order and original receipt chain unchanged.
-- [ ] Implement the bounded orchestration:
+- [x] Implement the bounded orchestration:
   ```js
   await completeWindowsFirstDeployment({
     control, project, operationId, stateSha256, pwsh, admission, signal,
@@ -13876,9 +13881,10 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   every owned observer with explicit aggregate cleanup errors. Do not acquire a
   nested admission, recreate a dead runtime, release a guarded lease, fabricate
   missing legacy provenance, or reinterpret unknown incomplete evidence.
-- [ ] In the missing-receipt branch, complete the retained prefix before the
+- [x] In the missing-receipt branch, complete the retained prefix before the
   already accepted receipt recovery and retirement. Keep original state checks
-  before/after each orchestration. Push and accept all 12 focused cases and
+  before/after each orchestration.
+- [ ] Push and accept all 12 focused cases and
   saved dependency closure; then rerun actual normal/receipt-loss application
   cases for the complete-prefix fast path. Earlier native prefix acceptance
   must not be mislabeled actual application interruption at those earlier edges.

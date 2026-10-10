@@ -274,6 +274,11 @@ missing. At `41317ee`, all nine focused cases passed in Actions `38073750577`;
 Actions `38073752429` also passed both real-application cases: normal first
 deployment and original actor loss before receipt publication, followed by
 saved recovery and public update no-op with the same runtime and chat data.
+Saved closeout also now composes the existing recovery steps for earlier
+released first-runtime prefixes, pending Actions acceptance. It checks original
+build/configuration provenance before restoring task policy or enabling the
+task; guarded or dead runtimes and missing provenance are not admitted by this
+composition.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

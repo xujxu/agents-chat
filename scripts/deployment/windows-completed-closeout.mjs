@@ -6,6 +6,7 @@ import { externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 import { validateState } from './state.mjs';
 import { openWindowsFirstDeploymentRetirement } from './windows-first-deployment-retirement.mjs';
 import { recoverWindowsFirstDeploymentReceipt } from './windows-first-receipt-recovery.mjs';
+import { completeWindowsFirstDeployment } from './windows-first-cold-completion.mjs';
 import {
   openWindowsTaskCompletionProof, beginWindowsTaskRetirement, openWindowsTaskRetirement,
   retireNextWindowsTaskFile, beginWindowsDeploymentRetirement, openWindowsDeploymentRetirement,
@@ -66,6 +67,8 @@ export async function closeCompletedWindowsDeployment({ control, project, operat
             throw new Error('First deployment closeout requires its exact accepted absent-prior state.');
           }
           if (!await hasMarker(control, 'deployment.json')) {
+            await checkState();
+            await completeWindowsFirstDeployment({ control, project, operationId, stateSha256, pwsh, admission, signal });
             await checkState();
             await recoverWindowsFirstDeploymentReceipt({ control, project, operationId, pwsh, admission, signal });
             await checkState();

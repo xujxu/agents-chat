@@ -47,6 +47,7 @@ const files = Object.freeze([...new Set([
   'windows-first-completion-proof-controller.ps1', 'windows-first-completion-proof.mjs',
   'windows-first-completion-recovery.ps1', 'windows-first-completion-recovery-controller.ps1',
   'windows-first-completion-recovery.mjs',
+  'windows-first-cold-completion.mjs',
   'windows-first-receipt-recovery.mjs', 'windows-first-receipt-publication.mjs',
   'windows-first-receipt-publication.ps1', 'windows-first-receipt-publication-controller.ps1',
   'windows-first-retirement-record.mjs', 'windows-first-retirement-record.ps1',

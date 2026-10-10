@@ -22,8 +22,9 @@ try {
     $scope = Open-AgentsChatFirstCompletionProof -Control $Control -Recovery
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
     [Console]::Out.WriteLine((@{
-        type='ready'; pid=$PID; processIdentity=$identity; control=$Control
+        type='ready'; pid=$PID; processIdentity=$identity; control=$Control; project=$scope.Project
         controllerIdentity=$ControllerIdentity; value=(Assert-AgentsChatFirstCompletionRecovery $scope)
+        deploymentIdentity=$scope.DeploymentIdentity
     } | ConvertTo-Json -Depth 8 -Compress))
     [Console]::Out.Flush()
     $sequence = 0

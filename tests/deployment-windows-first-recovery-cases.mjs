@@ -97,6 +97,11 @@ export async function prepareWindowsFirstRecoveryCase({
         }
         let recovery = await open(options);
         try {
+          const prepared = JSON.parse(await readFile(path.join(fixture.control,
+            `first-task-${fixture.operationId}`, 'completion-prepared.json')));
+          assert.equal(recovery.project, fixture.project);
+          assert.deepEqual(recovery.deploymentIdentity, prepared.deploymentIdentity);
+          assert.equal(Object.isFrozen(recovery.deploymentIdentity), true);
           verify(recovery.observation, initialStep);
           if (interrupted) assert.deepEqual(recovery.observation, interrupted);
           await rejectOpen(refused);

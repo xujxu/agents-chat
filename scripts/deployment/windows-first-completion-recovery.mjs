@@ -8,6 +8,7 @@ import { assertWindowsAdmission } from './windows-admission.mjs';
 import { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
 import { windowsTaskCompletionSteps } from './windows-task-controller.mjs';
 import { verifyHttpReadiness } from './http-readiness.mjs';
+import { captureWindowsFirstDeploymentIdentity } from './windows-first-deployment-identity.mjs';
 
 const script = fileURLToPath(new URL('./windows-first-completion-recovery-controller.ps1', import.meta.url));
 const steps = windowsTaskCompletionSteps.slice(windowsTaskCompletionSteps.indexOf('lease-released'));
@@ -56,13 +57,20 @@ export async function openWindowsFirstCompletionRecovery({ control, pwsh, admiss
   let failure;
   try {
     const ready = captureWorkerFields(await wire.receive({ signal, timeoutMs: 60000 }),
-      ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'first completion recovery readiness');
+      ['type', 'pid', 'processIdentity', 'control', 'project', 'controllerIdentity', 'value', 'deploymentIdentity'],
+      'first completion recovery readiness');
     if (ready.type !== 'ready' || ready.pid !== child.pid || ready.control !== control
       || ready.controllerIdentity !== controllerIdentity
-      || ready.processIdentity !== await processIdentity(child.pid)) {
+      || ready.processIdentity !== await processIdentity(child.pid)
+      || typeof ready.project !== 'string' || ready.project.length > 4096
+      || !path.isAbsolute(ready.project) || path.resolve(ready.project) !== ready.project
+      || /[\0\r\n]/.test(ready.project)
+      || control !== path.join(path.dirname(ready.project), `.${path.basename(ready.project)}.deployment`)) {
       throw new Error('Original first recovery bridge differs.');
     }
     let observation = capture(ready.value);
+    const deploymentIdentity = ready.deploymentIdentity === null ? null
+      : captureWindowsFirstDeploymentIdentity(ready.deploymentIdentity);
     const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity });
     const exchange = async (method, requestSignal) => {
       const id = ++sequence;
@@ -120,7 +128,7 @@ export async function openWindowsFirstCompletionRecovery({ control, pwsh, admiss
     };
     await assertWindowsAdmission(control, admission, { signal });
     return Object.freeze({
-      identity,
+      identity, project: ready.project, deploymentIdentity,
       get observation() { return observation; },
       check: ({ signal: requestSignal } = {}) => request('check', requestSignal),
       advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal),
