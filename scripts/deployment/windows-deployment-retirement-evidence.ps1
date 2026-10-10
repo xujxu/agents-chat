@@ -26,10 +26,7 @@ function Assert-AgentsChatDeploymentWorkerInventory([hashtable]$Context, $Entrie
     if ($expected.Count) { throw 'Missing original worker cleanup evidence.' }
 }
 
-function Retain-AgentsChatDeploymentWorkers([hashtable]$Context) {
-    $null = Assert-AgentsChatTaskRetirement $Context
-    if ($Context.Prefix -ne $Context.Intent.files.Count) { throw 'Task receipts have not finished retiring.' }
-    if ($Context.ContainsKey('DeploymentCandidate')) { return $Context.DeploymentCandidate }
+function Get-AgentsChatCompletedWorkerEvidence([hashtable]$Context, $Lock) {
     $Context.Stage = 'worker-evidence'
     $operation = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'worker-operation.ndjson') ''
     $records = @($operation.ReadText().TrimEnd("`n").Split("`n") | ForEach-Object {
@@ -40,7 +37,6 @@ function Retain-AgentsChatDeploymentWorkers([hashtable]$Context) {
         throw 'Original worker operation is not sealed.'
     }
     $entries = [Collections.Generic.List[object]]::new()
-    $entries.Add((Get-AgentsChatDeploymentRetirementDirectory $Context 'task-maintenance'))
     $workers = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     for ($index = 1; $index -lt $records.Count - 1; $index++) {
         $worker = $records[$index].workerId.GetString()
@@ -55,7 +51,7 @@ function Retain-AgentsChatDeploymentWorkers([hashtable]$Context) {
     $stored = Read-AgentsChatRetirementJson ($manifest.ReadText())
     Assert-AgentsChatRetirementFields $stored @('version', 'project', 'operationId', 'files')
     if ($stored.version -ne 1 -or $stored.project -cne $Context.Project -or
-        $stored.operationId -cne $Context.Intent.lock.operationId -or
+        $stored.operationId -cne $Lock.operationId -or
         $manifest.Sha256 -cne $records[0].manifestSha256.GetString() -or
         $stored.files -isnot [array] -or $stored.files.Count -lt 1 -or $stored.files.Count -gt 256) {
         throw 'Original worker helper manifest differs.'
@@ -73,14 +69,25 @@ function Retain-AgentsChatDeploymentWorkers([hashtable]$Context) {
     $entries.Add((Get-AgentsChatDeploymentRetirementFile $Context 'worker-engine\manifest.json'))
     $entries.Add($engineIdentity)
     $entries.Add((Get-AgentsChatDeploymentRetirementFile $Context 'worker-operation.ndjson'))
-    Assert-AgentsChatDeploymentWorkerInventory $Context @($entries | Select-Object -Skip 1)
+    Assert-AgentsChatDeploymentWorkerInventory $Context $entries.ToArray()
+    return [ordered]@{ entries=$entries.ToArray(); manifestSha256=$manifest.Sha256 }
+}
+
+function Retain-AgentsChatDeploymentWorkers([hashtable]$Context) {
+    $null = Assert-AgentsChatTaskRetirement $Context
+    if ($Context.Prefix -ne $Context.Intent.files.Count) { throw 'Task receipts have not finished retiring.' }
+    if ($Context.ContainsKey('DeploymentCandidate')) { return $Context.DeploymentCandidate }
+    $entries = [Collections.Generic.List[object]]::new()
+    $entries.Add((Get-AgentsChatDeploymentRetirementDirectory $Context 'task-maintenance'))
+    $workers = Get-AgentsChatCompletedWorkerEvidence $Context $Context.Intent.lock
+    foreach ($entry in $workers.entries) { $entries.Add($entry) }
     foreach ($relative in @('task-retirement.json', 'task-retirement-checkpoint.json', 'lock\owner.json')) {
         $entries.Add((Get-AgentsChatDeploymentRetirementFile $Context $relative))
     }
     $entries.Add((Get-AgentsChatDeploymentRetirementDirectory $Context 'lock'))
     $Context.DeploymentCandidate = [ordered]@{
         version=3; control=$Context.Control; task=$Context.Prepared
-        workerManifestSha256=$manifest.Sha256; entries=$entries.ToArray()
+        workerManifestSha256=$workers.manifestSha256; entries=$entries.ToArray()
         creator=[ordered]@{ pid=$Context.ControllerPid; processIdentity=$Context.ControllerIdentity
             bridgePid=$PID; bridgeIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID) }
     }

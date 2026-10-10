@@ -8,18 +8,25 @@ import { captureWindowsDeploymentRetirementRecord } from './windows-deployment-r
 export async function verifyWindowsDeploymentRetirementEvidence(control, supplied) {
   const record = captureWindowsDeploymentRetirementRecord(supplied);
   if (record.control !== control) throw new Error('Original retirement control differs.');
-  const lock = record.task.intent.intent.lock;
+  await verifyWindowsCompletedWorkerEvidence(control, {
+    lock: record.task.intent.intent.lock, workerManifestSha256: record.workerManifestSha256,
+    entries: record.entries.slice(1),
+  });
+  return record;
+}
+
+export async function verifyWindowsCompletedWorkerEvidence(control, { lock, workerManifestSha256, entries }) {
   const operation = await readWorkerOperation(control);
   if (operation.at(-1).phase !== 'sealed' || !isDeepStrictEqual(operation[0].lock, lock)
-    || operation[0].manifestSha256 !== record.workerManifestSha256) {
+    || operation[0].manifestSha256 !== workerManifestSha256) {
     throw new Error('Original worker operation is not sealed for this completed task.');
   }
   await verifyWorkerEngine({ control, project: lock.project, operationId: lock.operationId,
-    manifestSha256: record.workerManifestSha256 });
+    manifestSha256: workerManifestSha256 });
   const workerIds = operation.filter(entry => entry.phase === 'enrolled').map(entry => entry.workerId);
   const expected = workerIds.map(workerId => `worker-${workerId}.ndjson`);
-  const actual = record.entries.slice(1, 1 + workerIds.length).map(entry => entry.path);
-  const allJournals = record.entries.filter(entry => /^worker-[a-f0-9-]+\.ndjson$/.test(entry.path));
+  const actual = entries.slice(0, workerIds.length).map(entry => entry.path);
+  const allJournals = entries.filter(entry => /^worker-[a-f0-9-]+\.ndjson$/.test(entry.path));
   if (!isDeepStrictEqual(actual, expected) || allJournals.length !== workerIds.length) {
     throw new Error('Original worker enrollment differs from retained cleanup inventory.');
   }
@@ -32,5 +39,4 @@ export async function verifyWindowsDeploymentRetirementEvidence(control, supplie
       throw new Error('Original Windows worker has not settled.');
     }
   }
-  return record;
 }

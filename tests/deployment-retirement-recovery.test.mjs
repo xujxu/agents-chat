@@ -117,11 +117,15 @@ test('saved recovery bundle closes module dependencies after its source disappea
   assert.ok(names.has('windows-first-completion-proof-controller.ps1'));
   assert.ok(names.has('windows-first-completion-recovery.ps1'));
   assert.ok(names.has('windows-first-completion-recovery-controller.ps1'));
+  assert.ok(names.has('windows-first-retirement-record.ps1'));
+  assert.ok(names.has('windows-first-deployment-retirement.ps1'));
+  assert.ok(names.has('windows-first-deployment-retirement-controller.ps1'));
   const modules = [
     'linux-restore.mjs', 'linux-service-recovery.mjs', 'retirement-recovery.mjs',
     'windows-configuration.mjs', 'windows-first-install.mjs', 'windows-first-runtime.mjs',
     'windows-first-completion-proof.mjs',
     'windows-first-completion-recovery.mjs',
+    'windows-first-deployment-retirement.mjs',
   ];
   const urls = modules.map(name => pathToFileURL(path.join(saved.directory, name)).href);
   await execute(process.execPath, ['--input-type=module', '--eval',

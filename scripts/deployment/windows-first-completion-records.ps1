@@ -10,12 +10,16 @@ function Read-AgentsChatFirstCompletionRecord([hashtable]$Context, [string]$Name
     return Read-AgentsChatMaintenanceFields ($file.ReadText()) $Fields
 }
 
-function Read-AgentsChatFirstCompletionPrefix([hashtable]$Context) {
-    $names = @('intent', 'registered', 'activation-prepared', 'activation-start-requested',
+function Get-AgentsChatFirstCompletionRecordNames {
+    return @('intent', 'registered', 'activation-prepared', 'activation-start-requested',
         'activation-running', 'completion-prepared', 'completion-policy-requested',
         'completion-policy-staged', 'completion-release-requested', 'completion-released',
         'completion-policy-restore-requested', 'completion-policy-restored',
         'completion-enable-requested', 'completion-complete')
+}
+
+function Read-AgentsChatFirstCompletionPrefix([hashtable]$Context) {
+    $names = Get-AgentsChatFirstCompletionRecordNames
     $present = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($entry in Get-ChildItem -LiteralPath $Context.Directory -Force) {
         if ($entry.PSIsContainer -or -not $present.Add($entry.Name)) { throw 'Invalid first-completion prefix inventory.' }
@@ -205,6 +209,11 @@ function Read-AgentsChatFirstCompletionRecords([hashtable]$Context) {
     $Context.StateSha256 = $record.stateSha256.GetString()
     $Context.CompletionSha256 = $previous
     $Context.Phase = $record.phase.GetString()
+    $state = Read-AgentsChatFirstAcceptedState $Context $lock
+    if ($Context.DeploymentReceiptPresent) { Read-AgentsChatFirstDeploymentReceipt $Context $state }
+}
+
+function Read-AgentsChatFirstAcceptedState([hashtable]$Context, [hashtable]$Lock) {
     $Context.Stage = 'accepted-state'
     $stateFile = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'state.json') $Context.StateSha256
     $state = Read-AgentsChatMaintenanceFields ($stateFile.ReadText()) @(
@@ -225,7 +234,7 @@ function Read-AgentsChatFirstCompletionRecords([hashtable]$Context) {
         -not [DateTimeOffset]::TryParseExact($state.updatedAt.GetString(), "yyyy-MM-dd'T'HH:mm:ss.fff'Z'",
             [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$updated) -or
         $updated -lt $started) { throw 'Original accepted first-deployment state differs.' }
-    if ($Context.DeploymentReceiptPresent) { Read-AgentsChatFirstDeploymentReceipt $Context $state }
+    return $state
 }
 
 function Read-AgentsChatFirstDeploymentReceipt([hashtable]$Context, [hashtable]$State) {

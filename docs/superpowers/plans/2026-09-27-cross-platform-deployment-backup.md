@@ -13341,9 +13341,11 @@ Files:
   assert.equal(scope.observation.receiptSha256, hash(receipt));
   assert.deepEqual(scope.observation.runtime, active.runtime);
   ```
-- [ ] Confirm `Missing first-specific deployment retirement` in focused Actions
+- [x] Confirm `Missing first-specific deployment retirement` in focused Actions
   while all four receipt/proof prerequisites still pass.
-- [ ] Implement a separate first-retirement native authority. Initially require
+  `4e9fc15 / 38046299036`, job `114196421217`, confirmed that exact missing
+  factory at `2026-10-10 10:56:45 UTC`; all four prerequisites passed.
+- [x] Implement a separate first-retirement native authority. Initially require
   the complete first-specific proof, real final receipt, sealed worker operation
   and settled Windows worker journals. Hold all evidence while JavaScript
   verifies the exact worker engine/enrollment. Publish a versioned private
@@ -13351,7 +13353,7 @@ Files:
   accepted state and receipt descriptors, actual runtime/configuration/listener/
   permanent-policy checkpoint, exact deletion descriptors and actual new creator.
   Never populate a managed prior-owner or task-maintenance history.
-- [ ] Retain the marker exclusively. Reopening must validate original creator
+- [x] Retain the marker exclusively. Reopening must validate original creator
   identities, unchanged accepted state/receipt/runtime and only a contiguous
   deletion prefix. Delete original first-task receipts/directory, settled
   worker journals/helper files/directory and operation journal; original lock
@@ -13359,6 +13361,14 @@ Files:
   receipt, live first-runtime bundle and saved recovery engine.
   Every native edge checks retained evidence, actual original runtime/listener
   and policy. Failure preserves remaining evidence; close never stops runtime.
+  The actual implementation uses first-specific version4/purpose metadata,
+  reuses only factual worker collectors/verification and kernel runtime/file
+  primitives, and verifies HTTP readiness before publication and each deletion.
+  It permits a new native bridge under the same exact live Node only after
+  the previous bridge exits; foreign original creators must both be absent.
+  The first proof's exclusive release-intent descriptor is reused, not reopened.
+  Saved recovery inventory includes all five new modules; source-removal
+  coverage imports the factory and asserts its native dependencies.
 - [x] Exercise one exact deletion per `advance()`, competing scope refusal,
   retained receipt write refusal, reopen after first deletion and before final
   lock-directory deletion, and reject a non-prefix missing completion receipt.
