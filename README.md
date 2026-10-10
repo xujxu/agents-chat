@@ -300,7 +300,12 @@ That full regression finished 45/46: the combined Windows native batch reached
 its 40-minute deadline before the existing-application update step could run.
 Its cleanup failure obscured the timeout diagnostics. The native cases are now
 split into complementary foundations/cold-receipt jobs without dropping cases
-or increasing that deadline; the replacement 48-job regression remains pending.
+or increasing that deadline. The replacement 48-job run finished 47/48:
+all 46 named native cases and the existing-application lifecycle passed.
+The remaining receipt-loss case hit a state-file replacement `EPERM` before
+its crash boundary. Its observer now avoids polling the mutable state file;
+the four first-application scenarios are being rerun, without relaxing
+production state-write protections or claiming the native error's cause is proven.
 Default-tunnel and remaining watchdog integration are separate gates.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private

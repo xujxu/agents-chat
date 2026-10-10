@@ -14064,6 +14064,13 @@ inspection/configuration/lock/first-deployment composition.
 - [ ] Push and run the complete 48-job workflow. Require native37+9 and the
   existing actual update lifecycle, all four first applications, both
   configuration-policy contract jobs, and all Linux regressions to pass.
+  `16ccba0 / 38088777804` finished 47/48, with only the earlier receipt-loss
+  failure. Cold-receipt job `114320739564` passed at `22:17:17 UTC`,
+  1,782,862 ms: all nine named recovery scenarios passed. Node also reports
+  seven empty filtered file wrappers as passes (16 total), not seven additional
+  recovery cases. Combined with foundations37, all46 intended native cases
+  passed; all Linux jobs and the existing real Windows lifecycle also passed.
+  Corrected observer/application run `38090723610` is still pending.
 - [x] Update public help/README with the exact accepted fresh NoTunnel route
   and remaining gates. Do not label no-tunnel acceptance default tunnel
   acceptance or claim other-user/legacy-task adoption.
