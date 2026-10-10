@@ -253,6 +253,12 @@ The latest complete Linux/Windows regression passed all 43 jobs at `5e15139`
 application lifecycles. Real default-tunnel acceptance still needs a suitable
 Actions test environment; public first installation and cold restore remain
 unfinished.
+First-completion preparation now retains original source, build, dependency and
+configuration identities in its existing hash-linked record at `d0dbc5b`
+(Actions `38063498689`, seven focused cases). Cold proof exposes that original
+identity and rejects mismatched receipt digests; legacy records remain readable
+without inventing missing provenance. This does not yet authorize cold receipt
+publication when the original actor died before publishing one.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

@@ -13611,6 +13611,11 @@ null identity, but cannot acquire future cold receipt-publication authority.
 - [ ] Accept the focused native gate and saved-source dependency closure in
   Actions, then the full native first selection before using this evidence for
   a separate cold publication operation. Keep public first deployment gated.
+  Focused `d0dbc5b / 38063498689`, job `114246345530`, passed **7/7** at
+  `2026-10-10 15:41:24 UTC` (job success `15:41:29`). Cold retained identity,
+  valid-format wrong receipt refusal and legacy-schema compatibility passed in
+  126,855 ms; saved-source closure passed in 4,109 ms. Native40 and the actual
+  first application/public-update lifecycle still need this revision accepted.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
