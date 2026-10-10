@@ -223,8 +223,11 @@ project directory. Cold proof retains the completed receipt, rejects partial
 publication and foreign metadata, and grants no retirement authority.
 The same revision passed all 37 native cases (Actions `38046037772`), including
 all three genuine recovery-actor interruptions and the saved-source closure.
-First-specific retirement and public first-deployment integration remain
-unfinished gates.
+First-specific retirement passed five focused cases at `ac0637b`
+(Actions `38047289219`): exact ordered deletion, exclusive retained evidence,
+interrupted-prefix reopening, unchanged live runtime and final receipt, and
+fresh lock acquisition after cleanup. Genuine retirement-actor loss, the full
+regression and public first-deployment integration remain separate gates.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

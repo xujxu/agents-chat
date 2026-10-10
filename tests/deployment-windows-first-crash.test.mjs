@@ -11,6 +11,7 @@ import test from 'node:test';
 import { prepareWindowsFirstProofCase } from './deployment-windows-first-proof-cases.mjs';
 import { prepareWindowsFirstRecoveryCase } from './deployment-windows-first-recovery-cases.mjs';
 import { prepareWindowsFirstRetirementCase } from './deployment-windows-first-retirement-case.mjs';
+import { prepareWindowsFirstSavedCloseoutCase } from './deployment-windows-first-closeout-case.mjs';
 
 const execute = promisify(execFile);
 const actor = fileURLToPath(new URL('./deployment-windows-first-crash-actor.mjs', import.meta.url));
@@ -26,9 +27,11 @@ for (const scenario of [
   { step: 'complete', proof: true, receipt: true },
   { step: 'complete', receipt: true, retirement: true },
   { step: 'complete', receipt: true, retirement: true, interruptRetirement: true },
+  { step: 'complete', receipt: true, retirement: true, savedCloseout: true },
 ]) {
   const { step } = scenario;
-  const name = scenario.interruptRetirement ? 'cold-first-retirement-actor-loss'
+  const name = scenario.savedCloseout ? 'cold-first-saved-closeout'
+    : scenario.interruptRetirement ? 'cold-first-retirement-actor-loss'
     : scenario.retirement ? 'cold-first-retirement' : scenario.receipt ? 'cold-receipt-proof'
     : scenario.stopRecoveryAfter ? `recovery-actor-${scenario.stopRecoveryAfter}`
     : scenario.proof ? 'cold-proof' : scenario.recovery ? `cold-recovery-${step}` : step;
@@ -92,7 +95,8 @@ for (const scenario of [
           fixture, active, step, port, release, state, stopRecoveryAfter: scenario.stopRecoveryAfter,
           waitForController: identity => observe('AwaitPublisherExit', identity), observe: () => observe('Inspect'),
         });
-        if (scenario.retirement) retirementCase = await prepareWindowsFirstRetirementCase({
+        if (scenario.savedCloseout) retirementCase = await prepareWindowsFirstSavedCloseoutCase({ fixture, state });
+        else if (scenario.retirement) retirementCase = await prepareWindowsFirstRetirementCase({
           fixture, active, state, interrupt: scenario.interruptRetirement,
           waitForController: identity => observe('AwaitPublisherExit', identity), observe: () => observe('Inspect'),
         });

@@ -190,7 +190,7 @@ jobs:
           $tests = @('tests/deployment-windows-first-install.test.mjs', 'tests/deployment-windows-first-build.test.mjs', 'tests/deployment-windows-first-runtime.test.mjs', 'tests/deployment-windows-first-activation.test.mjs', 'tests/deployment-windows-first-readiness.test.mjs', 'tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
           if ($env:DEPLOYMENT_TEST_RECEIPT_ONLY -eq 'true') {
             if ($env:DEPLOYMENT_TEST_COMMANDS_ONLY -ne 'true') { throw 'Receipt selection requires both Windows command-only flags.' }
-            $pattern = '\((deployment-receipt|cold-proof|cold-receipt-proof|cold-first-retirement|cold-first-retirement-actor-loss)\)$|^saved recovery bundle closes module dependencies'
+            $pattern = '\((deployment-receipt|cold-proof|cold-receipt-proof|cold-first-retirement|cold-first-retirement-actor-loss|cold-first-saved-closeout)\)$|^saved recovery bundle closes module dependencies'
             $tests = @('tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
           }
           ./tests/deployment-windows-private-tests.ps1 -Tests $tests -NamePattern $pattern

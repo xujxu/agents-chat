@@ -13386,6 +13386,9 @@ Files:
 - [ ] Accept focused five-case receipt/retirement gate, complete native
   selection and saved-source closure. If shared managed helpers are extracted,
   also run the full dual-platform regression before public integration.
+  Focused `ac0637b / 38047289219`, job `114199268213`, passed **5/5**
+  at `2026-10-10 11:16:33 UTC`; genuine first retirement took 193,229 ms.
+  `beb635a / 38047852360` is running the full dual-platform regression.
 - [ ] Exercise genuine loss of three separately admitted retirement actors:
   after marker publication, after the first deletion, and after every evidence
   entry is deleted but before final marker removal. Each owned Node must be
@@ -13395,6 +13398,24 @@ Files:
   must resume the identical final observation, delete only the marker, preserve
   state/receipt/runtime, and permit a new deployment lock. Extend the focused
   selector to six cases; no production behavior change is presumed necessary.
+  `beb635a / 38047850347` is running this focused six-case gate.
+
+### Task 5CS: Route saved first-deployment closeout through its actual authority
+
+- [ ] Add a completed first fixture that saves the real recovery engine before
+  original actor loss, then invokes its verified task-retirement entry in a
+  fresh process after releasing the parent admission. Require the exact
+  `{ status: 'completed', operationId, phase: 'accepted' }` response, unchanged
+  state/receipt/runtime, retained verified recovery engine and fresh lock reuse.
+  Confirm the existing managed-only closeout refuses this first-specific history.
+- [ ] For an exact accepted absent-prior deployment, route completed closeout
+  to `openWindowsFirstDeploymentRetirement`, retaining original state bytes and
+  operation binding through every deletion. Keep managed closeout unchanged.
+  Require deploy/absent/first-install-absent/null-backup/activating predecessor;
+  do not infer first-install authority from missing managed receipts.
+- [ ] Accept saved first closeout remotely before wiring the public first
+  deployment command. Public success must still wait for original operation
+  actor exit and actual saved finalizer success.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
