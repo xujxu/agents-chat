@@ -13992,6 +13992,10 @@ inspection/configuration/lock/first-deployment composition.
   NoTunnel; deploy supports it but rejects conflicting first-policy requests.
   Preserve read-only status and inherited Node-hook stripping coverage.
   Push and accept portable/native command contracts plus actual matrix4.
+  Native gate `e1b9a3a / 38084153438`, job `114307001357`, passed at
+  `2026-10-10 21:04:05 UTC`: all 13 process/command contracts, native
+  public no-side-effect assertions, and all 13 first-receipt/recovery cases
+  (1,777,454 ms). This gate predates the later first-environment/cache fixes.
   First implementation `e1b9a3a / 38084155349`, job `114307008368`,
   reached real preflight but failed `DEPLOYMENT_CONFIGURATION_UNSUPPORTED`
   at `configuration-files.mjs:180`. The fresh environment unnecessarily
@@ -14012,7 +14016,13 @@ inspection/configuration/lock/first-deployment composition.
   https://nodejs.org/docs/latest-v24.x/api/module.html#moduleenablecompilecacheoptions
   Since this touches shared configuration handling, run the full dual-platform
   workflow (46 jobs including four actual first-application cases).
-- [ ] Update public help/README with the exact accepted fresh NoTunnel route
+  Full run `6d91d06 / 38085665538` is in progress. Its actual public-first job
+  `114311512963` passed at `2026-10-10 21:09:06 UTC` (723,083 ms), including
+  the exact empty-controller-root assertion. The cache-policy test passed on
+  Linux (`114311513126`, 2.1 ms) and Windows (`114311513092`, 5.8 ms).
+  At `21:16 UTC`, 41/46 jobs had passed with zero failures; full acceptance
+  remains pending.
+- [x] Update public help/README with the exact accepted fresh NoTunnel route
   and remaining gates. Do not label no-tunnel acceptance default tunnel
   acceptance or claim other-user/legacy-task adoption.
 

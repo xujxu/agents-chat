@@ -159,7 +159,8 @@ saved finalization, preserved authenticated data and no-op. Exact successful
 capture cleanup passed all 42 jobs at `26bcf7e` (Actions `38006102348`).
 The public existing-task update/no-op path passed all 42 jobs at `9355b6c`
 (Actions `38015607706`), including private directory preparation and automatic
-finalization. Windows first installation and public cold restore remain pending.
+finalization. Default-tunnel Windows first installation and public cold restore
+remain pending; explicit fresh NoTunnel acceptance is recorded below.
 Native first-install inspection and configuration capture also passed all 42
 jobs at `6f514cc` (Actions `38018693061`), preserving the real public update/no-op
 path. These foundations do not yet enable public first deployment.
@@ -252,8 +253,8 @@ The latest complete Linux/Windows regression passed all 44 jobs at `1876402`
 (Actions `38075160363`), including 42 native first-install cases, real normal
 and interrupted first-application recovery, and the existing-task application
 lifecycle. Real default-tunnel acceptance still needs a suitable
-Actions test environment; public first installation and cold restore remain
-unfinished.
+Actions test environment; default-tunnel first installation and cold restore
+remain unfinished.
 First-completion preparation now retains original source, build, dependency and
 configuration identities in its existing hash-linked record at `d0dbc5b`
 (Actions `38063498689`, seven focused cases). Cold proof exposes that original
@@ -292,8 +293,11 @@ native runtime activation, completion and receipt publication at
 Actual application acceptance also passed at `68f0be5 / 38082449059`:
 default Interactive/AtLogOn, explicit S4U/AtStartup, and receipt-loss recovery
 all preserved runtime and chat data through saved finalization and public
-update no-op. Public first-deployment routing and tunnel/watchdog integration
-remain separate gates.
+update no-op. The explicit public fresh `deploy.ps1 -NoTunnel` route also
+passed at `6d91d06 / 38085665538` (job `114311512963`), including automatic
+saved finalization and empty successful-controller capture storage.
+The full 46-job regression is still pending; default-tunnel and remaining
+watchdog integration are separate gates.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
@@ -597,8 +601,8 @@ module tree and workflow schema outside mutable source, so replacing source
 cannot alter an in-flight controller. The private supervisor and exact successful
 capture retirement passed all 42 jobs at `26bcf7e / 38006102348`.
 The public existing-task update/no-op path below passed all 43 jobs at
-`5e15139 / 38057686717`. Public first installation and cold restore remain
-separate, unfinished integration gates.
+`5e15139 / 38057686717`. Default-tunnel first installation and cold restore
+remain separate, unfinished integration gates.
 Installed immutable runtime bundles are not rewritten through retained scopes.
 The separate task installer defaults registration to the current Windows account.
 The staged public deploy/update commands currently preserve the installed task
@@ -608,22 +612,24 @@ The native task-definition inspector records and rechecks XML,
 task permissions, principal/mode settings and Scheduler instances. It is
 read-only and explicitly returns no runtime authority: a Scheduler engine PID
 is not proof of ownership of the watchdog or its descendants, and Ready or
-Disabled is not proof that application processes are stopped. Public integration
-of first installation and cold recovery remains pending.
+Disabled is not proof that application processes are stopped. Default-tunnel
+first installation and public cold recovery remain pending.
 
 **Deployment-backup branch: staged public commands.** Run from elevated
 PowerShell **7.4 or newer**, with **Node.js 24** (including its bundled npm)
 and Git on the controller PATH. This replaces the legacy deploy implementation;
 there is no fallback that kills port owners, reinstalls a task or builds before
-backup. Existing running managed tasks are accepted. The explicit fresh
-`deploy.ps1 -NoTunnel` route is implemented but its public application
-acceptance is still pending; legacy watchdog and stopped-task adoption remain
-unsupported.
+backup. Existing running managed tasks and explicit fresh
+`deploy.ps1 -NoTunnel` are accepted in actual application scenarios.
+Legacy watchdog and stopped-task adoption remain unsupported.
 
 ```powershell
 # Read-only help or status (no control files or helper capture)
 pwsh -NoProfile -File .\scripts\update.ps1 -Help
 pwsh -NoProfile -File .\scripts\update.ps1 -ProjectDir C:\apps\agents-chat -Status -Json
+
+# First deployment from a fresh checkout with its .env.local already configured
+pwsh -NoProfile -File .\scripts\deploy.ps1 -ProjectDir C:\apps\agents-chat -NoTunnel -SkipGitPull -Json
 
 # Update an existing managed task; skip only with matching accepted provenance
 pwsh -NoProfile -File .\scripts\update.ps1 -ProjectDir C:\apps\agents-chat -Json
