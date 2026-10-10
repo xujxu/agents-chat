@@ -270,8 +270,10 @@ incomplete publication evidence, validates the service digest against retained
 native task evidence, and creates only the receipt; it does not release the
 original operation lock or retire evidence. Saved closeout now invokes this
 operation before ordinary first-deployment retirement when the receipt is
-missing; that composition and genuine application actor-loss acceptance are
-pending their Actions gates.
+missing. At `41317ee`, all nine focused cases passed in Actions `38073750577`;
+Actions `38073752429` also passed both real-application cases: normal first
+deployment and original actor loss before receipt publication, followed by
+saved recovery and public update no-op with the same runtime and chat data.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

@@ -13750,10 +13750,14 @@ unknown staging, a replaced runtime, or a dead first runtime.
   resumable-retirement paths retain their existing behavior, including readable
   legacy provenance. Do not catch a refusal and start a new runtime or delete
   evidence.
-- [ ] Push and accept focused nine-case Actions plus saved dependency closure.
+- [x] Push and accept focused nine-case Actions plus saved dependency closure.
   Record exact commit/run/job and verify the existing warm first closeout path
   remains accepted. Proceed to actual application crash acceptance, not public
   first-install routing.
+  `41317ee / 38073750577`, job `114276310787`, passed 9/9 at
+  `2026-10-10 18:15:59 UTC`. Saved missing-receipt closeout took 178,183 ms;
+  the unchanged existing-receipt saved closeout took 178,383 ms. Saved
+  dependency closure passed in 4,623 ms.
 
 ### Task 5CY: Recover a genuine first application after pre-receipt actor loss
 
@@ -13787,7 +13791,7 @@ job in `.github/workflows/deployment-lifecycle.yml`.
   no worker/first-task/lock residue, unchanged receipt/data/runtime and an empty
   successful controller-capture directory. These are actual application checks,
   not the small HTTP native fixture.
-- [ ] Push the causal fixture and dispatch:
+- [x] Push the causal fixture and dispatch:
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_application_only=true \
@@ -13800,10 +13804,24 @@ job in `.github/workflows/deployment-lifecycle.yml`.
   original real runtime observable and authenticated chat saved. It failed
   with `DEPLOYMENT_WINDOWS_FIRST_RETIREMENT_REFUSED` at `17:47:36 UTC`
   (569,675 ms), matching the native missing-receipt boundary. The normal
-  matrix job remains pending observation; no actual recovery pass is claimed.
+  matrix job `114272683765` passed at `17:56:34 UTC` in 1,109,151 ms.
+  Both causal jobs are observed; no actual cold recovery pass is claimed yet.
   After that integration, repeat until both actual cases pass. Record their
   independent job IDs and exact outcomes; never call a native-only pass actual
   application crash acceptance.
+  Integrated `41317ee / 38073752429` passed both actual cases:
+  receipt-loss job `114276406460` at `18:07:38 UTC` (642,528 ms) and normal
+  job `114276406190` at `18:15:11 UTC` (1,093,066 ms). Actual source build,
+  surviving original runtime after actor loss, receipt creation through saved
+  closeout, exact state/runtime/chat preservation, and subsequent public update
+  no-op are accepted. No default tunnel or public first routing is inferred.
+- [ ] Run the complete dual-platform workflow, now 44 jobs (two isolated actual
+  first scenarios) with 42 native first-install cases:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat --ref feat/deployment-backup
+  ```
+  Preserve `5e15139 / 38057686717` as the last accepted full 43-job baseline
+  until this expanded regression finishes successfully.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
