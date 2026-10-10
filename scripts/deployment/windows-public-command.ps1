@@ -83,9 +83,11 @@ must be retained for inspection. Never manually remove an operation lock.
                 $jsonArguments = ConvertTo-Json -InputObject $arguments.ToArray() -Compress
                 $nodeOptions = [Environment]::GetEnvironmentVariable('NODE_OPTIONS', 'Process')
                 $nodePath = [Environment]::GetEnvironmentVariable('NODE_PATH', 'Process')
+                $pathExtensions = [Environment]::GetEnvironmentVariable('PATHEXT', 'Process')
                 try {
                     [Environment]::SetEnvironmentVariable('NODE_OPTIONS', $null, 'Process')
                     [Environment]::SetEnvironmentVariable('NODE_PATH', $null, 'Process')
+                    [Environment]::SetEnvironmentVariable('PATHEXT', '.EXE', 'Process')
                     $stage = 'context'
                     $text = & $node (Join-Path $PSScriptRoot 'windows-public-context.mjs') `
                         $Operation $Source $project $taskName $git $pwsh $jsonArguments
@@ -114,6 +116,7 @@ must be retained for inspection. Never manually remove an operation lock.
                 } finally {
                     [Environment]::SetEnvironmentVariable('NODE_OPTIONS', $nodeOptions, 'Process')
                     [Environment]::SetEnvironmentVariable('NODE_PATH', $nodePath, 'Process')
+                    [Environment]::SetEnvironmentVariable('PATHEXT', $pathExtensions, 'Process')
                 }
             }
         }

@@ -13397,6 +13397,12 @@ directory preparation, real live fixture, lifecycle workflow and README.
   unlike the successful native protocol cases. Add a bounded status regression
   with only SystemRoot/PATH/TEMP/TMP, and include the sanitized PowerShell
   error identifier rather than initializing a missing exit code to success.
+  Causal `561c76b / 38011007704` reproduced `VariableIsUndefined` at the
+  same exit-code read at 00:56:57 UTC. Set `PATHEXT=.EXE` while invoking
+  the selected absolute executable, then restore the caller's original
+  value in the existing environment finally block. This makes PowerShell
+  wait for native execution and collect its actual exit code without
+  trusting inherited file associations or inventing an exit status.
 
 ### Task 5BW: Retire only original completed controller captures
 
