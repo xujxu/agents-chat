@@ -13315,6 +13315,37 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CQ: Retain a completed first proof after deployment receipt publication
+
+Files: existing first-crash actor, crash/proof tests and
+`scripts/deployment/windows-first-completion-records.ps1`.
+
+- [x] Add an actual original-actor loss after all completion edges and genuine
+  `publishDeploymentReceipt`. Open the first-specific read-only proof against
+  that completed history. Require unchanged original runtime and both state
+  and receipt writes refused while proof is retained.
+- [ ] Run the new causal Actions case after Task 5CP: the current first-proof
+  inventory rejects every `deployment.json`, including a genuine completed
+  first receipt. Confirm this exact refusal, not an earlier adoption failure.
+- [ ] Admit an optional receipt only with the complete fourteen-file first
+  history. Capture its presence for the entire proof lifetime; retain its
+  original private file and validate exact schema, accepted status, project,
+  operation, accepted timestamp, source commit and all identity digests against
+  the original accepted state. Continue refusing receipt presence before
+  completion, foreign receipts and staged publication evidence. Do not grant
+  cleanup authority or claim that receipt digests independently attest current
+  build contents.
+- [x] Add cold-open refusal cases for wrong operation, project, timestamp,
+  source, malformed artifact digest, pending status and unknown fields:
+  ```js
+  await writeFile(receiptFile, JSON.stringify(changed));
+  await rejectProof(options, refused);
+  ```
+  Restore only the fixture-owned original bytes after each refusal.
+- [ ] Accept the full native selection before using the retained final receipt
+  as an input to first-specific retirement. Do not publish final success or
+  release an original lock merely because a receipt file exists.
+
 ### Task 5CP: Verify first-runtime adoption and the existing deployment receipt
 
 Files: `tests/deployment-windows-first-receipt-case.mjs` and the native

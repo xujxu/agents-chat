@@ -3,12 +3,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { prepareWindowsFirstRuntime } from '../scripts/deployment/windows-first-runtime.mjs';
 import { windowsTaskCompletionSteps } from '../scripts/deployment/windows-task-controller.mjs';
 import { withWindowsFirstBuildFixture, buildWindowsFirstFixture, windowsFirstHttpRuntimeScript } from './deployment-windows-first-build-fixture.mjs';
+import { verifyWindowsFirstDeploymentReceipt } from './deployment-windows-first-receipt-case.mjs';
 
-const [stopAfter, suppliedPort] = process.argv.slice(2);
+const [stopAfter, suppliedPort, receipt] = process.argv.slice(2);
 const port = Number(suppliedPort);
 assert.ok(windowsTaskCompletionSteps.slice(1).includes(stopAfter));
 assert.ok(Number.isSafeInteger(port) && port > 0 && port <= 65535);
 assert.equal(typeof process.send, 'function');
+assert.ok(receipt === undefined || receipt === 'receipt' && stopAfter === 'complete');
 const send = value => new Promise((resolve, reject) => process.send(value, error => error ? reject(error) : resolve()));
 const cleanup = [];
 try {
@@ -33,6 +35,7 @@ try {
         if (step === stopAfter) break;
       }
       await published.checkFiles();
+      if (receipt) await verifyWindowsFirstDeploymentReceipt({ fixture: f, built, active, port });
       await send({ type: 'paused', pid: process.pid, step: stopAfter });
       await delay(120000);
       throw new Error('Parent did not terminate the held first-completion actor.');

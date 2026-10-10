@@ -22,9 +22,11 @@ for (const scenario of [
   { step: 'lease-released', recovery: true, stopRecoveryAfter: 'released' },
   { step: 'lease-released', recovery: true, stopRecoveryAfter: 'permanent-policy-applied' },
   { step: 'lease-released', recovery: true, stopRecoveryAfter: 'enable-applied' },
+  { step: 'complete', proof: true, receipt: true },
 ]) {
   const { step } = scenario;
-  const name = scenario.stopRecoveryAfter ? `recovery-actor-${scenario.stopRecoveryAfter}`
+  const name = scenario.receipt ? 'cold-receipt-proof'
+    : scenario.stopRecoveryAfter ? `recovery-actor-${scenario.stopRecoveryAfter}`
     : scenario.proof ? 'cold-proof' : scenario.recovery ? `cold-recovery-${step}` : step;
   test(`Windows first-install abrupt actor death preserves the exact original lease boundary (${name})`,
     { skip: process.platform !== 'win32' }, async () => {
@@ -33,7 +35,8 @@ for (const scenario of [
       await new Promise((resolve, reject) => { socket.once('error', reject); socket.listen(0, '127.0.0.1', resolve); });
       const port = socket.address().port;
       await new Promise((resolve, reject) => socket.close(error => error ? reject(error) : resolve()));
-      const child = fork(actor, [step, String(port)], { execArgv: [], stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+      const child = fork(actor, [step, String(port), ...(scenario.receipt ? ['receipt'] : [])],
+        { execArgv: [], stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
       const signal = AbortSignal.timeout(300000);
       const exited = once(child, 'exit', { signal });
       let stderr = '';
@@ -73,11 +76,13 @@ for (const scenario of [
         const state = await readFile(path.join(fixture.control, 'state.json'));
         const before = await observe('Inspect');
         assert.equal(before.lease, step === 'release-requested' ? 'guarded' : 'released');
-        assert.equal(before.binding.enabled, step === 'enable-applied');
-        const permanent = ['permanent-policy-applied', 'enable-applied'].includes(step);
+        assert.equal(before.binding.enabled, ['enable-applied', 'complete'].includes(step));
+        const permanent = ['permanent-policy-applied', 'enable-applied', 'complete'].includes(step);
         assert.deepEqual(before.triggers, permanent ? [{ type: 8, enabled: true }] : []);
         assert.deepEqual(before.restart, permanent ? { count: 3, intervalSeconds: 60 } : { count: 0, intervalSeconds: null });
-        if (scenario.proof) proofCase = await prepareWindowsFirstProofCase({ fixture, active, port, release, state });
+        if (scenario.proof) proofCase = await prepareWindowsFirstProofCase({
+          fixture, active, port, release, state, completed: scenario.receipt === true,
+        });
         if (scenario.recovery) recoveryCase = await prepareWindowsFirstRecoveryCase({
           fixture, active, step, port, release, state, stopRecoveryAfter: scenario.stopRecoveryAfter,
           waitForController: identity => observe('AwaitPublisherExit', identity), observe: () => observe('Inspect'),
@@ -125,7 +130,7 @@ for (const scenario of [
           const response = await fetch(`http://127.0.0.1:${port}/api/auth/providers`, { signal: AbortSignal.timeout(5000) });
           assert.equal(response.status, 200);
           assert.deepEqual(Object.keys(await response.json()), ['admin-login']);
-        } else {
+        } else if (step !== 'complete') {
           await assert.rejects(readFile(path.join(directory, 'completion-released.json')), { code: 'ENOENT' });
           await assert.rejects(readFile(path.join(directory, 'completion-complete.json')), { code: 'ENOENT' });
         }
