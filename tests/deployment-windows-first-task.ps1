@@ -11,6 +11,9 @@ $settings = '<Settings xmlns="http://schemas.microsoft.com/windows/2004/02/mit/t
 $expected = ([xml]$settings).DocumentElement
 $normalized = ([xml]'<Settings xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><Enabled>false</Enabled></Settings>').DocumentElement
 Confirm-AgentsChatFirstTaskSettings $expected $normalized
+$enabled = ([xml]$settings.Replace('<Enabled>false</Enabled>', '<Enabled>true</Enabled>')).DocumentElement
+$implicitEnabled = ([xml]$normalized.OuterXml.Replace('<Enabled>false</Enabled>', '')).DocumentElement
+Confirm-AgentsChatFirstTaskSettings $enabled $implicitEnabled
 foreach ($invalid in @(
     $settings.Replace('<Enabled>false</Enabled>', '<Enabled>true</Enabled>'),
     $settings.Replace('<Enabled>false</Enabled>', ''),

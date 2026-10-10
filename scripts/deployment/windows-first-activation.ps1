@@ -77,6 +77,13 @@ function Stop-AgentsChatFirstRuntime([hashtable]$Context) {
         if ($deadline.ElapsedMilliseconds -ge 15000) { throw 'Original first-runtime instance did not settle.' }
         Start-Sleep -Milliseconds 100
     }
+    $receipt = [ordered]@{
+        status='first-runtime-stopped'; applicationHealthy=$false; taskName=$Context.TaskName
+        controllerPid=$PID; controllerIdentity=$Context.Identity; runtime=$activation.Runtime
+    }
+    $null = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::Publish(
+        (Join-Path $Context.Control "first-task-$($Context.OperationId)/activation-stopped.json"),
+        ($receipt | ConvertTo-Json -Depth 5 -Compress)))
     $activation.Stopped = $true
 }
 

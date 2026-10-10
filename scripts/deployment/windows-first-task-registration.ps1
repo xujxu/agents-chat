@@ -1,7 +1,7 @@
 function Confirm-AgentsChatFirstTaskSettings([Xml.XmlElement]$Expected, [Xml.XmlElement]$Actual) {
     $defaults = @{
         AllowHardTerminate='true'; RunOnlyIfNetworkAvailable='false'; AllowStartOnDemand='true'
-        Hidden='false'; RunOnlyIfIdle='false'; WakeToRun='false'; Priority='7'
+        Hidden='false'; RunOnlyIfIdle='false'; WakeToRun='false'; Priority='7'; Enabled='true'
     }
     if ($Expected.NamespaceURI -cne 'http://schemas.microsoft.com/windows/2004/02/mit/task' -or
         $Actual.NamespaceURI -cne $Expected.NamespaceURI -or $Expected.Attributes.Count -ne $Actual.Attributes.Count) {

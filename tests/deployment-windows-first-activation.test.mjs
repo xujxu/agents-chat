@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
@@ -54,6 +54,8 @@ for (const running of [true, false]) {
             assert.deepEqual(saved, active);
           } else {
             await assert.rejects(published.activate());
+            assert.ok((await readdir(published.bundle.directory)).some(name => /^runtime-\d+-\d+\.json$/.test(name)),
+              'Failure case must reach the actual managed runtime, not merely fail task admission.');
           }
           assert.equal(existsSync(path.join(f.control, 'deployment.json')), false);
           assert.equal(existsSync(path.join(f.control, 'backup')), false);
@@ -65,6 +67,11 @@ for (const running of [true, false]) {
             await execute(scheduler, ['/Delete', '/TN', f.taskName, '/F'], { timeout: 30000, maxBuffer: 16384 });
           }
         }
+        const stopped = JSON.parse(await readFile(path.join(f.control,
+          `first-task-${f.lock.operationId}`, 'activation-stopped.json'), 'utf8'));
+        assert.equal(stopped.status, 'first-runtime-stopped');
+        assert.equal(stopped.taskName, f.taskName);
+        assert.ok(stopped.runtime?.pid > 0, 'Settlement must identify the original started runtime.');
       }, { runtimeScript: running ? 'setInterval(() => {}, 1000);' : 'process.exit(1);' });
     });
 }
