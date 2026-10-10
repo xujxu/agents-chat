@@ -13321,17 +13321,24 @@ Reuse `windows-configuration-files.ps1/.mjs` with an explicit fresh parameter
 set rather than inventing an installed `configuration.json`, managed task or
 runtime receipt. Keep the existing installed parameter set unchanged.
 
-- [ ] Add native first-install configuration cases and observe missing
+- [x] Add native first-install configuration cases and observe missing
   `inspectWindowsFirstConfiguration` in command-only Actions before implementation.
-- [ ] Accept only an original first-install scope. Retain the same original
+  Causal `67b3cd2 / 38018314297`, job `114113480879`, passed all three
+  original inspection cases and failed all three fresh-configuration groups
+  at `2026-10-10 02:50:50 UTC` with the missing-export assertion.
+- [x] Accept only an original first-install scope. Retain the same original
   project and each present dotenv/agents file using existing native leases;
   retain absence observations for missing sources.
-- [ ] Use the shared fixed dotenv priority, authentication compatibility,
+- [x] Use the shared fixed dotenv priority, authentication compatibility,
   startup environment and build-environment policy. Reject Node hook injection
   before creating deployment state. No file contents or secrets in observations.
 - [ ] Require rechecks to refuse replacement, permission changes and newly
   appearing sources; allow the later build's artifacts without losing retained
   configuration identity. Release every helper on refusal or explicit close.
+  Include the new observer module and native controller in saved recovery
+  inventory because installed configuration now imports its scope guard.
+  Extend the source-disappearance import closure test and run it in the
+  command-only gate too; do not regress saved restore dependencies.
 - [ ] Accept native fresh cases and preserve installed-configuration behavior
   in the existing Windows application gate. Configuration capture alone does
   not authorize worker builds, task registration, activation or recovery.

@@ -1,7 +1,9 @@
+[CmdletBinding(DefaultParameterSetName = 'Installed')]
 param(
     [Parameter(Mandatory)][string]$Project,
-    [Parameter(Mandatory)][string]$Configuration,
-    [Parameter(Mandatory)][string]$Sha256,
+    [Parameter(Mandatory, ParameterSetName = 'Installed')][string]$Configuration,
+    [Parameter(Mandatory, ParameterSetName = 'Installed')][string]$Sha256,
+    [Parameter(Mandatory, ParameterSetName = 'Fresh')][switch]$FreshInstallation,
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][string]$ControllerIdentity
 )
@@ -41,7 +43,9 @@ function Observe-Configuration {
     }
     foreach ($file in $files) { $file.Check() }
     return [pscustomobject]@{
-        project=$Project; configuration=$Configuration; configurationSha256=$Sha256
+        project=$Project
+        configuration=$(if ($FreshInstallation) { $null } else { $Configuration })
+        configurationSha256=$(if ($FreshInstallation) { $null } else { $Sha256 })
         projectSecurityDescriptor=$root.SecurityDescriptor; files=@($records)
     }
 }
@@ -53,17 +57,19 @@ try {
     $stage = 'project'
     $root = [Deployment.WindowsPrivateFile]::OpenSourceDirectory($Project)
     $files.Add($root)
-    $stage = 'installed-configuration'
-    if ([IO.Path]::GetFileName($Configuration) -cne 'configuration.json') { throw 'Unsupported installed configuration path.' }
-    $files.Add([Deployment.WindowsPrivateFile]::OpenDirectory([IO.Path]::GetDirectoryName($Configuration)))
-    $installed = [Deployment.WindowsPrivateFile]::Open($Configuration, $Sha256)
-    $files.Add($installed)
-    $document = [Text.Json.JsonDocument]::Parse($installed.ReadText())
-    try {
-        if ($document.RootElement.GetProperty('command').GetProperty('cwd').GetString() -cne $Project) {
-            throw 'Installed configuration project differs.'
-        }
-    } finally { $document.Dispose() }
+    if (-not $FreshInstallation) {
+        $stage = 'installed-configuration'
+        if ([IO.Path]::GetFileName($Configuration) -cne 'configuration.json') { throw 'Unsupported installed configuration path.' }
+        $files.Add([Deployment.WindowsPrivateFile]::OpenDirectory([IO.Path]::GetDirectoryName($Configuration)))
+        $installed = [Deployment.WindowsPrivateFile]::Open($Configuration, $Sha256)
+        $files.Add($installed)
+        $document = [Text.Json.JsonDocument]::Parse($installed.ReadText())
+        try {
+            if ($document.RootElement.GetProperty('command').GetProperty('cwd').GetString() -cne $Project) {
+                throw 'Installed configuration project differs.'
+            }
+        } finally { $document.Dispose() }
+    }
     foreach ($name in @('.env.production.local', '.env.local', '.env.production', '.env', 'agents.json')) {
         $stage = $name
         $path = Join-Path $Project $name

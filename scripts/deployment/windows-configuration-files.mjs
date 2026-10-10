@@ -41,9 +41,17 @@ function capture(value, project, configuration, sha256) {
 }
 
 export async function openWindowsConfigurationFiles({ project, configuration, sha256, pwsh, signal }) {
+  return openConfigurationFiles({ project, configuration, sha256, pwsh, signal, fresh: false });
+}
+
+export async function openWindowsFirstConfigurationFiles({ project, pwsh, signal }) {
+  return openConfigurationFiles({ project, configuration: null, sha256: null, pwsh, signal, fresh: true });
+}
+
+async function openConfigurationFiles({ project, configuration, sha256, pwsh, signal, fresh }) {
   signal?.throwIfAborted();
-  if (process.platform !== 'win32' || ![project, configuration, pwsh].every(canonical)
-    || path.basename(configuration) !== 'configuration.json' || !digest(sha256)) {
+  if (process.platform !== 'win32' || ![project, pwsh].every(canonical)
+    || (!fresh && (!canonical(configuration) || path.basename(configuration) !== 'configuration.json' || !digest(sha256)))) {
     throw refused(new Error('Canonical Windows configuration scope is required.'));
   }
   const controllerIdentity = await processIdentity(process.pid);
@@ -51,7 +59,7 @@ export async function openWindowsConfigurationFiles({ project, configuration, sh
   const { child, wire, waitForExit, abandon } = windowsControllerTransport({
     pwsh, refused, label: 'Native configuration file observer',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-Project', project,
-      '-Configuration', configuration, '-Sha256', sha256,
+      ...(fresh ? ['-FreshInstallation'] : ['-Configuration', configuration, '-Sha256', sha256]),
       '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
   });
   let closed = false;

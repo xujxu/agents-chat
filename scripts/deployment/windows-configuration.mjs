@@ -1,8 +1,25 @@
 import { createHash } from 'node:crypto';
 import { assertWindowsManagedTaskScope } from './windows-managed-task.mjs';
-import { openWindowsConfigurationFiles } from './windows-configuration-files.mjs';
+import { assertWindowsFirstInstallScope } from './windows-first-install.mjs';
+import { openWindowsConfigurationFiles, openWindowsFirstConfigurationFiles } from './windows-configuration-files.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 import { inspectConfigurationFiles } from './configuration-files.mjs';
+
+async function finishInspection(retained, inspected, recheck, signal) {
+  const checkFiles = async ({ signal: checkSignal = signal } = {}) => {
+    await retained.check({ signal: checkSignal });
+    await inspected.check({ signal: checkSignal });
+    await retained.check({ signal: checkSignal });
+  };
+  await recheck();
+  await checkFiles({ signal });
+  return Object.freeze({
+    status: inspected.status, profile: inspected.profile, providers: inspected.providers,
+    files: retained.observation.files, projectSecurityDescriptor: retained.observation.projectSecurityDescriptor,
+    checkFiles, buildEnvironment: inspected.buildEnvironment, startupEnvironment: inspected.startupEnvironment,
+    close: () => retained.close(),
+  });
+}
 
 export async function inspectWindowsConfiguration({ scope, pwsh, profile, signal }) {
   const observed = await assertWindowsManagedTaskScope(scope, { signal });
@@ -19,19 +36,26 @@ export async function inspectWindowsConfiguration({ scope, pwsh, profile, signal
     const inspected = await inspectConfigurationFiles({
       project: observed.project, profile, environment: configuration.command.environment, signal,
     });
-    const checkFiles = async ({ signal: checkSignal = signal } = {}) => {
-      await retained.check({ signal: checkSignal });
-      await inspected.check({ signal: checkSignal });
-      await retained.check({ signal: checkSignal });
-    };
-    await assertWindowsManagedTaskScope(scope, { signal });
-    await checkFiles({ signal });
-    return Object.freeze({
-      status: inspected.status, profile: inspected.profile, providers: inspected.providers,
-      files: retained.observation.files, projectSecurityDescriptor: retained.observation.projectSecurityDescriptor,
-      checkFiles, buildEnvironment: inspected.buildEnvironment, startupEnvironment: inspected.startupEnvironment,
-      close: () => retained.close(),
+    return await finishInspection(retained, inspected, () => assertWindowsManagedTaskScope(scope, { signal }), signal);
+  } catch (error) {
+    try { await retained.close(); }
+    catch (cleanup) { throw new AggregateError([error, cleanup], 'Configuration inspection and close failed.'); }
+    throw error;
+  }
+}
+
+export async function inspectWindowsFirstConfiguration({ scope, pwsh, profile, signal }) {
+  const observed = await assertWindowsFirstInstallScope(scope, { signal });
+  const retained = await openWindowsFirstConfigurationFiles({ project: observed.project, pwsh, signal });
+  try {
+    if (retained.observation.projectSecurityDescriptor !== observed.projectSecurityDescriptor) {
+      throw new Error('Original first-install project permissions changed.');
+    }
+    const inspected = await inspectConfigurationFiles({
+      project: observed.project, profile, environment: { NODE_ENV: 'production' }, signal,
     });
+    inspected.buildEnvironment({});
+    return await finishInspection(retained, inspected, () => assertWindowsFirstInstallScope(scope, { signal }), signal);
   } catch (error) {
     try { await retained.close(); }
     catch (cleanup) { throw new AggregateError([error, cleanup], 'Configuration inspection and close failed.'); }

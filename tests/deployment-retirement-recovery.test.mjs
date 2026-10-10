@@ -104,7 +104,11 @@ test('saved recovery bundle closes module dependencies after its source disappea
       assert.ok(names.has(dependency), `${name} requires missing saved dependency ${dependency}`);
     }
   }
-  const modules = ['linux-restore.mjs', 'linux-service-recovery.mjs', 'retirement-recovery.mjs'];
+  assert.ok(names.has('windows-first-install-controller.ps1'));
+  const modules = [
+    'linux-restore.mjs', 'linux-service-recovery.mjs', 'retirement-recovery.mjs',
+    'windows-configuration.mjs', 'windows-first-install.mjs',
+  ];
   const urls = modules.map(name => pathToFileURL(path.join(saved.directory, name)).href);
   await execute(process.execPath, ['--input-type=module', '--eval',
     `for (const url of ${JSON.stringify(urls)}) await import(url);`], {

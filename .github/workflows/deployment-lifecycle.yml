@@ -177,7 +177,7 @@ jobs:
         shell: pwsh
         run: |
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
-          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-first-install.test.mjs')
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-first-install.test.mjs', 'tests/deployment-retirement-recovery.test.mjs') -NamePattern '^(Windows first-install|saved recovery bundle closes module dependencies)'
       - name: Verify public routing and legacy startup contracts
         if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         shell: powershell
