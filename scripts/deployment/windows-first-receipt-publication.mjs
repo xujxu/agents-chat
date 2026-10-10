@@ -40,10 +40,14 @@ export async function openWindowsFirstReceiptPublication({ control, project, ope
     const ready = captureWorkerFields(await wire.receive({ signal, timeoutMs: 60000 }),
       ['type', 'pid', 'processIdentity', 'control', 'project', 'controllerIdentity', 'value', 'deploymentIdentity', 'acceptedAt'],
       'first receipt publication readiness');
-    if (ready.type !== 'ready' || ready.pid !== child.pid || ready.control !== control || ready.project !== project
-      || ready.controllerIdentity !== controllerIdentity || ready.processIdentity !== await processIdentity(child.pid)
-      || typeof ready.acceptedAt !== 'string' || !Number.isFinite(Date.parse(ready.acceptedAt))) {
-      throw new Error('Original first receipt publication bridge differs.');
+    const expected = { type: 'ready', pid: child.pid, control, project, controllerIdentity,
+      processIdentity: await processIdentity(child.pid) };
+    const differing = Object.keys(expected).filter(key => ready[key] !== expected[key]);
+    if (typeof ready.acceptedAt !== 'string' || !Number.isFinite(Date.parse(ready.acceptedAt))) {
+      differing.push('acceptedAt');
+    }
+    if (differing.length) {
+      throw new Error(`Original first receipt publication bridge differs: ${differing.join(', ')}.`);
     }
     const observation = captureWindowsFirstCompletionObservation(ready.value);
     if (observation.phase !== 'complete' || observation.operationId !== operationId) {

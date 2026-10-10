@@ -13681,6 +13681,63 @@ is granted by this operation.
   integrating saved closeout or incomplete completion-step recovery. Add
   real-application actor-loss coverage in that integration gate; native fixture
   acceptance alone is not real application cold-recovery acceptance.
+  First implementation `5c9fc43 / 38068802219`, job `114261813390`, preserved
+  all seven existing cases, but the new case failed at `16:57:07 UTC` because
+  the fresh native publisher's readiness identity differed, before publication.
+  Refusal remains enforced; emit only mismatched readiness field names (not
+  configuration or secret values) to diagnose the exact native boundary.
+
+### Task 5CX: Compose missing first receipt publication into saved closeout
+
+**Prerequisite:** Task 5CW's native publication and saved dependency gate passes.
+This task does not admit earlier completion prefixes, legacy missing provenance,
+unknown staging, a replaced runtime, or a dead first runtime.
+
+**Files:** `scripts/deployment/windows-completed-closeout.mjs`,
+`tests/deployment-windows-first-closeout-case.mjs`,
+`tests/deployment-windows-first-crash.test.mjs`,
+`.github/workflows/deployment-lifecycle.yml`, and this plan/README.
+
+- [ ] Add a separate complete-without-receipt saved-finalizer case to the native
+  crash matrix:
+  ```js
+  { step: 'complete', savedCloseout: true, missingReceipt: true }
+  ```
+  Name it `cold-first-saved-receipt-publication`, include it in the focused
+  selector, and pass `missingReceipt` to the existing saved closeout helper.
+  For that variant, require ENOENT for the receipt before original actor death,
+  retain the prepared four-field identity and original accepted state, then
+  execute the existing saved `retirementRecoveryInvocation(..., { kind:'task' })`
+  after death. Require the new receipt to match original metadata/identity,
+  original state/runtime/data continuity, evidence retirement and fresh lock
+  reuse. Preserve the existing byte-identical warm-receipt assertions.
+- [ ] Push the causal fixture and dispatch the focused nine-case Actions gate:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_commands_only=true -f windows_receipt_only=true
+  ```
+  Require the new saved invocation to fail because its original completed first
+  history has no deployment receipt; the existing eight cases must pass.
+- [ ] In the already admitted absent-prior branch, only when the receipt is
+  absent, call the accepted recovery helper before existing first retirement:
+  ```js
+  if (!await hasMarker(control, 'deployment.json')) {
+    await recoverWindowsFirstDeploymentReceipt({
+      control, project, operationId, pwsh, admission, signal,
+    });
+    await checkState();
+  }
+  scope = await openWindowsFirstDeploymentRetirement({ control, pwsh, admission, signal });
+  ```
+  Reuse the existing admission, not a nested acquisition. Existing receipt and
+  resumable-retirement paths retain their existing behavior, including readable
+  legacy provenance. Do not catch a refusal and start a new runtime or delete
+  evidence.
+- [ ] Push and accept focused nine-case Actions plus saved dependency closure.
+  Record exact commit/run/job and verify the existing warm first closeout path
+  remains accepted. Proceed to actual application crash acceptance, not public
+  first-install routing.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
