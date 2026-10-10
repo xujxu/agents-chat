@@ -13388,6 +13388,15 @@ directory preparation, real live fixture, lifecycle workflow and README.
   protocol cases through the public wrapper for accepted, recovered-failure
   and current outcomes, including private-root creation and capture cleanup.
   These protocol cases remain distinct from real application acceptance.
+  `530d3f9 / 38010050996` passed the native command-only gate, including
+  all three public supervisor outcomes and six task-option cases, at
+  00:42:31 UTC on 2026-10-10. Real retry `38010218940`, job `114088940982`,
+  built and started the actual app, then failed before update at 00:52:33 UTC:
+  context-stage `RuntimeException` when reading `LASTEXITCODE` (line 92).
+  Its public process inherits the enclosing actor's minimal environment,
+  unlike the successful native protocol cases. Add a bounded status regression
+  with only SystemRoot/PATH/TEMP/TMP, and include the sanitized PowerShell
+  error identifier rather than initializing a missing exit code to success.
 
 ### Task 5BW: Retire only original completed controller captures
 

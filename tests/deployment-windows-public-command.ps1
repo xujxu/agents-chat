@@ -54,6 +54,30 @@ try {
     Assert (-not (Test-Path -LiteralPath (Join-Path $root '.project.deployment'))) 'Status created control files'
     Assert (-not (Test-Path -LiteralPath (Join-Path $root '.project.deployment-controllers'))) 'Status captured controller files'
     Assert (@(Get-ChildItem -LiteralPath $project -Force).Count -eq 0) 'Status changed project files'
+    $minimal = @'
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const [pwsh, entry, project, git, temporary] = process.argv.slice(1);
+const child = spawnSync(pwsh, ['-NoProfile', '-NonInteractive', '-File', entry,
+  '-ProjectDir', project, '-Status', '-Json'], {
+  env: {
+    SystemRoot: process.env.SystemRoot,
+    PATH: [path.dirname(process.execPath), path.dirname(pwsh), path.dirname(git)].join(';'),
+    TEMP: temporary, TMP: temporary,
+  },
+  encoding: 'utf8', timeout: 30000, maxBuffer: 32768,
+});
+assert.ifError(child.error);
+process.stderr.write(child.stderr);
+assert.equal(child.status, 0, child.stdout);
+assert.equal(JSON.parse(child.stdout).status, 'unmanaged');
+'@
+    $git = (Get-Command git.exe -CommandType Application | Select-Object -First 1).Source
+    & $node -e $minimal $pwsh $update $project $git $root
+    Assert ($LASTEXITCODE -eq 0) 'Public status requires deterministic native execution without inherited PATHEXT'
+    Assert (-not (Test-Path -LiteralPath (Join-Path $root '.project.deployment'))) 'Minimal-environment status created control files'
+    Assert (-not (Test-Path -LiteralPath (Join-Path $root '.project.deployment-controllers'))) 'Minimal-environment status captured helpers'
     $text = & $pwsh -NoProfile -NonInteractive -File $update -ProjectDir $project -Revision invalid -Json
     Assert ($LASTEXITCODE -eq 1) 'Invalid revision was not refused'
     $result = ($text -join "`n") | ConvertFrom-Json

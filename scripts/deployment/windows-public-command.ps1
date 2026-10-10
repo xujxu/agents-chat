@@ -119,10 +119,12 @@ must be retained for inspection. Never manually remove an operation lock.
         }
     } catch {
         $code = 1
+        $errorId = ($_.FullyQualifiedErrorId -split ',')[0]
+        if ($errorId -cnotmatch '^[A-Za-z0-9_.-]{1,128}$') { $errorId = 'Unknown' }
         $result = @{ status = 'failed'; code = 'DEPLOYMENT_WINDOWS_PUBLIC_COMMAND_FAILED'
             check = $stage
             message = 'Windows command failed; check controller prerequisites and retain deployment/recovery evidence.'
-            diagnostics = @(@{ type = $_.Exception.GetType().FullName; line = $_.InvocationInfo.ScriptLineNumber }) }
+            diagnostics = @(@{ type = $_.Exception.GetType().FullName; errorId = $errorId; line = $_.InvocationInfo.ScriptLineNumber }) }
     }
     if ($Options['Json']) {
         [Console]::Out.WriteLine(($result | ConvertTo-Json -Depth 12 -Compress))
@@ -136,7 +138,7 @@ must be retained for inspection. Never manually remove an operation lock.
         [Console]::Error.WriteLine("$($result.message) ($($result.code))")
         if ($result -is [Collections.IDictionary] -and $result.Contains('diagnostics')) {
             foreach ($diagnostic in $result.diagnostics) {
-                [Console]::Error.WriteLine("Diagnostic: $stage $($diagnostic.type) line=$($diagnostic.line)")
+                [Console]::Error.WriteLine("Diagnostic: $stage $($diagnostic.type) $($diagnostic.errorId) line=$($diagnostic.line)")
             }
         }
     }
