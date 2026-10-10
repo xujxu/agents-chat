@@ -59,7 +59,8 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const [pwsh, entry, project, git, temporary] = process.argv.slice(1);
-const child = spawnSync(pwsh, ['-NoProfile', '-NonInteractive', '-File', entry,
+for (const executable of [pwsh, path.join(path.dirname(pwsh), path.basename(pwsh).toUpperCase())]) {
+const child = spawnSync(executable, ['-NoProfile', '-NonInteractive', '-File', entry,
   '-ProjectDir', project, '-Status', '-Json'], {
   env: {
     SystemRoot: process.env.SystemRoot,
@@ -72,6 +73,7 @@ assert.ifError(child.error);
 process.stderr.write(child.stderr);
 assert.equal(child.status, 0, child.stdout);
 assert.equal(JSON.parse(child.stdout).status, 'unmanaged');
+}
 '@
     $git = (Get-Command git.exe -CommandType Application | Select-Object -First 1).Source
     & $node -e $minimal $pwsh $update $project $git $root
