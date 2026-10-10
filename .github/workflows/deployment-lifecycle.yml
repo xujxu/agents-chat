@@ -277,6 +277,8 @@ jobs:
           DEPLOYMENT_TEST_WINDOWS_FIRST_PUBLIC: ${{ matrix.scenario == 'public-first' && '1' || '0' }}
           DEPLOYMENT_TEST_COMMANDS_ONLY: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         run: |
+          node --test tests/deployment-windows-first-application-crash.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'First-application crash observer contracts failed.' }
           if ($env:DEPLOYMENT_TEST_FIRST_ONLY -eq 'true' -and $env:DEPLOYMENT_TEST_COMMANDS_ONLY -ne 'true') {
             throw 'First-application selection requires both Windows command-only flags.'
           }
