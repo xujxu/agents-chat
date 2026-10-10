@@ -13908,6 +13908,40 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   Earlier native prefix acceptance
   must not be mislabeled actual application interruption at those earlier edges.
 
+### Task 5DA: Verify the existing default first-task policy on a live native runtime
+
+**Files:** extend `tests/deployment-windows-first-completion.test.mjs` and its
+focused Actions selector. This is coverage for the already implemented current
+account / Interactive / AtLogOn defaults, not new production routing.
+
+- [x] Add `deployment-receipt-default-policy` beside the existing explicit
+  S4U/AtStartup receipt case. Invoke defaults by omitting registration options:
+  ```js
+  const task = scenario.defaultPolicy
+    ? await published.registerTask()
+    : await published.registerTask({ logonType: 'S4U', triggerType: 'AtStartup' });
+  ```
+  Assert returned account SID equals original first-install inspection and
+  default mode names are Interactive/AtLogOn. Run real guarded activation,
+  readiness, completion, original-controller close and ordinary receipt
+  acceptance, not just Scheduler registration.
+- [x] Check both BootTrigger and LogonTrigger remain absent during inhibited
+  policy stages. After completion require exactly the selected native trigger
+  (AtLogOn type 9 for defaults, AtStartup type 8 for explicit policy), original
+  owner/runtime instance, original account SID, unchanged security and the
+  existing restart policy.
+- [ ] Add the case to the focused selector (13 cases; full native first46),
+  push and dispatch the existing focused Actions command. If the hosted
+  runner lacks a real interactive logon, record that actual limitation rather
+  than substitute S4U or call a registration-only assertion runtime acceptance.
+  Do not create credentials or change host logon policy to bypass that limit.
+- [ ] If native default execution passes, add a separate actual-application
+  default-policy matrix case and omit task-mode options in that actor while
+  preserving explicit S4U cases. Require the same saved-finalizer/public-update
+  continuity checks with AtLogOn. This still does not exercise Dev Tunnel or
+  enable the public first-deployment entry; watchdog/tunnel integration remains
+  a separate gate.
+
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
 Files: existing first-crash actor, crash/proof tests and

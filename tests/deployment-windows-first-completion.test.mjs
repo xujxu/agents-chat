@@ -20,6 +20,7 @@ const completionSteps = ['policy-requested', 'policy-applied', 'policy-staged', 
 for (const scenario of [
   { name: 'complete' },
   { name: 'deployment-receipt' },
+  { name: 'deployment-receipt-default-policy', defaultPolicy: true },
   { name: 'stepwise', steps: 6 },
   { name: 'all-steps', steps: 12 },
   { name: 'before-release', blocked: 'release-requested', prior: 'policy-staged', lease: 'guarded' },
@@ -51,8 +52,12 @@ test(`Windows first-install completion preserves original-runtime handoff or set
           await assert.rejects(published.advanceCompletion());
         }
         await assert.rejects(published.complete());
-        const task = await published.registerTask({ logonType: 'S4U', triggerType: 'AtStartup' });
+        const task = scenario.defaultPolicy ? await published.registerTask()
+          : await published.registerTask({ logonType: 'S4U', triggerType: 'AtStartup' });
         registered = true;
+        assert.equal(task.accountSid, f.scope.observation.accountSid);
+        assert.equal(task.logonType, scenario.defaultPolicy ? 'Interactive' : 'S4U');
+        assert.equal(task.triggerType, scenario.defaultPolicy ? 'AtLogOn' : 'AtStartup');
         await published.prepareActivation();
         await f.record('activating');
         active = await published.activate();
@@ -119,12 +124,12 @@ test(`Windows first-install completion preserves original-runtime handoff or set
           assert.equal(record.lease, ['policy-requested', 'policy-staged', 'release-requested'].includes(phase) ? 'guarded' : 'released');
           if (phase !== 'policy-requested') assert.doesNotMatch(record.definition, /-ControllerPid|-ControllerIdentity/);
           if (!['policy-restored', 'enable-requested', 'complete'].includes(phase)) {
-            assert.doesNotMatch(record.definition, /<BootTrigger\b|<RestartOnFailure\b/);
+            assert.doesNotMatch(record.definition, /<(?:Boot|Logon)Trigger\b|<RestartOnFailure\b/);
           }
           previous = createHash('sha256').update(bytes).digest('hex');
         }
         await published.close();
-        if (scenario.name === 'deployment-receipt') {
+        if (scenario.name === 'deployment-receipt' || scenario.defaultPolicy) {
           await verifyWindowsFirstDeploymentReceipt({ fixture: f, built, active, port });
         }
         const after = await observe('Inspect');
@@ -135,12 +140,13 @@ test(`Windows first-install completion preserves original-runtime handoff or set
         assert.equal(after.binding.enabled, true);
         assert.equal(after.binding.instanceGuid, active.runtime.instanceGuid);
         assert.equal(after.binding.ownerPid, active.runtime.pid);
+        assert.equal(after.binding.principalSid, f.scope.observation.accountSid);
         assert.equal(after.definition, completed.definition);
         assert.equal(after.workingDirectory, published.bundle.directory);
         assert.equal(after.securityDescriptor, task.securityDescriptor);
-        assert.match(after.definition, /<BootTrigger\b/);
+        assert.match(after.definition, scenario.defaultPolicy ? /<LogonTrigger\b/ : /<BootTrigger\b/);
         assert.match(after.definition, /<RestartOnFailure\b/);
-        assert.deepEqual(after.triggers, [{ type: 8, enabled: true }]);
+        assert.deepEqual(after.triggers, [{ type: scenario.defaultPolicy ? 9 : 8, enabled: true }]);
         assert.deepEqual(after.restart, { count: 3, intervalSeconds: 60 });
         assert.doesNotMatch(after.definition, /-ControllerPid|-ControllerIdentity/);
         const response = await fetch(`http://127.0.0.1:${port}/api/auth/providers`, { signal: AbortSignal.timeout(5000) });
