@@ -13324,7 +13324,7 @@ Files: create `scripts/deployment/windows-first-completion-records.ps1`,
 `tests/deployment-windows-first-proof-cases.mjs`; extend the genuine crash test
 and saved-engine inventory/dependency assertions.
 
-- [ ] Add a third genuine actor fixture at `lease-released`. Before either
+- [x] Add a third genuine actor fixture at `lease-released`. Before either
   original actor dies, require refusal with diagnostic `original-processes`;
   reject a cloned admission. After both die, acquire the proof through the
   original retained fresh admission:
@@ -13343,15 +13343,17 @@ and saved-engine inventory/dependency assertions.
   retained state must refuse writes. Closing must not stop the runtime.
   Refuse modified lease, runtime, predecessor hash, providers or accepted state,
   restore each exact byte sequence, then require a fresh successful reopen.
-- [ ] Push the tests and require a causal
+- [x] Push the tests and require a causal
   `Missing first-runtime cold completion proof` with all prior 28 cases passing.
-- [ ] Read and retain original first-task intent, registration, activation
+  `eb8222b / 38037518097`, job `114170959540`, confirmed that exact assertion
+  at `2026-10-10 08:34:23 UTC`; all prior **28/28** cases passed.
+- [x] Read and retain original first-task intent, registration, activation
   handoff/start/running records and the linked completion prefix. Check the
   exact accepted first-deploy state, original lock and both dead controllers,
   private bundle/readiness, current original task/instance/Job/released lease
   and retained listener. Initially admit only the proven `release-requested`
   receipt boundary; refuse other inventories rather than guess progress.
-- [ ] Reuse existing native file, identity, bundle and runtime checks only
+- [x] Reuse existing native file, identity, bundle and runtime checks only
   with factual first-runtime fields. Do not fabricate managed admission,
   prior runtime or retirement evidence. Keep the first JS capability in its
   own WeakMap; read-only proof cannot authorize existing managed retirement.
@@ -13360,6 +13362,9 @@ and saved-engine inventory/dependency assertions.
 - [ ] Include all new native/module dependencies in saved recovery and accept
   the 29-case native gate before adding recovery mutation or deployment
   receipt/retirement integration.
+  The explicit inventory includes all four first-proof files; source-removal
+  coverage now asserts the native helpers and imports the first-proof module.
+  Implementation awaits the native Actions gate.
 
 ### Task 5CL: Observe genuine original actor loss across lease release
 
