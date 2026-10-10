@@ -84,8 +84,9 @@ fs.writeFileSync('.next/BUILD_ID', 'first-owned-fixture');
     environment.NEXT_TELEMETRY_DISABLED = '1';
     const options = { scope, configuration, control, lock, operation, node: process.execPath, npmCli, git, pwsh, environment };
     const record = async phase => {
-      state = { ...state, previousPhase: state.phase, phase, sourceCommit: commit, targetCommit: commit };
-      await writeState(control, state);
+      const next = { ...state, previousPhase: state.phase, phase, sourceCommit: commit, targetCommit: commit };
+      await writeState(control, next);
+      state = next;
     };
     return {
       ...options, project, taskName, commit, record, close,

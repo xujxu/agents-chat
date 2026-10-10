@@ -13315,6 +13315,42 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CE: Original configuring-to-activating authority handoff
+
+The generic transaction records `activating` after configure returns. The
+publisher currently retains `state.json` read-only, so configuration must
+explicitly release only that lease, not close the original controller which
+the staged task references.
+
+- [x] Add a native causal case in `tests/deployment-windows-first-runtime.test.mjs`
+  requiring `published.prepareActivation()`. Before registration it refuses;
+  after registration an attempted state advance remains blocked. Handoff
+  persists `first-task-<operationId>/activation-prepared.json`, preserves the
+  original controller PID/identity and task/bundle/lock handles, permits the
+  exact configuring-to-activating write and rejects a changed target commit.
+  No runtime or `.data` starts, no backup/deployment receipt is published.
+- [ ] Push and run the command-only Actions gate; require the missing-method
+  assertion before implementation.
+- [ ] Add native `prepare-activation` and the original-capability method:
+
+  ```js
+  prepareActivation: async ({ signal } = {}) => {
+    if (!registered || activationPrepared) throw refused(new Error('First task is not ready for activation handoff.'));
+    const receipt = await request('prepare-activation', signal);
+    activationPrepared = true;
+    return receipt;
+  }
+  ```
+
+  Publish the original configuring-state hash, lock hash, registered task
+  identity and bundle hash before releasing the configuring-state handle.
+  Continue checking the original lock, task policy, configuration and artifacts.
+  Native and JS checks allow either the unchanged configuring state or its
+  exact activating successor (only phase/previousPhase/updatedAt may change).
+  Do not authorize task start in this step. Close still settles the same helper.
+- [ ] Accept native handoff and malformed-successor refusal in Actions before
+  guarded demand-start and real Next/authenticated readiness.
+
 ### Task 5CD: First-task registration in the original publication controller
 
 Reuse the original publisher's retained project, lock, state and runtime bundle

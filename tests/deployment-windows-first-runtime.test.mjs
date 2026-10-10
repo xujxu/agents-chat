@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { readFile, rename } from 'node:fs/promises';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
@@ -141,8 +141,8 @@ test(`Windows first-install task registration binds an inhibited task to the ori
     await rename(directory, `${directory}-closed`);
     await rename(`${directory}-closed`, directory);
   });
-  }
 });
+}
 
 test('Windows first-install task registration preserves a competitor registered after runtime publication', windows, async t => {
   const prepare = await publication();
@@ -162,6 +162,52 @@ test('Windows first-install task registration preserves a competitor registered 
       await assert.rejects(published.registerTask({ logonType: 'S4U', triggerType: 'AtStartup' }));
       assert.equal(existsSync(path.join(f.control, `first-task-${f.lock.operationId}`)), false);
       assert.equal((await query()).stdout, before);
+    } finally {
+      await published.close();
+      if (registered) await execute(scheduler, ['/Delete', '/TN', f.taskName, '/F'], { timeout: 30000, maxBuffer: 16384 });
+    }
+  });
+});
+
+test('Windows first-install activation handoff releases only configuring state while retaining the original task controller', windows, async t => {
+  const prepare = await publication();
+  await withWindowsFirstBuildFixture(t, async f => {
+    const built = await buildWindowsFirstFixture(f);
+    await f.record('configuring');
+    await f.operation.seal();
+    const published = await prepare({ ...f, built, port: 3010 });
+    const scheduler = path.join(process.env.SystemRoot, 'System32', 'schtasks.exe');
+    let registered = false;
+    try {
+      assert.equal(typeof published.prepareActivation, 'function', 'Missing original first-task activation handoff');
+      await assert.rejects(published.prepareActivation());
+      const task = await published.registerTask({ logonType: 'S4U', triggerType: 'AtStartup' });
+      registered = true;
+      await assert.rejects(f.record('activating'));
+      const handoff = await published.prepareActivation();
+      assert.equal(handoff.status, 'first-activation-prepared');
+      assert.equal(handoff.runtimeAuthority, false);
+      assert.equal(handoff.controllerPid, task.controllerPid);
+      assert.equal(handoff.controllerIdentity, task.controllerIdentity);
+      assert.equal(handoff.operationId, f.lock.operationId);
+      assert.equal(handoff.taskName, f.taskName);
+      assert.equal(handoff.configurationSha256, published.bundle.sha256);
+      assert.deepEqual(JSON.parse(await readFile(path.join(f.control,
+        `first-task-${f.lock.operationId}`, 'activation-prepared.json'), 'utf8')), handoff);
+      await assert.rejects(published.prepareActivation());
+      await published.checkFiles();
+      await f.record('activating');
+      await published.checkFiles();
+      await assert.rejects(rename(published.bundle.directory, `${published.bundle.directory}-moved`));
+      assert.equal(existsSync(path.join(f.project, '.data')), false);
+      assert.equal(existsSync(path.join(f.control, 'deployment.json')), false);
+      const xml = (await execute(scheduler, ['/Query', '/TN', f.taskName, '/XML'], { timeout: 30000, maxBuffer: 65536 })).stdout;
+      assert.match(xml, /<Enabled>false<\/Enabled>/);
+      assert.doesNotMatch(xml, /<BootTrigger|<LogonTrigger/);
+      const stateFile = path.join(f.control, 'state.json');
+      const state = JSON.parse(await readFile(stateFile, 'utf8'));
+      await writeFile(stateFile, `${JSON.stringify({ ...state, targetCommit: 'a'.repeat(40) })}\n`);
+      await assert.rejects(published.checkFiles());
     } finally {
       await published.close();
       if (registered) await execute(scheduler, ['/Delete', '/TN', f.taskName, '/F'], { timeout: 30000, maxBuffer: 16384 });
