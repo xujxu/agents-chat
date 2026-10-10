@@ -41,6 +41,11 @@ export async function prepareWindowsFirstProofCase({ fixture, active, port, rele
         const proof = await api.openWindowsFirstCompletionProof(options);
         try {
           assert.deepEqual(proof.observation, expected);
+          if (receipt) {
+            const { service, ...deploymentIdentity } = JSON.parse(receipt).identity;
+            assert.deepEqual(proof.deploymentIdentity, deploymentIdentity,
+              'Cold first proof must retain the original build and configuration identity.');
+          }
           assert.deepEqual(await api.assertWindowsFirstCompletionProof(fixture.control, proof, admission), expected);
           await assert.rejects(api.assertWindowsFirstCompletionProof(fixture.control, { ...proof }, admission));
           await assert.rejects(writeFile(stateFile, state));

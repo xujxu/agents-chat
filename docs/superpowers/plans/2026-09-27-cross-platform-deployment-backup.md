@@ -13536,6 +13536,72 @@ TUNNEL/WINDOWS/DEPLOY. The user selected "no resources yet; continue other work.
 Do not treat mocked tunnel behavior as real tunnel acceptance, change the
 default to tunnel-disabled, or enable public first deployment prematurely.
 
+### Task 5CV: Retain original first-deployment identity in the completion chain
+
+Continue inline under the existing recovery design and execution approval.
+This is original evidence for cold receipt recovery, not permission to publish
+a receipt under a dead actor's lock or to accept freshly substituted artifacts.
+
+**Files and boundaries:** reuse
+`windows-deployment-acceptance.mjs`'s configuration digest;
+add small JS/PowerShell `windows-first-deployment-identity` validators;
+extend `windows-first-runtime.mjs/.ps1` and
+`windows-first-completion-handoff.ps1` to carry the original identity in
+`completion-prepared.json`; extend `windows-first-completion-records.ps1` and
+the existing proof controller/JS facade to retain and expose it. Include new
+validator dependencies in `saved-recovery-engine.mjs`. Keep the fourteen
+record names, subsequent hash chain, runtime observation and retirement order
+unchanged. Legacy prepared records without this field remain readable with a
+null identity, but cannot acquire future cold receipt-publication authority.
+
+- [x] Extend `tests/deployment-windows-first-proof-cases.mjs` to compare the
+  cold proof's retained identity with independently published warm acceptance:
+  ```js
+  const { service, ...deploymentIdentity } = JSON.parse(receipt).identity;
+  assert.deepEqual(proof.deploymentIdentity, deploymentIdentity,
+    'Cold first proof must retain the original build and configuration identity.');
+  ```
+- [ ] Push and run the existing focused receipt gate; require this assertion
+  to fail because the retained original identity is absent:
+  ```sh
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_commands_only=true -f windows_receipt_only=true
+  ```
+- [ ] Capture the original identity while the first build/configuration scopes
+  are still live, and pass it in the existing prepare-completion request:
+  ```js
+  const deploymentIdentity = captureWindowsFirstDeploymentIdentity({
+    source: built.source.record.commit,
+    build: built.artifacts.identity.build,
+    dependencies: built.artifacts.identity.dependencies,
+    config: windowsConfigurationIdentity(configuration),
+  });
+  ```
+  The validator admits exactly those four fields; source is a full lowercase
+  commit, the remaining fields are 64-character lowercase SHA256 values.
+  Native preparation additionally compares source to the retained activating
+  state's target. The JS acknowledgement must equal this original identity.
+- [ ] Persist `deploymentIdentity` inside the existing prepared record. Its
+  digest is already the first completion edge's `previousSha256`; do not add
+  an unbound sidecar or recompute original artifacts during cold open.
+  The native reader accepts this exact optional field, validates its shape and
+  source against accepted state, and pins its original prepared-file handle.
+  Return it separately in the proof's ready envelope; keep the existing
+  observation schema unchanged:
+  ```js
+  const deploymentIdentity = ready.deploymentIdentity === null ? null
+    : captureWindowsFirstDeploymentIdentity(ready.deploymentIdentity);
+  ```
+- [ ] Require any existing final receipt's source/build/dependencies/config
+  to match retained prepared identity when present. Extend receipt mutation
+  cases with valid-format wrong build, dependency and config digests, preserving
+  the original fixture bytes after each refusal. Missing original identity in
+  legacy records does not itself invalidate an already-existing final receipt.
+- [ ] Accept the focused native gate and saved-source dependency closure in
+  Actions, then the full native first selection before using this evidence for
+  a separate cold publication operation. Keep public first deployment gated.
+
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
 Files: existing first-crash actor, crash/proof tests and
