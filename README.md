@@ -167,7 +167,8 @@ Owned first-install builds and retained private runtime publication passed all
 42 jobs at `7023439` (Actions `38020925331`). Native create-only inhibited task
 creation, original-controller registration in both supported logon modes and
 configuring-to-activating state handoff passed the focused Windows gate at
-`85d9394` (Actions `38024807392`, 15 cases). These steps do not start or accept
+`85d9394` (Actions `38024807392`, 15 cases) and all 42 dual-platform jobs
+(Actions `38025215365`). These steps do not start or accept
 an application; guarded activation and public first deployment remain pending.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
@@ -472,7 +473,7 @@ module tree and workflow schema outside mutable source, so replacing source
 cannot alter an in-flight controller. The private supervisor and exact successful
 capture retirement passed all 42 jobs at `26bcf7e / 38006102348`.
 The public existing-task update/no-op path below passed all 42 jobs at
-`7023439 / 38020925331`. First installation and public cold restore remain
+`85d9394 / 38025215365`. First installation and public cold restore remain
 separate, unfinished integration gates.
 Installed immutable runtime bundles are not rewritten through retained scopes.
 The separate task installer defaults registration to the current Windows account.

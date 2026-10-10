@@ -13348,6 +13348,16 @@ Files: `scripts/deployment/windows-first-activation.ps1`, the original
 - [ ] Run native positive/failing-start cases and full lifecycle regression.
   This is runtime ownership acceptance only; actual Next/authenticated readiness,
   permanent policy completion and public first deploy remain subsequent gates.
+  Native `f96fcf5 / 38026904768`, job `114139568716`, passed **17/17**
+  at `2026-10-10 05:23:54 UTC`: positive start/close took 84,438 ms and
+  actual exited-application refusal/settlement 62,478 ms. Both require the
+  original runtime's persisted settlement receipt, not merely early refusal.
+  Initial `0c580d8 / 38026410798` exposed Scheduler omission of default
+  `Enabled=true`; admit that default only when the expected value is true.
+  Keep missing `Enabled=false` as a refusal.
+  Increase only the live Windows job budget from 35 to 45 minutes: the prior
+  accepted full live application case took 1,614,386 ms before adding startup
+  coverage. Keep every command, request, startup and cleanup deadline unchanged.
 
 ### Task 5CE: Original configuring-to-activating authority handoff
 
@@ -13393,7 +13403,9 @@ the staged task references.
   guarded demand-start and real Next/authenticated readiness.
   `85d9394 / 38024807392`, job `114133290100`, passed all **15/15**
   selected native cases at `2026-10-10 04:45:36 UTC`; handoff took 37,974 ms.
-  Full regression `85d9394 / 38025215365` is dispatched.
+  Full regression `85d9394 / 38025215365` passed **42/42**, preserving actual
+  public Windows update/no-op and Linux deployment/recovery. This is the
+  newest full baseline; it does not include guarded first-runtime startup.
 
 ### Task 5CD: First-task registration in the original publication controller
 

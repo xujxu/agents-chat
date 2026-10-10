@@ -150,7 +150,7 @@ jobs:
     if: ${{ inputs.windows_application_only || !inputs.windows_restore_only }}
     name: Actual Windows live deployment
     runs-on: windows-2022
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
