@@ -16,7 +16,7 @@ import { writeState } from '../scripts/deployment/state.mjs';
 const execute = promisify(execFile);
 const implementation = new URL('../scripts/deployment/windows-first-build.mjs', import.meta.url);
 
-async function fixture(t) {
+async function fixture(t, runtimeScript) {
   assert.ok(existsSync(implementation), 'Missing owned Windows first-install build');
   const { prepareWindowsFirstBuild } = await import(implementation);
   const root = await temporaryDeployment(t);
@@ -47,7 +47,7 @@ async function fixture(t) {
 const fs = require('node:fs');
 fs.mkdirSync('node_modules', { recursive: true });
 fs.mkdirSync('node_modules/next/dist/bin', { recursive: true });
-fs.writeFileSync('node_modules/next/dist/bin/next', 'process.exit(0);');
+fs.writeFileSync('node_modules/next/dist/bin/next', ${JSON.stringify(runtimeScript)});
 fs.mkdirSync('.next', { recursive: true });
 fs.writeFileSync('.next/BUILD_ID', 'first-owned-fixture');
 `);
@@ -99,8 +99,8 @@ fs.writeFileSync('.next/BUILD_ID', 'first-owned-fixture');
   }
 }
 
-export async function withWindowsFirstBuildFixture(t, run) {
-  const f = await fixture(t);
+export async function withWindowsFirstBuildFixture(t, run, { runtimeScript = 'process.exit(0);' } = {}) {
+  const f = await fixture(t, runtimeScript);
   try { await run(f); }
   finally { await f.close(); }
 }

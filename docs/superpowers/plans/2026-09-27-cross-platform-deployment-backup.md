@@ -13315,6 +13315,37 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CF: Guarded first runtime start and original-domain settlement
+
+Files: `scripts/deployment/windows-first-activation.ps1`, the original
+`windows-first-runtime.mjs/.ps1` publisher, saved recovery inventory,
+`tests/deployment-windows-first-activation.test.mjs` and its Actions step.
+
+- [x] Add native causal cases using a small owned-build runtime fixture:
+  a long-lived Node process and an immediately failing Node process. Require
+  `published.activate()` to refuse before original registration/handoff/activating
+  state, start only the task-bound prebuilt runtime, and return
+  `applicationHealthy:false` (not authenticated application acceptance).
+  Require close/failure to settle the original instance; no deployment receipt,
+  backup or application data may be invented.
+- [ ] Push/run the command-only Actions gate and require
+  `Missing guarded first Windows runtime activation`.
+- [ ] Add original-capability `activate()` and native
+  `Start-AgentsChatFirstRuntime`. Retain the exact activating state; record
+  start intent; release only the original task-file lease for guarded enable,
+  demand-start and immediate re-inhibition. Confirm the original task XML/SDDL,
+  unique instance, owner PID/creation identity and configuration-bound runtime
+  readiness. Reuse `Get-AgentsChatTaskOwnerBinding` and runtime pipe/Job control,
+  never a fabricated prior owner or installed generation.
+- [ ] Return the captured original runtime and persist `activation-running.json`.
+  Verify its guarded lease and admitted nonempty Job. A root-exited/stopped Job
+  cannot count as startup. Keep the original controller alive and task inhibited.
+  On close or failed startup, stop/retire only the original domain, require its
+  instance to settle, and preserve partial receipts on every failure.
+- [ ] Run native positive/failing-start cases and full lifecycle regression.
+  This is runtime ownership acceptance only; actual Next/authenticated readiness,
+  permanent policy completion and public first deploy remain subsequent gates.
+
 ### Task 5CE: Original configuring-to-activating authority handoff
 
 The generic transaction records `activating` after configure returns. The
@@ -13355,8 +13386,11 @@ the staged task references.
   Native implementation is isolated in `windows-first-activation-handoff.ps1`
   and included in saved recovery; once the activating successor is observed,
   both controllers reject regression or further changes to that state.
-- [ ] Accept native handoff and malformed-successor refusal in Actions before
+- [x] Accept native handoff and malformed-successor refusal in Actions before
   guarded demand-start and real Next/authenticated readiness.
+  `85d9394 / 38024807392`, job `114133290100`, passed all **15/15**
+  selected native cases at `2026-10-10 04:45:36 UTC`; handoff took 37,974 ms.
+  Full regression `85d9394 / 38025215365` is dispatched.
 
 ### Task 5CD: First-task registration in the original publication controller
 
@@ -13389,7 +13423,7 @@ Keep native task construction/checking in
   keep subsequent registered XML checks exact. Native cases also exercise
   changed Enabled/Priority, omitted Enabled and duplicate/unknown settings.
   Add successful S4U/AtStartup publication binding alongside Interactive/AtLogOn.
-- [ ] Implement the original-capability method:
+- [x] Implement the original-capability method:
 
   ```js
   registerTask: async ({ logonType = 'Interactive', triggerType = 'AtLogOn', signal } = {}) => {
@@ -13411,9 +13445,13 @@ Keep native task construction/checking in
   afterward in `control/first-task-<operationId>`. Retain the task definition file,
   exact XML and security descriptor and verify them on subsequent checks.
   Preserve all partial evidence and leave the task inhibited on failures.
-- [ ] Preserve existing command-only publication contracts and source-disappearance
+- [x] Preserve existing command-only publication contracts and source-disappearance
   import closure; accept the new cases in Actions. This step does not activate
   the task, create data/backup/deployment receipts, or expose public first deploy.
+  Accepted in `85d9394 / 38024807392`: original publisher registration took
+  37,883 ms (Interactive) and 37,273 ms (S4U), competitor refusal 39,350 ms.
+  Scheduler also reorders root sections: compare unique sections by expanded
+  element name while preserving all attributes/content and action ordering.
 
 ### Task 5CC: Atomic inhibited first-task creation
 
