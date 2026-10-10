@@ -13315,6 +13315,40 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CK: Expose bounded original completion steps for crash recovery
+
+Files: `scripts/deployment/windows-first-completion.ps1`, the existing original
+publisher transport and context, `tests/deployment-windows-first-completion.test.mjs`.
+Use the same twelve in-memory/action/receipt boundaries already used by existing
+managed-task completion; keep all nine durable first-completion receipts intact.
+
+- [x] Add a native stepwise contract:
+  ```js
+  for (const step of ['policy-requested', 'policy-applied', 'policy-staged',
+    'release-requested', 'lease-released', 'released']) {
+    assert.equal(await published.advanceCompletion(), step);
+    await published.checkFiles();
+  }
+  const completed = await published.complete();
+  ```
+  Reject advancing before preparation/accepted state or after completion. The
+  existing proof chain, exact original runtime and post-close HTTP assertions
+  apply unchanged. Preserve the original all-at-once completion case.
+- [ ] Run the native causal gate and require
+  `Missing original first-runtime completion steps` while the prior 24 cases
+  remain accepted.
+- [ ] Extract the existing fixed sequence into original-context
+  `Advance-AgentsChatFirstCompletion`. Initialize/retain accepted-state and
+  desired policies once, advance only one declared action/receipt edge, and
+  return its exact step. `Complete-AgentsChatFirstRuntime` loops at most twelve
+  edges and returns the same complete proof; no new policy or caller-supplied
+  state/identity authority is introduced.
+- [ ] Add native `advance-completion` transport with strict expected next-step
+  validation and complete-proof validation on the final edge. Keep repeat
+  complete refusal and partial-close original-domain settlement unchanged.
+- [ ] Accept native stepwise-to-complete continuity before using these exact
+  boundaries to kill a genuine separate operation actor and test cold recovery.
+
 ### Task 5CJ: Settle first-completion publication failures at real boundaries
 
 Files: `tests/deployment-windows-first-completion.test.mjs` and its native
@@ -13327,13 +13361,17 @@ cold recovery after a controller crash.
   flushed pending receipt with the intended phase, original runtime, correct
   previous digest and actual guarded/released/enabled values. An earlier
   admission or policy failure cannot pass this test.
-- [ ] Run all four completion scenarios in Actions. Require persisted
+- [x] Run all four completion scenarios in Actions. Require persisted
   `activation-stopped.json` for the exact original runtime, no original owner
   or Scheduler instance, and task disabled. For the after-enable collision,
   the controller must release its task-file handle before disabling the task.
   Preserve the original error and all incomplete receipts.
-- [ ] Record results separately from success and cold/crash recovery. Keep
+- [x] Record results separately from success and cold/crash recovery. Keep
   public first deployment gated until subsequent recovery/integration coverage.
+  `a863a9b / 38032725784`, job `114156854323`, passed **24/24** native cases
+  at `2026-10-10 07:07:34 UTC`. Before-release, after-release and after-enable
+  failures reached their exact flushed receipt boundaries and settled original
+  runtime/instance with task disabled (91,630 / 90,599 / 92,074 ms).
 
 ### Task 5CI: Complete permanent first-task policy under original authority
 
@@ -13403,8 +13441,12 @@ activation helper, saved recovery inventory and lifecycle workflow.
   Add rejection cases for changed, missing and duplicate restart fields,
   native COM assertions for exactly three restarts at sixty seconds, and
   bounded restart-policy diagnostics if a semantic difference remains.
-- [ ] Accept native success/refusals and completion-close persistence, then
-  first-completion interruption/recovery and actual public Next deployment.
+- [x] Accept native success/refusals and completion-close persistence.
+  `a863a9b / 38032725784` passed the normal permanent handoff in 104,758 ms,
+  preserving original runtime/instance/SDDL, enabled boot/restart policy,
+  released lease, hash-linked receipts and HTTP after publisher exit.
+  Full regression `a863a9b / 38033402323` is running.
+  First-completion crash recovery and actual public Next deployment follow.
   Do not treat this small HTTP fixture as real public first-install acceptance.
 
 ### Task 5CH: Persist verified first-runtime completion preparation

@@ -22,6 +22,7 @@ require('node:http').createServer((_req, res) => {
 
 for (const scenario of [
   { name: 'complete' },
+  { name: 'stepwise' },
   { name: 'before-release', blocked: 'release-requested', prior: 'policy-staged', lease: 'guarded' },
   { name: 'after-release', blocked: 'released', prior: 'release-requested', lease: 'released' },
   { name: 'after-enable', blocked: 'complete', prior: 'enable-requested', lease: 'released' },
@@ -46,6 +47,10 @@ test(`Windows first-install completion preserves original-runtime handoff or set
       ], { timeout: 90000, maxBuffer: 65536 })).stdout);
       try {
         assert.equal(typeof published.complete, 'function', 'Missing original first-runtime permanent completion');
+        if (scenario.name === 'stepwise') {
+          assert.equal(typeof published.advanceCompletion, 'function', 'Missing original first-runtime completion steps');
+          await assert.rejects(published.advanceCompletion());
+        }
         await assert.rejects(published.complete());
         const task = await published.registerTask({ logonType: 'S4U', triggerType: 'AtStartup' });
         registered = true;
@@ -55,6 +60,7 @@ test(`Windows first-install completion preserves original-runtime handoff or set
         await assert.rejects(published.complete());
         await published.prepareCompletion({ waitSeconds: 30 });
         await assert.rejects(published.complete());
+        if (scenario.name === 'stepwise') await assert.rejects(published.advanceCompletion());
         await published.checkFiles();
         await f.record('accepted');
         const completionDirectory = path.join(f.control, `first-task-${f.lock.operationId}`);
@@ -80,6 +86,13 @@ test(`Windows first-install completion preserves original-runtime handoff or set
           assert.deepEqual(await observe('Stop'), { status: 'already-stopped', enabled: false, instances: 0 });
           return;
         }
+        if (scenario.name === 'stepwise') {
+          for (const step of ['policy-requested', 'policy-applied', 'policy-staged',
+            'release-requested', 'lease-released', 'released']) {
+            assert.equal(await published.advanceCompletion(), step);
+            await published.checkFiles();
+          }
+        }
         const completed = await published.complete();
         assert.equal(completed.status, 'first-runtime-completed');
         assert.equal(completed.controllerPid, active.controllerPid);
@@ -89,6 +102,7 @@ test(`Windows first-install completion preserves original-runtime handoff or set
         assert.equal(completed.lease, 'released');
         assert.equal(completed.securityDescriptor, task.securityDescriptor);
         await assert.rejects(published.complete());
+        if (scenario.name === 'stepwise') await assert.rejects(published.advanceCompletion());
         await published.checkFiles();
         assert.deepEqual(JSON.parse(await readFile(path.join(f.control,
           `first-task-${f.lock.operationId}`, 'completion-complete.json'), 'utf8')), completed);
