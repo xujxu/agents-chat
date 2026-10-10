@@ -13492,7 +13492,10 @@ activation helper, saved recovery inventory and lifecycle workflow.
   `a863a9b / 38032725784` passed the normal permanent handoff in 104,758 ms,
   preserving original runtime/instance/SDDL, enabled boot/restart policy,
   released lease, hash-linked receipts and HTTP after publisher exit.
-  Full regression `a863a9b / 38033402323` is running.
+  Full regression `a863a9b / 38033402323` passed all **42/42** jobs.
+  Real Windows application job `114158805068` passed its application case
+  in 1,541,054 ms at `2026-10-10 07:52:12 UTC`. This baseline precedes the
+  explicit-step and genuine actor-loss additions.
   First-completion crash recovery and actual public Next deployment follow.
   Do not treat this small HTTP fixture as real public first-install acceptance.
 

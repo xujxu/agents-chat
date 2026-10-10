@@ -185,6 +185,8 @@ preserves the original runtime after controller close; receipt failures before
 release, after release and after enable stop only the original runtime and
 leave its task disabled. Task policy comparisons preserve exact semantics
 across Scheduler default omission, namespace placement and field ordering.
+The same permanent-completion revision passed all 42 Linux/Windows jobs
+(Actions `38033402323`), including real public Windows update/no-op.
 All twelve explicit original-controller completion steps and partial advancement
 followed by normal completion passed 26 native cases at `aaf4198`
 (Actions `38034721120`), retaining the same final proof and live original runtime.
@@ -493,7 +495,7 @@ module tree and workflow schema outside mutable source, so replacing source
 cannot alter an in-flight controller. The private supervisor and exact successful
 capture retirement passed all 42 jobs at `26bcf7e / 38006102348`.
 The public existing-task update/no-op path below passed all 42 jobs at
-`3975f34 / 38027451422`. First installation and public cold restore remain
+`a863a9b / 38033402323`. First installation and public cold restore remain
 separate, unfinished integration gates.
 Installed immutable runtime bundles are not rewritten through retained scopes.
 The separate task installer defaults registration to the current Windows account.
