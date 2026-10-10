@@ -7,6 +7,11 @@ import { validateReadinessProviders } from './http-readiness.mjs';
 
 const script = fileURLToPath(new URL('./windows-task-controller.ps1', import.meta.url));
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+export const windowsTaskCompletionSteps = Object.freeze([
+  'prepared', 'policy-requested', 'policy-applied', 'policy-staged', 'release-requested', 'lease-released',
+  'released', 'policy-restore-requested', 'permanent-policy-applied', 'policy-restored',
+  'enable-requested', 'enable-applied', 'complete',
+]);
 function uncertain(cause) {
   return Object.assign(new Error('Windows task maintenance authority is uncertain; retain inhibition and evidence.', { cause }), {
     code: 'DEPLOYMENT_WINDOWS_TASK_UNSETTLED', recoveryAllowed: false,
@@ -79,11 +84,7 @@ export async function stopWindowsTask({ pwsh, admission, sha256, signal, transac
   let activeRuntime;
   let completionStep;
   let completionStateSha256;
-  const completionSteps = [
-    'prepared', 'policy-requested', 'policy-applied', 'policy-staged', 'release-requested', 'lease-released',
-    'released', 'policy-restore-requested', 'permanent-policy-applied', 'policy-restored',
-    'enable-requested', 'enable-applied', 'complete',
-  ];
+  const completionSteps = windowsTaskCompletionSteps;
   let failure;
   const abandon = async cause => {
     closed = true;

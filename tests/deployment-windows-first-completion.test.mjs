@@ -12,6 +12,9 @@ import { withWindowsFirstBuildFixture, buildWindowsFirstFixture } from './deploy
 
 const execute = promisify(execFile);
 const observer = fileURLToPath(new URL('./deployment-windows-first-completion-observer.ps1', import.meta.url));
+const completionSteps = ['policy-requested', 'policy-applied', 'policy-staged', 'release-requested',
+  'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'policy-restored',
+  'enable-requested', 'enable-applied', 'complete'];
 const runtimeScript = `
 require('node:http').createServer((_req, res) => {
   res.setHeader('Content-Type', 'application/json');
@@ -22,7 +25,8 @@ require('node:http').createServer((_req, res) => {
 
 for (const scenario of [
   { name: 'complete' },
-  { name: 'stepwise' },
+  { name: 'stepwise', steps: 6 },
+  { name: 'all-steps', steps: 12 },
   { name: 'before-release', blocked: 'release-requested', prior: 'policy-staged', lease: 'guarded' },
   { name: 'after-release', blocked: 'released', prior: 'release-requested', lease: 'released' },
   { name: 'after-enable', blocked: 'complete', prior: 'enable-requested', lease: 'released' },
@@ -47,7 +51,7 @@ test(`Windows first-install completion preserves original-runtime handoff or set
       ], { timeout: 90000, maxBuffer: 65536 })).stdout);
       try {
         assert.equal(typeof published.complete, 'function', 'Missing original first-runtime permanent completion');
-        if (scenario.name === 'stepwise') {
+        if (scenario.steps) {
           assert.equal(typeof published.advanceCompletion, 'function', 'Missing original first-runtime completion steps');
           await assert.rejects(published.advanceCompletion());
         }
@@ -60,7 +64,7 @@ test(`Windows first-install completion preserves original-runtime handoff or set
         await assert.rejects(published.complete());
         await published.prepareCompletion({ waitSeconds: 30 });
         await assert.rejects(published.complete());
-        if (scenario.name === 'stepwise') await assert.rejects(published.advanceCompletion());
+        if (scenario.steps) await assert.rejects(published.advanceCompletion());
         await published.checkFiles();
         await f.record('accepted');
         const completionDirectory = path.join(f.control, `first-task-${f.lock.operationId}`);
@@ -86,14 +90,15 @@ test(`Windows first-install completion preserves original-runtime handoff or set
           assert.deepEqual(await observe('Stop'), { status: 'already-stopped', enabled: false, instances: 0 });
           return;
         }
-        if (scenario.name === 'stepwise') {
-          for (const step of ['policy-requested', 'policy-applied', 'policy-staged',
-            'release-requested', 'lease-released', 'released']) {
+        if (scenario.steps) {
+          for (const step of completionSteps.slice(0, scenario.steps)) {
             assert.equal(await published.advanceCompletion(), step);
             await published.checkFiles();
           }
         }
-        const completed = await published.complete();
+        const completed = scenario.steps === completionSteps.length
+          ? JSON.parse(await readFile(path.join(completionDirectory, 'completion-complete.json'), 'utf8'))
+          : await published.complete();
         assert.equal(completed.status, 'first-runtime-completed');
         assert.equal(completed.controllerPid, active.controllerPid);
         assert.equal(completed.controllerIdentity, active.controllerIdentity);
@@ -102,7 +107,7 @@ test(`Windows first-install completion preserves original-runtime handoff or set
         assert.equal(completed.lease, 'released');
         assert.equal(completed.securityDescriptor, task.securityDescriptor);
         await assert.rejects(published.complete());
-        if (scenario.name === 'stepwise') await assert.rejects(published.advanceCompletion());
+        if (scenario.steps) await assert.rejects(published.advanceCompletion());
         await published.checkFiles();
         assert.deepEqual(JSON.parse(await readFile(path.join(f.control,
           `first-task-${f.lock.operationId}`, 'completion-complete.json'), 'utf8')), completed);

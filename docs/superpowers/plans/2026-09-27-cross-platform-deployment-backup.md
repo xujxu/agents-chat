@@ -13334,18 +13334,25 @@ managed-task completion; keep all nine durable first-completion receipts intact.
   Reject advancing before preparation/accepted state or after completion. The
   existing proof chain, exact original runtime and post-close HTTP assertions
   apply unchanged. Preserve the original all-at-once completion case.
-- [ ] Run the native causal gate and require
+- [x] Run the native causal gate and require
   `Missing original first-runtime completion steps` while the prior 24 cases
   remain accepted.
-- [ ] Extract the existing fixed sequence into original-context
+  `9373421 / 38033561901`, job `114159268030`, confirmed the missing method
+  at `2026-10-10 07:27:29 UTC` with all 24 prior cases passing.
+- [x] Extract the existing fixed sequence into original-context
   `Advance-AgentsChatFirstCompletion`. Initialize/retain accepted-state and
   desired policies once, advance only one declared action/receipt edge, and
   return its exact step. `Complete-AgentsChatFirstRuntime` loops at most twelve
   edges and returns the same complete proof; no new policy or caller-supplied
   state/identity authority is introduced.
-- [ ] Add native `advance-completion` transport with strict expected next-step
+- [x] Add native `advance-completion` transport with strict expected next-step
   validation and complete-proof validation on the final edge. Keep repeat
   complete refusal and partial-close original-domain settlement unchanged.
+  Share the existing managed completion-step constant through its current
+  controller module, and use one first-completion proof parser for both APIs.
+  Also cover all twelve explicit steps through the final proof edge, alongside
+  six steps followed by `complete()`, so the new final-acknowledgement branch
+  is exercised rather than only intermediate progress.
 - [ ] Accept native stepwise-to-complete continuity before using these exact
   boundaries to kill a genuine separate operation actor and test cold recovery.
 

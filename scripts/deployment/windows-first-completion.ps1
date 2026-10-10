@@ -41,53 +41,103 @@ function Publish-AgentsChatFirstCompletionPolicy([hashtable]$Context, [string]$D
     & $CheckAuthority
 }
 
-function Complete-AgentsChatFirstRuntime([hashtable]$Context, [scriptblock]$CheckAuthority) {
+function Advance-AgentsChatFirstCompletion([hashtable]$Context, [scriptblock]$CheckAuthority) {
     if (-not $Context.CompletionPrepared -or $Context.CompletionCompleted -or
         $null -eq $Context.AcceptedStateSha256 -or $null -eq $Context.Activation -or
-        $Context.Activation.Stopped -or $Context.Activation.Lease -cne 'guarded') {
+        $Context.Activation.Stopped) {
         throw 'First completion requires unused original accepted authority.'
     }
     & $CheckAuthority
-    $null = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::Open(
-        (Join-Path $Context.Control 'state.json'), $Context.AcceptedStateSha256))
     $activation = $Context.Activation
-    $permanent = [xml]$activation.Task.Observation.permanentDefinition
-    $staged = [xml]$activation.Definition
-    $namespaces = [Xml.XmlNamespaceManager]::new($permanent.NameTable)
-    $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
-    $arguments = '/t:Task/t:Actions/t:Exec/t:Arguments'
-    $staged.SelectSingleNode($arguments, $namespaces).InnerText =
-        $permanent.SelectSingleNode($arguments, $namespaces).InnerText
-    $permanent.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces).InnerText = 'false'
-    $null = Write-AgentsChatFirstCompletionReceipt $Context 'policy-requested' $CheckAuthority
-    $activation.TaskFile.Check()
-    $activation.TaskFile.Dispose()
-    $null = $Context.Checks.Remove($activation.TaskFile)
-    $null = $Context.Resources.Remove($activation.TaskFile)
-    $activation.TaskFile = $null
-    Publish-AgentsChatFirstCompletionPolicy $Context $staged.OuterXml $CheckAuthority
-    $null = Write-AgentsChatFirstCompletionReceipt $Context 'policy-staged' $CheckAuthority
-    $null = Write-AgentsChatFirstCompletionReceipt $Context 'release-requested' $CheckAuthority
-    $runtime = $activation.Runtime
-    if ([Deployment.WindowsRuntimeControl]::Exchange(
-        [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'release', 15000) -cne 'released') {
-        throw 'Original first-runtime lease release was not acknowledged.'
+    switch -CaseSensitive ($Context.CompletionStep) {
+        'prepared' {
+            if ($activation.Lease -cne 'guarded') { throw 'First completion preparation lost its guarded lease.' }
+            $null = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::Open(
+                (Join-Path $Context.Control 'state.json'), $Context.AcceptedStateSha256))
+            $permanent = [xml]$activation.Task.Observation.permanentDefinition
+            $staged = [xml]$activation.Definition
+            $namespaces = [Xml.XmlNamespaceManager]::new($permanent.NameTable)
+            $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+            $arguments = '/t:Task/t:Actions/t:Exec/t:Arguments'
+            $staged.SelectSingleNode($arguments, $namespaces).InnerText =
+                $permanent.SelectSingleNode($arguments, $namespaces).InnerText
+            $permanent.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces).InnerText = 'false'
+            $Context.CompletionStagedDefinition = $staged.OuterXml
+            $Context.CompletionPermanentDefinition = $permanent.OuterXml
+            $null = Write-AgentsChatFirstCompletionReceipt $Context 'policy-requested' $CheckAuthority
+            $Context.CompletionStep = 'policy-requested'
+        }
+        'policy-requested' {
+            $activation.TaskFile.Check()
+            $activation.TaskFile.Dispose()
+            $null = $Context.Checks.Remove($activation.TaskFile)
+            $null = $Context.Resources.Remove($activation.TaskFile)
+            $activation.TaskFile = $null
+            Publish-AgentsChatFirstCompletionPolicy $Context $Context.CompletionStagedDefinition $CheckAuthority
+            $Context.CompletionStep = 'policy-applied'
+        }
+        'policy-applied' {
+            $null = Write-AgentsChatFirstCompletionReceipt $Context 'policy-staged' $CheckAuthority
+            $Context.CompletionStep = 'policy-staged'
+        }
+        'policy-staged' {
+            $null = Write-AgentsChatFirstCompletionReceipt $Context 'release-requested' $CheckAuthority
+            $Context.CompletionStep = 'release-requested'
+        }
+        'release-requested' {
+            $runtime = $activation.Runtime
+            if ([Deployment.WindowsRuntimeControl]::Exchange(
+                [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'release', 15000) -cne 'released') {
+                throw 'Original first-runtime lease release was not acknowledged.'
+            }
+            $activation.Lease = 'released'
+            $Context.CompletionStep = 'lease-released'
+        }
+        'lease-released' {
+            $null = Write-AgentsChatFirstCompletionReceipt $Context 'released' $CheckAuthority
+            $Context.CompletionStep = 'released'
+        }
+        'released' {
+            $null = Write-AgentsChatFirstCompletionReceipt $Context 'policy-restore-requested' $CheckAuthority
+            $Context.CompletionStep = 'policy-restore-requested'
+        }
+        'policy-restore-requested' {
+            Publish-AgentsChatFirstCompletionPolicy $Context $Context.CompletionPermanentDefinition $CheckAuthority
+            $Context.CompletionStep = 'permanent-policy-applied'
+        }
+        'permanent-policy-applied' {
+            $null = Write-AgentsChatFirstCompletionReceipt $Context 'policy-restored' $CheckAuthority
+            $Context.CompletionStep = 'policy-restored'
+        }
+        'policy-restored' {
+            $null = Write-AgentsChatFirstCompletionReceipt $Context 'enable-requested' $CheckAuthority
+            $Context.CompletionStep = 'enable-requested'
+        }
+        'enable-requested' {
+            $task = Get-AgentsChatFirstActivationTask $Context
+            $task.Enabled = $true
+            $activation.Enabled = $true
+            $Context.CompletionStep = 'enable-applied'
+        }
+        'enable-applied' {
+            $taskFile = Join-Path ([Environment]::SystemDirectory) "Tasks\$($Context.TaskName)"
+            $taskHash = (Get-FileHash -LiteralPath $taskFile -Algorithm SHA256).Hash.ToLowerInvariant()
+            $activation.TaskFile = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::OpenSourceFile($taskFile, $taskHash))
+            $Context.CompletionRecord = Write-AgentsChatFirstCompletionReceipt $Context 'complete' $CheckAuthority
+            $Context.CompletionCompleted = $true
+            $Context.CompletionStep = 'complete'
+        }
+        default { throw 'Unsupported original first-completion step.' }
     }
-    $activation.Lease = 'released'
     & $CheckAuthority
-    $null = Write-AgentsChatFirstCompletionReceipt $Context 'released' $CheckAuthority
-    $null = Write-AgentsChatFirstCompletionReceipt $Context 'policy-restore-requested' $CheckAuthority
-    Publish-AgentsChatFirstCompletionPolicy $Context $permanent.OuterXml $CheckAuthority
-    $null = Write-AgentsChatFirstCompletionReceipt $Context 'policy-restored' $CheckAuthority
-    $null = Write-AgentsChatFirstCompletionReceipt $Context 'enable-requested' $CheckAuthority
-    $task = Get-AgentsChatFirstActivationTask $Context
-    $task.Enabled = $true
-    $activation.Enabled = $true
-    & $CheckAuthority
-    $taskFile = Join-Path ([Environment]::SystemDirectory) "Tasks\$($Context.TaskName)"
-    $taskHash = (Get-FileHash -LiteralPath $taskFile -Algorithm SHA256).Hash.ToLowerInvariant()
-    $activation.TaskFile = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::OpenSourceFile($taskFile, $taskHash))
-    $record = Write-AgentsChatFirstCompletionReceipt $Context 'complete' $CheckAuthority
-    $Context.CompletionCompleted = $true
-    return $record
+    return $Context.CompletionStep
+}
+
+function Complete-AgentsChatFirstRuntime([hashtable]$Context, [scriptblock]$CheckAuthority) {
+    for ($index = 0; $index -lt 12; $index++) {
+        if ((Advance-AgentsChatFirstCompletion $Context $CheckAuthority) -ceq 'complete') {
+            return $Context.CompletionRecord
+        }
+    }
+    throw 'First completion exceeded its finite step sequence.'
 }

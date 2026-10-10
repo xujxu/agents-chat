@@ -31,6 +31,7 @@ function Prepare-AgentsChatFirstCompletion {
     $null = $Context.Checks.Remove($Context.ActivatingStateFile)
     $null = $Context.Resources.Remove($Context.ActivatingStateFile)
     $Context.CompletionPrepared = $true
+    $Context.CompletionStep = 'prepared'
     Assert-AgentsChatFirstActivationState $Context
     return $receipt
 }

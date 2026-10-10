@@ -122,6 +122,7 @@ try {
         ActivatingStateFields=$null; ActivatingStateFile=$null
         CompletionPrepared=$false; AcceptedStateSha256=$null
         CompletionCompleted=$false; CompletionSha256=$null; CompletionProviders=$null; CompletionListener=$null
+        CompletionStep=$null; CompletionRecord=$null; CompletionStagedDefinition=$null; CompletionPermanentDefinition=$null
         Activation=$null; Listener=$null; Port=$Port
     }
     [Console]::Out.WriteLine((@{
@@ -143,7 +144,7 @@ try {
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task', 'prepare-activation', 'activate', 'listener', 'prepare-completion', 'complete')) { throw 'Unexpected first-runtime request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task', 'prepare-activation', 'activate', 'listener', 'prepare-completion', 'complete', 'advance-completion')) { throw 'Unexpected first-runtime request.' }
         $sequence = $id
         Assert-FirstRuntimePublication
         $value = $method
@@ -178,6 +179,12 @@ try {
         if ($method -ceq 'complete') {
             $stage = 'first-runtime-completion'
             $value = Complete-AgentsChatFirstRuntime $context { Assert-FirstRuntimePublication }
+            Assert-FirstRuntimePublication
+        }
+        if ($method -ceq 'advance-completion') {
+            $stage = 'first-runtime-completion-step'
+            $step = Advance-AgentsChatFirstCompletion $context { Assert-FirstRuntimePublication }
+            $value = @{ step=$step; proof=$context.CompletionRecord }
             Assert-FirstRuntimePublication
         }
         if ($method -ceq 'close' -and $null -ne $context.Activation) {

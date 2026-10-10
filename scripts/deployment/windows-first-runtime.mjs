@@ -12,7 +12,7 @@ import { readWorkerJournal } from './worker-journal.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
-import { captureActivatedRuntime, captureTaskListener } from './windows-task-controller.mjs';
+import { captureActivatedRuntime, captureTaskListener, windowsTaskCompletionSteps } from './windows-task-controller.mjs';
 import { waitWindowsReadiness } from './windows-readiness.mjs';
 
 const script = fileURLToPath(new URL('./windows-first-runtime.ps1', import.meta.url));
@@ -143,15 +143,37 @@ export async function prepareWindowsFirstRuntime({
     let activeRuntime;
     let retainedListener;
     let completionActivatingStateSha256;
+    let completionStep;
     let completed = false;
     let registering = false;
     let preparingCompletion = false;
+    const captureCompletionProof = (value, stateSha256) => {
+      const expected = {
+        version: 1, phase: 'complete', status: 'first-runtime-completed',
+        project, operationId: lock.operationId, taskName: observed.taskName,
+        controllerPid: ready.pid, controllerIdentity: ready.processIdentity,
+        lockSha256: digest(lockBytes), activatingStateSha256: completionActivatingStateSha256,
+        stateSha256, configuration: bundle.configuration, configurationSha256: bundle.sha256,
+        runtime: activeRuntime, permanentDefinition: registeredTask.permanentDefinition,
+        securityDescriptor: registeredTask.securityDescriptor, enabled: true, lease: 'released',
+        port, providers: configuration.providers, listener: retainedListener,
+      };
+      const proof = captureWorkerFields(value, [...Object.keys(expected), 'definition', 'previousSha256'],
+        'first-runtime completion');
+      const { definition, previousSha256, ...actual } = proof;
+      if (!same(actual, expected) || typeof definition !== 'string' || definition.length < 1
+        || definition.length > 65536 || definition.includes('\0')
+        || typeof previousSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(previousSha256)) {
+        throw new Error('Original first-runtime completion differs.');
+      }
+      return Object.freeze(proof);
+    };
     const request = async (method, requestSignal, options = {}) => {
       if (busy || closed) throw failure ?? refused(new Error('Original first-runtime publication is busy or closed.'));
       busy = true;
       try {
         if (method !== 'close') await authority(requestSignal);
-        const completionStateSha256 = ['prepare-completion', 'complete'].includes(method)
+        const completionStateSha256 = ['prepare-completion', 'complete', 'advance-completion'].includes(method)
           ? digest(await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true })) : undefined;
         const id = ++sequence;
         await bridge.wire.send({ id, method, ...options });
@@ -160,7 +182,7 @@ export async function prepareWindowsFirstRuntime({
         }),
           ['id', 'type', 'processIdentity', 'value'], 'first-runtime reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== ready.processIdentity
-          || !['register-task', 'prepare-activation', 'activate', 'listener', 'prepare-completion', 'complete'].includes(method) && reply.value !== method) {
+          || !['register-task', 'prepare-activation', 'activate', 'listener', 'prepare-completion', 'complete', 'advance-completion'].includes(method) && reply.value !== method) {
           throw new Error('Unexpected first-runtime acknowledgement.');
         }
         if (method === 'register-task') {
@@ -236,31 +258,29 @@ export async function prepareWindowsFirstRuntime({
           })) throw new Error('Original first-completion handoff differs.');
           completionPrepared = true;
           completionActivatingStateSha256 = completionStateSha256;
+          completionStep = 'prepared';
           await authority(requestSignal);
           return Object.freeze(receipt);
         }
         if (method === 'complete') {
-          const expected = {
-            version: 1, phase: 'complete', status: 'first-runtime-completed',
-            project, operationId: lock.operationId, taskName: observed.taskName,
-            controllerPid: ready.pid, controllerIdentity: ready.processIdentity,
-            lockSha256: digest(lockBytes), activatingStateSha256: completionActivatingStateSha256,
-            stateSha256: completionStateSha256, configuration: bundle.configuration, configurationSha256: bundle.sha256,
-            runtime: activeRuntime, permanentDefinition: registeredTask.permanentDefinition,
-            securityDescriptor: registeredTask.securityDescriptor, enabled: true, lease: 'released',
-            port, providers: configuration.providers, listener: retainedListener,
-          };
-          const proof = captureWorkerFields(reply.value, [...Object.keys(expected), 'definition', 'previousSha256'],
-            'first-runtime completion');
-          const { definition, previousSha256, ...actual } = proof;
-          if (!same(actual, expected) || typeof definition !== 'string' || definition.length < 1
-            || definition.length > 65536 || definition.includes('\0')
-            || typeof previousSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(previousSha256)) {
-            throw new Error('Original first-runtime completion differs.');
-          }
+          const proof = captureCompletionProof(reply.value, completionStateSha256);
           await authority(requestSignal);
           completed = true;
-          return Object.freeze(proof);
+          completionStep = 'complete';
+          return proof;
+        }
+        if (method === 'advance-completion') {
+          const progress = captureWorkerFields(reply.value, ['step', 'proof'], 'first-runtime completion step');
+          const expected = windowsTaskCompletionSteps[windowsTaskCompletionSteps.indexOf(completionStep) + 1];
+          if (!windowsTaskCompletionSteps.includes(completionStep) || progress.step !== expected) {
+            throw new Error('Original first-completion step acknowledgement differs.');
+          }
+          if (progress.step === 'complete') captureCompletionProof(progress.proof, completionStateSha256);
+          else if (progress.proof !== null) throw new Error('Incomplete first-runtime step returned a completion proof.');
+          await authority(requestSignal);
+          completionStep = progress.step;
+          completed = completionStep === 'complete';
+          return completionStep;
         }
         if (method === 'close') {
           const result = await bridge.waitForExit();
@@ -283,6 +303,12 @@ export async function prepareWindowsFirstRuntime({
         },
         port, providers: configuration.providers, waitSeconds, signal: requestSignal,
       });
+    };
+    const completionRequest = async (method, { signal: requestSignal } = {}) => {
+      if (closed || busy || !completionPrepared || completed || (await loadState(control))?.phase !== 'accepted') {
+        throw refused(new Error('First completion requires its unused accepted authority.'));
+      }
+      return request(method, requestSignal);
     };
     return Object.freeze({
       status: 'runtime-prepared', runtimeAuthority: false, bundle,
@@ -324,12 +350,8 @@ export async function prepareWindowsFirstRuntime({
           return await request('prepare-completion', requestSignal, { providers: configuration.providers });
         } finally { preparingCompletion = false; }
       },
-      complete: async ({ signal: requestSignal } = {}) => {
-        if (closed || busy || !completionPrepared || completed || (await loadState(control))?.phase !== 'accepted') {
-          throw refused(new Error('First completion requires its unused accepted authority.'));
-        }
-        return request('complete', requestSignal);
-      },
+      complete: options => completionRequest('complete', options),
+      advanceCompletion: options => completionRequest('advance-completion', options),
       close: async () => { if (!closed) await request('close'); },
     });
   } catch (cause) {
