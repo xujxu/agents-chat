@@ -13380,6 +13380,14 @@ directory preparation, real live fixture, lifecycle workflow and README.
   instead of passing its multiple PATH matches as one executable. The
   regression fixture now requires multiple Node candidates, with a later
   invalid executable that must never run, alongside inherited Node hooks.
+  Focused `8516c3f / 38009847747 / 114087071745` passed native public
+  contracts at 00:38:38 UTC and all six Windows PowerShell task-option
+  cases. The fixture then leaked its expected child refusal exit code 1
+  to the Actions shell. Exit zero only after all cases and cleanup succeed;
+  do not change the public refusal's exit code. Extend synthetic supervisor
+  protocol cases through the public wrapper for accepted, recovered-failure
+  and current outcomes, including private-root creation and capture cleanup.
+  These protocol cases remain distinct from real application acceptance.
 
 ### Task 5BW: Retire only original completed controller captures
 

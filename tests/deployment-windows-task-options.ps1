@@ -177,3 +177,4 @@ param([switch]$NoTunnel)
     if (Test-Path -LiteralPath $Root) { Remove-Item -LiteralPath $Root -Recurse -Force }
 }
 if ($Failures.Count) { throw "$($Failures.Count) Windows task option cases failed: $($Failures -join ', ')" }
+exit 0

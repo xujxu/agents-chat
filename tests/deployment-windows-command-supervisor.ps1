@@ -28,11 +28,14 @@ try {
     }
     Copy-Item -LiteralPath (Join-Path $repository 'lib/workflow/workflowSchema.mjs') `
         -Destination (Join-Path $source 'lib/workflow/workflowSchema.mjs')
+    Copy-Item -LiteralPath (Join-Path $repository 'scripts/update.ps1') -Destination (Join-Path $source 'scripts/update.ps1')
     $entry = @'
 import fs from 'node:fs';
 import path from 'node:path';
 import { processIdentity } from './process-identity.mjs';
-const control = process.argv[4], scenario = process.argv.at(-1);
+const control = process.argv[4];
+const scenario = process.argv.at(-1) === '1800'
+  ? process.argv[5].replace('Agents-Supervisor-', '') : process.argv.at(-1);
 const identity = await processIdentity(process.pid);
 if (!identity) throw new Error('Missing original command process identity');
 fs.writeFileSync(path.join(control, 'actor.json'), JSON.stringify({ pid: process.pid, identity, scenario }));
@@ -42,6 +45,7 @@ console.log(JSON.stringify({
   closeoutRequired: !['current', 'invalid'].includes(scenario),
   operationId: '11111111-1111-4111-8111-111111111111',
   recoveryEngine: 'a'.repeat(64), code: prior ? 'DEPLOYMENT_TEST_FAILURE' : undefined,
+  message: prior ? 'Fixture update failed; prior runtime recovered.' : undefined,
 }));
 process.exitCode = scenario === 'exit-invalid' ? 2 : prior ? 1 : 0;
 '@
@@ -90,6 +94,34 @@ if (actor.scenario === 'closeout-failed') {
                 'Supervisor attempted closeout without a qualified original result'
             if ($scenario -eq 'current') { Assert ($result.status -ceq 'already-current') 'Supervisor lost no-op result' }
             else { Assert ($result.code -ceq 'DEPLOYMENT_WINDOWS_SUPERVISOR_FAILED') 'Invalid result was not explicitly refused' }
+        }
+    }
+    foreach ($scenario in @('accepted', 'prior', 'current')) {
+        $publicProject = Join-Path $root "public-$scenario"
+        [Deployment.WindowsPrivateFile]::CreateDirectory($publicProject).Dispose()
+        $publicControl = Join-Path $root ".public-$scenario.deployment"
+        $publicControllers = Join-Path $root ".public-$scenario.deployment-controllers"
+        Assert (-not (Test-Path -LiteralPath $publicControl)) 'Public supervisor fixture starts without control'
+        $text = & $pwsh -NoProfile -NonInteractive -File (Join-Path $source 'scripts/update.ps1') `
+            -ProjectDir $publicProject -TaskName "Agents-Supervisor-$scenario" -SkipGitPull -Json
+        $code = $LASTEXITCODE
+        $result = ($text -join "`n") | ConvertFrom-Json
+        $expectedCode = if ($scenario -eq 'prior') { 1 } else { 0 }
+        Assert ($code -eq $expectedCode) "Public supervisor lost original $scenario exit status: $($text -join '`n')"
+        $private = [Deployment.WindowsPrivateFile]::OpenDirectory($publicControl)
+        $private.Dispose()
+        $private = [Deployment.WindowsPrivateFile]::OpenDirectory($publicControllers)
+        $private.Dispose()
+        $remaining = @(Get-ChildItem -LiteralPath $publicControllers -Force)
+        Assert ($remaining.Count -eq $expectedCode) 'Public supervisor did not clean successful captures or retain failed capture'
+        if ($scenario -eq 'current') {
+            Assert ($result.status -ceq 'already-current' -and -not (Test-Path -LiteralPath (Join-Path $publicControl 'finalized'))) `
+                'Public no-op unexpectedly invoked finalization'
+        } else {
+            Assert ($result.closeoutStatus -ceq 'completed' -and -not $result.closeoutRequired) `
+                'Public supervisor did not return completed finalization'
+            Assert ($result.status -ceq $(if ($scenario -eq 'prior') { 'failed' } else { 'accepted' })) `
+                'Public wrapper replaced recovered failure with success'
         }
     }
     Write-Output 'PASS: private supervisor settles original actors, preserves recovered failure exit status and skips unqualified closeout'
