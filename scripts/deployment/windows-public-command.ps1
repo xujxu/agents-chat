@@ -77,8 +77,8 @@ must be retained for inspection. Never manually remove an operation lock.
                 $project = if ($Options.ContainsKey('ProjectDir')) { $Options['ProjectDir'] } else { $Source }
                 $project = [IO.Path]::GetFullPath($project)
                 $taskName = if ($Options.ContainsKey('TaskName')) { $Options['TaskName'] } else { 'Agents-Chat-Startup' }
-                $node = (Get-Command node.exe -CommandType Application -ErrorAction Stop).Source
-                $git = (Get-Command git.exe -CommandType Application -ErrorAction Stop).Source
+                $node = (Get-Command node.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+                $git = (Get-Command git.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
                 $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
                 $jsonArguments = ConvertTo-Json -InputObject $arguments.ToArray() -Compress
                 $nodeOptions = [Environment]::GetEnvironmentVariable('NODE_OPTIONS', 'Process')

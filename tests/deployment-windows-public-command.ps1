@@ -31,14 +31,22 @@ try {
     New-Item -ItemType Directory -Path $project | Out-Null
     $nodeOptions = $env:NODE_OPTIONS
     $nodePath = $env:NODE_PATH
+    $originalPath = $env:PATH
+    $node = (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source
+    $shadow = Join-Path $root 'shadow-tools'
+    New-Item -ItemType Directory -Path $shadow | Out-Null
+    [IO.File]::WriteAllText((Join-Path $shadow 'node.exe'), 'This later PATH entry must never execute.')
     try {
         $env:NODE_OPTIONS = '--require=agents-public-must-not-load'
         $env:NODE_PATH = Join-Path $root 'must-not-load'
+        $env:PATH = "$(Split-Path -Parent $node);$shadow;$originalPath"
+        Assert (@(Get-Command node.exe -CommandType Application).Count -gt 1) 'Fixture requires multiple Node tool candidates'
         $text = & $pwsh -NoProfile -NonInteractive -File $update -ProjectDir $project -Status -Json
         $statusCode = $LASTEXITCODE
     } finally {
         $env:NODE_OPTIONS = $nodeOptions
         $env:NODE_PATH = $nodePath
+        $env:PATH = $originalPath
     }
     Assert ($statusCode -eq 0) "Read-only public status failed or inherited Node hooks: $($text -join '`n')"
     $result = ($text -join "`n") | ConvertFrom-Json
@@ -50,7 +58,7 @@ try {
     Assert ($LASTEXITCODE -eq 1) 'Invalid revision was not refused'
     $result = ($text -join "`n") | ConvertFrom-Json
     Assert ($result.status -ceq 'failed') 'Invalid revision returned success'
-    Assert (@(Get-ChildItem -LiteralPath $root -Force).Count -eq 1) 'Invalid revision created control/capture files'
+    Assert (@(Get-ChildItem -LiteralPath $root -Force).Count -eq 2) 'Invalid revision created control/capture files'
     Write-Output 'PASS: public Windows help, unsupported modes and status have no deployment side effects'
 } finally {
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }

@@ -13374,6 +13374,12 @@ directory preparation, real live fixture, lifecycle workflow and README.
   for the existing native command contracts without either application build.
   This opt-in diagnostic mode has its own concurrency group; default full
   and real application acceptance remain unchanged and required.
+  Diagnostic `edb9cfd / 38009606559 / 114086303978` located
+  `CommandNotFoundException` at the Node invocation (line 90), before the
+  context script ran. Select the first application returned by `Get-Command`
+  instead of passing its multiple PATH matches as one executable. The
+  regression fixture now requires multiple Node candidates, with a later
+  invalid executable that must never run, alongside inherited Node hooks.
 
 ### Task 5BW: Retire only original completed controller captures
 
