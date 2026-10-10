@@ -257,13 +257,13 @@ First-completion preparation now retains original source, build, dependency and
 configuration identities in its existing hash-linked record at `d0dbc5b`
 (Actions `38063498689`, seven focused cases). Cold proof exposes that original
 identity and rejects mismatched receipt digests; legacy records remain readable
-without inventing missing provenance. This does not yet authorize cold receipt
-publication when the original actor died before publishing one.
+without inventing missing provenance. Retaining this identity alone does not
+grant cold receipt publication authority.
 The identity handoff also passed all 40 native first-install cases at
 `d87981b / 38064697243` and the real first-application/public-update lifecycle
 at `d87981b / 38064697428`.
-Cold missing-receipt publication is now implemented internally, pending its
-Actions acceptance gate. It requires a separately admitted exclusive native
+Internal cold missing-receipt publication passed all eight focused cases at
+`d9dc24a / 38071140956`. It requires a separately admitted exclusive native
 scope, the surviving completed original runtime, and current source/build/
 dependency/configuration matching the retained original identity. It rejects
 incomplete publication evidence, validates the service digest against retained

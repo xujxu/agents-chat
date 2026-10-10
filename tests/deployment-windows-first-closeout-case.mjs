@@ -10,9 +10,17 @@ import {
   saveRecoveryEngine, verifyRecoveryEngine, retirementRecoveryInvocation,
 } from '../scripts/deployment/saved-recovery-engine.mjs';
 
-export async function prepareWindowsFirstSavedCloseoutCase({ fixture, state }) {
+export async function prepareWindowsFirstSavedCloseoutCase({ fixture, state, missingReceipt = false }) {
   const { control, project, operationId, pwsh } = fixture;
-  const receipt = await readFile(path.join(control, 'deployment.json'));
+  const receiptFile = path.join(control, 'deployment.json');
+  let receipt;
+  let originalIdentity;
+  if (missingReceipt) {
+    await assert.rejects(readFile(receiptFile), { code: 'ENOENT' });
+    originalIdentity = JSON.parse(await readFile(path.join(control,
+      `first-task-${operationId}`, 'completion-prepared.json'))).deploymentIdentity;
+    assert.ok(originalIdentity, 'Saved cold closeout requires original prepared identity.');
+  } else { receipt = await readFile(receiptFile); }
   const saved = await saveRecoveryEngine({
     control, source: fileURLToPath(new URL('../scripts/deployment/', import.meta.url)),
   });
@@ -28,7 +36,15 @@ export async function prepareWindowsFirstSavedCloseoutCase({ fixture, state }) {
       assert.equal(remaining.includes('lock'), false);
       assert.equal(remaining.some(name => name.startsWith('worker-') || name.startsWith('first-task-')), false);
       assert.ok(remaining.includes(`first-runtime-${operationId}`));
-      assert.deepEqual(await readFile(path.join(control, 'deployment.json')), receipt);
+      const published = await readFile(receiptFile);
+      if (missingReceipt) {
+        const recovered = JSON.parse(published);
+        assert.deepEqual(recovered, {
+          version: 1, project, operationId, status: 'accepted', acceptedAt: JSON.parse(state).updatedAt,
+          identity: { ...originalIdentity, service: recovered.identity.service },
+        });
+        assert.match(recovered.identity.service, /^[a-f0-9]{64}$/);
+      } else { assert.deepEqual(published, receipt); }
       assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
       assert.deepEqual(await verifyRecoveryEngine({ control, manifestSha256: saved.manifestSha256 }), saved);
       const next = await acquireLock(control, { project, operationId: randomUUID(), pwsh });

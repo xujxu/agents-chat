@@ -13677,7 +13677,7 @@ is granted by this operation.
   The native fixture also refuses retained pending/staged publication evidence,
   independently changed build/dependency/configuration files, concurrent
   publication scopes and a wrong service preimage without publishing a receipt.
-- [ ] Accept the focused native gate and saved dependency closure before
+- [x] Accept the focused native gate and saved dependency closure before
   integrating saved closeout or incomplete completion-step recovery. Add
   real-application actor-loss coverage in that integration gate; native fixture
   acceptance alone is not real application cold-recovery acceptance.
@@ -13692,6 +13692,11 @@ is granted by this operation.
   `WindowsWorkerLauncher.ReadFrameAsync`'s existing 131,072-byte maximum; it
   exited before the independent process check. Match that existing native/wire
   limit rather than relax identity checks or enlarge the shared protocol.
+  Corrected `d9dc24a / 38071140956`, job `114268621303`, passed all eight cases
+  at `2026-10-10 17:32:57 UTC`: cold publication 106,675 ms, saved dependency
+  closure 2,618 ms. This accepts native fixture publication, refusal guards,
+  idempotence and original runtime/state/lock preservation, not actual
+  application cold recovery or saved closeout composition.
 
 ### Task 5CX: Compose missing first receipt publication into saved closeout
 
@@ -13704,7 +13709,7 @@ unknown staging, a replaced runtime, or a dead first runtime.
 `tests/deployment-windows-first-crash.test.mjs`,
 `.github/workflows/deployment-lifecycle.yml`, and this plan/README.
 
-- [ ] Add a separate complete-without-receipt saved-finalizer case to the native
+- [x] Add a separate complete-without-receipt saved-finalizer case to the native
   crash matrix:
   ```js
   { step: 'complete', savedCloseout: true, missingReceipt: true }
