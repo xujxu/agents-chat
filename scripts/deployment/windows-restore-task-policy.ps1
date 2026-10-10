@@ -36,16 +36,22 @@ try {
     $saved = [xml]($policies[1].definition)
     $namespaces = [Xml.XmlNamespaceManager]::new($current.NameTable)
     $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
-    $currentEnabled = $current.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
-    $savedEnabled = $saved.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
-    if ($currentEnabled.Count -ne 1 -or $savedEnabled.Count -ne 1 -or
-        $currentEnabled[0].InnerText -cnotin @('true', 'false') -or
-        $currentEnabled[0].InnerText -cne $savedEnabled[0].InnerText) {
-        throw 'Saved enabled policy differs or is unsupported.'
+    $enabledValues = @()
+    foreach ($document in @($current, $saved)) {
+        $settings = $document.SelectNodes('/t:Task/t:Settings', $namespaces)
+        $enabled = $document.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
+        if ($settings.Count -ne 1 -or $enabled.Count -gt 1 -or ($enabled.Count -eq 1 -and
+            ($enabled[0].Attributes.Count -ne 0 -or $enabled[0].InnerXml -cnotin @('true', 'false')))) {
+            throw 'Saved enabled policy is unsupported.'
+        }
+        # Scheduler omits Enabled for its default true, as in native completion.
+        $enabledValues += ($enabled.Count -eq 0 -or $enabled[0].InnerText -ceq 'true')
+        if ($enabled.Count) { $null = $settings[0].RemoveChild($enabled[0]) }
+        $normalized = $document.CreateElement('Enabled', $namespaces.LookupNamespace('t'))
+        $normalized.InnerText = 'false'
+        $null = $settings[0].AppendChild($normalized)
     }
-    # The shared comparator requires inhibited XML; preserve the original equality check above.
-    $currentEnabled[0].InnerText = 'false'
-    $savedEnabled[0].InnerText = 'false'
+    if ($enabledValues[0] -ne $enabledValues[1]) { throw 'Saved enabled policy differs.' }
     $stage = 'permanent-policy'
     $context = @{ Stage=$stage }
     Confirm-AgentsChatTaskReplacementPolicy $current.OuterXml $saved.OuterXml $context

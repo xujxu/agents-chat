@@ -12,16 +12,25 @@ export async function verifyWindowsRestorePolicy({ directory, control, project, 
     const original = scope.observation;
     assert.notEqual(original.configuration, task.configuration, 'Restore fixture must compare distinct runtime bundles.');
     const options = { scope, task, pwsh };
+    const enabledDefinition = value => task.definition.replace(/(<Settings>)([\s\S]*?)(<\/Settings>)/,
+      (_, before, body, after) => `${before}${body.replace(/<Enabled>[\s\S]*?<\/Enabled>/g, '')}${value}${after}`);
     assert.deepEqual(await inspectWindowsRestoreTaskPolicy(options), {
       status: 'same-task-policy', runtimeAuthority: false, taskName: task.name,
     });
+    for (const enabled of ['', '<Enabled>true</Enabled>']) {
+      assert.equal((await inspectWindowsRestoreTaskPolicy({
+        ...options, task: { ...task, definition: enabledDefinition(enabled) },
+      })).status, 'same-task-policy');
+    }
     await assert.rejects(inspectWindowsRestoreTaskPolicy({ ...options, scope: { ...scope } }));
     const changes = [
       { name: `${task.name}-foreign` },
       { securityDescriptor: `${task.securityDescriptor}S:` },
       { definition: '<invalid' },
-      { definition: task.definition.replace(/(<Settings>[\s\S]*?<Enabled>)(true|false)(<\/Enabled>)/,
-        (_, before, enabled, after) => `${before}${enabled === 'true' ? 'false' : 'true'}${after}`) },
+      { definition: enabledDefinition('<Enabled>false</Enabled>') },
+      { definition: enabledDefinition('<Enabled>true</Enabled><Enabled>true</Enabled>') },
+      { definition: enabledDefinition('<Enabled unexpected="true">true</Enabled>') },
+      { definition: enabledDefinition('<Enabled>invalid</Enabled>') },
       { definition: task.definition.replace(/BootTrigger/g, 'LogonTrigger') },
       { definition: task.definition.replace(/<UserId>[^<]+<\/UserId>/, '<UserId>S-1-5-18</UserId>') },
       { definition: task.definition.replace(/(<MultipleInstancesPolicy>)([^<]+)(<\/MultipleInstancesPolicy>)/,
