@@ -22,7 +22,9 @@ if ($Mode -ceq 'Stop' -and $task.GetInstances(0).Count -eq 0) {
     if ($identity -ceq $OwnerIdentity) {
         throw 'Original owner is still running without its task instance.'
     }
-    [Console]::Out.WriteLine('{"status":"already-stopped"}')
+    [Console]::Out.WriteLine((@{
+        status='already-stopped'; enabled=[bool]$task.Enabled; instances=0
+    } | ConvertTo-Json -Compress))
     exit 0
 }
 $binding = Get-AgentsChatTaskOwnerBinding -TaskName $TaskName -OwnerPid $OwnerPid `

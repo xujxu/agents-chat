@@ -55,7 +55,12 @@ function Confirm-AgentsChatFirstTaskXml([Xml.XmlElement]$Expected, [Xml.XmlEleme
         Confirm-AgentsChatFirstTaskSettings $Expected $Actual
         return
     }
-    if ($Expected.ChildNodes.Count -ne $Actual.ChildNodes.Count) { throw "Registered first-task shape differs: $($Expected.LocalName)." }
+    if ($Expected.ChildNodes.Count -ne $Actual.ChildNodes.Count) {
+        $beforeNames = @($Expected.ChildNodes | ForEach-Object { $_.LocalName }) -join ','
+        $afterNames = @($Actual.ChildNodes | ForEach-Object { $_.LocalName }) -join ','
+        [Console]::Error.WriteLine("First-task shape differs: element=$($Expected.LocalName); expected=$beforeNames; actual=$afterNames.")
+        throw "Registered first-task shape differs: $($Expected.LocalName)."
+    }
     if ($Expected.LocalName -ceq 'Task') {
         $remaining = [Collections.Generic.Dictionary[string,Xml.XmlElement]]::new([StringComparer]::Ordinal)
         foreach ($node in $Actual.ChildNodes) {

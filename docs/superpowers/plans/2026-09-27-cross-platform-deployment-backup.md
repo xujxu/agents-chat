@@ -13315,6 +13315,26 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CJ: Settle first-completion publication failures at real boundaries
+
+Files: `tests/deployment-windows-first-completion.test.mjs` and its native
+observer. These exercise the live original controller's failure handling, not
+cold recovery after a controller crash.
+
+- [x] Add three exact receipt-publication collisions: before release, after
+  release and after enable. Create a directory at the chosen receipt pathname
+  only after genuine accepted state. Require completion refusal, exactly one
+  flushed pending receipt with the intended phase, original runtime, correct
+  previous digest and actual guarded/released/enabled values. An earlier
+  admission or policy failure cannot pass this test.
+- [ ] Run all four completion scenarios in Actions. Require persisted
+  `activation-stopped.json` for the exact original runtime, no original owner
+  or Scheduler instance, and task disabled. For the after-enable collision,
+  the controller must release its task-file handle before disabling the task.
+  Preserve the original error and all incomplete receipts.
+- [ ] Record results separately from success and cold/crash recovery. Keep
+  public first deployment gated until subsequent recovery/integration coverage.
+
 ### Task 5CI: Complete permanent first-task policy under original authority
 
 Files: `tests/deployment-windows-first-completion.test.mjs`,
@@ -13361,6 +13381,11 @@ activation helper, saved recovery inventory and lifecycle workflow.
   guarded-to-released lease ordering and automation enabled only at completion.
   Shared account normalization handles both principal and logon-trigger SID
   aliases without weakening exact observed XML or task-file checks.
+  Initial native implementation `0fcf59d / 38030781090`, job `114151090515`,
+  preserved twenty prior cases but rejected permanent completion at structural
+  XML comparison (`RuntimeException`, comparison line 58, `06:30:38 UTC`).
+  Add bounded element/child-name diagnostics before changing normalization;
+  do not weaken policy checks based only on the generic refusal.
 - [ ] Accept native success/refusals and completion-close persistence, then
   first-completion interruption/recovery and actual public Next deployment.
   Do not treat this small HTTP fixture as real public first-install acceptance.
