@@ -57,7 +57,11 @@ for (const step of ['release-requested', 'lease-released']) {
         assert.equal(JSON.parse(release).controllerPid, active.controllerPid);
         assert.deepEqual(JSON.parse(release).runtime, active.runtime);
         const state = await readFile(path.join(fixture.control, 'state.json'));
-        assert.equal((await observe('Inspect')).lease, step === 'release-requested' ? 'guarded' : 'released');
+        const before = await observe('Inspect');
+        assert.equal(before.lease, step === 'release-requested' ? 'guarded' : 'released');
+        assert.equal(before.binding.enabled, false);
+        assert.deepEqual(before.triggers, []);
+        assert.deepEqual(before.restart, { count: 0, intervalSeconds: null });
         assert.deepEqual(await observe('KillPublisher'), { status: 'publisher-terminated' });
         assert.equal(child.kill(), true);
         await exited;
@@ -70,6 +74,10 @@ for (const step of ['release-requested', 'lease-released']) {
           assert.equal(surviving.binding.instanceGuid, active.runtime.instanceGuid);
           assert.ok(surviving.domain.members.includes(active.runtime.launcherPid));
           assert.equal(surviving.domain.quiescent, false);
+          assert.equal(surviving.definition, before.definition);
+          assert.equal(surviving.securityDescriptor, before.securityDescriptor);
+          assert.deepEqual(surviving.triggers, []);
+          assert.deepEqual(surviving.restart, { count: 0, intervalSeconds: null });
           const response = await fetch(`http://127.0.0.1:${port}/api/auth/providers`, { signal: AbortSignal.timeout(5000) });
           assert.equal(response.status, 200);
           assert.deepEqual(Object.keys(await response.json()), ['admin-login']);

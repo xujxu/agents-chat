@@ -13350,6 +13350,14 @@ first-deployment acceptance.
   `windows_application_only=true` and `windows_commands_only=true`.
   Require all 28 selected native cases, including both actual actor deaths,
   before implementing first-specific cold completion admission.
+  Initial `6a0a585 / 38035707601`, job `114165568588`, retained all prior
+  26 passes but both new cases failed before process termination: the observer
+  parsed the inhibited task's absent restart interval as a required duration.
+  Represent the native zero-count/empty-interval policy explicitly as
+  `{ count: 0, intervalSeconds: null }`; still reject an absent interval when
+  count is nonzero and preserve the permanent-policy 3/60 assertion.
+  Also make `AwaitStopped` refuse a reappearing instance rather than falling
+  through to fixture cleanup.
 
 ### Task 5CK: Expose bounded original completion steps for crash recovery
 

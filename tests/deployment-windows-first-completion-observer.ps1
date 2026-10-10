@@ -48,6 +48,7 @@ if ($Mode -cin @('Stop', 'AwaitStopped') -and $task.GetInstances(0).Count -eq 0)
     } | ConvertTo-Json -Compress))
     exit 0
 }
+if ($Mode -ceq 'AwaitStopped') { throw 'A task instance reappeared during read-only settlement observation.' }
 $binding = Get-AgentsChatTaskOwnerBinding -TaskName $TaskName -OwnerPid $OwnerPid `
     -OwnerIdentity $OwnerIdentity -Definition ([string]$task.Xml) `
     -SecurityDescriptor ([string]$task.GetSecurityDescriptor(7))
@@ -75,13 +76,19 @@ if ($Mode -ceq 'Inspect') {
     })
     $lease = [Deployment.WindowsRuntimeControl]::Exchange($Generation, $OwnerPid, $OwnerIdentity, 'lease', 15000)
     $domain = [Deployment.WindowsRuntimeControl]::Exchange($Generation, $OwnerPid, $OwnerIdentity, 'observe', 15000) | ConvertFrom-Json
+    $restartCount = [int]$task.Definition.Settings.RestartCount
+    $restartInterval = [string]$task.Definition.Settings.RestartInterval
+    $intervalSeconds = if ($restartInterval -ceq '') {
+        if ($restartCount -ne 0) { throw 'A nonzero restart policy has no interval.' }
+        $null
+    } else { [Xml.XmlConvert]::ToTimeSpan($restartInterval).TotalSeconds }
     [Console]::Out.WriteLine((@{
         binding=$binding; lease=$lease; domain=$domain; definition=[string]$task.Xml
         securityDescriptor=[string]$task.GetSecurityDescriptor(7)
         triggers=$triggers
         restart=@{
-            count=[int]$task.Definition.Settings.RestartCount
-            intervalSeconds=[Xml.XmlConvert]::ToTimeSpan([string]$task.Definition.Settings.RestartInterval).TotalSeconds
+            count=$restartCount
+            intervalSeconds=$intervalSeconds
         }
     } | ConvertTo-Json -Depth 5 -Compress))
 } else {
