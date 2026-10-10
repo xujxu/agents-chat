@@ -13823,6 +13823,66 @@ job in `.github/workflows/deployment-lifecycle.yml`.
   Preserve `5e15139 / 38057686717` as the last accepted full 43-job baseline
   until this expanded regression finishes successfully.
 
+### Task 5CZ: Finish released first-runtime prefixes through saved closeout
+
+**Files:** add `scripts/deployment/windows-first-cold-completion.mjs`; extend
+`windows-first-completion-recovery.mjs` and its native controller to expose the
+already retained original deployment identity; compose this helper in
+`windows-completed-closeout.mjs` before missing-receipt recovery and include it
+in `saved-recovery-engine.mjs`. Extend the existing saved-closeout fixture and
+crash scenarios, not the ordinary receipt publisher or native step algorithm.
+
+- [x] Add saved-finalizer scenarios at `lease-released`,
+  `permanent-policy-applied` and `enable-applied`, all without a warm receipt:
+  ```js
+  { step: 'lease-released', savedCloseout: true, missingReceipt: true }
+  { step: 'permanent-policy-applied', savedCloseout: true, missingReceipt: true }
+  { step: 'enable-applied', savedCloseout: true, missingReceipt: true }
+  ```
+  Before each valid saved invocation, change only fixture BUILD_ID, require
+  refusal and unchanged original state, completion history, task definition,
+  enabled setting and runtime instance. Restore fixture bytes, then require
+  successful saved receipt/retirement with the original prepared identity.
+  Add these three names to the focused selector (12 cases; native first45).
+- [ ] Push and run the focused Actions gate with
+  `windows_application_only=true`, `windows_commands_only=true` and
+  `windows_receipt_only=true`. Require all nine existing cases to pass and the
+  three new saved paths to refuse their incomplete completion prefix.
+- [ ] Expose frozen/null `recovery.deploymentIdentity` from the original
+  native context, using existing four-field validation. Keep
+  `recovery.observation`, native step order and original receipt chain unchanged.
+- [ ] Implement the bounded orchestration:
+  ```js
+  await completeWindowsFirstDeployment({
+    control, project, operationId, stateSha256, pwsh, admission, signal,
+  });
+  ```
+  Open existing exclusive `openWindowsFirstCompletionRecovery`, bind original
+  operation and state hash, and fast-return when it is already complete. For a
+  pending released prefix, require retained provenance, inspect its actual
+  managed runtime/configuration/source/artifacts, and compare the original four
+  digests before native policy mutation. Verify runtime identity, released
+  lease and original providers. Close the managed observation before changing
+  its frozen task policy; retain independent configuration checks.
+  ```js
+  while (recovery.observation.status !== 'complete') {
+    await configuration.checkFiles({ signal });
+    await source.check({ signal });
+    await artifacts.check({ signal });
+    await recovery.advance({ signal });
+  }
+  ```
+  Recheck retained file scopes and native evidence after the last edge. Close
+  every owned observer with explicit aggregate cleanup errors. Do not acquire a
+  nested admission, recreate a dead runtime, release a guarded lease, fabricate
+  missing legacy provenance, or reinterpret unknown incomplete evidence.
+- [ ] In the missing-receipt branch, complete the retained prefix before the
+  already accepted receipt recovery and retirement. Keep original state checks
+  before/after each orchestration. Push and accept all 12 focused cases and
+  saved dependency closure; then rerun actual normal/receipt-loss application
+  cases for the complete-prefix fast path. Earlier native prefix acceptance
+  must not be mislabeled actual application interruption at those earlier edges.
+
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
 Files: existing first-crash actor, crash/proof tests and

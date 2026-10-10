@@ -31,9 +31,12 @@ for (const scenario of [
   { step: 'complete', receipt: true, retirement: true, interruptRetirement: true },
   { step: 'complete', receipt: true, retirement: true, savedCloseout: true },
   { step: 'complete', savedCloseout: true, missingReceipt: true },
+  { step: 'lease-released', savedCloseout: true, missingReceipt: true },
+  { step: 'permanent-policy-applied', savedCloseout: true, missingReceipt: true },
+  { step: 'enable-applied', savedCloseout: true, missingReceipt: true },
 ]) {
   const { step } = scenario;
-  const name = scenario.missingReceipt ? 'cold-first-saved-receipt-publication'
+  const name = scenario.missingReceipt ? `cold-first-saved-${step === 'complete' ? 'receipt-publication' : step}`
     : scenario.savedCloseout ? 'cold-first-saved-closeout'
     : scenario.receiptRecovery ? 'cold-first-receipt-publication'
     : scenario.interruptRetirement ? 'cold-first-retirement-actor-loss'
@@ -102,7 +105,7 @@ for (const scenario of [
           waitForController: identity => observe('AwaitPublisherExit', identity), observe: () => observe('Inspect'),
         });
         if (scenario.savedCloseout) retirementCase = await prepareWindowsFirstSavedCloseoutCase({
-          fixture, state, missingReceipt: scenario.missingReceipt === true,
+          fixture, state, step, missingReceipt: scenario.missingReceipt === true, observe: () => observe('Inspect'),
         });
         else if (scenario.retirement) retirementCase = await prepareWindowsFirstRetirementCase({
           fixture, active, state, interrupt: scenario.interruptRetirement,
