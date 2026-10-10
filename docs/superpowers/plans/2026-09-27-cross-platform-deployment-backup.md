@@ -13394,9 +13394,13 @@ No new production recovery behavior is assumed necessary.
   Verify the same original instance, owner, launcher and released Job survived.
   Acquire a new admission, require an identical reopened recovery observation,
   finish remaining edges and reuse all chain/native-policy/HTTP assertions.
-- [ ] Run the 35-case native Actions gate. Require all prior 32 cases and all
+- [x] Run the 35-case native Actions gate. Require all prior 32 cases and all
   three genuine recovery-actor deaths before first-specific final receipt and
   retirement integration.
+  `707f478 / 38042820672`, job `114186318326`, passed **35/35** at
+  `2026-10-10 10:15:08 UTC`. Recovery-actor interruption at released took
+  86,488 ms; permanent-policy-applied 86,018 ms; enable-applied 83,290 ms.
+  No production correction was needed for these genuine second-actor losses.
 
 ### Task 5CN: Recover released first completion through bounded durable edges
 

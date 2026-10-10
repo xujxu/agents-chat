@@ -207,7 +207,12 @@ Released first-completion recovery passed 32 native cases at `2ffb19c`
 operation-actor loss after lease release, permanent-policy application and
 enablement; it resumes the exact durable sequence, refuses overlapping native
 recovery, and survives orderly close/reopen without restarting the application.
-Abrupt loss of the recovery actor itself remains a separate gate.
+Abrupt loss of the recovery actor itself passed all 35 native cases at
+`707f478` (Actions `38042820672`): after `released`,
+`permanent-policy-applied` and `enable-applied`, both native helpers exit,
+the same application runtime survives, and a fresh admission resumes the exact
+observation through completion. Final receipt/retirement and public first
+deployment remain separate integration gates.
 Controller-crash recovery and public first-deployment integration are still
 separate unfinished gates.
 The task parameter and read-only definition changes below passed native
