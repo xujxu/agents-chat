@@ -1,5 +1,7 @@
+. (Join-Path $PSScriptRoot 'windows-first-deployment-identity.ps1')
+
 function Prepare-AgentsChatFirstCompletion {
-    param([hashtable]$Context, [string[]]$Providers, [scriptblock]$CheckAuthority)
+    param([hashtable]$Context, [string[]]$Providers, [hashtable]$DeploymentIdentity, [scriptblock]$CheckAuthority)
     if ($Context.CompletionPrepared -or $null -eq $Context.Activation -or
         $null -eq $Context.Activation.Runtime -or $Context.Activation.Stopped -or
         $null -eq $Context.Listener -or $null -eq $Context.ActivatingStateFile -or
@@ -9,6 +11,10 @@ function Prepare-AgentsChatFirstCompletion {
         throw 'First completion requires original active readiness and unused activating authority.'
     }
     & $CheckAuthority
+    $identity = Read-AgentsChatFirstDeploymentIdentity ($DeploymentIdentity | ConvertTo-Json -Compress)
+    if ($identity.source -cne $Context.ActivatingStateFields.targetCommit.GetString()) {
+        throw 'First completion build identity differs from the original target.'
+    }
     $listener = Open-AgentsChatFirstRuntimeListener $Context $CheckAuthority
     $receipt = [ordered]@{
         status='first-completion-prepared'; runtimeAuthority=$false
@@ -17,7 +23,7 @@ function Prepare-AgentsChatFirstCompletion {
         lockSha256=$Context.LockSha256; activatingStateSha256=$Context.ActivatingStateSha256
         configuration=$Context.Bundle.Configuration; configurationSha256=$Context.Bundle.Sha256
         generation=$Context.Activation.Runtime.generation; port=$Context.Port
-        providers=@($Providers); listener=$listener
+        providers=@($Providers); listener=$listener; deploymentIdentity=$identity
     }
     $prepared = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::Publish(
         (Join-Path $Context.Control "first-task-$($Context.OperationId)/completion-prepared.json"),

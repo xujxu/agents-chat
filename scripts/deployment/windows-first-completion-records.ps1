@@ -1,13 +1,25 @@
 . (Join-Path $PSScriptRoot 'windows-task-completion-proof.ps1')
 . (Join-Path $PSScriptRoot 'windows-first-task-registration.ps1')
+. (Join-Path $PSScriptRoot 'windows-first-deployment-identity.ps1')
 
-function Read-AgentsChatFirstCompletionRecord([hashtable]$Context, [string]$Name, [string[]]$Fields) {
+function Read-AgentsChatFirstCompletionRecord(
+    [hashtable]$Context, [string]$Name, [string[]]$Fields, [string[]]$OptionalFields = @()
+) {
     $Context.Stage = "records-$Name"
     $file = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Directory "$Name.json") ''
     $Context.Hashes[$Name] = $file.Sha256
     if ($Name -ceq 'completion-release-requested') { $Context.ReleaseIntentFile = $file }
     $Context.CompletionText = $file.ReadText()
-    return Read-AgentsChatMaintenanceFields ($file.ReadText()) $Fields
+    if ($OptionalFields.Count) {
+        $document = [Text.Json.JsonDocument]::Parse($Context.CompletionText)
+        try {
+            foreach ($optionalName in $OptionalFields) {
+                $value = [Text.Json.JsonElement]::new()
+                if ($document.RootElement.TryGetProperty($optionalName, [ref]$value)) { $Fields += $optionalName }
+            }
+        } finally { $document.Dispose() }
+    }
+    return Read-AgentsChatMaintenanceFields $Context.CompletionText $Fields
 }
 
 function Get-AgentsChatFirstCompletionRecordNames {
@@ -140,7 +152,10 @@ function Read-AgentsChatFirstCompletionRecords([hashtable]$Context) {
     if ($Context.Runtime.configurationSha256 -cne $Context.ConfigurationSha256 -or
         $Context.Runtime.pid -in @($Context.ActorPid, $Context.BridgePid)) { throw 'Ambiguous original runtime.' }
     $prepared = Read-AgentsChatFirstCompletionRecord $Context 'completion-prepared' ($identity + @(
-        'status', 'runtimeAuthority', 'lockSha256', 'activatingStateSha256', 'generation', 'port', 'providers', 'listener'))
+        'status', 'runtimeAuthority', 'lockSha256', 'activatingStateSha256', 'generation', 'port', 'providers', 'listener')) @('deploymentIdentity')
+    $Context.DeploymentIdentity = if ($prepared.ContainsKey('deploymentIdentity')) {
+        Read-AgentsChatFirstDeploymentIdentity $prepared.deploymentIdentity.GetRawText()
+    } else { $null }
     Assert-AgentsChatCompletionFields $prepared $intent ($identity + @('lockSha256'))
     if ($prepared.status.GetString() -cne 'first-completion-prepared' -or $prepared.runtimeAuthority.GetBoolean() -or
         $prepared.activatingStateSha256.GetString() -cne $start.stateSha256.GetString() -or
@@ -210,6 +225,10 @@ function Read-AgentsChatFirstCompletionRecords([hashtable]$Context) {
     $Context.CompletionSha256 = $previous
     $Context.Phase = $record.phase.GetString()
     $state = Read-AgentsChatFirstAcceptedState $Context $lock
+    if ($null -ne $Context.DeploymentIdentity -and
+        $Context.DeploymentIdentity.source -cne $state.targetCommit.GetString()) {
+        throw 'Original first build identity differs from accepted source.'
+    }
     if ($Context.DeploymentReceiptPresent) { Read-AgentsChatFirstDeploymentReceipt $Context $state }
 }
 
@@ -253,6 +272,13 @@ function Read-AgentsChatFirstDeploymentReceipt([hashtable]$Context, [hashtable]$
     }
     foreach ($name in @('build', 'dependencies', 'config', 'service')) {
         if ($identity[$name].GetString() -cnotmatch '^[a-f0-9]{64}$') { throw 'Invalid first deployment identity digest.' }
+    }
+    if ($Context.ContainsKey('DeploymentIdentity') -and $null -ne $Context.DeploymentIdentity) {
+        foreach ($name in @('source', 'build', 'dependencies', 'config')) {
+            if ($identity[$name].GetString() -cne $Context.DeploymentIdentity[$name]) {
+                throw 'First deployment receipt differs from original prepared identity.'
+            }
+        }
     }
     $Context.DeploymentReceiptFile = $file
 }

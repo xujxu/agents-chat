@@ -6,6 +6,7 @@ import { captureWorkerFields } from './worker-identity.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { assertWindowsAdmission } from './windows-admission.mjs';
 import { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
+import { captureWindowsFirstDeploymentIdentity } from './windows-first-deployment-identity.mjs';
 
 const script = fileURLToPath(new URL('./windows-first-completion-proof-controller.ps1', import.meta.url));
 const proofs = new WeakMap();
@@ -58,13 +59,16 @@ export async function openWindowsFirstCompletionProof({ control, pwsh, admission
   let failure;
   try {
     const ready = captureWorkerFields(await wire.receive({ signal, timeoutMs: 60000 }),
-      ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'first completion proof readiness');
+      ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value', 'deploymentIdentity'],
+      'first completion proof readiness');
     if (ready.type !== 'ready' || ready.pid !== child.pid || ready.control !== control
       || ready.controllerIdentity !== controllerIdentity
       || ready.processIdentity !== await processIdentity(child.pid)) {
       throw new Error('Original first-completion proof bridge differs.');
     }
     const observation = capture(ready.value);
+    const deploymentIdentity = ready.deploymentIdentity === null ? null
+      : captureWindowsFirstDeploymentIdentity(ready.deploymentIdentity);
     const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity });
     const request = async (method, requestSignal) => {
       if (busy) throw refused(new Error('A first-completion proof request is already active.'));
@@ -101,7 +105,7 @@ export async function openWindowsFirstCompletionProof({ control, pwsh, admission
     };
     await assertWindowsAdmission(control, admission, { signal });
     const proof = Object.freeze({
-      identity, observation,
+      identity, observation, deploymentIdentity,
       check: ({ signal: requestSignal } = {}) => request('check', requestSignal),
       close: async () => { if (!closed) await request('close'); },
     });

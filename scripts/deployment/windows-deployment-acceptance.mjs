@@ -10,7 +10,7 @@ const serviceIdentity = observed => digest({
   securityDescriptor: observed.securityDescriptor, principalSid: observed.principalSid,
   enabled: observed.enabled, configurationSha256: observed.configurationSha256,
 });
-const configurationIdentity = configuration => digest({
+export const windowsConfigurationIdentity = configuration => digest({
   profile: configuration.profile, providers: configuration.providers,
   projectSecurityDescriptor: configuration.projectSecurityDescriptor,
   files: configuration.files.map(({ path, present, sha256, securityDescriptor }) =>
@@ -33,7 +33,7 @@ export async function captureWindowsDeploymentAcceptance({
     throw new Error('Windows acceptance requires complete artifact identities.');
   }
   const service = serviceIdentity(original);
-  const config = configurationIdentity(configuration);
+  const config = windowsConfigurationIdentity(configuration);
   const check = async checkSignal => {
     checkSignal?.throwIfAborted();
     const observed = await assertWindowsManagedTaskScope(scope, { signal: checkSignal });
@@ -41,7 +41,7 @@ export async function captureWindowsDeploymentAcceptance({
     await source.check({ signal: checkSignal });
     await artifacts.check({ signal: checkSignal });
     if (!same(observed, original) || !same(source.record, record) || !same(artifacts.identity, artifactIdentity)
-      || serviceIdentity(observed) !== service || configurationIdentity(configuration) !== config) {
+      || serviceIdentity(observed) !== service || windowsConfigurationIdentity(configuration) !== config) {
       throw new Error('Accepted Windows deployment authority changed.');
     }
   };

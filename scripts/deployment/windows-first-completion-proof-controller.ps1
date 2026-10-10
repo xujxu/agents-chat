@@ -24,6 +24,7 @@ try {
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; control=$Control
         controllerIdentity=$ControllerIdentity; value=(Assert-AgentsChatFirstCompletionProof $proof)
+        deploymentIdentity=$proof.DeploymentIdentity
     } | ConvertTo-Json -Depth 8 -Compress))
     [Console]::Out.Flush()
     $sequence = 0

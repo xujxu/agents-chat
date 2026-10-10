@@ -139,7 +139,7 @@ try {
         try { $method = $document.RootElement.GetProperty('method').GetString() }
         finally { $document.Dispose() }
         $fields = if ($method -ceq 'register-task') { @('id', 'method', 'logonType', 'triggerType') }
-            elseif ($method -ceq 'prepare-completion') { @('id', 'method', 'providers') }
+            elseif ($method -ceq 'prepare-completion') { @('id', 'method', 'providers', 'deploymentIdentity') }
             else { @('id', 'method') }
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
@@ -173,7 +173,8 @@ try {
             $stage = 'first-completion-handoff'
             if ($request.providers.ValueKind -ne [Text.Json.JsonValueKind]::Array) { throw 'Invalid first-runtime providers.' }
             $providers = @($request.providers.EnumerateArray() | ForEach-Object { $_.GetString() })
-            $value = Prepare-AgentsChatFirstCompletion $context $providers { Assert-FirstRuntimePublication }
+            $deploymentIdentity = Read-AgentsChatFirstDeploymentIdentity $request.deploymentIdentity.GetRawText()
+            $value = Prepare-AgentsChatFirstCompletion $context $providers $deploymentIdentity { Assert-FirstRuntimePublication }
             Assert-FirstRuntimePublication
         }
         if ($method -ceq 'complete') {

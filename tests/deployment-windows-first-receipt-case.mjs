@@ -5,6 +5,7 @@ import { inspectWindowsManagedTask } from '../scripts/deployment/windows-managed
 import { inspectWindowsConfiguration } from '../scripts/deployment/windows-configuration.mjs';
 import { captureWindowsDeploymentAcceptance } from '../scripts/deployment/windows-deployment-acceptance.mjs';
 import { publishDeploymentReceipt, readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
+import { captureWindowsFirstDeploymentIdentity } from '../scripts/deployment/windows-first-deployment-identity.mjs';
 
 export async function verifyWindowsFirstDeploymentReceipt({ fixture, built, active, port }) {
   const { project, taskName, pwsh, control, lock } = fixture;
@@ -24,6 +25,16 @@ export async function verifyWindowsFirstDeploymentReceipt({ fixture, built, acti
     assert.equal(acceptance.identity.source, built.sourceCommit);
     assert.equal(acceptance.identity.build, built.artifacts.identity.build);
     assert.equal(acceptance.identity.dependencies, built.artifacts.identity.dependencies);
+    const { service, ...preparedIdentity } = acceptance.identity;
+    assert.deepEqual(captureWindowsFirstDeploymentIdentity(preparedIdentity), preparedIdentity);
+    assert.equal(Object.isFrozen(captureWindowsFirstDeploymentIdentity(preparedIdentity)), true);
+    for (const changed of [
+      null, { ...preparedIdentity, service },
+      ...Object.keys(preparedIdentity).flatMap(name => [
+        { ...preparedIdentity, [name]: undefined }, { ...preparedIdentity, [name]: 1 },
+        { ...preparedIdentity, [name]: 'A'.repeat(name === 'source' ? 40 : 64) },
+      ]),
+    ]) assert.throws(() => captureWindowsFirstDeploymentIdentity(changed));
     const stateFile = path.join(control, 'state.json');
     const state = await readFile(stateFile);
     const receipt = await publishDeploymentReceipt({ control, lock, ...acceptance });

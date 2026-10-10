@@ -14,6 +14,8 @@ import { processIdentity } from './process-identity.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { captureActivatedRuntime, captureTaskListener, windowsTaskCompletionSteps } from './windows-task-controller.mjs';
 import { waitWindowsReadiness } from './windows-readiness.mjs';
+import { windowsConfigurationIdentity } from './windows-deployment-acceptance.mjs';
+import { captureWindowsFirstDeploymentIdentity } from './windows-first-deployment-identity.mjs';
 
 const script = fileURLToPath(new URL('./windows-first-runtime.ps1', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -58,6 +60,11 @@ export async function prepareWindowsFirstRuntime({
       || typeof built.source?.check !== 'function' || typeof built.artifacts?.check !== 'function') {
       throw new Error('First runtime requires its original configuring phase and exact build.');
     }
+    const deploymentIdentity = captureWindowsFirstDeploymentIdentity({
+      source: built.source.record.commit, build: built.artifacts.identity.build,
+      dependencies: built.artifacts.identity.dependencies, config: windowsConfigurationIdentity(configuration),
+    });
+    if (deploymentIdentity.source !== state.targetCommit) throw new Error('First build identity differs from the original target.');
     const workers = await readWorkerOperation(control);
     if (workers.at(-1)?.phase !== 'sealed' || !same(workers[0].lock, lock)) {
       throw new Error('First runtime requires the original sealed worker operation.');
@@ -247,7 +254,7 @@ export async function prepareWindowsFirstRuntime({
           const receipt = captureWorkerFields(reply.value, [
             'status', 'runtimeAuthority', 'project', 'operationId', 'taskName', 'controllerPid', 'controllerIdentity',
             'lockSha256', 'activatingStateSha256', 'configuration', 'configurationSha256',
-            'generation', 'port', 'providers', 'listener',
+            'generation', 'port', 'providers', 'listener', 'deploymentIdentity',
           ], 'first-completion handoff');
           if (!same(receipt, {
             status: 'first-completion-prepared', runtimeAuthority: false, project, operationId: lock.operationId,
@@ -255,12 +262,13 @@ export async function prepareWindowsFirstRuntime({
             lockSha256: digest(lockBytes), activatingStateSha256: completionStateSha256,
             configuration: bundle.configuration, configurationSha256: bundle.sha256,
             generation: activeRuntime.generation, port, providers: configuration.providers, listener: retainedListener,
+            deploymentIdentity,
           })) throw new Error('Original first-completion handoff differs.');
           completionPrepared = true;
           completionActivatingStateSha256 = completionStateSha256;
           completionStep = 'prepared';
           await authority(requestSignal);
-          return Object.freeze(receipt);
+          return Object.freeze({ ...receipt, deploymentIdentity });
         }
         if (method === 'complete') {
           const proof = captureCompletionProof(reply.value, completionStateSha256);
@@ -347,7 +355,7 @@ export async function prepareWindowsFirstRuntime({
         preparingCompletion = true;
         try {
           await verifyReadiness({ waitSeconds, signal: requestSignal });
-          return await request('prepare-completion', requestSignal, { providers: configuration.providers });
+          return await request('prepare-completion', requestSignal, { providers: configuration.providers, deploymentIdentity });
         } finally { preparingCompletion = false; }
       },
       complete: options => completionRequest('complete', options),

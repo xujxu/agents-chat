@@ -18,6 +18,8 @@ export async function prepareWindowsFirstProofCase({ fixture, active, port, rele
     ? await readFile(path.join(path.dirname(releaseFile), 'completion-complete.json')) : release;
   const receiptFile = path.join(fixture.control, 'deployment.json');
   const receipt = completed ? await readFile(receiptFile) : null;
+  const preparedFile = path.join(path.dirname(releaseFile), 'completion-prepared.json');
+  const prepared = await readFile(preparedFile);
   const admission = await acquireWindowsAdmission({ control: fixture.control, pwsh: fixture.pwsh });
   const options = { control: fixture.control, pwsh: fixture.pwsh, admission };
   const rejectProof = async (supplied, predicate) => {
@@ -49,6 +51,7 @@ export async function prepareWindowsFirstProofCase({ fixture, active, port, rele
           assert.deepEqual(await api.assertWindowsFirstCompletionProof(fixture.control, proof, admission), expected);
           await assert.rejects(api.assertWindowsFirstCompletionProof(fixture.control, { ...proof }, admission));
           await assert.rejects(writeFile(stateFile, state));
+          await assert.rejects(writeFile(preparedFile, prepared));
           if (receipt) await assert.rejects(writeFile(receiptFile, receipt));
         } finally { await proof.close(); }
         await assert.rejects(proof.check());
@@ -102,6 +105,9 @@ export async function prepareWindowsFirstProofCase({ fixture, active, port, rele
             value => { value.acceptedAt = '2000-01-01T00:00:00.000Z'; },
             value => { value.identity.source = '0'.repeat(40); },
             value => { value.identity.build = 'invalid'; },
+            value => { value.identity.build = '0'.repeat(64); },
+            value => { value.identity.dependencies = '0'.repeat(64); },
+            value => { value.identity.config = '0'.repeat(64); },
             value => { value.status = 'pending'; },
             value => { value.unrecognized = true; },
           ]) {
@@ -111,6 +117,35 @@ export async function prepareWindowsFirstProofCase({ fixture, active, port, rele
               await writeFile(receiptFile, JSON.stringify(changed));
               await rejectProof(options, refused);
             } finally { await writeFile(receiptFile, receipt); }
+          }
+          const names = [
+            'completion-prepared', 'completion-policy-requested', 'completion-policy-staged',
+            'completion-release-requested', 'completion-released', 'completion-policy-restore-requested',
+            'completion-policy-restored', 'completion-enable-requested', 'completion-complete',
+          ];
+          const records = await Promise.all(names.map(async name => {
+            const file = path.join(path.dirname(releaseFile), `${name}.json`);
+            return { file, bytes: await readFile(file) };
+          }));
+          let previous;
+          try {
+            for (const [index, record] of records.entries()) {
+              const legacy = JSON.parse(record.bytes);
+              if (index === 0) delete legacy.deploymentIdentity;
+              else legacy.previousSha256 = previous;
+              const bytes = Buffer.from(JSON.stringify(legacy));
+              await writeFile(record.file, bytes);
+              previous = hash(bytes);
+            }
+            const legacy = await api.openWindowsFirstCompletionProof(options);
+            try {
+              assert.equal(legacy.deploymentIdentity, null, 'Legacy evidence must not invent original artifact provenance.');
+              assert.deepEqual(await legacy.check(), { ...expected, completionSha256: previous });
+              assert.deepEqual(await readFile(receiptFile), receipt);
+              assert.deepEqual(await readFile(stateFile), state);
+            } finally { await legacy.close(); }
+          } finally {
+            for (const record of records) await writeFile(record.file, record.bytes);
           }
         }
         const reopened = await api.openWindowsFirstCompletionProof(options);

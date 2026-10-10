@@ -13561,14 +13561,19 @@ null identity, but cannot acquire future cold receipt-publication authority.
   assert.deepEqual(proof.deploymentIdentity, deploymentIdentity,
     'Cold first proof must retain the original build and configuration identity.');
   ```
-- [ ] Push and run the existing focused receipt gate; require this assertion
+- [x] Push and run the existing focused receipt gate; require this assertion
   to fail because the retained original identity is absent:
   ```sh
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_application_only=true \
     -f windows_commands_only=true -f windows_receipt_only=true
   ```
-- [ ] Capture the original identity while the first build/configuration scopes
+  `38833ab / 38062488897`, job `114243410327`, passed six of seven cases
+  and failed exactly the new cold-receipt identity assertion at
+  `2026-10-10 15:21:28 UTC`: actual `undefined`, expected the original four
+  identity fields. Existing retirement, saved closeout and dependency closure
+  passed unchanged.
+- [x] Capture the original identity while the first build/configuration scopes
   are still live, and pass it in the existing prepare-completion request:
   ```js
   const deploymentIdentity = captureWindowsFirstDeploymentIdentity({
@@ -13582,7 +13587,7 @@ null identity, but cannot acquire future cold receipt-publication authority.
   commit, the remaining fields are 64-character lowercase SHA256 values.
   Native preparation additionally compares source to the retained activating
   state's target. The JS acknowledgement must equal this original identity.
-- [ ] Persist `deploymentIdentity` inside the existing prepared record. Its
+- [x] Persist `deploymentIdentity` inside the existing prepared record. Its
   digest is already the first completion edge's `previousSha256`; do not add
   an unbound sidecar or recompute original artifacts during cold open.
   The native reader accepts this exact optional field, validates its shape and
@@ -13593,11 +13598,16 @@ null identity, but cannot acquire future cold receipt-publication authority.
   const deploymentIdentity = ready.deploymentIdentity === null ? null
     : captureWindowsFirstDeploymentIdentity(ready.deploymentIdentity);
   ```
-- [ ] Require any existing final receipt's source/build/dependencies/config
+- [x] Require any existing final receipt's source/build/dependencies/config
   to match retained prepared identity when present. Extend receipt mutation
   cases with valid-format wrong build, dependency and config digests, preserving
   the original fixture bytes after each refusal. Missing original identity in
   legacy records does not itself invalidate an already-existing final receipt.
+  The native fixture also reconstructs the legacy prepared-record shape and
+  following hash links from its own original files while no proof is retained.
+  Require null provenance, unchanged runtime observation/state/receipt, then
+  restore every original byte and reopen the current proof. This is schema
+  compatibility coverage, not a claim of running a historical producer.
 - [ ] Accept the focused native gate and saved-source dependency closure in
   Actions, then the full native first selection before using this evidence for
   a separate cold publication operation. Keep public first deployment gated.
