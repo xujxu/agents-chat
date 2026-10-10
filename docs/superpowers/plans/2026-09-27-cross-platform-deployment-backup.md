@@ -13386,6 +13386,15 @@ Files:
 - [ ] Accept focused five-case receipt/retirement gate, complete native
   selection and saved-source closure. If shared managed helpers are extracted,
   also run the full dual-platform regression before public integration.
+- [ ] Exercise genuine loss of three separately admitted retirement actors:
+  after marker publication, after the first deletion, and after every evidence
+  entry is deleted but before final marker removal. Each owned Node must be
+  forcibly terminated; wait for both exact native helpers to exit and observe
+  the unchanged running application before starting the next actor. Preserve
+  the original marker digest across all three interruptions. Fresh admission
+  must resume the identical final observation, delete only the marker, preserve
+  state/receipt/runtime, and permit a new deployment lock. Extend the focused
+  selector to six cases; no production behavior change is presumed necessary.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
@@ -13423,14 +13432,15 @@ Files: existing first-crash actor, crash/proof tests and
   await rejectProof(options, refused);
   ```
   Restore only the fixture-owned original bytes after each refusal.
-- [ ] Accept the full native selection before using the retained final receipt
+- [x] Accept the full native selection before using the retained final receipt
   as an input to first-specific retirement. Do not publish final success or
   release an original lock merely because a receipt file exists.
   Focused `16d449e / 38046028164`, job `114195621572`, passed **4/4**
   at `2026-10-10 10:49:55 UTC`: actual warm receipt 62,570 ms,
   original cold proof with staging/late-receipt refusal 73,383 ms,
   completed-receipt proof with metadata refusals 68,807 ms, saved closure
-  3,040 ms. Complete native37 `16d449e / 38046037772` is running.
+  3,040 ms. Complete native37 `16d449e / 38046037772`, job
+  `114195649702`, passed **37/37** at `2026-10-10 11:08:34 UTC`.
 
 ### Task 5CP: Verify first-runtime adoption and the existing deployment receipt
 

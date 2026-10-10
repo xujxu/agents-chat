@@ -25,9 +25,11 @@ for (const scenario of [
   { step: 'lease-released', recovery: true, stopRecoveryAfter: 'enable-applied' },
   { step: 'complete', proof: true, receipt: true },
   { step: 'complete', receipt: true, retirement: true },
+  { step: 'complete', receipt: true, retirement: true, interruptRetirement: true },
 ]) {
   const { step } = scenario;
-  const name = scenario.retirement ? 'cold-first-retirement' : scenario.receipt ? 'cold-receipt-proof'
+  const name = scenario.interruptRetirement ? 'cold-first-retirement-actor-loss'
+    : scenario.retirement ? 'cold-first-retirement' : scenario.receipt ? 'cold-receipt-proof'
     : scenario.stopRecoveryAfter ? `recovery-actor-${scenario.stopRecoveryAfter}`
     : scenario.proof ? 'cold-proof' : scenario.recovery ? `cold-recovery-${step}` : step;
   test(`Windows first-install abrupt actor death preserves the exact original lease boundary (${name})`,
@@ -90,7 +92,10 @@ for (const scenario of [
           fixture, active, step, port, release, state, stopRecoveryAfter: scenario.stopRecoveryAfter,
           waitForController: identity => observe('AwaitPublisherExit', identity), observe: () => observe('Inspect'),
         });
-        if (scenario.retirement) retirementCase = await prepareWindowsFirstRetirementCase({ fixture, active, state });
+        if (scenario.retirement) retirementCase = await prepareWindowsFirstRetirementCase({
+          fixture, active, state, interrupt: scenario.interruptRetirement,
+          waitForController: identity => observe('AwaitPublisherExit', identity), observe: () => observe('Inspect'),
+        });
         assert.deepEqual(await observe('KillPublisher'), { status: 'publisher-terminated' });
         assert.equal(child.kill(), true);
         await exited;

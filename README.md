@@ -221,8 +221,10 @@ read-only cold proof after that receipt passed all four focused cases at
 Scheduler working directory while the application still runs in its configured
 project directory. Cold proof retains the completed receipt, rejects partial
 publication and foreign metadata, and grants no retirement authority.
-Controller-crash recovery and public first-deployment integration are still
-separate unfinished gates.
+The same revision passed all 37 native cases (Actions `38046037772`), including
+all three genuine recovery-actor interruptions and the saved-source closure.
+First-specific retirement and public first-deployment integration remain
+unfinished gates.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
