@@ -22,7 +22,7 @@ const readOptional = async file => {
   catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 };
 
-test('actual Windows first deployment composes owned build, authenticated data and saved closeout', {
+test('actual Windows first deployment composes owned build, saved closeout and public update no-op', {
   skip: process.platform !== 'win32' || process.env.DEPLOYMENT_TEST_WINDOWS_FIRST_APPLICATION !== '1',
 }, async t => {
   assert.ok(existsSync(implementation), 'Missing first Windows deployment orchestrator');
@@ -97,6 +97,33 @@ test('actual Windows first deployment composes owned build, authenticated data a
     assert.deepEqual(await verifyRecoveryEngine({ control, manifestSha256: result.recoveryEngine }), engine);
     const next = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
     await releaseLock(control, next, { pwsh });
+    const publicEntry = fileURLToPath(new URL('../scripts/update.ps1', import.meta.url));
+    const current = await execute(pwsh, [
+      '-NoProfile', '-NonInteractive', '-File', publicEntry,
+      '-ProjectDir', project, '-TaskName', taskName, '-Revision', revision,
+      '-WaitSeconds', '120', '-TimeoutSeconds', '900', '-Json',
+    ], {
+      cwd: root, env: {
+        ...process.env, PATH: [path.dirname(process.execPath), path.dirname(git), path.dirname(pwsh)].join(path.delimiter),
+      }, timeout: 900000, maxBuffer: 32768,
+    });
+    const currentResult = JSON.parse(current.stdout);
+    assert.equal(currentResult.status, 'already-current');
+    assert.equal(currentResult.backupCreated, false);
+    const currentState = await loadState(control);
+    assert.equal(currentState.operationId, currentResult.operationId);
+    assert.notEqual(currentState.operationId, operationId);
+    assert.equal(currentState.phase, 'already-current');
+    assert.equal(currentState.targetCommit, revision);
+    assert.deepEqual((await scope.check()).runtime, runtime);
+    assert.deepEqual((await api(`/api/chats?id=${chatId}`)).chat, chat);
+    assert.deepEqual(await readFile(path.join(control, 'deployment.json')), receipt);
+    const afterCurrent = await observe('Inspect');
+    assert.equal(afterCurrent.binding.instanceGuid, before.binding.instanceGuid);
+    assert.deepEqual(afterCurrent.triggers, before.triggers);
+    assert.equal((await readdir(control)).some(name => /^(worker-|first-task-)/.test(name)
+      || ['backup', 'lock'].includes(name)), false);
+    assert.deepEqual(await readdir(path.join(root, '.fresh application.deployment-controllers')), []);
   } finally {
     await scope?.close();
     operationId ??= (await loadState(control))?.operationId;

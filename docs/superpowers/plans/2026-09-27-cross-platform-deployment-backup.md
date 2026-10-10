@@ -13499,6 +13499,26 @@ Files:
   first-deploy route until current-user Interactive/AtLogOn and tunnel-enabled
   defaults, explicit settings, and actual command routing are preserved.
 
+### Task 5CU: Accept public update interoperability after first deployment
+
+- [x] Extend the real first-application fixture after saved finalization and
+  fresh lock reuse. Invoke the actual public `scripts/update.ps1` in a new
+  PowerShell process with explicit toolchain PATH and the installed revision:
+  ```powershell
+  ./scripts/update.ps1 -ProjectDir $Project -TaskName $TaskName `
+    -Revision $Revision -WaitSeconds 120 -TimeoutSeconds 900 -Json
+  ```
+  Require `already-current`, a new bound terminal operation, unchanged source
+  target, runtime instance, task triggers, original deployment receipt and
+  authenticated chat data. Require no backup, no worker/first-task/lock residue
+  and no successful helper capture left behind. Keep public first-deploy gates
+  closed; this tests the already-supported public update path against a real
+  first-created installation rather than adding a second command implementation.
+- [ ] Run the focused actual-first Actions gate. Fix only a demonstrated
+  interoperability failure; preserve existing managed update behavior.
+- [ ] Record the result separately from the preceding first-core acceptance
+  and pending full43 baseline.
+
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
 Files: existing first-crash actor, crash/proof tests and
