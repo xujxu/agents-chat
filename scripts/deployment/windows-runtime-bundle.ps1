@@ -6,7 +6,8 @@ function New-AgentsChatRuntimeBundle {
         [Parameter(Mandatory)][string]$File,
         [Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][string[]]$Arguments,
         [Parameter(Mandatory)][string]$WorkingDirectory,
-        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.Dictionary[string,string]]$Environment
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.Dictionary[string,string]]$Environment,
+        [switch]$Retain
     )
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
@@ -22,6 +23,7 @@ function New-AgentsChatRuntimeBundle {
     }
     $directoryLease = [Deployment.WindowsPrivateFile]::CreateDirectory($Directory)
     $retained = [Collections.Generic.List[IDisposable]]::new()
+    $transferred = $false
     try {
         foreach ($name in $helpers) {
             $directoryLease.Check()
@@ -43,7 +45,13 @@ function New-AgentsChatRuntimeBundle {
         $retained.Add($published)
         $directoryLease.Check()
         foreach ($copy in $retained) { $copy.Check() }
-        return [pscustomobject]@{ Directory=$Directory; Configuration=$configuration; Sha256=$published.Sha256 }
+        $result = [pscustomobject]@{ Directory=$Directory; Configuration=$configuration; Sha256=$published.Sha256 }
+        if ($Retain) {
+            # Transfer original handles instead of reopening the published bundle.
+            $result | Add-Member -NotePropertyName Retained -NotePropertyValue (@($retained.ToArray()) + @($directoryLease))
+            $transferred = $true
+        }
+        return $result
     } catch {
         $cause = $_.Exception.GetBaseException()
         throw [InvalidOperationException]::new(
@@ -51,7 +59,7 @@ function New-AgentsChatRuntimeBundle {
             $_.Exception)
     } finally {
         $failures = [Collections.Generic.List[Exception]]::new()
-        foreach ($resource in @($retained.ToArray()) + @($directoryLease)) {
+        foreach ($resource in $(if ($transferred) { @() } else { @($retained.ToArray()) + @($directoryLease) })) {
             try { $resource.Dispose() }
             catch { $failures.Add($_.Exception) }
         }

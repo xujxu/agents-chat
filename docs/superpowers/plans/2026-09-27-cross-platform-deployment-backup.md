@@ -13321,18 +13321,24 @@ Add `windows-first-runtime.mjs/.ps1`, reusing
 `New-AgentsChatRuntimeBundle` and native private-file/runtime-host validation.
 This publishes artifacts only; task creation and activation remain separate.
 
-- [ ] Require the missing publisher in native cases. Reuse the accepted small
+- [x] Require the missing publisher in native cases. Reuse the accepted small
   owned-build fixture without describing it as an actual Next deployment.
   Keep competing fixture tasks truly inert by running the unchanged installer
   from their own fixture scripts directory beside an `exit 0` watchdog.
-- [ ] Require original fresh scope/configuration, lock, configuring phase,
+  Causal `13d82d4 / 38020002500`, job `114118682943`, failed at
+  `2026-10-10 03:20:40 UTC`: the previous nine cases passed, and both new
+  publication cases reported `Missing native Windows first-runtime publication`.
+- [x] Require original fresh scope/configuration, lock, configuring phase,
   exact built source/artifacts and sealed settled workers before publication.
   Derive a create-only private runtime directory from the operation ID;
   retain original lock/state and published bundle with native handles.
-- [ ] Publish the external Node and prebuilt local Next CLI command. Capture
+- [x] Publish the external Node and prebuilt local Next CLI command. Capture
   supported operational environment and the shared startup environment without
   promoting dotenv secrets into permanently overriding explicit environment.
   Do not register/start any task, create a backup or publish a deployment receipt.
+  `New-AgentsChatRuntimeBundle -Retain` transfers the original native directory
+  and file handles to this publisher; default callers still close normally.
+  No pathname-reopen gap is used to claim the original published bundle.
 - [ ] Refuse early/unsealed/forged/competing-task contexts before writing,
   retain existing bundles unchanged on repeated publication, and release
   every native helper on failure/close. Preserve saved recovery dependency
