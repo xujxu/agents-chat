@@ -215,6 +215,12 @@ observation through completion. Final receipt/retirement and public first
 deployment remain separate integration gates.
 The recovery implementation at `2ffb19c` also passed all 42 Linux/Windows jobs
 (Actions `38042553678`), including the real Windows application lifecycle.
+First-runtime managed adoption, actual deployment receipt publication and
+read-only cold proof after that receipt passed all four focused cases at
+`16d449e` (Actions `38046028164`). The task now uses its private bundle as the
+Scheduler working directory while the application still runs in its configured
+project directory. Cold proof retains the completed receipt, rejects partial
+publication and foreign metadata, and grants no retirement authority.
 Controller-crash recovery and public first-deployment integration are still
 separate unfinished gates.
 The task parameter and read-only definition changes below passed native

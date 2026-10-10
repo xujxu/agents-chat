@@ -13416,6 +13416,11 @@ Files: existing first-crash actor, crash/proof tests and
 - [ ] Accept the full native selection before using the retained final receipt
   as an input to first-specific retirement. Do not publish final success or
   release an original lock merely because a receipt file exists.
+  Focused `16d449e / 38046028164`, job `114195621572`, passed **4/4**
+  at `2026-10-10 10:49:55 UTC`: actual warm receipt 62,570 ms,
+  original cold proof with staging/late-receipt refusal 73,383 ms,
+  completed-receipt proof with metadata refusals 68,807 ms, saved closure
+  3,040 ms. Complete native37 `16d449e / 38046037772` is running.
 
 ### Task 5CP: Verify first-runtime adoption and the existing deployment receipt
 
