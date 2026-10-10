@@ -13421,6 +13421,17 @@ directory preparation, real live fixture, lifecycle workflow and README.
   `randomUUID` import. Restore that import, retain every assertion and run
   the complete dual-platform gate, which includes the real public no-op.
   The overall public lifecycle is not accepted until that gate succeeds.
+  Full `bb457cc / 38014246098` reached 38 passing jobs with three still
+  running. Task-options job `114100905843` passed all native task-option
+  cases, but its old `deploy-script-scheduled-task.test.js` still required
+  inline watchdog/log checks and direct npm installation in the removed
+  legacy deploy body (failure 01:48:08 UTC on 2026-10-10).
+  Update this source-routing contract to require shared admission and
+  supervisor delegation, original outcome propagation, and no inline
+  port-wide cleanup/task mutation/build or log-based readiness. Actual
+  ownership/readiness checks remain in the unchanged native behavior suites.
+  Include these existing JavaScript routing/startup contracts in command-only
+  Actions too; preserve the full task-options job and every real scenario.
 
 ### Task 5BW: Retire only original completed controller captures
 

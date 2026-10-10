@@ -173,6 +173,14 @@ jobs:
         if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         shell: powershell
         run: ./tests/deployment-windows-task-options.ps1
+      - name: Verify public routing and legacy startup contracts
+        if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
+        shell: powershell
+        run: |
+          node tests/deploy-script-scheduled-task.test.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node tests/start-script-healthcheck.test.js
+          exit $LASTEXITCODE
       - name: Update actual application, close original transaction and verify no-op
         if: ${{ !(inputs.windows_application_only && inputs.windows_commands_only) }}
         shell: pwsh
