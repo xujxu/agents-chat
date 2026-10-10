@@ -56,6 +56,23 @@ function Confirm-AgentsChatFirstTaskXml([Xml.XmlElement]$Expected, [Xml.XmlEleme
         return
     }
     if ($Expected.ChildNodes.Count -ne $Actual.ChildNodes.Count) { throw "Registered first-task shape differs: $($Expected.LocalName)." }
+    if ($Expected.LocalName -ceq 'Task') {
+        $remaining = [Collections.Generic.Dictionary[string,Xml.XmlElement]]::new([StringComparer]::Ordinal)
+        foreach ($node in $Actual.ChildNodes) {
+            if ($node -isnot [Xml.XmlElement] -or $node.NamespaceURI -cne $Expected.NamespaceURI) {
+                throw 'Unsupported first-task root content.'
+            }
+            $remaining.Add($node.LocalName, $node)
+        }
+        foreach ($node in $Expected.ChildNodes) {
+            if ($node -isnot [Xml.XmlElement] -or -not $remaining.ContainsKey($node.LocalName)) {
+                throw 'Missing or duplicate first-task section.'
+            }
+            Confirm-AgentsChatFirstTaskXml $node $remaining[$node.LocalName]
+            $null = $remaining.Remove($node.LocalName)
+        }
+        return
+    }
     for ($index = 0; $index -lt $Expected.ChildNodes.Count; $index++) {
         $before = $Expected.ChildNodes[$index]
         $after = $Actual.ChildNodes[$index]

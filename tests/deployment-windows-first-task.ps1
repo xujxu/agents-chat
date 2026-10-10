@@ -27,6 +27,9 @@ Write-Output 'PASS: first-task settings normalization admits only native orderin
 $before = [xml]'<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task" version="1.2"><Actions><Exec><Command>original</Command></Exec></Actions></Task>'
 $after = [xml]'<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Actions xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Exec><Command>original</Command></Exec></Actions></Task>'
 Confirm-AgentsChatFirstTaskXml $before.DocumentElement $after.DocumentElement
+$ordered = [xml]$before.OuterXml.Replace('<Actions>', '<Triggers /><Actions>')
+$reordered = [xml]$after.OuterXml.Replace('</Actions>', '</Actions><Triggers />')
+Confirm-AgentsChatFirstTaskXml $ordered.DocumentElement $reordered.DocumentElement
 foreach ($changed in @(
     $after.OuterXml.Replace('original', 'changed'),
     $after.OuterXml.Replace('version="1.2"', 'version="1.3"'),
