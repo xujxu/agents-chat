@@ -3,9 +3,27 @@ Set-StrictMode -Version Latest
 $helper = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment/windows-first-task.ps1'))
 if (-not (Test-Path -LiteralPath $helper)) { throw 'Missing native create-only first-task registration.' }
 . $helper
+. (Join-Path (Split-Path $helper) 'windows-first-task-registration.ps1')
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
+$settings = '<Settings xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Enabled>false</Enabled><AllowStartOnDemand>true</AllowStartOnDemand><Priority>7</Priority><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy></Settings>'
+$expected = ([xml]$settings).DocumentElement
+$normalized = ([xml]'<Settings xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><Enabled>false</Enabled></Settings>').DocumentElement
+Confirm-AgentsChatFirstTaskSettings $expected $normalized
+foreach ($invalid in @(
+    $settings.Replace('<Enabled>false</Enabled>', '<Enabled>true</Enabled>'),
+    $settings.Replace('<Enabled>false</Enabled>', ''),
+    $settings.Replace('<Priority>7</Priority>', '<Priority>6</Priority>'),
+    $settings.Replace('</Settings>', '<Enabled>false</Enabled></Settings>'),
+    $settings.Replace('</Settings>', '<Unexpected>true</Unexpected></Settings>')
+)) {
+    $refused = $false
+    try { Confirm-AgentsChatFirstTaskSettings $expected ([xml]$invalid).DocumentElement }
+    catch { $refused = $true }
+    Assert $refused 'First-task settings normalization accepted a changed, missing or duplicate policy field.'
+}
+Write-Output 'PASS: first-task settings normalization admits only native ordering and known omitted defaults.'
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 $folder = $scheduler.GetFolder('\')

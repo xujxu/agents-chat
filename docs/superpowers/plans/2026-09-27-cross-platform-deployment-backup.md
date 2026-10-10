@@ -13339,6 +13339,13 @@ Keep native task construction/checking in
   primitive step also exposed a legitimate-profile refusal. Resolve task
   principal names to SIDs using the existing admission convention and report
   only failed invariant names, never account/command/environment contents.
+  Diagnostics `0f0a099 / 38023223890`, job `114128505540`, isolated the
+  remaining mismatch: Scheduler reorders Settings and omits seven default-valued
+  fields. Compare every present setting exactly; permit only the observed
+  omitted defaults, reject unknown/duplicate/missing nondefault fields, and
+  keep subsequent registered XML checks exact. Native cases also exercise
+  changed Enabled/Priority, omitted Enabled and duplicate/unknown settings.
+  Add successful S4U/AtStartup publication binding alongside Interactive/AtLogOn.
 - [ ] Implement the original-capability method:
 
   ```js

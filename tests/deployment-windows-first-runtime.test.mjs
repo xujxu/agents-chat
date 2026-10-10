@@ -89,7 +89,11 @@ test('Windows first-install runtime publication refuses a competing task without
   });
 });
 
-test('Windows first-install task registration binds an inhibited task to the original retained publisher', windows, async t => {
+for (const policy of [
+  { options: {}, logonType: 'Interactive', triggerType: 'AtLogOn', trigger: /<LogonTrigger/ },
+  { options: { logonType: 'S4U', triggerType: 'AtStartup' }, logonType: 'S4U', triggerType: 'AtStartup', trigger: /<BootTrigger/ },
+]) {
+test(`Windows first-install task registration binds an inhibited task to the original retained publisher (${policy.logonType})`, windows, async t => {
   const prepare = await publication();
   await withWindowsFirstBuildFixture(t, async f => {
     const built = await buildWindowsFirstFixture(f);
@@ -105,20 +109,20 @@ test('Windows first-install task registration binds an inhibited task to the ori
         await assert.rejects(published.registerTask(options));
         assert.equal(existsSync(directory), false);
       }
-      const task = await published.registerTask();
+      const task = await published.registerTask(policy.options);
       registered = true;
       assert.equal(task.status, 'first-task-prepared');
       assert.equal(task.runtimeAuthority, false);
       assert.equal(task.taskName, f.taskName);
       assert.equal(task.accountSid, f.scope.observation.accountSid);
-      assert.equal(task.logonType, 'Interactive');
-      assert.equal(task.triggerType, 'AtLogOn');
+      assert.equal(task.logonType, policy.logonType);
+      assert.equal(task.triggerType, policy.triggerType);
       assert.equal(task.configuration, published.bundle.configuration);
       assert.equal(task.configurationSha256, published.bundle.sha256);
       assert.match(task.definition, /<Enabled>false<\/Enabled>/);
       assert.doesNotMatch(task.definition, /<LogonTrigger|<BootTrigger|<RestartOnFailure/);
       assert.match(task.definition, /-ControllerPid \d+ -ControllerIdentity \d+:\d+/);
-      assert.match(task.permanentDefinition, /<LogonTrigger/);
+      assert.match(task.permanentDefinition, policy.trigger);
       assert.doesNotMatch(task.permanentDefinition, /-ControllerPid/);
       assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'registered.json'), 'utf8')), task);
       await published.checkFiles();
@@ -137,6 +141,7 @@ test('Windows first-install task registration binds an inhibited task to the ori
     await rename(directory, `${directory}-closed`);
     await rename(`${directory}-closed`, directory);
   });
+  }
 });
 
 test('Windows first-install task registration preserves a competitor registered after runtime publication', windows, async t => {

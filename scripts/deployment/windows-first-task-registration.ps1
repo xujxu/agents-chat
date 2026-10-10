@@ -1,3 +1,43 @@
+function Confirm-AgentsChatFirstTaskSettings([Xml.XmlElement]$Expected, [Xml.XmlElement]$Actual) {
+    $defaults = @{
+        AllowHardTerminate='true'; RunOnlyIfNetworkAvailable='false'; AllowStartOnDemand='true'
+        Hidden='false'; RunOnlyIfIdle='false'; WakeToRun='false'; Priority='7'
+    }
+    if ($Expected.NamespaceURI -cne 'http://schemas.microsoft.com/windows/2004/02/mit/task' -or
+        $Actual.NamespaceURI -cne $Expected.NamespaceURI -or $Expected.Attributes.Count -ne $Actual.Attributes.Count) {
+        throw 'First-task settings namespace or attributes differ.'
+    }
+    foreach ($attribute in $Expected.Attributes) {
+        if (-not $Actual.HasAttribute($attribute.LocalName, $attribute.NamespaceURI) -or
+            $Actual.GetAttribute($attribute.LocalName, $attribute.NamespaceURI) -cne $attribute.Value) {
+            throw 'First-task settings attributes differ.'
+        }
+    }
+    $expectedFields = @{}
+    $actualFields = @{}
+    foreach ($pair in @(@{ Node=$Expected; Fields=$expectedFields }, @{ Node=$Actual; Fields=$actualFields })) {
+        foreach ($node in $pair.Node.ChildNodes) {
+            if ($node -isnot [Xml.XmlElement] -or $node.NamespaceURI -cne $Expected.NamespaceURI -or
+                $pair.Fields.ContainsKey($node.LocalName)) { throw 'Unsupported or duplicate first-task setting.' }
+            $pair.Fields.Add($node.LocalName, $node)
+        }
+    }
+    foreach ($name in $actualFields.Keys) {
+        if (-not $expectedFields.ContainsKey($name)) { throw 'Unexpected first-task setting.' }
+    }
+    foreach ($name in $expectedFields.Keys) {
+        $expectedField = $expectedFields[$name]
+        if ($actualFields.ContainsKey($name)) {
+            if ($expectedField.OuterXml -cne $actualFields[$name].OuterXml) {
+                throw "Registered first-task setting differs: $name."
+            }
+        } elseif (-not $defaults.ContainsKey($name) -or $expectedField.Attributes.Count -ne 0 -or
+            $expectedField.InnerXml -cne $defaults[$name]) {
+            throw "Registered first-task setting is missing: $name."
+        }
+    }
+}
+
 function Retain-AgentsChatFirstTaskResource([hashtable]$Context, $Resource) {
     $Context.Resources.Add($Resource)
     $Context.Checks.Add($Resource)
@@ -98,6 +138,11 @@ function New-AgentsChatFirstTaskRegistration {
         if ($accountSid.Value -cne $sid) { throw 'Registered first-task account differs.' }
         $users[0].InnerText = $sid
     }
+    $expectedSettings = $expected.SelectSingleNode('/t:Task/t:Settings', $namespaces)
+    $actualSettings = $actual.SelectSingleNode('/t:Task/t:Settings', $namespaces)
+    Confirm-AgentsChatFirstTaskSettings $expectedSettings $actualSettings
+    # Scheduler omits default-valued fields and reorders Settings on registration.
+    $null = $actualSettings.ParentNode.ReplaceChild($actual.ImportNode($expectedSettings, $true), $actualSettings)
     if ($actual.DocumentElement.OuterXml -cne $expected.DocumentElement.OuterXml) {
         $different = @('RegistrationInfo', 'Triggers', 'Principals', 'Settings', 'Actions') | Where-Object {
             $before = $expected.SelectSingleNode("/t:Task/t:$_", $namespaces)
@@ -105,12 +150,6 @@ function New-AgentsChatFirstTaskRegistration {
             $before.OuterXml -cne $after.OuterXml
         }
         [Console]::Error.WriteLine("First-task policy diagnostic: sections=$($different -join ',').")
-        if ('Settings' -in $different) {
-            foreach ($document in @($expected, $actual)) {
-                $settings = $document.SelectSingleNode('/t:Task/t:Settings', $namespaces)
-                [Console]::Error.WriteLine("First-task settings diagnostic: $($settings.OuterXml)")
-            }
-        }
         throw 'Registered first-task policy differs from the requested definition.'
     }
     $taskFile = Join-Path ([Environment]::SystemDirectory) "Tasks\$($Context.TaskName)"
