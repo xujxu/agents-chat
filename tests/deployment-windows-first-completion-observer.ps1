@@ -41,6 +41,10 @@ if ($Mode -ceq 'Inspect') {
         binding=$binding; lease=$lease; domain=$domain; definition=[string]$task.Xml
         securityDescriptor=[string]$task.GetSecurityDescriptor(7)
         triggers=$triggers
+        restart=@{
+            count=[int]$task.Definition.Settings.RestartCount
+            intervalSeconds=[Xml.XmlConvert]::ToTimeSpan([string]$task.Definition.Settings.RestartInterval).TotalSeconds
+        }
     } | ConvertTo-Json -Depth 5 -Compress))
 } else {
     $task.Enabled = $false

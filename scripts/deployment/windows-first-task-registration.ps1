@@ -28,8 +28,14 @@ function Confirm-AgentsChatFirstTaskSettings([Xml.XmlElement]$Expected, [Xml.Xml
     foreach ($name in $expectedFields.Keys) {
         $expectedField = $expectedFields[$name]
         if ($actualFields.ContainsKey($name)) {
-            if ($expectedField.OuterXml -cne $actualFields[$name].OuterXml) {
-                throw "Registered first-task setting differs: $name."
+            try { Confirm-AgentsChatFirstTaskXml $expectedField $actualFields[$name] }
+            catch {
+                if ($name -ceq 'RestartOnFailure') {
+                    [Console]::Error.WriteLine("First-task restart policy differs: expected=$($expectedField.OuterXml); actual=$($actualFields[$name].OuterXml).")
+                } else {
+                    [Console]::Error.WriteLine("First-task setting differs: $name.")
+                }
+                throw
             }
         } elseif (-not $defaults.ContainsKey($name) -or $expectedField.Attributes.Count -ne 0 -or
             $expectedField.InnerXml -cne $defaults[$name]) {
@@ -75,7 +81,7 @@ function Confirm-AgentsChatFirstTaskXml([Xml.XmlElement]$Expected, [Xml.XmlEleme
         [Console]::Error.WriteLine("First-task shape differs: element=$($Expected.LocalName); expected=$beforeNames; actual=$afterNames.")
         throw "Registered first-task shape differs: $($Expected.LocalName)."
     }
-    if ($Expected.LocalName -ceq 'Task') {
+    if ($Expected.LocalName -cin @('Task', 'RestartOnFailure')) {
         $remaining = [Collections.Generic.Dictionary[string,Xml.XmlElement]]::new([StringComparer]::Ordinal)
         foreach ($node in $Actual.ChildNodes) {
             if ($node -isnot [Xml.XmlElement] -or $node.NamespaceURI -cne $Expected.NamespaceURI) {

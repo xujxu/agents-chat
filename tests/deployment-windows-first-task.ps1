@@ -27,6 +27,21 @@ foreach ($invalid in @(
     Assert $refused 'First-task settings normalization accepted a changed, missing or duplicate policy field.'
 }
 Write-Output 'PASS: first-task settings normalization admits only native ordering and known omitted defaults.'
+$restartBefore = [xml]'<Settings xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RestartOnFailure><Interval>PT1M</Interval><Count>3</Count></RestartOnFailure></Settings>'
+$restartAfter = [xml]'<Settings xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RestartOnFailure xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Count>3</Count><Interval>PT1M</Interval></RestartOnFailure></Settings>'
+Confirm-AgentsChatFirstTaskSettings $restartBefore.DocumentElement $restartAfter.DocumentElement
+foreach ($changed in @(
+    $restartAfter.OuterXml.Replace('<Count>3</Count>', '<Count>4</Count>'),
+    $restartAfter.OuterXml.Replace('PT1M', 'PT2M'),
+    $restartAfter.OuterXml.Replace('<Count>3</Count>', ''),
+    $restartAfter.OuterXml.Replace('</RestartOnFailure>', '<Count>3</Count></RestartOnFailure>')
+)) {
+    $refused = $false
+    try { Confirm-AgentsChatFirstTaskSettings $restartBefore.DocumentElement ([xml]$changed).DocumentElement }
+    catch { $refused = $true }
+    Assert $refused 'First-task restart normalization accepted changed, missing or duplicate policy.'
+}
+Write-Output 'PASS: first-task restart policy preserves exact values across field ordering and namespace placement.'
 $before = [xml]'<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task" version="1.2"><Actions><Exec><Command>original</Command></Exec></Actions></Task>'
 $after = [xml]'<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Actions xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Exec><Command>original</Command></Exec></Actions></Task>'
 Confirm-AgentsChatFirstTaskXml $before.DocumentElement $after.DocumentElement

@@ -13395,6 +13395,14 @@ activation helper, saved recovery inventory and lifecycle workflow.
   missing false, explicit false, duplicate and attributed Enabled nodes as
   refusals. The independent native observer must verify the actual boot
   trigger remains enabled; accept its equivalent self-closing XML form.
+  `ca273f4 / 38031979362`, job `114154657947`, passed the trigger default
+  contracts and retained 22/24 cases, but exposed the remaining literal
+  settings-field `OuterXml` comparison at line 32 (`06:54:42 UTC`).
+  Reuse strict structural comparison for settings children; preserve exact
+  restart count/interval while allowing unique restart fields to reorder.
+  Add rejection cases for changed, missing and duplicate restart fields,
+  native COM assertions for exactly three restarts at sixty seconds, and
+  bounded restart-policy diagnostics if a semantic difference remains.
 - [ ] Accept native success/refusals and completion-close persistence, then
   first-completion interruption/recovery and actual public Next deployment.
   Do not treat this small HTTP fixture as real public first-install acceptance.

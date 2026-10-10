@@ -123,6 +123,7 @@ test(`Windows first-install completion preserves original-runtime handoff or set
         assert.match(after.definition, /<BootTrigger\b/);
         assert.match(after.definition, /<RestartOnFailure\b/);
         assert.deepEqual(after.triggers, [{ type: 8, enabled: true }]);
+        assert.deepEqual(after.restart, { count: 3, intervalSeconds: 60 });
         assert.doesNotMatch(after.definition, /-ControllerPid|-ControllerIdentity/);
         const response = await fetch(`http://127.0.0.1:${port}/api/auth/providers`, { signal: AbortSignal.timeout(5000) });
         assert.equal(response.status, 200);
