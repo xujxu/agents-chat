@@ -13,7 +13,8 @@ const optional = async file => {
   catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 };
 
-export async function crashWindowsFirstApplication({ args, control, taskName, pwsh }) {
+export async function crashWindowsFirstApplication({ args, control, taskName, pwsh, operationId }) {
+  assert.match(operationId, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
   const cancellation = new AbortController();
   const signal = AbortSignal.any([AbortSignal.timeout(1800000), cancellation.signal]);
   const child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
@@ -29,16 +30,12 @@ export async function crashWindowsFirstApplication({ args, control, taskName, pw
   const observe = async () => {
     while (true) {
       signal.throwIfAborted();
-      const state = await optional(path.join(control, 'state.json'));
-      if (state?.phase === 'accepted') {
-        assert.match(state.operationId, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
-        const complete = await optional(path.join(control, `first-task-${state.operationId}`, 'completion-complete.json'));
-        if (complete) {
-          assert.equal(complete.status, 'first-runtime-completed');
-          assert.equal(complete.operationId, state.operationId);
-          assert.equal(complete.taskName, taskName);
-          return complete;
-        }
+      const complete = await optional(path.join(control, `first-task-${operationId}`, 'completion-complete.json'));
+      if (complete) {
+        assert.equal(complete.status, 'first-runtime-completed');
+        assert.equal(complete.operationId, operationId);
+        assert.equal(complete.taskName, taskName);
+        return complete;
       }
       await delay(100, undefined, { signal });
     }

@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
 import { mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { acquireLock, loadState } from '../scripts/deployment/state.mjs';
@@ -8,14 +7,15 @@ import { inspectWindowsFirstConfiguration } from '../scripts/deployment/windows-
 import { runWindowsFirstDeployment } from '../scripts/deployment/windows-first-deployment.mjs';
 import { loginDeploymentFixture } from './deployment-http-fixture.mjs';
 
-const [project, control, taskName, pwsh, git, npmCli, revision, chatId] = process.argv.slice(2);
+const [project, control, taskName, pwsh, git, npmCli, revision, chatId, operationId] = process.argv.slice(2);
+assert.match(operationId, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
 const scope = await inspectWindowsFirstInstall({ project, taskName, pwsh });
 let configuration;
 let result;
 try {
   configuration = await inspectWindowsFirstConfiguration({ scope, pwsh, profile: 'agents-chat-auth-638c553' });
   await mkdir(control, { mode: 0o700 });
-  const lock = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
+  const lock = await acquireLock(control, { project, operationId, pwsh });
   const environment = {};
   const permitted = new Set(['PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP']);
   for (const [key, value] of Object.entries(process.env)) if (permitted.has(key.toUpperCase())) environment[key] = value;

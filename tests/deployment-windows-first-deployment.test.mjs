@@ -62,7 +62,8 @@ test(publicFirst
   ], { timeout: 90000, maxBuffer: 65536 })).stdout);
   try {
     const actor = fileURLToPath(new URL('./deployment-windows-first-deployment-actor.mjs', import.meta.url));
-    const args = [actor, project, control, taskName, pwsh, git, npmCli, revision, chatId];
+    const actorOperationId = randomUUID();
+    const args = [actor, project, control, taskName, pwsh, git, npmCli, revision, chatId, actorOperationId];
     let result;
     if (publicFirst) {
       const publicDeploy = fileURLToPath(new URL('../scripts/deploy.ps1', import.meta.url));
@@ -81,7 +82,7 @@ test(publicFirst
       assert.equal(result.closeoutRequired, false);
       assert.equal(result.closeoutStatus, 'completed');
     } else if (receiptLoss) {
-      result = await crashWindowsFirstApplication({ args, control, taskName, pwsh });
+      result = await crashWindowsFirstApplication({ args, control, taskName, pwsh, operationId: actorOperationId });
       assert.equal(result.status, 'actor-terminated-before-receipt');
     } else {
       const output = await execute(process.execPath, args, { timeout: 1800000, maxBuffer: 65536 });
@@ -91,6 +92,7 @@ test(publicFirst
       assert.equal(result.backupCreated, false);
       assert.equal(result.closeoutRequired, true);
     }
+    if (!publicFirst) assert.equal(result.operationId, actorOperationId);
     operationId = result.operationId;
     const state = await readFile(path.join(control, 'state.json'));
     const accepted = JSON.parse(state);
