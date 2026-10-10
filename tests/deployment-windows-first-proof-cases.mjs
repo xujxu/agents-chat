@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { acquireWindowsAdmission } from '../scripts/deployment/windows-admission.mjs';
 
@@ -59,6 +59,14 @@ export async function prepareWindowsFirstProofCase({ fixture, active, port, rele
           await writeFile(stateFile, JSON.stringify({ ...JSON.parse(state), targetCommit: '0'.repeat(40) }));
           await rejectProof(options, refused);
         } finally { await writeFile(stateFile, state); }
+        for (const name of ['completion-complete.json', 'activation-stopped.json']) {
+          const file = path.join(path.dirname(releaseFile), name);
+          await assert.rejects(readFile(file), { code: 'ENOENT' });
+          try {
+            await writeFile(file, release);
+            await rejectProof(options, refused);
+          } finally { await rm(file, { force: true }); }
+        }
         const reopened = await api.openWindowsFirstCompletionProof(options);
         try { assert.deepEqual(await reopened.check(), expected); }
         finally { await reopened.close(); }

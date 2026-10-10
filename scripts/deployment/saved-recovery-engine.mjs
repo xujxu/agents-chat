@@ -44,6 +44,8 @@ const files = Object.freeze([...new Set([
   'windows-first-completion.ps1',
   'windows-first-completion-records.ps1', 'windows-first-completion-proof.ps1',
   'windows-first-completion-proof-controller.ps1', 'windows-first-completion-proof.mjs',
+  'windows-first-completion-recovery.ps1', 'windows-first-completion-recovery-controller.ps1',
+  'windows-first-completion-recovery.mjs',
   'build-artifacts.mjs',
   'windows-runtime-publication.mjs', 'windows-runtime-publication.ps1', 'windows-worker-scope.mjs',
   'windows-restore-security.mjs', 'windows-restore-security.ps1', 'WindowsPrivateFile.SourceSecurity.cs',

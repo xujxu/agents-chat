@@ -20,7 +20,9 @@ function capture(value) {
     'completionSha256', 'runtime', 'port', 'providers', 'lease',
   ], 'first completion proof');
   const { status, phase, ...fields } = record;
-  if (status !== 'first-completion-observed' || phase !== 'release-requested') {
+  if (status !== 'first-completion-observed' || ![
+    'release-requested', 'released', 'policy-restore-requested', 'policy-restored', 'enable-requested', 'complete',
+  ].includes(phase)) {
     throw new Error('Unsupported first-completion proof boundary.');
   }
   return Object.freeze({ ...captureWindowsTaskCompletionProof({ ...fields, status: 'observed' }), status, phase });

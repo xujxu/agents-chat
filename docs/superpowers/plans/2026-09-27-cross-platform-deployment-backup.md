@@ -13338,7 +13338,7 @@ Extend first-completion records/proof, crash fixtures and saved closure.
   recovery bridge even with the same admission. Assert the full original
   hash chain, unchanged state/release-intent bytes and original runtime/instance,
   plus actual enabled boot/restart 3/60 policy and HTTP after recovery closes.
-- [ ] Run the 32-case native causal gate; only three new cases may fail with
+- [x] Run the 32-case native causal gate; only three new cases may fail with
   `Missing first-runtime cold completion recovery`.
   Initial `fe26a0b / 38039524223`, job `114176817075`, failed before reaching
   those assertions: the shared state sequence starts with `prepared`, which
@@ -13346,15 +13346,18 @@ Extend first-completion records/proof, crash fixtures and saved closure.
   the first advance rather than `policy-requested`, failing all six crash
   scenarios while 26 other cases passed. Skip the initial state with
   `windowsTaskCompletionSteps.slice(1)` and rerun the causal gate.
-- [ ] Extend first-specific history to contiguous completion prefixes through
+  Corrected `74d3809 / 38040792489`, job `114180457587`, confirmed the three
+  exact missing-recovery assertions at `2026-10-10 09:31:21 UTC`, with all
+  **29/29** prior cases passing.
+- [x] Extend first-specific history to contiguous completion prefixes through
   `complete`. Classify staged versus restored/enabled task state at durable
   intent boundaries using strict first-task semantic comparison. Do not infer
   lease release from receipts: still require the live original released lease.
-- [ ] Retain the original release-intent file exclusively for recovery, including
+- [x] Retain the original release-intent file exclusively for recovery, including
   across loss of the new Node admission owner. Release only the current task-file
   handle for the exact registered policy update or enable action; retain it
   again afterward. Preserve original runtime, instance, principal and SDDL.
-- [ ] Advance through released, restore intent, permanent disabled policy,
+- [x] Advance through released, restore intent, permanent disabled policy,
   restored receipt, enable intent, enable action and complete receipt.
   Recheck retained listener and actual HTTP providers before each advancement;
   never issue lease release from a new publisher PID.
@@ -13362,6 +13365,9 @@ Extend first-completion records/proof, crash fixtures and saved closure.
   phase/status/definition/enabled/lease/predecessor fields.
 - [ ] Accept all native cases and saved dependency closure, then add genuine
   recovery-actor interruption and first-specific final receipt/retirement.
+  All three recovery modules are in the explicit saved inventory, and the
+  source-disappearance test imports the recovery factory. Read-only proof
+  refusals additionally cover a gapped complete receipt and stopped evidence.
 
 ### Task 5CM: Reopen a first-specific non-mutating cold completion proof
 

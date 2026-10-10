@@ -5,7 +5,25 @@ function Read-AgentsChatFirstCompletionRecord([hashtable]$Context, [string]$Name
     $Context.Stage = "records-$Name"
     $file = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Directory "$Name.json") ''
     $Context.Hashes[$Name] = $file.Sha256
+    if ($Name -ceq 'completion-release-requested') { $Context.ReleaseIntentFile = $file }
+    $Context.CompletionText = $file.ReadText()
     return Read-AgentsChatMaintenanceFields ($file.ReadText()) $Fields
+}
+
+function Read-AgentsChatFirstCompletionPrefix([hashtable]$Context) {
+    $names = @('intent', 'registered', 'activation-prepared', 'activation-start-requested',
+        'activation-running', 'completion-prepared', 'completion-policy-requested',
+        'completion-policy-staged', 'completion-release-requested', 'completion-released',
+        'completion-policy-restore-requested', 'completion-policy-restored',
+        'completion-enable-requested', 'completion-complete')
+    $present = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($entry in Get-ChildItem -LiteralPath $Context.Directory -Force) {
+        if ($entry.PSIsContainer -or -not $present.Add($entry.Name)) { throw 'Invalid first-completion prefix inventory.' }
+    }
+    $count = 0
+    while ($count -lt $names.Count -and $present.Remove("$($names[$count]).json")) { $count++ }
+    if ($present.Count -or $count -lt 9) { throw 'First-completion prefix has gaps or precedes release intent.' }
+    $Context.RecordNames = $names[0..($count - 1)]
 }
 
 function Assert-AgentsChatFirstCompletionInventory([hashtable]$Context) {
@@ -51,9 +69,7 @@ function Read-AgentsChatFirstCompletionRecords([hashtable]$Context) {
     $Context.Files.Add([Deployment.WindowsPrivateFile]::OpenSourceDirectory($Context.Project))
     $Context.Directory = Join-Path $Context.Control "first-task-$($Context.OperationId)"
     $Context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory($Context.Directory))
-    $Context.RecordNames = @('intent', 'registered', 'activation-prepared', 'activation-start-requested',
-        'activation-running', 'completion-prepared', 'completion-policy-requested',
-        'completion-policy-staged', 'completion-release-requested')
+    Read-AgentsChatFirstCompletionPrefix $Context
     Assert-AgentsChatFirstCompletionInventory $Context
     $identity = @('project', 'operationId', 'taskName', 'controllerPid', 'controllerIdentity',
         'configuration', 'configurationSha256')
@@ -140,6 +156,8 @@ function Read-AgentsChatFirstCompletionRecords([hashtable]$Context) {
     $namespaces = [Xml.XmlNamespaceManager]::new($guarded.NameTable)
     $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
     $guarded.SelectSingleNode('/t:Task/t:Settings/t:Enabled', $namespaces).InnerText = 'false'
+    $Context.PermanentDefinition = $permanentText
+    $Context.PermanentDisabledDefinition = $guarded.OuterXml
     $guarded.SelectSingleNode('/t:Task/t:Triggers', $namespaces).IsEmpty = $true
     $restart = $guarded.SelectSingleNode('/t:Task/t:Settings/t:RestartOnFailure', $namespaces)
     $null = $restart.ParentNode.RemoveChild($restart)
@@ -148,10 +166,11 @@ function Read-AgentsChatFirstCompletionRecords([hashtable]$Context) {
     $arguments.InnerText += " -ControllerPid $($Context.BridgePid) -ControllerIdentity $($Context.BridgeIdentity)"
     Confirm-AgentsChatFirstTaskPolicy $guarded.OuterXml $registered.definition.GetString() $Context.AccountSid
     $arguments.InnerText = $permanentArguments
-    $Context.Definition = $guarded.OuterXml
+    $Context.StagedDefinition = $guarded.OuterXml
     $previous = $Context.Hashes['completion-prepared']
     $first = $null
-    foreach ($phase in @('policy-requested', 'policy-staged', 'release-requested')) {
+    foreach ($name in $Context.RecordNames[6..($Context.RecordNames.Count - 1)]) {
+        $phase = $name.Substring('completion-'.Length)
         $record = Read-AgentsChatFirstCompletionRecord $Context "completion-$phase" ($identity + @(
             'version', 'phase', 'status', 'lockSha256', 'activatingStateSha256', 'stateSha256',
             'runtime', 'definition', 'permanentDefinition', 'securityDescriptor', 'enabled', 'lease',
@@ -160,18 +179,26 @@ function Read-AgentsChatFirstCompletionRecords([hashtable]$Context) {
             'lockSha256', 'activatingStateSha256', 'port', 'providers', 'listener'))
         Assert-AgentsChatCompletionFields $record $registered @('permanentDefinition', 'securityDescriptor')
         Assert-AgentsChatCompletionFields $record $running @('runtime')
+        $complete = $phase -ceq 'complete'
+        $guardedLease = $phase -cin @('policy-requested', 'policy-staged', 'release-requested')
         if ($record.version.GetInt32() -ne 1 -or $record.phase.GetString() -cne $phase -or
-            $record.status.GetString() -cne 'first-completion-progress' -or $record.enabled.GetBoolean() -or
-            $record.lease.GetString() -cne 'guarded' -or $record.previousSha256.GetString() -cne $previous -or
+            $record.status.GetString() -cne $(if ($complete) { 'first-runtime-completed' } else { 'first-completion-progress' }) -or
+            $record.enabled.GetBoolean() -ne $complete -or
+            $record.lease.GetString() -cne $(if ($guardedLease) { 'guarded' } else { 'released' }) -or
+            $record.previousSha256.GetString() -cne $previous -or
             $record.stateSha256.GetString() -cnotmatch '^[a-f0-9]{64}$') { throw 'Original first-completion chain differs.' }
         if ($null -eq $first) { $first = $record }
         else { Assert-AgentsChatCompletionFields $record $first @('stateSha256') }
-        $expected = if ($phase -ceq 'policy-requested') { $registered.definition.GetString() } else { $Context.Definition }
+        $expected = if ($phase -ceq 'policy-requested') { $registered.definition.GetString() }
+            elseif ($complete) { $Context.PermanentDefinition }
+            elseif ($phase -cin @('policy-restored', 'enable-requested')) { $Context.PermanentDisabledDefinition }
+            else { $Context.StagedDefinition }
         Confirm-AgentsChatFirstTaskPolicy $expected $record.definition.GetString() $Context.AccountSid
         $previous = $Context.Hashes["completion-$phase"]
     }
     $Context.StateSha256 = $record.stateSha256.GetString()
     $Context.CompletionSha256 = $previous
+    $Context.Phase = $record.phase.GetString()
     $Context.Stage = 'accepted-state'
     $stateFile = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'state.json') $Context.StateSha256
     $state = Read-AgentsChatMaintenanceFields ($stateFile.ReadText()) @(
