@@ -13686,6 +13686,12 @@ is granted by this operation.
   the fresh native publisher's readiness identity differed, before publication.
   Refusal remains enforced; emit only mismatched readiness field names (not
   configuration or secret values) to diagnose the exact native boundary.
+  Diagnostic run `3f34328 / 38069887383`, job `114264981233`, isolated
+  `processIdentity` at `17:16:15 UTC` (existing seven still passed). The new
+  controller requested a 1 MiB frame immediately after readiness, exceeding
+  `WindowsWorkerLauncher.ReadFrameAsync`'s existing 131,072-byte maximum; it
+  exited before the independent process check. Match that existing native/wire
+  limit rather than relax identity checks or enlarge the shared protocol.
 
 ### Task 5CX: Compose missing first receipt publication into saved closeout
 

@@ -30,7 +30,7 @@ try {
     $sequence = 0
     while ($true) {
         $stage = 'request'
-        $line = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync([Console]::In, 1048576)
+        $line = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync([Console]::In, 131072)
         $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method', 'service')
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
