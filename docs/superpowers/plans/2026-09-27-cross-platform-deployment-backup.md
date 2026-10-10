@@ -13459,7 +13459,9 @@ Extend first-completion records/proof, crash fixtures and saved closure.
   cases at `2026-10-10 09:45:20 UTC`. Recovery from lease release took
   84,375 ms; permanent-policy application 65,811 ms; enable application
   58,532 ms. Saved-source closure passed in 1,878 ms.
-  Full `2ffb19c / 38042553678` is dispatched, not yet accepted.
+  Full `2ffb19c / 38042553678` passed **42/42** jobs. Actual Windows
+  application job `114185524948` passed at `2026-10-10 10:22:22 UTC`;
+  the application case took 1,289,627 ms and its native selection passed32/32.
 
 ### Task 5CM: Reopen a first-specific non-mutating cold completion proof
 

@@ -199,7 +199,7 @@ First-specific retained cold proof passed 29 native cases at `a94bc01`
 (Actions `38038631583`), including live-controller refusal, changed-evidence
 refusals, immutable state retention, successful reopening after exact restoration
 and preserved original runtime. Its saved module closure also works after the
-source disappears. The proof is read-only; recovery mutation is not yet accepted.
+source disappears. The proof is read-only; recovery uses a separate capability.
 The same revision passed all 42 Linux/Windows jobs (Actions `38039225393`),
 including real public Windows update/no-op with the saved dependency additions.
 Released first-completion recovery passed 32 native cases at `2ffb19c`
@@ -213,6 +213,8 @@ Abrupt loss of the recovery actor itself passed all 35 native cases at
 the same application runtime survives, and a fresh admission resumes the exact
 observation through completion. Final receipt/retirement and public first
 deployment remain separate integration gates.
+The recovery implementation at `2ffb19c` also passed all 42 Linux/Windows jobs
+(Actions `38042553678`), including the real Windows application lifecycle.
 Controller-crash recovery and public first-deployment integration are still
 separate unfinished gates.
 The task parameter and read-only definition changes below passed native
@@ -518,7 +520,7 @@ module tree and workflow schema outside mutable source, so replacing source
 cannot alter an in-flight controller. The private supervisor and exact successful
 capture retirement passed all 42 jobs at `26bcf7e / 38006102348`.
 The public existing-task update/no-op path below passed all 42 jobs at
-`a94bc01 / 38039225393`. First installation and public cold restore remain
+`2ffb19c / 38042553678`. First installation and public cold restore remain
 separate, unfinished integration gates.
 Installed immutable runtime bundles are not rewritten through retained scopes.
 The separate task installer defaults registration to the current Windows account.
