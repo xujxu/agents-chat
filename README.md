@@ -231,6 +231,10 @@ six focused cases at `beb635a` (Actions `38047850347`): three separate actors
 were terminated after marker publication, the first deletion and all evidence
 deletions; fresh admissions resumed the same marker and original runtime.
 Full regression and public first-deployment integration remain separate gates.
+The verified saved finalizer also accepts completed first deployments at
+`50a6a5c` (Actions `38049487645`, seven focused cases). It requires the exact
+accepted absent-prior state, uses first-specific retirement rather than managed
+history, and preserves the final receipt, original runtime and recovery engine.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

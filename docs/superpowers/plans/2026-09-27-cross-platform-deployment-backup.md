@@ -13432,9 +13432,14 @@ Files:
   operation binding through every deletion. Keep managed closeout unchanged.
   Require deploy/absent/first-install-absent/null-backup/activating predecessor;
   do not infer first-install authority from missing managed receipts.
-- [ ] Accept saved first closeout remotely before wiring the public first
+- [x] Accept saved first closeout remotely before wiring the public first
   deployment command. Public success must still wait for original operation
   actor exit and actual saved finalizer success.
+  `50a6a5c / 38049487645`, job `114205563966`, passed **7/7** at
+  `2026-10-10 11:59:21 UTC`; the actual saved first-finalizer case took
+  172,192 ms. State, final receipt, running first runtime and verified saved
+  engine survived, all operation evidence was retired, and a new lock was
+  acquired and released successfully.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
