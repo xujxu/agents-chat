@@ -160,6 +160,9 @@ capture cleanup passed all 42 jobs at `26bcf7e` (Actions `38006102348`).
 The public existing-task update/no-op path passed all 42 jobs at `9355b6c`
 (Actions `38015607706`), including private directory preparation and automatic
 finalization. Windows first installation and public cold restore remain pending.
+Native first-install inspection and configuration capture also passed all 42
+jobs at `6f514cc` (Actions `38018693061`), preserving the real public update/no-op
+path. These foundations do not yet enable public first deployment.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
@@ -463,7 +466,7 @@ module tree and workflow schema outside mutable source, so replacing source
 cannot alter an in-flight controller. The private supervisor and exact successful
 capture retirement passed all 42 jobs at `26bcf7e / 38006102348`.
 The public existing-task update/no-op path below passed all 42 jobs at
-`9355b6c / 38015607706`. First installation and public cold restore remain
+`6f514cc / 38018693061`. First installation and public cold restore remain
 separate, unfinished integration gates.
 Installed immutable runtime bundles are not rewritten through retained scopes.
 The separate task installer defaults registration to the current Windows account.

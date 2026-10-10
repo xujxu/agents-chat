@@ -28,7 +28,10 @@ test('Windows first-install runtime publication requires sealed configuring auth
     await assert.rejects(prepare(options));
     assert.equal(existsSync(directory), false);
     await f.operation.seal();
-    for (const override of [{ scope: { ...f.scope } }, { configuration: { ...f.configuration } }, { port: 0 }]) {
+    for (const override of [
+      { scope: { ...f.scope } }, { configuration: { ...f.configuration } }, { port: 0 },
+      { environment: { ...f.environment, PATH: 'x'.repeat(131072) } },
+    ]) {
       await assert.rejects(prepare({ ...options, ...override }));
       assert.equal(existsSync(directory), false);
     }

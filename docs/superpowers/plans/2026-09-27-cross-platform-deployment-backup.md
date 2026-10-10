@@ -13345,6 +13345,12 @@ This publishes artifacts only; task creation and activation remain separate.
   closure when adding dependencies.
 - [ ] Accept native publication cases before create-only disabled task
   registration, guarded activation and real public first-deploy acceptance.
+  Initial implementation `c4b28d2 / 38020320843`, job `114119676383`,
+  passed ten cases but refused the successful publication at the environment
+  stage (`2026-10-10 03:25:52 UTC`). The caller requested a 1 MiB frame from
+  `ReadFrameAsync`, whose existing hard maximum is 128 KiB. Match the existing
+  128 KiB transport limit, keep it bounded, add safe type/line diagnostics and
+  require oversized environment refusal before creating the runtime directory.
 
 ### Task 5CA: Owned source and build stages for a genuine Windows first installation
 
@@ -13393,20 +13399,24 @@ runtime receipt. Keep the existing installed parameter set unchanged.
 - [x] Use the shared fixed dotenv priority, authentication compatibility,
   startup environment and build-environment policy. Reject Node hook injection
   before creating deployment state. No file contents or secrets in observations.
-- [ ] Require rechecks to refuse replacement, permission changes and newly
+- [x] Require rechecks to refuse replacement, permission changes and newly
   appearing sources; allow the later build's artifacts without losing retained
   configuration identity. Release every helper on refusal or explicit close.
   Include the new observer module and native controller in saved recovery
   inventory because installed configuration now imports its scope guard.
   Extend the source-disappearance import closure test and run it in the
   command-only gate too; do not regress saved restore dependencies.
-- [ ] Accept native fresh cases and preserve installed-configuration behavior
+- [x] Accept native fresh cases and preserve installed-configuration behavior
   in the existing Windows application gate. Configuration capture alone does
   not authorize worker builds, task registration, activation or recovery.
   Native `6f514cc / 38018501808` passed **1/1**, job `114114065632`:
   all six fresh inspection/configuration cases plus the saved-engine
   source-disappearance import case passed at `2026-10-10 02:54:29 UTC`.
-  Full dual-platform regression `6f514cc / 38018693061` is pending.
+  Full dual-platform regression `6f514cc / 38018693061` passed **42/42**.
+  Live Windows job `114114663883` completed at `2026-10-10 03:21:25 UTC`:
+  real public update/automatic closeout **817,443 ms**, independent verification
+  **390 ms**, current/no-op **99,653 ms**. Authenticated data and original
+  task/receipt/backup guarantees remained intact.
 
 ### Task 5BY: Original Windows first-installation inspection
 

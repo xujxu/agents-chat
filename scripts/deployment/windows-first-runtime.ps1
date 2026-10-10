@@ -72,7 +72,7 @@ try {
         throw 'First-runtime publication requires original configuring authority.'
     }
     $stage = 'environment'
-    $line = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync([Console]::In, 1048576)
+    $line = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync([Console]::In, 131072)
     $initial = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method', 'environment')
     if ($initial.id.GetInt32() -ne 1 -or $initial.method.GetString() -cne 'publish' -or
         $initial.environment.ValueKind -ne [Text.Json.JsonValueKind]::Object) { throw 'Invalid first-runtime request.' }
@@ -118,7 +118,9 @@ try {
     }
 } catch {
     $failure = $_.Exception
-    [Console]::Error.WriteLine("First-runtime publication refused: $stage. Retain any incomplete bundle.")
+    $kind = $failure.GetBaseException().GetType().Name
+    $line = $_.InvocationInfo.ScriptLineNumber
+    [Console]::Error.WriteLine("First-runtime publication refused: $stage; type=$kind; line=$line. Retain any incomplete bundle.")
 } finally {
     for ($index = $resources.Count - 1; $index -ge 0; $index--) {
         try { $resources[$index].Dispose() }
