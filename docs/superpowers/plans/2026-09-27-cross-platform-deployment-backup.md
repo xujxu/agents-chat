@@ -13315,6 +13315,54 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BX: Public Windows deploy/update entry for existing managed tasks
+
+Continue the approved public-interface design inline. Reuse the accepted
+supervisor; do not introduce a second transaction or legacy fallback.
+
+**Files:** Replace `scripts/deploy.ps1`, add `scripts/update.ps1`,
+`scripts/deployment/windows-public-command.ps1`,
+`scripts/deployment/windows-public-context.mjs` and
+`tests/deployment-windows-public-command.ps1`. Extend the supervisor's private
+directory preparation, real live fixture, lifecycle workflow and README.
+
+- [ ] Require the public update script before building the real fixture.
+  The native contract invokes both public commands with `-Help -Json` and
+  nonexistent project paths; it requires `status: help` and no created paths.
+  Unsupported `-NoWait`, `-Verify`, `-DryRun`, `-RemoveTask` and explicit task
+  reconfiguration must fail before creating any project/control/capture path.
+  Read-only `-Status -Json` on a real project without control must return
+  `unmanaged`, without creating its sibling control or controller root.
+- [ ] Push the contract and dispatch:
+  `gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat --ref feat/deployment-backup -f windows_application_only=true`.
+  Observe `Missing public Windows update entry`, not a speculative failure.
+- [ ] Keep both public scripts as parameter/composition shells. Their shared
+  helper maps `-Revision`, `-SkipGitPull`, `-NoInstall`, `-WaitSeconds`,
+  `-TimeoutSeconds`, `-Status` and `-Json` to the existing shared parser.
+  Preserve the existing 180-second Windows readiness default.
+  Help and mode refusals precede tool and filesystem access.
+- [ ] Require PowerShell 7.4+ and controller Node 24, with explicit,
+  canonical local Node/Git/npm/PowerShell paths. Remove inherited
+  `NODE_OPTIONS` and `NODE_PATH` only while invoking controller Node, then
+  restore the caller's environment. Do not discover tools in the private actor.
+- [ ] Derive control as the private sibling `.<project>.deployment` and
+  capture parent as `.<project>.deployment-controllers`. The supervisor
+  prepares/opens these through existing native private-directory primitives;
+  its capture remains a unique child. Existing insecure directories are
+  refused, not repermissioned. Keep failed captures and operation evidence.
+- [ ] Read-only status invokes the existing command entry without creating
+  private directories or capturing helpers. Mutations invoke the original
+  supervisor and preserve its exit code and structured outcome. First
+  installation, restore, stopped/legacy tasks and task reconfiguration remain
+  explicitly unsupported in this batch, without the old destructive fallback.
+- [ ] Route the real fixture through `scripts/update.ps1`, selecting the
+  installed project/task and a distinct revision. Retain original task/data/
+  backup/receipt/closeout assertions and require an empty private controller
+  parent after successful update and no-op. Native fixture input may arrange
+  PATH for tool discovery; it must not supply transaction/cleanup callbacks.
+- [ ] Accept native public contracts and the real public update/no-op, then
+  all 42 lifecycle jobs before describing this public path as accepted.
+
 ### Task 5BW: Retire only original completed controller captures
 
 **Files:** Extend `WindowsControllerCapture.cs`,
@@ -13340,7 +13388,7 @@ the real live application fixture. Keep `Dispose` nondeleting.
 - [x] Require refusal without deletion for unexpected inventory and an
   active actor CWD; preserve source, project and unrelated captures. Assert
   success/no-op captures disappear and failed-command captures remain.
-- [ ] Accept native contracts and actual supervised upgrade/no-op cleanup,
+- [x] Accept native contracts and actual supervised upgrade/no-op cleanup,
   then the complete dual-platform regression before public-wrapper wiring.
   Implementation `b5fc1d2 / 38002317915` passed both application jobs.
   Live job `114068093014` completed at 23:46:29 UTC on 2026-10-09;
@@ -13349,8 +13397,8 @@ the real live application fixture. Keep `Dispose` nondeleting.
   protocol cases passed. Real supervised update/finalization/cleanup took
   1,086,701 ms, closed-state verification 643 ms and no-op/cleanup 177,088 ms.
   Authenticated data and original task/receipt/backup invariants passed.
-  Full `26bcf7e / 38006102348` is dispatched; do not count the complete
-  regression accepted until all required jobs finish successfully.
+  Full `26bcf7e / 38006102348` passed all 42 jobs. Real live job
+  `114075144954` completed at 00:15:15 UTC on 2026-10-10.
 
 ### Task 5BV: Supervise original Windows command and saved finalizer processes
 

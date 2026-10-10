@@ -163,6 +163,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native controller capture contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-command-supervisor.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Native supervisor protocol contracts failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-public-command.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Public Windows command contracts failed.' }
           $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
           $env:DEPLOYMENT_TEST_WINDOWS_LIVE = '1'
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source

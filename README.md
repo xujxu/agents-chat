@@ -155,8 +155,9 @@ the full regression at `f47a8a7` (Actions `37995338592`, attempt 2): 41 jobs
 passed initially, and the one cancelled Linux worker job passed an unchanged
 targeted retry. The production supervisor subsequently passed all 42 jobs at
 `bec7c7c` (Actions `38001799703`), including real update, automatic exact-manifest
-saved finalization, preserved authenticated data and no-op. Successful capture
-cleanup and public-wrapper acceptance remain pending.
+saved finalization, preserved authenticated data and no-op. Exact successful
+capture cleanup passed all 42 jobs at `26bcf7e` (Actions `38006102348`).
+Public-wrapper acceptance remains pending.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
