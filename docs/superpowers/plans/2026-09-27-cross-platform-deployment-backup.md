@@ -13415,7 +13415,9 @@ and saved-engine inventory/dependency assertions.
   `a94bc01 / 38038631583`, job `114174264245`, passed all **29/29** native
   cases at `2026-10-10 08:49:02 UTC`; cold proof took 89,507 ms and saved
   source-disappearance closure took 2,275 ms. Full regression
-  `a94bc01 / 38039225393` is dispatched; do not assume its outcome.
+  `a94bc01 / 38039225393` passed all **42/42** jobs. Real Windows application
+  job `114175969374` passed its application case in 1,564,761 ms at
+  `2026-10-10 09:28:32 UTC`. This baseline precedes the recovery-mutation tests.
 
 ### Task 5CL: Observe genuine original actor loss across lease release
 
