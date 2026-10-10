@@ -13452,20 +13452,24 @@ Files:
 
 ### Task 5CT: Compose first deployment and accept a real Windows application
 
-- [ ] Add an actual fresh-checkout fixture with no task, dependencies, build,
+- [x] Add an actual fresh-checkout fixture with no task, dependencies, build,
   application data or prior operation. A separate Node actor uses original
   first-install/configuration scopes and a real lock to call
   `runWindowsFirstDeployment`. Initially confirm the missing orchestrator.
-- [ ] Compose existing transaction, owned build, first-runtime registration,
+  `74cc069 / 38055516643`, job `114223037623`, confirmed exactly
+  `Missing first Windows deployment orchestrator` at `13:23:36 UTC`.
+- [x] Compose existing transaction, owned build, first-runtime registration,
   guarded activation, readiness, permanent completion and actual final receipt.
   Use absent-prior state and no backup; require dependency installation and
   positive bounded waits. Preserve evidence on failure. Return a bound saved
   closeout request, not premature lock release or invented managed history.
+  The initial control inventory includes only the real original lock and the
+  persistent `windows-admission.lock` created by native lock acquisition.
 - [ ] In Actions install/build real Next source, observe the resulting managed
   runtime and use authenticated chat API data before/after original-actor exit
   and saved finalization. Require exact accepted receipt, unchanged runtime,
   no backup, retired operation evidence and fresh lock reuse.
-- [ ] Add a separate actual-first-application job and focused dispatch input;
+- [x] Add a separate actual-first-application job and focused dispatch input;
   keep existing application and native-first regressions unchanged.
   This is core orchestration with explicit S4U/AtStartup for the fixture,
   not public default-policy or tunnel acceptance. Do not enable the public
