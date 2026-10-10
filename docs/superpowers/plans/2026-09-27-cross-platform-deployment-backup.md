@@ -13315,6 +13315,38 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CC: Atomic inhibited first-task creation
+
+Files: `scripts/deployment/windows-first-task.ps1`,
+`tests/deployment-windows-first-task.ps1`, and the native Windows step in
+`.github/workflows/deployment-lifecycle.yml`.
+
+- [x] Add the native causal fixture before implementing the helper. For both
+  S4U (2) and Interactive (3), reject an enabled definition without registering
+  anything; create a disabled task without triggers or restart; attempt a
+  case-insensitive duplicate and require HRESULT `0x800700B7`, unchanged XML,
+  unchanged security descriptor and zero instances. Only fixture UUID task names
+  are deleted during cleanup; no task is started.
+- [ ] Run the causal test in Actions using
+  `gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat --ref feat/deployment-backup -f windows_application_only=true -f windows_commands_only=true`.
+  Require `Missing native create-only first-task registration`.
+- [ ] Implement `Register-AgentsChatFirstTask -Folder -TaskName -Definition`.
+  Require a root-folder task name, current-account SID, S4U/Interactive,
+  highest run level, disabled/no triggers/no restart, demand-start/ignore-new,
+  and one executable action. Use native create-only registration, never
+  `TASK_UPDATE`, create-or-update or `-Force`:
+
+  ```powershell
+  $Folder.RegisterTask($TaskName, $Definition.XmlText, (2 -bor 16 -bor 32),
+      $sid, $null, [int]$Definition.Principal.LogonType, $null)
+  ```
+
+- [ ] Push and rerun the same Actions gate; require both native cases to pass
+  alongside the accepted publication contracts. Record exact causal/pass runs.
+  This helper supplies atomic creation only; it does not yet bind publication,
+  configuration and original lock authority, activate a runtime, or expose
+  public first deployment. Compose those authorities before public integration.
+
 ### Task 5CB: Private prebuilt runtime publication for a genuine first installation
 
 Add `windows-first-runtime.mjs/.ps1`, reusing
@@ -13339,11 +13371,11 @@ This publishes artifacts only; task creation and activation remain separate.
   `New-AgentsChatRuntimeBundle -Retain` transfers the original native directory
   and file handles to this publisher; default callers still close normally.
   No pathname-reopen gap is used to claim the original published bundle.
-- [ ] Refuse early/unsealed/forged/competing-task contexts before writing,
+- [x] Refuse early/unsealed/forged/competing-task contexts before writing,
   retain existing bundles unchanged on repeated publication, and release
   every native helper on failure/close. Preserve saved recovery dependency
   closure when adding dependencies.
-- [ ] Accept native publication cases before create-only disabled task
+- [x] Accept native publication cases before create-only disabled task
   registration, guarded activation and real public first-deploy acceptance.
   Initial implementation `c4b28d2 / 38020320843`, job `114119676383`,
   passed ten cases but refused the successful publication at the environment
@@ -13351,6 +13383,11 @@ This publishes artifacts only; task creation and activation remain separate.
   `ReadFrameAsync`, whose existing hard maximum is 128 KiB. Match the existing
   128 KiB transport limit, keep it bounded, add safe type/line diagnostics and
   require oversized environment refusal before creating the runtime directory.
+  Corrected `7023439 / 38020627476` passed **1/1**, job `114120624547`:
+  all eleven selected cases passed at `2026-10-10 03:31:19 UTC`; positive
+  publication took 52,519 ms, competitor refusal 35,539 ms. This is not actual
+  Next first-deploy acceptance. Full regression `7023439 / 38020925331`
+  is dispatched; `6f514cc / 38018693061` remains the accepted full baseline.
 
 ### Task 5CA: Owned source and build stages for a genuine Windows first installation
 
