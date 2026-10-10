@@ -14027,18 +14027,24 @@ inspection/configuration/lock/first-deployment composition.
   2,400-second native batch deadline; its finally cleanup masked the original
   failure with a still-open runtime configuration file. The later actual
   existing-application lifecycle did not execute.
-- [ ] Split the 46 native cases into complementary `foundations` (37) and
+- [x] Split the 46 native cases into complementary `foundations` (37) and
   `cold-receipts` (9) jobs. Partition names by
   `\((?:cold-receipt-proof|cold-first-[^)]*)\)$`; the first shard uses its
   negation, the second its match. Keep existing test files/cases and the
   2,400-second private-runner ceiling; focused13 becomes 4+9. Keep actual
   existing-task deployment in its own existing job. Full workflow becomes
   48 jobs rather than lengthening one native/application job.
-- [ ] Preserve timeout diagnostics before cleanup: kill only the retained
+- [x] Preserve timeout diagnostics before cleanup: kill only the retained
   original test Job, settle/read its streams, collect primary and cleanup
   exceptions, and fail with all of them instead of replacing the primary.
   Add native harness checks for ordinary intentional test failure and a bounded
   timeout, both requiring captured fixture output and a nonzero outcome.
+  Causal `7e84d19 / 38088630350`, job `114320303020`, failed at
+  `21:44:11 UTC` with `Private runner lost timeout output
+  (PRIVATE_RUNNER_STDOUT)`; ordinary failure diagnostics already passed.
+  Fix `16ccba0 / 38088777804` passed the command-contract step, including
+  both runner diagnostics cases, in job `114320739555`; the later actual
+  application and the complete 48-job regression are still running.
 - [ ] Push and run the complete 48-job workflow. Require native37+9 and the
   existing actual update lifecycle, all four first applications, both
   configuration-policy contract jobs, and all Linux regressions to pass.
