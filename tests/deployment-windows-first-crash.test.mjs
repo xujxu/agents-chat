@@ -8,13 +8,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
+import { prepareWindowsFirstProofCase } from './deployment-windows-first-proof-cases.mjs';
 
 const execute = promisify(execFile);
 const actor = fileURLToPath(new URL('./deployment-windows-first-crash-actor.mjs', import.meta.url));
 const observer = fileURLToPath(new URL('./deployment-windows-first-completion-observer.ps1', import.meta.url));
 
-for (const step of ['release-requested', 'lease-released']) {
-  test(`Windows first-install abrupt actor death preserves the exact original lease boundary (${step})`,
+for (const scenario of [
+  { step: 'release-requested' }, { step: 'lease-released' }, { step: 'lease-released', proof: true },
+]) {
+  const { step } = scenario;
+  test(`Windows first-install abrupt actor death preserves the exact original lease boundary (${scenario.proof ? 'cold-proof' : step})`,
     { skip: process.platform !== 'win32' }, async () => {
       const temporary = await realpath(os.tmpdir());
       const socket = createServer();
@@ -27,6 +31,7 @@ for (const step of ['release-requested', 'lease-released']) {
       let stderr = '';
       let fixture;
       let active;
+      let proofCase;
       let registered = false;
       child.stderr.on('data', bytes => { stderr = (stderr + bytes.toString('utf8')).slice(-8192); });
       const paused = new Promise((resolve, reject) => {
@@ -62,6 +67,7 @@ for (const step of ['release-requested', 'lease-released']) {
         assert.equal(before.binding.enabled, false);
         assert.deepEqual(before.triggers, []);
         assert.deepEqual(before.restart, { count: 0, intervalSeconds: null });
+        if (scenario.proof) proofCase = await prepareWindowsFirstProofCase({ fixture, active, port, release, state });
         assert.deepEqual(await observe('KillPublisher'), { status: 'publisher-terminated' });
         assert.equal(child.kill(), true);
         await exited;
@@ -82,6 +88,14 @@ for (const step of ['release-requested', 'lease-released']) {
           assert.equal(response.status, 200);
           assert.deepEqual(Object.keys(await response.json()), ['admin-login']);
         }
+        if (proofCase) {
+          await proofCase.verify();
+          const afterProof = await observe('Inspect');
+          assert.equal(afterProof.binding.instanceGuid, active.runtime.instanceGuid);
+          assert.equal(afterProof.lease, 'released');
+          assert.equal(afterProof.definition, before.definition);
+          assert.equal(afterProof.domain.quiescent, false);
+        }
         await assert.rejects(readFile(path.join(directory, 'completion-released.json')), { code: 'ENOENT' });
         await assert.rejects(readFile(path.join(directory, 'completion-complete.json')), { code: 'ENOENT' });
         assert.deepEqual(await readFile(path.join(directory, 'completion-release-requested.json')), release);
@@ -89,6 +103,7 @@ for (const step of ['release-requested', 'lease-released']) {
       } finally {
         if (child.exitCode === null && child.signalCode === null) child.kill();
         await exited;
+        if (proofCase) await proofCase.close();
         if (active) await observe('Stop');
         if (registered) await execute(path.join(process.env.SystemRoot, 'System32', 'schtasks.exe'),
           ['/Delete', '/TN', fixture.taskName, '/F'], { timeout: 30000, maxBuffer: 16384 });

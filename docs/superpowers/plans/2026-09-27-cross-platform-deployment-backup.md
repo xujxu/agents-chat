@@ -13315,6 +13315,52 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CM: Reopen a first-specific non-mutating cold completion proof
+
+Files: create `scripts/deployment/windows-first-completion-records.ps1`,
+`scripts/deployment/windows-first-completion-proof.ps1`,
+`scripts/deployment/windows-first-completion-proof-controller.ps1`,
+`scripts/deployment/windows-first-completion-proof.mjs` and
+`tests/deployment-windows-first-proof-cases.mjs`; extend the genuine crash test
+and saved-engine inventory/dependency assertions.
+
+- [ ] Add a third genuine actor fixture at `lease-released`. Before either
+  original actor dies, require refusal with diagnostic `original-processes`;
+  reject a cloned admission. After both die, acquire the proof through the
+  original retained fresh admission:
+  ```js
+  const proof = await api.openWindowsFirstCompletionProof(options);
+  assert.equal(proof.observation.status, 'first-completion-observed');
+  assert.equal(proof.observation.phase, 'release-requested');
+  assert.equal(proof.observation.mutationAuthority, false);
+  assert.equal(proof.observation.lease, 'released');
+  assert.deepEqual(proof.observation.runtime, active.runtime);
+  await api.assertWindowsFirstCompletionProof(fixture.control, proof, admission);
+  await assert.rejects(api.assertWindowsFirstCompletionProof(
+    fixture.control, { ...proof }, admission));
+  ```
+  Assert exact state/last-receipt hashes, original port/providers and identity;
+  retained state must refuse writes. Closing must not stop the runtime.
+  Refuse modified lease, runtime, predecessor hash, providers or accepted state,
+  restore each exact byte sequence, then require a fresh successful reopen.
+- [ ] Push the tests and require a causal
+  `Missing first-runtime cold completion proof` with all prior 28 cases passing.
+- [ ] Read and retain original first-task intent, registration, activation
+  handoff/start/running records and the linked completion prefix. Check the
+  exact accepted first-deploy state, original lock and both dead controllers,
+  private bundle/readiness, current original task/instance/Job/released lease
+  and retained listener. Initially admit only the proven `release-requested`
+  receipt boundary; refuse other inventories rather than guess progress.
+- [ ] Reuse existing native file, identity, bundle and runtime checks only
+  with factual first-runtime fields. Do not fabricate managed admission,
+  prior runtime or retirement evidence. Keep the first JS capability in its
+  own WeakMap; read-only proof cannot authorize existing managed retirement.
+  Frame identity/sequence, retained admission, exact snapshots and close
+  behavior follow the established native bridge contract.
+- [ ] Include all new native/module dependencies in saved recovery and accept
+  the 29-case native gate before adding recovery mutation or deployment
+  receipt/retirement integration.
+
 ### Task 5CL: Observe genuine original actor loss across lease release
 
 Files: `tests/deployment-windows-first-crash-actor.mjs`,
@@ -13346,7 +13392,7 @@ first-deployment acceptance.
   Both preserve the exact accepted state and release-intent bytes and must
   lack a complete proof. Cleanup then settles only the original runtime,
   deletes only the recorded fixture task and removes the exact temporary root.
-- [ ] Push and run the commands-only Actions gate with both
+- [x] Push and run the commands-only Actions gate with both
   `windows_application_only=true` and `windows_commands_only=true`.
   Require all 28 selected native cases, including both actual actor deaths,
   before implementing first-specific cold completion admission.
@@ -13358,6 +13404,10 @@ first-deployment acceptance.
   count is nonzero and preserve the permanent-policy 3/60 assertion.
   Also make `AwaitStopped` refuse a reappearing instance rather than falling
   through to fixture cleanup.
+  Corrected `bef8952 / 38036507496`, job `114167931006`, passed all **28/28**
+  native cases at `2026-10-10 08:16:08 UTC`. Real guarded actor loss took
+  101,423 ms; released actor loss took 106,635 ms. Both preserved exact
+  interrupted evidence; only the released original runtime survived.
 
 ### Task 5CK: Expose bounded original completion steps for crash recovery
 

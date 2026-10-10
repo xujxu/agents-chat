@@ -190,6 +190,11 @@ The same permanent-completion revision passed all 42 Linux/Windows jobs
 All twelve explicit original-controller completion steps and partial advancement
 followed by normal completion passed 26 native cases at `aaf4198`
 (Actions `38034721120`), retaining the same final proof and live original runtime.
+Genuine loss of both the native publisher and Node operation actor passed
+28 native cases at `bef8952` (Actions `38036507496`): before lease release,
+the original owner and task instance disappear; after release but before its
+receipt, the same disabled-task runtime keeps serving HTTP. These observations
+preserve the interrupted state and do not themselves perform cold recovery.
 Controller-crash recovery and public first-deployment integration are still
 separate unfinished gates.
 The task parameter and read-only definition changes below passed native
