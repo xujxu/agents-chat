@@ -13514,10 +13514,15 @@ Files:
   and no successful helper capture left behind. Keep public first-deploy gates
   closed; this tests the already-supported public update path against a real
   first-created installation rather than adding a second command implementation.
-- [ ] Run the focused actual-first Actions gate. Fix only a demonstrated
+- [x] Run the focused actual-first Actions gate. Fix only a demonstrated
   interoperability failure; preserve existing managed update behavior.
-- [ ] Record the result separately from the preceding first-core acceptance
+- [x] Record the result separately from the preceding first-core acceptance
   and pending full43 baseline.
+  `4768b9a / 38057969008`, job `114230216175`, passed in 932,405 ms at
+  `2026-10-10 14:26:08 UTC` (job success at `14:26:12`). The existing public
+  update implementation handled the first-created installation without a
+  production fix, runtime restart, backup creation or receipt replacement.
+  Full43 `5e15139 / 38057686717` remains in progress separately.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 

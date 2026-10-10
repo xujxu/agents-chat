@@ -244,6 +244,10 @@ authenticated chat data before and after the original actor exits, saved
 finalization, unchanged runtime and receipt, and fresh lock reuse without a
 backup. This uses explicit S4U/AtStartup in the fixture; public first deployment
 remains gated pending default task-policy and tunnel integration.
+The same first-created application also passed the actual public update no-op
+at `4768b9a` (Actions `38057969008`), preserving its runtime, task triggers,
+authenticated data and original receipt without creating a backup or leaving
+operation locks or successful controller captures behind.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
