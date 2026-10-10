@@ -13944,6 +13944,12 @@ inspection/configuration/lock/first-deployment composition.
 - [ ] Push and dispatch the actual matrix only after the pending actual3
   gate completes. Capture the new public case's explicit unsupported-mode
   refusal before implementation; do not cancel required earlier acceptance.
+  Initial public case `dbe4098 / 38083717231`, job `114305720066`, failed at
+  `2026-10-10 20:26:19 UTC`, but test cleanup masked the entry failure with
+  missing-control ENOENT. Allow only that exact uncreated control path in
+  cleanup, preserving other errors. Add `windows_first_public_only=true`
+  with a separate concurrency suffix to rerun this one case without rebuilding
+  the three independent internal cases or superseding their pending evidence.
 - [ ] Normalize only `--no-tunnel`, `--task-logon-type` and
   `--task-trigger-type` in a Windows adapter around existing `parseArguments`.
   Reject duplicates, invalid values and use on update/status/verify or without

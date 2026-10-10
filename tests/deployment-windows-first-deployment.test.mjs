@@ -189,7 +189,10 @@ test(publicFirst
     assert.deepEqual(await readdir(path.join(root, '.fresh application.deployment-controllers')), []);
   } finally {
     await scope?.close();
-    operationId ??= (await loadState(control))?.operationId;
+    try { operationId ??= (await loadState(control))?.operationId; }
+    catch (error) {
+      if (error.code !== 'ENOENT' || error.path !== control) throw error;
+    }
     const directory = operationId && path.join(control, `first-task-${operationId}`);
     const registered = directory && await readOptional(path.join(directory, 'registered.json'));
     runtime ??= directory && (await readOptional(path.join(directory, 'activation-running.json')))?.runtime;

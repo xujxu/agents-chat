@@ -48,12 +48,16 @@ on:
         description: With both Windows command flags, run only the actual first-application core
         type: boolean
         default: false
+      windows_first_public_only:
+        description: With first-application-only and both command flags, select only public first NoTunnel deployment
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}
+  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -229,7 +233,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [normal, receipt-loss, default-policy, public-first]
+        scenario: ${{ fromJSON(inputs.windows_first_public_only && '["public-first"]' || '["normal", "receipt-loss", "default-policy", "public-first"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -241,6 +245,7 @@ jobs:
         shell: pwsh
         env:
           DEPLOYMENT_TEST_FIRST_ONLY: ${{ inputs.windows_first_application_only }}
+          DEPLOYMENT_TEST_FIRST_PUBLIC_ONLY: ${{ inputs.windows_first_public_only }}
           DEPLOYMENT_TEST_WINDOWS_FIRST_RECEIPT_LOSS: ${{ matrix.scenario == 'receipt-loss' && '1' || '0' }}
           DEPLOYMENT_TEST_WINDOWS_FIRST_DEFAULT_POLICY: ${{ matrix.scenario == 'default-policy' && '1' || '0' }}
           DEPLOYMENT_TEST_WINDOWS_FIRST_PUBLIC: ${{ matrix.scenario == 'public-first' && '1' || '0' }}
@@ -248,6 +253,9 @@ jobs:
         run: |
           if ($env:DEPLOYMENT_TEST_FIRST_ONLY -eq 'true' -and $env:DEPLOYMENT_TEST_COMMANDS_ONLY -ne 'true') {
             throw 'First-application selection requires both Windows command-only flags.'
+          }
+          if ($env:DEPLOYMENT_TEST_FIRST_PUBLIC_ONLY -eq 'true' -and $env:DEPLOYMENT_TEST_FIRST_ONLY -ne 'true') {
+            throw 'Public-first selection requires first-application-only selection.'
           }
           $env:DEPLOYMENT_TEST_WINDOWS_FIRST_APPLICATION = '1'
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
