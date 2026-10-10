@@ -13315,6 +13315,68 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CR: Retire a completed first deployment without inventing prior history
+
+Files:
+- Add `scripts/deployment/windows-first-deployment-retirement.mjs`,
+  `windows-first-deployment-retirement-controller.ps1`,
+  `windows-first-deployment-retirement.ps1`,
+  `windows-first-retirement-record.mjs` and `windows-first-retirement-record.ps1`.
+- Add `tests/deployment-windows-first-retirement-case.mjs`; extend the actual
+  original-crash fixture and focused receipt selector.
+- Extend explicit saved recovery inventory and source-disappearance imports.
+- Extract only factual sealed-worker inventory/verification from
+  `windows-deployment-retirement-evidence.ps1` and `.mjs` if shared by both
+  first and managed retirement. Preserve the existing managed record schema,
+  initializers and capability branding.
+
+- [x] Add the missing-factory causal fixture after a genuine first build,
+  permanent completion and deployment receipt. Require original live actor
+  refusal, then kill original publisher/Node using the existing exact-identity
+  fixture before calling the first-specific factory:
+  ```js
+  const scope = await openWindowsFirstDeploymentRetirement({ control, pwsh, admission });
+  assert.equal(scope.observation.status, 'retiring');
+  assert.equal(scope.observation.stateSha256, hash(state));
+  assert.equal(scope.observation.receiptSha256, hash(receipt));
+  assert.deepEqual(scope.observation.runtime, active.runtime);
+  ```
+- [ ] Confirm `Missing first-specific deployment retirement` in focused Actions
+  while all four receipt/proof prerequisites still pass.
+- [ ] Implement a separate first-retirement native authority. Initially require
+  the complete first-specific proof, real final receipt, sealed worker operation
+  and settled Windows worker journals. Hold all evidence while JavaScript
+  verifies the exact worker engine/enrollment. Publish a versioned private
+  `worker-retirement.json` with first-specific purpose, original lock/publisher,
+  accepted state and receipt descriptors, actual runtime/configuration/listener/
+  permanent-policy checkpoint, exact deletion descriptors and actual new creator.
+  Never populate a managed prior-owner or task-maintenance history.
+- [ ] Retain the marker exclusively. Reopening must validate original creator
+  identities, unchanged accepted state/receipt/runtime and only a contiguous
+  deletion prefix. Delete original first-task receipts/directory, settled
+  worker journals/helper files/directory and operation journal; original lock
+  owner and lock directory last, then marker. Keep state, final deployment
+  receipt, live first-runtime bundle and saved recovery engine.
+  Every native edge checks retained evidence, actual original runtime/listener
+  and policy. Failure preserves remaining evidence; close never stops runtime.
+- [x] Exercise one exact deletion per `advance()`, competing scope refusal,
+  retained receipt write refusal, reopen after first deletion and before final
+  lock-directory deletion, and reject a non-prefix missing completion receipt.
+  Bound advancement by the actual fixture entry count:
+  ```js
+  for (let index = 1; index <= totalEntries + 1; index++) {
+    const observed = await scope.advance();
+    assert.equal(observed.retiredEntries, Math.min(index, totalEntries));
+    assert.equal(observed.status, index > totalEntries ? 'retired' : 'retiring');
+  }
+  ```
+  Require unchanged state/receipt bytes, surviving runtime/HTTP/permanent task,
+  no remaining first-task/worker/lock evidence, and successful fresh lock
+  acquisition/release. The final marker deletion is its own last edge.
+- [ ] Accept focused five-case receipt/retirement gate, complete native
+  selection and saved-source closure. If shared managed helpers are extracted,
+  also run the full dual-platform regression before public integration.
+
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
 Files: existing first-crash actor, crash/proof tests and

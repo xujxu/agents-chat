@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { prepareWindowsFirstProofCase } from './deployment-windows-first-proof-cases.mjs';
 import { prepareWindowsFirstRecoveryCase } from './deployment-windows-first-recovery-cases.mjs';
+import { prepareWindowsFirstRetirementCase } from './deployment-windows-first-retirement-case.mjs';
 
 const execute = promisify(execFile);
 const actor = fileURLToPath(new URL('./deployment-windows-first-crash-actor.mjs', import.meta.url));
@@ -23,9 +24,10 @@ for (const scenario of [
   { step: 'lease-released', recovery: true, stopRecoveryAfter: 'permanent-policy-applied' },
   { step: 'lease-released', recovery: true, stopRecoveryAfter: 'enable-applied' },
   { step: 'complete', proof: true, receipt: true },
+  { step: 'complete', receipt: true, retirement: true },
 ]) {
   const { step } = scenario;
-  const name = scenario.receipt ? 'cold-receipt-proof'
+  const name = scenario.retirement ? 'cold-first-retirement' : scenario.receipt ? 'cold-receipt-proof'
     : scenario.stopRecoveryAfter ? `recovery-actor-${scenario.stopRecoveryAfter}`
     : scenario.proof ? 'cold-proof' : scenario.recovery ? `cold-recovery-${step}` : step;
   test(`Windows first-install abrupt actor death preserves the exact original lease boundary (${name})`,
@@ -44,6 +46,7 @@ for (const scenario of [
       let active;
       let proofCase;
       let recoveryCase;
+      let retirementCase;
       let registered = false;
       child.stderr.on('data', bytes => { stderr = (stderr + bytes.toString('utf8')).slice(-8192); });
       const paused = new Promise((resolve, reject) => {
@@ -87,6 +90,7 @@ for (const scenario of [
           fixture, active, step, port, release, state, stopRecoveryAfter: scenario.stopRecoveryAfter,
           waitForController: identity => observe('AwaitPublisherExit', identity), observe: () => observe('Inspect'),
         });
+        if (scenario.retirement) retirementCase = await prepareWindowsFirstRetirementCase({ fixture, active, state });
         assert.deepEqual(await observe('KillPublisher'), { status: 'publisher-terminated' });
         assert.equal(child.kill(), true);
         await exited;
@@ -115,8 +119,8 @@ for (const scenario of [
           assert.equal(afterProof.definition, before.definition);
           assert.equal(afterProof.domain.quiescent, false);
         }
-        if (recoveryCase) {
-          await recoveryCase.verify();
+        if (recoveryCase || retirementCase) {
+          await (recoveryCase ?? retirementCase).verify();
           const recovered = await observe('Inspect');
           assert.equal(recovered.binding.instanceGuid, active.runtime.instanceGuid);
           assert.equal(recovered.binding.ownerPid, active.runtime.pid);
@@ -134,13 +138,16 @@ for (const scenario of [
           await assert.rejects(readFile(path.join(directory, 'completion-released.json')), { code: 'ENOENT' });
           await assert.rejects(readFile(path.join(directory, 'completion-complete.json')), { code: 'ENOENT' });
         }
-        assert.deepEqual(await readFile(path.join(directory, 'completion-release-requested.json')), release);
+        if (!retirementCase) {
+          assert.deepEqual(await readFile(path.join(directory, 'completion-release-requested.json')), release);
+        }
         assert.deepEqual(await readFile(path.join(fixture.control, 'state.json')), state);
       } finally {
         if (child.exitCode === null && child.signalCode === null) child.kill();
         await exited;
         if (proofCase) await proofCase.close();
         if (recoveryCase) await recoveryCase.close();
+        if (retirementCase) await retirementCase.close();
         if (active) await observe('Stop');
         if (registered) await execute(path.join(process.env.SystemRoot, 'System32', 'schtasks.exe'),
           ['/Delete', '/TN', fixture.taskName, '/F'], { timeout: 30000, maxBuffer: 16384 });
