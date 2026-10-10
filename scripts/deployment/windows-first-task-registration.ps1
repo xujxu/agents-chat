@@ -105,6 +105,12 @@ function New-AgentsChatFirstTaskRegistration {
             $before.OuterXml -cne $after.OuterXml
         }
         [Console]::Error.WriteLine("First-task policy diagnostic: sections=$($different -join ',').")
+        if ('Settings' -in $different) {
+            foreach ($document in @($expected, $actual)) {
+                $settings = $document.SelectSingleNode('/t:Task/t:Settings', $namespaces)
+                [Console]::Error.WriteLine("First-task settings diagnostic: $($settings.OuterXml)")
+            }
+        }
         throw 'Registered first-task policy differs from the requested definition.'
     }
     $taskFile = Join-Path ([Environment]::SystemDirectory) "Tasks\$($Context.TaskName)"
