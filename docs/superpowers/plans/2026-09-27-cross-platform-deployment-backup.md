@@ -13371,10 +13371,13 @@ Files: `scripts/deployment/windows-first-task.ps1`,
   case-insensitive duplicate and require HRESULT `0x800700B7`, unchanged XML,
   unchanged security descriptor and zero instances. Only fixture UUID task names
   are deleted during cleanup; no task is started.
-- [ ] Run the causal test in Actions using
+- [x] Run the causal test in Actions using
   `gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat --ref feat/deployment-backup -f windows_application_only=true -f windows_commands_only=true`.
   Require `Missing native create-only first-task registration`.
-- [ ] Implement `Register-AgentsChatFirstTask -Folder -TaskName -Definition`.
+  Causal `217f95d / 38020973072`, job `114121665022`, failed at
+  `2026-10-10 03:48:19 UTC` with that exact missing-helper message after all
+  eleven publication/build/configuration contracts passed.
+- [x] Implement `Register-AgentsChatFirstTask -Folder -TaskName -Definition`.
   Require a root-folder task name, current-account SID, S4U/Interactive,
   highest run level, disabled/no triggers/no restart, demand-start/ignore-new,
   and one executable action. Use native create-only registration, never
