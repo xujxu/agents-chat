@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { prepareWindowsFirstRuntime } from '../scripts/deployment/windows-first-runtime.mjs';
 import { withWindowsFirstBuildFixture, buildWindowsFirstFixture, windowsFirstHttpRuntimeScript } from './deployment-windows-first-build-fixture.mjs';
+import { verifyWindowsFirstDeploymentReceipt } from './deployment-windows-first-receipt-case.mjs';
 
 const execute = promisify(execFile);
 const observer = fileURLToPath(new URL('./deployment-windows-first-completion-observer.ps1', import.meta.url));
@@ -18,6 +19,7 @@ const completionSteps = ['policy-requested', 'policy-applied', 'policy-staged', 
 
 for (const scenario of [
   { name: 'complete' },
+  { name: 'deployment-receipt' },
   { name: 'stepwise', steps: 6 },
   { name: 'all-steps', steps: 12 },
   { name: 'before-release', blocked: 'release-requested', prior: 'policy-staged', lease: 'guarded' },
@@ -122,6 +124,9 @@ test(`Windows first-install completion preserves original-runtime handoff or set
           previous = createHash('sha256').update(bytes).digest('hex');
         }
         await published.close();
+        if (scenario.name === 'deployment-receipt') {
+          await verifyWindowsFirstDeploymentReceipt({ fixture: f, built, active, port });
+        }
         const after = await observe('Inspect');
         assert.equal(after.lease, 'released');
         assert.equal(after.domain.phase, 'admitted');

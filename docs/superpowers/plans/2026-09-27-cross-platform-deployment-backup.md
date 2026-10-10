@@ -13315,6 +13315,31 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CP: Verify first-runtime adoption and the existing deployment receipt
+
+Files: `tests/deployment-windows-first-receipt-case.mjs` and the native
+first-completion tests. Reuse the real managed observer and existing acceptance
+and receipt functions after permanent first completion; do not invent a prior
+runtime, managed transaction history, backup, or another receipt format.
+
+- [x] Add a genuine first-build/completion fixture that closes its original
+  publisher, discovers the same released instance through
+  `inspectWindowsManagedTask`, and inspects its actual configuration:
+  ```js
+  const acceptance = await captureWindowsDeploymentAcceptance({
+    scope, configuration, source: built.source, artifacts: built.artifacts,
+    port, waitSeconds: 30,
+  });
+  const receipt = await publishDeploymentReceipt({ control, lock, ...acceptance });
+  assert.deepEqual(await readDeploymentReceipt(control, project), receipt);
+  ```
+  Assert exact source/build/dependency identities, original operation and
+  accepted timestamp, unchanged state and runtime, no backup, byte-identical
+  idempotent publication, and refusal of a different source without mutation.
+- [ ] Run this added native Actions case; fix only demonstrated integration
+  failures before implementing final evidence retirement. Receipt publication
+  alone does not release the original lock or make public first deploy ready.
+
 ### Task 5CO: Resume after actual first-recovery actor death
 
 Files: `tests/deployment-windows-first-recovery-actor.mjs`, existing
