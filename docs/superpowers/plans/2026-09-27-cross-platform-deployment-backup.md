@@ -13907,6 +13907,10 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   ```
   Earlier native prefix acceptance
   must not be mislabeled actual application interruption at those earlier edges.
+  Actual regression `551c3ca / 38080122680` passed both cases:
+  normal job `114295134458` at `2026-10-10 19:41:36 UTC` (603,633 ms);
+  receipt-loss job `114295134575` at `19:43:14 UTC` (698,407 ms).
+  Native45 `38080120594` remains pending.
 
 ### Task 5DA: Verify the existing default first-task policy on a live native runtime
 
