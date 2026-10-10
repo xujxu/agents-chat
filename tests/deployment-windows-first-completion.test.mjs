@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -62,6 +63,24 @@ test('Windows first-install completion preserves the original ready runtime afte
         await published.checkFiles();
         assert.deepEqual(JSON.parse(await readFile(path.join(f.control,
           `first-task-${f.lock.operationId}`, 'completion-complete.json'), 'utf8')), completed);
+        const completionDirectory = path.join(f.control, `first-task-${f.lock.operationId}`);
+        let previous = createHash('sha256').update(await readFile(path.join(completionDirectory, 'completion-prepared.json'))).digest('hex');
+        for (const phase of ['policy-requested', 'policy-staged', 'release-requested', 'released',
+          'policy-restore-requested', 'policy-restored', 'enable-requested', 'complete']) {
+          const bytes = await readFile(path.join(completionDirectory, `completion-${phase}.json`));
+          const record = JSON.parse(bytes);
+          assert.equal(record.phase, phase);
+          assert.equal(record.previousSha256, previous);
+          assert.deepEqual(record.runtime, active.runtime);
+          assert.equal(record.securityDescriptor, task.securityDescriptor);
+          assert.equal(record.enabled, phase === 'complete');
+          assert.equal(record.lease, ['policy-requested', 'policy-staged', 'release-requested'].includes(phase) ? 'guarded' : 'released');
+          if (phase !== 'policy-requested') assert.doesNotMatch(record.definition, /-ControllerPid|-ControllerIdentity/);
+          if (!['policy-restored', 'enable-requested', 'complete'].includes(phase)) {
+            assert.doesNotMatch(record.definition, /<BootTrigger>|<RestartOnFailure>/);
+          }
+          previous = createHash('sha256').update(bytes).digest('hex');
+        }
         await published.close();
         const after = await observe('Inspect');
         assert.equal(after.lease, 'released');

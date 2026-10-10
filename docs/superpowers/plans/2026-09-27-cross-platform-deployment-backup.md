@@ -13340,9 +13340,11 @@ activation helper, saved recovery inventory and lifecycle workflow.
   readiness after original publisher exit. Cleanup uses the exact original
   runtime control endpoint, disables its task before stopping/retiring its Job,
   and waits for its instance; never terminate processes by name.
-- [ ] Push/run the commands-only causal gate, requiring
+- [x] Push/run the commands-only causal gate, requiring
   `Missing original first-runtime permanent completion`.
-- [ ] Add a first-specific native completion helper using the existing proven
+  `2f95295 / 38029825836`, job `114149200386`, confirmed the missing method
+  at `2026-10-10 06:20:53 UTC`; all twenty prior contracts passed.
+- [x] Add a first-specific native completion helper using the existing proven
   completion ordering: retain exact accepted state; persist policy intent;
   release only the retained task-file handle; register disabled no-automation
   permanent action with TASK_UPDATE only; persist release intent; release the
@@ -13350,10 +13352,15 @@ activation helper, saved recovery inventory and lifecycle workflow.
   while disabled; enable last; retain resulting task file and completion proof.
   Check original owner/listener/instance/SDDL and evolving exact task policy
   after each step. Track guarded/released lease state explicitly.
-- [ ] Expose original `published.complete()` with bounded native transport.
+- [x] Expose original `published.complete()` with bounded native transport.
   Return the completed original runtime/policy/lease proof. Completed close
   leaves that runtime running; incomplete close still settles only its original
   Job/instance and retains interruption evidence.
+  The native sequence publishes nine hash-linked preparation/completion
+  receipts. The test checks exact predecessor digests, original runtime/SDDL,
+  guarded-to-released lease ordering and automation enabled only at completion.
+  Shared account normalization handles both principal and logon-trigger SID
+  aliases without weakening exact observed XML or task-file checks.
 - [ ] Accept native success/refusals and completion-close persistence, then
   first-completion interruption/recovery and actual public Next deployment.
   Do not treat this small HTTP fixture as real public first-install acceptance.
@@ -13380,9 +13387,14 @@ not release the runtime lease or enable automation.
   releasing the state lease. Keep task-file, owner, listener and Job protection.
   Extend JS/native state guards to accept only the exact accepted successor
   after preparation, and latch it against further changes.
-- [ ] Accept native preparation and wrong-provider refusal. Do not publish a
+- [x] Accept native preparation and wrong-provider refusal. Do not publish a
   deployment receipt, release the guarded lease, enable permanent task policy
   or claim public first-deploy acceptance in this step.
+  `42962f2 / 38029650928`, job `114147716555`, passed **20/20** at
+  `2026-10-10 06:12:50 UTC`. The owned runtime verified preparation receipt,
+  blocked pre-handoff state write, exact accepted successor and repeat refusal
+  (87,706 ms); wrong providers produced no receipt (61,158 ms); unrelated
+  listener received zero HTTP (56,400 ms).
 
 ### Task 5CG: First-runtime listener-bound authentication-provider readiness
 

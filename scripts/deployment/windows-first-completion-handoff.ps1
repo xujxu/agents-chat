@@ -19,9 +19,12 @@ function Prepare-AgentsChatFirstCompletion {
         generation=$Context.Activation.Runtime.generation; port=$Context.Port
         providers=@($Providers); listener=$listener
     }
-    $null = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::Publish(
+    $prepared = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::Publish(
         (Join-Path $Context.Control "first-task-$($Context.OperationId)/completion-prepared.json"),
         ($receipt | ConvertTo-Json -Depth 5 -Compress)))
+    $Context.CompletionSha256 = $prepared.Sha256
+    $Context.CompletionProviders = $Providers.Clone()
+    $Context.CompletionListener = $listener
     & $CheckAuthority
     $Context.ActivatingStateFile.Check()
     $Context.ActivatingStateFile.Dispose()

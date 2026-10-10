@@ -82,6 +82,7 @@ export async function prepareWindowsFirstRuntime({
       } else if (activatingState) {
         if (!same(current, activatingState)) {
           if (!completionPrepared || current?.phase !== 'accepted' || current.previousPhase !== 'activating'
+            || Date.parse(current.updatedAt) < Date.parse(activatingState.updatedAt)
             || !same({ ...current, phase: activatingState.phase, previousPhase: activatingState.previousPhase,
               updatedAt: activatingState.updatedAt }, activatingState)) {
             throw new Error('First completion requires the exact original activating successor.');
@@ -141,6 +142,8 @@ export async function prepareWindowsFirstRuntime({
     let activated = false;
     let activeRuntime;
     let retainedListener;
+    let completionActivatingStateSha256;
+    let completed = false;
     let registering = false;
     let preparingCompletion = false;
     const request = async (method, requestSignal, options = {}) => {
@@ -148,16 +151,16 @@ export async function prepareWindowsFirstRuntime({
       busy = true;
       try {
         if (method !== 'close') await authority(requestSignal);
-        const completionStateSha256 = method === 'prepare-completion'
+        const completionStateSha256 = ['prepare-completion', 'complete'].includes(method)
           ? digest(await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true })) : undefined;
         const id = ++sequence;
         await bridge.wire.send({ id, method, ...options });
         const reply = captureWorkerFields(await bridge.wire.receive({
-          signal: requestSignal, timeoutMs: method === 'activate' || method === 'close' ? 120000 : 30000,
+          signal: requestSignal, timeoutMs: ['activate', 'close', 'complete'].includes(method) ? 120000 : 30000,
         }),
           ['id', 'type', 'processIdentity', 'value'], 'first-runtime reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== ready.processIdentity
-          || !['register-task', 'prepare-activation', 'activate', 'listener', 'prepare-completion'].includes(method) && reply.value !== method) {
+          || !['register-task', 'prepare-activation', 'activate', 'listener', 'prepare-completion', 'complete'].includes(method) && reply.value !== method) {
           throw new Error('Unexpected first-runtime acknowledgement.');
         }
         if (method === 'register-task') {
@@ -232,8 +235,32 @@ export async function prepareWindowsFirstRuntime({
             generation: activeRuntime.generation, port, providers: configuration.providers, listener: retainedListener,
           })) throw new Error('Original first-completion handoff differs.');
           completionPrepared = true;
+          completionActivatingStateSha256 = completionStateSha256;
           await authority(requestSignal);
           return Object.freeze(receipt);
+        }
+        if (method === 'complete') {
+          const expected = {
+            version: 1, phase: 'complete', status: 'first-runtime-completed',
+            project, operationId: lock.operationId, taskName: observed.taskName,
+            controllerPid: ready.pid, controllerIdentity: ready.processIdentity,
+            lockSha256: digest(lockBytes), activatingStateSha256: completionActivatingStateSha256,
+            stateSha256: completionStateSha256, configuration: bundle.configuration, configurationSha256: bundle.sha256,
+            runtime: activeRuntime, permanentDefinition: registeredTask.permanentDefinition,
+            securityDescriptor: registeredTask.securityDescriptor, enabled: true, lease: 'released',
+            port, providers: configuration.providers, listener: retainedListener,
+          };
+          const proof = captureWorkerFields(reply.value, [...Object.keys(expected), 'definition', 'previousSha256'],
+            'first-runtime completion');
+          const { definition, previousSha256, ...actual } = proof;
+          if (!same(actual, expected) || typeof definition !== 'string' || definition.length < 1
+            || definition.length > 65536 || definition.includes('\0')
+            || typeof previousSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(previousSha256)) {
+            throw new Error('Original first-runtime completion differs.');
+          }
+          await authority(requestSignal);
+          completed = true;
+          return Object.freeze(proof);
         }
         if (method === 'close') {
           const result = await bridge.waitForExit();
@@ -296,6 +323,12 @@ export async function prepareWindowsFirstRuntime({
           await verifyReadiness({ waitSeconds, signal: requestSignal });
           return await request('prepare-completion', requestSignal, { providers: configuration.providers });
         } finally { preparingCompletion = false; }
+      },
+      complete: async ({ signal: requestSignal } = {}) => {
+        if (closed || busy || !completionPrepared || completed || (await loadState(control))?.phase !== 'accepted') {
+          throw refused(new Error('First completion requires its unused accepted authority.'));
+        }
+        return request('complete', requestSignal);
       },
       close: async () => { if (!closed) await request('close'); },
     });

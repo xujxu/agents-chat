@@ -176,6 +176,10 @@ at `9de2cee` (Actions `38028513194`), including wrong-provider refusal and
 zero HTTP requests to a foreign listener. These small first-runtime fixtures
 do not constitute real Next first-deployment acceptance: permanent task
 policy completion and public first deployment remain pending.
+Readiness-backed completion preparation also passed 20 native cases at
+`42962f2` (Actions `38029650928`): the original controller records readiness
+evidence before releasing only its activating-state lease. The runtime stays
+guarded and the task stays inhibited until permanent completion.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

@@ -53,6 +53,7 @@ try {
     . (Join-Path $PSScriptRoot 'windows-first-activation-handoff.ps1')
     . (Join-Path $PSScriptRoot 'windows-first-activation.ps1')
     . (Join-Path $PSScriptRoot 'windows-first-completion-handoff.ps1')
+    . (Join-Path $PSScriptRoot 'windows-first-completion.ps1')
     $resources.Add([Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity))
     $stage = 'original-authority'
     if ($Control -cne (Join-Path (Split-Path -Parent $Project) ".$(Split-Path -Leaf $Project).deployment")) {
@@ -120,6 +121,7 @@ try {
         ActivationPrepared=$false; ActivatingStateSha256=$null
         ActivatingStateFields=$null; ActivatingStateFile=$null
         CompletionPrepared=$false; AcceptedStateSha256=$null
+        CompletionCompleted=$false; CompletionSha256=$null; CompletionProviders=$null; CompletionListener=$null
         Activation=$null; Listener=$null; Port=$Port
     }
     [Console]::Out.WriteLine((@{
@@ -141,7 +143,7 @@ try {
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task', 'prepare-activation', 'activate', 'listener', 'prepare-completion')) { throw 'Unexpected first-runtime request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task', 'prepare-activation', 'activate', 'listener', 'prepare-completion', 'complete')) { throw 'Unexpected first-runtime request.' }
         $sequence = $id
         Assert-FirstRuntimePublication
         $value = $method
@@ -171,6 +173,11 @@ try {
             if ($request.providers.ValueKind -ne [Text.Json.JsonValueKind]::Array) { throw 'Invalid first-runtime providers.' }
             $providers = @($request.providers.EnumerateArray() | ForEach-Object { $_.GetString() })
             $value = Prepare-AgentsChatFirstCompletion $context $providers { Assert-FirstRuntimePublication }
+            Assert-FirstRuntimePublication
+        }
+        if ($method -ceq 'complete') {
+            $stage = 'first-runtime-completion'
+            $value = Complete-AgentsChatFirstRuntime $context { Assert-FirstRuntimePublication }
             Assert-FirstRuntimePublication
         }
         if ($method -ceq 'close' -and $null -ne $context.Activation) {

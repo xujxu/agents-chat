@@ -27,6 +27,7 @@ function Assert-AgentsChatFirstActivationState([hashtable]$Context) {
         $updated = $current.updatedAt.GetString()
         $parsed = [DateTimeOffset]::MinValue
         if ($current.phase.GetString() -cne $phase -or $current.previousPhase.GetString() -cne $previous -or
+            ($completing -and [string]::CompareOrdinal($updated, $original.updatedAt.GetString()) -lt 0) -or
             -not [DateTimeOffset]::TryParseExact($updated, "yyyy-MM-dd'T'HH:mm:ss.fff'Z'",
                 [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsed)) {
             throw "First runtime requires the exact $previous successor."

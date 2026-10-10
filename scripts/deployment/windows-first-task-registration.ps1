@@ -90,6 +90,30 @@ function Retain-AgentsChatFirstTaskResource([hashtable]$Context, $Resource) {
     return $Resource
 }
 
+function Confirm-AgentsChatFirstTaskPolicy([string]$Expected, [string]$Actual, [string]$Sid) {
+    $before = [xml]$Expected
+    $after = [xml]$Actual
+    foreach ($document in @($before, $after)) {
+        $namespaces = [Xml.XmlNamespaceManager]::new($document.NameTable)
+        $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+        if ($document.SelectNodes('/t:Task/t:Principals/t:Principal/t:UserId', $namespaces).Count -ne 1) {
+            throw 'First task requires one explicit account.'
+        }
+        $users = $document.SelectNodes(
+            '/t:Task/t:Principals/t:Principal/t:UserId | /t:Task/t:Triggers/t:LogonTrigger/t:UserId', $namespaces)
+        foreach ($user in $users) {
+            $accountSid = if ($user.InnerText -match '^S-\d-') {
+                [Security.Principal.SecurityIdentifier]::new($user.InnerText)
+            } else {
+                ([Security.Principal.NTAccount]::new($user.InnerText)).Translate([Security.Principal.SecurityIdentifier])
+            }
+            if ($accountSid.Value -cne $Sid) { throw 'Registered first-task account differs.' }
+            $user.InnerText = $Sid
+        }
+    }
+    Confirm-AgentsChatFirstTaskXml $before.DocumentElement $after.DocumentElement
+}
+
 function Assert-AgentsChatFirstTaskRegistration([hashtable]$Context) {
     $task = $Context.Folder.GetTask($Context.TaskName)
     if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
@@ -170,21 +194,7 @@ function New-AgentsChatFirstTaskRegistration {
     $null = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::Publish(
         (Join-Path $directory 'intent.json'), ($intent | ConvertTo-Json -Depth 4 -Compress)))
     $task = Register-AgentsChatFirstTask -Folder $folder -TaskName $Context.TaskName -Definition $definition
-    $actual = [xml][string]$task.Xml
-    $expected = [xml]$requested
-    foreach ($document in @($actual, $expected)) {
-        $users = $document.SelectNodes('/t:Task/t:Principals/t:Principal/t:UserId', $namespaces)
-        if ($users.Count -ne 1) { throw 'First task requires one explicit account.' }
-        $user = $users[0].InnerText
-        $accountSid = if ($user -match '^S-\d-') {
-            [Security.Principal.SecurityIdentifier]::new($user)
-        } else {
-            ([Security.Principal.NTAccount]::new($user)).Translate([Security.Principal.SecurityIdentifier])
-        }
-        if ($accountSid.Value -cne $sid) { throw 'Registered first-task account differs.' }
-        $users[0].InnerText = $sid
-    }
-    Confirm-AgentsChatFirstTaskXml $expected.DocumentElement $actual.DocumentElement
+    Confirm-AgentsChatFirstTaskPolicy $requested ([string]$task.Xml) $sid
     $taskFile = Join-Path ([Environment]::SystemDirectory) "Tasks\$($Context.TaskName)"
     $taskHash = (Get-FileHash -LiteralPath $taskFile -Algorithm SHA256).Hash.ToLowerInvariant()
     $retained = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::OpenSourceFile($taskFile, $taskHash))

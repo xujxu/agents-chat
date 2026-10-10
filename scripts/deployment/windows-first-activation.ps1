@@ -1,7 +1,7 @@
 function Get-AgentsChatFirstActivationTask([hashtable]$Context) {
     $activation = $Context.Activation
     $task = $activation.Task.Folder.GetTask($Context.TaskName)
-    $expected = [xml]$activation.Task.Observation.definition
+    $expected = [xml]$activation.Definition
     if ($activation.Enabled) {
         $namespaces = [Xml.XmlNamespaceManager]::new($expected.NameTable)
         $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
@@ -27,7 +27,7 @@ function Assert-AgentsChatFirstRuntime([hashtable]$Context) {
     $binding = Get-AgentsChatTaskOwnerBinding -TaskName $Context.TaskName -OwnerPid $runtime.pid `
         -OwnerIdentity $runtime.identity -Definition ([string]$task.Xml) `
         -SecurityDescriptor $activation.Task.Observation.securityDescriptor
-    if ($binding.instanceGuid -cne $runtime.instanceGuid -or $binding.enabled -or
+    if ($binding.instanceGuid -cne $runtime.instanceGuid -or $binding.enabled -ne $activation.Enabled -or
         $binding.principalSid -cne $activation.Task.Observation.accountSid -or $binding.sessionId -ne $runtime.sessionId) {
         throw 'First-runtime task owner binding differs.'
     }
@@ -36,8 +36,8 @@ function Assert-AgentsChatFirstRuntime([hashtable]$Context) {
     if ($domain.phase -cne 'admitted' -or $domain.quiescent -or
         $domain.members -notcontains $runtime.launcherPid -or $domain.applicationHealthy -or
         [Deployment.WindowsRuntimeControl]::Exchange(
-            [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -cne 'guarded') {
-        throw 'First runtime lacks its original admitted Job and guarded lease.'
+            [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -cne $activation.Lease) {
+        throw 'First runtime lacks its original admitted Job and expected lease.'
     }
 }
 
@@ -68,9 +68,16 @@ function Open-AgentsChatFirstRuntimeListener([hashtable]$Context, [scriptblock]$
 
 function Stop-AgentsChatFirstRuntime([hashtable]$Context) {
     $activation = $Context.Activation
-    if ($null -eq $activation -or $activation.Stopped) { return }
+    if ($null -eq $activation -or $activation.Stopped -or $Context.CompletionCompleted) { return }
     $task = Get-AgentsChatFirstActivationTask $Context
     if ($activation.Enabled) {
+        if ($null -ne $activation.TaskFile) {
+            $activation.TaskFile.Check()
+            $activation.TaskFile.Dispose()
+            $null = $Context.Checks.Remove($activation.TaskFile)
+            $null = $Context.Resources.Remove($activation.TaskFile)
+            $activation.TaskFile = $null
+        }
         $task.Enabled = $false
         $activation.Enabled = $false
         $task = Get-AgentsChatFirstActivationTask $Context
@@ -123,6 +130,7 @@ function Start-AgentsChatFirstRuntime([hashtable]$Context, [hashtable]$Task, [sc
     $Context.ActivatingStateFile = $state
     $activation = @{
         Task=$Task; Enabled=$false; Instance=$null; InstanceGuid=$null; Owner=$null; Runtime=$null; Stopped=$false
+        Definition=$Task.Observation.definition; Lease='guarded'; TaskFile=$null
     }
     $Context.Activation = $activation
     $directory = Join-Path $Context.Control "first-task-$($Context.OperationId)"
@@ -169,7 +177,7 @@ function Start-AgentsChatFirstRuntime([hashtable]$Context, [hashtable]$Task, [sc
     $null = Get-AgentsChatFirstActivationTask $Context
     $taskFile = Join-Path ([Environment]::SystemDirectory) "Tasks\$($Context.TaskName)"
     $taskHash = (Get-FileHash -LiteralPath $taskFile -Algorithm SHA256).Hash.ToLowerInvariant()
-    $null = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::OpenSourceFile($taskFile, $taskHash))
+    $activation.TaskFile = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::OpenSourceFile($taskFile, $taskHash))
     $readyFile = Join-Path $Context.Bundle.Directory "runtime-$($ownerIdentity.Replace(':', '-')).json"
     $deadline.Restart()
     while (-not (Test-Path -LiteralPath $readyFile)) {
