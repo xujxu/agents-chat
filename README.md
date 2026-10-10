@@ -195,6 +195,11 @@ Genuine loss of both the native publisher and Node operation actor passed
 the original owner and task instance disappear; after release but before its
 receipt, the same disabled-task runtime keeps serving HTTP. These observations
 preserve the interrupted state and do not themselves perform cold recovery.
+First-specific retained cold proof passed 29 native cases at `a94bc01`
+(Actions `38038631583`), including live-controller refusal, changed-evidence
+refusals, immutable state retention, successful reopening after exact restoration
+and preserved original runtime. Its saved module closure also works after the
+source disappears. The proof is read-only; recovery mutation is not yet accepted.
 Controller-crash recovery and public first-deployment integration are still
 separate unfinished gates.
 The task parameter and read-only definition changes below passed native

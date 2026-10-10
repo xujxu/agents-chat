@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { prepareWindowsFirstRuntime } from '../scripts/deployment/windows-first-runtime.mjs';
+import { windowsTaskCompletionSteps } from '../scripts/deployment/windows-task-controller.mjs';
 import { withWindowsFirstBuildFixture, buildWindowsFirstFixture, windowsFirstHttpRuntimeScript } from './deployment-windows-first-build-fixture.mjs';
 
 const [stopAfter, suppliedPort] = process.argv.slice(2);
 const port = Number(suppliedPort);
-assert.ok(['release-requested', 'lease-released'].includes(stopAfter));
+assert.ok(windowsTaskCompletionSteps.includes(stopAfter));
 assert.ok(Number.isSafeInteger(port) && port > 0 && port <= 65535);
 assert.equal(typeof process.send, 'function');
 const send = value => new Promise((resolve, reject) => process.send(value, error => error ? reject(error) : resolve()));
@@ -27,7 +28,7 @@ try {
       await send({ type: 'active', active });
       await published.prepareCompletion({ waitSeconds: 30 });
       await f.record('accepted');
-      for (const step of ['policy-requested', 'policy-applied', 'policy-staged', 'release-requested', 'lease-released']) {
+      for (const step of windowsTaskCompletionSteps) {
         assert.equal(await published.advanceCompletion(), step);
         if (step === stopAfter) break;
       }

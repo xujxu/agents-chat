@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { prepareWindowsFirstProofCase } from './deployment-windows-first-proof-cases.mjs';
+import { prepareWindowsFirstRecoveryCase } from './deployment-windows-first-recovery-cases.mjs';
 
 const execute = promisify(execFile);
 const actor = fileURLToPath(new URL('./deployment-windows-first-crash-actor.mjs', import.meta.url));
@@ -16,9 +17,12 @@ const observer = fileURLToPath(new URL('./deployment-windows-first-completion-ob
 
 for (const scenario of [
   { step: 'release-requested' }, { step: 'lease-released' }, { step: 'lease-released', proof: true },
+  { step: 'lease-released', recovery: true }, { step: 'permanent-policy-applied', recovery: true },
+  { step: 'enable-applied', recovery: true },
 ]) {
   const { step } = scenario;
-  test(`Windows first-install abrupt actor death preserves the exact original lease boundary (${scenario.proof ? 'cold-proof' : step})`,
+  const name = scenario.proof ? 'cold-proof' : scenario.recovery ? `cold-recovery-${step}` : step;
+  test(`Windows first-install abrupt actor death preserves the exact original lease boundary (${name})`,
     { skip: process.platform !== 'win32' }, async () => {
       const temporary = await realpath(os.tmpdir());
       const socket = createServer();
@@ -32,6 +36,7 @@ for (const scenario of [
       let fixture;
       let active;
       let proofCase;
+      let recoveryCase;
       let registered = false;
       child.stderr.on('data', bytes => { stderr = (stderr + bytes.toString('utf8')).slice(-8192); });
       const paused = new Promise((resolve, reject) => {
@@ -64,10 +69,12 @@ for (const scenario of [
         const state = await readFile(path.join(fixture.control, 'state.json'));
         const before = await observe('Inspect');
         assert.equal(before.lease, step === 'release-requested' ? 'guarded' : 'released');
-        assert.equal(before.binding.enabled, false);
-        assert.deepEqual(before.triggers, []);
-        assert.deepEqual(before.restart, { count: 0, intervalSeconds: null });
+        assert.equal(before.binding.enabled, step === 'enable-applied');
+        const permanent = ['permanent-policy-applied', 'enable-applied'].includes(step);
+        assert.deepEqual(before.triggers, permanent ? [{ type: 8, enabled: true }] : []);
+        assert.deepEqual(before.restart, permanent ? { count: 3, intervalSeconds: 60 } : { count: 0, intervalSeconds: null });
         if (scenario.proof) proofCase = await prepareWindowsFirstProofCase({ fixture, active, port, release, state });
+        if (scenario.recovery) recoveryCase = await prepareWindowsFirstRecoveryCase({ fixture, active, step, port, release, state });
         assert.deepEqual(await observe('KillPublisher'), { status: 'publisher-terminated' });
         assert.equal(child.kill(), true);
         await exited;
@@ -76,14 +83,14 @@ for (const scenario of [
         } else {
           const surviving = await observe('Inspect');
           assert.equal(surviving.lease, 'released');
-          assert.equal(surviving.binding.enabled, false);
+          assert.equal(surviving.binding.enabled, before.binding.enabled);
           assert.equal(surviving.binding.instanceGuid, active.runtime.instanceGuid);
           assert.ok(surviving.domain.members.includes(active.runtime.launcherPid));
           assert.equal(surviving.domain.quiescent, false);
           assert.equal(surviving.definition, before.definition);
           assert.equal(surviving.securityDescriptor, before.securityDescriptor);
-          assert.deepEqual(surviving.triggers, []);
-          assert.deepEqual(surviving.restart, { count: 0, intervalSeconds: null });
+          assert.deepEqual(surviving.triggers, before.triggers);
+          assert.deepEqual(surviving.restart, before.restart);
           const response = await fetch(`http://127.0.0.1:${port}/api/auth/providers`, { signal: AbortSignal.timeout(5000) });
           assert.equal(response.status, 200);
           assert.deepEqual(Object.keys(await response.json()), ['admin-login']);
@@ -96,14 +103,32 @@ for (const scenario of [
           assert.equal(afterProof.definition, before.definition);
           assert.equal(afterProof.domain.quiescent, false);
         }
-        await assert.rejects(readFile(path.join(directory, 'completion-released.json')), { code: 'ENOENT' });
-        await assert.rejects(readFile(path.join(directory, 'completion-complete.json')), { code: 'ENOENT' });
+        if (recoveryCase) {
+          await recoveryCase.verify();
+          const recovered = await observe('Inspect');
+          assert.equal(recovered.binding.instanceGuid, active.runtime.instanceGuid);
+          assert.equal(recovered.binding.ownerPid, active.runtime.pid);
+          assert.equal(recovered.binding.enabled, true);
+          assert.equal(recovered.lease, 'released');
+          assert.equal(recovered.securityDescriptor, before.securityDescriptor);
+          assert.equal(recovered.domain.quiescent, false);
+          assert.ok(recovered.domain.members.includes(active.runtime.launcherPid));
+          assert.deepEqual(recovered.triggers, [{ type: 8, enabled: true }]);
+          assert.deepEqual(recovered.restart, { count: 3, intervalSeconds: 60 });
+          const response = await fetch(`http://127.0.0.1:${port}/api/auth/providers`, { signal: AbortSignal.timeout(5000) });
+          assert.equal(response.status, 200);
+          assert.deepEqual(Object.keys(await response.json()), ['admin-login']);
+        } else {
+          await assert.rejects(readFile(path.join(directory, 'completion-released.json')), { code: 'ENOENT' });
+          await assert.rejects(readFile(path.join(directory, 'completion-complete.json')), { code: 'ENOENT' });
+        }
         assert.deepEqual(await readFile(path.join(directory, 'completion-release-requested.json')), release);
         assert.deepEqual(await readFile(path.join(fixture.control, 'state.json')), state);
       } finally {
         if (child.exitCode === null && child.signalCode === null) child.kill();
         await exited;
         if (proofCase) await proofCase.close();
+        if (recoveryCase) await recoveryCase.close();
         if (active) await observe('Stop');
         if (registered) await execute(path.join(process.env.SystemRoot, 'System32', 'schtasks.exe'),
           ['/Delete', '/TN', fixture.taskName, '/F'], { timeout: 30000, maxBuffer: 16384 });

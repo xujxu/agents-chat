@@ -13315,6 +13315,48 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CN: Recover released first completion through bounded durable edges
+
+Files: add `tests/deployment-windows-first-recovery-cases.mjs` and
+`scripts/deployment/windows-first-completion-recovery.mjs`,
+`scripts/deployment/windows-first-completion-recovery.ps1`,
+`scripts/deployment/windows-first-completion-recovery-controller.ps1`.
+Extend first-completion records/proof, crash fixtures and saved closure.
+
+- [x] Add genuine crashes at `lease-released`, `permanent-policy-applied` and
+  `enable-applied`. Refuse opening recovery before original actor death.
+  After death, require exact original identity and progression:
+  ```js
+  let recovery = await openWindowsFirstCompletionRecovery(options);
+  for (const next of windowsTaskCompletionSteps.slice(windowsTaskCompletionSteps.indexOf(step) + 1)) {
+    assert.equal((await recovery.advance()).step, next);
+    await recovery.check();
+  }
+  assert.equal(recovery.observation.status, 'complete');
+  ```
+  Reopen after `policy-restored` and after `complete`; reject a competing native
+  recovery bridge even with the same admission. Assert the full original
+  hash chain, unchanged state/release-intent bytes and original runtime/instance,
+  plus actual enabled boot/restart 3/60 policy and HTTP after recovery closes.
+- [ ] Run the 32-case native causal gate; only three new cases may fail with
+  `Missing first-runtime cold completion recovery`.
+- [ ] Extend first-specific history to contiguous completion prefixes through
+  `complete`. Classify staged versus restored/enabled task state at durable
+  intent boundaries using strict first-task semantic comparison. Do not infer
+  lease release from receipts: still require the live original released lease.
+- [ ] Retain the original release-intent file exclusively for recovery, including
+  across loss of the new Node admission owner. Release only the current task-file
+  handle for the exact registered policy update or enable action; retain it
+  again afterward. Preserve original runtime, instance, principal and SDDL.
+- [ ] Advance through released, restore intent, permanent disabled policy,
+  restored receipt, enable intent, enable action and complete receipt.
+  Recheck retained listener and actual HTTP providers before each advancement;
+  never issue lease release from a new publisher PID.
+  Preserve original identity/nested snapshots while writing exact new
+  phase/status/definition/enabled/lease/predecessor fields.
+- [ ] Accept all native cases and saved dependency closure, then add genuine
+  recovery-actor interruption and first-specific final receipt/retirement.
+
 ### Task 5CM: Reopen a first-specific non-mutating cold completion proof
 
 Files: create `scripts/deployment/windows-first-completion-records.ps1`,
@@ -13359,12 +13401,15 @@ and saved-engine inventory/dependency assertions.
   own WeakMap; read-only proof cannot authorize existing managed retirement.
   Frame identity/sequence, retained admission, exact snapshots and close
   behavior follow the established native bridge contract.
-- [ ] Include all new native/module dependencies in saved recovery and accept
+- [x] Include all new native/module dependencies in saved recovery and accept
   the 29-case native gate before adding recovery mutation or deployment
   receipt/retirement integration.
   The explicit inventory includes all four first-proof files; source-removal
   coverage now asserts the native helpers and imports the first-proof module.
-  Implementation awaits the native Actions gate.
+  `a94bc01 / 38038631583`, job `114174264245`, passed all **29/29** native
+  cases at `2026-10-10 08:49:02 UTC`; cold proof took 89,507 ms and saved
+  source-disappearance closure took 2,275 ms. Full regression
+  `a94bc01 / 38039225393` is dispatched; do not assume its outcome.
 
 ### Task 5CL: Observe genuine original actor loss across lease release
 
