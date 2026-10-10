@@ -23,11 +23,12 @@ async function currentFile(file) {
 }
 
 export async function restoreExternalSnapshot({
-  project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal, expectedSnapshot,
+  project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal, expectedSnapshot, runtimeBundle,
 }) {
   if (process.platform === 'win32') return restoreWindowsExternalSnapshot({
-    project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal, expectedSnapshot,
+    project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal, expectedSnapshot, runtimeBundle,
   });
+  if (runtimeBundle !== undefined) throw new Error('Runtime bundle relocation requires Windows.');
   if (process.platform !== 'linux') throw new Error('External restoration requires Linux metadata; Windows requires native ACL restoration.');
   signal?.throwIfAborted();
   if (acceptDataLoss !== true || typeof checkStopped !== 'function') {

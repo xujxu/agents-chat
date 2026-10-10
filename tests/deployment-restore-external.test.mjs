@@ -62,6 +62,13 @@ test('all external destinations must be explicitly authorized before any write',
   }
 });
 
+test('Linux external restoration refuses Windows runtime relocation before mutation', linux, async t => {
+  const f = await fixture(t);
+  await assert.rejects(restoreExternalSnapshot({ ...f.options, runtimeBundle: {} }), /requires Windows/);
+  assert.equal(await readFile(f.unit, 'utf8'), 'changed unit\n');
+  assert.equal(await readFile(f.env, 'utf8'), 'PRIVATE=new');
+});
+
 test('external mutation refuses a different backup even when its destination list is unchanged', linux, async t => {
   const f = await fixture(t);
   const expectedSnapshot = await verifySnapshot(f.backup);

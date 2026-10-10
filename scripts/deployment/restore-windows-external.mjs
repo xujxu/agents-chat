@@ -7,6 +7,7 @@ import { realDirectory } from './snapshot-files.mjs';
 import { canonicalWorkerDirectory, closeWorkerFile, readWorkerFile, syncWorkerDirectory } from './worker-files.mjs';
 import { prepareWindowsSourceRestoreSecurity, windowsRestoredSecurityMatches } from './windows-restore-security.mjs';
 import { inspectWindowsSnapshotSecurity } from './windows-snapshot-security.mjs';
+import { inspectWindowsRuntimeRelocation } from './windows-runtime-relocation.mjs';
 
 const identity = info => ({ dev: info.dev, ino: info.ino });
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -64,7 +65,7 @@ export async function restoreWindowsExternalSnapshot(options) {
 }
 
 async function restoreExternal({
-  project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal, expectedSnapshot,
+  project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal, expectedSnapshot, runtimeBundle,
 }, scopes) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32') throw new Error('Native external restoration requires Windows.');
@@ -80,12 +81,16 @@ async function restoreExternal({
   if (manifest.project !== root || manifest.version !== 3 || manifest.runtime.platform !== 'win32') {
     throw new Error('External restoration requires a matching Windows snapshot with native ACL metadata.');
   }
-  const entries = manifest.externalFiles ?? [];
+  const originalEntries = manifest.externalFiles ?? [];
   if (!Array.isArray(authorizedPaths) || authorizedPaths.some(file => typeof file !== 'string')
-    || !same([...authorizedPaths].sort(), entries.map(entry => entry.path).sort())
-    || entries.some(entry => inside(saved, entry.path))) {
+    || !same([...authorizedPaths].sort(), originalEntries.map(entry => entry.path).sort())
+    || originalEntries.some(entry => inside(saved, entry.path))) {
     throw new Error('Every external restoration path requires exact native authorization.');
   }
+  const relocation = runtimeBundle === undefined ? null : await inspectWindowsRuntimeRelocation({
+    project: root, backup: saved, snapshot: manifest, runtimeBundle, signal,
+  });
+  const entries = relocation?.entries ?? originalEntries;
   const check = async () => {
     signal?.throwIfAborted();
     if (!same(identity(await lstat(await realDirectory(project), { bigint: true })), original)) {
@@ -93,6 +98,7 @@ async function restoreExternal({
     }
     const state = await checkStopped({ signal });
     if (state?.stopped !== true || state.inhibited !== true) throw new Error('External restoration requires a stopped and inhibited runtime.');
+    await relocation?.check();
     signal?.throwIfAborted();
     for (const scope of scopes) await scope.security.checkRoot({ signal });
   };
@@ -110,7 +116,7 @@ async function restoreExternal({
     retained.push({ entry, current, bytes });
   }
   const required = BigInt(entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), 0));
-  for (const parent of manifest.windowsExternalSecurity?.parents ?? []) {
+  for (const parent of relocation?.parents ?? manifest.windowsExternalSecurity?.parents ?? []) {
     const items = retained.filter(item => path.dirname(item.entry.path) === parent.path);
     const capacity = await statfs(parent.path, { bigint: true });
     if (capacity.bavail * capacity.bsize < required) throw new Error('Insufficient space for external restoration.');
@@ -170,5 +176,6 @@ async function restoreExternal({
   if (!same(await verifySnapshot(saved, { signal }), manifest)) throw new Error('Retained backup changed during external restoration.');
   await check();
   for (const scope of scopes) await scope.security.verify({ signal });
+  await relocation?.verify();
   return manifest;
 }
