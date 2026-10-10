@@ -13315,6 +13315,42 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CL: Observe genuine original actor loss across lease release
+
+Files: `tests/deployment-windows-first-crash-actor.mjs`,
+`tests/deployment-windows-first-crash.test.mjs`, the existing first-completion
+observer and shared first-build fixture, and the focused native workflow.
+This gate characterizes actual crash outcomes, not cold recovery or public
+first-deployment acceptance.
+
+- [x] Fork a separate genuine first-build/configuration/task/runtime actor.
+  Report fixture, registration and active-runtime identities before waiting at
+  `release-requested` or `lease-released`. Share the existing HTTP fixture
+  rather than inventing a second readiness contract.
+- [x] Terminate the original native publisher first through a retained process
+  handle after matching PID, creation identity and PowerShell image; then
+  terminate the owned Node child. This prevents orderly native EOF cleanup
+  from winning the released-runtime crash boundary.
+- [x] Observe without cleanup mutation before asserting:
+  ```js
+  assert.deepEqual(await observe('AwaitStopped'),
+    { status: 'already-stopped', enabled: false, instances: 0 });
+  // In the separate lease-released case:
+  assert.equal((await observe('Inspect')).lease, 'released');
+  await assert.rejects(readFile(path.join(directory, 'completion-released.json')),
+    { code: 'ENOENT' });
+  ```
+  The guarded case must lose its original instance and owner within 30 seconds.
+  The released case must retain the original instance, nonquiescent Job and
+  launcher, and serve the expected providers over HTTP while disabled.
+  Both preserve the exact accepted state and release-intent bytes and must
+  lack a complete proof. Cleanup then settles only the original runtime,
+  deletes only the recorded fixture task and removes the exact temporary root.
+- [ ] Push and run the commands-only Actions gate with both
+  `windows_application_only=true` and `windows_commands_only=true`.
+  Require all 28 selected native cases, including both actual actor deaths,
+  before implementing first-specific cold completion admission.
+
 ### Task 5CK: Expose bounded original completion steps for crash recovery
 
 Files: `scripts/deployment/windows-first-completion.ps1`, the existing original
@@ -13353,8 +13389,12 @@ managed-task completion; keep all nine durable first-completion receipts intact.
   Also cover all twelve explicit steps through the final proof edge, alongside
   six steps followed by `complete()`, so the new final-acknowledgement branch
   is exercised rather than only intermediate progress.
-- [ ] Accept native stepwise-to-complete continuity before using these exact
+- [x] Accept native stepwise-to-complete continuity before using these exact
   boundaries to kill a genuine separate operation actor and test cold recovery.
+  `aaf4198 / 38034721120`, job `114162670697`, passed all 26 native cases
+  at `2026-10-10 07:43:19 UTC`. Partial advancement followed by complete took
+  112,460 ms; all twelve explicit steps took 124,214 ms. All prior completion
+  and failure-boundary cases remained accepted.
 
 ### Task 5CJ: Settle first-completion publication failures at real boundaries
 

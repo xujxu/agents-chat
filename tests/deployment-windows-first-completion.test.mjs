@@ -8,20 +8,13 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { prepareWindowsFirstRuntime } from '../scripts/deployment/windows-first-runtime.mjs';
-import { withWindowsFirstBuildFixture, buildWindowsFirstFixture } from './deployment-windows-first-build-fixture.mjs';
+import { withWindowsFirstBuildFixture, buildWindowsFirstFixture, windowsFirstHttpRuntimeScript } from './deployment-windows-first-build-fixture.mjs';
 
 const execute = promisify(execFile);
 const observer = fileURLToPath(new URL('./deployment-windows-first-completion-observer.ps1', import.meta.url));
 const completionSteps = ['policy-requested', 'policy-applied', 'policy-staged', 'release-requested',
   'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'policy-restored',
   'enable-requested', 'enable-applied', 'complete'];
-const runtimeScript = `
-require('node:http').createServer((_req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({ 'admin-login': { id: 'admin-login', name: 'Admin', type: 'credentials',
-    signinUrl: 'http://localhost/api/auth/signin/admin-login', callbackUrl: 'http://localhost/api/auth/callback/admin-login' } }));
-}).listen(Number(process.argv[process.argv.indexOf('--port') + 1]), '127.0.0.1');
-`;
 
 for (const scenario of [
   { name: 'complete' },
@@ -155,6 +148,6 @@ test(`Windows first-install completion preserves original-runtime handoff or set
             ['/Delete', '/TN', f.taskName, '/F'], { timeout: 30000, maxBuffer: 16384 });
         }
       }
-    }, { runtimeScript });
+    }, { runtimeScript: windowsFirstHttpRuntimeScript });
   });
 }

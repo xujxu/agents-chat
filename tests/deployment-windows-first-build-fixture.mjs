@@ -16,6 +16,14 @@ import { writeState } from '../scripts/deployment/state.mjs';
 const execute = promisify(execFile);
 const implementation = new URL('../scripts/deployment/windows-first-build.mjs', import.meta.url);
 
+export const windowsFirstHttpRuntimeScript = `
+require('node:http').createServer((_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify({ 'admin-login': { id: 'admin-login', name: 'Admin', type: 'credentials',
+    signinUrl: 'http://localhost/api/auth/signin/admin-login', callbackUrl: 'http://localhost/api/auth/callback/admin-login' } }));
+}).listen(Number(process.argv[process.argv.indexOf('--port') + 1]), '127.0.0.1');
+`;
+
 async function fixture(t, runtimeScript) {
   assert.ok(existsSync(implementation), 'Missing owned Windows first-install build');
   const { prepareWindowsFirstBuild } = await import(implementation);

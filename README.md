@@ -185,6 +185,9 @@ preserves the original runtime after controller close; receipt failures before
 release, after release and after enable stop only the original runtime and
 leave its task disabled. Task policy comparisons preserve exact semantics
 across Scheduler default omission, namespace placement and field ordering.
+All twelve explicit original-controller completion steps and partial advancement
+followed by normal completion passed 26 native cases at `aaf4198`
+(Actions `38034721120`), retaining the same final proof and live original runtime.
 Controller-crash recovery and public first-deployment integration are still
 separate unfinished gates.
 The task parameter and read-only definition changes below passed native
