@@ -36,3 +36,48 @@ test('Windows command does not discover missing native context from inherited en
       { code: 'DEPLOYMENT_WINDOWS_COMMAND_CONTEXT_REQUIRED' });
   }
 });
+
+test('Windows first command admits explicit NoTunnel policy before requiring native context', async () => {
+  for (const args of [
+    ['--no-tunnel'],
+    ['--no-tunnel', '--task-logon-type', 'Interactive', '--task-trigger-type', 'AtLogOn'],
+    ['--no-tunnel', '--task-logon-type', 'S4U', '--task-trigger-type', 'AtStartup'],
+  ]) {
+    await assert.rejects(runWindowsDeploymentCommand({ operation: 'deploy', args }),
+      { code: 'DEPLOYMENT_WINDOWS_COMMAND_CONTEXT_REQUIRED' });
+  }
+});
+
+test('Windows first command rejects policy conflicts before installation access', async () => {
+  for (const [operation, args] of [
+    ['update', ['--no-tunnel']],
+    ['deploy', ['--task-logon-type', 'S4U']],
+    ['deploy', ['--task-trigger-type', 'AtStartup']],
+    ['deploy', ['--no-tunnel', '--status']],
+    ['deploy', ['--no-tunnel', '--verify']],
+    ['deploy', ['--no-tunnel', '--dry-run']],
+    ['deploy', ['--no-tunnel', '--no-install']],
+    ['deploy', ['--no-tunnel', '--task-logon-type', 'Password']],
+    ['deploy', ['--no-tunnel', '--task-trigger-type', 'Daily']],
+  ]) {
+    await assert.rejects(runWindowsDeploymentCommand({ operation, args }),
+      { code: 'DEPLOYMENT_COMMAND_MODE_UNSUPPORTED' });
+  }
+});
+
+test('Windows first command rejects duplicate or missing policy values', async () => {
+  for (const args of [
+    ['--no-tunnel', '--no-tunnel'],
+    ['--no-tunnel', '--task-logon-type', 'S4U', '--task-logon-type', 'Interactive'],
+    ['--no-tunnel', '--task-trigger-type', 'AtStartup', '--task-trigger-type', 'AtLogOn'],
+  ]) {
+    await assert.rejects(runWindowsDeploymentCommand({ operation: 'deploy', args }), /Duplicate/);
+  }
+  for (const args of [
+    ['--no-tunnel', '--task-logon-type'],
+    ['--no-tunnel', '--task-trigger-type'],
+  ]) {
+    await assert.rejects(runWindowsDeploymentCommand({ operation: 'deploy', args }),
+      { code: 'DEPLOYMENT_COMMAND_MODE_UNSUPPORTED' });
+  }
+});

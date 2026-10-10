@@ -18,12 +18,24 @@ try {
         $result = ($text -join "`n") | ConvertFrom-Json
         Assert ($result.status -ceq 'help' -and $result.message.Contains('-Revision')) 'Public help is incomplete'
         Assert (-not (Test-Path -LiteralPath $root)) 'Public help created installation files'
-        foreach ($flag in @('-NoWait', '-Verify', '-DryRun', '-RemoveTask', '-NoTunnel')) {
+        $unsupportedFlags = @('-NoWait', '-Verify', '-DryRun', '-RemoveTask')
+        if ($operation -ceq 'update') { $unsupportedFlags += '-NoTunnel' }
+        foreach ($flag in $unsupportedFlags) {
             $text = & $pwsh -NoProfile -NonInteractive -File $entry -ProjectDir $missing -Json $flag
             Assert ($LASTEXITCODE -eq 1) "Public $flag must fail before access to an absent project"
             $result = ($text -join "`n") | ConvertFrom-Json
             Assert ($result.code -ceq 'DEPLOYMENT_COMMAND_MODE_UNSUPPORTED') "Public $flag was not explicitly refused"
             Assert (-not (Test-Path -LiteralPath $root)) 'Unsupported public mode created files'
+        }
+        foreach ($policy in @(
+            @('-NoTunnel', '-Status'), @('-NoTunnel', '-NoInstall'),
+            @('-TaskLogonType', 'S4U'), @('-TaskTriggerType', 'AtStartup')
+        )) {
+            $text = & $pwsh -NoProfile -NonInteractive -File $entry -ProjectDir $missing -Json @policy
+            Assert ($LASTEXITCODE -eq 1) 'Conflicting first policy must fail before installation access'
+            $result = ($text -join "`n") | ConvertFrom-Json
+            Assert ($result.code -ceq 'DEPLOYMENT_COMMAND_MODE_UNSUPPORTED') 'First policy conflict was not explicitly refused'
+            Assert (-not (Test-Path -LiteralPath $root)) 'First policy conflict created installation files'
         }
     }
     New-Item -ItemType Directory -Path $root | Out-Null
