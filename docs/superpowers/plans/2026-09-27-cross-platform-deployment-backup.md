@@ -13989,6 +13989,13 @@ inspection/configuration/lock/first-deployment composition.
   NoTunnel; deploy supports it but rejects conflicting first-policy requests.
   Preserve read-only status and inherited Node-hook stripping coverage.
   Push and accept portable/native command contracts plus actual matrix4.
+  First implementation `e1b9a3a / 38084155349`, job `114307008368`,
+  reached real preflight but failed `DEPLOYMENT_CONFIGURATION_UNSUPPORTED`
+  at `configuration-files.mjs:180`. The fresh environment unnecessarily
+  included USERPROFILE, outside the existing reviewed build-operational
+  allowlist. Remove that key; retain native-derived HOME and explicit npm
+  cache, as the accepted internal actor does. Do not broaden the shared
+  configuration allowlist to accommodate an unnecessary environment entry.
 - [ ] Update public help/README with the exact accepted fresh NoTunnel route
   and remaining gates. Do not label no-tunnel acceptance default tunnel
   acceptance or claim other-user/legacy-task adoption.

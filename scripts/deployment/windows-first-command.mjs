@@ -18,7 +18,7 @@ function firstEnvironment({ node, git, pwsh }) {
     });
   }
   return {
-    SystemRoot, WINDIR: SystemRoot, TEMP, TMP, HOME: home, USERPROFILE: home,
+    SystemRoot, WINDIR: SystemRoot, TEMP, TMP, HOME: home,
     COMSPEC: path.join(SystemRoot, 'System32', 'cmd.exe'),
     PATHEXT: '.COM;.EXE;.BAT;.CMD',
     PATH: [path.dirname(node), path.dirname(git), path.dirname(pwsh),
