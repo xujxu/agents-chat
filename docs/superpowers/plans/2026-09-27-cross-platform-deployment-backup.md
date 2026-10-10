@@ -13370,6 +13370,29 @@ runtime, managed transaction history, backup, or another receipt format.
 - [ ] Run this added native Actions case; fix only demonstrated integration
   failures before implementing final evidence retirement. Receipt publication
   alone does not release the original lock or make public first deploy ready.
+  Causal `cad331e / 38042966778`, job `114190473046`, preserved **35/35**
+  prior cases but failed the new receipt case at `2026-10-10 10:35:59 UTC`.
+  Exact native refusal: `task-action / Managed task does not use one installed
+  bundle`. The first-task constructor used the mutable project as Scheduler
+  action working directory, while managed discovery correctly requires the
+  private installed bundle. Change the constructor to
+  `$action.WorkingDirectory = $Context.Bundle.Directory`; leave discovery
+  strict and leave the application's configured project cwd unchanged.
+  The observer now asserts that actual permanent task working directory.
+
+  Focused remote receipt iterations use the existing private runner and a
+  fixed four-case selector (three native receipt/proof cases plus saved closure):
+  ```sh
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_commands_only=true -f windows_receipt_only=true
+  ```
+  Default full/native selections are unchanged. The selector uses its own
+  concurrency group and refuses use without both command flags.
+  The pre-fix causal37 `f794ebd / 38044346874` is superseded: its new cold
+  receipt fixture cannot reach proof opening before the known adoption failure.
+  Confirm corrected cold-proof causes in the focused run, then expand to the
+  entire native selection after the production corrections.
 
 ### Task 5CO: Resume after actual first-recovery actor death
 

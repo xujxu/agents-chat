@@ -136,6 +136,7 @@ test(`Windows first-install completion preserves original-runtime handoff or set
         assert.equal(after.binding.instanceGuid, active.runtime.instanceGuid);
         assert.equal(after.binding.ownerPid, active.runtime.pid);
         assert.equal(after.definition, completed.definition);
+        assert.equal(after.workingDirectory, published.bundle.directory);
         assert.equal(after.securityDescriptor, task.securityDescriptor);
         assert.match(after.definition, /<BootTrigger\b/);
         assert.match(after.definition, /<RestartOnFailure\b/);

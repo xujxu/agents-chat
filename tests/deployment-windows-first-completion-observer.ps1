@@ -91,6 +91,7 @@ if ($Mode -ceq 'Inspect') {
     [Console]::Out.WriteLine((@{
         binding=$binding; lease=$lease; domain=$domain; definition=[string]$task.Xml
         securityDescriptor=[string]$task.GetSecurityDescriptor(7)
+        workingDirectory=[string]$task.Definition.Actions.Item(1).WorkingDirectory
         triggers=$triggers
         restart=@{
             count=$restartCount

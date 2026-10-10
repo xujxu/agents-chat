@@ -40,12 +40,16 @@ on:
         description: With windows_application_only, run native command contracts without application builds
         type: boolean
         default: false
+      windows_receipt_only:
+        description: With both Windows command flags, select first-receipt integration and saved dependency tests
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}
+  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -175,11 +179,19 @@ jobs:
         run: ./tests/deployment-windows-task-options.ps1
       - name: Inspect genuinely fresh Windows installations
         shell: pwsh
+        env:
+          DEPLOYMENT_TEST_RECEIPT_ONLY: ${{ inputs.windows_receipt_only }}
+          DEPLOYMENT_TEST_COMMANDS_ONLY: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         run: |
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           $env:DEPLOYMENT_TEST_GIT = (Get-Command git.exe -CommandType Application | Select-Object -First 1).Source
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source) 'node_modules/npm/bin/npm-cli.js'
-          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-first-install.test.mjs', 'tests/deployment-windows-first-build.test.mjs', 'tests/deployment-windows-first-runtime.test.mjs', 'tests/deployment-windows-first-activation.test.mjs', 'tests/deployment-windows-first-readiness.test.mjs', 'tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs') -NamePattern '^(Windows first-install|saved recovery bundle closes module dependencies)'
+          $pattern = '^(Windows first-install|saved recovery bundle closes module dependencies)'
+          if ($env:DEPLOYMENT_TEST_RECEIPT_ONLY -eq 'true') {
+            if ($env:DEPLOYMENT_TEST_COMMANDS_ONLY -ne 'true') { throw 'Receipt selection requires both Windows command-only flags.' }
+            $pattern = '\((deployment-receipt|cold-proof|cold-receipt-proof)\)$|^saved recovery bundle closes module dependencies'
+          }
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-first-install.test.mjs', 'tests/deployment-windows-first-build.test.mjs', 'tests/deployment-windows-first-runtime.test.mjs', 'tests/deployment-windows-first-activation.test.mjs', 'tests/deployment-windows-first-readiness.test.mjs', 'tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs') -NamePattern $pattern
       - name: Verify native create-only first-task registration
         if: ${{ !cancelled() }}
         shell: pwsh

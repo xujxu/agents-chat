@@ -191,7 +191,7 @@ function New-AgentsChatFirstTaskRegistration {
     $action = $definition.Actions.Create(0)
     $definition.Actions.Context = 'Author'
     $action.Path = $Context.Pwsh
-    $action.WorkingDirectory = $Context.Project
+    $action.WorkingDirectory = $Context.Bundle.Directory
     $hostScript = Join-Path $Context.Bundle.Directory 'windows-runtime-host.ps1'
     $action.Arguments = "-NoProfile -NonInteractive -File `"$hostScript`" -Configuration `"$($Context.Bundle.Configuration)`" -Sha256 $($Context.Bundle.Sha256)"
     $permanent = [string]$definition.XmlText
