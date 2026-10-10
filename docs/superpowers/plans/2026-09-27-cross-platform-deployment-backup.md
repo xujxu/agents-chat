@@ -13394,11 +13394,17 @@ Files: `scripts/deployment/windows-first-task.ps1`,
       $sid, $null, [int]$Definition.Principal.LogonType, $null)
   ```
 
-- [ ] Push and rerun the same Actions gate; require both native cases to pass
+- [x] Push and rerun the same Actions gate; require both native cases to pass
   alongside the accepted publication contracts. Record exact causal/pass runs.
   This helper supplies atomic creation only; it does not yet bind publication,
   configuration and original lock authority, activate a runtime, or expose
   public first deployment. Compose those authorities before public integration.
+  `b2c0dff / 38022288510`, job `114125669743`, passed both primitive logon
+  cases at `2026-10-10 04:01:23 UTC`. SID resolution fixes the overly strict
+  account-string check without accepting another account. The independent
+  original-controller suite passed 12/13; only its registered XML comparison
+  refused. Bind explicit principal/action IDs, compare account aliases by SID,
+  and retain exact registered XML for all subsequent checks.
 
 ### Task 5CB: Private prebuilt runtime publication for a genuine first installation
 
@@ -13440,7 +13446,8 @@ This publishes artifacts only; task creation and activation remain separate.
   all eleven selected cases passed at `2026-10-10 03:31:19 UTC`; positive
   publication took 52,519 ms, competitor refusal 35,539 ms. This is not actual
   Next first-deploy acceptance. Full regression `7023439 / 38020925331`
-  is dispatched; `6f514cc / 38018693061` remains the accepted full baseline.
+  passed **42/42**, including actual Windows public update/no-op and Linux
+  first install, upgrade and recovery. This is the latest full baseline.
 
 ### Task 5CA: Owned source and build stages for a genuine Windows first installation
 

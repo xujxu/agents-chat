@@ -38,6 +38,7 @@ function New-AgentsChatFirstTaskRegistration {
     $definition = $scheduler.NewTask(0)
     $definition.RegistrationInfo.URI = "\$($Context.TaskName)"
     $definition.RegistrationInfo.Description = "Agents-Chat managed first installation $($Context.OperationId)."
+    $definition.Principal.Id = 'Author'
     $definition.Principal.UserId = $sid
     $definition.Principal.LogonType = if ($LogonType -ceq 'S4U') { 2 } else { 3 }
     $definition.Principal.RunLevel = 1
@@ -53,6 +54,7 @@ function New-AgentsChatFirstTaskRegistration {
     $trigger = $definition.Triggers.Create($(if ($TriggerType -ceq 'AtStartup') { 8 } else { 9 }))
     if ($TriggerType -ceq 'AtLogOn') { $trigger.UserId = $sid }
     $action = $definition.Actions.Create(0)
+    $definition.Actions.Context = 'Author'
     $action.Path = $Context.Pwsh
     $action.WorkingDirectory = $Context.Project
     $hostScript = Join-Path $Context.Bundle.Directory 'windows-runtime-host.ps1'
@@ -82,7 +84,27 @@ function New-AgentsChatFirstTaskRegistration {
     $null = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::Publish(
         (Join-Path $directory 'intent.json'), ($intent | ConvertTo-Json -Depth 4 -Compress)))
     $task = Register-AgentsChatFirstTask -Folder $folder -TaskName $Context.TaskName -Definition $definition
-    if (([xml][string]$task.Xml).OuterXml -cne ([xml]$requested).OuterXml) {
+    $actual = [xml][string]$task.Xml
+    $expected = [xml]$requested
+    foreach ($document in @($actual, $expected)) {
+        $users = $document.SelectNodes('/t:Task/t:Principals/t:Principal/t:UserId', $namespaces)
+        if ($users.Count -ne 1) { throw 'First task requires one explicit account.' }
+        $user = $users[0].InnerText
+        $accountSid = if ($user -match '^S-\d-') {
+            [Security.Principal.SecurityIdentifier]::new($user)
+        } else {
+            ([Security.Principal.NTAccount]::new($user)).Translate([Security.Principal.SecurityIdentifier])
+        }
+        if ($accountSid.Value -cne $sid) { throw 'Registered first-task account differs.' }
+        $users[0].InnerText = $sid
+    }
+    if ($actual.DocumentElement.OuterXml -cne $expected.DocumentElement.OuterXml) {
+        $different = @('RegistrationInfo', 'Triggers', 'Principals', 'Settings', 'Actions') | Where-Object {
+            $before = $expected.SelectSingleNode("/t:Task/t:$_", $namespaces)
+            $after = $actual.SelectSingleNode("/t:Task/t:$_", $namespaces)
+            $before.OuterXml -cne $after.OuterXml
+        }
+        [Console]::Error.WriteLine("First-task policy diagnostic: sections=$($different -join ',').")
         throw 'Registered first-task policy differs from the requested definition.'
     }
     $taskFile = Join-Path ([Environment]::SystemDirectory) "Tasks\$($Context.TaskName)"

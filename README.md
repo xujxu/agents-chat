@@ -163,6 +163,10 @@ finalization. Windows first installation and public cold restore remain pending.
 Native first-install inspection and configuration capture also passed all 42
 jobs at `6f514cc` (Actions `38018693061`), preserving the real public update/no-op
 path. These foundations do not yet enable public first deployment.
+Owned first-install builds and retained private runtime publication passed all
+42 jobs at `7023439` (Actions `38020925331`). Native create-only inhibited task
+creation is also accepted independently; original-controller registration and
+activation still require integration acceptance before public first deployment.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
