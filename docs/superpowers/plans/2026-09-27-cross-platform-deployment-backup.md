@@ -13315,6 +13315,29 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CA: Owned source and build stages for a genuine Windows first installation
+
+Add `windows-first-build.mjs` using the existing owned source/build engine and
+native enrolled workers, not a fabricated running task. Keep the existing
+managed-task build adapter unchanged.
+
+- [ ] Require the missing first-build module in native command-only tests.
+  Exercise real Git/npm workers with a small artifact fixture; this is not
+  the actual Next application acceptance.
+- [ ] Bind first-configuration objects to their original absent-task scope.
+  Add a fresh-runtime recheck that allows only the caller's separately checked
+  transaction control evidence, while still refusing runtime artifacts.
+- [ ] Require the original project, sibling control, current lock and deploy
+  state with absent prior runtime and no backup. Bind read operations to
+  preflight and mutations to exact source-selected/dependencies/building
+  phases and target commit. Require external controller Node, bundled npm,
+  Git and PowerShell; reuse the shared configuration environment policy.
+- [ ] Verify native worker enrollment/settlement, unchanged package inputs,
+  captured artifacts and lack of a fabricated backup or deployment receipt.
+  Refuse a competing task before mutation and preserve its exact definition.
+- [ ] Accept native contracts before composing create-only registration and
+  real first-deploy application acceptance.
+
 ### Task 5BZ: Native configuration capture for a genuine first installation
 
 Reuse `windows-configuration-files.ps1/.mjs` with an explicit fresh parameter
@@ -13342,6 +13365,10 @@ runtime receipt. Keep the existing installed parameter set unchanged.
 - [ ] Accept native fresh cases and preserve installed-configuration behavior
   in the existing Windows application gate. Configuration capture alone does
   not authorize worker builds, task registration, activation or recovery.
+  Native `6f514cc / 38018501808` passed **1/1**, job `114114065632`:
+  all six fresh inspection/configuration cases plus the saved-engine
+  source-disappearance import case passed at `2026-10-10 02:54:29 UTC`.
+  Full dual-platform regression `6f514cc / 38018693061` is pending.
 
 ### Task 5BY: Original Windows first-installation inspection
 

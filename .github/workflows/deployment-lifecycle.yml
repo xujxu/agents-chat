@@ -177,7 +177,9 @@ jobs:
         shell: pwsh
         run: |
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
-          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-first-install.test.mjs', 'tests/deployment-retirement-recovery.test.mjs') -NamePattern '^(Windows first-install|saved recovery bundle closes module dependencies)'
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git.exe -CommandType Application | Select-Object -First 1).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source) 'node_modules/npm/bin/npm-cli.js'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-first-install.test.mjs', 'tests/deployment-windows-first-build.test.mjs', 'tests/deployment-retirement-recovery.test.mjs') -NamePattern '^(Windows first-install|saved recovery bundle closes module dependencies)'
       - name: Verify public routing and legacy startup contracts
         if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         shell: powershell
