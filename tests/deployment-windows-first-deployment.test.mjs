@@ -12,6 +12,7 @@ import { loginDeploymentFixture } from './deployment-http-fixture.mjs';
 import { acquireLock, releaseLock, loadState } from '../scripts/deployment/state.mjs';
 import { inspectWindowsManagedTask } from '../scripts/deployment/windows-managed-task.mjs';
 import { verifyRecoveryEngine, retirementRecoveryInvocation } from '../scripts/deployment/saved-recovery-engine.mjs';
+import { crashWindowsFirstApplication } from './deployment-windows-first-application-crash.mjs';
 
 const execute = promisify(execFile);
 const implementation = new URL('../scripts/deployment/windows-first-deployment.mjs', import.meta.url);
@@ -22,7 +23,10 @@ const readOptional = async file => {
   catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 };
 
-test('actual Windows first deployment composes owned build, saved closeout and public update no-op', {
+const receiptLoss = process.env.DEPLOYMENT_TEST_WINDOWS_FIRST_RECEIPT_LOSS === '1';
+test(receiptLoss
+  ? 'actual Windows first deployment recovers missing receipt after actor loss, saved closeout and public update no-op'
+  : 'actual Windows first deployment composes owned build, saved closeout and public update no-op', {
   skip: process.platform !== 'win32' || process.env.DEPLOYMENT_TEST_WINDOWS_FIRST_APPLICATION !== '1',
 }, async t => {
   assert.ok(existsSync(implementation), 'Missing first Windows deployment orchestrator');
@@ -52,14 +56,19 @@ test('actual Windows first deployment composes owned build, saved closeout and p
   ], { timeout: 90000, maxBuffer: 65536 })).stdout);
   try {
     const actor = fileURLToPath(new URL('./deployment-windows-first-deployment-actor.mjs', import.meta.url));
-    const output = await execute(process.execPath, [
-      actor, project, control, taskName, pwsh, git, npmCli, revision, chatId,
-    ], { timeout: 1800000, maxBuffer: 65536 });
-    assert.equal(output.stderr, '');
-    const result = JSON.parse(output.stdout);
-    assert.equal(result.status, 'accepted');
-    assert.equal(result.backupCreated, false);
-    assert.equal(result.closeoutRequired, true);
+    const args = [actor, project, control, taskName, pwsh, git, npmCli, revision, chatId];
+    let result;
+    if (receiptLoss) {
+      result = await crashWindowsFirstApplication({ args, control, taskName, pwsh });
+      assert.equal(result.status, 'actor-terminated-before-receipt');
+    } else {
+      const output = await execute(process.execPath, args, { timeout: 1800000, maxBuffer: 65536 });
+      assert.equal(output.stderr, '');
+      result = JSON.parse(output.stdout);
+      assert.equal(result.status, 'accepted');
+      assert.equal(result.backupCreated, false);
+      assert.equal(result.closeoutRequired, true);
+    }
     operationId = result.operationId;
     const state = await readFile(path.join(control, 'state.json'));
     const accepted = JSON.parse(state);
@@ -68,12 +77,28 @@ test('actual Windows first deployment composes owned build, saved closeout and p
     assert.equal(accepted.targetCommit, revision);
     assert.equal(accepted.priorRuntime, 'absent');
     assert.equal(accepted.backupId, null);
-    const receipt = await readFile(path.join(control, 'deployment.json'));
-    assert.equal(JSON.parse(receipt).identity.source, revision);
+    let receipt;
+    let originalIdentity;
+    if (receiptLoss) {
+      await assert.rejects(readFile(path.join(control, 'deployment.json')), { code: 'ENOENT' });
+      originalIdentity = JSON.parse(await readFile(path.join(control,
+        `first-task-${operationId}`, 'completion-prepared.json'))).deploymentIdentity;
+      assert.ok(originalIdentity);
+      assert.equal(originalIdentity.source, revision);
+    } else {
+      receipt = await readFile(path.join(control, 'deployment.json'));
+      assert.equal(JSON.parse(receipt).identity.source, revision);
+    }
     scope = await inspectWindowsManagedTask({ project, taskName, pwsh });
     runtime = scope.observation.runtime;
     const before = await observe('Inspect');
     const api = await loginDeploymentFixture();
+    if (receiptLoss) {
+      assert.equal((await api('/api/chats', { chat: {
+        id: chatId, name: 'Surviving first Windows deployment', ts: Date.now(), agentSessions: {},
+        messages: [{ id: 'first', type: 'user', content: 'First deployment data survives closeout', ts: Date.now() }],
+      } })).ok, true);
+    }
     const chat = (await api(`/api/chats?id=${chatId}`)).chat;
     assert.equal(chat.messages[0].content, 'First deployment data survives closeout');
     const engine = await verifyRecoveryEngine({ control, manifestSha256: result.recoveryEngine });
@@ -83,6 +108,15 @@ test('actual Windows first deployment composes owned build, saved closeout and p
     });
     assert.equal(final.stderr, '');
     assert.deepEqual(JSON.parse(final.stdout), { status: 'completed', operationId, phase: 'accepted' });
+    if (receiptLoss) {
+      receipt = await readFile(path.join(control, 'deployment.json'));
+      const recovered = JSON.parse(receipt);
+      assert.deepEqual(recovered, {
+        version: 1, project, operationId, status: 'accepted', acceptedAt: accepted.updatedAt,
+        identity: { ...originalIdentity, service: recovered.identity.service },
+      });
+      assert.match(recovered.identity.service, /^[a-f0-9]{64}$/);
+    }
     assert.deepEqual((await scope.check()).runtime, runtime);
     assert.deepEqual((await api(`/api/chats?id=${chatId}`)).chat, chat);
     assert.deepEqual(await readFile(path.join(control, 'deployment.json')), receipt);

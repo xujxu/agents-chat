@@ -13750,6 +13750,50 @@ unknown staging, a replaced runtime, or a dead first runtime.
   remains accepted. Proceed to actual application crash acceptance, not public
   first-install routing.
 
+### Task 5CY: Recover a genuine first application after pre-receipt actor loss
+
+**Files:** add `tests/deployment-windows-first-application-crash.mjs`; extend
+`tests/deployment-windows-first-deployment.test.mjs` and the first-application
+job in `.github/workflows/deployment-lifecycle.yml`.
+
+- [x] Add a test-only external observer that spawns the unchanged actual first
+  deployment actor, waits for its real `completion-complete.json`, and kills
+  that original actor immediately. Await its exit and the original native
+  publisher's exit, require `deployment.json` absent, and verify the saved
+  recovery manifest. Return a distinct crash observation, not an invented
+  successful deployment result:
+  ```js
+  { status: 'actor-terminated-before-receipt', operationId, recoveryEngine }
+  ```
+  Refuse if the actor exits earlier or publishes a receipt before interruption.
+  Bound observation with the existing 30-minute actual actor limit. Do not add
+  production fault switches, change runtime identity or stop the application.
+- [x] Configure the existing actual application lifecycle in two isolated Actions
+  matrix jobs (`normal` and `receipt-loss`), preserving each existing 35-minute
+  job budget and private runner. Set
+  `DEPLOYMENT_TEST_WINDOWS_FIRST_RECEIPT_LOSS` only for the latter. Keep the
+  normal case unchanged; in the crash case, authenticate against the surviving
+  original runtime, write a real chat before recovery, and retain original
+  accepted state and prepared deployment identity.
+- [x] Extend the actual fixture to invoke the saved finalizer from outside the checkout. In the crash case,
+  require its new receipt to match original accepted metadata and four-field
+  identity, and require original runtime instance, policy, state and chat
+  continuity. Then run the existing public update no-op, require no backup,
+  no worker/first-task/lock residue, unchanged receipt/data/runtime and an empty
+  successful controller-capture directory. These are actual application checks,
+  not the small HTTP native fixture.
+- [ ] Push the causal fixture and dispatch:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_commands_only=true -f windows_first_application_only=true
+  ```
+  Before Task 5CX production integration, the crash case must reach saved
+  closeout and fail only for its missing receipt; the normal case must pass.
+  After that integration, repeat until both actual cases pass. Record their
+  independent job IDs and exact outcomes; never call a native-only pass actual
+  application crash acceptance.
+
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
 Files: existing first-crash actor, crash/proof tests and
