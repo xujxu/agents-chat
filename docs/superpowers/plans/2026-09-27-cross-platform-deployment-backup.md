@@ -13465,6 +13465,12 @@ Files:
   closeout request, not premature lock release or invented managed history.
   The initial control inventory includes only the real original lock and the
   persistent `windows-admission.lock` created by native lock acquisition.
+  Initial `a7b33a7 / 38055688226`, job `114223594537`, reached the new
+  orchestrator but refused `build-environment-conflict` at `13:26:31 UTC`:
+  the new fixture copied APPDATA/LOCALAPPDATA from the generic build fixture,
+  although retained configuration permits only its narrower operational set.
+  Remove those two fixture overrides; do not relax production configuration
+  policy. The explicit private npm cache remains outside mutable source.
 - [ ] In Actions install/build real Next source, observe the resulting managed
   runtime and use authenticated chat API data before/after original-actor exit
   and saved finalization. Require exact accepted receipt, unchanged runtime,

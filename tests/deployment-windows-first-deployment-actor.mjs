@@ -17,7 +17,7 @@ try {
   await mkdir(control, { mode: 0o700 });
   const lock = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
   const environment = {};
-  const permitted = new Set(['PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA']);
+  const permitted = new Set(['PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP']);
   for (const [key, value] of Object.entries(process.env)) if (permitted.has(key.toUpperCase())) environment[key] = value;
   environment.HOME = path.dirname(project);
   environment.NEXT_TELEMETRY_DISABLED = '1';
