@@ -13476,6 +13476,13 @@ Files:
   ignores `.env.local`, not `.env`. Use the supported ignored local file and
   assert a clean checkout before the actor starts. Keep owned source inspection
   and its dirty-source refusal unchanged.
+  `26b02d4 / 38055897108`, job `114224278782`, reached the actual build,
+  activation and completion preparation, then exhausted the 120-second verify
+  budget at the extra `published.checkFiles()` call (`13:39:04 UTC`).
+  `prepareCompletion()` already checks source and artifacts before its native
+  request and again after validating the original completion handoff. Remove
+  the immediately repeated full-tree check from the orchestrator, preserving
+  all retained-authority checks and the original readiness/stage deadlines.
 - [ ] In Actions install/build real Next source, observe the resulting managed
   runtime and use authenticated chat API data before/after original-actor exit
   and saved finalization. Require exact accepted receipt, unchanged runtime,

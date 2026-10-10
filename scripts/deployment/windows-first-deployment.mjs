@@ -168,7 +168,6 @@ export async function runWindowsFirstDeployment({
       async verify({ signal: stageSignal }) {
         await authority();
         await published.prepareCompletion({ waitSeconds, signal: stageSignal });
-        await published.checkFiles({ signal: stageSignal });
       },
     });
     await runStage('complete-first-runtime', async stageSignal => {
