@@ -13315,6 +13315,49 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CI: Complete permanent first-task policy under original authority
+
+Files: `tests/deployment-windows-first-completion.test.mjs`,
+`tests/deployment-windows-first-completion-observer.ps1`,
+`scripts/deployment/windows-first-completion.ps1`, the original publisher and
+activation helper, saved recovery inventory and lifecycle workflow.
+
+- [x] Add a native original-runtime completion contract:
+  ```js
+  await published.prepareCompletion({ waitSeconds: 30 });
+  await assert.rejects(published.complete());
+  await f.record('accepted');
+  const completed = await published.complete();
+  assert.deepEqual(completed.runtime, active.runtime);
+  assert.equal(completed.lease, 'released');
+  await published.close();
+  const after = await observe('Inspect');
+  assert.equal(after.binding.instanceGuid, active.runtime.instanceGuid);
+  assert.equal(after.lease, 'released');
+  ```
+  Require no pre-acceptance/repeated completion, unchanged SDDL/account/instance,
+  permanent boot/restart policy, no controller-bound action arguments and HTTP
+  readiness after original publisher exit. Cleanup uses the exact original
+  runtime control endpoint, disables its task before stopping/retiring its Job,
+  and waits for its instance; never terminate processes by name.
+- [ ] Push/run the commands-only causal gate, requiring
+  `Missing original first-runtime permanent completion`.
+- [ ] Add a first-specific native completion helper using the existing proven
+  completion ordering: retain exact accepted state; persist policy intent;
+  release only the retained task-file handle; register disabled no-automation
+  permanent action with TASK_UPDATE only; persist release intent; release the
+  original lease from the original native publisher; restore permanent policy
+  while disabled; enable last; retain resulting task file and completion proof.
+  Check original owner/listener/instance/SDDL and evolving exact task policy
+  after each step. Track guarded/released lease state explicitly.
+- [ ] Expose original `published.complete()` with bounded native transport.
+  Return the completed original runtime/policy/lease proof. Completed close
+  leaves that runtime running; incomplete close still settles only its original
+  Job/instance and retains interruption evidence.
+- [ ] Accept native success/refusals and completion-close persistence, then
+  first-completion interruption/recovery and actual public Next deployment.
+  Do not treat this small HTTP fixture as real public first-install acceptance.
+
 ### Task 5CH: Persist verified first-runtime completion preparation
 
 Reuse the original publisher and readiness checker. Preparing completion does
