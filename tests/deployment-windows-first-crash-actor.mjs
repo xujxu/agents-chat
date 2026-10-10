@@ -6,7 +6,7 @@ import { withWindowsFirstBuildFixture, buildWindowsFirstFixture, windowsFirstHtt
 
 const [stopAfter, suppliedPort] = process.argv.slice(2);
 const port = Number(suppliedPort);
-assert.ok(windowsTaskCompletionSteps.includes(stopAfter));
+assert.ok(windowsTaskCompletionSteps.slice(1).includes(stopAfter));
 assert.ok(Number.isSafeInteger(port) && port > 0 && port <= 65535);
 assert.equal(typeof process.send, 'function');
 const send = value => new Promise((resolve, reject) => process.send(value, error => error ? reject(error) : resolve()));
@@ -28,7 +28,7 @@ try {
       await send({ type: 'active', active });
       await published.prepareCompletion({ waitSeconds: 30 });
       await f.record('accepted');
-      for (const step of windowsTaskCompletionSteps) {
+      for (const step of windowsTaskCompletionSteps.slice(1)) {
         assert.equal(await published.advanceCompletion(), step);
         if (step === stopAfter) break;
       }

@@ -13340,6 +13340,12 @@ Extend first-completion records/proof, crash fixtures and saved closure.
   plus actual enabled boot/restart 3/60 policy and HTTP after recovery closes.
 - [ ] Run the 32-case native causal gate; only three new cases may fail with
   `Missing first-runtime cold completion recovery`.
+  Initial `fe26a0b / 38039524223`, job `114176817075`, failed before reaching
+  those assertions: the shared state sequence starts with `prepared`, which
+  the actor had already reached. Its loop wrongly expected that state from
+  the first advance rather than `policy-requested`, failing all six crash
+  scenarios while 26 other cases passed. Skip the initial state with
+  `windowsTaskCompletionSteps.slice(1)` and rerun the causal gate.
 - [ ] Extend first-specific history to contiguous completion prefixes through
   `complete`. Classify staged versus restored/enabled task state at durable
   intent boundaries using strict first-task semantic comparison. Do not infer
