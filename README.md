@@ -165,8 +165,10 @@ jobs at `6f514cc` (Actions `38018693061`), preserving the real public update/no-
 path. These foundations do not yet enable public first deployment.
 Owned first-install builds and retained private runtime publication passed all
 42 jobs at `7023439` (Actions `38020925331`). Native create-only inhibited task
-creation is also accepted independently; original-controller registration and
-activation still require integration acceptance before public first deployment.
+creation, original-controller registration in both supported logon modes and
+configuring-to-activating state handoff passed the focused Windows gate at
+`85d9394` (Actions `38024807392`, 15 cases). These steps do not start or accept
+an application; guarded activation and public first deployment remain pending.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

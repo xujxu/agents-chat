@@ -27,7 +27,8 @@ function Assert-FirstRuntimePublication {
         throw 'Original first-runtime controller changed.'
     }
     foreach ($resource in $checks) { $resource.Check() }
-    if ($null -ne $firstTask) { Assert-AgentsChatFirstTaskRegistration $firstTask }
+    if ($null -ne $context -and $null -ne $context.Activation) { Assert-AgentsChatFirstRuntime $context }
+    elseif ($null -ne $firstTask) { Assert-AgentsChatFirstTaskRegistration $firstTask }
     if ($null -ne $context) { Assert-AgentsChatFirstActivationState $context }
     foreach ($name in @('recovery-lock', 'deployment.json', 'task-maintenance', 'backup')) {
         if ([IO.Directory]::GetFileSystemEntries($Control, $name).Length -ne 0) {
@@ -50,6 +51,7 @@ try {
     . (Join-Path $PSScriptRoot 'windows-first-task.ps1')
     . (Join-Path $PSScriptRoot 'windows-first-task-registration.ps1')
     . (Join-Path $PSScriptRoot 'windows-first-activation-handoff.ps1')
+    . (Join-Path $PSScriptRoot 'windows-first-activation.ps1')
     $resources.Add([Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity))
     $stage = 'original-authority'
     if ($Control -cne (Join-Path (Split-Path -Parent $Project) ".$(Split-Path -Leaf $Project).deployment")) {
@@ -115,6 +117,7 @@ try {
         Bundle=$bundle; Identity=$identity; Pwsh=$pwsh
         ConfiguringStateFile=$stateFile; OriginalState=$state
         ActivationPrepared=$false; ActivatingStateSha256=$null
+        Activation=$null
     }
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; controllerIdentity=$ControllerIdentity
@@ -133,7 +136,7 @@ try {
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task', 'prepare-activation')) { throw 'Unexpected first-runtime request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task', 'prepare-activation', 'activate')) { throw 'Unexpected first-runtime request.' }
         $sequence = $id
         Assert-FirstRuntimePublication
         $value = $method
@@ -150,6 +153,14 @@ try {
             $value = Prepare-AgentsChatFirstActivation $context $firstTask
             Assert-FirstRuntimePublication
         }
+        if ($method -ceq 'activate') {
+            $stage = 'first-runtime-activation'
+            $value = Start-AgentsChatFirstRuntime $context $firstTask { Assert-FirstRuntimePublication }
+        }
+        if ($method -ceq 'close' -and $null -ne $context.Activation) {
+            $stage = 'first-runtime-settlement'
+            Stop-AgentsChatFirstRuntime $context
+        }
         [Console]::Out.WriteLine((@{ id=$id; type='reply'; processIdentity=$identity; value=$value } | ConvertTo-Json -Depth 6 -Compress))
         [Console]::Out.Flush()
         if ($method -ceq 'close') { break }
@@ -160,6 +171,15 @@ try {
     $line = $_.InvocationInfo.ScriptLineNumber
     [Console]::Error.WriteLine("First-runtime preparation refused: $stage; type=$kind; line=$line. Retain the bundle and any inhibited task evidence.")
 } finally {
+    if ($null -ne $context -and $null -ne $context.Activation) {
+        try { Stop-AgentsChatFirstRuntime $context }
+        catch {
+            [Console]::Error.WriteLine('First-runtime original-domain settlement failed; retain all evidence.')
+            $failure = if ($failure) {
+                [AggregateException]::new('First-runtime activation and settlement failed.', [Exception[]]@($failure, $_.Exception))
+            } else { $_.Exception }
+        }
+    }
     for ($index = $resources.Count - 1; $index -ge 0; $index--) {
         try { $resources[$index].Dispose() }
         catch {

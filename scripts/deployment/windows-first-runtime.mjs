@@ -125,6 +125,7 @@ export async function prepareWindowsFirstRuntime({
     let failure;
     let registered = false;
     let registeredTask;
+    let activated = false;
     let registering = false;
     const request = async (method, requestSignal, options = {}) => {
       if (busy || closed) throw failure ?? refused(new Error('Original first-runtime publication is busy or closed.'));
@@ -133,10 +134,12 @@ export async function prepareWindowsFirstRuntime({
         if (method !== 'close') await authority(requestSignal);
         const id = ++sequence;
         await bridge.wire.send({ id, method, ...options });
-        const reply = captureWorkerFields(await bridge.wire.receive({ signal: requestSignal, timeoutMs: 30000 }),
+        const reply = captureWorkerFields(await bridge.wire.receive({
+          signal: requestSignal, timeoutMs: method === 'activate' || method === 'close' ? 120000 : 30000,
+        }),
           ['id', 'type', 'processIdentity', 'value'], 'first-runtime reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== ready.processIdentity
-          || !['register-task', 'prepare-activation'].includes(method) && reply.value !== method) {
+          || !['register-task', 'prepare-activation', 'activate'].includes(method) && reply.value !== method) {
           throw new Error('Unexpected first-runtime acknowledgement.');
         }
         if (method === 'register-task') {
@@ -174,6 +177,32 @@ export async function prepareWindowsFirstRuntime({
           await authority(requestSignal);
           return Object.freeze(receipt);
         }
+        if (method === 'activate') {
+          const active = captureWorkerFields(reply.value, [
+            'status', 'applicationHealthy', 'taskName', 'controllerPid', 'controllerIdentity', 'configurationSha256', 'runtime',
+          ], 'first-runtime activation');
+          const runtime = captureWorkerFields(active.runtime, [
+            'pid', 'identity', 'generation', 'instanceGuid', 'sessionId', 'configurationSha256', 'launcherPid', 'readySha256',
+          ], 'first-runtime ownership');
+          const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+          if (active.status !== 'first-runtime-running' || active.applicationHealthy !== false
+            || active.taskName !== observed.taskName || active.controllerPid !== ready.pid
+            || active.controllerIdentity !== ready.processIdentity || active.configurationSha256 !== bundle.sha256
+            || !Number.isSafeInteger(runtime.pid) || runtime.pid < 1 || runtime.pid === ready.pid
+            || typeof runtime.identity !== 'string' || !new RegExp(`^${runtime.pid}:[1-9][0-9]*$`).test(runtime.identity)
+            || runtime.identity !== await processIdentity(runtime.pid)
+            || ![runtime.generation, runtime.instanceGuid].every(value => typeof value === 'string' && uuid.test(value)
+              && value !== '00000000-0000-0000-0000-000000000000')
+            || !Number.isSafeInteger(runtime.sessionId) || runtime.sessionId < 0
+            || !Number.isSafeInteger(runtime.launcherPid) || runtime.launcherPid < 1
+            || runtime.configurationSha256 !== bundle.sha256
+            || typeof runtime.readySha256 !== 'string' || !/^[a-f0-9]{64}$/.test(runtime.readySha256)) {
+            throw new Error('First-runtime ownership differs from its original controller.');
+          }
+          await authority(requestSignal);
+          activated = true;
+          return Object.freeze({ ...active, runtime: Object.freeze(runtime) });
+        }
         if (method === 'close') {
           const result = await bridge.waitForExit();
           if (result.code !== 0 || result.signal !== null) throw new Error('First-runtime publisher did not close cleanly.');
@@ -208,6 +237,12 @@ export async function prepareWindowsFirstRuntime({
           throw refused(new Error('First task is not ready for activation handoff.'));
         }
         return request('prepare-activation', requestSignal);
+      },
+      activate: async ({ signal: requestSignal } = {}) => {
+        if (closed || busy || !activationPrepared || activated || (await loadState(control))?.phase !== 'activating') {
+          throw refused(new Error('First-runtime startup requires its unused activating authority.'));
+        }
+        return request('activate', requestSignal);
       },
       close: async () => { if (!closed) await request('close'); },
     });

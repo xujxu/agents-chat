@@ -13328,16 +13328,19 @@ Files: `scripts/deployment/windows-first-activation.ps1`, the original
   `applicationHealthy:false` (not authenticated application acceptance).
   Require close/failure to settle the original instance; no deployment receipt,
   backup or application data may be invented.
-- [ ] Push/run the command-only Actions gate and require
+- [x] Push/run the command-only Actions gate and require
   `Missing guarded first Windows runtime activation`.
-- [ ] Add original-capability `activate()` and native
+  Causal `778c633 / 38025335626`, job `114134876569`, confirmed both missing
+  activation assertions at `2026-10-10 05:04:53 UTC`; all prior fifteen cases
+  and independent native task/XML contracts passed.
+- [x] Add original-capability `activate()` and native
   `Start-AgentsChatFirstRuntime`. Retain the exact activating state; record
   start intent; release only the original task-file lease for guarded enable,
   demand-start and immediate re-inhibition. Confirm the original task XML/SDDL,
   unique instance, owner PID/creation identity and configuration-bound runtime
   readiness. Reuse `Get-AgentsChatTaskOwnerBinding` and runtime pipe/Job control,
   never a fabricated prior owner or installed generation.
-- [ ] Return the captured original runtime and persist `activation-running.json`.
+- [x] Return the captured original runtime and persist `activation-running.json`.
   Verify its guarded lease and admitted nonempty Job. A root-exited/stopped Job
   cannot count as startup. Keep the original controller alive and task inhibited.
   On close or failed startup, stop/retire only the original domain, require its

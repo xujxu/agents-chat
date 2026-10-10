@@ -200,7 +200,7 @@ function New-AgentsChatFirstTaskRegistration {
         taskFileSha256=$taskHash; taskFileDev=$fileIdentity.Dev; taskFileIno=$fileIdentity.Ino
         taskFileSecurityDescriptor=$retained.SecurityDescriptor
     }
-    $result = @{ Folder=$folder; TaskName=$Context.TaskName; Observation=$observation }
+    $result = @{ Folder=$folder; TaskName=$Context.TaskName; Observation=$observation; File=$retained }
     Assert-AgentsChatFirstTaskRegistration $result
     $null = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::Publish(
         (Join-Path $directory 'registered.json'), ($observation | ConvertTo-Json -Depth 4 -Compress)))
