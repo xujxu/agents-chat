@@ -14018,7 +14018,7 @@ account / Interactive / AtLogOn defaults, not new production routing.
   continuity checks with AtLogOn. This still does not exercise Dev Tunnel or
   enable the public first-deployment entry; watchdog/tunnel integration remains
   a separate gate.
-- [ ] Push and accept all three actual-application cases:
+- [x] Push and accept all three actual-application cases:
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_application_only=true \
@@ -14028,6 +14028,11 @@ account / Interactive / AtLogOn defaults, not new production routing.
   one AtLogOn trigger, unchanged task definition and principal through saved
   finalization, plus original runtime/chat/receipt continuity through public
   update no-op. Existing explicit normal and receipt-loss cases remain separate.
+  `68f0be5 / 38082449059` passed all three actual cases. Default-policy job
+  `114301979160` completed at `2026-10-10 20:24:34 UTC` (1,045,260 ms),
+  normal `114301979137` at `20:24:39 UTC` (1,051,722 ms), and receipt-loss
+  `114301979050` at `20:21:28 UTC` (853,424 ms). No production policy
+  substitution or host logon changes were needed.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
