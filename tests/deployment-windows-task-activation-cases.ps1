@@ -254,6 +254,8 @@ try {
                 & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-deployment-acceptance.mjs') `
                     $Control $pwsh $TaskName $Root
                 Assert ($LASTEXITCODE -eq 0) 'Saved accepted-deployment inspection failed after native retirement'
+                & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-task-snapshot.mjs') $Control $pwsh
+                Assert ($LASTEXITCODE -eq 0) 'Saved snapshot and restore preflight failed after final unlock'
             }
         }
         $observation = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
