@@ -38,8 +38,10 @@ test('actual Windows first deployment composes owned build, authenticated data a
   await execute(git, ['-c', `safe.directory=${repository}`, 'clone', '--no-hardlinks', repository, project],
     { timeout: 120000, maxBuffer: 16384 });
   const revision = (await execute(git, ['-C', project, 'rev-parse', 'HEAD'])).stdout.trim();
-  await writeFile(path.join(project, '.env'), 'NEXTAUTH_SECRET=first-application-fixture-secret\n'
+  await writeFile(path.join(project, '.env.local'), 'NEXTAUTH_SECRET=first-application-fixture-secret\n'
     + 'NEXTAUTH_URL=http://localhost:3010\nADMIN_USERNAME=fixture\nADMIN_PASSWORD=private-fixture-password\n');
+  assert.equal((await execute(git, ['-C', project, 'status', '--porcelain=v1', '--untracked-files=normal'])).stdout, '',
+    'Fresh application fixture must remain a clean checkout after local configuration.');
   let scope;
   let runtime;
   let operationId;

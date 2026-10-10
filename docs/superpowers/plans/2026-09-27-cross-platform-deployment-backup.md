@@ -13471,6 +13471,11 @@ Files:
   although retained configuration permits only its narrower operational set.
   Remove those two fixture overrides; do not relax production configuration
   policy. The explicit private npm cache remains outside mutable source.
+  `721e421 / 38055777830`, job `114223916987`, then reached owned source
+  inspection and refused the dirty fixture at `13:28:00 UTC`: this repository
+  ignores `.env.local`, not `.env`. Use the supported ignored local file and
+  assert a clean checkout before the actor starts. Keep owned source inspection
+  and its dirty-source refusal unchanged.
 - [ ] In Actions install/build real Next source, observe the resulting managed
   runtime and use authenticated chat API data before/after original-actor exit
   and saved finalization. Require exact accepted receipt, unchanged runtime,
