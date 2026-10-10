@@ -13386,6 +13386,15 @@ activation helper, saved recovery inventory and lifecycle workflow.
   XML comparison (`RuntimeException`, comparison line 58, `06:30:38 UTC`).
   Add bounded element/child-name diagnostics before changing normalization;
   do not weaken policy checks based only on the generic refusal.
+  `150d411 / 38031314147`, job `114152671518`, identified the exact
+  normalization at `06:42:28 UTC`: `BootTrigger` requested `Enabled=true`,
+  but native XML omitted that default. Before-release and after-release fault
+  cases passed (81,673 / 81,973 ms); success and after-enable remained blocked
+  by this earlier structural refusal (22/24).
+  Admit only missing `Enabled=true` on supported boot/logon triggers; keep
+  missing false, explicit false, duplicate and attributed Enabled nodes as
+  refusals. The independent native observer must verify the actual boot
+  trigger remains enabled; accept its equivalent self-closing XML form.
 - [ ] Accept native success/refusals and completion-close persistence, then
   first-completion interruption/recovery and actual public Next deployment.
   Do not treat this small HTTP fixture as real public first-install acceptance.

@@ -55,9 +55,23 @@ function Confirm-AgentsChatFirstTaskXml([Xml.XmlElement]$Expected, [Xml.XmlEleme
         Confirm-AgentsChatFirstTaskSettings $Expected $Actual
         return
     }
-    if ($Expected.ChildNodes.Count -ne $Actual.ChildNodes.Count) {
-        $beforeNames = @($Expected.ChildNodes | ForEach-Object { $_.LocalName }) -join ','
-        $afterNames = @($Actual.ChildNodes | ForEach-Object { $_.LocalName }) -join ','
+    $beforeChildren = @($Expected.ChildNodes)
+    $afterChildren = @($Actual.ChildNodes)
+    if ($Expected.LocalName -cin @('BootTrigger', 'LogonTrigger')) {
+        $enabled = @($beforeChildren | Where-Object {
+            $_ -is [Xml.XmlElement] -and $_.LocalName -ceq 'Enabled' -and $_.NamespaceURI -ceq $Expected.NamespaceURI
+        })
+        $actualEnabled = @($afterChildren | Where-Object {
+            $_ -is [Xml.XmlElement] -and $_.LocalName -ceq 'Enabled' -and $_.NamespaceURI -ceq $Expected.NamespaceURI
+        })
+        if ($enabled.Count -eq 1 -and $actualEnabled.Count -eq 0 -and
+            $enabled[0].Attributes.Count -eq 0 -and $enabled[0].InnerXml -ceq 'true') {
+            $beforeChildren = @($beforeChildren | Where-Object { -not [object]::ReferenceEquals($_, $enabled[0]) })
+        }
+    }
+    if ($beforeChildren.Count -ne $afterChildren.Count) {
+        $beforeNames = @($beforeChildren | ForEach-Object { $_.LocalName }) -join ','
+        $afterNames = @($afterChildren | ForEach-Object { $_.LocalName }) -join ','
         [Console]::Error.WriteLine("First-task shape differs: element=$($Expected.LocalName); expected=$beforeNames; actual=$afterNames.")
         throw "Registered first-task shape differs: $($Expected.LocalName)."
     }
@@ -78,9 +92,9 @@ function Confirm-AgentsChatFirstTaskXml([Xml.XmlElement]$Expected, [Xml.XmlEleme
         }
         return
     }
-    for ($index = 0; $index -lt $Expected.ChildNodes.Count; $index++) {
-        $before = $Expected.ChildNodes[$index]
-        $after = $Actual.ChildNodes[$index]
+    for ($index = 0; $index -lt $beforeChildren.Count; $index++) {
+        $before = $beforeChildren[$index]
+        $after = $afterChildren[$index]
         if ($before -is [Xml.XmlElement] -and $after -is [Xml.XmlElement]) {
             Confirm-AgentsChatFirstTaskXml $before $after
         } elseif ($before.NodeType -ne $after.NodeType -or $before.Value -cne $after.Value) {

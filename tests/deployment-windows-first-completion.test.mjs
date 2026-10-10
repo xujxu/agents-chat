@@ -105,7 +105,7 @@ test(`Windows first-install completion preserves original-runtime handoff or set
           assert.equal(record.lease, ['policy-requested', 'policy-staged', 'release-requested'].includes(phase) ? 'guarded' : 'released');
           if (phase !== 'policy-requested') assert.doesNotMatch(record.definition, /-ControllerPid|-ControllerIdentity/);
           if (!['policy-restored', 'enable-requested', 'complete'].includes(phase)) {
-            assert.doesNotMatch(record.definition, /<BootTrigger>|<RestartOnFailure>/);
+            assert.doesNotMatch(record.definition, /<BootTrigger\b|<RestartOnFailure\b/);
           }
           previous = createHash('sha256').update(bytes).digest('hex');
         }
@@ -120,8 +120,9 @@ test(`Windows first-install completion preserves original-runtime handoff or set
         assert.equal(after.binding.ownerPid, active.runtime.pid);
         assert.equal(after.definition, completed.definition);
         assert.equal(after.securityDescriptor, task.securityDescriptor);
-        assert.match(after.definition, /<BootTrigger>/);
-        assert.match(after.definition, /<RestartOnFailure>/);
+        assert.match(after.definition, /<BootTrigger\b/);
+        assert.match(after.definition, /<RestartOnFailure\b/);
+        assert.deepEqual(after.triggers, [{ type: 8, enabled: true }]);
         assert.doesNotMatch(after.definition, /-ControllerPid|-ControllerIdentity/);
         const response = await fetch(`http://127.0.0.1:${port}/api/auth/providers`, { signal: AbortSignal.timeout(5000) });
         assert.equal(response.status, 200);

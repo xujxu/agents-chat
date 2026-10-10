@@ -45,6 +45,23 @@ foreach ($changed in @(
     Assert $refused 'First-task XML comparison accepted changed policy content.'
 }
 Write-Output 'PASS: first-task XML comparison preserves all content while ignoring namespace declaration placement.'
+foreach ($kind in @('BootTrigger', 'LogonTrigger')) {
+    $enabled = [xml]"<$kind xmlns=`"http://schemas.microsoft.com/windows/2004/02/mit/task`"><Enabled>true</Enabled></$kind>"
+    $implicit = [xml]"<$kind xmlns=`"http://schemas.microsoft.com/windows/2004/02/mit/task`" />"
+    Confirm-AgentsChatFirstTaskXml $enabled.DocumentElement $implicit.DocumentElement
+    foreach ($pair in @(
+        @{ Before=$enabled.OuterXml.Replace('true', 'false'); After=$implicit.OuterXml },
+        @{ Before=$enabled.OuterXml; After=$enabled.OuterXml.Replace('true', 'false') },
+        @{ Before=$enabled.OuterXml; After=$enabled.OuterXml.Replace('</Enabled>', '</Enabled><Enabled>true</Enabled>') },
+        @{ Before=$enabled.OuterXml.Replace('<Enabled>', '<Enabled extra="true">'); After=$implicit.OuterXml }
+    )) {
+        $refused = $false
+        try { Confirm-AgentsChatFirstTaskXml ([xml]$pair.Before).DocumentElement ([xml]$pair.After).DocumentElement }
+        catch { $refused = $true }
+        Assert $refused 'First-task trigger normalization accepted disabled, duplicate or attributed enabled policy.'
+    }
+}
+Write-Output 'PASS: native trigger normalization admits only an omitted Enabled=true default.'
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 $folder = $scheduler.GetFolder('\')

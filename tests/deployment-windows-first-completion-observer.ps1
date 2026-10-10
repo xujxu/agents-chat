@@ -31,11 +31,16 @@ $binding = Get-AgentsChatTaskOwnerBinding -TaskName $TaskName -OwnerPid $OwnerPi
     -OwnerIdentity $OwnerIdentity -Definition ([string]$task.Xml) `
     -SecurityDescriptor ([string]$task.GetSecurityDescriptor(7))
 if ($Mode -ceq 'Inspect') {
+    $triggers = @(for ($index = 1; $index -le $task.Definition.Triggers.Count; $index++) {
+        $trigger = $task.Definition.Triggers.Item($index)
+        @{ type=[int]$trigger.Type; enabled=[bool]$trigger.Enabled }
+    })
     $lease = [Deployment.WindowsRuntimeControl]::Exchange($Generation, $OwnerPid, $OwnerIdentity, 'lease', 15000)
     $domain = [Deployment.WindowsRuntimeControl]::Exchange($Generation, $OwnerPid, $OwnerIdentity, 'observe', 15000) | ConvertFrom-Json
     [Console]::Out.WriteLine((@{
         binding=$binding; lease=$lease; domain=$domain; definition=[string]$task.Xml
         securityDescriptor=[string]$task.GetSecurityDescriptor(7)
+        triggers=$triggers
     } | ConvertTo-Json -Depth 5 -Compress))
 } else {
     $task.Enabled = $false
