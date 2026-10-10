@@ -13403,6 +13403,15 @@ directory preparation, real live fixture, lifecycle workflow and README.
   value in the existing environment finally block. This makes PowerShell
   wait for native execution and collect its actual exit code without
   trusting inherited file associations or inventing an exit status.
+  `baf0320 / 38011255794` passed all native command contracts at
+  00:59:54 UTC. Real retry `38011431716`, live job `114092107047`, then
+  reached the context helper but was refused before update at 01:06:29 UTC.
+  Added per-field sanitized context diagnostics and uppercase executable
+  coverage. Focused `31f86fe / 38011991237` reproduced `powershell` canonical
+  refusal at 01:10:24 UTC: Windows reports the executable name with the
+  launcher's casing. Permit case-only differences, returning native realpath
+  spelling; continue refusing other path redirection and wrong entry types.
+  Cover uppercase project paths and canonical returned status paths too.
 
 ### Task 5BW: Retire only original completed controller captures
 

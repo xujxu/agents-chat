@@ -18,7 +18,8 @@ try {
       || /[\0\r\n]/.test(value) || value.slice(2).includes(':')) throw new Error('Invalid local path.');
     const resolved = path.resolve(value);
     const real = realpathSync.native(resolved);
-    if (real !== resolved || (directory ? !statSync(real).isDirectory() : !statSync(real).isFile())) {
+    if (real.toLowerCase() !== resolved.toLowerCase()
+      || (directory ? !statSync(real).isDirectory() : !statSync(real).isFile())) {
       throw new Error('Canonical local paths are required.');
     }
     return real;

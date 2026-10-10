@@ -60,19 +60,21 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const [pwsh, entry, project, git, temporary] = process.argv.slice(1);
 for (const executable of [pwsh, path.join(path.dirname(pwsh), path.basename(pwsh).toUpperCase())]) {
-const child = spawnSync(executable, ['-NoProfile', '-NonInteractive', '-File', entry,
-  '-ProjectDir', project, '-Status', '-Json'], {
-  env: {
-    SystemRoot: process.env.SystemRoot,
-    PATH: [path.dirname(process.execPath), path.dirname(pwsh), path.dirname(git)].join(';'),
-    TEMP: temporary, TMP: temporary,
-  },
-  encoding: 'utf8', timeout: 30000, maxBuffer: 32768,
-});
-assert.ifError(child.error);
-process.stderr.write(child.stderr);
-assert.equal(child.status, 0, child.stdout);
-assert.equal(JSON.parse(child.stdout).status, 'unmanaged');
+  const child = spawnSync(executable, ['-NoProfile', '-NonInteractive', '-File', entry,
+    '-ProjectDir', executable === pwsh ? project : project.toUpperCase(), '-Status', '-Json'], {
+    env: {
+      SystemRoot: process.env.SystemRoot,
+      PATH: [path.dirname(process.execPath), path.dirname(pwsh), path.dirname(git)].join(';'),
+      TEMP: temporary, TMP: temporary,
+    },
+    encoding: 'utf8', timeout: 30000, maxBuffer: 32768,
+  });
+  assert.ifError(child.error);
+  process.stderr.write(child.stderr);
+  assert.equal(child.status, 0, child.stdout);
+  const result = JSON.parse(child.stdout);
+  assert.equal(result.status, 'unmanaged');
+  assert.equal(result.project, require('node:fs').realpathSync.native(project));
 }
 '@
     $git = (Get-Command git.exe -CommandType Application | Select-Object -First 1).Source
