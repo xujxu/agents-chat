@@ -13915,6 +13915,53 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DF: Restore archived external runtime members at the explicit new bundle
+
+**Scope:** compose the approved launcher indirection with native external
+file restoration, keeping the authoritative snapshot and full original path
+authorization unchanged. Only the exact archived configuration/helpers may
+relocate to an explicitly supplied distinct private bundle. Other external
+configuration, absence and ACL requirements retain their original destinations.
+
+**Files:** create `windows-runtime-relocation.mjs`; extend
+`restore-windows-external.mjs`, the `restore-external.mjs` platform dispatcher
+and the saved recovery inventory. Add
+`tests/deployment-windows-runtime-relocation.test.mjs` to the existing native
+snapshot/restoration job.
+
+- [ ] Add two native cases, with a fully absent old runtime parent and with
+  runtime members sharing a parent with ordinary external configuration:
+  ```js
+  await restoreExternalSnapshot({
+    project, backup, expectedSnapshot: snapshot, authorizedPaths,
+    runtimeBundle: { directory, configuration, sha256 },
+    acceptDataLoss: true, checkStopped,
+  });
+  ```
+  Require exact archived bytes/policies at the new bundle, no recreation of
+  historical runtime paths, retained ordinary external configuration/absence,
+  unchanged authoritative snapshot and repeat-restore identity preservation.
+  Refuse incomplete original authorization, wrong bundle/digest, overlaps,
+  stale extra members, changed helper bytes and a nonstopped runtime.
+- [ ] Push and dispatch `windows_restore_only=true`; require the new cases
+  to fail on the missing relocation behavior, not fixture setup.
+- [ ] Derive the mapping from `inspectWindowsSnapshotRuntime`, not caller
+  supplied source paths. Validate the private destination's canonical identity,
+  exact configuration/helper inventory and bytes against archived members.
+  Group physical restoration paths by destination parent, carrying each
+  original parent's root/selected file security and compacting its descriptor
+  table through `validateWindowsSnapshotSecurity`. Reject collisions.
+  Preserve entry order so backup `external/N` indexes remain authoritative.
+  Recheck the original destination directory identity during restoration.
+- [ ] Apply this plan only after full original `authorizedPaths` admission.
+  Reuse the existing stopped/inhibited checks, native file creation/removal,
+  saved ACL restoration and final checks. Return the original manifest and
+  reject this Windows-only option on Linux rather than silently ignoring it.
+  Add the new dependency to the saved engine inventory.
+- [ ] Repeat the native seven-job gate, including the unchanged ordinary
+  external restore cases and saved archived publication path. This does not
+  claim the higher-level restore transaction, cold restore or public command.
+
 ### Task 5DE: Publish a distinct native runtime bundle from archived inputs
 
 **Scope:** extend the approved restore preflight, without stopping the live
@@ -13964,6 +14011,10 @@ and call it from the saved task snapshot post-update fixture.
 - [ ] Repeat the same remote gate and require both current-runtime publication
   regressions and archived publication assertions. Record limited acceptance
   before implementing external-path relocation and the restore transaction.
+  `d7a4fe5 / 38095428682` passed all seven native jobs. Managed job
+  `114340224541` reported the archived publication assertion at `23:40:08 UTC`
+  and unchanged current-runtime publication at `23:40:09 UTC`. The stronger
+  different-live-config fixture at `4a20946 / 38095473152` is still running.
 
 ### Task 5DD: Compare archived task policy against the original live observation
 
@@ -14001,7 +14052,7 @@ caller to pass explicit PowerShell.
   validate original child/controller identity and clean close acknowledgement.
   Return `same-task-policy` with `runtimeAuthority: false`. Preserve native
   refusal and cleanup errors and include both new files in saved recovery.
-- [ ] Repeat the seven native Actions jobs and record the limited compatibility
+- [x] Repeat the seven native Actions jobs and record the limited compatibility
   acceptance before composing archive publication/restoration.
   First implementation `e362dc0 / 38094005874` finished 6/7: the fixture
   stopped its task before calling the new read-only inspection. `b9e799e`
@@ -14010,6 +14061,9 @@ caller to pass explicit PowerShell.
   exposing the unsupported implicit Enabled=true at `23:31:10 UTC`.
   `d7a4fe5` implements the established Scheduler default semantics, with
   explicit/implicit true positives and false/duplicate/invalid negatives.
+  Its run `38095428682` passed 7/7; managed job `114340224541` reported all
+  policy comparisons at `23:39:50 UTC`. This is read-only compatibility,
+  not authorization to restore a changed account, trigger or task policy.
 
 ### Task 5DC: Read archived Windows runtime inputs without consulting the live bundle
 
