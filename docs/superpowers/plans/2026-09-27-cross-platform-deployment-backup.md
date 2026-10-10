@@ -13315,6 +13315,29 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CH: Persist verified first-runtime completion preparation
+
+Reuse the original publisher and readiness checker. Preparing completion does
+not release the runtime lease or enable automation.
+
+- [x] Extend native readiness cases to require
+  `published.prepareCompletion({waitSeconds, signal})`: reverify HTTP and native
+  listener, persist `completion-prepared.json`, identify original controller/
+  generation/port/providers, then release only the activating-state handle.
+  Before preparation, writing accepted state is blocked; afterward only the
+  exact activating-to-accepted successor is admitted. Wrong providers cannot
+  publish a preparation receipt. Repeat preparation refuses.
+- [ ] Run the causal command-only Actions gate and require
+  `Missing first-runtime completion handoff`.
+- [ ] Implement native preparation beside the first-activation handoff helper;
+  record original lock, activating state, bundle and listener identities before
+  releasing the state lease. Keep task-file, owner, listener and Job protection.
+  Extend JS/native state guards to accept only the exact accepted successor
+  after preparation, and latch it against further changes.
+- [ ] Accept native preparation and wrong-provider refusal. Do not publish a
+  deployment receipt, release the guarded lease, enable permanent task policy
+  or claim public first-deploy acceptance in this step.
+
 ### Task 5CG: First-runtime listener-bound authentication-provider readiness
 
 Files: `tests/deployment-windows-first-readiness.test.mjs`, the existing
@@ -13339,8 +13362,12 @@ first-runtime publisher/native activation helper, and the Windows Actions step.
   providers and original publication port. The private adapter supplies native
   listener observation and full original-authority recheck after HTTP. Do not
   accept caller-supplied provider/port overrides or invent a managed-task scope.
-- [ ] Accept all three native cases and existing first-start/settlement behavior
+- [x] Accept all three native cases and existing first-start/settlement behavior
   before permanent task policy completion and real Next first-deploy acceptance.
+  `9de2cee / 38028513194`, job `114144364219`, passed **20/20** native cases
+  at `2026-10-10 05:51:22 UTC`: owned readiness 57,694 ms, wrong providers
+  46,218 ms and foreign listener refusal 41,366 ms. The external listener
+  received no HTTP requests.
 
 ### Task 5CF: Guarded first runtime start and original-domain settlement
 

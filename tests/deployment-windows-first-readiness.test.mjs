@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createServer } from 'node:http';
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
@@ -48,8 +49,25 @@ require('node:http').createServer((_req, res) => {
           const result = await published.verifyReadiness({ waitSeconds: 30 });
           assert.deepEqual(result, { status: 'ready', generation: active.runtime.generation, port, providers: ['admin-login'] });
           await published.checkFiles();
+          assert.equal(typeof published.prepareCompletion, 'function', 'Missing first-runtime completion handoff');
+          await assert.rejects(f.record('accepted'));
+          const prepared = await published.prepareCompletion({ waitSeconds: 30 });
+          assert.equal(prepared.status, 'first-completion-prepared');
+          assert.equal(prepared.controllerPid, active.controllerPid);
+          assert.equal(prepared.controllerIdentity, active.controllerIdentity);
+          assert.equal(prepared.generation, active.runtime.generation);
+          assert.equal(prepared.port, port);
+          assert.deepEqual(prepared.providers, ['admin-login']);
+          assert.deepEqual(JSON.parse(await readFile(path.join(f.control,
+            `first-task-${f.lock.operationId}`, 'completion-prepared.json'), 'utf8')), prepared);
+          await assert.rejects(published.prepareCompletion());
+          await f.record('accepted');
+          await published.checkFiles();
         } else if (scenario === 'wrong-providers') {
           await assert.rejects(published.verifyReadiness({ waitSeconds: 30 }), /Readiness authentication providers/);
+          assert.equal(typeof published.prepareCompletion, 'function', 'Missing first-runtime completion handoff');
+          await assert.rejects(published.prepareCompletion({ waitSeconds: 30 }), /Readiness authentication providers/);
+          assert.equal(existsSync(path.join(f.control, `first-task-${f.lock.operationId}`, 'completion-prepared.json')), false);
         } else {
           await assert.rejects(published.verifyReadiness({ waitSeconds: 30 }),
             error => error.code === 'DEPLOYMENT_WINDOWS_FIRST_RUNTIME_REFUSED'
