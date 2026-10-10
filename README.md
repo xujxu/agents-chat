@@ -157,7 +157,9 @@ targeted retry. The production supervisor subsequently passed all 42 jobs at
 `bec7c7c` (Actions `38001799703`), including real update, automatic exact-manifest
 saved finalization, preserved authenticated data and no-op. Exact successful
 capture cleanup passed all 42 jobs at `26bcf7e` (Actions `38006102348`).
-Public-wrapper acceptance remains pending.
+The public existing-task update/no-op path passed all 42 jobs at `9355b6c`
+(Actions `38015607706`), including private directory preparation and automatic
+finalization. Windows first installation and public cold restore remain pending.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
@@ -460,7 +462,9 @@ External Windows controller capture passed all 41 lifecycle jobs at
 module tree and workflow schema outside mutable source, so replacing source
 cannot alter an in-flight controller. The private supervisor and exact successful
 capture retirement passed all 42 jobs at `26bcf7e / 38006102348`.
-Public wiring below is implemented on this branch but still awaiting acceptance.
+The public existing-task update/no-op path below passed all 42 jobs at
+`9355b6c / 38015607706`. First installation and public cold restore remain
+separate, unfinished integration gates.
 Installed immutable runtime bundles are not rewritten through retained scopes.
 The separate task installer defaults registration to the current Windows account.
 The staged public deploy/update commands currently preserve the installed task

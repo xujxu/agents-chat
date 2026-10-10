@@ -13315,6 +13315,40 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BY: Original Windows first-installation inspection
+
+**Files:** Add `scripts/deployment/windows-first-install.mjs`,
+`scripts/deployment/windows-first-install-controller.ps1` and
+`tests/deployment-windows-first-install.test.mjs`. Reuse the native directory
+lease, controller-owner watch, framed transport and existing task installer
+only to arrange inert test tasks.
+
+- [ ] Add native tests requiring `inspectWindowsFirstInstall` before import.
+  A genuinely absent task, fresh project and absent/empty private control
+  produce a read-only observation with `runtimeAuthority: false`.
+  Existing `.data`, `.next`, `node_modules`, retained control evidence or
+  any registered task must refuse without removing files or changing tasks.
+- [ ] Push the tests and run the command-only Actions mode. Observe the
+  missing first-install inspection module before implementing it.
+- [ ] Retain the original project directory through the existing native
+  `OpenSourceDirectory` lease, bound to the original Node controller's
+  process identity. Treat only Scheduler's file-not-found HRESULT as an
+  absent task; propagate every other scheduler failure.
+- [ ] Return project identity/security, task name, current account SID and
+  session as immutable observation data. Do not invent a running task,
+  runtime generation, task receipt, maintenance state or recovery authority.
+  Keep fresh checks distinct from post-build uninstalled checks; both
+  require the task to remain absent and the original directory unchanged.
+- [ ] After inspection, create an inert competing task and require recheck
+  refusal while its exact definition remains unchanged. Create build
+  artifacts and permit only the explicit post-build check; fresh checking
+  must refuse them. A retained project must not be replaceable before close.
+- [ ] Accept native inspection cases and preserve existing public command
+  contracts. This is only read-only first-install admission infrastructure:
+  private configuration capture, owned build, create-only registration,
+  guarded activation/failure recovery and real public first-install
+  acceptance are still required before enabling an absent-task deploy.
+
 ### Task 5BX: Public Windows deploy/update entry for existing managed tasks
 
 Continue the approved public-interface design inline. Reuse the accepted
@@ -13363,7 +13397,7 @@ directory preparation, real live fixture, lifecycle workflow and README.
   backup/receipt/closeout assertions and require an empty private controller
   parent after successful update and no-op. Native fixture input may arrange
   PATH for tool discovery; it must not supply transaction/cleanup callbacks.
-- [ ] Accept native public contracts and the real public update/no-op, then
+- [x] Accept native public contracts and the real public update/no-op, then
   all 42 lifecycle jobs before describing this public path as accepted.
   Implementation `b005b0a / 38008709220`, live job `114085683461`,
   passed ten portable contracts, native capture/supervisor cases and public
@@ -13440,6 +13474,11 @@ directory preparation, real live fixture, lifecycle workflow and README.
   no-op 104,393 ms. Authenticated data, competing-lock preservation and
   unchanged no-op task/receipt/backup checks all passed. This accepts that
   real public update/no-op path, not the still-pending complete regression.
+  Corrected full `9355b6c / 38015607706` passed all 42 jobs. Real public
+  job `114105787433` completed at 02:37:14 UTC on 2026-10-10:
+  update/automatic closeout/cleanup 1,177,190 ms, independent verification
+  743 ms and no-op 182,090 ms. All data, task, receipt, backup and competing
+  lock checks passed; no deadlines or assertions were relaxed.
 
 ### Task 5BW: Retire only original completed controller captures
 

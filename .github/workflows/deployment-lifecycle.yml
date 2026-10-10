@@ -173,6 +173,11 @@ jobs:
         if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         shell: powershell
         run: ./tests/deployment-windows-task-options.ps1
+      - name: Inspect genuinely fresh Windows installations
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-first-install.test.mjs')
       - name: Verify public routing and legacy startup contracts
         if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         shell: powershell
