@@ -24,8 +24,11 @@ const readOptional = async file => {
 };
 
 const receiptLoss = process.env.DEPLOYMENT_TEST_WINDOWS_FIRST_RECEIPT_LOSS === '1';
-const defaultPolicy = process.env.DEPLOYMENT_TEST_WINDOWS_FIRST_DEFAULT_POLICY === '1';
-test(receiptLoss
+const publicFirst = process.env.DEPLOYMENT_TEST_WINDOWS_FIRST_PUBLIC === '1';
+const defaultPolicy = publicFirst || process.env.DEPLOYMENT_TEST_WINDOWS_FIRST_DEFAULT_POLICY === '1';
+test(publicFirst
+  ? 'actual public Windows first NoTunnel deployment completes default-policy startup, closeout and public update no-op'
+  : receiptLoss
   ? 'actual Windows first deployment recovers missing receipt after actor loss, saved closeout and public update no-op'
   : defaultPolicy
   ? 'actual Windows first deployment preserves default Interactive/AtLogOn policy through saved closeout and public update no-op'
@@ -61,7 +64,23 @@ test(receiptLoss
     const actor = fileURLToPath(new URL('./deployment-windows-first-deployment-actor.mjs', import.meta.url));
     const args = [actor, project, control, taskName, pwsh, git, npmCli, revision, chatId];
     let result;
-    if (receiptLoss) {
+    if (publicFirst) {
+      const publicDeploy = fileURLToPath(new URL('../scripts/deploy.ps1', import.meta.url));
+      const output = await execute(pwsh, [
+        '-NoProfile', '-NonInteractive', '-File', publicDeploy,
+        '-ProjectDir', project, '-TaskName', taskName, '-Revision', revision,
+        '-NoTunnel', '-WaitSeconds', '120', '-TimeoutSeconds', '900', '-Json',
+      ], {
+        cwd: root, env: {
+          ...process.env, PATH: [path.dirname(process.execPath), path.dirname(git), path.dirname(pwsh)].join(path.delimiter),
+        }, timeout: 1800000, maxBuffer: 65536,
+      });
+      result = JSON.parse(output.stdout);
+      assert.equal(result.status, 'accepted');
+      assert.equal(result.backupCreated, false);
+      assert.equal(result.closeoutRequired, false);
+      assert.equal(result.closeoutStatus, 'completed');
+    } else if (receiptLoss) {
       result = await crashWindowsFirstApplication({ args, control, taskName, pwsh });
       assert.equal(result.status, 'actor-terminated-before-receipt');
     } else {
@@ -99,7 +118,7 @@ test(receiptLoss
     assert.match(before.definition, defaultPolicy ? /<LogonType>InteractiveToken<\/LogonType>/
       : /<LogonType>S4U<\/LogonType>/);
     const api = await loginDeploymentFixture();
-    if (receiptLoss) {
+    if (receiptLoss || publicFirst) {
       assert.equal((await api('/api/chats', { chat: {
         id: chatId, name: 'Surviving first Windows deployment', ts: Date.now(), agentSessions: {},
         messages: [{ id: 'first', type: 'user', content: 'First deployment data survives closeout', ts: Date.now() }],
@@ -108,12 +127,14 @@ test(receiptLoss
     const chat = (await api(`/api/chats?id=${chatId}`)).chat;
     assert.equal(chat.messages[0].content, 'First deployment data survives closeout');
     const engine = await verifyRecoveryEngine({ control, manifestSha256: result.recoveryEngine });
-    const command = retirementRecoveryInvocation(engine, { control, project, operationId, pwsh, kind: 'task' });
-    const final = await execute(command.file, command.args, {
-      cwd: root, env: command.env, timeout: 300000, maxBuffer: 32768,
-    });
-    assert.equal(final.stderr, '');
-    assert.deepEqual(JSON.parse(final.stdout), { status: 'completed', operationId, phase: 'accepted' });
+    if (!publicFirst) {
+      const command = retirementRecoveryInvocation(engine, { control, project, operationId, pwsh, kind: 'task' });
+      const final = await execute(command.file, command.args, {
+        cwd: root, env: command.env, timeout: 300000, maxBuffer: 32768,
+      });
+      assert.equal(final.stderr, '');
+      assert.deepEqual(JSON.parse(final.stdout), { status: 'completed', operationId, phase: 'accepted' });
+    }
     if (receiptLoss) {
       receipt = await readFile(path.join(control, 'deployment.json'));
       const recovered = JSON.parse(receipt);

@@ -13915,6 +13915,72 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DB: Expose the admitted first deployment through explicit public NoTunnel
+
+**Scope:** the approved explicit `deploy.ps1 -NoTunnel` first-install route,
+using current account and existing Interactive/AtLogOn defaults. Do not treat
+failed managed-task inspection as proof of absence. Existing task deployments
+keep their current path; default tunnel mode, other accounts, adoption and
+restore remain explicitly unsupported until their own integration is accepted.
+
+**Files:** existing public wrapper/context, command admission, actual first
+application test and workflow; add `windows-command-options.mjs` for
+Windows-only argument normalization and `windows-first-command.mjs` for fresh
+inspection/configuration/lock/first-deployment composition.
+
+- [x] Extend the actual application matrix with `public-first`. Invoke the
+  real public PowerShell entry, not the internal actor:
+  ```js
+  await execute(pwsh, [
+    '-NoProfile', '-NonInteractive', '-File', publicDeploy,
+    '-ProjectDir', project, '-TaskName', taskName, '-Revision', revision,
+    '-NoTunnel', '-WaitSeconds', '120', '-TimeoutSeconds', '900', '-Json',
+  ], { env: publicEnvironment, timeout: 1800000, maxBuffer: 65536 });
+  ```
+  Require accepted result, no backup, completed supervisor closeout, default
+  InteractiveToken/AtLogOn, no operation/controller residue and subsequent
+  authenticated chat preservation through public update no-op. Keep the
+  internal normal, receipt-loss and default-policy cases unchanged.
+- [ ] Push and dispatch the actual matrix only after the pending actual3
+  gate completes. Capture the new public case's explicit unsupported-mode
+  refusal before implementation; do not cancel required earlier acceptance.
+- [ ] Normalize only `--no-tunnel`, `--task-logon-type` and
+  `--task-trigger-type` in a Windows adapter around existing `parseArguments`.
+  Reject duplicates, invalid values and use on update/status/verify or without
+  explicit NoTunnel. Keep the shared Linux parser unchanged. Add portable
+  admission tests for valid fresh-mode routing before missing context and
+  invalid combinations before installation access.
+- [ ] Forward these explicit options through public wrapper and context.
+  Keep UserId and unsupported modes refused before access. Require fresh
+  control (no state or evidence) and exact native first-install inspection.
+  Build the fresh environment from explicit Node/Git/PowerShell paths,
+  supervisor SystemRoot/TEMP/TMP and native current-user home; never forward
+  arbitrary inherited PATH, Node hooks or credentials.
+- [ ] Compose existing capabilities:
+  ```js
+  scope = await inspectWindowsFirstInstall({ project, taskName, pwsh, signal });
+  configuration = await inspectWindowsFirstConfiguration({
+    scope, pwsh, profile: 'agents-chat-auth-638c553', signal,
+  });
+  lock = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
+  result = await runWindowsFirstDeployment({
+    ...options, scope, configuration, control, lock, node, npmCli, git, pwsh,
+    environment, port: 3010, deploymentBytes: 2 * 1024 ** 3, signal, onProgress,
+  });
+  ```
+  Recheck original empty state after lock. On failure release only a pristine
+  owned lock with unchanged null state and fresh native installation proof;
+  retain all mutated/uncertain evidence. Close configuration/observer with
+  explicit aggregate cleanup errors. Return original operation ID and saved
+  recovery binding to the unchanged supervisor finalizer.
+- [ ] Update native public no-side-effect tests: update still refuses
+  NoTunnel; deploy supports it but rejects conflicting first-policy requests.
+  Preserve read-only status and inherited Node-hook stripping coverage.
+  Push and accept portable/native command contracts plus actual matrix4.
+- [ ] Update public help/README with the exact accepted fresh NoTunnel route
+  and remaining gates. Do not label no-tunnel acceptance default tunnel
+  acceptance or claim other-user/legacy-task adoption.
+
 ### Task 5DA: Verify the existing default first-task policy on a live native runtime
 
 **Files:** extend `tests/deployment-windows-first-completion.test.mjs` and its

@@ -229,7 +229,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [normal, receipt-loss, default-policy]
+        scenario: [normal, receipt-loss, default-policy, public-first]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -243,6 +243,7 @@ jobs:
           DEPLOYMENT_TEST_FIRST_ONLY: ${{ inputs.windows_first_application_only }}
           DEPLOYMENT_TEST_WINDOWS_FIRST_RECEIPT_LOSS: ${{ matrix.scenario == 'receipt-loss' && '1' || '0' }}
           DEPLOYMENT_TEST_WINDOWS_FIRST_DEFAULT_POLICY: ${{ matrix.scenario == 'default-policy' && '1' || '0' }}
+          DEPLOYMENT_TEST_WINDOWS_FIRST_PUBLIC: ${{ matrix.scenario == 'public-first' && '1' || '0' }}
           DEPLOYMENT_TEST_COMMANDS_ONLY: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         run: |
           if ($env:DEPLOYMENT_TEST_FIRST_ONLY -eq 'true' -and $env:DEPLOYMENT_TEST_COMMANDS_ONLY -ne 'true') {
