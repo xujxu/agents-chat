@@ -13608,14 +13608,73 @@ null identity, but cannot acquire future cold receipt-publication authority.
   Require null provenance, unchanged runtime observation/state/receipt, then
   restore every original byte and reopen the current proof. This is schema
   compatibility coverage, not a claim of running a historical producer.
-- [ ] Accept the focused native gate and saved-source dependency closure in
+- [x] Accept the focused native gate and saved-source dependency closure in
   Actions, then the full native first selection before using this evidence for
   a separate cold publication operation. Keep public first deployment gated.
   Focused `d0dbc5b / 38063498689`, job `114246345530`, passed **7/7** at
   `2026-10-10 15:41:24 UTC` (job success `15:41:29`). Cold retained identity,
   valid-format wrong receipt refusal and legacy-schema compatibility passed in
-  126,855 ms; saved-source closure passed in 4,109 ms. Native40 and the actual
-  first application/public-update lifecycle still need this revision accepted.
+  126,855 ms; saved-source closure passed in 4,109 ms.
+  `d87981b / 38064697243`, job `114249868659`, then passed **40/40** native
+  cases at `2026-10-10 16:17:01 UTC` (job complete `16:17:07`).
+  Real first application/public-update `d87981b / 38064697428`, job
+  `114249868320`, passed in 1,168,820 ms at `16:02:22 UTC`.
+
+### Task 5CW: Publish a missing first receipt after original actor loss
+
+**Files:** add `windows-first-receipt-recovery.mjs` for fresh actual acceptance;
+add `windows-first-receipt-publication.mjs/.ps1` and its native controller for
+admitted create-only publication; reuse the first completion proof, original
+identity validators, current managed observer/configuration/source/artifact
+inspectors and `WindowsPrivateFile.Publish`. Include every new dependency in
+the saved recovery inventory. No public routing or automatic evidence deletion
+is granted by this operation.
+
+- [x] Add `tests/deployment-windows-first-receipt-recovery-case.mjs` and the
+  `cold-first-receipt-publication` crash scenario. The actual original actor
+  completes all native runtime edges without publishing a deployment receipt.
+  Require refusal while that actor lives. After genuine actor/publisher loss,
+  alter the fixture's BUILD_ID and require refusal without receipt/state/lock
+  mutation; restore only those fixture-owned bytes before the valid path:
+  ```js
+  const receipt = await recoverWindowsFirstDeploymentReceipt({
+    control, project, operationId, pwsh, admission,
+  });
+  ```
+  Require exact original accepted metadata, current service identity, unchanged
+  original lock/state/runtime, byte-identical idempotent replay, and acceptance
+  by the existing retained first proof. Extend focused receipt selection to
+  eight cases (native first selection becomes 41).
+- [ ] Run the focused Actions selector and confirm the missing implementation
+  before adding publication authority.
+- [ ] Open the existing first completion proof with its recovery-exclusive
+  release-intent handle. Require complete phase, original actors absent and
+  non-null original deployment identity. Keep existing staging conflicts
+  refused and reject incomplete native pending publication files; do not
+  delete or reinterpret them.
+- [ ] Reinspect the original running managed task, supported configuration,
+  exact source metadata and build artifacts; compare source/build/dependencies/
+  config against original prepared identity before any publication. Use the
+  existing accepted-runtime/readiness checks before and after native publication.
+- [ ] Validate the supplied service-identity JSON preimage against native
+  retained project/task/definition/security/principal/enabled/configuration
+  fields. Hash its exact JSON bytes using the existing service-identity shape.
+  Native code constructs receipt version/project/operation/status/acceptedAt
+  from retained original state, never from caller-selected metadata. Publish
+  create-only with the existing private atomic writer, retaining its handle:
+  ```powershell
+  $file = [Deployment.WindowsPrivateFile]::Publish(
+      (Join-Path $context.Control 'deployment.json'), $receiptText)
+  $context.Files.Add($file)
+  $context.DeploymentReceiptPresent = $true
+  ```
+  An already-existing receipt must match the same original identity and current
+  service, and return unchanged rather than be replaced. Closing this scope
+  releases only its own handles, not the original operation lock or runtime.
+- [ ] Accept the focused native gate and saved dependency closure before
+  integrating saved closeout or incomplete completion-step recovery. Add
+  real-application actor-loss coverage in that integration gate; native fixture
+  acceptance alone is not real application cold-recovery acceptance.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 

@@ -12,6 +12,7 @@ import { prepareWindowsFirstProofCase } from './deployment-windows-first-proof-c
 import { prepareWindowsFirstRecoveryCase } from './deployment-windows-first-recovery-cases.mjs';
 import { prepareWindowsFirstRetirementCase } from './deployment-windows-first-retirement-case.mjs';
 import { prepareWindowsFirstSavedCloseoutCase } from './deployment-windows-first-closeout-case.mjs';
+import { prepareWindowsFirstReceiptRecoveryCase } from './deployment-windows-first-receipt-recovery-case.mjs';
 
 const execute = promisify(execFile);
 const actor = fileURLToPath(new URL('./deployment-windows-first-crash-actor.mjs', import.meta.url));
@@ -25,12 +26,14 @@ for (const scenario of [
   { step: 'lease-released', recovery: true, stopRecoveryAfter: 'permanent-policy-applied' },
   { step: 'lease-released', recovery: true, stopRecoveryAfter: 'enable-applied' },
   { step: 'complete', proof: true, receipt: true },
+  { step: 'complete', receiptRecovery: true },
   { step: 'complete', receipt: true, retirement: true },
   { step: 'complete', receipt: true, retirement: true, interruptRetirement: true },
   { step: 'complete', receipt: true, retirement: true, savedCloseout: true },
 ]) {
   const { step } = scenario;
   const name = scenario.savedCloseout ? 'cold-first-saved-closeout'
+    : scenario.receiptRecovery ? 'cold-first-receipt-publication'
     : scenario.interruptRetirement ? 'cold-first-retirement-actor-loss'
     : scenario.retirement ? 'cold-first-retirement' : scenario.receipt ? 'cold-receipt-proof'
     : scenario.stopRecoveryAfter ? `recovery-actor-${scenario.stopRecoveryAfter}`
@@ -91,6 +94,7 @@ for (const scenario of [
         if (scenario.proof) proofCase = await prepareWindowsFirstProofCase({
           fixture, active, port, release, state, completed: scenario.receipt === true,
         });
+        if (scenario.receiptRecovery) proofCase = await prepareWindowsFirstReceiptRecoveryCase({ fixture, state });
         if (scenario.recovery) recoveryCase = await prepareWindowsFirstRecoveryCase({
           fixture, active, step, port, release, state, stopRecoveryAfter: scenario.stopRecoveryAfter,
           waitForController: identity => observe('AwaitPublisherExit', identity), observe: () => observe('Inspect'),

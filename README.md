@@ -259,6 +259,9 @@ configuration identities in its existing hash-linked record at `d0dbc5b`
 identity and rejects mismatched receipt digests; legacy records remain readable
 without inventing missing provenance. This does not yet authorize cold receipt
 publication when the original actor died before publishing one.
+The identity handoff also passed all 40 native first-install cases at
+`d87981b / 38064697243` and the real first-application/public-update lifecycle
+at `d87981b / 38064697428`.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
