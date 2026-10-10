@@ -41,6 +41,31 @@ function Assert-AgentsChatFirstRuntime([hashtable]$Context) {
     }
 }
 
+function Open-AgentsChatFirstRuntimeListener([hashtable]$Context, [scriptblock]$CheckAuthority) {
+    if ($null -eq $Context.Activation -or $null -eq $Context.Activation.Runtime -or $Context.Activation.Stopped) {
+        throw 'First-runtime listener requires original active authority.'
+    }
+    & $CheckAuthority
+    $runtime = $Context.Activation.Runtime
+    if ($null -eq $Context.Listener) {
+        try {
+            $Context.Listener = [Deployment.WindowsRuntimeListener]::Retain(
+                [guid]$runtime.generation, $runtime.pid, $runtime.identity, $runtime.launcherPid, $Context.Port)
+        } catch {
+            if ($_.Exception.GetBaseException() -isnot [Deployment.WindowsRuntimeListenerNotReadyException]) { throw }
+            & $CheckAuthority
+            return @{ status='not-ready' }
+        }
+        $null = Retain-AgentsChatFirstTaskResource $Context $Context.Listener
+    }
+    & $CheckAuthority
+    return [ordered]@{
+        status='retained'; generation=$runtime.generation; port=$Context.Port
+        pid=$Context.Listener.ListenerPid; identity=$Context.Listener.ListenerIdentity
+        address=$Context.Listener.Address; createdAt=$Context.Listener.CreatedAt; pairedRecords=$Context.Listener.PairedRecords
+    }
+}
+
 function Stop-AgentsChatFirstRuntime([hashtable]$Context) {
     $activation = $Context.Activation
     if ($null -eq $activation -or $activation.Stopped) { return }

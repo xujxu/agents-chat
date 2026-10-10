@@ -13326,13 +13326,16 @@ first-runtime publisher/native activation helper, and the Windows Actions step.
   Require original `published.verifyReadiness({waitSeconds, signal})` and reject
   use before activation. These are protocol fixtures, not actual Next/login
   acceptance, and cannot publish a deployment receipt.
-- [ ] Push/run the command-only gate, requiring
+- [x] Push/run the command-only gate, requiring
   `Missing original first-runtime HTTP readiness`.
-- [ ] Reuse `WindowsRuntimeListener.Retain` with original owner/generation/
+  `31a9d77 / 38027512384`, job `114141394865`, confirmed all three missing
+  capability assertions at `2026-10-10 05:42:42 UTC`; the prior seventeen
+  contracts passed, including real first-runtime positive and failed startup.
+- [x] Reuse `WindowsRuntimeListener.Retain` with original owner/generation/
   launcher/port from the active first-runtime scope. Retain/check the listener
   alongside original native resources; only its explicit not-ready exception
   is retryable. Never probe a foreign port owner.
-- [ ] Reuse `waitWindowsReadiness` with the original configuration's admitted
+- [x] Reuse `waitWindowsReadiness` with the original configuration's admitted
   providers and original publication port. The private adapter supplies native
   listener observation and full original-authority recheck after HTTP. Do not
   accept caller-supplied provider/port overrides or invent a managed-task scope.

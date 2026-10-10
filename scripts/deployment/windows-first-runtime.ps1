@@ -45,7 +45,7 @@ try {
         (Join-Path $PSScriptRoot 'WindowsWorkerJob.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeDomain.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimePipe.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeControl.cs'),
         (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
-        (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'))
+        (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-maintenance.ps1')
     . (Join-Path $PSScriptRoot 'windows-runtime-bundle.ps1')
     . (Join-Path $PSScriptRoot 'windows-first-task.ps1')
@@ -117,7 +117,7 @@ try {
         Bundle=$bundle; Identity=$identity; Pwsh=$pwsh
         ConfiguringStateFile=$stateFile; OriginalState=$state
         ActivationPrepared=$false; ActivatingStateSha256=$null
-        Activation=$null
+        Activation=$null; Listener=$null; Port=$Port
     }
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; controllerIdentity=$ControllerIdentity
@@ -136,7 +136,7 @@ try {
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task', 'prepare-activation', 'activate')) { throw 'Unexpected first-runtime request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task', 'prepare-activation', 'activate', 'listener')) { throw 'Unexpected first-runtime request.' }
         $sequence = $id
         Assert-FirstRuntimePublication
         $value = $method
@@ -156,6 +156,10 @@ try {
         if ($method -ceq 'activate') {
             $stage = 'first-runtime-activation'
             $value = Start-AgentsChatFirstRuntime $context $firstTask { Assert-FirstRuntimePublication }
+        }
+        if ($method -ceq 'listener') {
+            $stage = 'first-runtime-listener'
+            $value = Open-AgentsChatFirstRuntimeListener $context { Assert-FirstRuntimePublication }
         }
         if ($method -ceq 'close' -and $null -ne $context.Activation) {
             $stage = 'first-runtime-settlement'

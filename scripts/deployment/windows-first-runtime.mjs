@@ -12,6 +12,8 @@ import { readWorkerJournal } from './worker-journal.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
+import { captureActivatedRuntime, captureTaskListener } from './windows-task-controller.mjs';
+import { waitWindowsReadiness } from './windows-readiness.mjs';
 
 const script = fileURLToPath(new URL('./windows-first-runtime.ps1', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -126,6 +128,7 @@ export async function prepareWindowsFirstRuntime({
     let registered = false;
     let registeredTask;
     let activated = false;
+    let activeRuntime;
     let registering = false;
     const request = async (method, requestSignal, options = {}) => {
       if (busy || closed) throw failure ?? refused(new Error('Original first-runtime publication is busy or closed.'));
@@ -139,7 +142,7 @@ export async function prepareWindowsFirstRuntime({
         }),
           ['id', 'type', 'processIdentity', 'value'], 'first-runtime reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== ready.processIdentity
-          || !['register-task', 'prepare-activation', 'activate'].includes(method) && reply.value !== method) {
+          || !['register-task', 'prepare-activation', 'activate', 'listener'].includes(method) && reply.value !== method) {
           throw new Error('Unexpected first-runtime acknowledgement.');
         }
         if (method === 'register-task') {
@@ -181,28 +184,21 @@ export async function prepareWindowsFirstRuntime({
           const active = captureWorkerFields(reply.value, [
             'status', 'applicationHealthy', 'taskName', 'controllerPid', 'controllerIdentity', 'configurationSha256', 'runtime',
           ], 'first-runtime activation');
-          const runtime = captureWorkerFields(active.runtime, [
-            'pid', 'identity', 'generation', 'instanceGuid', 'sessionId', 'configurationSha256', 'launcherPid', 'readySha256',
-          ], 'first-runtime ownership');
-          const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+          const runtime = captureActivatedRuntime(active.runtime);
           if (active.status !== 'first-runtime-running' || active.applicationHealthy !== false
             || active.taskName !== observed.taskName || active.controllerPid !== ready.pid
             || active.controllerIdentity !== ready.processIdentity || active.configurationSha256 !== bundle.sha256
-            || !Number.isSafeInteger(runtime.pid) || runtime.pid < 1 || runtime.pid === ready.pid
-            || typeof runtime.identity !== 'string' || !new RegExp(`^${runtime.pid}:[1-9][0-9]*$`).test(runtime.identity)
+            || runtime.pid === ready.pid
             || runtime.identity !== await processIdentity(runtime.pid)
-            || ![runtime.generation, runtime.instanceGuid].every(value => typeof value === 'string' && uuid.test(value)
-              && value !== '00000000-0000-0000-0000-000000000000')
-            || !Number.isSafeInteger(runtime.sessionId) || runtime.sessionId < 0
-            || !Number.isSafeInteger(runtime.launcherPid) || runtime.launcherPid < 1
-            || runtime.configurationSha256 !== bundle.sha256
-            || typeof runtime.readySha256 !== 'string' || !/^[a-f0-9]{64}$/.test(runtime.readySha256)) {
+            || runtime.configurationSha256 !== bundle.sha256) {
             throw new Error('First-runtime ownership differs from its original controller.');
           }
           await authority(requestSignal);
           activated = true;
-          return Object.freeze({ ...active, runtime: Object.freeze(runtime) });
+          activeRuntime = Object.freeze(runtime);
+          return Object.freeze({ ...active, runtime: activeRuntime });
         }
+        if (method === 'listener') return captureTaskListener(reply.value, activeRuntime, port);
         if (method === 'close') {
           const result = await bridge.waitForExit();
           if (result.code !== 0 || result.signal !== null) throw new Error('First-runtime publisher did not close cleanly.');
@@ -243,6 +239,16 @@ export async function prepareWindowsFirstRuntime({
           throw refused(new Error('First-runtime startup requires its unused activating authority.'));
         }
         return request('activate', requestSignal);
+      },
+      verifyReadiness: async ({ waitSeconds = 120, signal: requestSignal } = {}) => {
+        if (closed || busy || !activated) throw refused(new Error('First-runtime readiness requires its original active owner.'));
+        return waitWindowsReadiness({
+          context: {
+            listener: ({ signal: listenerSignal }) => request('listener', listenerSignal),
+            check: ({ signal: checkSignal }) => request('check', checkSignal),
+          },
+          port, providers: configuration.providers, waitSeconds, signal: requestSignal,
+        });
       },
       close: async () => { if (!closed) await request('close'); },
     });

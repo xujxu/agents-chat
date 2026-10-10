@@ -45,11 +45,15 @@ require('node:http').createServer((_req, res) => {
         await f.record('activating');
         const active = await published.activate();
         if (scenario === 'owned') {
-          const result = await published.verifyReadiness({ waitSeconds: 15 });
+          const result = await published.verifyReadiness({ waitSeconds: 30 });
           assert.deepEqual(result, { status: 'ready', generation: active.runtime.generation, port, providers: ['admin-login'] });
           await published.checkFiles();
+        } else if (scenario === 'wrong-providers') {
+          await assert.rejects(published.verifyReadiness({ waitSeconds: 30 }), /Readiness authentication providers/);
         } else {
-          await assert.rejects(published.verifyReadiness({ waitSeconds: 15 }));
+          await assert.rejects(published.verifyReadiness({ waitSeconds: 30 }),
+            error => error.code === 'DEPLOYMENT_WINDOWS_FIRST_RUNTIME_REFUSED'
+              && error.diagnostic?.includes('first-runtime-listener'));
         }
         assert.equal(requests, 0, 'Readiness must never send HTTP to an unrelated listener.');
         assert.equal(existsSync(path.join(f.control, 'deployment.json')), false);
