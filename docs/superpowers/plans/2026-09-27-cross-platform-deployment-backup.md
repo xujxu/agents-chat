@@ -13941,7 +13941,7 @@ inspection/configuration/lock/first-deployment composition.
   InteractiveToken/AtLogOn, no operation/controller residue and subsequent
   authenticated chat preservation through public update no-op. Keep the
   internal normal, receipt-loss and default-policy cases unchanged.
-- [ ] Push and dispatch the actual matrix only after the pending actual3
+- [x] Push and dispatch the actual matrix only after the pending actual3
   gate completes. Capture the new public case's explicit unsupported-mode
   refusal before implementation; do not cancel required earlier acceptance.
   Initial public case `dbe4098 / 38083717231`, job `114305720066`, failed at
@@ -13950,19 +13950,25 @@ inspection/configuration/lock/first-deployment composition.
   cleanup, preserving other errors. Add `windows_first_public_only=true`
   with a separate concurrency suffix to rerun this one case without rebuilding
   the three independent internal cases or superseding their pending evidence.
-- [ ] Normalize only `--no-tunnel`, `--task-logon-type` and
+  Isolated `75120b6 / 38083931013`, job `114306356599`, completed at
+  `2026-10-10 20:29:40 UTC`: real public entry failed explicitly with
+  `DEPLOYMENT_COMMAND_MODE_UNSUPPORTED` (1,738 ms), with no cleanup masking.
+  Separate parser causal `eac5922 / 38083823601`, job `114306040221`,
+  preserved all ten existing contracts; three new policy contracts failed
+  because `--no-tunnel` was unknown.
+- [x] Normalize only `--no-tunnel`, `--task-logon-type` and
   `--task-trigger-type` in a Windows adapter around existing `parseArguments`.
   Reject duplicates, invalid values and use on update/status/verify or without
   explicit NoTunnel. Keep the shared Linux parser unchanged. Add portable
   admission tests for valid fresh-mode routing before missing context and
   invalid combinations before installation access.
-- [ ] Forward these explicit options through public wrapper and context.
+- [x] Forward these explicit options through public wrapper and context.
   Keep UserId and unsupported modes refused before access. Require fresh
   control (no state or evidence) and exact native first-install inspection.
   Build the fresh environment from explicit Node/Git/PowerShell paths,
   supervisor SystemRoot/TEMP/TMP and native current-user home; never forward
   arbitrary inherited PATH, Node hooks or credentials.
-- [ ] Compose existing capabilities:
+- [x] Compose existing capabilities:
   ```js
   scope = await inspectWindowsFirstInstall({ project, taskName, pwsh, signal });
   configuration = await inspectWindowsFirstConfiguration({

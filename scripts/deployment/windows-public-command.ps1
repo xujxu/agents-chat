@@ -17,10 +17,11 @@ function Invoke-WindowsPublicCommand {
                 message = @"
 Usage: pwsh -NoProfile -File scripts/$Operation.ps1 [options]
 
-Existing running managed tasks only; requires elevated PowerShell 7.4+ and
+Existing running managed tasks or explicit first -NoTunnel deployment.
+Requires elevated PowerShell 7.4+ and
 Node.js 24 with its bundled npm, plus Git on the controller PATH.
   -ProjectDir PATH       Installed checkout (default: this tools checkout)
-  -TaskName NAME         Existing task (default: Agents-Chat-Startup)
+  -TaskName NAME         Task name (default: Agents-Chat-Startup)
   -Revision SHA          Full locally available commit; conflicts with -SkipGitPull
   -SkipGitPull           Keep current source revision
   -NoInstall            Skip npm ci, but still build and verify
@@ -30,9 +31,14 @@ Node.js 24 with its bundled npm, plus Git on the controller PATH.
   -Json                 One JSON result on stdout; progress/errors on stderr
   -Help                 Show this help without accessing tools or installation
 
-First installation, legacy/stopped tasks, restore, -NoWait, -Verify, -DryRun,
--RemoveTask and explicit -UserId/-NoTunnel/-TaskLogonType/-TaskTriggerType
-changes are not supported yet. There is no legacy deployment fallback.
+First installation: deploy -NoTunnel requires a fresh source/config checkout,
+no .data/.next/node_modules, no registered task and no deployment evidence.
+Uses the current account, Interactive/AtLogOn by default; optional
+-TaskLogonType Interactive|S4U and -TaskTriggerType AtLogOn|AtStartup
+are first-install-only. Dependencies and verified startup are required.
+Default tunnel first installation, legacy/stopped tasks, restore, -NoWait,
+-Verify, -DryRun, -RemoveTask, -UserId and existing-task policy changes
+are not supported yet. There is no legacy deployment fallback.
 The existing task identity, account, triggers and configuration are preserved.
 Readiness uses port 3010. Control/backup lives in sibling .<project>.deployment;
 private helpers use sibling .<project>.deployment-controllers.
@@ -43,8 +49,12 @@ must be retained for inspection. Never manually remove an operation lock.
         } else {
             $unsupported = $Options['NoWait'] -or $Options['Verify'] -or $Options['DryRun'] -or $Options['RemoveTask'] -or
                 ($Options.ContainsKey('WaitSeconds') -and $Options['WaitSeconds'] -eq 0)
-            foreach ($name in @('UserId', 'NoTunnel', 'TaskLogonType', 'TaskTriggerType')) {
-                if ($Options.ContainsKey($name)) { $unsupported = $true }
+            if ($Options.ContainsKey('UserId')) { $unsupported = $true }
+            $firstPolicy = $Options.ContainsKey('NoTunnel') -or $Options.ContainsKey('TaskLogonType') -or
+                $Options.ContainsKey('TaskTriggerType')
+            if ($firstPolicy -and ($Operation -cne 'deploy' -or -not $Options['NoTunnel'] -or
+                $Options['Status'] -or $Options['NoInstall'])) {
+                $unsupported = $true
             }
             if ($unsupported) {
                 $code = 1
@@ -60,11 +70,15 @@ must be retained for inspection. Never manually remove an operation lock.
                     throw 'An elevated Windows controller is required.'
                 }
                 $arguments = [Collections.Generic.List[string]]::new()
-                foreach ($pair in @(@('SkipGitPull', '--no-pull'), @('NoInstall', '--no-install'), @('Status', '--status'))) {
+                foreach ($pair in @(@('SkipGitPull', '--no-pull'), @('NoInstall', '--no-install'), @('Status', '--status'),
+                    @('NoTunnel', '--no-tunnel'))) {
                     if ($Options[$pair[0]]) { $arguments.Add($pair[1]) }
                 }
                 if ($Options.ContainsKey('Revision')) {
                     $arguments.Add('--revision'); $arguments.Add($Options['Revision'])
+                }
+                foreach ($pair in @(@('TaskLogonType', '--task-logon-type'), @('TaskTriggerType', '--task-trigger-type'))) {
+                    if ($Options.ContainsKey($pair[0])) { $arguments.Add($pair[1]); $arguments.Add($Options[$pair[0]]) }
                 }
                 if (-not $Options['Status'] -or $Options.ContainsKey('WaitSeconds')) {
                     $arguments.Add('--wait')

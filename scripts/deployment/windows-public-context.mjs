@@ -1,13 +1,13 @@
 import { realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { parseArguments } from './cli.mjs';
+import { parseWindowsCommandArguments } from './windows-command-options.mjs';
 import { deploymentDiagnostics } from './deployment-diagnostics.mjs';
 
 const [operation, sourceArgument, projectArgument, taskName, gitArgument, pwshArgument, argumentsJson] = process.argv.slice(2);
 let check = 'arguments';
 try {
   const args = JSON.parse(argumentsJson);
-  const options = parseArguments(operation, args);
+  const options = parseWindowsCommandArguments(operation, args);
   check = 'runtime';
   if (process.platform !== 'win32' || Number(process.versions.node.split('.')[0]) !== 24) {
     throw Object.assign(new Error('Unsupported controller runtime.'), { code: 'DEPLOYMENT_NODE_REQUIRED' });

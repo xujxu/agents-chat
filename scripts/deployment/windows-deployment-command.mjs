@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
-import { parseArguments } from './cli.mjs';
+import { parseWindowsCommandArguments } from './windows-command-options.mjs';
 import { readDeploymentReceipt } from './deployment-receipt.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
 import { acquireLock, loadState, reconcileInterruptedOperation, releaseLock } from './state.mjs';
@@ -10,6 +10,7 @@ import { canonicalWorkerDirectory, externalWorkerDirectory, readWorkerFile } fro
 import { hasUnsettledWorker } from './worker-errors.mjs';
 import { runWindowsLiveDeployment } from './windows-deployment.mjs';
 import { inspectWindowsManagedTask } from './windows-managed-task.mjs';
+import { runWindowsFirstCommand } from './windows-first-command.mjs';
 
 const refused = (code, message) => Object.assign(new Error(message), { code });
 const canonical = value => typeof value === 'string' && value.length <= 4096
@@ -19,10 +20,10 @@ export async function runWindowsDeploymentCommand({
   operation, args, project, control, taskName, node, npmCli, git, pwsh, signal, onProgress,
 }) {
   if (!['deploy', 'update'].includes(operation)) throw new Error('Unsupported Windows deployment command.');
-  const options = parseArguments(operation, args);
+  const options = parseWindowsCommandArguments(operation, args);
   if (options.help) return {
     status: 'help',
-    message: 'Windows command admission supports existing running managed tasks, positive health waits and read-only status.',
+    message: 'Windows command admission supports existing running managed tasks, explicit first NoTunnel deployment, positive health waits and read-only status.',
   };
   if (options.operation === 'verify' || options.waitSeconds === 0 || options.dryRun) {
     throw refused('DEPLOYMENT_COMMAND_MODE_UNSUPPORTED',
@@ -56,6 +57,14 @@ export async function runWindowsDeploymentCommand({
   }
   if (!['idle', 'already-current', 'preflight-refused', 'prior-runtime-restored'].includes(status.status)) {
     throw refused('DEPLOYMENT_RECOVERY_REQUIRED', 'Existing operation needs inspection or recovery before another deployment.');
+  }
+  if (options.firstInstall) {
+    if (originalState || names.length) {
+      throw refused('DEPLOYMENT_FRESH_INSTALL_REQUIRED', 'Explicit first-task policy requires a fresh installation with no deployment evidence.');
+    }
+    return runWindowsFirstCommand({
+      options, project, control, taskName, node, npmCli, git, pwsh, signal, onProgress,
+    });
   }
   let scope;
   let lock;

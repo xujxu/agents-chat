@@ -615,8 +615,10 @@ of first installation and cold recovery remains pending.
 PowerShell **7.4 or newer**, with **Node.js 24** (including its bundled npm)
 and Git on the controller PATH. This replaces the legacy deploy implementation;
 there is no fallback that kills port owners, reinstalls a task or builds before
-backup. Only an existing running managed task is supported in this batch.
-Legacy watchdog tasks, stopped tasks and first installation are not yet supported.
+backup. Existing running managed tasks are accepted. The explicit fresh
+`deploy.ps1 -NoTunnel` route is implemented but its public application
+acceptance is still pending; legacy watchdog and stopped-task adoption remain
+unsupported.
 
 ```powershell
 # Read-only help or status (no control files or helper capture)
@@ -640,10 +642,16 @@ and `-Help`. Readiness uses port **3010**. The private sibling
 Successful captures are removed only after original processes settle. Failed
 captures and all recovery evidence must be retained for inspection.
 Inherited `NODE_OPTIONS`/`NODE_PATH` do not configure the controller or runtime.
-`-NoWait`, zero wait, `-Verify`, `-DryRun`, `-RemoveTask` and explicit
-`-UserId`, `-NoTunnel`, `-TaskLogonType` or `-TaskTriggerType` are temporarily
-refused before installation access. First deployment and public restore remain
-unfinished; do not use the old task installer as an automatic recovery fallback.
+`-NoWait`, zero wait, `-Verify`, `-DryRun`, `-RemoveTask` and explicit `-UserId`
+are temporarily refused before installation access. First-only `-NoTunnel`
+requires `deploy`, dependency installation, positive readiness waits, a fresh
+checkout/configuration, no `.data`/`.next`/`node_modules`, no registered task,
+and no previous deployment state/evidence. Its default policy is the current
+account with Interactive/AtLogOn; optional `-TaskLogonType Interactive|S4U`
+and `-TaskTriggerType AtLogOn|AtStartup` require this same fresh NoTunnel mode.
+These options cannot reconfigure an existing installation or an update.
+Default-tunnel first deployment and public restore remain unfinished; do not
+use the old task installer as an automatic recovery fallback.
 
 ### Deployment (Linux systemd)
 
