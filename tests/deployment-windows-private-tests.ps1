@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory)][string[]]$Tests,
-    [string]$NamePattern
+    [string]$NamePattern,
+    [ValidateRange(1, 2400)][int]$TimeoutSeconds = 1800
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -37,7 +38,7 @@ try {
     $controller = [Deployment.WindowsControllerProcess]::Start($node, $arguments.ToArray(), $root, $environment)
     $output = $controller.StandardOutput.ReadToEndAsync()
     $diagnostic = $controller.StandardError.ReadToEndAsync()
-    if (-not $controller.WaitForExit(1800000)) { throw 'Private Windows tests timed out.' }
+    if (-not $controller.WaitForExit($TimeoutSeconds * 1000)) { throw 'Private Windows tests timed out.' }
     $code = $controller.ExitCode
     $controller.Kill()
     if (-not $output.Wait(15000) -or -not $diagnostic.Wait(15000)) { throw 'Private test streams did not close.' }

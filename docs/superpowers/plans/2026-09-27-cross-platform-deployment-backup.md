@@ -13389,7 +13389,7 @@ Files:
   Focused `ac0637b / 38047289219`, job `114199268213`, passed **5/5**
   at `2026-10-10 11:16:33 UTC`; genuine first retirement took 193,229 ms.
   `beb635a / 38047852360` is running the full dual-platform regression.
-- [ ] Exercise genuine loss of three separately admitted retirement actors:
+- [x] Exercise genuine loss of three separately admitted retirement actors:
   after marker publication, after the first deletion, and after every evidence
   entry is deleted but before final marker removal. Each owned Node must be
   forcibly terminated; wait for both exact native helpers to exit and observe
@@ -13398,17 +13398,36 @@ Files:
   must resume the identical final observation, delete only the marker, preserve
   state/receipt/runtime, and permit a new deployment lock. Extend the focused
   selector to six cases; no production behavior change is presumed necessary.
-  `beb635a / 38047850347` is running this focused six-case gate.
+  `beb635a / 38047850347`, job `114200892527`, passed **6/6** at
+  `2026-10-10 11:28:42 UTC`; the genuine three-actor interruption case
+  took 208,714 ms. No additional production recovery fix was necessary.
+  Full `38047852360` has an initial Linux inactive-service failure
+  (`114200898298`, `linux-inactive-service.mjs:100`) because the kernel domain
+  still exists while systemd reports no ControlGroup. This precedes mutation
+  and touches unchanged Linux code. Inspect/retry the exact job after the full
+  run settles; do not weaken the unreported-domain refusal or call the matrix
+  accepted before resolving it.
+  The expanded serial first-crash cases also need a larger bounded CI budget:
+  native37 took 20m38s and the two retirement cases add roughly 6m38s, while
+  the last accepted actual application step took 21m31s. Set the combined
+  Windows job to 75 minutes and this first-install suite to 40 minutes; retain
+  the private runner's existing 30-minute default for other callers. The
+  already-running pinned matrix still has its original 45-minute job limit.
 
 ### Task 5CS: Route saved first-deployment closeout through its actual authority
 
-- [ ] Add a completed first fixture that saves the real recovery engine before
+- [x] Add a completed first fixture that saves the real recovery engine before
   original actor loss, then invokes its verified task-retirement entry in a
-  fresh process after releasing the parent admission. Require the exact
+  fresh process with no parent admission held. Require the exact
   `{ status: 'completed', operationId, phase: 'accepted' }` response, unchanged
   state/receipt/runtime, retained verified recovery engine and fresh lock reuse.
-  Confirm the existing managed-only closeout refuses this first-specific history.
-- [ ] For an exact accepted absent-prior deployment, route completed closeout
+- [x] Confirm the existing managed-only closeout refuses this first-specific
+  history. Causal `9732b3c / 38047989141`, job `114202875668`, ran
+  after the accepted six-case gate.
+  At `2026-10-10 11:42:43 UTC`, the saved-entry case failed specifically with
+  `DEPLOYMENT_WINDOWS_COMPLETED_CLOSEOUT_REFUSED` caused by
+  `DEPLOYMENT_WINDOWS_COMPLETION_PROOF_REFUSED`; the other six cases passed.
+- [x] For an exact accepted absent-prior deployment, route completed closeout
   to `openWindowsFirstDeploymentRetirement`, retaining original state bytes and
   operation binding through every deletion. Keep managed closeout unchanged.
   Require deploy/absent/first-install-absent/null-backup/activating predecessor;

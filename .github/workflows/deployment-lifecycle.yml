@@ -154,7 +154,7 @@ jobs:
     if: ${{ inputs.windows_application_only || !inputs.windows_restore_only }}
     name: Actual Windows live deployment
     runs-on: windows-2022
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
@@ -193,7 +193,7 @@ jobs:
             $pattern = '\((deployment-receipt|cold-proof|cold-receipt-proof|cold-first-retirement|cold-first-retirement-actor-loss|cold-first-saved-closeout)\)$|^saved recovery bundle closes module dependencies'
             $tests = @('tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
           }
-          ./tests/deployment-windows-private-tests.ps1 -Tests $tests -NamePattern $pattern
+          ./tests/deployment-windows-private-tests.ps1 -Tests $tests -NamePattern $pattern -TimeoutSeconds 2400
       - name: Verify native create-only first-task registration
         if: ${{ !cancelled() }}
         shell: pwsh

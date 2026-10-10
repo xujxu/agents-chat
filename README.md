@@ -226,8 +226,11 @@ all three genuine recovery-actor interruptions and the saved-source closure.
 First-specific retirement passed five focused cases at `ac0637b`
 (Actions `38047289219`): exact ordered deletion, exclusive retained evidence,
 interrupted-prefix reopening, unchanged live runtime and final receipt, and
-fresh lock acquisition after cleanup. Genuine retirement-actor loss, the full
-regression and public first-deployment integration remain separate gates.
+fresh lock acquisition after cleanup. Genuine retirement-actor loss passed all
+six focused cases at `beb635a` (Actions `38047850347`): three separate actors
+were terminated after marker publication, the first deletion and all evidence
+deletions; fresh admissions resumed the same marker and original runtime.
+Full regression and public first-deployment integration remain separate gates.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

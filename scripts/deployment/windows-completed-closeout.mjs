@@ -4,6 +4,7 @@ import path from 'node:path';
 import { withWindowsAdmission } from './windows-admission.mjs';
 import { externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 import { validateState } from './state.mjs';
+import { openWindowsFirstDeploymentRetirement } from './windows-first-deployment-retirement.mjs';
 import {
   openWindowsTaskCompletionProof, beginWindowsTaskRetirement, openWindowsTaskRetirement,
   retireNextWindowsTaskFile, beginWindowsDeploymentRetirement, openWindowsDeploymentRetirement,
@@ -57,6 +58,22 @@ export async function closeCompletedWindowsDeployment({ control, project, operat
       let scope;
       let failure;
       try {
+        if (state.priorRuntime === 'absent') {
+          if (state.operation !== 'deploy' || state.phase !== 'accepted'
+            || state.previousPhase !== 'activating' || state.runtimeIdentity !== 'first-install-absent'
+            || state.backupId !== null || state.errorCode !== null) {
+            throw new Error('First deployment closeout requires its exact accepted absent-prior state.');
+          }
+          scope = await openWindowsFirstDeploymentRetirement({ control, pwsh, admission, signal });
+          checkProof(scope.observation);
+          let deployment = await scope.check({ signal });
+          while (deployment.status !== 'retired') {
+            await checkState();
+            deployment = await scope.advance({ signal });
+          }
+          await checkState();
+          return Object.freeze({ status: 'completed', operationId, phase: state.phase });
+        }
         if (await hasMarker(control, 'worker-retirement.json')) {
           scope = await openWindowsDeploymentRetirement({ control, pwsh, admission, signal });
           checkProof(scope.observation.manifest.record.task.intent.intent.completion);
