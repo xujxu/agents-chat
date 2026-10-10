@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory)][int]$OwnerPid,
     [Parameter(Mandatory)][string]$OwnerIdentity,
     [Parameter(Mandatory)][guid]$Generation,
-    [ValidateSet('Inspect', 'Stop', 'KillPublisher', 'AwaitStopped')][string]$Mode = 'Inspect',
+    [ValidateSet('Inspect', 'Stop', 'KillPublisher', 'AwaitStopped', 'AwaitPublisherExit')][string]$Mode = 'Inspect',
     [int]$PublisherPid = 0,
     [string]$PublisherIdentity = ''
 )
@@ -17,7 +17,9 @@ Add-Type -Path @(
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 $task = $scheduler.GetFolder('\').GetTask($TaskName)
-if ($Mode -cin @('Stop', 'AwaitStopped') -and $PublisherPid -gt 0) {
+if ($Mode -ceq 'AwaitPublisherExit' -and $PublisherPid -lt 1) { throw 'An explicit publisher identity is required.' }
+if ($Mode -cin @('Stop', 'AwaitStopped', 'AwaitPublisherExit') -and $PublisherPid -gt 0) {
+    if ($PublisherIdentity -cnotmatch "^$PublisherPid`:[1-9][0-9]*$") { throw 'Invalid publisher identity.' }
     $publisher = $null
     try { $publisher = [Diagnostics.Process]::GetProcessById($PublisherPid) }
     catch { if ($_.Exception.GetBaseException() -isnot [ArgumentException]) { throw } }
@@ -28,6 +30,10 @@ if ($Mode -cin @('Stop', 'AwaitStopped') -and $PublisherPid -gt 0) {
                 -not $publisher.WaitForExit(15000)) { throw 'Original first publisher did not exit after actor death.' }
         } finally { $publisher.Dispose() }
     }
+}
+if ($Mode -ceq 'AwaitPublisherExit') {
+    [Console]::Out.WriteLine('{"status":"publisher-exited"}')
+    exit 0
 }
 if ($Mode -ceq 'AwaitStopped') {
     $deadline = [Diagnostics.Stopwatch]::StartNew()

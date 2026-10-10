@@ -202,6 +202,12 @@ and preserved original runtime. Its saved module closure also works after the
 source disappears. The proof is read-only; recovery mutation is not yet accepted.
 The same revision passed all 42 Linux/Windows jobs (Actions `38039225393`),
 including real public Windows update/no-op with the saved dependency additions.
+Released first-completion recovery passed 32 native cases at `2ffb19c`
+(Actions `38041954471`). Recovery preserves the original runtime across real
+operation-actor loss after lease release, permanent-policy application and
+enablement; it resumes the exact durable sequence, refuses overlapping native
+recovery, and survives orderly close/reopen without restarting the application.
+Abrupt loss of the recovery actor itself remains a separate gate.
 Controller-crash recovery and public first-deployment integration are still
 separate unfinished gates.
 The task parameter and read-only definition changes below passed native

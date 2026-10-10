@@ -1,22 +1,60 @@
 import assert from 'node:assert/strict';
+import { fork } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { acquireWindowsAdmission } from '../scripts/deployment/windows-admission.mjs';
 import { windowsTaskCompletionSteps } from '../scripts/deployment/windows-task-controller.mjs';
 
 const implementation = new URL('../scripts/deployment/windows-first-completion-recovery.mjs', import.meta.url);
+const actor = fileURLToPath(new URL('./deployment-windows-first-recovery-actor.mjs', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const phaseFor = step => ({
   'lease-released': 'release-requested', 'permanent-policy-applied': 'policy-restore-requested',
   'enable-applied': 'enable-requested',
 })[step] ?? step;
 
-export async function prepareWindowsFirstRecoveryCase({ fixture, active, step, port, release, state }) {
+async function crashRecoveryActor({ fixture, stopAfter, waitForController }) {
+  const child = fork(actor, [fixture.control, fixture.pwsh, stopAfter],
+    { execArgv: [], stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  const exited = once(child, 'exit', { signal: AbortSignal.timeout(180000) });
+  let stderr = '';
+  let held;
+  child.stderr.on('data', bytes => { stderr = (stderr + bytes.toString('utf8')).slice(-8192); });
+  const paused = new Promise((resolve, reject) => {
+    child.once('message', message => message?.type === 'paused'
+      ? resolve(message) : reject(new Error('Unexpected first-recovery actor message.')));
+    child.once('error', reject);
+  });
+  try {
+    held = await Promise.race([
+      paused, exited.then(() => { throw new Error(`First-recovery actor exited before its boundary: ${stderr}`); }),
+    ]);
+    assert.equal(held.pid, child.pid);
+    assert.equal(held.observation.step, stopAfter);
+    assert.equal(child.kill(), true);
+    await exited;
+    return held.observation;
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    await exited;
+    if (held) {
+      for (const identity of [held.bridge, held.admission]) {
+        assert.deepEqual(await waitForController(identity), { status: 'publisher-exited' });
+      }
+    }
+  }
+}
+
+export async function prepareWindowsFirstRecoveryCase({
+  fixture, active, step, port, release, state, stopRecoveryAfter, waitForController, observe,
+}) {
   assert.ok(existsSync(implementation), 'Missing first-runtime cold completion recovery');
   const { openWindowsFirstCompletionRecovery: open } = await import(implementation);
-  const admission = await acquireWindowsAdmission({ control: fixture.control, pwsh: fixture.pwsh });
+  let admission = await acquireWindowsAdmission({ control: fixture.control, pwsh: fixture.pwsh });
   const options = { control: fixture.control, pwsh: fixture.pwsh, admission };
   const rejectOpen = async predicate => {
     let unexpected;
@@ -40,11 +78,29 @@ export async function prepareWindowsFirstRecoveryCase({ fixture, active, step, p
     };
     return {
       async verify() {
+        let initialStep = step;
+        let interrupted;
+        if (stopRecoveryAfter) {
+          await admission.close();
+          interrupted = await crashRecoveryActor({ fixture, stopAfter: stopRecoveryAfter, waitForController });
+          verify(interrupted, stopRecoveryAfter);
+          const surviving = await observe();
+          assert.equal(surviving.binding.instanceGuid, active.runtime.instanceGuid);
+          assert.equal(surviving.binding.ownerPid, active.runtime.pid);
+          assert.equal(surviving.binding.enabled, stopRecoveryAfter === 'enable-applied');
+          assert.equal(surviving.lease, 'released');
+          assert.equal(surviving.domain.quiescent, false);
+          assert.ok(surviving.domain.members.includes(active.runtime.launcherPid));
+          admission = await acquireWindowsAdmission({ control: fixture.control, pwsh: fixture.pwsh });
+          options.admission = admission;
+          initialStep = stopRecoveryAfter;
+        }
         let recovery = await open(options);
         try {
-          verify(recovery.observation, step);
+          verify(recovery.observation, initialStep);
+          if (interrupted) assert.deepEqual(recovery.observation, interrupted);
           await rejectOpen(refused);
-          for (const next of windowsTaskCompletionSteps.slice(windowsTaskCompletionSteps.indexOf(step) + 1)) {
+          for (const next of windowsTaskCompletionSteps.slice(windowsTaskCompletionSteps.indexOf(initialStep) + 1)) {
             verify(await recovery.advance(), next);
             verify(await recovery.check(), next);
             if (next === 'policy-restored') {

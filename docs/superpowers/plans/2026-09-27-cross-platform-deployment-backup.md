@@ -13315,6 +13315,33 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CO: Resume after actual first-recovery actor death
+
+Files: `tests/deployment-windows-first-recovery-actor.mjs`, existing
+first-recovery cases, original crash fixture and native completion observer.
+No new production recovery behavior is assumed necessary.
+
+- [x] Add three fixtures that first lose the original operation actor, then fork
+  an independent recovery Node actor with its own real Windows admission.
+  Advance to `released`, `permanent-policy-applied` or `enable-applied` and send
+  the actual observation plus both native helper identities over bounded IPC.
+- [x] Kill that owned Node process, not a mocked callback or orderly `close()`.
+  Wait for both its exact native recovery bridge and admission helper to exit,
+  without stopping the original application or mutating the task:
+  ```js
+  assert.equal(child.kill(), true);
+  await exited;
+  for (const identity of [held.bridge, held.admission]) {
+    assert.deepEqual(await waitForController(identity), { status: 'publisher-exited' });
+  }
+  ```
+  Verify the same original instance, owner, launcher and released Job survived.
+  Acquire a new admission, require an identical reopened recovery observation,
+  finish remaining edges and reuse all chain/native-policy/HTTP assertions.
+- [ ] Run the 35-case native Actions gate. Require all prior 32 cases and all
+  three genuine recovery-actor deaths before first-specific final receipt and
+  retirement integration.
+
 ### Task 5CN: Recover released first completion through bounded durable edges
 
 Files: add `tests/deployment-windows-first-recovery-cases.mjs` and
@@ -13363,11 +13390,16 @@ Extend first-completion records/proof, crash fixtures and saved closure.
   never issue lease release from a new publisher PID.
   Preserve original identity/nested snapshots while writing exact new
   phase/status/definition/enabled/lease/predecessor fields.
-- [ ] Accept all native cases and saved dependency closure, then add genuine
+- [x] Accept all native cases and saved dependency closure, then add genuine
   recovery-actor interruption and first-specific final receipt/retirement.
   All three recovery modules are in the explicit saved inventory, and the
   source-disappearance test imports the recovery factory. Read-only proof
   refusals additionally cover a gapped complete receipt and stopped evidence.
+  `2ffb19c / 38041954471`, job `114183798983`, passed all **32/32** native
+  cases at `2026-10-10 09:45:20 UTC`. Recovery from lease release took
+  84,375 ms; permanent-policy application 65,811 ms; enable application
+  58,532 ms. Saved-source closure passed in 1,878 ms.
+  Full `2ffb19c / 38042553678` is dispatched, not yet accepted.
 
 ### Task 5CM: Reopen a first-specific non-mutating cold completion proof
 

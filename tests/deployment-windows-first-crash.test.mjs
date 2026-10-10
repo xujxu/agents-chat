@@ -19,9 +19,13 @@ for (const scenario of [
   { step: 'release-requested' }, { step: 'lease-released' }, { step: 'lease-released', proof: true },
   { step: 'lease-released', recovery: true }, { step: 'permanent-policy-applied', recovery: true },
   { step: 'enable-applied', recovery: true },
+  { step: 'lease-released', recovery: true, stopRecoveryAfter: 'released' },
+  { step: 'lease-released', recovery: true, stopRecoveryAfter: 'permanent-policy-applied' },
+  { step: 'lease-released', recovery: true, stopRecoveryAfter: 'enable-applied' },
 ]) {
   const { step } = scenario;
-  const name = scenario.proof ? 'cold-proof' : scenario.recovery ? `cold-recovery-${step}` : step;
+  const name = scenario.stopRecoveryAfter ? `recovery-actor-${scenario.stopRecoveryAfter}`
+    : scenario.proof ? 'cold-proof' : scenario.recovery ? `cold-recovery-${step}` : step;
   test(`Windows first-install abrupt actor death preserves the exact original lease boundary (${name})`,
     { skip: process.platform !== 'win32' }, async () => {
       const temporary = await realpath(os.tmpdir());
@@ -49,11 +53,11 @@ for (const scenario of [
         });
         child.once('error', reject);
       });
-      const observe = async mode => JSON.parse((await execute(fixture.pwsh, [
+      const observe = async (mode, publisher = { pid: active.controllerPid, processIdentity: active.controllerIdentity }) => JSON.parse((await execute(fixture.pwsh, [
         '-NoProfile', '-NonInteractive', '-File', observer, '-TaskName', fixture.taskName,
         '-OwnerPid', String(active.runtime.pid), '-OwnerIdentity', active.runtime.identity,
         '-Generation', active.runtime.generation, '-Mode', mode,
-        '-PublisherPid', String(active.controllerPid), '-PublisherIdentity', active.controllerIdentity,
+        '-PublisherPid', String(publisher.pid), '-PublisherIdentity', publisher.processIdentity,
       ], { timeout: 90000, maxBuffer: 65536 })).stdout);
       try {
         const held = await Promise.race([
@@ -74,7 +78,10 @@ for (const scenario of [
         assert.deepEqual(before.triggers, permanent ? [{ type: 8, enabled: true }] : []);
         assert.deepEqual(before.restart, permanent ? { count: 3, intervalSeconds: 60 } : { count: 0, intervalSeconds: null });
         if (scenario.proof) proofCase = await prepareWindowsFirstProofCase({ fixture, active, port, release, state });
-        if (scenario.recovery) recoveryCase = await prepareWindowsFirstRecoveryCase({ fixture, active, step, port, release, state });
+        if (scenario.recovery) recoveryCase = await prepareWindowsFirstRecoveryCase({
+          fixture, active, step, port, release, state, stopRecoveryAfter: scenario.stopRecoveryAfter,
+          waitForController: identity => observe('AwaitPublisherExit', identity), observe: () => observe('Inspect'),
+        });
         assert.deepEqual(await observe('KillPublisher'), { status: 'publisher-terminated' });
         assert.equal(child.kill(), true);
         await exited;
