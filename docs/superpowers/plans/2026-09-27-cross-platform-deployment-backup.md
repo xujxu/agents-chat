@@ -13315,6 +13315,30 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CG: First-runtime listener-bound authentication-provider readiness
+
+Files: `tests/deployment-windows-first-readiness.test.mjs`, the existing
+first-runtime publisher/native activation helper, and the Windows Actions step.
+
+- [x] Add three native causal cases: the actual Job-owned fixture listener
+  serves admitted `admin-login` provider metadata; wrong provider metadata
+  refuses; a healthy but unrelated listener receives zero HTTP requests.
+  Require original `published.verifyReadiness({waitSeconds, signal})` and reject
+  use before activation. These are protocol fixtures, not actual Next/login
+  acceptance, and cannot publish a deployment receipt.
+- [ ] Push/run the command-only gate, requiring
+  `Missing original first-runtime HTTP readiness`.
+- [ ] Reuse `WindowsRuntimeListener.Retain` with original owner/generation/
+  launcher/port from the active first-runtime scope. Retain/check the listener
+  alongside original native resources; only its explicit not-ready exception
+  is retryable. Never probe a foreign port owner.
+- [ ] Reuse `waitWindowsReadiness` with the original configuration's admitted
+  providers and original publication port. The private adapter supplies native
+  listener observation and full original-authority recheck after HTTP. Do not
+  accept caller-supplied provider/port overrides or invent a managed-task scope.
+- [ ] Accept all three native cases and existing first-start/settlement behavior
+  before permanent task policy completion and real Next first-deploy acceptance.
+
 ### Task 5CF: Guarded first runtime start and original-domain settlement
 
 Files: `scripts/deployment/windows-first-activation.ps1`, the original
