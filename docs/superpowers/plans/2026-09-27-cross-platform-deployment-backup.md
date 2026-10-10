@@ -13927,7 +13927,7 @@ not task-policy admission, mutation authority, publication or public restore.
 - Modify `scripts/deployment/saved-recovery-engine.mjs`.
 - Extend `tests/deployment-windows-task-snapshot.mjs`.
 
-- [ ] Extend the existing native task snapshot fixture:
+- [x] Extend the existing native task snapshot fixture:
   ```js
   const archived = await inspectWindowsSnapshotRuntime({
     backup: destination, snapshot: manifest, project: lock.project,
@@ -13942,14 +13942,17 @@ not task-policy admission, mutation authority, publication or public restore.
   Reject wrong project/task, changed expected manifest, overlapping backup
   and cancellation. After completed update, import the reader from the saved
   recovery engine and inspect the same authoritative backup again.
-- [ ] Push these tests and run only the existing snapshot/restoration group:
+- [x] Push these tests and run only the existing snapshot/restoration group:
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_restore_only=true
   ```
   Expected causal failure: missing `windows-snapshot-runtime.mjs` in the
   original-task snapshot case; do not add another workflow selector.
-- [ ] Implement `inspectWindowsSnapshotRuntime({ backup, snapshot, project,
+  Confirmed `acf5b6f / 38092143227`: six existing jobs passed; managed
+  discovery `114330587127` failed at `22:39:27 UTC` with the expected
+  `ERR_MODULE_NOT_FOUND` from the new native snapshot assertion.
+- [x] Implement `inspectWindowsSnapshotRuntime({ backup, snapshot, project,
   taskName, signal })`. Canonicalize private backup outside the project;
   require a matching verified version-3 Windows project snapshot. Capture
   exactly task version/name/definition/security/configuration/digest fields.
@@ -13964,6 +13967,8 @@ not task-policy admission, mutation authority, publication or public restore.
 - [ ] Add the reader to the explicit saved recovery inventory and repeat the
   same Actions selector. Require native snapshot/restore, saved reader import,
   unchanged source/data/task assertions and existing recovery regressions.
+  Implementation and inventory are pushed at `b8f4f48`; run `38092612846`
+  is executing this seven-job gate.
 - [ ] Record this limited acceptance, then continue native archived-policy
   admission and distinct restored-runtime publication. Do not claim public
   no-build restore from a successful inventory reader.
