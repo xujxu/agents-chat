@@ -31,7 +31,7 @@ const files = Object.freeze([...new Set([
   'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-copy.mjs', 'snapshot-scope.mjs', 'snapshot-external.mjs', 'snapshot-rotation.mjs',
   'windows-snapshot-security.mjs', 'windows-snapshot-security.ps1',
   'windows-external-snapshot-security.mjs',
-  'windows-task-snapshot.mjs',
+  'windows-task-snapshot.mjs', 'windows-snapshot-runtime.mjs',
   'windows-completed-closeout.mjs',
   'windows-deployment-acceptance.mjs', 'windows-current-deployment.mjs', 'deployment-receipt.mjs',
   'windows-configuration.mjs', 'windows-configuration-files.mjs', 'windows-configuration-files.ps1',
