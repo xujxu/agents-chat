@@ -13327,9 +13327,12 @@ not release the runtime lease or enable automation.
   Before preparation, writing accepted state is blocked; afterward only the
   exact activating-to-accepted successor is admitted. Wrong providers cannot
   publish a preparation receipt. Repeat preparation refuses.
-- [ ] Run the causal command-only Actions gate and require
+- [x] Run the causal command-only Actions gate and require
   `Missing first-runtime completion handoff`.
-- [ ] Implement native preparation beside the first-activation handoff helper;
+  `96db258 / 38029029742`, job `114145888789`, confirmed both missing
+  capability assertions at `2026-10-10 06:02:00 UTC`; prior contracts and
+  foreign-listener refusal passed (18/20).
+- [x] Implement native preparation beside the first-activation handoff helper;
   record original lock, activating state, bundle and listener identities before
   releasing the state lease. Keep task-file, owner, listener and Job protection.
   Extend JS/native state guards to accept only the exact accepted successor
@@ -13399,7 +13402,7 @@ Files: `scripts/deployment/windows-first-activation.ps1`, the original
   cannot count as startup. Keep the original controller alive and task inhibited.
   On close or failed startup, stop/retire only the original domain, require its
   instance to settle, and preserve partial receipts on every failure.
-- [ ] Run native positive/failing-start cases and full lifecycle regression.
+- [x] Run native positive/failing-start cases and full lifecycle regression.
   This is runtime ownership acceptance only; actual Next/authenticated readiness,
   permanent policy completion and public first deploy remain subsequent gates.
   Native `f96fcf5 / 38026904768`, job `114139568716`, passed **17/17**
@@ -13412,6 +13415,10 @@ Files: `scripts/deployment/windows-first-activation.ps1`, the original
   Increase only the live Windows job budget from 35 to 45 minutes: the prior
   accepted full live application case took 1,614,386 ms before adding startup
   coverage. Keep every command, request, startup and cleanup deadline unchanged.
+  Full `3975f34 / 38027451422` passed **42/42** jobs; live Windows job
+  `114141215650` completed its actual application case in 1,442,306 ms at
+  `2026-10-10 05:55:47 UTC`. This full baseline includes guarded startup/
+  settlement, not the subsequently added first-runtime HTTP readiness.
 
 ### Task 5CE: Original configuring-to-activating authority handoff
 

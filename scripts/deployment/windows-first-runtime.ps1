@@ -52,6 +52,7 @@ try {
     . (Join-Path $PSScriptRoot 'windows-first-task-registration.ps1')
     . (Join-Path $PSScriptRoot 'windows-first-activation-handoff.ps1')
     . (Join-Path $PSScriptRoot 'windows-first-activation.ps1')
+    . (Join-Path $PSScriptRoot 'windows-first-completion-handoff.ps1')
     $resources.Add([Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity))
     $stage = 'original-authority'
     if ($Control -cne (Join-Path (Split-Path -Parent $Project) ".$(Split-Path -Leaf $Project).deployment")) {
@@ -117,6 +118,8 @@ try {
         Bundle=$bundle; Identity=$identity; Pwsh=$pwsh
         ConfiguringStateFile=$stateFile; OriginalState=$state
         ActivationPrepared=$false; ActivatingStateSha256=$null
+        ActivatingStateFields=$null; ActivatingStateFile=$null
+        CompletionPrepared=$false; AcceptedStateSha256=$null
         Activation=$null; Listener=$null; Port=$Port
     }
     [Console]::Out.WriteLine((@{
@@ -132,11 +135,13 @@ try {
         $document = [Text.Json.JsonDocument]::Parse($text)
         try { $method = $document.RootElement.GetProperty('method').GetString() }
         finally { $document.Dispose() }
-        $fields = if ($method -ceq 'register-task') { @('id', 'method', 'logonType', 'triggerType') } else { @('id', 'method') }
+        $fields = if ($method -ceq 'register-task') { @('id', 'method', 'logonType', 'triggerType') }
+            elseif ($method -ceq 'prepare-completion') { @('id', 'method', 'providers') }
+            else { @('id', 'method') }
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task', 'prepare-activation', 'activate', 'listener')) { throw 'Unexpected first-runtime request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task', 'prepare-activation', 'activate', 'listener', 'prepare-completion')) { throw 'Unexpected first-runtime request.' }
         $sequence = $id
         Assert-FirstRuntimePublication
         $value = $method
@@ -160,6 +165,13 @@ try {
         if ($method -ceq 'listener') {
             $stage = 'first-runtime-listener'
             $value = Open-AgentsChatFirstRuntimeListener $context { Assert-FirstRuntimePublication }
+        }
+        if ($method -ceq 'prepare-completion') {
+            $stage = 'first-completion-handoff'
+            if ($request.providers.ValueKind -ne [Text.Json.JsonValueKind]::Array) { throw 'Invalid first-runtime providers.' }
+            $providers = @($request.providers.EnumerateArray() | ForEach-Object { $_.GetString() })
+            $value = Prepare-AgentsChatFirstCompletion $context $providers { Assert-FirstRuntimePublication }
+            Assert-FirstRuntimePublication
         }
         if ($method -ceq 'close' -and $null -ne $context.Activation) {
             $stage = 'first-runtime-settlement'

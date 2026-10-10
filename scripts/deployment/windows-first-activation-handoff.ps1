@@ -5,12 +5,18 @@ function Assert-AgentsChatFirstActivationState([hashtable]$Context) {
     $retained = [Deployment.WindowsPrivateFile]::Open($file, $hash)
     try {
         if ($retained.ByteLength -gt 65536) { throw 'Oversized first-activation state.' }
-        if ($null -ne $Context.ActivatingStateSha256) {
-            if ($hash -cne $Context.ActivatingStateSha256) { throw 'Observed first-activation state changed.' }
+        if ($null -ne $Context.AcceptedStateSha256) {
+            if ($hash -cne $Context.AcceptedStateSha256) { throw 'Observed first-acceptance state changed.' }
             return
         }
-        if ($hash -ceq $Context.StateSha256) { return }
-        $original = $Context.OriginalState
+        $completing = $null -ne $Context.ActivatingStateSha256
+        if ($completing) {
+            if ($hash -ceq $Context.ActivatingStateSha256) { return }
+            if (-not $Context.CompletionPrepared) { throw 'Observed first-activation state changed.' }
+        } elseif ($hash -ceq $Context.StateSha256) { return }
+        $original = if ($completing) { $Context.ActivatingStateFields } else { $Context.OriginalState }
+        $phase = if ($completing) { 'accepted' } else { 'activating' }
+        $previous = if ($completing) { 'activating' } else { 'configuring' }
         $current = Read-AgentsChatMaintenanceFields ($retained.ReadText()) ([string[]]@($original.Keys))
         foreach ($name in $original.Keys) {
             if ($name -cin @('phase', 'previousPhase', 'updatedAt')) { continue }
@@ -20,13 +26,17 @@ function Assert-AgentsChatFirstActivationState([hashtable]$Context) {
         }
         $updated = $current.updatedAt.GetString()
         $parsed = [DateTimeOffset]::MinValue
-        if ($current.phase.GetString() -cne 'activating' -or $current.previousPhase.GetString() -cne 'configuring' -or
+        if ($current.phase.GetString() -cne $phase -or $current.previousPhase.GetString() -cne $previous -or
             -not [DateTimeOffset]::TryParseExact($updated, "yyyy-MM-dd'T'HH:mm:ss.fff'Z'",
                 [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsed)) {
-            throw 'First activation requires the exact configuring successor.'
+            throw "First runtime requires the exact $previous successor."
         }
         $retained.Check()
-        $Context.ActivatingStateSha256 = $hash
+        if ($completing) { $Context.AcceptedStateSha256 = $hash }
+        else {
+            $Context.ActivatingStateSha256 = $hash
+            $Context.ActivatingStateFields = $current
+        }
     } finally { $retained.Dispose() }
 }
 

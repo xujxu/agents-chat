@@ -70,13 +70,24 @@ export async function prepareWindowsFirstRuntime({
     }
     let activationPrepared = false;
     let activatingState;
+    let completionPrepared = false;
+    let acceptedState;
     const authority = async requestSignal => {
       requestSignal?.throwIfAborted();
       await assertLockOwner(control, lock);
       await requireNoServiceMaintenance(control);
       const current = await loadState(control);
-      if (activatingState) {
-        if (!same(current, activatingState)) throw new Error('Observed first-activation state changed.');
+      if (acceptedState) {
+        if (!same(current, acceptedState)) throw new Error('Observed first-acceptance state changed.');
+      } else if (activatingState) {
+        if (!same(current, activatingState)) {
+          if (!completionPrepared || current?.phase !== 'accepted' || current.previousPhase !== 'activating'
+            || !same({ ...current, phase: activatingState.phase, previousPhase: activatingState.previousPhase,
+              updatedAt: activatingState.updatedAt }, activatingState)) {
+            throw new Error('First completion requires the exact original activating successor.');
+          }
+          acceptedState = current;
+        }
       } else if (!same(current, state)) {
         if (!activationPrepared || current?.phase !== 'activating' || current.previousPhase !== 'configuring'
           || !same({ ...current, phase: state.phase, previousPhase: state.previousPhase, updatedAt: state.updatedAt }, state)) {
@@ -129,12 +140,16 @@ export async function prepareWindowsFirstRuntime({
     let registeredTask;
     let activated = false;
     let activeRuntime;
+    let retainedListener;
     let registering = false;
+    let preparingCompletion = false;
     const request = async (method, requestSignal, options = {}) => {
       if (busy || closed) throw failure ?? refused(new Error('Original first-runtime publication is busy or closed.'));
       busy = true;
       try {
         if (method !== 'close') await authority(requestSignal);
+        const completionStateSha256 = method === 'prepare-completion'
+          ? digest(await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true })) : undefined;
         const id = ++sequence;
         await bridge.wire.send({ id, method, ...options });
         const reply = captureWorkerFields(await bridge.wire.receive({
@@ -142,7 +157,7 @@ export async function prepareWindowsFirstRuntime({
         }),
           ['id', 'type', 'processIdentity', 'value'], 'first-runtime reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== ready.processIdentity
-          || !['register-task', 'prepare-activation', 'activate', 'listener'].includes(method) && reply.value !== method) {
+          || !['register-task', 'prepare-activation', 'activate', 'listener', 'prepare-completion'].includes(method) && reply.value !== method) {
           throw new Error('Unexpected first-runtime acknowledgement.');
         }
         if (method === 'register-task') {
@@ -198,7 +213,28 @@ export async function prepareWindowsFirstRuntime({
           activeRuntime = Object.freeze(runtime);
           return Object.freeze({ ...active, runtime: activeRuntime });
         }
-        if (method === 'listener') return captureTaskListener(reply.value, activeRuntime, port);
+        if (method === 'listener') {
+          const listener = captureTaskListener(reply.value, activeRuntime, port);
+          if (listener.status === 'retained') retainedListener = listener;
+          return listener;
+        }
+        if (method === 'prepare-completion') {
+          const receipt = captureWorkerFields(reply.value, [
+            'status', 'runtimeAuthority', 'project', 'operationId', 'taskName', 'controllerPid', 'controllerIdentity',
+            'lockSha256', 'activatingStateSha256', 'configuration', 'configurationSha256',
+            'generation', 'port', 'providers', 'listener',
+          ], 'first-completion handoff');
+          if (!same(receipt, {
+            status: 'first-completion-prepared', runtimeAuthority: false, project, operationId: lock.operationId,
+            taskName: observed.taskName, controllerPid: ready.pid, controllerIdentity: ready.processIdentity,
+            lockSha256: digest(lockBytes), activatingStateSha256: completionStateSha256,
+            configuration: bundle.configuration, configurationSha256: bundle.sha256,
+            generation: activeRuntime.generation, port, providers: configuration.providers, listener: retainedListener,
+          })) throw new Error('Original first-completion handoff differs.');
+          completionPrepared = true;
+          await authority(requestSignal);
+          return Object.freeze(receipt);
+        }
         if (method === 'close') {
           const result = await bridge.waitForExit();
           if (result.code !== 0 || result.signal !== null) throw new Error('First-runtime publisher did not close cleanly.');
@@ -210,6 +246,16 @@ export async function prepareWindowsFirstRuntime({
         failure = await bridge.abandon(cause);
         throw failure;
       } finally { busy = false; }
+    };
+    const verifyReadiness = async ({ waitSeconds = 120, signal: requestSignal } = {}) => {
+      if (closed || busy || !activated) throw refused(new Error('First-runtime readiness requires its original active owner.'));
+      return waitWindowsReadiness({
+        context: {
+          listener: ({ signal: listenerSignal }) => request('listener', listenerSignal),
+          check: ({ signal: checkSignal }) => request('check', checkSignal),
+        },
+        port, providers: configuration.providers, waitSeconds, signal: requestSignal,
+      });
     };
     return Object.freeze({
       status: 'runtime-prepared', runtimeAuthority: false, bundle,
@@ -240,15 +286,16 @@ export async function prepareWindowsFirstRuntime({
         }
         return request('activate', requestSignal);
       },
-      verifyReadiness: async ({ waitSeconds = 120, signal: requestSignal } = {}) => {
-        if (closed || busy || !activated) throw refused(new Error('First-runtime readiness requires its original active owner.'));
-        return waitWindowsReadiness({
-          context: {
-            listener: ({ signal: listenerSignal }) => request('listener', listenerSignal),
-            check: ({ signal: checkSignal }) => request('check', checkSignal),
-          },
-          port, providers: configuration.providers, waitSeconds, signal: requestSignal,
-        });
+      verifyReadiness,
+      prepareCompletion: async ({ waitSeconds = 120, signal: requestSignal } = {}) => {
+        if (closed || busy || !activated || completionPrepared || preparingCompletion) {
+          throw refused(new Error('First completion requires its original unused active authority.'));
+        }
+        preparingCompletion = true;
+        try {
+          await verifyReadiness({ waitSeconds, signal: requestSignal });
+          return await request('prepare-completion', requestSignal, { providers: configuration.providers });
+        } finally { preparingCompletion = false; }
       },
       close: async () => { if (!closed) await request('close'); },
     });

@@ -120,6 +120,7 @@ function Start-AgentsChatFirstRuntime([hashtable]$Context, [hashtable]$Task, [sc
     & $CheckAuthority
     $state = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::Open(
         (Join-Path $Context.Control 'state.json'), $Context.ActivatingStateSha256))
+    $Context.ActivatingStateFile = $state
     $activation = @{
         Task=$Task; Enabled=$false; Instance=$null; InstanceGuid=$null; Owner=$null; Runtime=$null; Stopped=$false
     }
