@@ -91,8 +91,10 @@ export async function inspectWindowsFirstInstall({ project, taskName, pwsh, sign
       }
     };
     const scope = Object.freeze({
+      identity: Object.freeze({ pwsh, pid: ready.pid, processIdentity: ready.processIdentity }),
       observation,
       checkFresh: ({ signal: requestSignal } = {}) => request('check-fresh', requestSignal),
+      checkFreshRuntime: ({ signal: requestSignal } = {}) => request('check-fresh-runtime', requestSignal),
       checkUninstalled: ({ signal: requestSignal } = {}) => request('check-uninstalled', requestSignal),
       close: async () => { if (!closed) await request('close'); },
     });
@@ -106,8 +108,10 @@ export async function inspectWindowsFirstInstall({ project, taskName, pwsh, sign
   }
 }
 
-export async function assertWindowsFirstInstallScope(scope, { fresh = true, signal } = {}) {
+export async function assertWindowsFirstInstallScope(scope, { fresh = true, controlEvidence = fresh, signal } = {}) {
   const request = scopes.get(scope);
-  if (!request || typeof fresh !== 'boolean') throw refused(new Error('An original first-install scope is required.'));
-  return request(fresh ? 'check-fresh' : 'check-uninstalled', signal);
+  if (!request || typeof fresh !== 'boolean' || typeof controlEvidence !== 'boolean' || !fresh && controlEvidence) {
+    throw refused(new Error('An original first-install scope and supported observation mode are required.'));
+  }
+  return request(fresh ? controlEvidence ? 'check-fresh' : 'check-fresh-runtime' : 'check-uninstalled', signal);
 }

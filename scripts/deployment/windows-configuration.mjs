@@ -5,6 +5,8 @@ import { openWindowsConfigurationFiles, openWindowsFirstConfigurationFiles } fro
 import { readWorkerFile } from './worker-files.mjs';
 import { inspectConfigurationFiles } from './configuration-files.mjs';
 
+const firstConfigurations = new WeakMap();
+
 async function finishInspection(retained, inspected, recheck, signal) {
   const checkFiles = async ({ signal: checkSignal = signal } = {}) => {
     await retained.check({ signal: checkSignal });
@@ -55,10 +57,21 @@ export async function inspectWindowsFirstConfiguration({ scope, pwsh, profile, s
       project: observed.project, profile, environment: { NODE_ENV: 'production' }, signal,
     });
     inspected.buildEnvironment({});
-    return await finishInspection(retained, inspected, () => assertWindowsFirstInstallScope(scope, { signal }), signal);
+    const configuration = await finishInspection(retained, inspected, () => assertWindowsFirstInstallScope(scope, { signal }), signal);
+    firstConfigurations.set(configuration, scope);
+    return configuration;
   } catch (error) {
     try { await retained.close(); }
     catch (cleanup) { throw new AggregateError([error, cleanup], 'Configuration inspection and close failed.'); }
     throw error;
   }
+
+}
+
+export async function assertWindowsFirstConfiguration(configuration, { scope, signal }) {
+  if (!scope || firstConfigurations.get(configuration) !== scope) {
+    throw new Error('Original first-install configuration and scope are required.');
+  }
+  await configuration.checkFiles({ signal });
+  return configuration;
 }

@@ -19,7 +19,7 @@ function Assert-TaskAbsent {
     throw 'A registered task requires existing-installation inspection.'
 }
 
-function Observe-FirstInstallation([bool]$Fresh) {
+function Observe-FirstInstallation([bool]$Fresh, [bool]$ControlEvidence) {
     $root.Check()
     Assert-TaskAbsent
     if ($Fresh) {
@@ -32,7 +32,7 @@ function Observe-FirstInstallation([bool]$Fresh) {
     if ([IO.Directory]::GetFileSystemEntries($parent, $controlName).Length -ne 0) {
         $controlLease = [Deployment.WindowsPrivateFile]::OpenDirectory($control)
         try {
-            if ($Fresh -and [IO.Directory]::GetFileSystemEntries($control).Length -ne 0) {
+            if ($ControlEvidence -and [IO.Directory]::GetFileSystemEntries($control).Length -ne 0) {
                 throw 'Existing deployment evidence requires inspection or recovery.'
             }
             $controlLease.Check()
@@ -76,7 +76,7 @@ try {
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
     [Console]::Out.WriteLine((@{
         type = 'ready'; pid = $PID; processIdentity = $identity; controllerIdentity = $ControllerIdentity
-        value = (Observe-FirstInstallation $true)
+        value = (Observe-FirstInstallation $true $true)
     } | ConvertTo-Json -Depth 5 -Compress))
     [Console]::Out.Flush()
     $sequence = 0
@@ -86,13 +86,15 @@ try {
         $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check-fresh', 'check-uninstalled', 'close') -or
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check-fresh', 'check-fresh-runtime', 'check-uninstalled', 'close') -or
             [Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
             throw 'Original first-install observer request differs.'
         }
         $sequence = $id
         $stage = $method
-        $value = if ($method -ceq 'close') { 'close' } else { Observe-FirstInstallation ($method -ceq 'check-fresh') }
+        $value = if ($method -ceq 'close') { 'close' } else {
+            Observe-FirstInstallation ($method -cne 'check-uninstalled') ($method -ceq 'check-fresh')
+        }
         [Console]::Out.WriteLine((@{ id = $id; type = 'reply'; processIdentity = $identity; value = $value } |
             ConvertTo-Json -Depth 5 -Compress))
         [Console]::Out.Flush()

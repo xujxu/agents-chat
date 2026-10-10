@@ -13321,13 +13321,16 @@ Add `windows-first-build.mjs` using the existing owned source/build engine and
 native enrolled workers, not a fabricated running task. Keep the existing
 managed-task build adapter unchanged.
 
-- [ ] Require the missing first-build module in native command-only tests.
+- [x] Require the missing first-build module in native command-only tests.
   Exercise real Git/npm workers with a small artifact fixture; this is not
   the actual Next application acceptance.
-- [ ] Bind first-configuration objects to their original absent-task scope.
+  Causal `d8cf7d8 / 38018878641`, job `114115232680`, failed at
+  `2026-10-10 03:02:31 UTC`: both new build cases reported
+  `Missing owned Windows first-install build`; the previous seven cases passed.
+- [x] Bind first-configuration objects to their original absent-task scope.
   Add a fresh-runtime recheck that allows only the caller's separately checked
   transaction control evidence, while still refusing runtime artifacts.
-- [ ] Require the original project, sibling control, current lock and deploy
+- [x] Require the original project, sibling control, current lock and deploy
   state with absent prior runtime and no backup. Bind read operations to
   preflight and mutations to exact source-selected/dependencies/building
   phases and target commit. Require external controller Node, bundled npm,
