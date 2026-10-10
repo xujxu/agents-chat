@@ -4,10 +4,10 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, rename, rmdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
+import { registerInertWindowsTask } from './deployment-windows-inert-task.mjs';
 
 const execute = promisify(execFile);
 const implementation = new URL('../scripts/deployment/windows-first-install.mjs', import.meta.url);
@@ -89,11 +89,7 @@ test('Windows first-install inspection refuses an existing or newly registered t
   const scheduler = path.join(process.env.SystemRoot, 'System32', 'schtasks.exe');
   let registered = false;
   try {
-    await mkdir(path.join(f.project, 'scripts'));
-    await writeFile(path.join(f.project, 'scripts/service-watchdog.ps1'), 'exit 0\n');
-    await execute(f.pwsh, ['-NoProfile', '-NonInteractive', '-File',
-      fileURLToPath(new URL('../scripts/install-scheduled-task.ps1', import.meta.url)),
-      '-TaskName', f.taskName, '-ProjectDir', f.project], { timeout: 30000, maxBuffer: 16384 });
+    await registerInertWindowsTask(f);
     registered = true;
     const query = () => execute(scheduler, ['/Query', '/TN', f.taskName, '/XML'], { timeout: 30000, maxBuffer: 65536 });
     const before = (await query()).stdout;

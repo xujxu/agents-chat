@@ -13315,6 +13315,31 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CB: Private prebuilt runtime publication for a genuine first installation
+
+Add `windows-first-runtime.mjs/.ps1`, reusing
+`New-AgentsChatRuntimeBundle` and native private-file/runtime-host validation.
+This publishes artifacts only; task creation and activation remain separate.
+
+- [ ] Require the missing publisher in native cases. Reuse the accepted small
+  owned-build fixture without describing it as an actual Next deployment.
+  Keep competing fixture tasks truly inert by running the unchanged installer
+  from their own fixture scripts directory beside an `exit 0` watchdog.
+- [ ] Require original fresh scope/configuration, lock, configuring phase,
+  exact built source/artifacts and sealed settled workers before publication.
+  Derive a create-only private runtime directory from the operation ID;
+  retain original lock/state and published bundle with native handles.
+- [ ] Publish the external Node and prebuilt local Next CLI command. Capture
+  supported operational environment and the shared startup environment without
+  promoting dotenv secrets into permanently overriding explicit environment.
+  Do not register/start any task, create a backup or publish a deployment receipt.
+- [ ] Refuse early/unsealed/forged/competing-task contexts before writing,
+  retain existing bundles unchanged on repeated publication, and release
+  every native helper on failure/close. Preserve saved recovery dependency
+  closure when adding dependencies.
+- [ ] Accept native publication cases before create-only disabled task
+  registration, guarded activation and real public first-deploy acceptance.
+
 ### Task 5CA: Owned source and build stages for a genuine Windows first installation
 
 Add `windows-first-build.mjs` using the existing owned source/build engine and
@@ -13335,11 +13360,15 @@ managed-task build adapter unchanged.
   preflight and mutations to exact source-selected/dependencies/building
   phases and target commit. Require external controller Node, bundled npm,
   Git and PowerShell; reuse the shared configuration environment policy.
-- [ ] Verify native worker enrollment/settlement, unchanged package inputs,
+- [x] Verify native worker enrollment/settlement, unchanged package inputs,
   captured artifacts and lack of a fabricated backup or deployment receipt.
   Refuse a competing task before mutation and preserve its exact definition.
-- [ ] Accept native contracts before composing create-only registration and
+- [x] Accept native contracts before composing create-only registration and
   real first-deploy application acceptance.
+  `1526504 / 38019205982` passed command-only **1/1**, job `114116213727`.
+  All nine selected cases passed at `2026-10-10 03:06:54 UTC`; owned first-build
+  fixture **51,200 ms**, competing-task refusal **19,555 ms**. This establishes
+  native Git/npm ownership and phase checks, not actual Next first deployment.
 
 ### Task 5BZ: Native configuration capture for a genuine first installation
 
