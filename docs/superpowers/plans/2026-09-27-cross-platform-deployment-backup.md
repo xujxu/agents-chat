@@ -13915,6 +13915,59 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DC: Read archived Windows runtime inputs without consulting the live bundle
+
+**Scope:** the first implementation step of the already approved Explicit
+restore design: recover saved configuration/helpers, not current runtime
+values or stale ready/lease records. This is read-only snapshot inspection,
+not task-policy admission, mutation authority, publication or public restore.
+
+**Files:**
+- Create `scripts/deployment/windows-snapshot-runtime.mjs`.
+- Modify `scripts/deployment/saved-recovery-engine.mjs`.
+- Extend `tests/deployment-windows-task-snapshot.mjs`.
+
+- [ ] Extend the existing native task snapshot fixture:
+  ```js
+  const archived = await inspectWindowsSnapshotRuntime({
+    backup: destination, snapshot: manifest, project: lock.project,
+    taskName: observation.taskName,
+  });
+  assert.deepEqual(archived.task, task);
+  assert.deepEqual(archived.configuration, runtime);
+  await archived.check();
+  ```
+  Require every returned source to be the corresponding backup `external/N`
+  or `files/relative` member, never the live configuration/helper path.
+  Reject wrong project/task, changed expected manifest, overlapping backup
+  and cancellation. After completed update, import the reader from the saved
+  recovery engine and inspect the same authoritative backup again.
+- [ ] Push these tests and run only the existing snapshot/restoration group:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_restore_only=true
+  ```
+  Expected causal failure: missing `windows-snapshot-runtime.mjs` in the
+  original-task snapshot case; do not add another workflow selector.
+- [ ] Implement `inspectWindowsSnapshotRuntime({ backup, snapshot, project,
+  taskName, signal })`. Canonicalize private backup outside the project;
+  require a matching verified version-3 Windows project snapshot. Capture
+  exactly task version/name/definition/security/configuration/digest fields.
+  Resolve each configuration/helper source through the verified manifest.
+  Require regular saved members, declared digests and one-MiB read limits;
+  compare byte lengths and SHA-256 after reading. Parse the saved version-1
+  configuration, require its original project and bounded helper inventory,
+  and return frozen task/configuration/file records plus `check()` which
+  re-verifies the original manifest. Use existing `captureWorkerFields`,
+  `relativeSnapshotPath`, `readWorkerFile` and `verifySnapshot`; do not add
+  an alternative native runtime protocol parser.
+- [ ] Add the reader to the explicit saved recovery inventory and repeat the
+  same Actions selector. Require native snapshot/restore, saved reader import,
+  unchanged source/data/task assertions and existing recovery regressions.
+- [ ] Record this limited acceptance, then continue native archived-policy
+  admission and distinct restored-runtime publication. Do not claim public
+  no-build restore from a successful inventory reader.
+
 ### Task 5DB: Expose the admitted first deployment through explicit public NoTunnel
 
 **Scope:** the approved explicit `deploy.ps1 -NoTunnel` first-install route,
@@ -13988,7 +14041,7 @@ inspection/configuration/lock/first-deployment composition.
   retain all mutated/uncertain evidence. Close configuration/observer with
   explicit aggregate cleanup errors. Return original operation ID and saved
   recovery binding to the unchanged supervisor finalizer.
-- [ ] Update native public no-side-effect tests: update still refuses
+- [x] Update native public no-side-effect tests: update still refuses
   NoTunnel; deploy supports it but rejects conflicting first-policy requests.
   Preserve read-only status and inherited Node-hook stripping coverage.
   Push and accept portable/native command contracts plus actual matrix4.
@@ -14061,7 +14114,8 @@ inspection/configuration/lock/first-deployment composition.
   matrix jobs before application setup: the old observer parsed the deliberately
   invalid mutable journal instead of reporting the original fixture actor exit.
   Fix `6388ddc / 38090723610` is rerunning all four actual applications.
-- [ ] Push and run the complete 48-job workflow. Require native37+9 and the
+- [x] Push and run the complete 48-job workflow plus the corrected four-case
+  rerun. Require native37+9 and the
   existing actual update lifecycle, all four first applications, both
   configuration-policy contract jobs, and all Linux regressions to pass.
   `16ccba0 / 38088777804` finished 47/48, with only the earlier receipt-loss
@@ -14070,7 +14124,13 @@ inspection/configuration/lock/first-deployment composition.
   seven empty filtered file wrappers as passes (16 total), not seven additional
   recovery cases. Combined with foundations37, all46 intended native cases
   passed; all Linux jobs and the existing real Windows lifecycle also passed.
-  Corrected observer/application run `38090723610` is still pending.
+  Corrected `6388ddc / 38090723610` passed all four actual applications:
+  public `114326417691` at `22:26:25 UTC`, normal `114326417875` at
+  `22:34:06 UTC`, default-policy `114326418008` at `22:34:55 UTC`, and
+  receipt-loss `114326418109` at `22:33:28 UTC` (1,065,278 ms).
+  Its observer regression also passed (192 ms in the receipt-loss job).
+  This is combined acceptance across two runs with production unchanged;
+  the original full48 remains 47/48, not a single fully green run.
 - [x] Update public help/README with the exact accepted fresh NoTunnel route
   and remaining gates. Do not label no-tunnel acceptance default tunnel
   acceptance or claim other-user/legacy-task adoption.

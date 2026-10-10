@@ -304,8 +304,10 @@ or increasing that deadline. The replacement 48-job run finished 47/48:
 all 46 named native cases and the existing-application lifecycle passed.
 The remaining receipt-loss case hit a state-file replacement `EPERM` before
 its crash boundary. Its observer now avoids polling the mutable state file;
-the four first-application scenarios are being rerun, without relaxing
-production state-write protections or claiming the native error's cause is proven.
+all four first-application scenarios passed the corrected
+`6388ddc / 38090723610` run. These two runs provide combined regression
+coverage, not a single green 48-job run. Production state-write protections
+were not relaxed, and the original native error's cause remains unproven.
 Default-tunnel and remaining watchdog integration are separate gates.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private

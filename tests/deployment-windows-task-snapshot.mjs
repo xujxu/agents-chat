@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as stages from '../scripts/deployment/windows-task-transaction.mjs';
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 
@@ -63,18 +63,34 @@ export function createWindowsTaskSnapshotFixture({ observation, control, lock, c
       const runtime = JSON.parse(bytes);
       const expectedFiles = [observation.configuration,
         ...Object.keys(runtime.helpers).map(name => path.join(path.dirname(observation.configuration), name))];
+      const { inspectWindowsSnapshotRuntime } = await import('../scripts/deployment/windows-snapshot-runtime.mjs');
+      const runtimeOptions = { backup: destination, snapshot: manifest, project: lock.project, taskName: observation.taskName };
+      const archived = await inspectWindowsSnapshotRuntime(runtimeOptions);
+      assert.deepEqual(archived.task, task);
+      assert.deepEqual(archived.configuration, runtime);
+      assert.deepEqual(archived.files.map(file => file.name), expectedFiles.map(file => path.basename(file)));
+      for (const change of [
+        { project: path.join(lock.project, 'other') }, { taskName: `${observation.taskName}-other` },
+        { snapshot: { ...manifest, id: 'changed-expected-snapshot' } }, { backup: lock.project },
+      ]) await assert.rejects(inspectWindowsSnapshotRuntime({ ...runtimeOptions, ...change }));
+      await assert.rejects(inspectWindowsSnapshotRuntime({ ...runtimeOptions, signal: interrupted.signal }),
+        /Snapshot stage cancelled/);
       const external = [];
-      for (const file of expectedFiles) {
+      for (const [position, file] of expectedFiles.entries()) {
         const relative = path.relative(lock.project, file);
+        let archivedFile;
         if (path.isAbsolute(relative) || relative === '..' || relative.startsWith(`..${path.sep}`)) {
           external.push(file);
           const index = manifest.externalFiles.findIndex(entry => entry.path === file);
           assert.ok(index >= 0);
-          assert.deepEqual(await readFile(path.join(destination, 'external', String(index))), await readFile(file));
+          archivedFile = path.join(destination, 'external', String(index));
         } else {
           assert.ok(manifest.entries.some(entry => entry.path === relative.split(path.sep).join('/')));
-          assert.deepEqual(await readFile(path.join(destination, 'files', relative)), await readFile(file));
+          archivedFile = path.join(destination, 'files', relative);
         }
+        assert.equal(archived.files[position].file, archivedFile);
+        assert.equal(archived.files[position].sha256, position === 0 ? task.configurationSha256 : runtime.helpers[path.basename(file)]);
+        assert.deepEqual(await readFile(archivedFile), await readFile(file));
       }
       assert.deepEqual(manifest.externalFiles.map(file => file.path).sort(), external.sort());
       if (external.length) {
@@ -90,6 +106,7 @@ export function createWindowsTaskSnapshotFixture({ observation, control, lock, c
       assert.equal(current.dev, original.dev);
       assert.equal(current.ino, original.ino);
       assert.deepEqual(await verifySnapshot(destination), manifest);
+      await archived.check();
       await configuration.checkFiles();
       await context.check();
       return manifest;
@@ -106,6 +123,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assert.equal(state.backupId, manifest.id);
   assert.equal(state.sourceCommit, manifest.source.commit);
   assert.notEqual(state.targetCommit, manifest.source.commit);
+  const { verifyRecoveryEngine } = await import('../scripts/deployment/saved-recovery-engine.mjs');
+  const saved = await verifyRecoveryEngine({ control, manifestSha256: manifest.recoveryEngine });
+  const { inspectWindowsSnapshotRuntime } = await import(pathToFileURL(path.join(saved.directory, 'windows-snapshot-runtime.mjs')));
+  const archived = await inspectWindowsSnapshotRuntime({
+    backup: path.join(control, 'backup'), snapshot: manifest, project: manifest.project, taskName: manifest.runtime.task.name,
+  });
+  assert.deepEqual(archived.task, manifest.runtime.task);
+  assert.equal(archived.configuration.command.cwd, manifest.project);
+  await archived.check();
   assert.equal(await readFile(path.join(control, 'backup/files/source-marker.txt'), 'utf8'), 'old-source\n');
   assert.equal(await readFile(path.join(manifest.project, 'source-marker.txt'), 'utf8'), 'new-source\n');
   await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
