@@ -13915,6 +13915,52 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DE: Publish a distinct native runtime bundle from archived inputs
+
+**Scope:** extend the approved restore preflight, without stopping the live
+task, restoring project files or claiming public restore acceptance. Reuse
+the existing publisher, native configuration parser and checked copy pipeline.
+Do not rewrite historical runtime paths or copy stale readiness/lease records.
+
+**Files:** extend `windows-runtime-publication.mjs/.ps1` and
+`WindowsRuntimeHost.cs`; add `tests/deployment-windows-restore-publication.mjs`
+and call it from the saved task snapshot post-update fixture.
+
+- [ ] Add a saved-engine fixture after the original update/retirement:
+  ```js
+  const bundle = await prepareWindowsRestoreRuntimeBundle({
+    scope, control, lock, node: process.execPath, pwsh, backup, snapshot,
+  });
+  assert.equal(bundle.sha256, snapshot.runtime.task.configurationSha256);
+  ```
+  Acquire a fresh original lock and record restore-preflight with the exact
+  backup ID and archived target revision. Refuse forged scope/lock, cancellation,
+  changed snapshot, wrong operation/target/backup and noninitial phase before
+  creating a destination. Temporarily hide the retired original configuration;
+  require publication from archived members only. Compare every copied byte,
+  exact member inventory, unchanged live observation and state; refuse overwrite.
+  Restore the fixture's original configuration/state and release its own lock.
+- [ ] Push the fixture and dispatch the existing seven-job gate:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_restore_only=true
+  ```
+  Require the missing saved publication export as the causal failure.
+- [ ] Export `prepareWindowsRestoreRuntimeBundle` as a restore-only entry to
+  the shared original-controller publisher. Independently derive archive
+  inventory from the exact verified snapshot and compare native task policy.
+  Bind original restore-preflight state, backup ID and target revision;
+  recheck original scope/state/archive before and after publication.
+  Send bounded archive file records over the existing wire, never command-line
+  configuration contents. Native code must validate the exact helper inventory
+  and parse archived configuration through `WindowsRuntimeHost.OpenArchive`,
+  a mapping-aware entry to the same retained-source loader, before destination
+  creation. Copy only checked helpers/configuration into the new UUID bundle;
+  use the existing normal `Open` to verify the result and existing close protocol.
+- [ ] Repeat the same remote gate and require both current-runtime publication
+  regressions and archived publication assertions. Record limited acceptance
+  before implementing external-path relocation and the restore transaction.
+
 ### Task 5DD: Compare archived task policy against the original live observation
 
 **Scope:** read-only policy compatibility for the approved Windows restore
@@ -13928,21 +13974,23 @@ the saved recovery inventory; add `tests/deployment-windows-restore-policy.mjs`;
 extend the existing native task snapshot post-update check and its PowerShell
 caller to pass explicit PowerShell.
 
-- [ ] After original update/retirement, load both managed discovery and the
+- [x] After original update/retirement, load both managed discovery and the
   new policy inspector from the saved engine. Require compatibility with the
   archived task despite a distinct live bundle. Reject foreign task/security,
   changed enabled state, trigger, principal, settings, malformed XML, forged
   scope and cancellation. Recheck identical live observation and absence of
   a new lock after every refusal.
-- [ ] Push and run `windows_restore_only=true`; require the missing saved
+- [x] Push and run `windows_restore_only=true`; require the missing saved
   policy module as causal failure, retaining the existing six native jobs.
-- [ ] Implement a controller-bound read-only native comparator using the
+  Confirmed `ab838f3 / 38093498174`: six jobs passed; managed discovery
+  `114334546128` failed at `23:06:22 UTC` on the missing saved module.
+- [x] Implement a controller-bound read-only native comparator using the
   existing transport and `Read-AgentsChatMaintenanceFields`. Send current and
   archived definitions in separate bounded frames, not one doubled XML frame.
   Require equal explicit enabled policy before temporarily normalizing both
   parsed documents to inhibited form for the shared comparator. Never call
   Scheduler registration, task control or filesystem publication.
-- [ ] Recheck the original branded managed scope before and after comparison;
+- [x] Recheck the original branded managed scope before and after comparison;
   validate original child/controller identity and clean close acknowledgement.
   Return `same-task-policy` with `runtimeAuthority: false`. Preserve native
   refusal and cleanup errors and include both new files in saved recovery.
