@@ -7,6 +7,8 @@ import { requireNoServiceMaintenance, validateState } from './state.mjs';
 import { inspectWindowsWorkerScope } from './windows-worker-scope.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
+import { inspectWindowsSnapshotRuntime } from './windows-snapshot-runtime.mjs';
+import { inspectWindowsRestoreTaskPolicy } from './windows-restore-task-policy.mjs';
 
 const script = fileURLToPath(new URL('./windows-runtime-publication.ps1', import.meta.url));
 function refused(cause) {
@@ -15,7 +17,15 @@ function refused(cause) {
   });
 }
 
-export async function prepareWindowsRuntimeBundle({ scope, control, lock: suppliedLock, node, pwsh, signal }) {
+export function prepareWindowsRuntimeBundle(options) {
+  return prepareRuntimeBundle(options, false);
+}
+
+export function prepareWindowsRestoreRuntimeBundle(options) {
+  return prepareRuntimeBundle(options, true);
+}
+
+async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, pwsh, signal, backup, snapshot }, restore) {
   signal?.throwIfAborted();
   let bridge;
   try {
@@ -29,14 +39,29 @@ export async function prepareWindowsRuntimeBundle({ scope, control, lock: suppli
     const stateBytes = await readWorkerFile(stateFile, 65536, { privateMode: true });
     const state = validateState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(stateBytes)));
     if (state.project !== lock.project || state.operationId !== lock.operationId || state.startedAt !== lock.createdAt
-      || !['deploy', 'update'].includes(state.operation) || state.phase !== 'preflight' || state.previousPhase !== null
+      || (restore ? state.operation !== 'restore' || state.phase !== 'restore-preflight'
+        : !['deploy', 'update'].includes(state.operation) || state.phase !== 'preflight')
+      || state.previousPhase !== null
       || state.priorRuntime !== 'running' || state.runtimeIdentity !== observation.runtime.generation || state.errorCode !== null) {
       throw new Error('Runtime publication requires the original running preflight state.');
     }
+    const archived = restore ? await inspectWindowsSnapshotRuntime({
+      backup, snapshot, project: lock.project, taskName: observation.taskName, signal,
+    }) : null;
+    if (archived) {
+      if (state.backupId !== snapshot.id || state.targetCommit !== snapshot.source.commit) {
+        throw new Error('Restore publication state does not identify the admitted backup and revision.');
+      }
+      await inspectWindowsRestoreTaskPolicy({ scope, task: archived.task, pwsh, signal });
+    }
+    const sourceConfiguration = archived
+      ? archived.files.find(file => file.name === 'configuration.json').file : observation.configuration;
+    const sha256 = archived ? archived.task.configurationSha256 : observation.configurationSha256;
     const authority = async () => {
       signal?.throwIfAborted();
       await requireNoServiceMaintenance(root);
       await check({ signal });
+      await archived?.check({ signal });
       if (!(await readWorkerFile(stateFile, 65536, { privateMode: true })).equals(stateBytes)) {
         throw new Error('Original runtime publication state changed.');
       }
@@ -48,15 +73,16 @@ export async function prepareWindowsRuntimeBundle({ scope, control, lock: suppli
     if (!controllerIdentity) throw new Error('Original runtime publisher identity is unavailable.');
     bridge = windowsControllerTransport({
       pwsh, refused, label: 'Native runtime publisher',
-      args: ['-NoProfile', '-NonInteractive', '-File', script, '-Configuration', observation.configuration,
-        '-Sha256', observation.configurationSha256, '-Directory', directory,
+      args: ['-NoProfile', '-NonInteractive', '-File', script, '-Configuration', sourceConfiguration,
+        '-Sha256', sha256, '-Directory', directory, ...(restore ? ['-Archived'] : []),
         '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
     });
+    if (archived) await bridge.wire.send({ id: 0, method: 'archive', files: archived.files });
     const ready = captureWorkerFields(await bridge.wire.receive({ signal, timeoutMs: 60000 }),
       ['type', 'pid', 'processIdentity', 'controllerIdentity', 'directory', 'configuration', 'sha256'], 'runtime publication');
     if (ready.type !== 'ready' || ready.pid !== bridge.child.pid || ready.controllerIdentity !== controllerIdentity
       || ready.processIdentity !== await processIdentity(bridge.child.pid)
-      || ready.directory !== directory || ready.configuration !== configuration || ready.sha256 !== observation.configurationSha256) {
+      || ready.directory !== directory || ready.configuration !== configuration || ready.sha256 !== sha256) {
       throw new Error('Original native runtime publication differs.');
     }
     await authority();
@@ -70,7 +96,7 @@ export async function prepareWindowsRuntimeBundle({ scope, control, lock: suppli
     if (result.code !== 0 || result.signal !== null) throw new Error('Native runtime publisher did not close cleanly.');
     bridge.wire.close();
     await authority();
-    return Object.freeze({ directory, configuration, sha256: observation.configurationSha256 });
+    return Object.freeze({ directory, configuration, sha256 });
   } catch (cause) {
     if (!bridge) throw refused(cause);
     const error = await bridge.abandon(cause);

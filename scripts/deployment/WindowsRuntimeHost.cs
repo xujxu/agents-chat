@@ -62,14 +62,19 @@ namespace Deployment
             string file = Path.Combine(directory, "runtime-" + identity.Replace(':', '-') + ".json");
             retained.Add(WindowsPrivateFile.Publish(file, text));
         }
-        static WindowsRuntimeHost Load(string configuration, string sha256, string helpers, ref string stage)
+        static WindowsRuntimeHost Load(string configuration, string sha256, string helpers, ref string stage,
+            Dictionary<string, string> archive = null)
         {
             var host = new WindowsRuntimeHost();
             try
             {
                 WindowsPrivateFile config = host.Retain(configuration, sha256);
-                if (!String.Equals(Path.GetDirectoryName(configuration), helpers, StringComparison.OrdinalIgnoreCase))
+                if (archive == null &&
+                    !String.Equals(Path.GetDirectoryName(configuration), helpers, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Configuration must belong to the installed helper bundle.");
+                if (archive != null && (archive.Count != Helpers.Length ||
+                    Array.Exists(Helpers, name => !archive.ContainsKey(name))))
+                    throw new InvalidDataException("Archived helper inventory differs.");
                 using (JsonDocument document = JsonDocument.Parse(config.ReadText(),
                     new JsonDocumentOptions { MaxDepth = 16 }))
                 {
@@ -79,7 +84,8 @@ namespace Deployment
                     stage = "helpers";
                     JsonElement files = Fields(root.GetProperty("helpers"), Helpers);
                     foreach (string name in Helpers)
-                        host.Retain(Path.Combine(helpers, name), files.GetProperty(name).GetString());
+                        host.Retain(archive == null ? Path.Combine(helpers, name) : archive[name],
+                            files.GetProperty(name).GetString());
                     stage = "command";
                     JsonElement command = Fields(root.GetProperty("command"), "file", "args", "cwd", "environment");
                     JsonElement arguments = command.GetProperty("args");
@@ -120,6 +126,14 @@ namespace Deployment
             string stage = "configuration";
             try { return Load(configuration, sha256, helpers, ref stage); }
             catch { throw new InvalidOperationException("Managed runtime startup refused: " + stage + "."); }
+        }
+        public static WindowsRuntimeHost OpenArchive(string configuration, string sha256,
+            Dictionary<string, string> helpers)
+        {
+            if (helpers == null) throw new ArgumentNullException("helpers");
+            string stage = "configuration";
+            try { return Load(configuration, sha256, null, ref stage, helpers); }
+            catch { throw new InvalidOperationException("Archived runtime configuration refused: " + stage + "."); }
         }
         public static void Run(string configuration, string sha256, string helpers, string pwsh)
         {

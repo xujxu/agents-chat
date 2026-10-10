@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { lstat, readFile, readdir, rename } from 'node:fs/promises';
+import { lstat, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -14,7 +14,9 @@ export async function verifyWindowsRestorePublication({ directory, control, snap
   const project = snapshot.project;
   const taskName = snapshot.runtime.task.name;
   const scope = await inspectWindowsManagedTask({ project, taskName, pwsh });
-  const originalState = JSON.parse(await readFile(path.join(control, 'state.json')));
+  const stateFile = path.join(control, 'state.json');
+  const originalStateBytes = await readFile(stateFile);
+  const originalState = JSON.parse(originalStateBytes);
   const errors = [];
   let lock;
   let hidden = false;
@@ -42,10 +44,11 @@ export async function verifyWindowsRestorePublication({ directory, control, snap
       { operation: 'update', phase: 'preflight' }, { targetCommit: 'f'.repeat(40) },
       { backupId: 'foreign-backup' }, { previousPhase: 'restoring' },
     ]) {
-      await writeState(control, { ...state, ...change });
+      // Inject invalid admission evidence without claiming a legal state transition.
+      await writeFile(stateFile, `${JSON.stringify({ ...state, ...change })}\n`);
       await assert.rejects(prepareWindowsRestoreRuntimeBundle(input));
     }
-    await writeState(control, state);
+    await writeFile(stateFile, `${JSON.stringify(state)}\n`);
     await assert.rejects(lstat(destination), { code: 'ENOENT' });
     const archived = await inspectWindowsSnapshotRuntime({ ...input, project, taskName });
     await rename(originalConfiguration, hiddenConfiguration);
@@ -70,7 +73,7 @@ export async function verifyWindowsRestorePublication({ directory, control, snap
     try { await rename(hiddenConfiguration, originalConfiguration); } catch (error) { errors.push(error); }
   }
   if (lock) {
-    try { await writeState(control, originalState); } catch (error) { errors.push(error); }
+    try { await writeFile(stateFile, originalStateBytes); } catch (error) { errors.push(error); }
     try { await releaseLock(control, lock, { pwsh }); } catch (error) { errors.push(error); }
   }
   try { await scope.close(); } catch (error) { errors.push(error); }

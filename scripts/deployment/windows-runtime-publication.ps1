@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory)][string]$Configuration,
     [Parameter(Mandatory)][string]$Sha256,
     [Parameter(Mandatory)][string]$Directory,
+    [switch]$Archived,
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][string]$ControllerIdentity
 )
@@ -26,13 +27,46 @@ try {
     $source = [IO.Path]::GetDirectoryName($Configuration)
     $sourceDirectory = [Deployment.WindowsPrivateFile]::OpenDirectory($source)
     $resources.Add($sourceDirectory)
-    $original = [Deployment.WindowsRuntimeHost]::Open($Configuration, $Sha256, $source)
-    $resources.Add($original)
     $configurationFile = [Deployment.WindowsPrivateFile]::Open($Configuration, $Sha256)
     $resources.Add($configurationFile)
     $document = [Text.Json.JsonDocument]::Parse($configurationFile.ReadText())
     $resources.Add($document)
     $hashes = $document.RootElement.GetProperty('helpers')
+    $sources = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
+    if ($Archived) {
+        $stage = 'archive-input'
+        $line = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync([Console]::In, 131072)
+        $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method', 'files')
+        if ($request.id.GetInt32() -ne 0 -or $request.method.GetString() -cne 'archive' -or
+            $request.files.ValueKind -ne [Text.Json.JsonValueKind]::Array -or
+            $request.files.GetArrayLength() -ne [Deployment.WindowsRuntimeHost]::HelperFiles.Length + 1) {
+            throw 'Unexpected archived runtime inventory.'
+        }
+        $configurationSeen = $false
+        foreach ($item in $request.files.EnumerateArray()) {
+            $fields = Read-AgentsChatMaintenanceFields ($item.GetRawText()) @('name', 'file', 'sha256')
+            $name = $fields.name.GetString()
+            $file = $fields.file.GetString()
+            $digest = $fields.sha256.GetString()
+            if ([IO.Path]::GetDirectoryName($file) -cne $source) { throw 'Archived runtime member directory differs.' }
+            if ($name -ceq 'configuration.json') {
+                if ($configurationSeen -or $file -cne $Configuration -or $digest -cne $Sha256) {
+                    throw 'Archived runtime configuration differs.'
+                }
+                $configurationSeen = $true
+            } else {
+                if ($name -cnotin [Deployment.WindowsRuntimeHost]::HelperFiles -or
+                    $digest -cne $hashes.GetProperty($name).GetString()) { throw 'Archived helper differs.' }
+                $sources.Add($name, $file)
+            }
+        }
+        if (-not $configurationSeen) { throw 'Archived runtime configuration is absent.' }
+        $original = [Deployment.WindowsRuntimeHost]::OpenArchive($Configuration, $Sha256, $sources)
+    } else {
+        $original = [Deployment.WindowsRuntimeHost]::Open($Configuration, $Sha256, $source)
+        foreach ($name in [Deployment.WindowsRuntimeHost]::HelperFiles) { $sources.Add($name, (Join-Path $source $name)) }
+    }
+    $resources.Add($original)
     $stage = 'private-destination'
     $destination = [Deployment.WindowsPrivateFile]::CreateDirectory($Directory)
     $resources.Add($destination)
@@ -42,7 +76,7 @@ try {
         $original.Check()
         $destination.Check()
         $copy = [Deployment.WindowsPrivateFile]::CopyTrustedSource(
-            (Join-Path $source $name), $hashes.GetProperty($name).GetString(), (Join-Path $Directory $name))
+            $sources[$name], $hashes.GetProperty($name).GetString(), (Join-Path $Directory $name))
         $resources.Add($copy)
         $copies.Add($copy)
     }
