@@ -284,6 +284,11 @@ The complete-prefix fast path also passed both actual application regressions
 at `551c3ca / 38080122680` (normal first deployment and receipt-loss recovery).
 These preserve the original instance and authenticated chat through saved
 finalization and public update no-op; they use explicit S4U/AtStartup.
+The existing default current-account Interactive/AtLogOn policy also passed
+native runtime activation, completion and receipt publication at
+`cdd8192 / 38080335930` (13 focused cases). This uses a small HTTP fixture;
+actual application default-policy acceptance and public first-deployment
+tunnel/watchdog integration remain separate gates.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

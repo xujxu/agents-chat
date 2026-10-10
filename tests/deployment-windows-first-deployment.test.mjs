@@ -24,8 +24,11 @@ const readOptional = async file => {
 };
 
 const receiptLoss = process.env.DEPLOYMENT_TEST_WINDOWS_FIRST_RECEIPT_LOSS === '1';
+const defaultPolicy = process.env.DEPLOYMENT_TEST_WINDOWS_FIRST_DEFAULT_POLICY === '1';
 test(receiptLoss
   ? 'actual Windows first deployment recovers missing receipt after actor loss, saved closeout and public update no-op'
+  : defaultPolicy
+  ? 'actual Windows first deployment preserves default Interactive/AtLogOn policy through saved closeout and public update no-op'
   : 'actual Windows first deployment composes owned build, saved closeout and public update no-op', {
   skip: process.platform !== 'win32' || process.env.DEPLOYMENT_TEST_WINDOWS_FIRST_APPLICATION !== '1',
 }, async t => {
@@ -92,6 +95,9 @@ test(receiptLoss
     scope = await inspectWindowsManagedTask({ project, taskName, pwsh });
     runtime = scope.observation.runtime;
     const before = await observe('Inspect');
+    assert.deepEqual(before.triggers, [{ type: defaultPolicy ? 9 : 8, enabled: true }]);
+    assert.match(before.definition, defaultPolicy ? /<LogonType>InteractiveToken<\/LogonType>/
+      : /<LogonType>S4U<\/LogonType>/);
     const api = await loginDeploymentFixture();
     if (receiptLoss) {
       assert.equal((await api('/api/chats', { chat: {
@@ -125,7 +131,9 @@ test(receiptLoss
     assert.equal(after.binding.instanceGuid, before.binding.instanceGuid);
     assert.equal(after.binding.enabled, true);
     assert.equal(after.lease, 'released');
-    assert.deepEqual(after.triggers, [{ type: 8, enabled: true }]);
+    assert.deepEqual(after.triggers, before.triggers);
+    assert.equal(after.definition, before.definition);
+    assert.equal(after.binding.principalSid, before.binding.principalSid);
     const names = await readdir(control);
     assert.equal(names.some(name => /^(worker-|first-task-)/.test(name) || ['backup', 'lock'].includes(name)), false);
     assert.deepEqual(await verifyRecoveryEngine({ control, manifestSha256: result.recoveryEngine }), engine);

@@ -25,7 +25,8 @@ try {
   const options = {
     scope, configuration, control, lock, node: process.execPath, npmCli, git, pwsh, environment,
     port: 3010, deploymentBytes: 2 * 1024 ** 3, revision, waitSeconds: 120, timeoutSeconds: 900,
-    logonType: 'S4U', triggerType: 'AtStartup',
+    ...(process.env.DEPLOYMENT_TEST_WINDOWS_FIRST_DEFAULT_POLICY === '1'
+      ? {} : { logonType: 'S4U', triggerType: 'AtStartup' }),
   };
   const before = (await readdir(control)).sort();
   await assert.rejects(runWindowsFirstDeployment({ ...options, noInstall: true }), /dependencies/);

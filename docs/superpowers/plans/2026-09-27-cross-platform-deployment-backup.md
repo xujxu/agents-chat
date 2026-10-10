@@ -13934,17 +13934,31 @@ account / Interactive / AtLogOn defaults, not new production routing.
   (AtLogOn type 9 for defaults, AtStartup type 8 for explicit policy), original
   owner/runtime instance, original account SID, unchanged security and the
   existing restart policy.
-- [ ] Add the case to the focused selector (13 cases; full native first46),
+- [x] Add the case to the focused selector (13 cases; full native first46),
   push and dispatch the existing focused Actions command. If the hosted
   runner lacks a real interactive logon, record that actual limitation rather
   than substitute S4U or call a registration-only assertion runtime acceptance.
   Do not create credentials or change host logon policy to bypass that limit.
-- [ ] If native default execution passes, add a separate actual-application
+  `cdd8192 / 38080335930`, job `114295763179`, passed all 13 cases at
+  `2026-10-10 20:04:23 UTC`. Default Interactive/AtLogOn activation,
+  completion and receipt publication passed in 81,511 ms; saved dependency
+  closure passed in 3,577 ms. No logon fallback or host policy change was used.
+- [x] If native default execution passes, add a separate actual-application
   default-policy matrix case and omit task-mode options in that actor while
   preserving explicit S4U cases. Require the same saved-finalizer/public-update
   continuity checks with AtLogOn. This still does not exercise Dev Tunnel or
   enable the public first-deployment entry; watchdog/tunnel integration remains
   a separate gate.
+- [ ] Push and accept all three actual-application cases:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_commands_only=true -f windows_first_application_only=true
+  ```
+  The default actor omits policy arguments. Require actual InteractiveToken XML,
+  one AtLogOn trigger, unchanged task definition and principal through saved
+  finalization, plus original runtime/chat/receipt continuity through public
+  update no-op. Existing explicit normal and receipt-loss cases remain separate.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
