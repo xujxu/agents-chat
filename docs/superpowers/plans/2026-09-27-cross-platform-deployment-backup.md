@@ -14022,6 +14022,26 @@ inspection/configuration/lock/first-deployment composition.
   Linux (`114311513126`, 2.1 ms) and Windows (`114311513092`, 5.8 ms).
   At `21:16 UTC`, 41/46 jobs had passed with zero failures; full acceptance
   remains pending.
+  Full run completed at `21:38:07 UTC` with 45/46 passing, including all four
+  actual first-application cases. Windows live job `114311512881` reached the
+  2,400-second native batch deadline; its finally cleanup masked the original
+  failure with a still-open runtime configuration file. The later actual
+  existing-application lifecycle did not execute.
+- [ ] Split the 46 native cases into complementary `foundations` (37) and
+  `cold-receipts` (9) jobs. Partition names by
+  `\((?:cold-receipt-proof|cold-first-[^)]*)\)$`; the first shard uses its
+  negation, the second its match. Keep existing test files/cases and the
+  2,400-second private-runner ceiling; focused13 becomes 4+9. Keep actual
+  existing-task deployment in its own existing job. Full workflow becomes
+  48 jobs rather than lengthening one native/application job.
+- [ ] Preserve timeout diagnostics before cleanup: kill only the retained
+  original test Job, settle/read its streams, collect primary and cleanup
+  exceptions, and fail with all of them instead of replacing the primary.
+  Add native harness checks for ordinary intentional test failure and a bounded
+  timeout, both requiring captured fixture output and a nonzero outcome.
+- [ ] Push and run the complete 48-job workflow. Require native37+9 and the
+  existing actual update lifecycle, all four first applications, both
+  configuration-policy contract jobs, and all Linux regressions to pass.
 - [x] Update public help/README with the exact accepted fresh NoTunnel route
   and remaining gates. Do not label no-tunnel acceptance default tunnel
   acceptance or claim other-user/legacy-task adoption.

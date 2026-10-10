@@ -181,6 +181,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native supervisor protocol contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-public-command.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Public Windows command contracts failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-private-runner.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Private Windows test runner diagnostics failed.' }
       - name: Verify public task-option refusals in Windows PowerShell
         if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         shell: powershell
