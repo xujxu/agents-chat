@@ -24,13 +24,19 @@ function Read-AgentsChatFirstCompletionPrefix([hashtable]$Context) {
     while ($count -lt $names.Count -and $present.Remove("$($names[$count]).json")) { $count++ }
     if ($present.Count -or $count -lt 9) { throw 'First-completion prefix has gaps or precedes release intent.' }
     $Context.RecordNames = $names[0..($count - 1)]
+    $Context.DeploymentReceiptPresent = [IO.Directory]::GetFileSystemEntries($Context.Control, 'deployment.json').Length -ne 0
 }
 
 function Assert-AgentsChatFirstCompletionInventory([hashtable]$Context) {
     $Context.Stage = 'inventory'
-    foreach ($name in @('recovery-lock', 'deployment.json', 'task-maintenance', 'backup')) {
+    foreach ($name in @('recovery-lock', '.deployment.json.staging', 'task-maintenance', 'backup')) {
         if ([IO.Directory]::GetFileSystemEntries($Context.Control, $name).Length) {
             throw 'First completion conflicts with existing deployment or recovery evidence.'
+        }
+        $hasReceipt = [IO.Directory]::GetFileSystemEntries($Context.Control, 'deployment.json').Length -ne 0
+        if ($hasReceipt -ne $Context.DeploymentReceiptPresent -or
+            ($hasReceipt -and $Context.RecordNames[-1] -cne 'completion-complete')) {
+            throw 'First deployment receipt appeared, disappeared or precedes complete runtime handoff.'
         }
     }
     $expected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -219,4 +225,25 @@ function Read-AgentsChatFirstCompletionRecords([hashtable]$Context) {
         -not [DateTimeOffset]::TryParseExact($state.updatedAt.GetString(), "yyyy-MM-dd'T'HH:mm:ss.fff'Z'",
             [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$updated) -or
         $updated -lt $started) { throw 'Original accepted first-deployment state differs.' }
+    if ($Context.DeploymentReceiptPresent) { Read-AgentsChatFirstDeploymentReceipt $Context $state }
+}
+
+function Read-AgentsChatFirstDeploymentReceipt([hashtable]$Context, [hashtable]$State) {
+    $Context.Stage = 'deployment-receipt'
+    $file = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'deployment.json') ''
+    if ($file.ByteLength -gt 8192) { throw 'Oversized first deployment receipt.' }
+    $receipt = Read-AgentsChatMaintenanceFields ($file.ReadText()) @(
+        'version', 'project', 'operationId', 'status', 'acceptedAt', 'identity')
+    Assert-AgentsChatCompletionFields $receipt $State @('project', 'operationId')
+    $identity = Read-AgentsChatMaintenanceFields $receipt.identity.GetRawText() @(
+        'source', 'build', 'dependencies', 'config', 'service')
+    if ($receipt.version.GetInt32() -ne 1 -or $receipt.status.GetString() -cne 'accepted' -or
+        $receipt.acceptedAt.GetString() -cne $State.updatedAt.GetString() -or
+        $identity.source.GetString() -cne $State.targetCommit.GetString()) {
+        throw 'First deployment receipt differs from original accepted state.'
+    }
+    foreach ($name in @('build', 'dependencies', 'config', 'service')) {
+        if ($identity[$name].GetString() -cnotmatch '^[a-f0-9]{64}$') { throw 'Invalid first deployment identity digest.' }
+    }
+    $Context.DeploymentReceiptFile = $file
 }

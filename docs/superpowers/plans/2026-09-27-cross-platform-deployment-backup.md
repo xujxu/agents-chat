@@ -13324,17 +13324,26 @@ Files: existing first-crash actor, crash/proof tests and
   `publishDeploymentReceipt`. Open the first-specific read-only proof against
   that completed history. Require unchanged original runtime and both state
   and receipt writes refused while proof is retained.
-- [ ] Run the new causal Actions case after Task 5CP: the current first-proof
+- [x] Run the new causal Actions case after Task 5CP: the current first-proof
   inventory rejects every `deployment.json`, including a genuine completed
   first receipt. Confirm this exact refusal, not an earlier adoption failure.
-- [ ] Admit an optional receipt only with the complete fourteen-file first
+  Corrected causal `4e39245 / 38045649562`, job `114194521900`, at
+  `2026-10-10 10:44:11 UTC` passed actual warm receipt publication
+  (93,169 ms) and saved closure. The two intended failures were classic
+  cold-proof's missing staging refusal and completed-receipt proof's native
+  `inventory` refusal. The initial selector also reported five empty test-file
+  successes; these are not additional behavioral cases. Restrict its file list
+  to the three actual matching modules so subsequent totals are four cases.
+- [x] Admit an optional receipt only with the complete fourteen-file first
   history. Capture its presence for the entire proof lifetime; retain its
   original private file and validate exact schema, accepted status, project,
-  operation, accepted timestamp, source commit and all identity digests against
-  the original accepted state. Continue refusing receipt presence before
+  operation, accepted timestamp and source commit against the original accepted
+  state, and validate the other four identity digest formats. Continue refusing receipt presence before
   completion, foreign receipts and staged publication evidence. Do not grant
   cleanup authority or claim that receipt digests independently attest current
   build contents.
+  Test receipt appearance during an already-retained incomplete proof as well
+  as invalid receipt files at cold open; a late receipt must poison the proof.
 - [x] Add cold-open refusal cases for wrong operation, project, timestamp,
   source, malformed artifact digest, pending status and unknown fields:
   ```js
@@ -13367,7 +13376,7 @@ runtime, managed transaction history, backup, or another receipt format.
   Assert exact source/build/dependency identities, original operation and
   accepted timestamp, unchanged state and runtime, no backup, byte-identical
   idempotent publication, and refusal of a different source without mutation.
-- [ ] Run this added native Actions case; fix only demonstrated integration
+- [x] Run this added native Actions case; fix only demonstrated integration
   failures before implementing final evidence retirement. Receipt publication
   alone does not release the original lock or make public first deploy ready.
   Causal `cad331e / 38042966778`, job `114190473046`, preserved **35/35**

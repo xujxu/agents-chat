@@ -47,6 +47,16 @@ export async function prepareWindowsFirstProofCase({ fixture, active, port, rele
           if (receipt) await assert.rejects(writeFile(receiptFile, receipt));
         } finally { await proof.close(); }
         await assert.rejects(proof.check());
+        if (!receipt) {
+          const watching = await api.openWindowsFirstCompletionProof(options);
+          try {
+            await writeFile(receiptFile, '{}');
+            await assert.rejects(watching.check(), refused);
+          } finally {
+            try { await watching.close(); }
+            finally { await rm(receiptFile, { force: true }); }
+          }
+        }
         for (const mutation of [
           value => { value.lease = 'released'; },
           value => { value.runtime.launcherPid += 1; },
