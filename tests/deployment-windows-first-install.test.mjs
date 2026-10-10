@@ -27,6 +27,11 @@ async function fixture(t) {
     root, project, control, taskName, pwsh,
     inspect: () => inspectWindowsFirstInstall({ project, taskName, pwsh }),
     checkOriginal: scope => assertWindowsFirstInstallScope(scope),
+    configure: async scope => {
+      const { inspectWindowsFirstConfiguration } = await import('../scripts/deployment/windows-configuration.mjs');
+      assert.equal(typeof inspectWindowsFirstConfiguration, 'function', 'Missing native Windows first-install configuration');
+      return inspectWindowsFirstConfiguration({ scope, pwsh, profile: 'agents-chat-auth-638c553' });
+    },
   };
 }
 
@@ -100,4 +105,82 @@ test('Windows first-install inspection refuses an existing or newly registered t
     await scope.close();
     if (registered) await execute(scheduler, ['/Delete', '/TN', f.taskName, '/F'], { timeout: 30000, maxBuffer: 16384 });
   }
+});
+
+const configurationText = 'nextauth_secret=fixture-first-config-secret\nnextauth_url=http://localhost:3010\n'
+  + 'admin_username=fixture\nadmin_password=fixture-first-config-password\n';
+
+test('Windows first-install configuration retains actual dotenv sources without inventing installed configuration', windows, async t => {
+  const f = await fixture(t);
+  const file = path.join(f.project, '.env.production.local');
+  const agents = path.join(f.project, 'agents.json');
+  await writeFile(file, configurationText);
+  await writeFile(path.join(f.project, '.env'), 'NEXTAUTH_SECRET=lower-priority-fixture\n');
+  await writeFile(agents, '{"agents":[]}');
+  const scope = await f.inspect();
+  let configuration;
+  try {
+    configuration = await f.configure(scope);
+    await assert.rejects(f.configure({ ...scope }), { code: 'DEPLOYMENT_WINDOWS_FIRST_INSTALL_REFUSED' });
+    assert.equal(configuration.status, 'configuration-supported');
+    assert.deepEqual(configuration.providers, ['admin-login']);
+    assert.equal(configuration.buildEnvironment({}).NEXTAUTH_SECRET, 'fixture-first-config-secret');
+    assert.equal(configuration.buildEnvironment({}).ADMIN_PASSWORD, 'fixture-first-config-password');
+    assert.deepEqual(configuration.startupEnvironment(), { NODE_ENV: 'production' });
+    assert.doesNotMatch(JSON.stringify(configuration), /fixture-first-config/);
+    assert.equal(configuration.files.length, 5);
+    assert.equal(configuration.files.find(source => source.path === agents).present, true);
+    assert.ok(configuration.files.find(source => source.path === file).securityDescriptor);
+    await configuration.checkFiles();
+    await assert.rejects(rename(file, `${file}-moved`));
+    await assert.rejects(writeFile(agents, '{"changed":true}'));
+    assert.equal(await readFile(file, 'utf8'), configurationText);
+    assert.equal(await readFile(agents, 'utf8'), '{"agents":[]}');
+    assert.equal(existsSync(f.control), false);
+    await mkdir(path.join(f.project, '.next'));
+    await configuration.checkFiles();
+  } finally {
+    try { await configuration?.close(); }
+    finally { await scope.close(); }
+  }
+  await rename(file, `${file}-closed`);
+  await rename(`${file}-closed`, file);
+});
+
+test('Windows first-install configuration refuses newly appearing higher-priority sources without removing them', windows, async t => {
+  const f = await fixture(t);
+  await writeFile(path.join(f.project, '.env'), configurationText);
+  const scope = await f.inspect();
+  let configuration;
+  const added = path.join(f.project, '.env.local');
+  try {
+    configuration = await f.configure(scope);
+    await writeFile(added, 'NEXTAUTH_SECRET=changed-fixture\n');
+    await assert.rejects(configuration.checkFiles(), { code: 'DEPLOYMENT_WINDOWS_CONFIGURATION_REFUSED' });
+    assert.equal(await readFile(added, 'utf8'), 'NEXTAUTH_SECRET=changed-fixture\n');
+    assert.equal(existsSync(f.control), false);
+  } finally {
+    try { await configuration?.close(); }
+    finally { await scope.close(); }
+  }
+});
+
+test('Windows first-install configuration refuses unsupported authentication and injected Node hooks before mutation', windows, async t => {
+  const f = await fixture(t);
+  const scope = await f.inspect();
+  const file = path.join(f.project, '.env');
+  try {
+    for (const text of [
+      'NEXTAUTH_SECRET=change-me-to-a-random-string\n',
+      'NEXTAUTH_SECRET=fixture\nNEXTAUTH_URL=http://localhost:3010\n',
+      `${configurationText}NODE_OPTIONS=--inspect\n`,
+      `${configurationText}NODE_PATH=unexpected-fixture\n`,
+    ]) {
+      await writeFile(file, text);
+      await assert.rejects(f.configure(scope), { code: 'DEPLOYMENT_CONFIGURATION_UNSUPPORTED' });
+      assert.equal(await readFile(file, 'utf8'), text);
+      assert.equal(existsSync(f.control), false);
+    }
+    await scope.checkFresh();
+  } finally { await scope.close(); }
 });

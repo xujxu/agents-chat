@@ -13315,6 +13315,27 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5BZ: Native configuration capture for a genuine first installation
+
+Reuse `windows-configuration-files.ps1/.mjs` with an explicit fresh parameter
+set rather than inventing an installed `configuration.json`, managed task or
+runtime receipt. Keep the existing installed parameter set unchanged.
+
+- [ ] Add native first-install configuration cases and observe missing
+  `inspectWindowsFirstConfiguration` in command-only Actions before implementation.
+- [ ] Accept only an original first-install scope. Retain the same original
+  project and each present dotenv/agents file using existing native leases;
+  retain absence observations for missing sources.
+- [ ] Use the shared fixed dotenv priority, authentication compatibility,
+  startup environment and build-environment policy. Reject Node hook injection
+  before creating deployment state. No file contents or secrets in observations.
+- [ ] Require rechecks to refuse replacement, permission changes and newly
+  appearing sources; allow the later build's artifacts without losing retained
+  configuration identity. Release every helper on refusal or explicit close.
+- [ ] Accept native fresh cases and preserve installed-configuration behavior
+  in the existing Windows application gate. Configuration capture alone does
+  not authorize worker builds, task registration, activation or recovery.
+
 ### Task 5BY: Original Windows first-installation inspection
 
 **Files:** Add `scripts/deployment/windows-first-install.mjs`,
@@ -13342,15 +13363,20 @@ only to arrange inert test tasks.
   runtime generation, task receipt, maintenance state or recovery authority.
   Keep fresh checks distinct from post-build uninstalled checks; both
   require the task to remain absent and the original directory unchanged.
-- [ ] After inspection, create an inert competing task and require recheck
+- [x] After inspection, create an inert competing task and require recheck
   refusal while its exact definition remains unchanged. Create build
   artifacts and permit only the explicit post-build check; fresh checking
   must refuse them. A retained project must not be replaceable before close.
-- [ ] Accept native inspection cases and preserve existing public command
+- [x] Accept native inspection cases and preserve existing public command
   contracts. This is only read-only first-install admission infrastructure:
   private configuration capture, owned build, create-only registration,
   guarded activation/failure recovery and real public first-install
   acceptance are still required before enabling an absent-task deploy.
+  `91fa236 / 38018124085` passed command-only **1/1**, native job
+  `114112882177`: all three first-install cases passed at
+  `2026-10-10 02:47:48 UTC`, including original-scope forgery and closed-scope
+  refusal. Existing native capture/supervisor/public/options/routing cases
+  passed. This is not a real first-install application acceptance.
 
 ### Task 5BX: Public Windows deploy/update entry for existing managed tasks
 
