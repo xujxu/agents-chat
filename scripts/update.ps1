@@ -20,4 +20,4 @@ param(
     [ValidateSet('AtLogOn', 'AtStartup')][string]$TaskTriggerType
 )
 . (Join-Path $PSScriptRoot 'deployment/windows-public-command.ps1')
-exit (Invoke-WindowsPublicCommand -Operation deploy -Source (Split-Path -Parent $PSScriptRoot) -Options $PSBoundParameters)
+exit (Invoke-WindowsPublicCommand -Operation update -Source (Split-Path -Parent $PSScriptRoot) -Options $PSBoundParameters)

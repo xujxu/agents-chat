@@ -458,47 +458,54 @@ private bundle before task admission, without starting or changing the runtime.
 External Windows controller capture passed all 41 lifecycle jobs at
 `4893130 / 37963608037`. It retains private copies of the complete controller
 module tree and workflow schema outside mutable source, so replacing source
-cannot alter an in-flight controller. Public supervisor wiring remains pending.
-Public Windows task-backed runtime composition remains gated, and installed immutable
-runtime bundles are not rewritten through retained runtime scopes.
-First registration defaults to the current Windows account, or accepts an
-explicit `-UserId`. On redeployment, omitted account, logon, trigger and tunnel
-options preserve the existing supported task settings. Foreign task actions and
-unsupported principal/trigger modes are refused before changing the task.
+cannot alter an in-flight controller. The private supervisor and exact successful
+capture retirement passed all 42 jobs at `26bcf7e / 38006102348`.
+Public wiring below is implemented on this branch but still awaiting acceptance.
+Installed immutable runtime bundles are not rewritten through retained scopes.
+The separate task installer defaults registration to the current Windows account.
+The staged public deploy/update commands currently preserve the installed task
+and refuse explicit account, logon, trigger or tunnel changes. Foreign task
+actions are refused before changing the task.
 The native task-definition inspector records and rechecks XML,
 task permissions, principal/mode settings and Scheduler instances. It is
 read-only and explicitly returns no runtime authority: a Scheduler engine PID
 is not proof of ownership of the watchdog or its descendants, and Ready or
 Disabled is not proof that application processes are stopped. Public integration
-of Windows containment, artifact/configuration binding and recovery remains pending.
+of first installation and cold recovery remains pending.
+
+**Deployment-backup branch: staged public commands.** Run from elevated
+PowerShell **7.4 or newer**, with **Node.js 24** (including its bundled npm)
+and Git on the controller PATH. This replaces the legacy deploy implementation;
+there is no fallback that kills port owners, reinstalls a task or builds before
+backup. Only an existing running managed task is supported in this batch.
+Legacy watchdog tasks, stopped tasks and first installation are not yet supported.
 
 ```powershell
-# Deploy (pulls latest code, restarts the service, waits for readiness)
-.\scripts\deploy.ps1
+# Read-only help or status (no control files or helper capture)
+pwsh -NoProfile -File .\scripts\update.ps1 -Help
+pwsh -NoProfile -File .\scripts\update.ps1 -ProjectDir C:\apps\agents-chat -Status -Json
 
-# Deploy without git pull
-.\scripts\deploy.ps1 -SkipGitPull
+# Update an existing managed task; skip only with matching accepted provenance
+pwsh -NoProfile -File .\scripts\update.ps1 -ProjectDir C:\apps\agents-chat -Json
 
-# Deploy with AtStartup trigger (runs even without login)
-.\scripts\deploy.ps1 -TaskTriggerType AtStartup -TaskLogonType S4U
-
-# Local serving behind separately managed HTTPS; no tunnel or Azure AD changes
-.\scripts\deploy.ps1 -UserId 'MACHINE\appuser' -NoTunnel
-
-# Explicitly restore normal tunnel startup for a previously NoTunnel task
-.\scripts\deploy.ps1 -NoTunnel:$false
-
-# Remove the scheduled task entirely
-.\scripts\deploy.ps1 -RemoveTask
+# Rebuild the current revision of an existing managed task
+pwsh -NoProfile -File .\scripts\deploy.ps1 -ProjectDir C:\apps\agents-chat -SkipGitPull
 ```
 
-The deploy script:
-1. Pulls latest code from git (unless `-SkipGitPull`)
-2. Stops the existing Scheduled Task and cleans up port 3000
-3. Restarts the task so the app rebuilds and serves again
-4. Waits up to 180s for `localhost:3000` to respond
-
-Logs are written to `logs/service-watchdog.log` and `logs/start-service-child.log`.
+Both commands accept `-TaskName` (default `Agents-Chat-Startup`), `-ProjectDir`
+(default tools checkout), `-Revision` (full local commit ID, conflicts with
+`-SkipGitPull`), `-NoInstall`, `-WaitSeconds` (positive, default 180),
+`-TimeoutSeconds` (positive per-stage limit, default 1800), `-Status`, `-Json`
+and `-Help`. Readiness uses port **3010**. The private sibling
+`.<project>.deployment` retains the backup, state and recovery engine;
+`.<project>.deployment-controllers` holds temporary helper captures.
+Successful captures are removed only after original processes settle. Failed
+captures and all recovery evidence must be retained for inspection.
+Inherited `NODE_OPTIONS`/`NODE_PATH` do not configure the controller or runtime.
+`-NoWait`, zero wait, `-Verify`, `-DryRun`, `-RemoveTask` and explicit
+`-UserId`, `-NoTunnel`, `-TaskLogonType` or `-TaskTriggerType` are temporarily
+refused before installation access. First deployment and public restore remain
+unfinished; do not use the old task installer as an automatic recovery fallback.
 
 ### Deployment (Linux systemd)
 

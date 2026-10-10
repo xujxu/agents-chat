@@ -10,7 +10,9 @@ param(
     [Parameter(Mandatory)][string]$PowerShell,
     [Parameter(Mandatory)][string]$Git,
     [Parameter(Mandatory)][string]$NpmCli,
-    [Parameter(Mandatory)][string]$ArgumentsJson
+    [Parameter(Mandatory)][string]$ArgumentsJson,
+    [switch]$PrepareDirectories,
+    [switch]$ReturnOutcome
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -79,6 +81,22 @@ try {
     $stage = 'native-tools'
     Add-Type -Path @('WindowsWorkerJob.cs', 'WindowsPrivateFile.cs', 'WindowsControllerToken.cs',
         'WindowsControllerProcess.cs', 'WindowsControllerCapture.cs' | ForEach-Object { Join-Path $PSScriptRoot $_ })
+    if ($PrepareDirectories) {
+        $stage = 'private-directories'
+        $parent = Split-Path -Parent $Project
+        $leaf = Split-Path -Leaf $Project
+        if ($Control -cne (Join-Path $parent ".$leaf.deployment") -or
+            $TemporaryDirectory -cne (Join-Path $parent ".$leaf.deployment-controllers") -or
+            (Split-Path -Parent $Directory) -cne $TemporaryDirectory -or
+            (Split-Path -Leaf $Directory) -cnotmatch '^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$') {
+            throw 'Public command private directories do not match the installed project.'
+        }
+        foreach ($path in @($Control, $TemporaryDirectory)) {
+            if ([IO.Directory]::Exists($path)) { $retained = [Deployment.WindowsPrivateFile]::OpenDirectory($path) }
+            else { $retained = [Deployment.WindowsPrivateFile]::CreateDirectory($path) }
+            try { $retained.Check() } finally { $retained.Dispose() }
+        }
+    }
     $stage = 'capture'
     $temporary = [Deployment.WindowsPrivateFile]::OpenDirectory($TemporaryDirectory)
     $capture = [Deployment.WindowsControllerCapture]::Create($Source, $Project, $Directory)
@@ -146,9 +164,11 @@ if ($failure) {
             line = $failure.InvocationInfo.ScriptLineNumber
         })
     }
-    [Console]::Out.WriteLine(($details | ConvertTo-Json -Depth 5 -Compress))
     [Console]::Error.WriteLine("$code ($stage)")
+    if ($ReturnOutcome) { return @{ Code = 1; Result = $details } }
+    [Console]::Out.WriteLine(($details | ConvertTo-Json -Depth 5 -Compress))
     exit 1
 }
+if ($ReturnOutcome) { return @{ Code = $outcome.Code; Result = $outcome.Value } }
 [Console]::Out.WriteLine(($outcome.Value | ConvertTo-Json -Depth 8 -Compress))
 exit $outcome.Code

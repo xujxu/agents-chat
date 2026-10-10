@@ -126,27 +126,20 @@ try {
         Assert-Equal $rejected $true 'foreign action refused rather than adopted'
     }
 
-    Invoke-Case 'deploy task installation forwards explicit identity and tunnel choice' {
+    Invoke-Case 'staged public deploy refuses task reconfiguration without registration' {
         foreach ($name in @('UserId', 'NoTunnel')) {
             if ($DeployAst.ParamBlock.Parameters.Name.VariablePath.UserPath -notcontains $name) {
                 throw "deploy.ps1 does not declare $name"
             }
         }
-        $extracted = Join-Path $Scripts 'installer-function.ps1'
-        Set-Content -LiteralPath $extracted -Encoding UTF8 -Value (Get-FunctionText $DeployAst 'Install-AgentsChatTask')
-        . $extracted
         $TaskName = 'Agents-Chat-Test-' + [Guid]::NewGuid().ToString('N')
-        $TaskNames.Add($TaskName)
-        $ProjectDir = $Project
-        $UserId = $Current.Name
-        $TaskLogonType = 'S4U'
-        $TaskTriggerType = 'AtStartup'
-        $NoTunnel = $true
-        $global:LASTEXITCODE = 0
-        $null = Install-AgentsChatTask
-        $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
-        Assert-Equal $task.Principal.LogonType.ToString() 'S4U' 'forwarded logon'
-        Assert-Equal $task.Actions[0].Arguments "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $Scripts 'service-watchdog.ps1')`" -NoTunnel" 'forwarded NoTunnel'
+        $text = & $PowerShell -NoProfile -NonInteractive -ExecutionPolicy Bypass `
+            -File (Join-Path $Repository 'scripts/deploy.ps1') -TaskName $TaskName `
+            -ProjectDir $Project -UserId $Current.Name -TaskLogonType S4U -TaskTriggerType AtStartup -NoTunnel -Json
+        Assert-Equal $LASTEXITCODE 1 'unsupported task changes fail'
+        $result = ($text -join "`n") | ConvertFrom-Json
+        Assert-Equal $result.code 'DEPLOYMENT_COMMAND_MODE_UNSUPPORTED' 'task changes are explicitly unsupported'
+        Assert-Equal ([bool](Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) $false 'no task registered'
     }
 
     Invoke-Case 'watchdog child command preserves spaced paths and both tunnel modes' {

@@ -18,7 +18,7 @@ Add-Type -Path @('WindowsWorkerJob.cs', 'WindowsPrivateFile.cs', 'WindowsControl
 $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
 $git = (Get-Command git).Source
 $npm = Join-Path (Split-Path $Node) 'node_modules/npm/bin/npm-cli.js'
-$control = Join-Path $Root 'live-control'
+$control = Join-Path (Split-Path -Parent $Project) ".$(Split-Path -Leaf $Project).deployment"
 $directory = Join-Path $Root 'captured-controller'
 $capture = $null
 $actor = $null

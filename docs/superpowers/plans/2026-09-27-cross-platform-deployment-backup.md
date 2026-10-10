@@ -13326,36 +13326,39 @@ supervisor; do not introduce a second transaction or legacy fallback.
 `tests/deployment-windows-public-command.ps1`. Extend the supervisor's private
 directory preparation, real live fixture, lifecycle workflow and README.
 
-- [ ] Require the public update script before building the real fixture.
+- [x] Require the public update script before building the real fixture.
   The native contract invokes both public commands with `-Help -Json` and
   nonexistent project paths; it requires `status: help` and no created paths.
   Unsupported `-NoWait`, `-Verify`, `-DryRun`, `-RemoveTask` and explicit task
   reconfiguration must fail before creating any project/control/capture path.
   Read-only `-Status -Json` on a real project without control must return
   `unmanaged`, without creating its sibling control or controller root.
-- [ ] Push the contract and dispatch:
+- [x] Push the contract and dispatch:
   `gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat --ref feat/deployment-backup -f windows_application_only=true`.
   Observe `Missing public Windows update entry`, not a speculative failure.
-- [ ] Keep both public scripts as parameter/composition shells. Their shared
+  Causal `84c05af / 38008426446`, live job `114082540288`, failed on that
+  assertion at 00:18:54 UTC on 2026-10-10, after existing contracts and
+  native capture/supervisor cases passed.
+- [x] Keep both public scripts as parameter/composition shells. Their shared
   helper maps `-Revision`, `-SkipGitPull`, `-NoInstall`, `-WaitSeconds`,
   `-TimeoutSeconds`, `-Status` and `-Json` to the existing shared parser.
   Preserve the existing 180-second Windows readiness default.
   Help and mode refusals precede tool and filesystem access.
-- [ ] Require PowerShell 7.4+ and controller Node 24, with explicit,
+- [x] Require PowerShell 7.4+ and controller Node 24, with explicit,
   canonical local Node/Git/npm/PowerShell paths. Remove inherited
   `NODE_OPTIONS` and `NODE_PATH` only while invoking controller Node, then
   restore the caller's environment. Do not discover tools in the private actor.
-- [ ] Derive control as the private sibling `.<project>.deployment` and
+- [x] Derive control as the private sibling `.<project>.deployment` and
   capture parent as `.<project>.deployment-controllers`. The supervisor
   prepares/opens these through existing native private-directory primitives;
   its capture remains a unique child. Existing insecure directories are
   refused, not repermissioned. Keep failed captures and operation evidence.
-- [ ] Read-only status invokes the existing command entry without creating
+- [x] Read-only status invokes the existing command entry without creating
   private directories or capturing helpers. Mutations invoke the original
   supervisor and preserve its exit code and structured outcome. First
   installation, restore, stopped/legacy tasks and task reconfiguration remain
   explicitly unsupported in this batch, without the old destructive fallback.
-- [ ] Route the real fixture through `scripts/update.ps1`, selecting the
+- [x] Route the real fixture through `scripts/update.ps1`, selecting the
   installed project/task and a distinct revision. Retain original task/data/
   backup/receipt/closeout assertions and require an empty private controller
   parent after successful update and no-op. Native fixture input may arrange
