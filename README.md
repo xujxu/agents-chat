@@ -523,6 +523,16 @@ the full lifecycle matrix contains 36 jobs. Linux service recovery and
 interrupted-recovery resumption run separately under unchanged 10-minute
 limits, preserving all 66 existing cases without name-based filtering.
 Public Windows task-backed restore composition remains gated. Component-level
+saved-engine archive inspection, native task-policy comparison and distinct
+runtime bundle publication passed all seven focused native jobs at
+`4a20946 / 38095473152`. Publication uses archived configuration/helpers even
+when the historical configuration is absent and the current configuration
+differs; it excludes stale runtime records and preserves the running task.
+The policy comparison accounts for Scheduler's implicit `Enabled=true` but
+refuses account, trigger, enabled-state and security changes. These are restore
+preflight components, not acceptance of public or cold no-build restoration.
+
+Component-level
 project/Git/external restoration and original-task snapshot capture passed all
 36 lifecycle jobs at `201133577d1a680aa380ea9be991a081d3244c9c / 37124027076`.
 The journal's native atomic lockfile publication primitive passed all 34 jobs

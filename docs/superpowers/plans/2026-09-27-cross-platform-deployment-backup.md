@@ -14008,13 +14008,15 @@ and call it from the saved task snapshot post-update fixture.
   a mapping-aware entry to the same retained-source loader, before destination
   creation. Copy only checked helpers/configuration into the new UUID bundle;
   use the existing normal `Open` to verify the result and existing close protocol.
-- [ ] Repeat the same remote gate and require both current-runtime publication
+- [x] Repeat the same remote gate and require both current-runtime publication
   regressions and archived publication assertions. Record limited acceptance
   before implementing external-path relocation and the restore transaction.
   `d7a4fe5 / 38095428682` passed all seven native jobs. Managed job
   `114340224541` reported the archived publication assertion at `23:40:08 UTC`
   and unchanged current-runtime publication at `23:40:09 UTC`. The stronger
-  different-live-config fixture at `4a20946 / 38095473152` is still running.
+  different-live-config fixture at `4a20946 / 38095473152` also passed 7/7.
+  Managed `114341778856` reported archived publication at `23:47:39 UTC`
+  and unchanged current publication at `23:47:41 UTC`.
 
 ### Task 5DD: Compare archived task policy against the original live observation
 
