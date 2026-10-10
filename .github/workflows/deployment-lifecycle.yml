@@ -44,12 +44,16 @@ on:
         description: With both Windows command flags, select first-receipt integration and saved dependency tests
         type: boolean
         default: false
+      windows_first_application_only:
+        description: With both Windows command flags, run only the actual first-application core
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}
+  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -151,7 +155,7 @@ jobs:
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds'
 
   windows-live-deployment:
-    if: ${{ inputs.windows_application_only || !inputs.windows_restore_only }}
+    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only }}
     name: Actual Windows live deployment
     runs-on: windows-2022
     timeout-minutes: 75
@@ -216,6 +220,33 @@ jobs:
           $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds'
+
+  windows-first-application:
+    if: ${{ inputs.windows_first_application_only || ((inputs.windows_application_only || !inputs.windows_restore_only) && !(inputs.windows_application_only && inputs.windows_commands_only)) }}
+    name: Actual Windows first deployment core
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Deploy actual fresh application and run its saved finalizer
+        shell: pwsh
+        env:
+          DEPLOYMENT_TEST_FIRST_ONLY: ${{ inputs.windows_first_application_only }}
+          DEPLOYMENT_TEST_COMMANDS_ONLY: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
+        run: |
+          if ($env:DEPLOYMENT_TEST_FIRST_ONLY -eq 'true' -and $env:DEPLOYMENT_TEST_COMMANDS_ONLY -ne 'true') {
+            throw 'First-application selection requires both Windows command-only flags.'
+          }
+          $env:DEPLOYMENT_TEST_WINDOWS_FIRST_APPLICATION = '1'
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git.exe -CommandType Application | Select-Object -First 1).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source) 'node_modules/npm/bin/npm-cli.js'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-first-deployment.test.mjs')
 
   database-admission:
     if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}

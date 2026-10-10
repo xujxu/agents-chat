@@ -230,11 +230,14 @@ fresh lock acquisition after cleanup. Genuine retirement-actor loss passed all
 six focused cases at `beb635a` (Actions `38047850347`): three separate actors
 were terminated after marker publication, the first deletion and all evidence
 deletions; fresh admissions resumed the same marker and original runtime.
-Full regression and public first-deployment integration remain separate gates.
+Public first-deployment integration remains a separate gate.
 The verified saved finalizer also accepts completed first deployments at
 `50a6a5c` (Actions `38049487645`, seven focused cases). It requires the exact
 accepted absent-prior state, uses first-specific retirement rather than managed
 history, and preserves the final receipt, original runtime and recovery engine.
+The combined implementation passed all 42 Linux/Windows jobs at `389e20f`
+(Actions `38050578461`), including 40 native first-install cases and the real
+Windows application update, closeout and no-op lifecycle.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,
@@ -538,7 +541,7 @@ module tree and workflow schema outside mutable source, so replacing source
 cannot alter an in-flight controller. The private supervisor and exact successful
 capture retirement passed all 42 jobs at `26bcf7e / 38006102348`.
 The public existing-task update/no-op path below passed all 42 jobs at
-`2ffb19c / 38042553678`. First installation and public cold restore remain
+`389e20f / 38050578461`. First installation and public cold restore remain
 separate, unfinished integration gates.
 Installed immutable runtime bundles are not rewritten through retained scopes.
 The separate task installer defaults registration to the current Windows account.

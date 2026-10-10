@@ -13383,12 +13383,17 @@ Files:
   Require unchanged state/receipt bytes, surviving runtime/HTTP/permanent task,
   no remaining first-task/worker/lock evidence, and successful fresh lock
   acquisition/release. The final marker deletion is its own last edge.
-- [ ] Accept focused five-case receipt/retirement gate, complete native
+- [x] Accept focused five-case receipt/retirement gate, complete native
   selection and saved-source closure. If shared managed helpers are extracted,
   also run the full dual-platform regression before public integration.
   Focused `ac0637b / 38047289219`, job `114199268213`, passed **5/5**
   at `2026-10-10 11:16:33 UTC`; genuine first retirement took 193,229 ms.
-  `beb635a / 38047852360` is running the full dual-platform regression.
+  `beb635a / 38047852360` passed native **39/39** and 40 complete jobs in its
+  first attempt, but did not complete the actual Windows application within
+  the old job budget. Corrected full42 `389e20f / 38050578461` passed **42/42**.
+  Windows job `114211728600` passed native **40/40** at `12:53:38 UTC` and
+  actual application update/closeout/no-op at `2026-10-10 13:19:10 UTC`
+  (1,528,990 ms). This is the accepted dual-platform baseline.
 - [x] Exercise genuine loss of three separately admitted retirement actors:
   after marker publication, after the first deletion, and after every evidence
   entry is deleted but before final marker removal. Each owned Node must be
@@ -13404,15 +13409,19 @@ Files:
   Full `38047852360` has an initial Linux inactive-service failure
   (`114200898298`, `linux-inactive-service.mjs:100`) because the kernel domain
   still exists while systemd reports no ControlGroup. This precedes mutation
-  and touches unchanged Linux code. Inspect/retry the exact job after the full
-  run settles; do not weaken the unreported-domain refusal or call the matrix
-  accepted before resolving it.
+  and touches unchanged Linux code. The exact same-revision job rerun in
+  attempt2 (`114208651630`) passed at `2026-10-10 12:20:45 UTC`, taking
+  1,057,000 ms and covering actual application acceptance and saved restoration.
+  No Linux code or safety check was changed. The workflow still reports failure
+  because the previous Windows application cancellation remains; the retry
+  watcher exit code alone is not the Linux job result.
   The expanded serial first-crash cases also need a larger bounded CI budget:
   native37 took 20m38s and the two retirement cases add roughly 6m38s, while
   the last accepted actual application step took 21m31s. Set the combined
   Windows job to 75 minutes and this first-install suite to 40 minutes; retain
   the private runner's existing 30-minute default for other callers. The
-  already-running pinned matrix still has its original 45-minute job limit.
+  old pinned matrix reached that original 45-minute limit and cancelled its
+  actual application step at `12:02:09 UTC`; native39 had passed at `11:47:55`.
 
 ### Task 5CS: Route saved first-deployment closeout through its actual authority
 
@@ -13440,6 +13449,28 @@ Files:
   172,192 ms. State, final receipt, running first runtime and verified saved
   engine survived, all operation evidence was retired, and a new lock was
   acquired and released successfully.
+
+### Task 5CT: Compose first deployment and accept a real Windows application
+
+- [ ] Add an actual fresh-checkout fixture with no task, dependencies, build,
+  application data or prior operation. A separate Node actor uses original
+  first-install/configuration scopes and a real lock to call
+  `runWindowsFirstDeployment`. Initially confirm the missing orchestrator.
+- [ ] Compose existing transaction, owned build, first-runtime registration,
+  guarded activation, readiness, permanent completion and actual final receipt.
+  Use absent-prior state and no backup; require dependency installation and
+  positive bounded waits. Preserve evidence on failure. Return a bound saved
+  closeout request, not premature lock release or invented managed history.
+- [ ] In Actions install/build real Next source, observe the resulting managed
+  runtime and use authenticated chat API data before/after original-actor exit
+  and saved finalization. Require exact accepted receipt, unchanged runtime,
+  no backup, retired operation evidence and fresh lock reuse.
+- [ ] Add a separate actual-first-application job and focused dispatch input;
+  keep existing application and native-first regressions unchanged.
+  This is core orchestration with explicit S4U/AtStartup for the fixture,
+  not public default-policy or tunnel acceptance. Do not enable the public
+  first-deploy route until current-user Interactive/AtLogOn and tunnel-enabled
+  defaults, explicit settings, and actual command routing are preserved.
 
 ### Task 5CQ: Retain a completed first proof after deployment receipt publication
 
