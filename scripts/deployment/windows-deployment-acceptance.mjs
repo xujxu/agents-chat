@@ -5,11 +5,12 @@ import { assertWindowsManagedTaskScope } from './windows-managed-task.mjs';
 import { waitWindowsReadiness } from './windows-readiness.mjs';
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const serviceIdentity = observed => digest({
+export const windowsServiceIdentityRecord = observed => ({
   project: observed.project, taskName: observed.taskName, definition: observed.definition,
   securityDescriptor: observed.securityDescriptor, principalSid: observed.principalSid,
   enabled: observed.enabled, configurationSha256: observed.configurationSha256,
 });
+const serviceIdentity = observed => digest(windowsServiceIdentityRecord(observed));
 export const windowsConfigurationIdentity = configuration => digest({
   profile: configuration.profile, providers: configuration.providers,
   projectSecurityDescriptor: configuration.projectSecurityDescriptor,

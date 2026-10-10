@@ -262,6 +262,14 @@ publication when the original actor died before publishing one.
 The identity handoff also passed all 40 native first-install cases at
 `d87981b / 38064697243` and the real first-application/public-update lifecycle
 at `d87981b / 38064697428`.
+Cold missing-receipt publication is now implemented internally, pending its
+Actions acceptance gate. It requires a separately admitted exclusive native
+scope, the surviving completed original runtime, and current source/build/
+dependency/configuration matching the retained original identity. It rejects
+incomplete publication evidence, validates the service digest against retained
+native task evidence, and creates only the receipt; it does not release the
+original operation lock or retire evidence. Saved closeout integration is not
+yet enabled.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

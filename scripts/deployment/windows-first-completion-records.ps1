@@ -225,6 +225,7 @@ function Read-AgentsChatFirstCompletionRecords([hashtable]$Context) {
     $Context.CompletionSha256 = $previous
     $Context.Phase = $record.phase.GetString()
     $state = Read-AgentsChatFirstAcceptedState $Context $lock
+    $Context.AcceptedState = $state
     if ($null -ne $Context.DeploymentIdentity -and
         $Context.DeploymentIdentity.source -cne $state.targetCommit.GetString()) {
         throw 'Original first build identity differs from accepted source.'

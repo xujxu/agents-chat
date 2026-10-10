@@ -15,7 +15,7 @@ function refused(cause) {
     code: 'DEPLOYMENT_WINDOWS_FIRST_COMPLETION_PROOF_REFUSED', recoveryAllowed: false,
   });
 }
-function capture(value) {
+export function captureWindowsFirstCompletionObservation(value) {
   const record = captureWorkerFields(value, [
     'status', 'mutationAuthority', 'phase', 'operationId', 'taskName', 'stateSha256',
     'completionSha256', 'runtime', 'port', 'providers', 'lease',
@@ -66,7 +66,7 @@ export async function openWindowsFirstCompletionProof({ control, pwsh, admission
       || ready.processIdentity !== await processIdentity(child.pid)) {
       throw new Error('Original first-completion proof bridge differs.');
     }
-    const observation = capture(ready.value);
+    const observation = captureWindowsFirstCompletionObservation(ready.value);
     const deploymentIdentity = ready.deploymentIdentity === null ? null
       : captureWindowsFirstDeploymentIdentity(ready.deploymentIdentity);
     const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity });
@@ -94,7 +94,9 @@ export async function openWindowsFirstCompletionProof({ control, pwsh, admission
           wire.close();
           return;
         }
-        if (!isDeepStrictEqual(capture(reply.value), observation)) throw new Error('Retained first-completion evidence changed.');
+        if (!isDeepStrictEqual(captureWindowsFirstCompletionObservation(reply.value), observation)) {
+          throw new Error('Retained first-completion evidence changed.');
+        }
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
         return observation;
       } catch (cause) {

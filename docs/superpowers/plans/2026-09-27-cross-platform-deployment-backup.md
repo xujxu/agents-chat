@@ -13645,18 +13645,21 @@ is granted by this operation.
   original lock/state/runtime, byte-identical idempotent replay, and acceptance
   by the existing retained first proof. Extend focused receipt selection to
   eight cases (native first selection becomes 41).
-- [ ] Run the focused Actions selector and confirm the missing implementation
-  before adding publication authority.
-- [ ] Open the existing first completion proof with its recovery-exclusive
+- [x] Run the focused Actions selector and confirm the missing implementation
+  before adding publication authority. At `1257009 / 38067333628`, job
+  `114257536768`, seven existing cases passed and the new case failed exactly
+  with `Missing first Windows cold receipt publication` at
+  `2026-10-10 16:38:57 UTC` (60,867 ms). No publication code existed in that run.
+- [x] Open the existing first completion proof with its recovery-exclusive
   release-intent handle. Require complete phase, original actors absent and
   non-null original deployment identity. Keep existing staging conflicts
   refused and reject incomplete native pending publication files; do not
   delete or reinterpret them.
-- [ ] Reinspect the original running managed task, supported configuration,
+- [x] Reinspect the original running managed task, supported configuration,
   exact source metadata and build artifacts; compare source/build/dependencies/
   config against original prepared identity before any publication. Use the
   existing accepted-runtime/readiness checks before and after native publication.
-- [ ] Validate the supplied service-identity JSON preimage against native
+- [x] Validate the supplied service-identity JSON preimage against native
   retained project/task/definition/security/principal/enabled/configuration
   fields. Hash its exact JSON bytes using the existing service-identity shape.
   Native code constructs receipt version/project/operation/status/acceptedAt
@@ -13671,6 +13674,9 @@ is granted by this operation.
   An already-existing receipt must match the same original identity and current
   service, and return unchanged rather than be replaced. Closing this scope
   releases only its own handles, not the original operation lock or runtime.
+  The native fixture also refuses retained pending/staged publication evidence,
+  independently changed build/dependency/configuration files, concurrent
+  publication scopes and a wrong service preimage without publishing a receipt.
 - [ ] Accept the focused native gate and saved dependency closure before
   integrating saved closeout or incomplete completion-step recovery. Add
   real-application actor-loss coverage in that integration gate; native fixture
