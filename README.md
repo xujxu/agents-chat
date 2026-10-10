@@ -248,9 +248,10 @@ The same first-created application also passed the actual public update no-op
 at `4768b9a` (Actions `38057969008`), preserving its runtime, task triggers,
 authenticated data and original receipt without creating a backup or leaving
 operation locks or successful controller captures behind.
-The latest complete Linux/Windows regression passed all 43 jobs at `5e15139`
-(Actions `38057686717`), including both real first-install and existing-task
-application lifecycles. Real default-tunnel acceptance still needs a suitable
+The latest complete Linux/Windows regression passed all 44 jobs at `1876402`
+(Actions `38075160363`), including 42 native first-install cases, real normal
+and interrupted first-application recovery, and the existing-task application
+lifecycle. Real default-tunnel acceptance still needs a suitable
 Actions test environment; public first installation and cold restore remain
 unfinished.
 First-completion preparation now retains original source, build, dependency and

@@ -13815,13 +13815,18 @@ job in `.github/workflows/deployment-lifecycle.yml`.
   surviving original runtime after actor loss, receipt creation through saved
   closeout, exact state/runtime/chat preservation, and subsequent public update
   no-op are accepted. No default tunnel or public first routing is inferred.
-- [ ] Run the complete dual-platform workflow, now 44 jobs (two isolated actual
+- [x] Run the complete dual-platform workflow, now 44 jobs (two isolated actual
   first scenarios) with 42 native first-install cases:
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat --ref feat/deployment-backup
   ```
   Preserve `5e15139 / 38057686717` as the last accepted full 43-job baseline
   until this expanded regression finishes successfully.
+  `1876402 / 38075160363` passed all 44 jobs. Windows live job
+  `114280494000` passed native 42/42 at `2026-10-10 18:47:23 UTC` and the
+  actual existing-application lifecycle at `19:13:09 UTC` (1,543,453 ms).
+  This is the new accepted full baseline; it predates Task 5CZ's earlier-prefix
+  orchestration and must not be reported as acceptance of that newer work.
 
 ### Task 5CZ: Finish released first-runtime prefixes through saved closeout
 
