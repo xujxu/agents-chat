@@ -24,6 +24,21 @@ foreach ($invalid in @(
     Assert $refused 'First-task settings normalization accepted a changed, missing or duplicate policy field.'
 }
 Write-Output 'PASS: first-task settings normalization admits only native ordering and known omitted defaults.'
+$before = [xml]'<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task" version="1.2"><Actions><Exec><Command>original</Command></Exec></Actions></Task>'
+$after = [xml]'<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Actions xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Exec><Command>original</Command></Exec></Actions></Task>'
+Confirm-AgentsChatFirstTaskXml $before.DocumentElement $after.DocumentElement
+foreach ($changed in @(
+    $after.OuterXml.Replace('original', 'changed'),
+    $after.OuterXml.Replace('version="1.2"', 'version="1.3"'),
+    $after.OuterXml.Replace('<Exec>', '<Exec extra="true">'),
+    $after.OuterXml.Replace('<Command>original</Command>', '')
+)) {
+    $refused = $false
+    try { Confirm-AgentsChatFirstTaskXml $before.DocumentElement ([xml]$changed).DocumentElement }
+    catch { $refused = $true }
+    Assert $refused 'First-task XML comparison accepted changed policy content.'
+}
+Write-Output 'PASS: first-task XML comparison preserves all content while ignoring namespace declaration placement.'
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 $folder = $scheduler.GetFolder('\')

@@ -38,6 +38,35 @@ function Confirm-AgentsChatFirstTaskSettings([Xml.XmlElement]$Expected, [Xml.Xml
     }
 }
 
+function Confirm-AgentsChatFirstTaskXml([Xml.XmlElement]$Expected, [Xml.XmlElement]$Actual) {
+    if ($Expected.LocalName -cne $Actual.LocalName -or $Expected.NamespaceURI -cne $Actual.NamespaceURI) {
+        throw 'Registered first-task element differs.'
+    }
+    $beforeAttributes = @($Expected.Attributes | Where-Object NamespaceURI -CNE 'http://www.w3.org/2000/xmlns/')
+    $afterAttributes = @($Actual.Attributes | Where-Object NamespaceURI -CNE 'http://www.w3.org/2000/xmlns/')
+    if ($beforeAttributes.Count -ne $afterAttributes.Count) { throw 'Registered first-task attributes differ.' }
+    foreach ($attribute in $beforeAttributes) {
+        if (-not $Actual.HasAttribute($attribute.LocalName, $attribute.NamespaceURI) -or
+            $Actual.GetAttribute($attribute.LocalName, $attribute.NamespaceURI) -cne $attribute.Value) {
+            throw "Registered first-task attribute differs: $($attribute.LocalName)."
+        }
+    }
+    if ($Expected.LocalName -ceq 'Settings') {
+        Confirm-AgentsChatFirstTaskSettings $Expected $Actual
+        return
+    }
+    if ($Expected.ChildNodes.Count -ne $Actual.ChildNodes.Count) { throw "Registered first-task shape differs: $($Expected.LocalName)." }
+    for ($index = 0; $index -lt $Expected.ChildNodes.Count; $index++) {
+        $before = $Expected.ChildNodes[$index]
+        $after = $Actual.ChildNodes[$index]
+        if ($before -is [Xml.XmlElement] -and $after -is [Xml.XmlElement]) {
+            Confirm-AgentsChatFirstTaskXml $before $after
+        } elseif ($before.NodeType -ne $after.NodeType -or $before.Value -cne $after.Value) {
+            throw "Registered first-task content differs: $($Expected.LocalName)."
+        }
+    }
+}
+
 function Retain-AgentsChatFirstTaskResource([hashtable]$Context, $Resource) {
     $Context.Resources.Add($Resource)
     $Context.Checks.Add($Resource)
@@ -138,20 +167,7 @@ function New-AgentsChatFirstTaskRegistration {
         if ($accountSid.Value -cne $sid) { throw 'Registered first-task account differs.' }
         $users[0].InnerText = $sid
     }
-    $expectedSettings = $expected.SelectSingleNode('/t:Task/t:Settings', $namespaces)
-    $actualSettings = $actual.SelectSingleNode('/t:Task/t:Settings', $namespaces)
-    Confirm-AgentsChatFirstTaskSettings $expectedSettings $actualSettings
-    # Scheduler omits default-valued fields and reorders Settings on registration.
-    $null = $actualSettings.ParentNode.ReplaceChild($actual.ImportNode($expectedSettings, $true), $actualSettings)
-    if ($actual.DocumentElement.OuterXml -cne $expected.DocumentElement.OuterXml) {
-        $different = @('RegistrationInfo', 'Triggers', 'Principals', 'Settings', 'Actions') | Where-Object {
-            $before = $expected.SelectSingleNode("/t:Task/t:$_", $namespaces)
-            $after = $actual.SelectSingleNode("/t:Task/t:$_", $namespaces)
-            $before.OuterXml -cne $after.OuterXml
-        }
-        [Console]::Error.WriteLine("First-task policy diagnostic: sections=$($different -join ',').")
-        throw 'Registered first-task policy differs from the requested definition.'
-    }
+    Confirm-AgentsChatFirstTaskXml $expected.DocumentElement $actual.DocumentElement
     $taskFile = Join-Path ([Environment]::SystemDirectory) "Tasks\$($Context.TaskName)"
     $taskHash = (Get-FileHash -LiteralPath $taskFile -Algorithm SHA256).Hash.ToLowerInvariant()
     $retained = Retain-AgentsChatFirstTaskResource $Context ([Deployment.WindowsPrivateFile]::OpenSourceFile($taskFile, $taskHash))
