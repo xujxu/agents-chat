@@ -16,6 +16,7 @@ $checks = [Collections.Generic.List[object]]::new()
 $failure = $null
 $stage = 'bootstrap'
 $firstTask = $null
+$context = $null
 function Retain-FirstRuntimeResource($Resource) {
     $resources.Add($Resource)
     $checks.Add($Resource)
@@ -27,6 +28,7 @@ function Assert-FirstRuntimePublication {
     }
     foreach ($resource in $checks) { $resource.Check() }
     if ($null -ne $firstTask) { Assert-AgentsChatFirstTaskRegistration $firstTask }
+    if ($null -ne $context) { Assert-AgentsChatFirstActivationState $context }
     foreach ($name in @('recovery-lock', 'deployment.json', 'task-maintenance', 'backup')) {
         if ([IO.Directory]::GetFileSystemEntries($Control, $name).Length -ne 0) {
             throw 'Existing deployment or recovery evidence is not a first publication.'
@@ -47,6 +49,7 @@ try {
     . (Join-Path $PSScriptRoot 'windows-runtime-bundle.ps1')
     . (Join-Path $PSScriptRoot 'windows-first-task.ps1')
     . (Join-Path $PSScriptRoot 'windows-first-task-registration.ps1')
+    . (Join-Path $PSScriptRoot 'windows-first-activation-handoff.ps1')
     $resources.Add([Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity))
     $stage = 'original-authority'
     if ($Control -cne (Join-Path (Split-Path -Parent $Project) ".$(Split-Path -Leaf $Project).deployment")) {
@@ -110,6 +113,8 @@ try {
         Resources=$resources; Checks=$checks; Project=$Project; Control=$Control; TaskName=$TaskName
         OperationId=$operationId; LockSha256=$LockSha256; StateSha256=$StateSha256
         Bundle=$bundle; Identity=$identity; Pwsh=$pwsh
+        ConfiguringStateFile=$stateFile; OriginalState=$state
+        ActivationPrepared=$false; ActivatingStateSha256=$null
     }
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; controllerIdentity=$ControllerIdentity
@@ -128,7 +133,7 @@ try {
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task')) { throw 'Unexpected first-runtime request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'register-task', 'prepare-activation')) { throw 'Unexpected first-runtime request.' }
         $sequence = $id
         Assert-FirstRuntimePublication
         $value = $method
@@ -139,6 +144,11 @@ try {
                 -LogonType $request.logonType.GetString() -TriggerType $request.triggerType.GetString()
             Assert-FirstRuntimePublication
             $value = $firstTask.Observation
+        }
+        if ($method -ceq 'prepare-activation') {
+            $stage = 'first-activation-handoff'
+            $value = Prepare-AgentsChatFirstActivation $context $firstTask
+            Assert-FirstRuntimePublication
         }
         [Console]::Out.WriteLine((@{ id=$id; type='reply'; processIdentity=$identity; value=$value } | ConvertTo-Json -Depth 6 -Compress))
         [Console]::Out.Flush()

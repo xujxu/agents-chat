@@ -13329,9 +13329,13 @@ the staged task references.
   original controller PID/identity and task/bundle/lock handles, permits the
   exact configuring-to-activating write and rejects a changed target commit.
   No runtime or `.data` starts, no backup/deployment receipt is published.
-- [ ] Push and run the command-only Actions gate; require the missing-method
+- [x] Push and run the command-only Actions gate; require the missing-method
   assertion before implementation.
-- [ ] Add native `prepare-activation` and the original-capability method:
+  `b3a5598 / 38023894369`, job `114130526954`, confirmed
+  `Missing original first-task activation handoff` at `2026-10-10 04:30:14 UTC`.
+  Registration still required structural XML comparison; this is causal
+  handoff evidence, not registration acceptance.
+- [x] Add native `prepare-activation` and the original-capability method:
 
   ```js
   prepareActivation: async ({ signal } = {}) => {
@@ -13348,6 +13352,9 @@ the staged task references.
   Native and JS checks allow either the unchanged configuring state or its
   exact activating successor (only phase/previousPhase/updatedAt may change).
   Do not authorize task start in this step. Close still settles the same helper.
+  Native implementation is isolated in `windows-first-activation-handoff.ps1`
+  and included in saved recovery; once the activating successor is observed,
+  both controllers reject regression or further changes to that state.
 - [ ] Accept native handoff and malformed-successor refusal in Actions before
   guarded demand-start and real Next/authenticated readiness.
 

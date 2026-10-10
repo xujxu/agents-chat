@@ -66,11 +66,23 @@ export async function prepareWindowsFirstRuntime({
       });
       if (receipts.at(-1)?.phase !== 'settled') throw new Error('First-runtime workers are not settled.');
     }
+    let activationPrepared = false;
+    let activatingState;
     const authority = async requestSignal => {
       requestSignal?.throwIfAborted();
       await assertLockOwner(control, lock);
       await requireNoServiceMaintenance(control);
-      if (!same(await loadState(control), state) || !same(await readWorkerOperation(control), workers)) {
+      const current = await loadState(control);
+      if (activatingState) {
+        if (!same(current, activatingState)) throw new Error('Observed first-activation state changed.');
+      } else if (!same(current, state)) {
+        if (!activationPrepared || current?.phase !== 'activating' || current.previousPhase !== 'configuring'
+          || !same({ ...current, phase: state.phase, previousPhase: state.previousPhase, updatedAt: state.updatedAt }, state)) {
+          throw new Error('First activation requires the exact original configuring successor.');
+        }
+        activatingState = current;
+      }
+      if (!same(await readWorkerOperation(control), workers)) {
         throw new Error('Original first-runtime authority changed.');
       }
       await assertWindowsFirstConfiguration(configuration, { scope, signal: requestSignal });
@@ -112,6 +124,7 @@ export async function prepareWindowsFirstRuntime({
     let busy = false;
     let failure;
     let registered = false;
+    let registeredTask;
     let registering = false;
     const request = async (method, requestSignal, options = {}) => {
       if (busy || closed) throw failure ?? refused(new Error('Original first-runtime publication is busy or closed.'));
@@ -123,7 +136,7 @@ export async function prepareWindowsFirstRuntime({
         const reply = captureWorkerFields(await bridge.wire.receive({ signal: requestSignal, timeoutMs: 30000 }),
           ['id', 'type', 'processIdentity', 'value'], 'first-runtime reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== ready.processIdentity
-          || method !== 'register-task' && reply.value !== method) {
+          || !['register-task', 'prepare-activation'].includes(method) && reply.value !== method) {
           throw new Error('Unexpected first-runtime acknowledgement.');
         }
         if (method === 'register-task') {
@@ -145,6 +158,21 @@ export async function prepareWindowsFirstRuntime({
           }
           await authority(requestSignal);
           return Object.freeze(task);
+        }
+        if (method === 'prepare-activation') {
+          const receipt = captureWorkerFields(reply.value, [
+            'status', 'runtimeAuthority', 'project', 'operationId', 'taskName', 'controllerPid', 'controllerIdentity',
+            'lockSha256', 'configuringStateSha256', 'configuration', 'configurationSha256', 'taskFileSha256',
+          ], 'first-activation handoff');
+          if (!same(receipt, {
+            status: 'first-activation-prepared', runtimeAuthority: false, project, operationId: lock.operationId,
+            taskName: observed.taskName, controllerPid: ready.pid, controllerIdentity: ready.processIdentity,
+            lockSha256: digest(lockBytes), configuringStateSha256: digest(stateBytes),
+            configuration: bundle.configuration, configurationSha256: bundle.sha256, taskFileSha256: registeredTask.taskFileSha256,
+          })) throw new Error('Original first-activation handoff differs.');
+          activationPrepared = true;
+          await authority(requestSignal);
+          return Object.freeze(receipt);
         }
         if (method === 'close') {
           const result = await bridge.waitForExit();
@@ -171,8 +199,15 @@ export async function prepareWindowsFirstRuntime({
           await assertWindowsFirstInstallScope(scope, { fresh: false, signal: requestSignal });
           const task = await request('register-task', requestSignal, { logonType, triggerType });
           registered = true;
+          registeredTask = task;
           return task;
         } finally { registering = false; }
+      },
+      prepareActivation: async ({ signal: requestSignal } = {}) => {
+        if (closed || busy || !registered || activationPrepared) {
+          throw refused(new Error('First task is not ready for activation handoff.'));
+        }
+        return request('prepare-activation', requestSignal);
       },
       close: async () => { if (!closed) await request('close'); },
     });
