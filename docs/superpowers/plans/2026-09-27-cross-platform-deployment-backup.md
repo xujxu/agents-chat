@@ -13412,6 +13412,15 @@ directory preparation, real live fixture, lifecycle workflow and README.
   launcher's casing. Permit case-only differences, returning native realpath
   spelling; continue refusing other path redirection and wrong entry types.
   Cover uppercase project paths and canonical returned status paths too.
+  `1c7087c / 38012219679` passed all focused native command contracts at
+  01:13:59 UTC. Real `38012400546`, live job `114095229684`, passed the
+  public update, automatic finalization, capture cleanup and authenticated
+  data checks: update 1,091,729 ms, independent closed-state verification
+  499 ms. At 01:41:44 UTC its no-op fixture failed before the competing-lock
+  probe because the public-wrapper fixture edit removed the still-needed
+  `randomUUID` import. Restore that import, retain every assertion and run
+  the complete dual-platform gate, which includes the real public no-op.
+  The overall public lifecycle is not accepted until that gate succeeds.
 
 ### Task 5BW: Retire only original completed controller captures
 
