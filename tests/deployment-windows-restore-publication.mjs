@@ -24,6 +24,8 @@ export async function verifyWindowsRestorePublication({ directory, control, snap
   const hiddenConfiguration = `${originalConfiguration}.fixture-offline`;
   try {
     assert.notEqual(scope.observation.configuration, originalConfiguration);
+    assert.notEqual(scope.observation.configurationSha256, snapshot.runtime.task.configurationSha256,
+      'Restore publication must distinguish archived configuration from the current configuration.');
     lock = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
     const state = {
       ...originalState, operationId: lock.operationId, operation: 'restore',

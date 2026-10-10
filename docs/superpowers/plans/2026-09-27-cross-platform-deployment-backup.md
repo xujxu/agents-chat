@@ -13926,7 +13926,7 @@ Do not rewrite historical runtime paths or copy stale readiness/lease records.
 `WindowsRuntimeHost.cs`; add `tests/deployment-windows-restore-publication.mjs`
 and call it from the saved task snapshot post-update fixture.
 
-- [ ] Add a saved-engine fixture after the original update/retirement:
+- [x] Add a saved-engine fixture after the original update/retirement:
   ```js
   const bundle = await prepareWindowsRestoreRuntimeBundle({
     scope, control, lock, node: process.execPath, pwsh, backup, snapshot,
@@ -13937,16 +13937,20 @@ and call it from the saved task snapshot post-update fixture.
   backup ID and archived target revision. Refuse forged scope/lock, cancellation,
   changed snapshot, wrong operation/target/backup and noninitial phase before
   creating a destination. Temporarily hide the retired original configuration;
-  require publication from archived members only. Compare every copied byte,
+  require publication from archived members only, with a deliberately different
+  live configuration digest. Compare every copied byte,
   exact member inventory, unchanged live observation and state; refuse overwrite.
   Restore the fixture's original configuration/state and release its own lock.
-- [ ] Push the fixture and dispatch the existing seven-job gate:
+- [x] Push the fixture and dispatch the existing seven-job gate:
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_restore_only=true
   ```
-  Require the missing saved publication export as the causal failure.
-- [ ] Export `prepareWindowsRestoreRuntimeBundle` as a restore-only entry to
+  `1153371 / 38094101615` finished six successful jobs and one fixture
+  ordering failure before reaching the new export; this is not the intended
+  missing-export causal evidence. Corrected fixture ordering at `b9e799e`
+  executes the assertions before deliberate task cleanup.
+- [x] Export `prepareWindowsRestoreRuntimeBundle` as a restore-only entry to
   the shared original-controller publisher. Independently derive archive
   inventory from the exact verified snapshot and compare native task policy.
   Bind original restore-preflight state, backup ID and target revision;
@@ -13987,15 +13991,25 @@ caller to pass explicit PowerShell.
 - [x] Implement a controller-bound read-only native comparator using the
   existing transport and `Read-AgentsChatMaintenanceFields`. Send current and
   archived definitions in separate bounded frames, not one doubled XML frame.
-  Require equal explicit enabled policy before temporarily normalizing both
+  Require equal effective enabled policy before temporarily normalizing both
   parsed documents to inhibited form for the shared comparator. Never call
   Scheduler registration, task control or filesystem publication.
+  Match the existing native completion convention: absent Enabled means true.
+  Reject duplicates, attributes and nonboolean content; normalize only this
+  default-valued node. Keep principal, trigger and other policy comparisons.
 - [x] Recheck the original branded managed scope before and after comparison;
   validate original child/controller identity and clean close acknowledgement.
   Return `same-task-policy` with `runtimeAuthority: false`. Preserve native
   refusal and cleanup errors and include both new files in saved recovery.
 - [ ] Repeat the seven native Actions jobs and record the limited compatibility
   acceptance before composing archive publication/restoration.
+  First implementation `e362dc0 / 38094005874` finished 6/7: the fixture
+  stopped its task before calling the new read-only inspection. `b9e799e`
+  moves that invocation after final unlock but before fixture shutdown.
+  Its run `38094622330` finished 6/7 and reached the positive policy test,
+  exposing the unsupported implicit Enabled=true at `23:31:10 UTC`.
+  `d7a4fe5` implements the established Scheduler default semantics, with
+  explicit/implicit true positives and false/duplicate/invalid negatives.
 
 ### Task 5DC: Read archived Windows runtime inputs without consulting the live bundle
 

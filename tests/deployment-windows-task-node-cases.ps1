@@ -166,6 +166,9 @@ try {
         if ($PriorRuntimeRecovery -and $Action -ceq 'replace-refused') {
             $candidateEnvironment.Add('DEPLOYMENT_PRIOR_RECOVERY_FIXTURE', 'changed')
         }
+        if ($OwnedSourceBuild) {
+            $candidateEnvironment.Add('DEPLOYMENT_RESTORE_ARCHIVE_FIXTURE', 'current-not-archived')
+        }
         $candidateName = switch ($Action) {
             'replace-variable' { 'replacement%SystemRoot%' }
             'replace-argument' { 'replacement$(Arg0)' }
