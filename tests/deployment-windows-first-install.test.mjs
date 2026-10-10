@@ -15,7 +15,7 @@ const windows = { skip: process.platform !== 'win32' };
 
 async function fixture(t) {
   assert.ok(existsSync(implementation), 'Missing native Windows first-install inspection');
-  const { inspectWindowsFirstInstall } = await import(implementation);
+  const { inspectWindowsFirstInstall, assertWindowsFirstInstallScope } = await import(implementation);
   const root = await temporaryDeployment(t);
   const project = path.join(root, 'fresh-project');
   const control = path.join(root, '.fresh-project.deployment');
@@ -26,6 +26,7 @@ async function fixture(t) {
   return {
     root, project, control, taskName, pwsh,
     inspect: () => inspectWindowsFirstInstall({ project, taskName, pwsh }),
+    checkOriginal: scope => assertWindowsFirstInstallScope(scope),
   };
 }
 
@@ -40,6 +41,8 @@ test('Windows first-install inspection retains an absent-task project without cr
     assert.match(scope.observation.accountSid, /^S-1-/);
     assert.ok(Number.isSafeInteger(scope.observation.sessionId));
     await scope.checkFresh();
+    await f.checkOriginal(scope);
+    await assert.rejects(f.checkOriginal({ ...scope }), { code: 'DEPLOYMENT_WINDOWS_FIRST_INSTALL_REFUSED' });
     assert.deepEqual(await readdir(f.project), []);
     assert.equal(existsSync(f.control), false);
     await assert.rejects(rename(f.project, `${f.project}-replaced`), error =>
@@ -53,6 +56,7 @@ test('Windows first-install inspection retains an absent-task project without cr
   }
   await rename(f.project, `${f.project}-closed`);
   await rename(`${f.project}-closed`, f.project);
+  await assert.rejects(f.checkOriginal(scope), { code: 'DEPLOYMENT_WINDOWS_FIRST_INSTALL_REFUSED' });
 });
 
 test('Windows first-install inspection refuses old runtime artifacts and control evidence without deleting them', windows, async t => {

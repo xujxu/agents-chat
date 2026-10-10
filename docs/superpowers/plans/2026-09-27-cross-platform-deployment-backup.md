@@ -13323,18 +13323,21 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 lease, controller-owner watch, framed transport and existing task installer
 only to arrange inert test tasks.
 
-- [ ] Add native tests requiring `inspectWindowsFirstInstall` before import.
+- [x] Add native tests requiring `inspectWindowsFirstInstall` before import.
   A genuinely absent task, fresh project and absent/empty private control
   produce a read-only observation with `runtimeAuthority: false`.
   Existing `.data`, `.next`, `node_modules`, retained control evidence or
   any registered task must refuse without removing files or changing tasks.
-- [ ] Push the tests and run the command-only Actions mode. Observe the
+- [x] Push the tests and run the command-only Actions mode. Observe the
   missing first-install inspection module before implementing it.
-- [ ] Retain the original project directory through the existing native
+  Causal `32d5a32 / 38017929267`, native job `114112268104`, failed at
+  `2026-10-10 02:44:29 UTC`: all three new cases reported
+  `Missing native Windows first-install inspection`; preceding contracts passed.
+- [x] Retain the original project directory through the existing native
   `OpenSourceDirectory` lease, bound to the original Node controller's
   process identity. Treat only Scheduler's file-not-found HRESULT as an
   absent task; propagate every other scheduler failure.
-- [ ] Return project identity/security, task name, current account SID and
+- [x] Return project identity/security, task name, current account SID and
   session as immutable observation data. Do not invent a running task,
   runtime generation, task receipt, maintenance state or recovery authority.
   Keep fresh checks distinct from post-build uninstalled checks; both
