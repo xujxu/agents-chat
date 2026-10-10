@@ -187,23 +187,6 @@ jobs:
         if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         shell: powershell
         run: ./tests/deployment-windows-task-options.ps1
-      - name: Inspect genuinely fresh Windows installations
-        shell: pwsh
-        env:
-          DEPLOYMENT_TEST_RECEIPT_ONLY: ${{ inputs.windows_receipt_only }}
-          DEPLOYMENT_TEST_COMMANDS_ONLY: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
-        run: |
-          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
-          $env:DEPLOYMENT_TEST_GIT = (Get-Command git.exe -CommandType Application | Select-Object -First 1).Source
-          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source) 'node_modules/npm/bin/npm-cli.js'
-          $pattern = '^(Windows first-install|saved recovery bundle closes module dependencies)'
-          $tests = @('tests/deployment-windows-first-install.test.mjs', 'tests/deployment-windows-first-build.test.mjs', 'tests/deployment-windows-first-runtime.test.mjs', 'tests/deployment-windows-first-activation.test.mjs', 'tests/deployment-windows-first-readiness.test.mjs', 'tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
-          if ($env:DEPLOYMENT_TEST_RECEIPT_ONLY -eq 'true') {
-            if ($env:DEPLOYMENT_TEST_COMMANDS_ONLY -ne 'true') { throw 'Receipt selection requires both Windows command-only flags.' }
-            $pattern = '\((deployment-receipt|deployment-receipt-default-policy|cold-proof|cold-receipt-proof|cold-first-receipt-publication|cold-first-retirement|cold-first-retirement-actor-loss|cold-first-saved-closeout|cold-first-saved-receipt-publication|cold-first-saved-(?:lease-released|permanent-policy-applied|enable-applied))\)$|^saved recovery bundle closes module dependencies'
-            $tests = @('tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
-          }
-          ./tests/deployment-windows-private-tests.ps1 -Tests $tests -NamePattern $pattern -TimeoutSeconds 2400
       - name: Verify native create-only first-task registration
         if: ${{ !cancelled() }}
         shell: pwsh
@@ -226,6 +209,47 @@ jobs:
           $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds'
+
+  windows-first-native:
+    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only }}
+    name: Native Windows first deployment (${{ matrix.shard }})
+    runs-on: windows-2022
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [foundations, cold-receipts]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Inspect genuinely fresh Windows installations
+        shell: pwsh
+        env:
+          DEPLOYMENT_TEST_RECEIPT_ONLY: ${{ inputs.windows_receipt_only }}
+          DEPLOYMENT_TEST_COMMANDS_ONLY: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
+          DEPLOYMENT_TEST_FIRST_SHARD: ${{ matrix.shard }}
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git.exe -CommandType Application | Select-Object -First 1).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source) 'node_modules/npm/bin/npm-cli.js'
+          $pattern = '^(Windows first-install|saved recovery bundle closes module dependencies)'
+          $tests = @('tests/deployment-windows-first-install.test.mjs', 'tests/deployment-windows-first-build.test.mjs', 'tests/deployment-windows-first-runtime.test.mjs', 'tests/deployment-windows-first-activation.test.mjs', 'tests/deployment-windows-first-readiness.test.mjs', 'tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
+          if ($env:DEPLOYMENT_TEST_RECEIPT_ONLY -eq 'true') {
+            if ($env:DEPLOYMENT_TEST_COMMANDS_ONLY -ne 'true') { throw 'Receipt selection requires both Windows command-only flags.' }
+            $pattern = '\((deployment-receipt|deployment-receipt-default-policy|cold-proof|cold-receipt-proof|cold-first-receipt-publication|cold-first-retirement|cold-first-retirement-actor-loss|cold-first-saved-closeout|cold-first-saved-receipt-publication|cold-first-saved-(?:lease-released|permanent-policy-applied|enable-applied))\)$|^saved recovery bundle closes module dependencies'
+            $tests = @('tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
+          }
+          $coldReceipts = '\((?:cold-receipt-proof|cold-first-[^)]*)\)$'
+          $pattern = if ($env:DEPLOYMENT_TEST_FIRST_SHARD -eq 'cold-receipts') {
+            "^(?=.*$coldReceipts)(?:$pattern)"
+          } else {
+            "^(?!.*$coldReceipts)(?:$pattern)"
+          }
+          ./tests/deployment-windows-private-tests.ps1 -Tests $tests -NamePattern $pattern -TimeoutSeconds 2400
 
   windows-first-application:
     if: ${{ inputs.windows_first_application_only || ((inputs.windows_application_only || !inputs.windows_restore_only) && !(inputs.windows_application_only && inputs.windows_commands_only)) }}

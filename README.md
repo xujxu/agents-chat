@@ -296,8 +296,12 @@ all preserved runtime and chat data through saved finalization and public
 update no-op. The explicit public fresh `deploy.ps1 -NoTunnel` route also
 passed at `6d91d06 / 38085665538` (job `114311512963`), including automatic
 saved finalization and empty successful-controller capture storage.
-The full 46-job regression is still pending; default-tunnel and remaining
-watchdog integration are separate gates.
+That full regression finished 45/46: the combined Windows native batch reached
+its 40-minute deadline before the existing-application update step could run.
+Its cleanup failure obscured the timeout diagnostics. The native cases are now
+split into complementary foundations/cold-receipt jobs without dropping cases
+or increasing that deadline; the replacement 48-job regression remains pending.
+Default-tunnel and remaining watchdog integration are separate gates.
 The task parameter and read-only definition changes below passed native
 PowerShell 5.1 acceptance. The full 25-job regression, including private
 runtime-control transport, task-held Jobs, scoped control requests,

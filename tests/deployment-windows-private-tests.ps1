@@ -14,7 +14,7 @@ $parent = & $node -e "process.stdout.write(require('node:fs').realpathSync.nativ
 if ($LASTEXITCODE -ne 0) { throw 'Cannot canonicalize private test parent.' }
 $root = Join-Path $parent "agents-private-tests-$([guid]::NewGuid())"
 $controller = $null
-$failure = $null
+$failures = [Collections.Generic.List[Exception]]::new()
 try {
     $created = [Deployment.WindowsPrivateFile]::CreateDirectory($root)
     try { $created.Check() } finally { $created.Dispose() }
@@ -38,23 +38,26 @@ try {
     $controller = [Deployment.WindowsControllerProcess]::Start($node, $arguments.ToArray(), $root, $environment)
     $output = $controller.StandardOutput.ReadToEndAsync()
     $diagnostic = $controller.StandardError.ReadToEndAsync()
-    if (-not $controller.WaitForExit($TimeoutSeconds * 1000)) { throw 'Private Windows tests timed out.' }
-    $code = $controller.ExitCode
+    $exited = $controller.WaitForExit($TimeoutSeconds * 1000)
+    $code = $null
+    if ($exited) { $code = $controller.ExitCode }
+    else { $failures.Add([TimeoutException]::new('Private Windows tests timed out.')) }
     $controller.Kill()
     if (-not $output.Wait(15000) -or -not $diagnostic.Wait(15000)) { throw 'Private test streams did not close.' }
     [Console]::Out.Write($output.GetAwaiter().GetResult())
     [Console]::Error.Write($diagnostic.GetAwaiter().GetResult())
-    if ($code -ne 0) { throw "Private Windows tests failed with exit code $code." }
+    if ($exited -and $code -ne 0) { throw "Private Windows tests failed with exit code $code." }
 } catch {
-    $failure = $_.Exception
-    throw
+    $failures.Add($_.Exception)
 } finally {
     if ($controller) {
         try { $controller.Dispose() }
-        catch {
-            if ($failure) { throw [AggregateException]::new($failure, $_.Exception) }
-            throw
-        }
+        catch { $failures.Add($_.Exception) }
     }
-    if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+    try {
+        if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+    }
+    catch { $failures.Add($_.Exception) }
 }
+if ($failures.Count -eq 1) { throw $failures[0] }
+if ($failures.Count -gt 1) { throw [AggregateException]::new('Private Windows tests and cleanup failed.', $failures.ToArray()) }
