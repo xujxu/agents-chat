@@ -280,6 +280,8 @@ cases at `dd9d4d5 / 38077869010`. It checks original
 build/configuration provenance before restoring task policy or enabling the
 task; guarded or dead runtimes and missing provenance are not admitted by this
 composition.
+The changed recovery handshake passed all 45 native first-install cases at
+`551c3ca / 38080120594`.
 The complete-prefix fast path also passed both actual application regressions
 at `551c3ca / 38080122680` (normal first deployment and receipt-loss recovery).
 These preserve the original instance and authenticated chat through saved

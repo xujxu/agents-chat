@@ -13895,7 +13895,7 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   (lease released), 199,657 ms (permanent policy applied), and 207,347 ms
   (enable applied), including changed-build refusal without policy/history
   mutation. Saved dependency closure passed in 3,194 ms.
-- [ ] Rerun all 45 native first-install cases for the changed recovery readiness
+- [x] Rerun all 45 native first-install cases for the changed recovery readiness
   envelope and actual normal/receipt-loss application cases for the
   complete-prefix fast path:
   ```bash
@@ -13910,7 +13910,10 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   Actual regression `551c3ca / 38080122680` passed both cases:
   normal job `114295134458` at `2026-10-10 19:41:36 UTC` (603,633 ms);
   receipt-loss job `114295134575` at `19:43:14 UTC` (698,407 ms).
-  Native45 `38080120594` remains pending.
+  Native45 `551c3ca / 38080120594`, job `114295129381`, passed 45/45 at
+  `2026-10-10 20:06:36 UTC` (1,997,867 ms). Earlier saved prefixes passed in
+  141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
+  complete-prefix regression gates, not actual earlier-prefix interruption.
 
 ### Task 5DA: Verify the existing default first-task policy on a live native runtime
 
