@@ -13315,6 +13315,50 @@ Full gate `37942832825` passed all 41 jobs at `d844b66`.
 - [x] Validate all new cases, unchanged completion/crash/retirement cases and
   the full dual-platform matrix before exposing public orchestration.
 
+### Task 5CD: First-task registration in the original publication controller
+
+Reuse the original publisher's retained project, lock, state and runtime bundle
+instead of spawning another authority holder or inventing an installed runtime.
+Keep native task construction/checking in
+`scripts/deployment/windows-first-task-registration.ps1`; compose it from
+`windows-first-runtime.ps1` and expose `published.registerTask(options)` from
+`windows-first-runtime.mjs`. Include the native helpers in saved recovery.
+
+- [x] Add native behavioral cases in
+  `tests/deployment-windows-first-runtime.test.mjs`: unsupported policy leaves
+  no first-task directory; default Interactive/AtLogOn policy creates an inhibited
+  task with an original-controller lease; the permanent policy is recorded but
+  not activated; repeat registration refuses without poisoning the retained
+  publisher; a competitor appearing after publication is preserved unchanged.
+- [ ] Push causal cases and require the explicit missing-method assertion in
+  the command-only Actions gate. Do not substitute primitive creation acceptance
+  for original publication/configuration/lock authority.
+- [ ] Implement the original-capability method:
+
+  ```js
+  registerTask: async ({ logonType = 'Interactive', triggerType = 'AtLogOn', signal } = {}) => {
+    if (!['Interactive', 'S4U'].includes(logonType)
+      || !['AtLogOn', 'AtStartup'].includes(triggerType) || registered) {
+      throw refused(new Error('Unsupported or repeated first-task registration.'));
+    }
+    await assertWindowsFirstInstallScope(scope, { fresh: false, signal });
+    const task = await request('register-task', signal, { logonType, triggerType });
+    registered = true;
+    return Object.freeze(task);
+  }
+  ```
+
+  Before mutation, the request rechecks the original publication authority.
+  Native construction uses `Register-AgentsChatFirstTask`; stages disabled with
+  no triggers/restart and arguments bound to the original publisher PID/identity.
+  Record create-only `intent.json` before Scheduler creation and `registered.json`
+  afterward in `control/first-task-<operationId>`. Retain the task definition file,
+  exact XML and security descriptor and verify them on subsequent checks.
+  Preserve all partial evidence and leave the task inhibited on failures.
+- [ ] Preserve existing command-only publication contracts and source-disappearance
+  import closure; accept the new cases in Actions. This step does not activate
+  the task, create data/backup/deployment receipts, or expose public first deploy.
+
 ### Task 5CC: Atomic inhibited first-task creation
 
 Files: `scripts/deployment/windows-first-task.ps1`,

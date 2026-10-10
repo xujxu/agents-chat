@@ -88,3 +88,78 @@ test('Windows first-install runtime publication refuses a competing task without
     }
   });
 });
+
+test('Windows first-install task registration binds an inhibited task to the original retained publisher', windows, async t => {
+  const prepare = await publication();
+  await withWindowsFirstBuildFixture(t, async f => {
+    const built = await buildWindowsFirstFixture(f);
+    await f.record('configuring');
+    await f.operation.seal();
+    const published = await prepare({ ...f, built, port: 3010 });
+    const scheduler = path.join(process.env.SystemRoot, 'System32', 'schtasks.exe');
+    const directory = path.join(f.control, `first-task-${f.lock.operationId}`);
+    let registered = false;
+    try {
+      assert.equal(typeof published.registerTask, 'function', 'Missing original-publisher first-task registration');
+      for (const options of [{ logonType: 'Password' }, { triggerType: 'Daily' }]) {
+        await assert.rejects(published.registerTask(options));
+        assert.equal(existsSync(directory), false);
+      }
+      const task = await published.registerTask();
+      registered = true;
+      assert.equal(task.status, 'first-task-prepared');
+      assert.equal(task.runtimeAuthority, false);
+      assert.equal(task.taskName, f.taskName);
+      assert.equal(task.accountSid, f.scope.observation.accountSid);
+      assert.equal(task.logonType, 'Interactive');
+      assert.equal(task.triggerType, 'AtLogOn');
+      assert.equal(task.configuration, published.bundle.configuration);
+      assert.equal(task.configurationSha256, published.bundle.sha256);
+      assert.match(task.definition, /<Enabled>false<\/Enabled>/);
+      assert.doesNotMatch(task.definition, /<LogonTrigger|<BootTrigger|<RestartOnFailure/);
+      assert.match(task.definition, /-ControllerPid \d+ -ControllerIdentity \d+:\d+/);
+      assert.match(task.permanentDefinition, /<LogonTrigger/);
+      assert.doesNotMatch(task.permanentDefinition, /-ControllerPid/);
+      assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'registered.json'), 'utf8')), task);
+      await published.checkFiles();
+      await assert.rejects(published.registerTask());
+      await published.checkFiles();
+      assert.equal(existsSync(path.join(f.control, 'deployment.json')), false);
+      assert.equal(existsSync(path.join(f.control, 'backup')), false);
+      assert.equal(existsSync(path.join(f.project, '.data')), false);
+      const state = JSON.parse(await readFile(path.join(f.control, 'state.json'), 'utf8'));
+      assert.equal(state.phase, 'configuring');
+    } finally {
+      await published.close();
+      if (registered) await execute(scheduler, ['/Delete', '/TN', f.taskName, '/F'], { timeout: 30000, maxBuffer: 16384 });
+    }
+    await assert.rejects(published.registerTask());
+    await rename(directory, `${directory}-closed`);
+    await rename(`${directory}-closed`, directory);
+  });
+});
+
+test('Windows first-install task registration preserves a competitor registered after runtime publication', windows, async t => {
+  const prepare = await publication();
+  await withWindowsFirstBuildFixture(t, async f => {
+    const built = await buildWindowsFirstFixture(f);
+    await f.record('configuring');
+    await f.operation.seal();
+    const published = await prepare({ ...f, built, port: 3010 });
+    const scheduler = path.join(process.env.SystemRoot, 'System32', 'schtasks.exe');
+    let registered = false;
+    try {
+      assert.equal(typeof published.registerTask, 'function', 'Missing original-publisher first-task registration');
+      await registerInertWindowsTask(f);
+      registered = true;
+      const query = () => execute(scheduler, ['/Query', '/TN', f.taskName, '/XML'], { timeout: 30000, maxBuffer: 65536 });
+      const before = (await query()).stdout;
+      await assert.rejects(published.registerTask({ logonType: 'S4U', triggerType: 'AtStartup' }));
+      assert.equal(existsSync(path.join(f.control, `first-task-${f.lock.operationId}`)), false);
+      assert.equal((await query()).stdout, before);
+    } finally {
+      await published.close();
+      if (registered) await execute(scheduler, ['/Delete', '/TN', f.taskName, '/F'], { timeout: 30000, maxBuffer: 16384 });
+    }
+  });
+});
