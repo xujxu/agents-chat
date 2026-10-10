@@ -13432,6 +13432,14 @@ directory preparation, real live fixture, lifecycle workflow and README.
   ownership/readiness checks remain in the unchanged native behavior suites.
   Include these existing JavaScript routing/startup contracts in command-only
   Actions too; preserve the full task-options job and every real scenario.
+  Focused `9355b6c / 38015477546`, job `114104666959`, passed at
+  02:04:10 UTC. Full retry `9355b6c / 38015607706` is queued.
+  The preceding full run's real public job `bb457cc / 38014246098 /
+  114100905576` passed at 02:05:48 UTC: public update/automatic closeout/
+  capture cleanup 882,649 ms, closed-state verification 485 ms, and public
+  no-op 104,393 ms. Authenticated data, competing-lock preservation and
+  unchanged no-op task/receipt/backup checks all passed. This accepts that
+  real public update/no-op path, not the still-pending complete regression.
 
 ### Task 5BW: Retire only original completed controller captures
 
