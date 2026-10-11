@@ -13915,6 +13915,56 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DM: Restore with explicit external-egress denial for actual restore executables
+
+**Scope:** use Windows Defender Firewall application rules on the disposable
+Actions runner, not a production firewall change or a claim of VM air gap.
+Block non-loopback IPv4/IPv6 outbound traffic for the actual Node, PowerShell,
+Windows PowerShell and Git executables after update/no-op; preserve local
+health/API traffic and the separate Actions runner control channel. Keep rules
+active through saved restoration, independent closeout and data verification.
+
+**Prior art:** Microsoft `New-NetFirewallRule` supports explicit outbound Block,
+Program, Profile and RemoteAddress conditions:
+https://learn.microsoft.com/en-us/powershell/module/netsecurity/new-netfirewallrule
+Use narrowly named fixture rules and restore original firewall profile settings.
+Do not disable interfaces, replace global outbound policy or claim all other
+executables/DNS services are isolated.
+
+**Files:** create `tests/deployment-windows-egress-probe.mjs` and
+`tests/deployment-windows-restore-egress.ps1`; extend live PowerShell actors,
+README and `.github/workflows/deployment-lifecycle.yml`.
+
+- [ ] Resolve one public npm-registry IPv4 endpoint and prove TCP443 connectivity
+  from both actual Node and PowerShell before creating rules. Retain the same
+  address for negative probes, so DNS failure cannot masquerade as isolation.
+  Install per-executable rules:
+  ```powershell
+  New-NetFirewallRule -Name $name -DisplayName $name -Direction Outbound `
+      -Action Block -Program $program -Profile Any -Enabled True `
+      -RemoteAddress @('0.0.0.0-126.255.255.255', '128.0.0.0-255.255.255.255',
+          '::2-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff')
+  ```
+  Verify effective rules, application filters and enabled profiles; require
+  bounded Node/PowerShell denial probes. Restore all original profile settings
+  and remove only created rule names, aggregating cleanup errors.
+- [ ] Add an Actions-only firewall precheck before the expensive actual build.
+  In the offline actual scenario, enable rules immediately before normal restore;
+  repeat effective-policy and denial probes after restore closeout, then remove
+  rules in fixture cleanup. Reuse unchanged restored-file, authenticated-data,
+  unchanged-backup, distinct-runtime and no-restart closeout assertions.
+- [ ] Replace the three increasingly specialized restore booleans with one
+  `windows_restore_scenario` choice: complete/cancelled/failed/crash/offline.
+  Preserve the other workflow selectors; crash continues to run both prefixes.
+  Default full coverage includes the offline scenario. Run:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=offline
+  ```
+  Record the exact egress boundary in acceptance documentation. Public/cold
+  restore remains gated; production code and deadlines are unchanged.
+
 ### Task 5DL: Accept abrupt death during actual project file copying
 
 **Scope:** reuse the accepted crash fixture and the existing combined-restore
@@ -13925,7 +13975,7 @@ actor at the environment file's finish event. Do not add production test hooks.
 **Files:** extend `tests/deployment-windows-crashed-restore.mjs`, its interrupted
 actor, Node/PowerShell routing, and the existing workflow crash selector.
 
-- [ ] Confirm the snapshot's environment file precedes the native addon in
+- [x] Confirm the snapshot's environment file precedes the native addon in
   the real file-copy order, and the current addon exists. Interpose only the
   environment stream:
   ```js
@@ -13940,7 +13990,7 @@ actor, Node/PowerShell routing, and the existing workflow crash selector.
   ```
   Restore the original function if the actor unexpectedly survives. Persist
   fixture-only scenario/boundary evidence; existing parent settles the Job.
-- [ ] Fresh verification must prove a partial copy, not complete restoration:
+- [x] Fresh verification must prove a partial copy, not complete restoration:
   ```js
   assert.deepEqual(await readFile(path.join(project, '.env.local')),
     await readFile(path.join(backup, 'files', '.env.local')));
@@ -13950,10 +14000,14 @@ actor, Node/PowerShell routing, and the existing workflow crash selector.
   Retain interrupted restoring-phase state, unchanged original backup/receipt/
   lock, and independent inhibited writer-free original runtime assertions.
   Missing native addon is an expected crash prefix, never a usable deployment.
-- [ ] Extend the existing `windows_restore_crash_only=true` selector to run
+- [x] Extend the existing `windows_restore_crash_only=true` selector to run
   both `crashed` and `copy-crashed`; default matrix includes both. Reuse the
   Task5DK Actions command; do not add an eleventh workflow input. Record both
   actual outcomes before proceeding to network-isolated or public/cold restore.
+  Both passed at `e1bc523 / 38145325358`: copy-prefix job `114487350020`
+  at `2026-10-11 14:42:26 UTC` (actor673,018ms, fresh verifier17,448ms,
+  actual2,345,283ms); after-project job `114487349798` at `14:53:03 UTC`
+  (actor1,319,080ms, fresh verifier17,108ms, actual2,987,032ms).
 
 ### Task 5DK: Accept abrupt controller death after actual project restoration
 
@@ -13994,7 +14048,7 @@ Keep production code, cleanup authority and deadlines unchanged.
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_application_only=true \
-    -f windows_live_only=true -f windows_restore_crash_only=true
+    -f windows_live_only=true -f windows_restore_scenario=crash
   ```
   Record the actual outcome before moving to file-copy crash prefixes, offline
   restoration or saved/public cold reentry. No local validation.
@@ -14046,7 +14100,7 @@ actual actors and `.github/workflows/deployment-lifecycle.yml`.
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_application_only=true \
-    -f windows_live_only=true -f windows_restore_failure_only=true
+    -f windows_live_only=true -f windows_restore_scenario=failed
   ```
   Default full coverage adds this scenario alongside completion/cancellation;
   paired command-only still selects one job and does not build an application.
@@ -14101,7 +14155,7 @@ Production restore behavior and deadlines stay unchanged.
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_application_only=true \
-    -f windows_live_only=true -f windows_restore_cancel_only=true
+    -f windows_live_only=true -f windows_restore_scenario=cancelled
   ```
   Record the actual result before extending coverage to thrown errors, abrupt
   controller death, mutation prefixes or network isolation.

@@ -563,7 +563,11 @@ the original runtime stays restart-disabled and quiescent. Abrupt controller
 death after project restoration passed at `d7111e8 / 38141960473`: a distinct
 verifier confirms the interrupted journal, original backup/receipt/lock and
 restored project bytes; native observation confirms no restart or writers.
-Interrupted file-copy prefixes and cold reentry remain separate gates.
+Actual file-copy interruption passed at `e1bc523 / 38145325358`: archived
+environment bytes are present while a later native addon is absent, proving
+an incomplete copy remains fenced rather than being reported as restored.
+The same run also passed the after-project crash regression. Cold reentry
+and external-network denial during restoration remain separate gates.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

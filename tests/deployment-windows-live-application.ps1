@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory)][string]$Node,
     [Parameter(Mandatory)][string]$ChatId,
     [Parameter(Mandatory)][string]$TargetCommit,
-    [ValidateSet('complete', 'cancelled', 'failed', 'crashed', 'copy-crashed')][string]$RestoreScenario = 'complete'
+    [ValidateSet('complete', 'cancelled', 'failed', 'crashed', 'copy-crashed', 'offline')][string]$RestoreScenario = 'complete'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -14,6 +14,7 @@ function Assert([bool]$Condition, [string]$Message) {
 }
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $helpers = Join-Path $repository 'scripts/deployment'
+. (Join-Path $PSScriptRoot 'deployment-windows-restore-egress.ps1')
 Add-Type -Path @('WindowsWorkerJob.cs', 'WindowsPrivateFile.cs', 'WindowsControllerToken.cs',
     'WindowsControllerProcess.cs', 'WindowsControllerCapture.cs', 'WindowsRuntimeDomain.cs',
     'WindowsRuntimePipe.cs', 'WindowsRuntimeControl.cs' | ForEach-Object { Join-Path $helpers $_ })
@@ -24,6 +25,7 @@ $control = Join-Path (Split-Path -Parent $Project) ".$(Split-Path -Leaf $Project
 $directory = Join-Path $Root 'captured-controller'
 $capture = $null
 $actor = $null
+$egress = $null
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 try {
@@ -34,10 +36,13 @@ try {
     $environment.Add('TEMP', $Root)
     $environment.Add('TMP', $Root)
     $recoveryEngine = ''
-    $modes = if ($RestoreScenario -eq 'complete') { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
+    $modes = if ($RestoreScenario -in @('complete', 'offline')) { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
         elseif ($RestoreScenario -in @('crashed', 'copy-crashed')) { @('update', 'verify-closed', 'current', "restore-$RestoreScenario", 'restore-crash-verified') }
         else { @('update', 'verify-closed', 'current', "restore-$RestoreScenario") }
     foreach ($mode in $modes) {
+        if ($RestoreScenario -eq 'offline' -and $mode -eq 'restore') {
+            $egress = Enable-WindowsRestoreEgressBlock -Node $Node -Pwsh $pwsh -Git $git
+        }
         $elapsed = [Diagnostics.Stopwatch]::StartNew()
         $capture.Check()
         $before = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
@@ -129,18 +134,26 @@ try {
         }
         Write-Output "PASS: real Windows live deployment $mode with captured controller and preserved task/data; elapsedMs=$($elapsed.ElapsedMilliseconds)"
     }
-} finally {
-    if ($actor) { $actor.Dispose() }
-    if ($capture) { $capture.Dispose() }
-    $owners = @($scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0) | ForEach-Object {
-        if ($_.EnginePID -gt 0) { [Diagnostics.Process]::GetProcessById([int]$_.EnginePID) }
-    })
-    Disable-ScheduledTask -TaskName $TaskName | Out-Null
-    Stop-ScheduledTask -TaskName $TaskName
-    foreach ($owner in $owners) {
-        try { Assert ($owner.WaitForExit(15000)) 'Live fixture runtime did not settle' }
-        finally { $owner.Dispose() }
+    if ($egress) {
+        Assert-WindowsRestoreEgressBlocked $egress
+        Write-Output 'PASS: actual saved restoration and independent closeout completed with restore-executable external egress denied'
     }
-    Assert (@(Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq 3010).Count -eq 0) `
-        'Live fixture listener survived cleanup'
+} finally {
+    try {
+        if ($egress) { Disable-WindowsRestoreEgressBlock $egress }
+    } finally {
+        if ($actor) { $actor.Dispose() }
+        if ($capture) { $capture.Dispose() }
+        $owners = @($scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0) | ForEach-Object {
+            if ($_.EnginePID -gt 0) { [Diagnostics.Process]::GetProcessById([int]$_.EnginePID) }
+        })
+        Disable-ScheduledTask -TaskName $TaskName | Out-Null
+        Stop-ScheduledTask -TaskName $TaskName
+        foreach ($owner in $owners) {
+            try { Assert ($owner.WaitForExit(15000)) 'Live fixture runtime did not settle' }
+            finally { $owner.Dispose() }
+        }
+        Assert (@(Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq 3010).Count -eq 0) `
+            'Live fixture listener survived cleanup'
+    }
 }

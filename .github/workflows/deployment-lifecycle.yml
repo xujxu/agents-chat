@@ -44,18 +44,11 @@ on:
         description: With windows_application_only, run native command contracts without application builds
         type: boolean
         default: false
-      windows_restore_cancel_only:
-        description: With the paired Windows live selector, run actual restore cancellation instead of completion
-        type: boolean
-        default: false
-      windows_restore_failure_only:
-        description: With the paired Windows live selector, run actual restore failure after project mutation
-        type: boolean
-        default: false
-      windows_restore_crash_only:
-        description: With the paired Windows live selector, kill the restore controller during and after project copying
-        type: boolean
-        default: false
+      windows_restore_scenario:
+        description: With the paired Windows live selector, choose the actual saved restore scenario
+        type: choice
+        options: [complete, cancelled, failed, crash, offline]
+        default: complete
       windows_receipt_only:
         description: With both Windows command flags, select first-receipt integration and saved dependency tests
         type: boolean
@@ -176,13 +169,13 @@ jobs:
 
   windows-live-deployment:
     if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only }}
-    name: ${{ matrix.scenario == 'cancelled' && 'Actual Windows restore cancellation' || matrix.scenario == 'failed' && 'Actual Windows restore failure' || matrix.scenario == 'crashed' && 'Actual Windows restore crash' || matrix.scenario == 'copy-crashed' && 'Actual Windows file-copy restore crash' || 'Actual Windows live deployment' }}
+    name: ${{ matrix.scenario == 'cancelled' && 'Actual Windows restore cancellation' || matrix.scenario == 'failed' && 'Actual Windows restore failure' || matrix.scenario == 'crashed' && 'Actual Windows restore crash' || matrix.scenario == 'copy-crashed' && 'Actual Windows file-copy restore crash' || matrix.scenario == 'offline' && 'Actual Windows restore egress denial' || 'Actual Windows live deployment' }}
     runs-on: windows-2022
     timeout-minutes: 115
     strategy:
       fail-fast: false
       matrix:
-        scenario: ${{ fromJSON(inputs.windows_restore_cancel_only && '["cancelled"]' || inputs.windows_restore_failure_only && '["failed"]' || inputs.windows_restore_crash_only && '["crashed","copy-crashed"]' || inputs.windows_application_only && '["complete"]' || '["complete","cancelled","failed","crashed","copy-crashed"]') }}
+        scenario: ${{ fromJSON(inputs.windows_restore_scenario == 'cancelled' && '["cancelled"]' || inputs.windows_restore_scenario == 'failed' && '["failed"]' || inputs.windows_restore_scenario == 'crash' && '["crashed","copy-crashed"]' || inputs.windows_restore_scenario == 'offline' && '["offline"]' || inputs.windows_application_only && '["complete"]' || '["complete","cancelled","failed","crashed","copy-crashed","offline"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -190,6 +183,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Verify scoped restore egress denial and cleanup
+        if: matrix.scenario == 'offline'
+        shell: pwsh
+        run: |
+          . ./tests/deployment-windows-restore-egress.ps1
+          $guard = $null
+          try {
+            $guard = Enable-WindowsRestoreEgressBlock -Node (Get-Command node).Source -Pwsh (Get-Command pwsh).Source -Git (Get-Command git).Source
+          } finally {
+            if ($guard) { Disable-WindowsRestoreEgressBlock $guard }
+          }
+          & (Get-Command node).Source ./tests/deployment-windows-egress-probe.mjs allowed $guard.Address
+          if ($LASTEXITCODE -ne 0) { throw 'External connectivity was not restored after firewall fixture cleanup.' }
       - name: Verify native Windows command contracts
         shell: pwsh
         run: |
