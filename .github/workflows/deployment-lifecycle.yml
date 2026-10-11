@@ -36,6 +36,10 @@ on:
         description: Run only the real Windows application lifecycle (takes precedence)
         type: boolean
         default: false
+      windows_live_only:
+        description: With windows_application_only, omit the unrelated first-install suites
+        type: boolean
+        default: false
       windows_commands_only:
         description: With windows_application_only, run native command contracts without application builds
         type: boolean
@@ -57,7 +61,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}
+  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_live_only && '-windows-live' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -211,7 +215,7 @@ jobs:
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds'
 
   windows-first-native:
-    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only }}
+    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only) }}
     name: Native Windows first deployment (${{ matrix.shard }})
     runs-on: windows-2022
     timeout-minutes: 45

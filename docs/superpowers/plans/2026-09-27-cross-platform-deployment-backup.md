@@ -13915,6 +13915,64 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DH: Restore the running managed Windows application through saved tooling
+
+**Scope:** compose the approved explicit live restore core, not public command
+routing or cold/stopped/legacy recovery. Require acknowledged data loss,
+the original running managed task and its manifest-verified saved engine.
+Restore archived files and artifacts without dependency installation/build,
+then activate a distinct restored bundle and independently close the transaction.
+
+**Files:** create `scripts/deployment/windows-restore.mjs` and saved inventory
+entry; add `tests/deployment-windows-live-restore.mjs`, extend the existing
+actual application's Node actor and PowerShell orchestrator. Add
+`windows_live_only` alongside `windows_application_only` to omit unrelated
+first-install suites during this actual-restore gate; default/full coverage
+is unchanged.
+
+- [ ] Extend the actual application flow after update/independent closeout/no-op:
+  mutate the authenticated chat name, run restore in its own owned actor,
+  and then run saved native closeout in another actor after the first exits.
+  ```js
+  const result = await runWindowsLiveRestore({
+    scope, control, lock, backup, node: process.execPath, pwsh,
+    profile: 'agents-chat-auth-638c553', port: 3010, acceptDataLoss: true,
+    waitSeconds: 120, timeoutSeconds: 900,
+  });
+  assert.equal(result.status, 'restored');
+  assert.equal(result.closeoutRequired, true);
+  ```
+  Refuse missing acknowledgement before new state/lock. Require archived
+  source revision, removal of the newer source marker, exact restored env/
+  build-ID/lockfile/native-addon bytes, original chat content/name, a new
+  original runtime instance and unchanged authoritative backup. Verify the
+  separate closeout releases the lock without restarting that restored runtime.
+- [ ] Push and dispatch the existing real Windows application selector:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true -f windows_live_only=true
+  ```
+  Require missing saved `windows-restore.mjs` as causal failure after the
+  original update/no-op succeeds. Retain existing private-runner timeout bounds.
+- [ ] Compose `runRestore` with admitted backup/configuration, original lock
+  and native task transaction. Validate saved engine/external helper location,
+  capacity and source before first restore-preflight state. During the
+  `record('restoring')` edge, while original state remains restore-preflight,
+  prepare saved workers, distinct archived bundle and native task admission;
+  close live configuration/scope observations, then record restoring.
+  Keep fallible preparation out of the first record callback so existing
+  recorded-failure handling remains accurate.
+- [ ] Restore project/Git and projected external files only under checked
+  original stopped/inhibited authority. Capture restored source/artifact
+  identities, seal workers, retire/replace/activate the native task, and use
+  archived providers for readiness/completion. Write restored state before
+  original lease release; never overwrite that terminal state on later failure.
+  Publish restored deployment receipt and return independent closeout binding.
+  Preserve original error and checked cleanup; retain lock/evidence on failure.
+- [ ] Repeat actual application acceptance, then native/shared regressions.
+  Record scope honestly: public/saved entry routing, earlier crash prefixes,
+  cold and legacy restore remain separate required work.
+
 ### Task 5DG: Admit the saved Windows application configuration before downtime
 
 **Scope:** the approved live restore preflight must validate archived
@@ -13927,7 +13985,7 @@ its saved-engine inventory entry; add
 `tests/deployment-windows-restore-admission.mjs` to the existing saved snapshot
 fixture after publication checks.
 
-- [ ] Add the saved-engine native admission assertion:
+- [x] Add the saved-engine native admission assertion:
   ```js
   const admission = await admitWindowsRestore({
     scope, backup, snapshot, node: process.execPath, pwsh,
@@ -13941,9 +13999,11 @@ fixture after publication checks.
   Refuse forged scope, wrong/relative Node, changed expected snapshot,
   unsupported profile and cancellation. Require unchanged live observation,
   state and absence of a new lock. Compare complete original external paths.
-- [ ] Push and run the existing `windows_restore_only=true` Actions gate;
+- [x] Push and run the existing `windows_restore_only=true` Actions gate;
   require missing saved admission module as causal failure.
-- [ ] Implement `admitWindowsRestore` with native scope and explicit external
+  `1adfa5c / 38097770402` finished 6/7; managed `114347163437` failed
+  at `00:27:08 UTC` on that exact missing saved module.
+- [x] Implement `admitWindowsRestore` with native scope and explicit external
   Node identity checks. Read the exact backup runtime and use archived
   `command.environment` with `inspectSnapshotConfiguration`, not the live
   environment. Compare native saved/current task policy and project security.
@@ -13952,8 +14012,10 @@ fixture after publication checks.
   Retain the current configuration observer through preflight, expose
   `check()` for live+archive rechecks and `checkSnapshot()` for archive-only
   checks after stop, and release native observations with checked cleanup.
-- [ ] Add the helper to saved recovery, rerun the same seven native jobs and
+- [x] Add the helper to saved recovery, rerun the same seven native jobs and
   record acceptance before composing the stop/files/activation transaction.
+  `5fef17e / 38097859251` passed all seven jobs and the explicit admission
+  assertion at `00:38:35 UTC`. This is preflight, not completed restoration.
 
 ### Task 5DF: Restore archived external runtime members at the explicit new bundle
 
@@ -14007,7 +14069,13 @@ snapshot/restoration job.
   `38ef6e4 / 38096573615` passed 7/7. Snapshot job `114344989274` reported
   both relocation cases at `00:11:49 UTC` (31,796 / 49,720 ms); managed job
   `114344989303` retained archived publication at `00:08:44 UTC`.
-  Full dual-platform run `e2d8abd / 38097108061` is still in progress.
+  Full dual-platform run `e2d8abd / 38097108061` passed 48/48. The final
+  cold-receipts shard reported all nine named recovery scenarios at
+  `00:39:09 UTC` in 1,598,432 ms; Node's total16 includes seven empty-file
+  wrappers, not seven additional recovery cases. Both Linux/Windows contracts,
+  owned application builds, actual existing Windows update and all four actual
+  first-application cases passed. The later admission helper has its separate
+  native7/7 acceptance above.
 
 ### Task 5DE: Publish a distinct native runtime bundle from archived inputs
 

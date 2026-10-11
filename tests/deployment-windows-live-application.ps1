@@ -32,7 +32,7 @@ try {
     $environment.Add('TEMP', $Root)
     $environment.Add('TMP', $Root)
     $recoveryEngine = ''
-    foreach ($mode in @('update', 'verify-closed', 'current')) {
+    foreach ($mode in @('update', 'verify-closed', 'current', 'restore', 'restore-closed')) {
         $elapsed = [Diagnostics.Stopwatch]::StartNew()
         $capture.Check()
         $before = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
@@ -44,7 +44,7 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        $actorTimeout = if ($mode -eq 'update') { 1200000 } else { 300000 }
+        $actorTimeout = if ($mode -eq 'update') { 1200000 } elseif ($mode -eq 'restore') { 900000 } else { 300000 }
         $exited = $actor.WaitForExit($actorTimeout)
         $actor.Kill()
         Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'
@@ -55,14 +55,17 @@ try {
         Assert $exited "Live application controller $mode exceeded its bound; output: $text"
         Assert ($code -eq 0) "Live controller $mode failed: $text"
         $result = $text | ConvertFrom-Json
-        $expected = switch ($mode) { update { 'accepted' } verify-closed { 'completed' } current { 'already-current' } }
+        $expected = switch ($mode) {
+            update { 'accepted' } verify-closed { 'completed' } current { 'already-current' }
+            restore { 'restored' } restore-closed { 'completed' }
+        }
         Assert ($result.status -ceq $expected) "Unexpected live controller $mode status"
         $actor.Dispose()
         $actor = $null
         $capture.Check()
         $after = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
         Assert ($after.Count -eq 1) 'Live deployment lost the application task'
-        if ($mode -eq 'update') {
+        if ($mode -in @('update', 'restore')) {
             Assert ($result.recoveryEngine -cmatch '^[a-f0-9]{64}$') 'Live deployment returned no exact saved recovery binding'
             $recoveryEngine = $result.recoveryEngine
             Assert ($after.Item(1).EnginePID -ne $originalPid -and $after.Item(1).InstanceGuid -cne $originalInstance) `
@@ -72,6 +75,14 @@ try {
                 'Closeout or already-current restarted the accepted application'
             & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs') restored $ChatId
             Assert ($LASTEXITCODE -eq 0) "Authenticated data was lost during $mode"
+        }
+        if ($mode -eq 'current') {
+            & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs') mutate $ChatId
+            Assert ($LASTEXITCODE -eq 0) 'Cannot create acknowledged post-backup data change'
+        }
+        if ($mode -eq 'restore') {
+            & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs') restored $ChatId
+            Assert ($LASTEXITCODE -eq 0) 'Restore did not recover authenticated pre-backup data'
         }
         Write-Output "PASS: real Windows live deployment $mode with captured controller and preserved task/data; elapsedMs=$($elapsed.ElapsedMilliseconds)"
     }
