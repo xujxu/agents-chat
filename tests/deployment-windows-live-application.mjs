@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { lstat, readFile, readdir } from 'node:fs/promises';
+import { lstat, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -116,6 +116,8 @@ if (['restore', 'restore-closed'].includes(mode)) {
     assert.equal(snapshot.ino, prior.snapshot.ino);
     assert.deepEqual((await readdir(control)).filter(name => name.startsWith('runtime-')).sort(), prior.inventory);
     assert.equal(result.backupCreated, false);
+    assert.equal(await readFile(path.join(project, '.env.local'), 'utf8'), 'DEPLOYMENT_RESTORE_FIXTURE=original\n');
+    await writeFile(path.join(project, '.env.local'), 'DEPLOYMENT_RESTORE_FIXTURE=after-update\n');
   } else {
     assert.equal(state.backupId, result.operationId);
     assert.equal(result.backupCreated, true);

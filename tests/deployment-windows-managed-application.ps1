@@ -40,6 +40,11 @@ function Assert-OwnedListener($Ready, $Owner, $Listener, $NativeListener) {
 $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
 $Control = & $Node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" $Control
 Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize managed application parent'
+if ($LiveDeployment) {
+    $environmentFile = Join-Path $Project '.env.local'
+    Assert (-not (Test-Path -LiteralPath $environmentFile)) 'Live fixture environment file already exists'
+    [IO.File]::WriteAllText($environmentFile, "DEPLOYMENT_RESTORE_FIXTURE=original`n", [Text.UTF8Encoding]::new($false))
+}
 $root = Join-Path $Control "managed-application-$([guid]::NewGuid())"
 $environment = [ordered]@{}
 foreach ($entry in Get-ChildItem Env:) {

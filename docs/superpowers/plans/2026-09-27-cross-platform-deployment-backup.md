@@ -14095,6 +14095,18 @@ is unchanged.
   project-files, external-files, source-and-artifacts and deployment-receipt
   stage labels, without writing additional transaction phases or changing
   operation order. No complete restore acceptance is claimed.
+  Run `83685fc / 38122304079`, job `114419378425`, completed the
+  restore core and receipt at `08:41:17 UTC`. Project restoration took
+  14m21s, external restoration 2m18s and receipt publication 3m18s; each
+  remained within its original stage bound. The next byte assertion failed:
+  `.env.local` was absent because this actual fixture had only ever configured
+  authentication through the runtime environment and never created that file.
+  Keep the byte assertion: create a harmless, live-only `.env.local` fixture
+  before deployment, prove no-op preserves its original bytes, then mutate it
+  after no-op. Require its saved manifest entry before restoring, and compare
+  restored bytes with the unchanged archive. This corrects fixture setup rather
+  than silently skipping absent configuration coverage. Independent restore
+  closeout and final authenticated-data checks remain unaccepted.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

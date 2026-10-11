@@ -11,6 +11,8 @@ export async function verifyWindowsLiveRestore({ mode, directory, project, contr
   const { loadState, acquireLock } = await captured('state.mjs');
   const backup = path.join(control, 'backup');
   const snapshot = await verifySnapshot(backup);
+  assert.ok(snapshot.entries.some(entry => entry.path === '.env.local' && entry.kind === 'file'),
+    'Actual restore must include the original fixture environment file.');
   const recovery = await verifyRecoveryEngine({ control, manifestSha256: snapshot.recoveryEngine });
   const saved = name => import(pathToFileURL(path.join(recovery.directory, name)));
   if (mode === 'restore-closed') {
