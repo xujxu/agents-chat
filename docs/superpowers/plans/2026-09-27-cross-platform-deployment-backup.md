@@ -14003,6 +14003,10 @@ is unchanged.
   clears PATH only around restoration, supplies the absolute executable and
   verifies project/Git objects/Git metadata/external files plus an unchanged
   external-file second pass before restoring PATH for independent checks.
+  Focused `298ae35 / 38108180901`, job `114378025878`, passed this
+  PATH-free combined restoration at `03:26:04 UTC` (39,671 ms), along with
+  source-absent imports and inherited-policy drift checks. Actual retry
+  `38108388848` was dispatched after that success.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the
