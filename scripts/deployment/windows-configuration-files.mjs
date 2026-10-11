@@ -17,9 +17,11 @@ function refused(cause) {
 }
 function capture(value, project, configuration, sha256) {
   const record = captureWorkerFields(value,
-    ['project', 'configuration', 'configurationSha256', 'projectSecurityDescriptor', 'files'], 'configuration file observation');
+    ['project', 'configuration', 'configurationSha256', 'projectSecurityDescriptor', 'projectFileSecurityDescriptor', 'files'],
+    'configuration file observation');
   if (record.project !== project || record.configuration !== configuration || record.configurationSha256 !== sha256
-    || !security(record.projectSecurityDescriptor) || !Array.isArray(record.files) || record.files.length !== names.length) {
+    || !security(record.projectSecurityDescriptor) || !security(record.projectFileSecurityDescriptor)
+    || !Array.isArray(record.files) || record.files.length !== names.length) {
     throw new Error('Unexpected configuration observation scope.');
   }
   const files = record.files.map((value, index) => {

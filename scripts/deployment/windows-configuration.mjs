@@ -18,6 +18,7 @@ async function finishInspection(retained, inspected, recheck, signal) {
   return Object.freeze({
     status: inspected.status, profile: inspected.profile, providers: inspected.providers,
     files: retained.observation.files, projectSecurityDescriptor: retained.observation.projectSecurityDescriptor,
+    projectFileSecurityDescriptor: retained.observation.projectFileSecurityDescriptor,
     checkFiles, buildEnvironment: inspected.buildEnvironment, startupEnvironment: inspected.startupEnvironment,
     close: () => retained.close(),
   });

@@ -40,7 +40,7 @@ export async function admitWindowsRestore({ scope, backup, snapshot, node, pwsh,
   await inspectWindowsRestoreTaskPolicy({ scope, task: runtime.task, pwsh, signal });
   const current = await inspectWindowsConfiguration({ scope, pwsh, profile, signal });
   try {
-    if (original.windowsSecurity.descriptors[original.windowsSecurity.root.security] !== current.projectSecurityDescriptor) {
+    if (original.windowsSecurity.descriptors[original.windowsSecurity.root.security] !== current.projectFileSecurityDescriptor) {
       throw new Error('Restoring changed project security requires a separate native policy transition.');
     }
     const paths = [

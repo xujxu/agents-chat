@@ -41,12 +41,17 @@ function Observe-Configuration {
             }
         }
     }
+    $sections = [Security.AccessControl.AccessControlSections]::Owner -bor
+        [Security.AccessControl.AccessControlSections]::Group -bor
+        [Security.AccessControl.AccessControlSections]::Access
+    $projectFileSecurity = (Get-Acl -LiteralPath $Project).GetSecurityDescriptorSddlForm($sections)
     foreach ($file in $files) { $file.Check() }
     return [pscustomobject]@{
         project=$Project
         configuration=$(if ($FreshInstallation) { $null } else { $Configuration })
         configurationSha256=$(if ($FreshInstallation) { $null } else { $Sha256 })
-        projectSecurityDescriptor=$root.SecurityDescriptor; files=@($records)
+        projectSecurityDescriptor=$root.SecurityDescriptor
+        projectFileSecurityDescriptor=$projectFileSecurity; files=@($records)
     }
 }
 try {

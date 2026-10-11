@@ -13965,6 +13965,21 @@ is unchanged.
   saved inventory and the Windows restore module to the existing source-absent
   import test. Run that dependency-closure test in the focused live gate before
   any real application build, rather than relying only on the full matrix.
+  Fix `f09caf6 / 38102292508` passed source-absent dependency closure at
+  `01:36:54 UTC` (2,415 ms), then failed actual restore admission at
+  `02:00:34 UTC`: snapshot file-security evidence differed from the
+  configuration observer's kernel-object descriptor.
+  Focused inherited-directory reproduction `02a432a / 38103903297`,
+  job `114365263931`, failed at `02:07:06 UTC` (2,531 ms): the same
+  directory's file-security descriptor retains inherited ACE `ID` flags,
+  while its kernel-object descriptor omits them.
+  Preserve the original kernel descriptor for retained identity/first-install
+  checks; additionally observe `projectFileSecurityDescriptor` using the same
+  native file-security API as snapshot capture, bracketed by retained checks.
+  Restore admission compares that complete descriptor exactly, without stripping
+  inheritance flags or weakening owner/group/ACL checks. Recheck the new field
+  on every configuration observation; the focused test also changes inheritance
+  protection and requires both original observers to reject that drift.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the
