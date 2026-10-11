@@ -547,7 +547,8 @@ authenticated pre-backup chat data, an unchanged backup, a distinct restored
 runtime and lock removal without restarting that runtime. Restoration uses
 saved artifacts without installation or rebuilding; network isolation is not
 yet proven. Public/cold Windows restore remains gated. Full dual-platform
-regression `38131880686` is pending.
+regression `3e6a403 / 38131880686` passed all 48 jobs, repeating the complete
+actual Windows restore and independent closeout.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

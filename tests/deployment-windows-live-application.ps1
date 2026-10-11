@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory)][string]$Root,
     [Parameter(Mandatory)][string]$Node,
     [Parameter(Mandatory)][string]$ChatId,
-    [Parameter(Mandatory)][string]$TargetCommit
+    [Parameter(Mandatory)][string]$TargetCommit,
+    [switch]$RestoreCancellation
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -14,7 +15,8 @@ function Assert([bool]$Condition, [string]$Message) {
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $helpers = Join-Path $repository 'scripts/deployment'
 Add-Type -Path @('WindowsWorkerJob.cs', 'WindowsPrivateFile.cs', 'WindowsControllerToken.cs',
-    'WindowsControllerProcess.cs', 'WindowsControllerCapture.cs' | ForEach-Object { Join-Path $helpers $_ })
+    'WindowsControllerProcess.cs', 'WindowsControllerCapture.cs', 'WindowsRuntimeDomain.cs',
+    'WindowsRuntimePipe.cs', 'WindowsRuntimeControl.cs' | ForEach-Object { Join-Path $helpers $_ })
 $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
 $git = (Get-Command git).Source
 $npm = Join-Path (Split-Path $Node) 'node_modules/npm/bin/npm-cli.js'
@@ -32,7 +34,9 @@ try {
     $environment.Add('TEMP', $Root)
     $environment.Add('TMP', $Root)
     $recoveryEngine = ''
-    foreach ($mode in @('update', 'verify-closed', 'current', 'restore', 'restore-closed')) {
+    $modes = if ($RestoreCancellation) { @('update', 'verify-closed', 'current', 'restore-cancelled') }
+        else { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
+    foreach ($mode in $modes) {
         $elapsed = [Diagnostics.Stopwatch]::StartNew()
         $capture.Check()
         $before = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
@@ -44,7 +48,7 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        $actorTimeout = if ($mode -eq 'restore') { 2700000 } elseif ($mode -eq 'update') { 1800000 } else { 300000 }
+        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } else { 300000 }
         $exited = $actor.WaitForExit($actorTimeout)
         $actor.Kill()
         Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'
@@ -69,6 +73,7 @@ try {
         $expected = switch ($mode) {
             update { 'accepted' } verify-closed { 'completed' } current { 'already-current' }
             restore { 'restored' } restore-closed { 'completed' }
+            restore-cancelled { 'cancelled' }
         }
         Assert ($result.status -ceq $expected) "Unexpected live controller $mode status"
         $actor.Dispose()
@@ -76,6 +81,19 @@ try {
         $capture.Check()
         $after = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
         Assert ($after.Count -eq 1) 'Live deployment lost the application task'
+        if ($mode -eq 'restore-cancelled') {
+            Assert ($after.Item(1).EnginePID -eq $originalPid -and $after.Item(1).InstanceGuid -ceq $originalInstance -and
+                $result.runtime.pid -eq $originalPid) 'Cancelled restore replaced the original runtime'
+            Assert (-not $scheduler.GetFolder('\').GetTask($TaskName).Enabled) 'Cancelled restore enabled restart'
+            $observed = [Deployment.WindowsRuntimeControl]::Exchange(
+                [guid]$result.runtime.generation, $result.runtime.pid,
+                $result.runtime.identity, 'observe', 15000) | ConvertFrom-Json
+            Assert ($observed.quiescent -and @($observed.members).Count -eq 0) 'Cancelled restore retained writers'
+            Assert (@(Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq 3010).Count -eq 0) `
+                'Cancelled restore retained the application listener'
+            Write-Output "PASS: real Windows cancelled restore retains original inhibited runtime, backup and lock; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            continue
+        }
         if ($mode -in @('update', 'restore')) {
             Assert ($result.recoveryEngine -cmatch '^[a-f0-9]{64}$') 'Live deployment returned no exact saved recovery binding'
             $recoveryEngine = $result.recoveryEngine

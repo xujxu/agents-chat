@@ -252,6 +252,7 @@ test('actual application source installs and builds inside native ownership', {
         path.join(repository, 'tests/deployment-windows-managed-application.ps1'),
         '-Project', f.project, '-Control', f.control, '-Node', process.execPath, '-LiveDeployment',
         '-TargetCommit', liveRevision,
+        ...(process.env.DEPLOYMENT_TEST_WINDOWS_RESTORE_CANCEL === '1' ? ['-RestoreCancellation'] : []),
       ], { timeout: 4800000, maxBuffer: 32768 });
       console.log(live.stdout.trim());
       return;

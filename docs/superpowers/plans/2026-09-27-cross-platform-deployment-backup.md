@@ -13915,6 +13915,56 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DI: Accept cancellation of an actual Windows restore before project mutation
+
+**Scope:** exercise the existing native cancellation path using the actual built
+application and saved engine, not a mocked transaction. Cancel only when the
+stopped restore enters its project-files stage. This proves guarded settlement
+and retained evidence, not cold reentry or recovery after a partially copied
+project; those remain separate requirements.
+
+**Files:** add `tests/deployment-windows-cancelled-restore.mjs`; extend the actual
+application actors/orchestrators and `.github/workflows/deployment-lifecycle.yml`.
+Production restore behavior and deadlines stay unchanged.
+
+- [ ] Build/update the genuine application and complete no-op as in the accepted
+  fixture. Dispatch a separate cancellation actor instead of normal restoration:
+  ```js
+  const cancellation = new AbortController();
+  await assert.rejects(runWindowsLiveRestore({
+    ...options, signal: cancellation.signal,
+    onProgress({ stage }) {
+      if (stage === 'project-files') cancellation.abort();
+    },
+  }), { code: 'DEPLOYMENT_STAGE_CANCELLED', stage: 'restoreFiles', recoveryAllowed: true });
+  ```
+  Require the injection to fire. Compare current source marker, Git HEAD, build
+  ID and modified environment bytes before/after; preserve the deployment
+  receipt and complete authoritative backup. Require recovery-required state,
+  original restore operation/backup binding, cancellation error code and the
+  retained original lock.
+- [ ] After that actor exits and its native Job settles, independently inspect
+  Scheduler and the original runtime control channel:
+  ```powershell
+  $observed = [Deployment.WindowsRuntimeControl]::Exchange(
+      [guid]$result.runtime.generation, $result.runtime.pid,
+      $result.runtime.identity, 'observe', 15000) | ConvertFrom-Json
+  Assert ($observed.quiescent -and @($observed.members).Count -eq 0) 'Cancelled restore retained writers'
+  ```
+  Require the same native task instance, disabled restart, no listener and no
+  child writers. Do not report successful restoration or automatically release
+  the recovery lock. Existing fixture cleanup terminates its exact task.
+- [ ] Add a focused `windows_restore_cancel_only` selector alongside the paired
+  Windows live selector. The default full matrix runs both successful restore
+  and cancellation; command-only selection runs once without a real build.
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_cancel_only=true
+  ```
+  Record the actual result before extending coverage to thrown errors, abrupt
+  controller death, mutation prefixes or network isolation.
+
 ### Task 5DH: Restore the running managed Windows application through saved tooling
 
 **Scope:** compose the approved explicit live restore core, not public command
@@ -14129,7 +14179,9 @@ is unchanged.
   source/artifact/env assertions, unchanged archive checks, authenticated
   original chat data, new runtime identity, no-restart closeout and lock
   removal passed. The real restore used the existing default stage deadline.
-  Full 48-job Linux/Windows regression `38131880686` is pending.
+  Full Linux/Windows regression `3e6a403 / 38131880686` passed all 48
+  jobs. Its actual Windows job `114447722118` repeated complete acceptance at
+  `11:05:08 UTC`: restore 1,100,897 ms and independent closeout 79,039 ms.
 - [x] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the
@@ -14168,7 +14220,7 @@ is unchanged.
   original lease release; never overwrite that terminal state on later failure.
   Publish restored deployment receipt and return independent closeout binding.
   Preserve original error and checked cleanup; retain lock/evidence on failure.
-- [ ] Repeat actual application acceptance, then native/shared regressions.
+- [x] Repeat actual application acceptance, then native/shared regressions.
   Record scope honestly: public/saved entry routing, earlier crash prefixes,
   cold and legacy restore remain separate required work.
 

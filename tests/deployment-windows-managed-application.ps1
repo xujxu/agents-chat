@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory)][string]$Node,
     [switch]$CompleteSnapshot,
     [switch]$LiveDeployment,
+    [switch]$RestoreCancellation,
     [string]$TargetCommit
 )
 $ErrorActionPreference = 'Stop'
@@ -139,7 +140,8 @@ foreach ($phase in $phases) {
             $owner.Dispose()
             $owner = $null
             & $pwsh -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deployment-windows-live-application.ps1') `
-                -Project $Project -TaskName $taskName -Root $root -Node $Node -ChatId $chatId -TargetCommit $TargetCommit
+                -Project $Project -TaskName $taskName -Root $root -Node $Node -ChatId $chatId -TargetCommit $TargetCommit `
+                -RestoreCancellation:$RestoreCancellation
             Assert ($LASTEXITCODE -eq 0) 'Actual Windows live deployment composition failed'
             continue
         }
