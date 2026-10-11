@@ -554,6 +554,8 @@ Actual cancellation after native stop but before project mutation passed at
 backup and deployment receipt; independent post-controller observation confirms
 the original runtime remains quiescent, restart-disabled and without writers
 or a listener. This is not acceptance of interruption after partial restoration.
+Full dual-platform regression `375b18a / 38137237291` passed all 49 jobs,
+including both complete saved restoration and pre-mutation cancellation.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

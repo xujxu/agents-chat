@@ -14016,7 +14016,9 @@ Production restore behavior and deadlines stay unchanged.
   `2026-10-11 11:52:55 UTC`: update1,173,223ms, no-op185,895ms,
   cancelled restore405,641ms; full actual test2,037,286ms. Independent runtime
   observation and retained backup/lock assertions passed. Full49 regression
-  `375b18a / 38137237291` is running; this checkbox records the focused result.
+  `375b18a / 38137237291` passed49/49: cancellation job `114463501976`
+  completed at `2026-10-11 12:23:37 UTC`, and complete restoration job
+  `114463502082` completed at `13:01:53 UTC`.
 
 ### Task 5DH: Restore the running managed Windows application through saved tooling
 
