@@ -14021,9 +14021,19 @@ is unchanged.
   Implementation `42d296a / 38110839654`, job `114385886449`, passed
   all three owner cases at `04:15:38 UTC`; receipt, saved dependency closure,
   inherited-policy and PATH-free combined restoration contracts also passed.
-  Actual application retry `38111070373` and native restore regression
-  `38111088682` are pending; do not count this component acceptance as full
-  actual restore acceptance.
+  Native restore regression `38111088682` also passed all seven jobs:
+  snapshot/restoration `114386627644`, managed discovery `114386627702`,
+  independent closeout `114386627653` and all four prior-runtime recovery
+  cases. Actual application retry `38111070373`, job `114386571849`,
+  failed at `04:55:42 UTC`: owner admission passed, but the Git metadata
+  controller still used kernel-object root policy (`OICI`) against archived
+  file-security policy (`OICIID`). Attributes and owner/group matched.
+  Add an inherited private-root combined fixture without the existing broad
+  ACL setup; require exact root observation, refusal of stripped inheritance
+  flags, full project/Git/external restoration and unchanged backup.
+  Use the existing file-security observation pattern for both Git-root
+  readiness and later root capture, bracketed by retained root checks.
+  Keep the shared exact policy comparison and original kernel lease unchanged.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

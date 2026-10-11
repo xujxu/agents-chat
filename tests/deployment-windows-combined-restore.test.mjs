@@ -14,9 +14,10 @@ import { restoreExternalSnapshot } from '../scripts/deployment/restore-external.
 import { inspectWindowsSnapshotSecurity } from '../scripts/deployment/windows-snapshot-security.mjs';
 import { windowsRestoredSecurityMatches } from '../scripts/deployment/windows-restore-security.mjs';
 import { windowsGitMetadataInventory } from '../scripts/deployment/windows-git-snapshot-security.mjs';
+import { prepareWindowsGitMetadataSecurity } from '../scripts/deployment/windows-git-metadata-security.mjs';
 
-async function fixture(t) {
-  const f = await gitMetadataFixture(t, { broad: true });
+async function fixture(t, { broad = true } = {}) {
+  const f = await gitMetadataFixture(t, { broad });
   for (const name of ['.data', '.next', 'node_modules', 'logs']) await mkdir(path.join(f.project, name));
   const payload = {
     'app.txt': 'original\n',
@@ -173,5 +174,37 @@ test('Windows combined restoration uses explicit PowerShell without PATH lookup'
     if (originalPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalPath;
   }
+  await verify(f);
+});
+
+test('Windows combined restoration preserves inherited private Git root policy', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const f = await fixture(t, { broad: false });
+  const record = await readSnapshotGit(f.backup, f.manifest);
+  const metadata = record.windowsSecurity;
+  const policy = {
+    securityDescriptor: metadata.descriptors[metadata.root.security],
+    attributes: metadata.root.attributes,
+  };
+  assert.match(policy.securityDescriptor, /\(A;[^;]*ID;/, 'The Git root must have inherited ACEs.');
+  const directory = path.join(f.project, '.git');
+  const identity = await lstat(directory, { bigint: true });
+  const native = await prepareWindowsGitMetadataSecurity({
+    project: f.project, backup: f.backup, record,
+  });
+  try {
+    const observed = await native.observeDirectory(directory, {
+      dev: String(identity.dev), ino: String(identity.ino),
+    });
+    assert.deepEqual(observed.windowsSecurity, policy);
+  } finally { await native.close(); }
+  const descriptors = [...metadata.descriptors];
+  descriptors[metadata.root.security] = policy.securityDescriptor.replaceAll('ID', '');
+  await assert.rejects(prepareWindowsGitMetadataSecurity({
+    project: f.project, backup: f.backup,
+    record: { ...record, windowsSecurity: { ...metadata, descriptors } },
+  }), error => /root security policy/.test(error.cause?.message));
+  await restore(f);
   await verify(f);
 });
