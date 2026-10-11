@@ -13915,6 +13915,52 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DO: Admit public Windows restoration without importing historical code
+
+**Scope:** block1's public wrapper needs a read-only descriptor for the verified
+historical saved entry, not a current-engine inventory requirement. Mirror
+Linux public invocation's separation: current code verifies manifest/file bytes;
+the historical child later validates its own module inventory and live task.
+No cold fallback, task mutation, controller launch or lock acquisition here.
+
+**Files:** create `scripts/deployment/windows-restore-invocation.mjs` and
+`tests/deployment-windows-restore-invocation.test.mjs`; add the test alongside
+saved-entry contracts in the Windows command gate.
+
+- [ ] Create a private Windows snapshot fixture with a historical engine whose
+  modules deliberately throw if imported. Valid admission must return:
+  ```js
+  assert.deepEqual(invocation.args, [
+    path.join(engine, 'windows-restore-entry.mjs'), control, recoveryEngine, '--accept-data-loss',
+  ]);
+  assert.deepEqual(invocation.input, {
+    project, taskName, pwsh, backup, port: 3010, waitSeconds: 120, timeoutSeconds: 60,
+  });
+  ```
+  Verify no control-directory writes. Refuse absent backup with its distinct
+  code, wrong task/project, missing Windows entry, altered bytes/manifest,
+  extra engine file, invalid deadline, and mutable in-project executables.
+  Run command-only Actions and record the missing-module red gate first.
+- [ ] Implement `prepareWindowsRestoreInvocation` as a bounded admission stage:
+  validate canonical native paths/deadlines/task, canonical private sibling
+  control, complete version3 matching Windows project/task snapshot, exact
+  recovery digest, and required Windows entry in the saved manifest. Call
+  `locateRecoveryEngine`/`inspectRecoveryEngineFiles`, never import saved modules.
+  ```js
+  return Object.freeze({
+    file: process.execPath,
+    args: Object.freeze([path.join(engine.directory, 'windows-restore-entry.mjs'),
+      control, engine.manifestSha256, '--accept-data-loss']),
+    input: Object.freeze({ project, taskName, pwsh, backup, port: 3010, waitSeconds, timeoutSeconds }),
+    backupId: snapshot.id,
+  });
+  ```
+  A missing Windows entry in an older backup must fail explicitly, not copy
+  current code into the archive or silently use a different engine generation.
+- [ ] Push and rerun paired command-only Actions. This gate accepts only
+  read-only public admission; public supervisor/PowerShell command integration
+  and actual wrapper acceptance follow without claiming they already exist.
+
 ### Task 5DN: Expose the accepted live Windows restore through its saved process entry
 
 **Approved scope:** the existing design's self-contained external restore entry,
@@ -13936,7 +13982,7 @@ parts of that same approved scope.
 - Modify `.github/workflows/deployment-lifecycle.yml`: run entry contracts with
   saved dependency closure before actual builds.
 
-- [ ] Add API tests for acknowledgement, exact engine/self binding, unknown
+- [x] Add API tests for acknowledgement, exact engine/self binding, unknown
   input fields, malformed UTF8, input over32768 bytes, invalid deadlines/paths
   and missing backup. Use a real saved engine in a private temporary control
   directory; every refusal requires exit1, one sanitized JSON result and
@@ -13950,6 +13996,8 @@ parts of that same approved scope.
   ```
   Run the paired command-only selector in Actions and record the missing-entry
   failure before adding implementation.
+  Causal `7023ab8 / 38156508986` failed at `2026-10-11 16:45:14 UTC`
+  with the exact missing saved Windows restore process entry assertion.
 - [ ] Implement the saved process contract:
   ```text
   node <saved-engine>/windows-restore-entry.mjs <control> <manifest-sha256> --accept-data-loss
@@ -13992,6 +14040,12 @@ parts of that same approved scope.
   Verify dependency closure and native entry contracts before claiming saved
   process support; run actual and full dual-platform regression for this new
   production inventory generation. Public wrapper and cold recovery stay gated.
+  Implementation `3e72433` adds the saved entry and routes complete/offline
+  actual restoration through a distinct saved subprocess. Focused native
+  contracts `38184419677` passed: job `114603594853` at
+  `2026-10-11 23:31:09 UTC` passed both saved dependency closure and all
+  saved-entry refusals. Actual offline `38184727295` and full53
+  `38184729161` are running; actual saved-process support is not yet accepted.
 
 ### Task 5DM: Restore with explicit external-egress denial for actual restore executables
 

@@ -211,7 +211,7 @@ jobs:
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-private-runner.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Private Windows test runner diagnostics failed.' }
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-receipt.test.mjs')
-          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs', 'tests/deployment-windows-restore-entry.test.mjs') -NamePattern '^(saved recovery bundle closes module dependencies|saved Windows restore entry)'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs', 'tests/deployment-windows-restore-entry.test.mjs', 'tests/deployment-windows-restore-invocation.test.mjs') -NamePattern '^(saved recovery bundle closes module dependencies|saved Windows restore entry|public Windows restore invocation)'
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-project-policy.test.mjs')
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-combined-restore.test.mjs') -NamePattern '^Windows combined restoration (uses explicit PowerShell|preserves inherited private Git root policy)'
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-restore-project.test.mjs') -NamePattern '^Windows (project restoration preserves an eligible|unsupported saved ownership)'
