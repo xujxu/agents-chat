@@ -13959,7 +13959,12 @@ is unchanged.
   `2026-10-11 01:11:24 UTC`: expected `ERR_MODULE_NOT_FOUND` for the saved
   orchestrator after update, independent closeout, no-op and chat mutation
   passed. The other five selected jobs passed. Implementation `db66705 /
-  38099718423` is running in isolated live job `114356709810`.
+  38099718423` failed in isolated live job `114356709810` at
+  `2026-10-11 01:32:30 UTC`: the saved orchestrator omitted its shared
+  `linux-deployment-capacity.mjs` dependency. Add that helper to the explicit
+  saved inventory and the Windows restore module to the existing source-absent
+  import test. Run that dependency-closure test in the focused live gate before
+  any real application build, rather than relying only on the full matrix.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

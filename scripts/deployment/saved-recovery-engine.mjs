@@ -35,7 +35,7 @@ const files = Object.freeze([...new Set([
   'windows-runtime-relocation.mjs',
   'windows-restore-task-policy.mjs', 'windows-restore-task-policy.ps1',
   'windows-restore-compatibility.mjs',
-  'windows-restore.mjs',
+  'windows-restore.mjs', 'linux-deployment-capacity.mjs',
   'windows-completed-closeout.mjs',
   'windows-deployment-acceptance.mjs', 'windows-current-deployment.mjs', 'deployment-receipt.mjs',
   'windows-configuration.mjs', 'windows-configuration-files.mjs', 'windows-configuration-files.ps1',

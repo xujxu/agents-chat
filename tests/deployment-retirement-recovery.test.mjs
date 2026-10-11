@@ -126,6 +126,7 @@ test('saved recovery bundle closes module dependencies after its source disappea
     'windows-first-completion-proof.mjs',
     'windows-first-completion-recovery.mjs',
     'windows-first-deployment-retirement.mjs',
+    'windows-restore.mjs',
   ];
   const urls = modules.map(name => pathToFileURL(path.join(saved.directory, name)).href);
   await execute(process.execPath, ['--input-type=module', '--eval',
