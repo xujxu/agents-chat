@@ -14051,6 +14051,16 @@ is unchanged.
   per-stage limit, 120-second readiness limit, 2,700-second outer fixture,
   3,000-second private runner and 75-minute job bounds. Emit separate fixture
   diagnostics after core/receipt return and after unchanged-backup assertions.
+  Retry `ff6a34b / 38115715416`, job `114400089905`, failed at
+  `06:13:56 UTC` on the unchanged 1,200-second update actor limit, before
+  restore. The nested update fixture buffered all command diagnostics until
+  child exit, so the timeout discarded its phase evidence. Forward available
+  child stderr as it arrives (keeping bounded captured output and JSON stdout).
+  Because the native supervisor also buffers its inner controller, report the
+  last recorded phase from the fixture's bounded state file on actor timeout;
+  this is diagnostic only and never authorizes recovery or suppresses failure.
+  Retry without increasing update, stage or outer deadlines. This run provides
+  no evidence about the revised restore actor allowance.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

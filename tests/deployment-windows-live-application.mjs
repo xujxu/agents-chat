@@ -43,7 +43,7 @@ if (['restore', 'restore-closed'].includes(mode)) {
     let output;
     let failure;
     try {
-      output = await promisify(execFile)(supervise ? pwsh : process.execPath,
+      const pending = promisify(execFile)(supervise ? pwsh : process.execPath,
         supervise ? ['-NoProfile', '-NonInteractive', '-File', publicEntry,
           '-ProjectDir', project, '-TaskName', taskName, '-Revision', targetCommit,
           '-WaitSeconds', '120', '-TimeoutSeconds', '900', '-Json',
@@ -51,6 +51,8 @@ if (['restore', 'restore-closed'].includes(mode)) {
         { cwd: directory, env: supervise ? {
           ...process.env, PATH: [path.dirname(process.execPath), path.dirname(git), path.dirname(pwsh)].join(path.delimiter),
         } : process.env, timeout: 1200000, maxBuffer: 16384 });
+      pending.child.stderr.on('data', chunk => process.stderr.write(chunk));
+      output = await pending;
     } catch (error) {
       assert.equal(error.killed, false);
       assert.equal(error.signal, null);
@@ -58,7 +60,6 @@ if (['restore', 'restore-closed'].includes(mode)) {
       output = error;
       failure = error;
     }
-    process.stderr.write(output.stderr);
     const result = JSON.parse(output.stdout);
     if (failure) {
       assert.equal(result.status, 'failed');

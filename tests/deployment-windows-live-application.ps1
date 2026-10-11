@@ -52,6 +52,17 @@ try {
         Assert ($output.Wait(15000) -and $diagnostic.Wait(15000)) 'Live controller streams did not settle'
         [Console]::Error.Write($diagnostic.GetAwaiter().GetResult())
         $text = $output.GetAwaiter().GetResult()
+        if (-not $exited) {
+            try {
+                $stateFile = Join-Path $control 'state.json'
+                Assert ((Get-Item -LiteralPath $stateFile).Length -le 65536) 'Fixture state exceeds diagnostic bound'
+                $state = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
+                Assert ($state.phase -is [string] -and $state.phase -cmatch '^[a-z-]{1,64}$') 'Invalid fixture phase'
+                [Console]::Error.WriteLine("Timed out $mode actor; last recorded phase: $($state.phase)")
+            } catch {
+                [Console]::Error.WriteLine("Timed out $mode actor; state diagnostic unavailable: $($_.Exception.GetType().FullName)")
+            }
+        }
         Assert $exited "Live application controller $mode exceeded its bound; output: $text"
         Assert ($code -eq 0) "Live controller $mode failed: $text"
         $result = $text | ConvertFrom-Json
