@@ -14061,6 +14061,21 @@ is unchanged.
   this is diagnostic only and never authorizes recovery or suppresses failure.
   Retry without increasing update, stage or outer deadlines. This run provides
   no evidence about the revised restore actor allowance.
+  Diagnostic retry `a0de692 / 38117530682`, job `114405314554`,
+  failed at `06:46:05 UTC`: update reached accepted at `06:40:22`,
+  then its outer actor expired with last recorded phase still accepted.
+  This exposes competing whole-process deadlines after native acceptance;
+  the nested public command had the same 1,200-second limit,
+  despite the outer actor also running refusals, status and assertions.
+  Separate the deadlines: public command 1,500 seconds, update actor 1,800;
+  retain restore actor 1,200 and all other actors 300. Increase the enclosing
+  application fixture by exactly the additional update allowance, from
+  2,700 to 3,300 seconds. The selected private runner gets 4,800 seconds:
+  both initial build stages (2 x 600), the 3,300-second fixture and 300 seconds
+  for setup/cleanup. Its ordinary default stays 1,800; retain the five-second
+  timeout regression and test the new maximum through immediate failure.
+  Set only the live job to 90 minutes to include the early native checks.
+  Production stage, readiness and command configuration limits are unchanged.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

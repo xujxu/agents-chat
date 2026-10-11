@@ -50,7 +50,7 @@ if (['restore', 'restore-closed'].includes(mode)) {
         ] : [modulePath, 'update', project, control, taskName, pwsh, git, npmCli, ...args],
         { cwd: directory, env: supervise ? {
           ...process.env, PATH: [path.dirname(process.execPath), path.dirname(git), path.dirname(pwsh)].join(path.delimiter),
-        } : process.env, timeout: 1200000, maxBuffer: 16384 });
+        } : process.env, timeout: 1500000, maxBuffer: 16384 });
       pending.child.stderr.on('data', chunk => process.stderr.write(chunk));
       output = await pending;
     } catch (error) {
