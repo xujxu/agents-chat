@@ -30,12 +30,24 @@ function Read-Path($Item, [string[]]$Names = @('path')) {
     if ($name -cne '' -and -not $allowed.ContainsKey($name)) { throw 'Git metadata path is not admitted.' }
     return $fields
 }
+function Read-RootPolicy {
+    Check-Roots
+    $sections = [Security.AccessControl.AccessControlSections]::Owner -bor
+        [Security.AccessControl.AccessControlSections]::Group -bor
+        [Security.AccessControl.AccessControlSections]::Access
+    $policy = @{
+        securityDescriptor=(Get-Acl -LiteralPath $Project).GetSecurityDescriptorSddlForm($sections)
+        attributes=[int](Get-Item -LiteralPath $Project -Force).Attributes
+    }
+    Check-Roots
+    return $policy
+}
 function Capture([string]$Name) {
     if ($Name -ceq '') {
         $id = $root.CaptureIdentity()
         return @{
             path=''; dev=$id.Dev; ino=$id.Ino; bytes=0
-            windowsSecurity=@{ securityDescriptor=$root.SecurityDescriptor; attributes=[int](Get-Item -LiteralPath $Project -Force).Attributes }
+            windowsSecurity=(Read-RootPolicy)
         }
     }
     $kind = $allowed[$Name]
@@ -96,7 +108,7 @@ try {
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; controllerIdentity=$ControllerIdentity
         project=$Project; backup=$Backup
-        root=@{ securityDescriptor=$root.SecurityDescriptor; attributes=[int](Get-Item -LiteralPath $Project -Force).Attributes }
+        root=(Read-RootPolicy)
     } | ConvertTo-Json -Depth 8 -Compress))
     [Console]::Out.Flush()
     $sequence = 0

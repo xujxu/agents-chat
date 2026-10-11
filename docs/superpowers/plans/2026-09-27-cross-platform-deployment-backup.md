@@ -14034,6 +14034,9 @@ is unchanged.
   Use the existing file-security observation pattern for both Git-root
   readiness and later root capture, bracketed by retained root checks.
   Keep the shared exact policy comparison and original kernel lease unchanged.
+  Causal `fd9fbe8 / 38113261356`, job `114393024560`, failed the new
+  private-root case at `05:02:00 UTC` (9,266 ms) with the exact actual
+  application's policy mismatch; the existing broad-root PATH-free case passed.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the
