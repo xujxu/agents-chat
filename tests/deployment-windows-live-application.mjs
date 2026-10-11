@@ -9,9 +9,10 @@ import { promisify } from 'node:util';
 const [mode, directory, project, control, taskName, pwsh, git, npmCli, targetCommit, recoveryEngine] = process.argv.slice(2);
 const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)).href);
 const { loadState, acquireLock, releaseLock } = await captured('state.mjs');
-assert.ok(['update', 'verify-closed', 'current', 'restore', 'restore-closed', 'restore-cancelled', 'restore-failed'].includes(mode));
+const restoreModes = ['restore', 'restore-closed', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-crash-verified'];
+assert.ok(['update', 'verify-closed', 'current', ...restoreModes].includes(mode));
 assert.match(targetCommit, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
-if (['restore', 'restore-closed', 'restore-cancelled', 'restore-failed'].includes(mode)) {
+if (restoreModes.includes(mode)) {
   const { verifyWindowsLiveRestore } = await import('./deployment-windows-live-restore.mjs');
   console.log(JSON.stringify(await verifyWindowsLiveRestore({ mode, directory, project, control, taskName, pwsh })));
 } else if (mode === 'verify-closed') {

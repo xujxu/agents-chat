@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory)][string]$Node,
     [Parameter(Mandatory)][string]$ChatId,
     [Parameter(Mandatory)][string]$TargetCommit,
-    [ValidateSet('complete', 'cancelled', 'failed')][string]$RestoreScenario = 'complete'
+    [ValidateSet('complete', 'cancelled', 'failed', 'crashed')][string]$RestoreScenario = 'complete'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -35,6 +35,7 @@ try {
     $environment.Add('TMP', $Root)
     $recoveryEngine = ''
     $modes = if ($RestoreScenario -eq 'complete') { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
+        elseif ($RestoreScenario -eq 'crashed') { @('update', 'verify-closed', 'current', 'restore-crashed', 'restore-crash-verified') }
         else { @('update', 'verify-closed', 'current', "restore-$RestoreScenario") }
     foreach ($mode in $modes) {
         $elapsed = [Diagnostics.Stopwatch]::StartNew()
@@ -48,7 +49,7 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } else { 300000 }
+        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } else { 300000 }
         $exited = $actor.WaitForExit($actorTimeout)
         $actor.Kill()
         Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'
@@ -68,6 +69,17 @@ try {
             }
         }
         Assert $exited "Live application controller $mode exceeded its bound; output: $text"
+        if ($mode -eq 'restore-crashed') {
+            Assert ($code -ne 0 -and [string]::IsNullOrWhiteSpace($text)) 'Crashed restore reported successful completion'
+            $actor.Dispose()
+            $actor = $null
+            $capture.Check()
+            $crashed = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
+            Assert ($crashed.Count -eq 1 -and $crashed.Item(1).EnginePID -eq $originalPid -and
+                $crashed.Item(1).InstanceGuid -ceq $originalInstance) 'Controller death replaced the original runtime'
+            Write-Output "Original restore actor terminated without a result; verifying its retained crash evidence; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            continue
+        }
         Assert ($code -eq 0) "Live controller $mode failed: $text"
         $result = $text | ConvertFrom-Json
         $expected = switch ($mode) {
@@ -75,6 +87,7 @@ try {
             restore { 'restored' } restore-closed { 'completed' }
             restore-cancelled { 'cancelled' }
             restore-failed { 'failed' }
+            restore-crash-verified { 'crash-verified' }
         }
         Assert ($result.status -ceq $expected) "Unexpected live controller $mode status"
         $actor.Dispose()
@@ -82,7 +95,7 @@ try {
         $capture.Check()
         $after = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
         Assert ($after.Count -eq 1) 'Live deployment lost the application task'
-        if ($mode -in @('restore-cancelled', 'restore-failed')) {
+        if ($mode -in @('restore-cancelled', 'restore-failed', 'restore-crash-verified')) {
             Assert ($after.Item(1).EnginePID -eq $originalPid -and $after.Item(1).InstanceGuid -ceq $originalInstance -and
                 $result.runtime.pid -eq $originalPid) 'Interrupted restore replaced the original runtime'
             Assert (-not $scheduler.GetFolder('\').GetTask($TaskName).Enabled) 'Interrupted restore enabled restart'

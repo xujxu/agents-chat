@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { lstat, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { prepareWindowsRestoreCrash } from './deployment-windows-crashed-restore.mjs';
+import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-evidence.mjs';
 
 export async function verifyWindowsInterruptedRestore({ scenario, project, control, backup, snapshot, recovery, taskName, pwsh }) {
-  assert.ok(['cancelled', 'failed'].includes(scenario));
+  assert.ok(['cancelled', 'failed', 'crashed'].includes(scenario));
   const saved = name => import(pathToFileURL(path.join(recovery.directory, name)));
   const { runWindowsLiveRestore } = await saved('windows-restore.mjs');
   const { inspectWindowsManagedTask } = await saved('windows-managed-task.mjs');
@@ -20,6 +22,9 @@ export async function verifyWindowsInterruptedRestore({ scenario, project, contr
     assert.equal(before.at(-1).toString(), 'DEPLOYMENT_RESTORE_FIXTURE=after-update\n');
     const receipt = await readFile(path.join(control, 'deployment.json'));
     const lock = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
+    const crash = scenario === 'crashed' ? await prepareWindowsRestoreCrash({
+      control, backup, lock, runtime: scope.observation.runtime, receipt,
+    }) : null;
     const cancellation = new AbortController();
     const failure = new Error('Actual restore failure after project mutation');
     const errorCode = scenario === 'cancelled' ? 'DEPLOYMENT_STAGE_CANCELLED' : 'DEPLOYMENT_RESTORE_FAILED';
@@ -38,6 +43,7 @@ export async function verifyWindowsInterruptedRestore({ scenario, project, contr
           injected = true;
           throw failure;
         }
+        if (crash && stage === 'external-files') crash({ phase, stage });
       },
     }), scenario === 'cancelled'
       ? { code: 'DEPLOYMENT_STAGE_CANCELLED', stage: 'restoreFiles', recoveryAllowed: true }
@@ -56,11 +62,7 @@ export async function verifyWindowsInterruptedRestore({ scenario, project, contr
     if (scenario === 'cancelled') {
       assert.deepEqual(await Promise.all(files.map(name => readFile(path.join(project, name)))), before);
     } else {
-      await assert.rejects(lstat(path.join(project, 'deployment-live-target.txt')), { code: 'ENOENT' });
-      for (const name of ['.env.local', '.next/BUILD_ID', 'package-lock.json',
-        'node_modules/better-sqlite3/build/Release/better_sqlite3.node']) {
-        assert.deepEqual(await readFile(path.join(project, name)), await readFile(path.join(backup, 'files', name)));
-      }
+      await assertWindowsRestoredProjectBytes(project, backup);
     }
     assert.deepEqual(await readFile(path.join(control, 'deployment.json')), receipt);
     assert.deepEqual(await verifySnapshot(backup), snapshot);

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-evidence.mjs';
 
 export async function verifyWindowsLiveRestore({ mode, directory, project, control, taskName, pwsh }) {
   const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
@@ -27,7 +28,11 @@ export async function verifyWindowsLiveRestore({ mode, directory, project, contr
     assert.deepEqual(await verifySnapshot(backup), snapshot);
     return result;
   }
-  if (['restore-cancelled', 'restore-failed'].includes(mode)) {
+  if (mode === 'restore-crash-verified') {
+    const { verifyWindowsCrashedRestore } = await import('./deployment-windows-crashed-restore.mjs');
+    return verifyWindowsCrashedRestore({ project, control, backup, snapshot, recovery });
+  }
+  if (['restore-cancelled', 'restore-failed', 'restore-crashed'].includes(mode)) {
     const { verifyWindowsInterruptedRestore } = await import('./deployment-windows-interrupted-restore.mjs');
     return verifyWindowsInterruptedRestore({
       scenario: mode.slice('restore-'.length), project, control, backup, snapshot, recovery, taskName, pwsh,
@@ -62,11 +67,7 @@ export async function verifyWindowsLiveRestore({ mode, directory, project, contr
     assert.equal(state.targetCommit, snapshot.source.commit);
     assert.equal(state.backupId, snapshot.id);
     assert.equal(JSON.parse(await readFile(path.join(control, 'deployment.json'))).operationId, lock.operationId);
-    await assert.rejects(lstat(path.join(project, 'deployment-live-target.txt')), { code: 'ENOENT' });
-    for (const name of ['.env.local', '.next/BUILD_ID', 'package-lock.json',
-      'node_modules/better-sqlite3/build/Release/better_sqlite3.node']) {
-      assert.deepEqual(await readFile(path.join(project, name)), await readFile(path.join(backup, 'files', name)));
-    }
+    await assertWindowsRestoredProjectBytes(project, backup);
     assert.deepEqual(await verifySnapshot(backup), snapshot);
     process.stderr.write(`${new Date().toISOString()} Windows restore assertions and unchanged backup verified\n`);
   } catch (error) { errors.push(error); }

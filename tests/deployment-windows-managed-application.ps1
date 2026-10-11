@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory)][string]$Node,
     [switch]$CompleteSnapshot,
     [switch]$LiveDeployment,
-    [ValidateSet('complete', 'cancelled', 'failed')][string]$RestoreScenario = 'complete',
+    [ValidateSet('complete', 'cancelled', 'failed', 'crashed')][string]$RestoreScenario = 'complete',
     [string]$TargetCommit
 )
 $ErrorActionPreference = 'Stop'

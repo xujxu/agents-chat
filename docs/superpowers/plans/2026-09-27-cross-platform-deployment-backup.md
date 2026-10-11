@@ -13915,6 +13915,50 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DK: Accept abrupt controller death after actual project restoration
+
+**Scope:** force-terminate the original Node restore actor at `external-files`,
+after project mutation, without running its catch/finally settlement. A fresh
+actor verifies retained evidence; the PowerShell parent independently observes
+the original inhibited, empty runtime after terminating the original controller
+Job. This is crash containment, not cold reentry or successful restoration.
+
+**Files:** add `tests/deployment-windows-crashed-restore.mjs`; extend the existing
+interrupted-restore helper, actual Node/PowerShell actors and workflow selectors.
+Keep production code, cleanup authority and deadlines unchanged.
+
+- [ ] Before restoring, persist fixture-only original lock/runtime bindings and
+  hashes of the deployment receipt and backup manifest outside the project.
+  At the existing external-files progress callback, record the exact boundary:
+  ```js
+  writeFileSync(boundary, JSON.stringify({ phase, stage, pid: process.pid }), { flag: 'wx' });
+  process.kill(process.pid, 'SIGKILL');
+  throw new Error('Restore crash injection did not terminate its original actor.');
+  ```
+  Parent requires a nonzero actor exit and no successful JSON result, then
+  settles its owned Job and starts a distinct `restore-crash-verified` actor.
+- [ ] Fresh verification requires the persisted boundary/pid, original lock
+  bytes, unchanged receipt/manifest hashes and a fully valid backup. It checks
+  archived project bytes with the same helper as the accepted thrown-error case.
+  Unlike settled cancellation/error, journal must remain at the interrupted
+  `restoring` phase with previousPhase `restore-preflight` and errorCode null:
+  ```js
+  assert.equal(state.phase, 'restoring');
+  assert.equal(state.previousPhase, 'restore-preflight');
+  assert.equal(state.errorCode, null);
+  assert.equal(state.operationId, lock.operationId);
+  ```
+  Do not impersonate/release the dead lock owner or synthesize recovery success.
+  Reuse post-actor native task identity/quiescence/writer/listener assertions.
+- [ ] Add focused `windows_restore_crash_only` and default `crashed` coverage:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_crash_only=true
+  ```
+  Record the actual outcome before moving to file-copy crash prefixes, offline
+  restoration or saved/public cold reentry. No local validation.
+
 ### Task 5DJ: Accept a thrown restore error after actual project mutation
 
 **Scope:** extend the accepted actual cancellation fixture to throw a known
@@ -13927,7 +13971,7 @@ No production behavior or deadline changes.
 `tests/deployment-windows-interrupted-restore.mjs`; extend the Node/PowerShell
 actual actors and `.github/workflows/deployment-lifecycle.yml`.
 
-- [ ] Preserve the accepted `cancelled` scenario and add `failed`, selected
+- [x] Preserve the accepted `cancelled` scenario and add `failed`, selected
   through `RestoreScenario` and the actual fixture environment:
   ```js
   const failure = new Error('Actual restore failure after project mutation');
@@ -13938,7 +13982,7 @@ actual actors and `.github/workflows/deployment-lifecycle.yml`.
   ```
   Require the injection to fire, recovery-required/restoring state with
   DEPLOYMENT_RESTORE_FAILED, original operation/backup binding and retained lock.
-- [ ] Prove real mutation before the injected error: the new source marker must
+- [x] Prove real mutation before the injected error: the new source marker must
   be absent, and environment, build ID, package lock and native-addon bytes
   must equal their authoritative archived files:
   ```js
@@ -13953,7 +13997,7 @@ actual actors and `.github/workflows/deployment-lifecycle.yml`.
   backup. Reuse independent post-actor Scheduler/runtime observation from 5DI:
   same task instance, disabled restart, quiescent original Job, no child writers
   and no3010 listener. Do not activate, release the lock or claim restoration.
-- [ ] Run focused actual failure acceptance in Actions:
+- [x] Run focused actual failure acceptance in Actions:
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_application_only=true \
@@ -13962,6 +14006,10 @@ actual actors and `.github/workflows/deployment-lifecycle.yml`.
   Default full coverage adds this scenario alongside completion/cancellation;
   paired command-only still selects one job and does not build an application.
   Record evidence before expanding to abrupt death or file-copy crash prefixes.
+  Accepted `4bb8ebb / 38137334922`, job `114463786030`, at
+  `2026-10-11 13:04:11 UTC`: update1,182,641ms, no-op185,376ms,
+  failed restore1,368,419ms; full actual test3,020,886ms. Both restored project
+  bytes and independently inhibited, writer-free original runtime passed.
 
 ### Task 5DI: Accept cancellation of an actual Windows restore before project mutation
 
