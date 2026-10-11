@@ -52,7 +52,15 @@ export async function readDeploymentReceipt(control, project) {
   return observed === null ? null : decode(observed, project);
 }
 
-export async function publishDeploymentReceipt({ control, lock: supplied, identity, checkAccepted, signal }) {
+export function publishDeploymentReceipt(options) {
+  return publishReceipt(options, false);
+}
+
+export function publishRestoredDeploymentReceipt(options) {
+  return publishReceipt(options, true);
+}
+
+async function publishReceipt({ control, lock: supplied, identity, checkAccepted, signal }, restored) {
   signal?.throwIfAborted();
   const lock = captureLockOwner(supplied);
   const expected = captureIdentity(identity);
@@ -60,9 +68,11 @@ export async function publishDeploymentReceipt({ control, lock: supplied, identi
   const { root } = await externalWorkerDirectory(control, lock.project);
   const original = fileIdentity(await lstat(root, { bigint: true }));
   const state = await loadState(root);
-  if (!state || state.phase !== 'accepted' || state.operation === 'restore'
+  if (!state || (restored
+    ? state.phase !== 'restored' || state.operation !== 'restore' || state.previousPhase !== 'restore-activating' || state.errorCode !== null
+    : state.phase !== 'accepted' || state.operation === 'restore')
     || state.project !== lock.project || state.operationId !== lock.operationId || state.targetCommit !== expected.source) {
-    throw new Error('Deployment receipt requires matching accepted state and source.');
+    throw new Error(`Deployment receipt requires matching ${restored ? 'restored' : 'accepted'} state and source.`);
   }
   const stateFile = path.join(root, 'state.json');
   const stateEvidence = await observe(stateFile);

@@ -13924,7 +13924,8 @@ Restore archived files and artifacts without dependency installation/build,
 then activate a distinct restored bundle and independently close the transaction.
 
 **Files:** create `scripts/deployment/windows-restore.mjs` and saved inventory
-entry; add `tests/deployment-windows-live-restore.mjs`, extend the existing
+entry; extend `scripts/deployment/deployment-receipt.mjs` and its contract test;
+add `tests/deployment-windows-live-restore.mjs`, extend the existing
 actual application's Node actor and PowerShell orchestrator. Add
 `windows_live_only` alongside `windows_application_only` to omit unrelated
 first-install suites during this actual-restore gate; default/full coverage
@@ -13962,6 +13963,26 @@ is unchanged.
   close live configuration/scope observations, then record restoring.
   Keep fallible preparation out of the first record callback so existing
   recorded-failure handling remains accurate.
+- [ ] Publish the healthy restored runtime through an explicit
+  `publishRestoredDeploymentReceipt` entry, retaining the shared receipt
+  schema, lock/state/file identity and repeated live acceptance checks.
+  The original `publishDeploymentReceipt` must continue rejecting restore;
+  the new entry requires `operation === 'restore'`, `phase === 'restored'`,
+  `previousPhase === 'restore-activating'`, a matching archived target and no
+  error code. Exercise absent/ordinary state refusal, idempotence, original
+  publisher refusal and changed runtime identity:
+  ```js
+  await acceptOperation(restored.control, restored.lock, 'restore');
+  await assert.rejects(publishDeploymentReceipt(restored), /accepted/i);
+  const receipt = await receipts.publishRestoredDeploymentReceipt(restored);
+  assert.equal(receipt.status, 'accepted');
+  assert.deepEqual(receipt.identity, restored.identity);
+  ```
+  Reserve at least one byte for each zero-sized/absent external destination
+  in the positive-only capacity API. Isolate the receipt causal gate from
+  the actual build by adding `-f windows_commands_only=true` to the paired
+  live selector. Tests are committed as `7a11ef2`, run `38099542780`;
+  no successful receipt or full restore acceptance is claimed yet.
 - [ ] Restore project/Git and projected external files only under checked
   original stopped/inhibited authority. Capture restored source/artifact
   identities, seal workers, retire/replace/activate the native task, and use
