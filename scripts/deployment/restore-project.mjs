@@ -39,7 +39,7 @@ export async function restoreProjectSnapshot(options) {
   return result;
 }
 
-async function restoreProject({ project, backup, acceptDataLoss, checkStopped, signal, expectedSnapshot }, prepareSecurity) {
+async function restoreProject({ project, backup, acceptDataLoss, checkStopped, signal, expectedSnapshot, pwsh }, prepareSecurity) {
   signal?.throwIfAborted();
   const windows = process.platform === 'win32';
   if (!windows && process.platform !== 'linux') throw new Error('Unsupported project restoration platform.');
@@ -81,7 +81,7 @@ async function restoreProject({ project, backup, acceptDataLoss, checkStopped, s
   const current = names.length ? await inventorySnapshot(root, names, {
     signal, allowInternalWindowsLinks: windows, removingWindowsLinks: windows,
   }) : [];
-  if (windows) security = await prepareSecurity({ project: root, backup: saved, manifest, current, signal });
+  if (windows) security = await prepareSecurity({ project: root, backup: saved, manifest, current, signal, pwsh });
   const bytes = manifest.entries.reduce((sum, entry) => sum + (entry.bytes ?? 0), manifest.gitObjects?.bytes ?? 0);
   if (!Number.isSafeInteger(bytes)) throw new Error('Restore capacity exceeds safe byte range.');
   const capacity = await statfs(root, { bigint: true });
@@ -92,13 +92,13 @@ async function restoreProject({ project, backup, acceptDataLoss, checkStopped, s
   }
   if (manifest.gitMetadata) {
     if (manifest.gitObjects) await restoreGitObjects({
-      project: root, backup: saved, manifest, checkStopped, signal,
+      project: root, backup: saved, manifest, checkStopped, signal, pwsh,
     });
     const record = await readSnapshotGit(saved, manifest);
     await restoreGitMetadata({ project: root, backup: saved, record, checkStopped: async () => {
       await check();
       return { stopped: true, inhibited: true };
-    }, signal });
+    }, signal, pwsh });
   }
   if (security) {
     await security.prepareRemoval({ signal });

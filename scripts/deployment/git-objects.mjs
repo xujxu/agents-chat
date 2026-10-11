@@ -108,17 +108,17 @@ export async function readGitObjectSnapshot(backup, manifest, { signal } = {}) {
   return record;
 }
 
-export async function restoreGitObjects({ project, backup, manifest, checkStopped, signal }) {
+export async function restoreGitObjects({ project, backup, manifest, checkStopped, signal, pwsh }) {
   const resources = { permissions: null };
   let failure;
-  try { await restoreObjects({ project, backup, manifest, checkStopped, signal, resources }); }
+  try { await restoreObjects({ project, backup, manifest, checkStopped, signal, pwsh, resources }); }
   catch (error) { failure = error; }
   try { await resources.permissions?.close(); }
   catch (error) { failure = failure ? new AggregateError([failure, error], 'Git object restoration and cleanup failed.') : error; }
   if (failure) throw failure;
 }
 
-async function restoreObjects({ project, backup, manifest, checkStopped, signal, resources }) {
+async function restoreObjects({ project, backup, manifest, checkStopped, signal, pwsh, resources }) {
   if (!['linux', 'win32'].includes(process.platform)) throw new Error('Git object restoration requires native ownership support.');
   if (typeof checkStopped !== 'function') throw new Error('Git object restoration requires stopped runtime authority.');
   const saved = await readGitObjectSnapshot(backup, manifest, { signal });
@@ -144,7 +144,7 @@ async function restoreObjects({ project, backup, manifest, checkStopped, signal,
   if (process.platform === 'win32') {
     await inspectGitGraphPointers(root);
     resources.permissions = await prepareWindowsGitObjectSecurity({
-      project: root, backup: path.join(backup, 'git-objects'), manifest: saved, current, signal,
+      project: root, backup: path.join(backup, 'git-objects'), manifest: saved, current, signal, pwsh,
     });
   }
   const permissions = resources.permissions;

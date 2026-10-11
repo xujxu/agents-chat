@@ -21,7 +21,7 @@ async function exists(file) {
 }
 
 // Git lockfiles protect only metadata. The caller must retain stopped application authority.
-export async function restoreGitMetadata({ project, backup, record: supplied, checkStopped, signal }) {
+export async function restoreGitMetadata({ project, backup, record: supplied, checkStopped, signal, pwsh }) {
   const record = validateGitMetadata(supplied, supplied?.commit);
   if (record.version === 2 && !backup) {
     throw new Error('Windows Git metadata restoration requires a private backup for its native security journal adapter.');
@@ -34,7 +34,7 @@ export async function restoreGitMetadata({ project, backup, record: supplied, ch
   };
   await checkAuthority();
   const permissions = record.version === 2
-    ? await prepareWindowsGitMetadataSecurity({ project, backup, record, signal }) : null;
+    ? await prepareWindowsGitMetadataSecurity({ project, backup, record, signal, pwsh }) : null;
   let failure;
   let result;
   try { result = await restoreGitMetadataCore({ project, record, checkAuthority, signal, permissions }); }

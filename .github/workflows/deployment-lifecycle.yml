@@ -190,6 +190,7 @@ jobs:
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-receipt.test.mjs')
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs') -NamePattern '^saved recovery bundle closes module dependencies'
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-project-policy.test.mjs')
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-combined-restore.test.mjs') -NamePattern '^Windows combined restoration uses explicit PowerShell'
       - name: Verify public task-option refusals in Windows PowerShell
         if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         shell: powershell

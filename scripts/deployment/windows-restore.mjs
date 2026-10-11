@@ -168,14 +168,14 @@ export async function runWindowsLiveRestore({
         await checkStopped({ signal: stageSignal });
         await admission.checkSnapshot({ signal: stageSignal });
         await restoreProjectSnapshot({
-          project, backup, expectedSnapshot: admission.snapshot, acceptDataLoss, checkStopped, signal: stageSignal,
+          project, backup, expectedSnapshot: admission.snapshot, acceptDataLoss, checkStopped, pwsh, signal: stageSignal,
         });
       },
       async configure({ signal: stageSignal }) {
         await checkStopped({ signal: stageSignal });
         await restoreExternalSnapshot({
           project, backup, expectedSnapshot: admission.snapshot, authorizedPaths: admission.authorizedPaths,
-          runtimeBundle: bundle, acceptDataLoss, checkStopped, signal: stageSignal,
+          runtimeBundle: bundle, acceptDataLoss, checkStopped, pwsh, signal: stageSignal,
         });
         source = await inspectGitMetadata({ project, commit: admission.snapshot.source.commit, signal: stageSignal });
         artifacts = await inspectBuildArtifacts({ project, signal: stageSignal });

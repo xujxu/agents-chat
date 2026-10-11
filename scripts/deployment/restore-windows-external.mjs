@@ -29,7 +29,7 @@ async function currentFile(file) {
   };
 }
 
-async function matchesSavedFiles(scope, backup, signal) {
+async function matchesSavedFiles(scope, backup, signal, pwsh) {
   for (const item of scope.items) {
     signal?.throwIfAborted();
     const current = await currentFile(item.entry.path);
@@ -39,7 +39,7 @@ async function matchesSavedFiles(scope, backup, signal) {
     } else if (!current || !item.bytes.equals(await readWorkerFile(item.entry.path, 1024 * 1024))) return false;
   }
   const observed = await inspectWindowsSnapshotSecurity({
-    project: scope.parent, destinationParent: backup, entries: scope.entries, signal,
+    project: scope.parent, destinationParent: backup, entries: scope.entries, signal, pwsh,
   });
   const errors = [];
   let matches;
@@ -65,7 +65,7 @@ export async function restoreWindowsExternalSnapshot(options) {
 }
 
 async function restoreExternal({
-  project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal, expectedSnapshot, runtimeBundle,
+  project, backup, authorizedPaths, acceptDataLoss, checkStopped, signal, expectedSnapshot, runtimeBundle, pwsh,
 }, scopes) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32') throw new Error('Native external restoration requires Windows.');
@@ -126,7 +126,7 @@ async function restoreExternal({
       project: parent.path, backup: saved, metadata: parent.metadata,
       entries: savedEntries,
       current: items.filter(item => item.current).map(item => ({ path: path.basename(item.entry.path), kind: 'file' })),
-      signal,
+      signal, pwsh,
     });
     scopes.push({ parent: parent.path, metadata: parent.metadata, entries: savedEntries, items, security });
   }
@@ -137,7 +137,7 @@ async function restoreExternal({
   if (!same(await verifySnapshot(saved, { signal }), manifest)) throw new Error('Admitted external restore backup changed before mutation.');
   for (const scope of scopes) {
     await check();
-    if (await matchesSavedFiles(scope, saved, signal)) continue;
+    if (await matchesSavedFiles(scope, saved, signal, pwsh)) continue;
     await check();
     await scope.security.prepareRemoval({ signal });
     for (const item of scope.items) {

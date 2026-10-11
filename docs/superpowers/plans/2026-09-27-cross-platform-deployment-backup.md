@@ -13991,8 +13991,18 @@ is unchanged.
   Native regression `953fe1b / 38106043726` passed all seven jobs:
   snapshot/restoration `114371685463`, managed discovery `114371685585`,
   independent closeout `114371685673` and all four prior-runtime recovery
-  cases. Actual application run `38106029744`, job `114371644256`, is
-  still running; native component acceptance is not full restore acceptance.
+  cases. Actual application run `38106029744`, job `114371644256`, failed
+  at `03:19:27 UTC`: restore reached `restoring` at `03:17:52`, but the
+  project security controller attempted `spawn pwsh.exe` in the intentionally
+  PATH-free private actor. The admitted absolute PowerShell path was not
+  forwarded by generic restoration adapters; the operation recorded
+  `recovery-required` at `03:18:55`.
+  Thread explicit `pwsh` through project security, Git object/metadata
+  restoration and external-file restoration/comparison; retain existing
+  defaults for other callers. The early native combined-restore regression
+  clears PATH only around restoration, supplies the absolute executable and
+  verifies project/Git objects/Git metadata/external files plus an unchanged
+  external-file second pass before restoring PATH for independent checks.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

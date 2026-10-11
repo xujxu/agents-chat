@@ -156,3 +156,22 @@ test('Windows combined restoration retries private project interruption after re
   await restore(f);
   await verify(f);
 });
+
+test('Windows combined restoration uses explicit PowerShell without PATH lookup', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const f = await fixture(t);
+  assert.ok(f.manifest.gitObjects, 'The test must restore Git objects as well as Git metadata.');
+  assert.ok(path.isAbsolute(process.env.DEPLOYMENT_TEST_PWSH));
+  f.options.pwsh = process.env.DEPLOYMENT_TEST_PWSH;
+  const originalPath = process.env.PATH;
+  process.env.PATH = '';
+  try {
+    await restore(f);
+    await restoreExternalSnapshot({ ...f.options, authorizedPaths: [f.external, f.absent] });
+  } finally {
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+  }
+  await verify(f);
+});
