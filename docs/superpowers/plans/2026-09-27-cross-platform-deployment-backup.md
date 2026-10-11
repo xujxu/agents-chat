@@ -14037,6 +14037,11 @@ is unchanged.
   Causal `fd9fbe8 / 38113261356`, job `114393024560`, failed the new
   private-root case at `05:02:00 UTC` (9,266 ms) with the exact actual
   application's policy mismatch; the existing broad-root PATH-free case passed.
+  Implementation `7ccaa04 / 38113503427`, job `114393718242`, passed
+  the private inherited-root case at `05:06:00 UTC` (29,266 ms), including
+  exact capture and stripped-inheritance refusal. The PATH-free combined
+  restoration and all three owner cases also passed. Actual retry
+  `38113744685` is pending.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the
