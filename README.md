@@ -532,6 +532,18 @@ The policy comparison accounts for Scheduler's implicit `Enabled=true` but
 refuses account, trigger, enabled-state and security changes. These are restore
 preflight components, not acceptance of public or cold no-build restoration.
 
+Explicit archived-runtime relocation passed the complete 48-job Linux/Windows
+matrix at `e2d8abd / 38097108061`, including absent historical runtime parents
+and parents shared with ordinary external files. Archived configuration
+admission subsequently passed all seven native restore jobs at
+`5fef17e / 38097859251`. Restored-runtime receipt publication passed its five
+Windows contracts at `db66705 / 38099716685`; it uses an explicit terminal
+restore entry without allowing the ordinary deployment publisher to accept
+restore state. The full 48-job result predates these latter additions.
+Actual saved application restore composition is implemented but still awaiting
+acceptance; public/cold restore and network-isolated restoration are not
+established by these component results.
+
 Component-level
 project/Git/external restoration and original-task snapshot capture passed all
 36 lifecycle jobs at `201133577d1a680aa380ea9be991a081d3244c9c / 37124027076`.

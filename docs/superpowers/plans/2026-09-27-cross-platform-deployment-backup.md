@@ -13948,13 +13948,18 @@ is unchanged.
   build-ID/lockfile/native-addon bytes, original chat content/name, a new
   original runtime instance and unchanged authoritative backup. Verify the
   separate closeout releases the lock without restarting that restored runtime.
-- [ ] Push and dispatch the existing real Windows application selector:
+- [x] Push and dispatch the existing real Windows application selector:
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_application_only=true -f windows_live_only=true
   ```
   Require missing saved `windows-restore.mjs` as causal failure after the
   original update/no-op succeeds. Retain existing private-runner timeout bounds.
+  Confirmed `1b52620 / 38099385214`, live job `114351964857`, at
+  `2026-10-11 01:11:24 UTC`: expected `ERR_MODULE_NOT_FOUND` for the saved
+  orchestrator after update, independent closeout, no-op and chat mutation
+  passed. The other five selected jobs passed. Implementation `db66705 /
+  38099718423` is running in isolated live job `114356709810`.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the
@@ -13963,7 +13968,7 @@ is unchanged.
   close live configuration/scope observations, then record restoring.
   Keep fallible preparation out of the first record callback so existing
   recorded-failure handling remains accurate.
-- [ ] Publish the healthy restored runtime through an explicit
+- [x] Publish the healthy restored runtime through an explicit
   `publishRestoredDeploymentReceipt` entry, retaining the shared receipt
   schema, lock/state/file identity and repeated live acceptance checks.
   The original `publishDeploymentReceipt` must continue rejecting restore;
@@ -13981,8 +13986,11 @@ is unchanged.
   Reserve at least one byte for each zero-sized/absent external destination
   in the positive-only capacity API. Isolate the receipt causal gate from
   the actual build by adding `-f windows_commands_only=true` to the paired
-  live selector. Tests are committed as `7a11ef2`, run `38099542780`;
-  no successful receipt or full restore acceptance is claimed yet.
+  live selector. Tests `7a11ef2 / 38099542780`, job `114352431036`,
+  failed at `2026-10-11 00:48:29 UTC` with the expected missing publisher.
+  Implementation `db66705 / 38099716685`, job `114352950534`, passed all
+  five receipt contracts at `00:51:38 UTC`, including the explicit restored
+  publisher (5,127 ms). This is component receipt acceptance, not full restore.
 - [ ] Restore project/Git and projected external files only under checked
   original stopped/inhibited authority. Capture restored source/artifact
   identities, seal workers, retire/replace/activate the native task, and use
