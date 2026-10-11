@@ -7,7 +7,7 @@ function Get-WindowsRestoreTcpProbe([string]$Address) {
         if (-not [object]::ReferenceEquals($completed, $connect)) {
             return [pscustomobject]@{ Connected = $false; ErrorCode = 'TimedOut' }
         }
-        try { $connect.GetAwaiter().GetResult() }
+        try { [void]$connect.GetAwaiter().GetResult() }
         catch {
             $cause = $_.Exception
             while ($cause.InnerException) { $cause = $cause.InnerException }
