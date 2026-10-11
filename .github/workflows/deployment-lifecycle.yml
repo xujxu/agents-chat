@@ -215,7 +215,7 @@ jobs:
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
-          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds' -TimeoutSeconds 3000
 
   windows-first-native:
     if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only) }}

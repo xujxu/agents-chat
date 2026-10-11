@@ -13980,6 +13980,14 @@ is unchanged.
   inheritance flags or weakening owner/group/ACL checks. Recheck the new field
   on every configuration observation; the focused test also changes inheritance
   protection and requires both original observers to reject that drift.
+  Fix `2dcff28 / 38104210712` passed the early policy/closure contracts;
+  actual job `114366149772` was killed by the old 1,500-second outer
+  child-process deadline at `02:40:15 UTC`, after update (1,130,348 ms)
+  and no-op (195,290 ms) passed. No restore result was produced.
+  Extend only this expanded test's outer deadline to 2,700 seconds and private
+  runner allowance to 3,000 seconds: exactly the added 900-second restore
+  actor and 300-second independent closeout. Preserve every actor/stage limit,
+  the runner's 1,800-second default for other tests and the 75-minute job limit.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

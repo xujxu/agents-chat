@@ -3,10 +3,12 @@ Set-StrictMode -Version Latest
 $pwsh = (Get-Command pwsh -CommandType Application | Select-Object -First 1).Source
 $original = $env:DEPLOYMENT_TEST_PRIVATE_RUNNER_SCENARIO
 try {
-    foreach ($scenario in @('failure', 'timeout')) {
+    foreach ($case in @(@{ Scenario='failure'; Timeout=5 }, @{ Scenario='timeout'; Timeout=5 },
+        @{ Scenario='failure'; Timeout=3000 })) {
+        $scenario = $case.Scenario
         $env:DEPLOYMENT_TEST_PRIVATE_RUNNER_SCENARIO = $scenario
         $output = & $pwsh -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deployment-windows-private-tests.ps1') `
-            -Tests tests/deployment-windows-private-runner-fixture.mjs -TimeoutSeconds 5 2>&1
+            -Tests tests/deployment-windows-private-runner-fixture.mjs -TimeoutSeconds $case.Timeout 2>&1
         $code = $LASTEXITCODE
         $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
         if ($code -eq 0) { throw "Private runner accepted intentional $scenario." }

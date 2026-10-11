@@ -252,7 +252,7 @@ test('actual application source installs and builds inside native ownership', {
         path.join(repository, 'tests/deployment-windows-managed-application.ps1'),
         '-Project', f.project, '-Control', f.control, '-Node', process.execPath, '-LiveDeployment',
         '-TargetCommit', liveRevision,
-      ], { timeout: 1500000, maxBuffer: 32768 });
+      ], { timeout: 2700000, maxBuffer: 32768 });
       console.log(live.stdout.trim());
       return;
     }
