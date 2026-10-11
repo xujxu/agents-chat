@@ -187,6 +187,7 @@ jobs:
         if: matrix.scenario == 'offline'
         shell: pwsh
         run: |
+          Set-StrictMode -Version Latest
           . ./tests/deployment-windows-restore-egress.ps1
           $guard = $null
           try {
