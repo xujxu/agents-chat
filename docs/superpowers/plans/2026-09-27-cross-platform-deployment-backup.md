@@ -14018,6 +14018,12 @@ is unchanged.
   grant privileges, allow arbitrary group membership or replace archived owners.
   Preserve exact owner restoration and add ordinary Users-group owner refusal
   alongside the existing foreign-SID refusal.
+  Implementation `42d296a / 38110839654`, job `114385886449`, passed
+  all three owner cases at `04:15:38 UTC`; receipt, saved dependency closure,
+  inherited-policy and PATH-free combined restoration contracts also passed.
+  Actual application retry `38111070373` and native restore regression
+  `38111088682` are pending; do not count this component acceptance as full
+  actual restore acceptance.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the
