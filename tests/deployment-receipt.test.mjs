@@ -7,6 +7,7 @@ import test from 'node:test';
 import { temporaryDeployment, acceptOperation } from './deployment-fixture.mjs';
 import { acquireLock } from './deployment-fixture.mjs';
 import { publishDeploymentReceipt, readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
+import * as receipts from '../scripts/deployment/deployment-receipt.mjs';
 
 async function fixture(t) {
   const root = await temporaryDeployment(t);
@@ -36,6 +37,27 @@ test('deployment receipts require accepted state and fresh matching source/artif
   await assert.rejects(publishDeploymentReceipt({ ...f,
     checkAccepted: async () => ({ ...f.identity, build: 'f'.repeat(64) }) }), /identity|changed/i);
   await assert.rejects(readDeploymentReceipt(f.control, path.join(f.lock.project, 'other')), /project/i);
+});
+
+test('restored deployment receipts require their explicit terminal restore publication path', async t => {
+  assert.equal(typeof receipts.publishRestoredDeploymentReceipt, 'function', 'Missing restored deployment receipt publisher');
+  const ordinary = await fixture(t);
+  await acceptOperation(ordinary.control, ordinary.lock);
+  await assert.rejects(receipts.publishRestoredDeploymentReceipt(ordinary), /restored/i);
+  const restored = await fixture(t);
+  await assert.rejects(receipts.publishRestoredDeploymentReceipt(restored), /restored/i);
+  await acceptOperation(restored.control, restored.lock, 'restore');
+  await assert.rejects(publishDeploymentReceipt(restored), /accepted/i);
+  const receipt = await receipts.publishRestoredDeploymentReceipt(restored);
+  assert.equal(receipt.status, 'accepted');
+  assert.equal(receipt.operationId, restored.lock.operationId);
+  assert.deepEqual(receipt.identity, restored.identity);
+  const before = await lstat(path.join(restored.control, 'deployment.json'), { bigint: true });
+  assert.deepEqual(await receipts.publishRestoredDeploymentReceipt(restored), receipt);
+  assert.equal((await lstat(path.join(restored.control, 'deployment.json'), { bigint: true })).ino, before.ino);
+  await assert.rejects(receipts.publishRestoredDeploymentReceipt({
+    ...restored, checkAccepted: async () => ({ ...restored.identity, build: 'f'.repeat(64) }),
+  }), /identity|changed/i);
 });
 
 test('incomplete or foreign staged receipts are retained rather than overwritten', async t => {

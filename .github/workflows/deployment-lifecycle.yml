@@ -61,7 +61,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_live_only && '-windows-live' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}
+  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_live_only && '-windows-live' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && '-commands' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -132,7 +132,7 @@ jobs:
         run: sudo userdel --remove agents-chat-test
 
   application-build:
-    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !(inputs.windows_application_only && inputs.windows_commands_only) }}
+    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !(inputs.windows_application_only && (inputs.windows_commands_only || inputs.windows_live_only)) }}
     name: Owned application build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
@@ -187,6 +187,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Public Windows command contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-private-runner.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Private Windows test runner diagnostics failed.' }
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-receipt.test.mjs')
       - name: Verify public task-option refusals in Windows PowerShell
         if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         shell: powershell
@@ -256,7 +257,7 @@ jobs:
           ./tests/deployment-windows-private-tests.ps1 -Tests $tests -NamePattern $pattern -TimeoutSeconds 2400
 
   windows-first-application:
-    if: ${{ inputs.windows_first_application_only || ((inputs.windows_application_only || !inputs.windows_restore_only) && !(inputs.windows_application_only && inputs.windows_commands_only)) }}
+    if: ${{ inputs.windows_first_application_only || ((inputs.windows_application_only || !inputs.windows_restore_only) && !(inputs.windows_application_only && (inputs.windows_commands_only || inputs.windows_live_only))) }}
     name: Actual Windows first deployment core (${{ matrix.scenario }})
     runs-on: windows-2022
     timeout-minutes: 35
