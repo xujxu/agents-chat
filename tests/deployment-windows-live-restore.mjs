@@ -35,7 +35,7 @@ export async function verifyWindowsLiveRestore({ mode, directory, project, contr
   try {
     const stateBytes = await readFile(path.join(control, 'state.json'));
     const options = { scope, control, backup, node: process.execPath, pwsh,
-      profile: 'agents-chat-auth-638c553', port: 3010, waitSeconds: 120, timeoutSeconds: 900,
+      profile: 'agents-chat-auth-638c553', port: 3010, waitSeconds: 120,
       onProgress: ({ phase, stage }) => process.stderr.write(
         `${new Date().toISOString()} Windows restore phase: ${phase}${stage ? ` / ${stage}` : ''}\n`) };
     await assert.rejects(runWindowsLiveRestore({ ...options, acceptDataLoss: false }), /acknowledgement/i);

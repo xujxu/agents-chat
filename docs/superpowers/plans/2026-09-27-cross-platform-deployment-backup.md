@@ -14107,6 +14107,21 @@ is unchanged.
   restored bytes with the unchanged archive. This corrects fixture setup rather
   than silently skipping absent configuration coverage. Independent restore
   closeout and final authenticated-data checks remain unaccepted.
+  Retry `01e1bc5 / 38125798643`, job `114429790712`, produced the
+  actual inner failure at `09:37:55 UTC`: `restoreFiles` reached its explicitly
+  configured 900-second limit while creating a directory link, after the
+  ordinary file-copy/checksum loop. It settled and recorded recovery-required,
+  rather than being killed by an outer actor. Prior successful project-stage
+  evidence was already 861 seconds, so the fixture's half-default limit has
+  insufficient margin for this real application on hosted Windows runners.
+  Remove that test-only override and exercise the existing production default
+  of 1,800 seconds; change no production default or integrity check.
+  Allow the restore actor 2,700 seconds (one default-length project stage plus
+  900 seconds for the previously measured preflight/external/activation/receipt
+  and assertions), propagate only its extra 900 seconds to the outer fixture
+  (4,800), selected private runner (6,300) and live job (115 minutes).
+  Update and readiness limits remain unchanged. This accepts no incomplete
+  copy and does not remove links, ACLs or payloads to make the test smaller.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

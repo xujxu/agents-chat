@@ -4,7 +4,7 @@ $pwsh = (Get-Command pwsh -CommandType Application | Select-Object -First 1).Sou
 $original = $env:DEPLOYMENT_TEST_PRIVATE_RUNNER_SCENARIO
 try {
     foreach ($case in @(@{ Scenario='failure'; Timeout=5 }, @{ Scenario='timeout'; Timeout=5 },
-        @{ Scenario='failure'; Timeout=5400 })) {
+        @{ Scenario='failure'; Timeout=6300 })) {
         $scenario = $case.Scenario
         $env:DEPLOYMENT_TEST_PRIVATE_RUNNER_SCENARIO = $scenario
         $output = & $pwsh -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deployment-windows-private-tests.ps1') `
