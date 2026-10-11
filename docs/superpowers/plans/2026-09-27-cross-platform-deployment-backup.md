@@ -13931,7 +13931,7 @@ actual application's Node actor and PowerShell orchestrator. Add
 first-install suites during this actual-restore gate; default/full coverage
 is unchanged.
 
-- [ ] Extend the actual application flow after update/independent closeout/no-op:
+- [x] Extend the actual application flow after update/independent closeout/no-op:
   mutate the authenticated chat name, run restore in its own owned actor,
   and then run saved native closeout in another actor after the first exits.
   ```js
@@ -14122,7 +14122,15 @@ is unchanged.
   (4,800), selected private runner (6,300) and live job (115 minutes).
   Update and readiness limits remain unchanged. This accepts no incomplete
   copy and does not remove links, ACLs or payloads to make the test smaller.
-- [ ] Compose `runRestore` with admitted backup/configuration, original lock
+  **Actual acceptance:** `3e6a403 / 38129215300`, job `114439860917`,
+  passed at `2026-10-11 10:24:30 UTC`. Public update took 848,897 ms,
+  independent update verification 483 ms, no-op 111,386 ms, saved restore
+  1,163,025 ms and independent restore closeout 79,195 ms. All restored
+  source/artifact/env assertions, unchanged archive checks, authenticated
+  original chat data, new runtime identity, no-restart closeout and lock
+  removal passed. The real restore used the existing default stage deadline.
+  Full 48-job Linux/Windows regression `38131880686` is pending.
+- [x] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the
   `record('restoring')` edge, while original state remains restore-preflight,
@@ -14153,7 +14161,7 @@ is unchanged.
   Implementation `db66705 / 38099716685`, job `114352950534`, passed all
   five receipt contracts at `00:51:38 UTC`, including the explicit restored
   publisher (5,127 ms). This is component receipt acceptance, not full restore.
-- [ ] Restore project/Git and projected external files only under checked
+- [x] Restore project/Git and projected external files only under checked
   original stopped/inhibited authority. Capture restored source/artifact
   identities, seal workers, retire/replace/activate the native task, and use
   archived providers for readiness/completion. Write restored state before

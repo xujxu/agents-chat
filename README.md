@@ -540,9 +540,14 @@ admission subsequently passed all seven native restore jobs at
 Windows contracts at `db66705 / 38099716685`; it uses an explicit terminal
 restore entry without allowing the ordinary deployment publisher to accept
 restore state. The full 48-job result predates these latter additions.
-Actual saved application restore composition is implemented but still awaiting
-acceptance; public/cold restore and network-isolated restoration are not
-established by these component results.
+Actual saved Windows application restore passed at `3e6a403 / 38129215300`:
+public update, no-op, saved restoration and separate-controller closeout all
+completed. Acceptance includes restored source/artifact/environment bytes,
+authenticated pre-backup chat data, an unchanged backup, a distinct restored
+runtime and lock removal without restarting that runtime. Restoration uses
+saved artifacts without installation or rebuilding; network isolation is not
+yet proven. Public/cold Windows restore remains gated. Full dual-platform
+regression `38131880686` is pending.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
