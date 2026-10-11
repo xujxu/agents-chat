@@ -9,7 +9,10 @@ import { promisify } from 'node:util';
 const [mode, directory, project, control, taskName, pwsh, git, npmCli, targetCommit, recoveryEngine] = process.argv.slice(2);
 const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)).href);
 const { loadState, acquireLock, releaseLock } = await captured('state.mjs');
-const restoreModes = ['restore', 'restore-closed', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-crash-verified'];
+const restoreModes = [
+  'restore', 'restore-closed', 'restore-cancelled', 'restore-failed',
+  'restore-crashed', 'restore-copy-crashed', 'restore-crash-verified',
+];
 assert.ok(['update', 'verify-closed', 'current', ...restoreModes].includes(mode));
 assert.match(targetCommit, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 if (restoreModes.includes(mode)) {

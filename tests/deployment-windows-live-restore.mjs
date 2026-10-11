@@ -32,7 +32,7 @@ export async function verifyWindowsLiveRestore({ mode, directory, project, contr
     const { verifyWindowsCrashedRestore } = await import('./deployment-windows-crashed-restore.mjs');
     return verifyWindowsCrashedRestore({ project, control, backup, snapshot, recovery });
   }
-  if (['restore-cancelled', 'restore-failed', 'restore-crashed'].includes(mode)) {
+  if (['restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed'].includes(mode)) {
     const { verifyWindowsInterruptedRestore } = await import('./deployment-windows-interrupted-restore.mjs');
     return verifyWindowsInterruptedRestore({
       scenario: mode.slice('restore-'.length), project, control, backup, snapshot, recovery, taskName, pwsh,

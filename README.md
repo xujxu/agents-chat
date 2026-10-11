@@ -560,7 +560,10 @@ Actual thrown-error settlement after project restoration passed at
 `4bb8ebb / 38137334922`: archived project bytes are restored, but the previous
 receipt, backup and recovery lock remain; independent observation confirms
 the original runtime stays restart-disabled and quiescent. Abrupt controller
-death, interrupted file-copy prefixes and cold reentry remain separate gates.
+death after project restoration passed at `d7111e8 / 38141960473`: a distinct
+verifier confirms the interrupted journal, original backup/receipt/lock and
+restored project bytes; native observation confirms no restart or writers.
+Interrupted file-copy prefixes and cold reentry remain separate gates.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

@@ -53,7 +53,7 @@ on:
         type: boolean
         default: false
       windows_restore_crash_only:
-        description: With the paired Windows live selector, kill the restore controller after project mutation
+        description: With the paired Windows live selector, kill the restore controller during and after project copying
         type: boolean
         default: false
       windows_receipt_only:
@@ -176,13 +176,13 @@ jobs:
 
   windows-live-deployment:
     if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only }}
-    name: ${{ matrix.scenario == 'cancelled' && 'Actual Windows restore cancellation' || matrix.scenario == 'failed' && 'Actual Windows restore failure' || matrix.scenario == 'crashed' && 'Actual Windows restore crash' || 'Actual Windows live deployment' }}
+    name: ${{ matrix.scenario == 'cancelled' && 'Actual Windows restore cancellation' || matrix.scenario == 'failed' && 'Actual Windows restore failure' || matrix.scenario == 'crashed' && 'Actual Windows restore crash' || matrix.scenario == 'copy-crashed' && 'Actual Windows file-copy restore crash' || 'Actual Windows live deployment' }}
     runs-on: windows-2022
     timeout-minutes: 115
     strategy:
       fail-fast: false
       matrix:
-        scenario: ${{ fromJSON(inputs.windows_restore_cancel_only && '["cancelled"]' || inputs.windows_restore_failure_only && '["failed"]' || inputs.windows_restore_crash_only && '["crashed"]' || inputs.windows_application_only && '["complete"]' || '["complete","cancelled","failed","crashed"]') }}
+        scenario: ${{ fromJSON(inputs.windows_restore_cancel_only && '["cancelled"]' || inputs.windows_restore_failure_only && '["failed"]' || inputs.windows_restore_crash_only && '["crashed","copy-crashed"]' || inputs.windows_application_only && '["complete"]' || '["complete","cancelled","failed","crashed","copy-crashed"]') }}
     steps:
       - uses: actions/checkout@v4
         with:

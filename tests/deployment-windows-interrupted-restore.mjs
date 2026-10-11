@@ -7,7 +7,7 @@ import { prepareWindowsRestoreCrash } from './deployment-windows-crashed-restore
 import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-evidence.mjs';
 
 export async function verifyWindowsInterruptedRestore({ scenario, project, control, backup, snapshot, recovery, taskName, pwsh }) {
-  assert.ok(['cancelled', 'failed', 'crashed'].includes(scenario));
+  assert.ok(['cancelled', 'failed', 'crashed', 'copy-crashed'].includes(scenario));
   const saved = name => import(pathToFileURL(path.join(recovery.directory, name)));
   const { runWindowsLiveRestore } = await saved('windows-restore.mjs');
   const { inspectWindowsManagedTask } = await saved('windows-managed-task.mjs');
@@ -16,14 +16,15 @@ export async function verifyWindowsInterruptedRestore({ scenario, project, contr
   const scope = await inspectWindowsManagedTask({ project, taskName, pwsh });
   const errors = [];
   let result;
+  let crash;
   try {
     const files = ['deployment-live-target.txt', '.git/HEAD', '.next/BUILD_ID', '.env.local'];
     const before = await Promise.all(files.map(name => readFile(path.join(project, name))));
     assert.equal(before.at(-1).toString(), 'DEPLOYMENT_RESTORE_FIXTURE=after-update\n');
     const receipt = await readFile(path.join(control, 'deployment.json'));
     const lock = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
-    const crash = scenario === 'crashed' ? await prepareWindowsRestoreCrash({
-      control, backup, lock, runtime: scope.observation.runtime, receipt,
+    crash = ['crashed', 'copy-crashed'].includes(scenario) ? await prepareWindowsRestoreCrash({
+      scenario, project, control, backup, snapshot, lock, runtime: scope.observation.runtime, receipt,
     }) : null;
     const cancellation = new AbortController();
     const failure = new Error('Actual restore failure after project mutation');
@@ -43,7 +44,7 @@ export async function verifyWindowsInterruptedRestore({ scenario, project, contr
           injected = true;
           throw failure;
         }
-        if (crash && stage === 'external-files') crash({ phase, stage });
+        crash?.onProgress({ phase, stage });
       },
     }), scenario === 'cancelled'
       ? { code: 'DEPLOYMENT_STAGE_CANCELLED', stage: 'restoreFiles', recoveryAllowed: true }
@@ -68,6 +69,7 @@ export async function verifyWindowsInterruptedRestore({ scenario, project, contr
     assert.deepEqual(await verifySnapshot(backup), snapshot);
     result = { status: scenario, operationId: lock.operationId, runtime: scope.observation.runtime };
   } catch (error) { errors.push(error); }
+  crash?.close();
   try { await scope.close(); } catch (error) { errors.push(error); }
   if (errors.length) throw new AggregateError(errors, 'Actual interrupted Windows restore or scope cleanup failed.');
   return result;

@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory)][string]$Node,
     [Parameter(Mandatory)][string]$ChatId,
     [Parameter(Mandatory)][string]$TargetCommit,
-    [ValidateSet('complete', 'cancelled', 'failed', 'crashed')][string]$RestoreScenario = 'complete'
+    [ValidateSet('complete', 'cancelled', 'failed', 'crashed', 'copy-crashed')][string]$RestoreScenario = 'complete'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -35,7 +35,7 @@ try {
     $environment.Add('TMP', $Root)
     $recoveryEngine = ''
     $modes = if ($RestoreScenario -eq 'complete') { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
-        elseif ($RestoreScenario -eq 'crashed') { @('update', 'verify-closed', 'current', 'restore-crashed', 'restore-crash-verified') }
+        elseif ($RestoreScenario -in @('crashed', 'copy-crashed')) { @('update', 'verify-closed', 'current', "restore-$RestoreScenario", 'restore-crash-verified') }
         else { @('update', 'verify-closed', 'current', "restore-$RestoreScenario") }
     foreach ($mode in $modes) {
         $elapsed = [Diagnostics.Stopwatch]::StartNew()
@@ -49,7 +49,7 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } else { 300000 }
+        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } else { 300000 }
         $exited = $actor.WaitForExit($actorTimeout)
         $actor.Kill()
         Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'
@@ -69,7 +69,7 @@ try {
             }
         }
         Assert $exited "Live application controller $mode exceeded its bound; output: $text"
-        if ($mode -eq 'restore-crashed') {
+        if ($mode -in @('restore-crashed', 'restore-copy-crashed')) {
             Assert ($code -ne 0 -and [string]::IsNullOrWhiteSpace($text)) 'Crashed restore reported successful completion'
             $actor.Dispose()
             $actor = $null

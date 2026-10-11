@@ -13915,6 +13915,46 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DL: Accept abrupt death during actual project file copying
+
+**Scope:** reuse the accepted crash fixture and the existing combined-restore
+test's `createWriteStream`/`syncBuiltinESMExports` injection technique. Arm only
+at project-files; run the genuine output stream unchanged, then SIGKILL the
+actor at the environment file's finish event. Do not add production test hooks.
+
+**Files:** extend `tests/deployment-windows-crashed-restore.mjs`, its interrupted
+actor, Node/PowerShell routing, and the existing workflow crash selector.
+
+- [ ] Confirm the snapshot's environment file precedes the native addon in
+  the real file-copy order, and the current addon exists. Interpose only the
+  environment stream:
+  ```js
+  streams.createWriteStream = (file, options) => {
+    const stream = original(file, options);
+    if (file === path.join(project, '.env.local')) {
+      stream.once('finish', () => terminate('project-file-copy'));
+    }
+    return stream;
+  };
+  syncBuiltinESMExports();
+  ```
+  Restore the original function if the actor unexpectedly survives. Persist
+  fixture-only scenario/boundary evidence; existing parent settles the Job.
+- [ ] Fresh verification must prove a partial copy, not complete restoration:
+  ```js
+  assert.deepEqual(await readFile(path.join(project, '.env.local')),
+    await readFile(path.join(backup, 'files', '.env.local')));
+  await assert.rejects(lstat(path.join(project,
+    'node_modules/better-sqlite3/build/Release/better_sqlite3.node')), { code: 'ENOENT' });
+  ```
+  Retain interrupted restoring-phase state, unchanged original backup/receipt/
+  lock, and independent inhibited writer-free original runtime assertions.
+  Missing native addon is an expected crash prefix, never a usable deployment.
+- [ ] Extend the existing `windows_restore_crash_only=true` selector to run
+  both `crashed` and `copy-crashed`; default matrix includes both. Reuse the
+  Task5DK Actions command; do not add an eleventh workflow input. Record both
+  actual outcomes before proceeding to network-isolated or public/cold restore.
+
 ### Task 5DK: Accept abrupt controller death after actual project restoration
 
 **Scope:** force-terminate the original Node restore actor at `external-files`,
@@ -13927,7 +13967,7 @@ Job. This is crash containment, not cold reentry or successful restoration.
 interrupted-restore helper, actual Node/PowerShell actors and workflow selectors.
 Keep production code, cleanup authority and deadlines unchanged.
 
-- [ ] Before restoring, persist fixture-only original lock/runtime bindings and
+- [x] Before restoring, persist fixture-only original lock/runtime bindings and
   hashes of the deployment receipt and backup manifest outside the project.
   At the existing external-files progress callback, record the exact boundary:
   ```js
@@ -13937,7 +13977,7 @@ Keep production code, cleanup authority and deadlines unchanged.
   ```
   Parent requires a nonzero actor exit and no successful JSON result, then
   settles its owned Job and starts a distinct `restore-crash-verified` actor.
-- [ ] Fresh verification requires the persisted boundary/pid, original lock
+- [x] Fresh verification requires the persisted boundary/pid, original lock
   bytes, unchanged receipt/manifest hashes and a fully valid backup. It checks
   archived project bytes with the same helper as the accepted thrown-error case.
   Unlike settled cancellation/error, journal must remain at the interrupted
@@ -13950,7 +13990,7 @@ Keep production code, cleanup authority and deadlines unchanged.
   ```
   Do not impersonate/release the dead lock owner or synthesize recovery success.
   Reuse post-actor native task identity/quiescence/writer/listener assertions.
-- [ ] Add focused `windows_restore_crash_only` and default `crashed` coverage:
+- [x] Add focused `windows_restore_crash_only` and default `crashed` coverage:
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
     --ref feat/deployment-backup -f windows_application_only=true \
@@ -13958,6 +13998,11 @@ Keep production code, cleanup authority and deadlines unchanged.
   ```
   Record the actual outcome before moving to file-copy crash prefixes, offline
   restoration or saved/public cold reentry. No local validation.
+  Accepted `d7111e8 / 38141960473`, job `114477468487`, at
+  `2026-10-11 13:54:37 UTC`: update1,029,073ms, no-op159,625ms,
+  original restore actor force-terminated at1,122,438ms, fresh verification
+  14,913ms; full actual test2,572,552ms. Interrupted state and original
+  inhibited, writer-free runtime remained after the actor and its Job exited.
 
 ### Task 5DJ: Accept a thrown restore error after actual project mutation
 
