@@ -14082,6 +14082,19 @@ is unchanged.
   native guard; wait in at-most-30-second slices under a monotonic stopwatch
   enforcing the original total test deadline. Reuse the immediate-failure
   maximum-duration case and five-second actual timeout case before any build.
+  Run `382691d / 38119452310`, job `114410976517`, passed those
+  prechecks and the real update/closeout/no-op. Restore recorded preflight at
+  `07:23:51 UTC`, restoring at `07:26:34`, then its 1,200-second actor
+  limit expired at `07:40:56` with phase still restoring, before the active
+  stage's own 900-second limit could report its outcome.
+  Give restore the same 1,800-second actor allowance as update and carry
+  exactly that extra 600 seconds through outer fixture (3,900), selected
+  private runner (5,400) and live job (100 minutes). Preserve the inner
+  900-second stage limit so another slow stage produces its own failure,
+  not premature outer termination. Extend existing progress events with
+  project-files, external-files, source-and-artifacts and deployment-receipt
+  stage labels, without writing additional transaction phases or changing
+  operation order. No complete restore acceptance is claimed.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

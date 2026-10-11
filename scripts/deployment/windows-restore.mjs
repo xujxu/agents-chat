@@ -165,6 +165,7 @@ export async function runWindowsLiveRestore({
         stopped = await stopWindowsTaskTransaction({ control, lock, pwsh, ...taskAdmission, signal: stageSignal });
       },
       async restoreFiles({ signal: stageSignal }) {
+        onProgress?.({ phase: state.phase, stage: 'project-files' });
         await checkStopped({ signal: stageSignal });
         await admission.checkSnapshot({ signal: stageSignal });
         await restoreProjectSnapshot({
@@ -172,11 +173,13 @@ export async function runWindowsLiveRestore({
         });
       },
       async configure({ signal: stageSignal }) {
+        onProgress?.({ phase: state.phase, stage: 'external-files' });
         await checkStopped({ signal: stageSignal });
         await restoreExternalSnapshot({
           project, backup, expectedSnapshot: admission.snapshot, authorizedPaths: admission.authorizedPaths,
           runtimeBundle: bundle, acceptDataLoss, checkStopped, pwsh, signal: stageSignal,
         });
+        onProgress?.({ phase: state.phase, stage: 'source-and-artifacts' });
         source = await inspectGitMetadata({ project, commit: admission.snapshot.source.commit, signal: stageSignal });
         artifacts = await inspectBuildArtifacts({ project, signal: stageSignal });
       },
@@ -208,6 +211,7 @@ export async function runWindowsLiveRestore({
       },
     });
     await runStage('publish-restored-receipt', async stageSignal => {
+      onProgress?.({ phase: state.phase, stage: 'deployment-receipt' });
       await authority();
       active = await inspectWindowsManagedTask({ project, taskName: original.taskName, pwsh, signal: stageSignal });
       activeConfiguration = await inspectWindowsConfiguration({
