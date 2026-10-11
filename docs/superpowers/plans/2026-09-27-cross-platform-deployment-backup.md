@@ -14041,7 +14041,16 @@ is unchanged.
   the private inherited-root case at `05:06:00 UTC` (29,266 ms), including
   exact capture and stripped-inheritance refusal. The PATH-free combined
   restoration and all three owner cases also passed. Actual retry
-  `38113744685` is pending.
+  `38113744685`, job `114394410717`, restored project/Git/external files,
+  reached restore-activating at `05:40:53 UTC` and recorded healthy restored
+  state at `05:41:43 UTC`. Its restore actor hit the 900-second whole-process
+  test limit about 21 seconds later, before returning its receipt/assertions.
+  This is not completed actual acceptance. Give that test actor the existing
+  update actor's 1,200-second allowance for preflight, file restoration,
+  activation, receipt and backup assertions combined. Retain the 900-second
+  per-stage limit, 120-second readiness limit, 2,700-second outer fixture,
+  3,000-second private runner and 75-minute job bounds. Emit separate fixture
+  diagnostics after core/receipt return and after unchanged-backup assertions.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

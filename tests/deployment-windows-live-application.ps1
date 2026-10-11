@@ -44,7 +44,7 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        $actorTimeout = if ($mode -eq 'update') { 1200000 } elseif ($mode -eq 'restore') { 900000 } else { 300000 }
+        $actorTimeout = if ($mode -in @('update', 'restore')) { 1200000 } else { 300000 }
         $exited = $actor.WaitForExit($actorTimeout)
         $actor.Kill()
         Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'

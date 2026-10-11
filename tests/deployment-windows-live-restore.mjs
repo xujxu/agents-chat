@@ -40,6 +40,7 @@ export async function verifyWindowsLiveRestore({ mode, directory, project, contr
     await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
     const lock = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
     result = await runWindowsLiveRestore({ ...options, lock, acceptDataLoss: true });
+    process.stderr.write(`${new Date().toISOString()} Windows restore core and receipt completed; verifying restored state and bytes\n`);
     assert.equal(result.status, 'restored');
     assert.equal(result.backupId, snapshot.id);
     assert.equal(result.closeoutRequired, true);
@@ -58,6 +59,7 @@ export async function verifyWindowsLiveRestore({ mode, directory, project, contr
       assert.deepEqual(await readFile(path.join(project, name)), await readFile(path.join(backup, 'files', name)));
     }
     assert.deepEqual(await verifySnapshot(backup), snapshot);
+    process.stderr.write(`${new Date().toISOString()} Windows restore assertions and unchanged backup verified\n`);
   } catch (error) { errors.push(error); }
   try { await scope.close(); } catch (error) { errors.push(error); }
   if (errors.length) throw new AggregateError(errors, 'Actual Windows restore or original scope cleanup failed.');
