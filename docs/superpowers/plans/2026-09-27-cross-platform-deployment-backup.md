@@ -13915,6 +13915,46 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DG: Admit the saved Windows application configuration before downtime
+
+**Scope:** the approved live restore preflight must validate archived
+authentication configuration and exact external destinations, not reuse
+current provider values. Reuse the archive reader, native policy comparison,
+current configuration observer and shared snapshot configuration parser.
+
+**Files:** add `scripts/deployment/windows-restore-compatibility.mjs` and
+its saved-engine inventory entry; add
+`tests/deployment-windows-restore-admission.mjs` to the existing saved snapshot
+fixture after publication checks.
+
+- [ ] Add the saved-engine native admission assertion:
+  ```js
+  const admission = await admitWindowsRestore({
+    scope, backup, snapshot, node: process.execPath, pwsh,
+    profile: 'agents-chat-auth-638c553',
+  });
+  assert.deepEqual(admission.providers, ['admin-login']);
+  await admission.check();
+  await admission.checkSnapshot();
+  await admission.close();
+  ```
+  Refuse forged scope, wrong/relative Node, changed expected snapshot,
+  unsupported profile and cancellation. Require unchanged live observation,
+  state and absence of a new lock. Compare complete original external paths.
+- [ ] Push and run the existing `windows_restore_only=true` Actions gate;
+  require missing saved admission module as causal failure.
+- [ ] Implement `admitWindowsRestore` with native scope and explicit external
+  Node identity checks. Read the exact backup runtime and use archived
+  `command.environment` with `inspectSnapshotConfiguration`, not the live
+  environment. Compare native saved/current task policy and project security.
+  Derive exact authorized external paths from archived helper/configuration
+  names and native current configuration sources; reject extra destinations.
+  Retain the current configuration observer through preflight, expose
+  `check()` for live+archive rechecks and `checkSnapshot()` for archive-only
+  checks after stop, and release native observations with checked cleanup.
+- [ ] Add the helper to saved recovery, rerun the same seven native jobs and
+  record acceptance before composing the stop/files/activation transaction.
+
 ### Task 5DF: Restore archived external runtime members at the explicit new bundle
 
 **Scope:** compose the approved launcher indirection with native external
@@ -13929,7 +13969,7 @@ and the saved recovery inventory. Add
 `tests/deployment-windows-runtime-relocation.test.mjs` to the existing native
 snapshot/restoration job.
 
-- [ ] Add two native cases, with a fully absent old runtime parent and with
+- [x] Add two native cases, with a fully absent old runtime parent and with
   runtime members sharing a parent with ordinary external configuration:
   ```js
   await restoreExternalSnapshot({
@@ -13943,9 +13983,12 @@ snapshot/restoration job.
   unchanged authoritative snapshot and repeat-restore identity preservation.
   Refuse incomplete original authorization, wrong bundle/digest, overlaps,
   stale extra members, changed helper bytes and a nonstopped runtime.
-- [ ] Push and dispatch `windows_restore_only=true`; require the new cases
+- [x] Push and dispatch `windows_restore_only=true`; require the new cases
   to fail on the missing relocation behavior, not fixture setup.
-- [ ] Derive the mapping from `inspectWindowsSnapshotRuntime`, not caller
+  `8ac4705 / 38096077577` finished 6/7; snapshot job `114343451829` at
+  `00:02:06 UTC` reported the expected absent historical parent failure and
+  ignored-option missing rejection in the shared-parent case.
+- [x] Derive the mapping from `inspectWindowsSnapshotRuntime`, not caller
   supplied source paths. Validate the private destination's canonical identity,
   exact configuration/helper inventory and bytes against archived members.
   Group physical restoration paths by destination parent, carrying each
@@ -13953,14 +13996,18 @@ snapshot/restoration job.
   table through `validateWindowsSnapshotSecurity`. Reject collisions.
   Preserve entry order so backup `external/N` indexes remain authoritative.
   Recheck the original destination directory identity during restoration.
-- [ ] Apply this plan only after full original `authorizedPaths` admission.
+- [x] Apply this plan only after full original `authorizedPaths` admission.
   Reuse the existing stopped/inhibited checks, native file creation/removal,
   saved ACL restoration and final checks. Return the original manifest and
   reject this Windows-only option on Linux rather than silently ignoring it.
   Add the new dependency to the saved engine inventory.
-- [ ] Repeat the native seven-job gate, including the unchanged ordinary
+- [x] Repeat the native seven-job gate, including the unchanged ordinary
   external restore cases and saved archived publication path. This does not
   claim the higher-level restore transaction, cold restore or public command.
+  `38ef6e4 / 38096573615` passed 7/7. Snapshot job `114344989274` reported
+  both relocation cases at `00:11:49 UTC` (31,796 / 49,720 ms); managed job
+  `114344989303` retained archived publication at `00:08:44 UTC`.
+  Full dual-platform run `e2d8abd / 38097108061` is still in progress.
 
 ### Task 5DE: Publish a distinct native runtime bundle from archived inputs
 
