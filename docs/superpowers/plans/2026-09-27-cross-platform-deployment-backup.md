@@ -13935,7 +13935,7 @@ executables/DNS services are isolated.
 `tests/deployment-windows-restore-egress.ps1`; extend live PowerShell actors,
 README and `.github/workflows/deployment-lifecycle.yml`.
 
-- [ ] Resolve one public npm-registry IPv4 endpoint and prove TCP443 connectivity
+- [x] Resolve one public npm-registry IPv4 endpoint and prove TCP443 connectivity
   from both actual Node and PowerShell before creating rules. Retain the same
   address for negative probes, so DNS failure cannot masquerade as isolation.
   Install per-executable rules:
@@ -13948,6 +13948,14 @@ README and `.github/workflows/deployment-lifecycle.yml`.
   Verify effective rules, application filters and enabled profiles; require
   bounded Node/PowerShell denial probes. Restore all original profile settings
   and remove only created rule names, aggregating cleanup errors.
+  Initial actual `201d260 / 38149395099` stopped before restore because
+  PowerShell's successful TCP Task completion leaked an extra pipeline value.
+  Strict-mode precheck `d194d47 / 38151762446` reproduced the exact missing
+  Connected-property error without rebuilding. `bc245a7` discards that return
+  value; focused `38151833678`, job `114506707804`, passed all native command
+  checks at `2026-10-11 15:38:50 UTC`. Egress precheck proved Node EACCES and
+  PowerShell AccessDenied, then successful external TCP after cleanup.
+  Actual rerun `bc245a7 / 38152007084` remains pending.
 - [ ] Add an Actions-only firewall precheck before the expensive actual build.
   In the offline actual scenario, enable rules immediately before normal restore;
   repeat effective-policy and denial probes after restore closeout, then remove
