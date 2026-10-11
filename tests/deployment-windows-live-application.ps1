@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory)][string]$Node,
     [Parameter(Mandatory)][string]$ChatId,
     [Parameter(Mandatory)][string]$TargetCommit,
-    [switch]$RestoreCancellation
+    [ValidateSet('complete', 'cancelled', 'failed')][string]$RestoreScenario = 'complete'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -34,8 +34,8 @@ try {
     $environment.Add('TEMP', $Root)
     $environment.Add('TMP', $Root)
     $recoveryEngine = ''
-    $modes = if ($RestoreCancellation) { @('update', 'verify-closed', 'current', 'restore-cancelled') }
-        else { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
+    $modes = if ($RestoreScenario -eq 'complete') { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
+        else { @('update', 'verify-closed', 'current', "restore-$RestoreScenario") }
     foreach ($mode in $modes) {
         $elapsed = [Diagnostics.Stopwatch]::StartNew()
         $capture.Check()
@@ -48,7 +48,7 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } else { 300000 }
+        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } else { 300000 }
         $exited = $actor.WaitForExit($actorTimeout)
         $actor.Kill()
         Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'
@@ -74,6 +74,7 @@ try {
             update { 'accepted' } verify-closed { 'completed' } current { 'already-current' }
             restore { 'restored' } restore-closed { 'completed' }
             restore-cancelled { 'cancelled' }
+            restore-failed { 'failed' }
         }
         Assert ($result.status -ceq $expected) "Unexpected live controller $mode status"
         $actor.Dispose()
@@ -81,17 +82,17 @@ try {
         $capture.Check()
         $after = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
         Assert ($after.Count -eq 1) 'Live deployment lost the application task'
-        if ($mode -eq 'restore-cancelled') {
+        if ($mode -in @('restore-cancelled', 'restore-failed')) {
             Assert ($after.Item(1).EnginePID -eq $originalPid -and $after.Item(1).InstanceGuid -ceq $originalInstance -and
-                $result.runtime.pid -eq $originalPid) 'Cancelled restore replaced the original runtime'
-            Assert (-not $scheduler.GetFolder('\').GetTask($TaskName).Enabled) 'Cancelled restore enabled restart'
+                $result.runtime.pid -eq $originalPid) 'Interrupted restore replaced the original runtime'
+            Assert (-not $scheduler.GetFolder('\').GetTask($TaskName).Enabled) 'Interrupted restore enabled restart'
             $observed = [Deployment.WindowsRuntimeControl]::Exchange(
                 [guid]$result.runtime.generation, $result.runtime.pid,
                 $result.runtime.identity, 'observe', 15000) | ConvertFrom-Json
-            Assert ($observed.quiescent -and @($observed.members).Count -eq 0) 'Cancelled restore retained writers'
+            Assert ($observed.quiescent -and @($observed.members).Count -eq 0) 'Interrupted restore retained writers'
             Assert (@(Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq 3010).Count -eq 0) `
-                'Cancelled restore retained the application listener'
-            Write-Output "PASS: real Windows cancelled restore retains original inhibited runtime, backup and lock; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+                'Interrupted restore retained the application listener'
+            Write-Output "PASS: real Windows $RestoreScenario restore retains original inhibited runtime, backup and lock; elapsedMs=$($elapsed.ElapsedMilliseconds)"
             continue
         }
         if ($mode -in @('update', 'restore')) {

@@ -27,9 +27,11 @@ export async function verifyWindowsLiveRestore({ mode, directory, project, contr
     assert.deepEqual(await verifySnapshot(backup), snapshot);
     return result;
   }
-  if (mode === 'restore-cancelled') {
-    const { verifyWindowsCancelledRestore } = await import('./deployment-windows-cancelled-restore.mjs');
-    return verifyWindowsCancelledRestore({ project, control, backup, snapshot, recovery, taskName, pwsh });
+  if (['restore-cancelled', 'restore-failed'].includes(mode)) {
+    const { verifyWindowsInterruptedRestore } = await import('./deployment-windows-interrupted-restore.mjs');
+    return verifyWindowsInterruptedRestore({
+      scenario: mode.slice('restore-'.length), project, control, backup, snapshot, recovery, taskName, pwsh,
+    });
   }
   const { runWindowsLiveRestore } = await saved('windows-restore.mjs');
   const { inspectWindowsManagedTask } = await saved('windows-managed-task.mjs');

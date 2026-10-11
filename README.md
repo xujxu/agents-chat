@@ -549,6 +549,11 @@ saved artifacts without installation or rebuilding; network isolation is not
 yet proven. Public/cold Windows restore remains gated. Full dual-platform
 regression `3e6a403 / 38131880686` passed all 48 jobs, repeating the complete
 actual Windows restore and independent closeout.
+Actual cancellation after native stop but before project mutation passed at
+`375b18a / 38134859077`. It retains recovery-required state, the original lock,
+backup and deployment receipt; independent post-controller observation confirms
+the original runtime remains quiescent, restart-disabled and without writers
+or a listener. This is not acceptance of interruption after partial restoration.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

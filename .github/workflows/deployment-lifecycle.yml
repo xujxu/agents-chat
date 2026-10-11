@@ -48,6 +48,10 @@ on:
         description: With the paired Windows live selector, run actual restore cancellation instead of completion
         type: boolean
         default: false
+      windows_restore_failure_only:
+        description: With the paired Windows live selector, run actual restore failure after project mutation
+        type: boolean
+        default: false
       windows_receipt_only:
         description: With both Windows command flags, select first-receipt integration and saved dependency tests
         type: boolean
@@ -168,13 +172,13 @@ jobs:
 
   windows-live-deployment:
     if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only }}
-    name: ${{ matrix.scenario == 'cancelled' && 'Actual Windows restore cancellation' || 'Actual Windows live deployment' }}
+    name: ${{ matrix.scenario == 'cancelled' && 'Actual Windows restore cancellation' || matrix.scenario == 'failed' && 'Actual Windows restore failure' || 'Actual Windows live deployment' }}
     runs-on: windows-2022
     timeout-minutes: 115
     strategy:
       fail-fast: false
       matrix:
-        scenario: ${{ fromJSON(inputs.windows_restore_cancel_only && '["cancelled"]' || inputs.windows_application_only && '["complete"]' || '["complete","cancelled"]') }}
+        scenario: ${{ fromJSON(inputs.windows_restore_cancel_only && '["cancelled"]' || inputs.windows_restore_failure_only && '["failed"]' || inputs.windows_application_only && '["complete"]' || '["complete","cancelled","failed"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -216,13 +220,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node tests/start-script-healthcheck.test.js
           exit $LASTEXITCODE
-      - name: Update actual application, verify no-op, restore and independently close
+      - name: Update actual application and verify saved restore outcome
         if: ${{ !(inputs.windows_application_only && inputs.windows_commands_only) }}
         shell: pwsh
         run: |
           $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
           $env:DEPLOYMENT_TEST_WINDOWS_LIVE = '1'
-          $env:DEPLOYMENT_TEST_WINDOWS_RESTORE_CANCEL = '${{ matrix.scenario == 'cancelled' && '1' || '' }}'
+          $env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO = '${{ matrix.scenario }}'
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'

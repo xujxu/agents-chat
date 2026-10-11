@@ -13915,6 +13915,54 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DJ: Accept a thrown restore error after actual project mutation
+
+**Scope:** extend the accepted actual cancellation fixture to throw a known
+error when the saved restore enters `external-files`, after project restoration
+has completed. This exercises the non-aborted failure path after real mutation,
+not an interrupted file-copy prefix, abrupt controller death or cold reentry.
+No production behavior or deadline changes.
+
+**Files:** rename the cancellation helper to
+`tests/deployment-windows-interrupted-restore.mjs`; extend the Node/PowerShell
+actual actors and `.github/workflows/deployment-lifecycle.yml`.
+
+- [ ] Preserve the accepted `cancelled` scenario and add `failed`, selected
+  through `RestoreScenario` and the actual fixture environment:
+  ```js
+  const failure = new Error('Actual restore failure after project mutation');
+  onProgress({ stage }) {
+    if (scenario === 'failed' && stage === 'external-files') throw failure;
+  }
+  await assert.rejects(restore, error => error === failure);
+  ```
+  Require the injection to fire, recovery-required/restoring state with
+  DEPLOYMENT_RESTORE_FAILED, original operation/backup binding and retained lock.
+- [ ] Prove real mutation before the injected error: the new source marker must
+  be absent, and environment, build ID, package lock and native-addon bytes
+  must equal their authoritative archived files:
+  ```js
+  await assert.rejects(lstat(path.join(project, 'deployment-live-target.txt')), { code: 'ENOENT' });
+  for (const name of ['.env.local', '.next/BUILD_ID', 'package-lock.json',
+    'node_modules/better-sqlite3/build/Release/better_sqlite3.node']) {
+    assert.deepEqual(await readFile(path.join(project, name)),
+      await readFile(path.join(backup, 'files', name)));
+  }
+  ```
+  Retain the previous deployment receipt byte-for-byte and reverify the full
+  backup. Reuse independent post-actor Scheduler/runtime observation from 5DI:
+  same task instance, disabled restart, quiescent original Job, no child writers
+  and no3010 listener. Do not activate, release the lock or claim restoration.
+- [ ] Run focused actual failure acceptance in Actions:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_failure_only=true
+  ```
+  Default full coverage adds this scenario alongside completion/cancellation;
+  paired command-only still selects one job and does not build an application.
+  Record evidence before expanding to abrupt death or file-copy crash prefixes.
+
 ### Task 5DI: Accept cancellation of an actual Windows restore before project mutation
 
 **Scope:** exercise the existing native cancellation path using the actual built
@@ -13927,7 +13975,7 @@ project; those remain separate requirements.
 application actors/orchestrators and `.github/workflows/deployment-lifecycle.yml`.
 Production restore behavior and deadlines stay unchanged.
 
-- [ ] Build/update the genuine application and complete no-op as in the accepted
+- [x] Build/update the genuine application and complete no-op as in the accepted
   fixture. Dispatch a separate cancellation actor instead of normal restoration:
   ```js
   const cancellation = new AbortController();
@@ -13943,7 +13991,7 @@ Production restore behavior and deadlines stay unchanged.
   receipt and complete authoritative backup. Require recovery-required state,
   original restore operation/backup binding, cancellation error code and the
   retained original lock.
-- [ ] After that actor exits and its native Job settles, independently inspect
+- [x] After that actor exits and its native Job settles, independently inspect
   Scheduler and the original runtime control channel:
   ```powershell
   $observed = [Deployment.WindowsRuntimeControl]::Exchange(
@@ -13954,7 +14002,7 @@ Production restore behavior and deadlines stay unchanged.
   Require the same native task instance, disabled restart, no listener and no
   child writers. Do not report successful restoration or automatically release
   the recovery lock. Existing fixture cleanup terminates its exact task.
-- [ ] Add a focused `windows_restore_cancel_only` selector alongside the paired
+- [x] Add a focused `windows_restore_cancel_only` selector alongside the paired
   Windows live selector. The default full matrix runs both successful restore
   and cancellation; command-only selection runs once without a real build.
   ```bash
@@ -13964,6 +14012,11 @@ Production restore behavior and deadlines stay unchanged.
   ```
   Record the actual result before extending coverage to thrown errors, abrupt
   controller death, mutation prefixes or network isolation.
+  Accepted `375b18a / 38134859077`, job `114456548130`, at
+  `2026-10-11 11:52:55 UTC`: update1,173,223ms, no-op185,895ms,
+  cancelled restore405,641ms; full actual test2,037,286ms. Independent runtime
+  observation and retained backup/lock assertions passed. Full49 regression
+  `375b18a / 38137237291` is running; this checkbox records the focused result.
 
 ### Task 5DH: Restore the running managed Windows application through saved tooling
 

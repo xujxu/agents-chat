@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory)][string]$Node,
     [switch]$CompleteSnapshot,
     [switch]$LiveDeployment,
-    [switch]$RestoreCancellation,
+    [ValidateSet('complete', 'cancelled', 'failed')][string]$RestoreScenario = 'complete',
     [string]$TargetCommit
 )
 $ErrorActionPreference = 'Stop'
@@ -141,7 +141,7 @@ foreach ($phase in $phases) {
             $owner = $null
             & $pwsh -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'deployment-windows-live-application.ps1') `
                 -Project $Project -TaskName $taskName -Root $root -Node $Node -ChatId $chatId -TargetCommit $TargetCommit `
-                -RestoreCancellation:$RestoreCancellation
+                -RestoreScenario $RestoreScenario
             Assert ($LASTEXITCODE -eq 0) 'Actual Windows live deployment composition failed'
             continue
         }
