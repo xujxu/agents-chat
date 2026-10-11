@@ -545,8 +545,8 @@ public update, no-op, saved restoration and separate-controller closeout all
 completed. Acceptance includes restored source/artifact/environment bytes,
 authenticated pre-backup chat data, an unchanged backup, a distinct restored
 runtime and lock removal without restarting that runtime. Restoration uses
-saved artifacts without installation or rebuilding; network isolation is not
-yet proven. Public/cold Windows restore remains gated. Full dual-platform
+saved artifacts without installation or rebuilding. Public/cold Windows restore
+remains gated. Full dual-platform
 regression `3e6a403 / 38131880686` passed all 48 jobs, repeating the complete
 actual Windows restore and independent closeout.
 Actual cancellation after native stop but before project mutation passed at
@@ -566,8 +566,14 @@ restored project bytes; native observation confirms no restart or writers.
 Actual file-copy interruption passed at `e1bc523 / 38145325358`: archived
 environment bytes are present while a later native addon is absent, proving
 an incomplete copy remains fenced rather than being reported as restored.
-The same run also passed the after-project crash regression. Cold reentry
-and external-network denial during restoration remain separate gates.
+The same run also passed the after-project crash regression.
+Actual restoration and independent closeout with executable-scoped external
+egress denial passed at `bc245a7 / 38152007084`. Windows Firewall blocks
+non-loopback outbound traffic for the actual Node, PowerShell, Git and Git
+network helpers; effective rules and positive/negative TCP probes are checked.
+The restored authenticated data, artifacts, backup and no-restart closeout pass
+under those rules. This is not a whole-VM air gap or isolation of every process
+and DNS service. Public/saved command composition and cold reentry remain gated.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

@@ -13915,6 +13915,84 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DN: Expose the accepted live Windows restore through its saved process entry
+
+**Approved scope:** the existing design's self-contained external restore entry,
+explicit acknowledgement and saved-engine dispatch. The handoff explicitly
+retains prior design approval and inline execution. This step adds the saved
+CLI boundary; public PowerShell routing and cold recovery remain subsequent
+parts of that same approved scope.
+
+**Files:**
+- Create `scripts/deployment/windows-restore-entry.mjs`: verified saved process
+  entry, bounded input, live admission and structured terminal outcome.
+- Modify `scripts/deployment/saved-recovery-engine.mjs`: include the entry.
+- Create `tests/deployment-windows-restore-entry-fixture.mjs`: bounded subprocess
+  runner shared by entry contracts and genuine application restoration.
+- Create `tests/deployment-windows-restore-entry.test.mjs`: refusal/protocol
+  contracts that must not create operation evidence.
+- Modify `tests/deployment-windows-live-restore.mjs`: invoke the saved entry
+  rather than importing the restore core for the complete/offline scenario.
+- Modify `.github/workflows/deployment-lifecycle.yml`: run entry contracts with
+  saved dependency closure before actual builds.
+
+- [ ] Add API tests for acknowledgement, exact engine/self binding, unknown
+  input fields, malformed UTF8, input over32768 bytes, invalid deadlines/paths
+  and missing backup. Use a real saved engine in a private temporary control
+  directory; every refusal requires exit1, one sanitized JSON result and
+  unchanged control entries.
+  ```js
+  assert.equal(output.code, 1);
+  assert.equal(output.result.status, 'failed');
+  assert.equal(output.result.closeoutRequired, false);
+  assert.deepEqual((await readdir(control)).sort(), before);
+  assert.ok(!JSON.stringify(output).includes('PRIVATE_RESTORE_INPUT'));
+  ```
+  Run the paired command-only selector in Actions and record the missing-entry
+  failure before adding implementation.
+- [ ] Implement the saved process contract:
+  ```text
+  node <saved-engine>/windows-restore-entry.mjs <control> <manifest-sha256> --accept-data-loss
+  stdin JSON: project, taskName, pwsh, backup, port, waitSeconds, timeoutSeconds
+  ```
+  Require native Windows/Node24+, exact verified self path, canonical external
+  sibling control/backup and PowerShell paths, valid task name, port3010 and
+  positive safe-integer deadlines. Decode stdin with fatal UTF8 and exact fields.
+  Verify the complete version3 Windows snapshot's project/task/engine binding
+  before runtime admission. Refuse interrupted/unbound state without removing
+  evidence; do not silently route to an unimplemented cold recovery path.
+- [ ] Inspect the original live task using saved modules, acquire the original
+  restore lock and recheck state, then call the existing core:
+  ```js
+  result = await runWindowsLiveRestore({
+    scope, control, lock, backup: input.backup, node: process.execPath,
+    pwsh: input.pwsh, profile: 'agents-chat-auth-638c553', port: input.port,
+    waitSeconds: input.waitSeconds, timeoutSeconds: input.timeoutSeconds,
+    acceptDataLoss: true, onProgress,
+  });
+  ```
+  Preserve closeout-required success for a later independent controller.
+  Failed preflight may release only an unchanged original state/lock with
+  original scope recheck and no unsettled workers; otherwise retain evidence.
+  Reuse deployment diagnostics and reject invalid closeout bindings. JSON stays
+  on stdout, bounded stage/progress diagnostics on stderr; never echo input.
+- [ ] Run the fixed command-only contracts, then switch complete/offline actual
+  restoration to the saved subprocess. Require unacknowledged entry refusal,
+  unchanged state/no lock, then the same strict restored-state/bytes/backup
+  assertions and separate closeout. Keep cancellation/crash injection fixtures
+  calling the core directly; production process entry gets no test-only hooks.
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=offline
+  ```
+  Verify dependency closure and native entry contracts before claiming saved
+  process support; run actual and full dual-platform regression for this new
+  production inventory generation. Public wrapper and cold recovery stay gated.
+
 ### Task 5DM: Restore with explicit external-egress denial for actual restore executables
 
 **Scope:** use Windows Defender Firewall application rules on the disposable
@@ -13955,13 +14033,13 @@ README and `.github/workflows/deployment-lifecycle.yml`.
   value; focused `38151833678`, job `114506707804`, passed all native command
   checks at `2026-10-11 15:38:50 UTC`. Egress precheck proved Node EACCES and
   PowerShell AccessDenied, then successful external TCP after cleanup.
-  Actual rerun `bc245a7 / 38152007084` remains pending.
-- [ ] Add an Actions-only firewall precheck before the expensive actual build.
+  Actual rerun `bc245a7 / 38152007084` passed; details below.
+- [x] Add an Actions-only firewall precheck before the expensive actual build.
   In the offline actual scenario, enable rules immediately before normal restore;
   repeat effective-policy and denial probes after restore closeout, then remove
   rules in fixture cleanup. Reuse unchanged restored-file, authenticated-data,
   unchanged-backup, distinct-runtime and no-restart closeout assertions.
-- [ ] Replace the three increasingly specialized restore booleans with one
+- [x] Replace the three increasingly specialized restore booleans with one
   `windows_restore_scenario` choice: complete/cancelled/failed/crash/offline.
   Preserve the other workflow selectors; crash continues to run both prefixes.
   Default full coverage includes the offline scenario. Run:
@@ -13972,6 +14050,11 @@ README and `.github/workflows/deployment-lifecycle.yml`.
   ```
   Record the exact egress boundary in acceptance documentation. Public/cold
   restore remains gated; production code and deadlines are unchanged.
+  Accepted `bc245a7 / 38152007084`, job `114507211433`, at
+  `2026-10-11 16:35:00 UTC`: update1,144,856ms, no-op129,877ms,
+  restore1,502,223ms, separate closeout85,922ms; actual3,228,620ms.
+  Rules remained effective through complete restoration, authenticated data
+  checks and independent closeout; post-restore denial probes passed.
 
 ### Task 5DL: Accept abrupt death during actual project file copying
 
