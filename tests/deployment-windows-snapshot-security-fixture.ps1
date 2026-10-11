@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$File,
     [ValidateSet('inspect', 'retain-read', 'broaden', 'broaden-inheritable', 'broaden-git-index',
-        'broaden-git-index-users', 'unbroaden-git-index-users')][string]$Action = 'inspect'
+        'broaden-git-index-users', 'unbroaden-git-index-users', 'owner-administrators')][string]$Action = 'inspect'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -16,7 +16,12 @@ if ($Action -ceq 'retain-read') {
     return
 }
 $acl = Get-Acl -LiteralPath $File
-if ($Action -cne 'inspect') {
+if ($Action -ceq 'owner-administrators') {
+    if ([IO.Path]::GetFileName($File) -cne '.env.local') { throw 'Unsupported owner fixture mutation.' }
+    $acl.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
+    Set-Acl -LiteralPath $File -AclObject $acl
+    $acl = Get-Acl -LiteralPath $File
+} elseif ($Action -cne 'inspect') {
     if ($Action -cin @('broaden-git-index', 'broaden-git-index-users', 'unbroaden-git-index-users')) {
         if ([IO.Path]::GetFileName($File) -cne 'index' -or
             [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($File)) -cne '.git') {

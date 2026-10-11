@@ -202,6 +202,20 @@ test('Windows unsupported saved ownership refuses before deleting current data',
   assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'post-backup data');
 });
 
+test('Windows project restoration preserves an eligible administrator-group file owner', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const f = await fixture(t, true, project =>
+    inspectWindowsSecurity(path.join(project, '.env.local'), 'owner-administrators'));
+  const saved = await verifySnapshot(f.backup);
+  const entry = saved.windowsSecurity.entries.find(entry => entry.path === '.env.local');
+  const descriptor = saved.windowsSecurity.descriptors[entry.security];
+  assert.match(descriptor, /^O:BA/);
+  await restoreProjectSnapshot(f.options);
+  assert.equal(await readFile(path.join(f.project, '.env.local'), 'utf8'), 'PRIVATE=saved');
+  assert.equal((await inspectWindowsSecurity(path.join(f.project, '.env.local'))).securityDescriptor, descriptor);
+});
+
 test('project mutation refuses a different backup from the one admitted before downtime', supported, async t => {
   const f = await fixture(t);
   const expectedSnapshot = await verifySnapshot(f.backup);

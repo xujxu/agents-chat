@@ -170,7 +170,16 @@ namespace Deployment
                     descriptor.Owner.Value != account.User.Value && descriptor.Owner.Value != account.Owner.Value ||
                     !groups.Contains(descriptor.Group.Value) || descriptor.DiscretionaryAcl == null ||
                     (descriptor.ControlFlags & ControlFlags.DiscretionaryAclPresent) == 0)
-                    throw new InvalidDataException("Restoration requires supported same-account ownership.");
+                    throw new InvalidDataException("Restoration requires supported same-account ownership. " +
+                        "ownerIsUser=" + (descriptor.Owner == account.User) +
+                        "; ownerIsTokenOwner=" + (descriptor.Owner == account.Owner) +
+                        "; ownerIsAdministrators=" + (descriptor.Owner != null &&
+                            descriptor.Owner.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid)) +
+                        "; ownerIsSystem=" + (descriptor.Owner != null &&
+                            descriptor.Owner.IsWellKnown(WellKnownSidType.LocalSystemSid)) +
+                        "; groupIsTokenMember=" + (descriptor.Group != null && groups.Contains(descriptor.Group.Value)) +
+                        "; daclPresent=" + (descriptor.DiscretionaryAcl != null &&
+                            (descriptor.ControlFlags & ControlFlags.DiscretionaryAclPresent) != 0));
             }
             foreach (GenericAce entry in descriptor.DiscretionaryAcl)
             {
