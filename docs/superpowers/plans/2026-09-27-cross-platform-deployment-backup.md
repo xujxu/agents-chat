@@ -14076,6 +14076,12 @@ is unchanged.
   timeout regression and test the new maximum through immediate failure.
   Set only the live job to 90 minutes to include the early native checks.
   Production stage, readiness and command configuration limits are unchanged.
+  Run `31af21a / 38119272790` stopped early at `06:50:47 UTC`:
+  the new maximum-duration private-runner self-test exposed the native
+  controller's one-hour maximum for a single `WaitForExit` call. Preserve that
+  native guard; wait in at-most-30-second slices under a monotonic stopwatch
+  enforcing the original total test deadline. Reuse the immediate-failure
+  maximum-duration case and five-second actual timeout case before any build.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

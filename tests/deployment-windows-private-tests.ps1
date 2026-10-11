@@ -38,7 +38,12 @@ try {
     $controller = [Deployment.WindowsControllerProcess]::Start($node, $arguments.ToArray(), $root, $environment)
     $output = $controller.StandardOutput.ReadToEndAsync()
     $diagnostic = $controller.StandardError.ReadToEndAsync()
-    $exited = $controller.WaitForExit($TimeoutSeconds * 1000)
+    $elapsed = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        $remaining = [Math]::Max(0, $TimeoutSeconds * 1000 - $elapsed.ElapsedMilliseconds)
+        $exited = $controller.WaitForExit([int][Math]::Min(30000, $remaining))
+    } while (-not $exited -and $elapsed.ElapsedMilliseconds -lt $TimeoutSeconds * 1000)
+    $elapsed.Stop()
     $code = $null
     if ($exited) { $code = $controller.ExitCode }
     else { $failures.Add([TimeoutException]::new('Private Windows tests timed out.')) }
