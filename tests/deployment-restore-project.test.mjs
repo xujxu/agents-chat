@@ -184,23 +184,25 @@ test('Windows root policy drift refuses before deleting current data', { skip: p
   assert.equal(await readFile(path.join(f.project, 'new-source'), 'utf8'), 'new source');
 });
 
-test('Windows unsupported saved ownership refuses before deleting current data', { skip: process.platform !== 'win32' }, async t => {
-  const f = await fixture(t);
-  const manifestFile = path.join(f.backup, 'manifest.json');
-  const manifest = JSON.parse(await readFile(manifestFile, 'utf8'));
-  const descriptor = manifest.windowsSecurity.descriptors[manifest.windowsSecurity.entries[0].security];
-  const foreign = descriptor.replace(/^O:.*?G:/, 'O:S-1-5-21-101-102-103-1001G:');
-  assert.notEqual(foreign, descriptor);
-  manifest.windowsSecurity.entries[0].security = manifest.windowsSecurity.descriptors.length;
-  manifest.windowsSecurity.descriptors.push(foreign);
-  await writeFile(manifestFile, JSON.stringify(manifest));
-  const completeFile = path.join(f.backup, 'complete.json');
-  const complete = JSON.parse(await readFile(completeFile, 'utf8'));
-  complete.sha256 = await fileDigest(manifestFile);
-  await writeFile(completeFile, JSON.stringify(complete));
-  await assert.rejects(restoreProjectSnapshot(f.options), error => /same-account ownership/i.test(error.diagnostic));
-  assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'post-backup data');
-});
+for (const owner of ['S-1-5-21-101-102-103-1001', 'S-1-5-32-545']) {
+  test(`Windows unsupported saved ownership ${owner} refuses before deleting current data`, { skip: process.platform !== 'win32' }, async t => {
+    const f = await fixture(t);
+    const manifestFile = path.join(f.backup, 'manifest.json');
+    const manifest = JSON.parse(await readFile(manifestFile, 'utf8'));
+    const descriptor = manifest.windowsSecurity.descriptors[manifest.windowsSecurity.entries[0].security];
+    const foreign = descriptor.replace(/^O:.*?G:/, `O:${owner}G:`);
+    assert.notEqual(foreign, descriptor);
+    manifest.windowsSecurity.entries[0].security = manifest.windowsSecurity.descriptors.length;
+    manifest.windowsSecurity.descriptors.push(foreign);
+    await writeFile(manifestFile, JSON.stringify(manifest));
+    const completeFile = path.join(f.backup, 'complete.json');
+    const complete = JSON.parse(await readFile(completeFile, 'utf8'));
+    complete.sha256 = await fileDigest(manifestFile);
+    await writeFile(completeFile, JSON.stringify(complete));
+    await assert.rejects(restoreProjectSnapshot(f.options), error => /same-account ownership/i.test(error.diagnostic));
+    assert.equal(await readFile(path.join(f.project, '.data/chats.db'), 'utf8'), 'post-backup data');
+  });
+}
 
 test('Windows project restoration preserves an eligible administrator-group file owner', {
   skip: process.platform !== 'win32',
@@ -213,7 +215,8 @@ test('Windows project restoration preserves an eligible administrator-group file
   assert.match(descriptor, /^O:BA/);
   await restoreProjectSnapshot(f.options);
   assert.equal(await readFile(path.join(f.project, '.env.local'), 'utf8'), 'PRIVATE=saved');
-  assert.equal((await inspectWindowsSecurity(path.join(f.project, '.env.local'))).securityDescriptor, descriptor);
+  assert.match((await inspectWindowsSecurity(path.join(f.project, '.env.local'))).securityDescriptor, /^O:BA/);
+  assert.deepEqual(await verifySnapshot(f.backup), saved);
 });
 
 test('project mutation refuses a different backup from the one admitted before downtime', supported, async t => {

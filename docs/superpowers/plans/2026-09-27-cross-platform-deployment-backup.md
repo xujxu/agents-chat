@@ -14007,6 +14007,17 @@ is unchanged.
   PATH-free combined restoration at `03:26:04 UTC` (39,671 ms), along with
   source-absent imports and inherited-policy drift checks. Actual retry
   `38108388848` was dispatched after that success.
+  That actual run failed at `04:04:00 UTC`, after reaching restoring, because
+  native saved-file owner admission refused a descriptor. Focused reproduction
+  `7635087 / 38110544166`, job `114385003091`, passed foreign-owner refusal
+  and failed a genuinely administrator-group-owned file at `04:10:07 UTC`
+  (4,183 ms): the current user/default owner differed, while group and DACL
+  checks passed. The original actual descriptor was not classified in its log.
+  Admit additional owners only when the current native token explicitly marks
+  that SID enabled and `SE_GROUP_OWNER`, excluding deny-only groups. Do not
+  grant privileges, allow arbitrary group membership or replace archived owners.
+  Preserve exact owner restoration and add ordinary Users-group owner refusal
+  alongside the existing foreign-SID refusal.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

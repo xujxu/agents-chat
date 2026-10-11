@@ -27,6 +27,22 @@ namespace Deployment
         static extern uint GetSecurityDescriptorLength(IntPtr descriptor);
         [DllImport("kernel32.dll")]
         static extern IntPtr LocalFree(IntPtr allocation);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool GetTokenInformation(SafeAccessTokenHandle token, int informationClass,
+            IntPtr information, int bytes, out int required);
+        [StructLayout(LayoutKind.Sequential)]
+        struct SourceTokenGroup
+        {
+            public IntPtr Sid;
+            public uint Attributes;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        struct SourceTokenGroups
+        {
+            public uint Count;
+            public SourceTokenGroup First;
+        }
         [StructLayout(LayoutKind.Sequential)]
         struct SourceBasicInformation
         {
@@ -154,6 +170,41 @@ namespace Deployment
             }
         }
 
+        static bool CanOwnSource(WindowsIdentity account, SecurityIdentifier owner)
+        {
+            if (owner == null) return false;
+            if (owner == account.User || owner == account.Owner) return true;
+            int required;
+            bool sized = GetTokenInformation(account.AccessToken, 2, IntPtr.Zero, 0, out required);
+            int error = Marshal.GetLastWin32Error();
+            int offset = Marshal.OffsetOf<SourceTokenGroups>("First").ToInt32();
+            int stride = Marshal.SizeOf<SourceTokenGroup>();
+            if (sized || error != 122 || required < offset || required > 65536)
+                throw new InvalidDataException("Invalid restoration owner-group information size.");
+            int capacity = required;
+            IntPtr information = Marshal.AllocHGlobal(capacity);
+            try
+            {
+                Native(GetTokenInformation(account.AccessToken, 2, information, capacity, out required),
+                    "Read restoration owner-eligible token groups");
+                if (required < offset || required > capacity)
+                    throw new InvalidDataException("Invalid restoration owner-group information.");
+                uint count = unchecked((uint)Marshal.ReadInt32(information));
+                if (count > (required - offset) / stride)
+                    throw new InvalidDataException("Invalid restoration owner-group count.");
+                for (int index = 0; index < count; index++)
+                {
+                    var group = Marshal.PtrToStructure<SourceTokenGroup>(
+                        IntPtr.Add(information, offset + index * stride));
+                    // An enabled SE_GROUP_OWNER group is assignable without restoring foreign ownership.
+                    if ((group.Attributes & (0x4u | 0x8u | 0x10u)) == (0x4u | 0x8u) &&
+                        new SecurityIdentifier(group.Sid) == owner) return true;
+                }
+                return false;
+            }
+            finally { Marshal.FreeHGlobal(information); }
+        }
+
         public static void ValidateSourceSecurity(string sddl)
         {
             if (String.IsNullOrEmpty(sddl) || Encoding.UTF8.GetByteCount(sddl) > 8192 ||
@@ -167,7 +218,7 @@ namespace Deployment
                 var groups = new HashSet<string>(StringComparer.Ordinal) { account.User.Value, account.Owner.Value };
                 foreach (IdentityReference group in account.Groups) groups.Add(group.Value);
                 if (descriptor.Owner == null || descriptor.Group == null ||
-                    descriptor.Owner.Value != account.User.Value && descriptor.Owner.Value != account.Owner.Value ||
+                    !CanOwnSource(account, descriptor.Owner) ||
                     !groups.Contains(descriptor.Group.Value) || descriptor.DiscretionaryAcl == null ||
                     (descriptor.ControlFlags & ControlFlags.DiscretionaryAclPresent) == 0)
                     throw new InvalidDataException("Restoration requires supported same-account ownership. " +
