@@ -13988,6 +13988,11 @@ is unchanged.
   runner allowance to 3,000 seconds: exactly the added 900-second restore
   actor and 300-second independent closeout. Preserve every actor/stage limit,
   the runner's 1,800-second default for other tests and the 75-minute job limit.
+  Native regression `953fe1b / 38106043726` passed all seven jobs:
+  snapshot/restoration `114371685463`, managed discovery `114371685585`,
+  independent closeout `114371685673` and all four prior-runtime recovery
+  cases. Actual application run `38106029744`, job `114371644256`, is
+  still running; native component acceptance is not full restore acceptance.
 - [ ] Compose `runRestore` with admitted backup/configuration, original lock
   and native task transaction. Validate saved engine/external helper location,
   capacity and source before first restore-preflight state. During the

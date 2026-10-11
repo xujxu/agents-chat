@@ -543,6 +543,10 @@ restore state. The full 48-job result predates these latter additions.
 Actual saved application restore composition is implemented but still awaiting
 acceptance; public/cold restore and network-isolated restoration are not
 established by these component results.
+The subsequent native restore regression passed all seven jobs at
+`953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
+file-security evidence, retaining inherited ACE flags; the separate
+kernel-handle descriptor remains unchanged for existing identity checks.
 
 Component-level
 project/Git/external restoration and original-task snapshot capture passed all
