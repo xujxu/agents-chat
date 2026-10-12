@@ -53,8 +53,9 @@ export async function inspectWindowsColdActivationRecovery({ control, pwsh, sign
       snapshot.runtime.task.configurationSha256, snapshot.source.commit, original.taskName);
     const { guard, staging } = prior;
     const history = guard?.history;
-    if (staging || !history || history.phase !== 'stopped' || history.records.length !== 3 || !history.runtime) {
-      throw new Error('Cold activation observation requires its complete stopped prefix without staged ownership.');
+    if (staging || !history || !['running', 'stopped'].includes(history.phase)
+      || history.records[1]?.phase !== 'running' || !history.runtime) {
+      throw new Error('Cold activation observation requires its acknowledged runtime prefix without staged ownership.');
     }
     const deadOwners = async () => {
       for (const owner of [lock, guard.record.owner,
@@ -70,13 +71,14 @@ export async function inspectWindowsColdActivationRecovery({ control, pwsh, sign
     const controllerIdentity = await processIdentity(process.pid);
     if (!controllerIdentity) throw new Error('Original cold activation observer identity is unavailable.');
     const expectedObservation = {
-      status: 'cold-activation-stopped', mutationAuthority: false,
+      status: history.phase === 'stopped' ? 'cold-activation-stopped' : 'cold-activation-inactive',
+      mutationAuthority: false,
       operationId: lock.operationId, taskName: original.taskName, stateSha256: expected.stateSha256,
       ownerSha256: digest(guard.bytes), filesReceiptSha256: digest(guard.receipt.bytes),
       intentSha256: digest(guard.intent.bytes), historySha256: history.sha256, runtime: history.runtime,
     };
     bridge = windowsControllerTransport({
-      pwsh, refused, label: 'Native stopped cold activation observer',
+      pwsh, refused, label: 'Native inactive cold activation observer',
       args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
         '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity, '-Recovery', '-ColdActivation',
         '-OwnerSha256', expectedObservation.ownerSha256, '-ReceiptSha256', expectedObservation.filesReceiptSha256,
@@ -91,7 +93,7 @@ export async function inspectWindowsColdActivationRecovery({ control, pwsh, sign
     const capture = value => {
       const observation = captureWorkerFields(value, Object.keys(expectedObservation), 'cold activation observation');
       const runtime = Object.freeze(captureActivatedRuntime(observation.runtime));
-      if (!same(observation, expectedObservation)) throw new Error('Original stopped cold activation observation differs.');
+      if (!same(observation, expectedObservation)) throw new Error('Original inactive cold activation observation differs.');
       return Object.freeze({ ...observation, runtime });
     };
     const observation = capture(ready.value);

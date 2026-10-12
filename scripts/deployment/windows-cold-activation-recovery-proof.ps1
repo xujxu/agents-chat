@@ -23,11 +23,14 @@ function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
             if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
                 [string]$task.Xml -cne $Context.ColdDefinition -or $task.Definition.Triggers.Count -ne 0 -or
                 [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor) {
-                throw 'Stopped cold activation task policy, security or instance changed.'
+                throw 'Inactive cold activation task policy, security or instance changed.'
             }
         }
         return [ordered]@{
-            status='cold-activation-stopped'; mutationAuthority=$false
+            status=$(if ($Context.ColdHistoryPhase -ceq 'stopped') {
+                'cold-activation-stopped'
+            } else { 'cold-activation-inactive' })
+            mutationAuthority=$false
             operationId=$Context.OperationId; taskName=$Context.TaskName; stateSha256=$Context.StateSha256
             ownerSha256=$Context.ColdOwnerSha256; filesReceiptSha256=$Context.ColdReceiptSha256
             intentSha256=$Context.ColdIntentSha256; historySha256=$Context.ColdHistorySha256
@@ -58,7 +61,11 @@ function Open-AgentsChatColdActivationRecoveryProof {
             'securityDescriptor', 'configuration', 'configurationSha256', 'runtime')
         $previous = $IntentSha256
         $first = $running = $null
-        foreach ($phase in @('start-requested', 'running', 'stopped')) {
+        $phases = @('start-requested', 'running')
+        if ($proof.RecoveryFiles['recovery-lock'] -ccontains 'activation-stopped.json') {
+            $phases += 'stopped'
+        }
+        foreach ($phase in $phases) {
             $file = Open-AgentsChatCompletionFile $proof (Join-Path $Control "recovery-lock/activation-$phase.json") ''
             $record = Read-AgentsChatMaintenanceFields ($file.ReadText()) $schema
             if ($record.version.GetInt32() -ne 1 -or $record.phase.GetString() -cne $phase -or
@@ -92,7 +99,7 @@ function Open-AgentsChatColdActivationRecoveryProof {
             }
             $previous = $file.Sha256
         }
-        if ($previous -cne $HistorySha256) { throw 'Original stopped cold history digest changed.' }
+        if ($previous -cne $HistorySha256) { throw 'Original inactive cold history digest changed.' }
         $policy = @{
             Definition=$proof.Definition; Bundle=$proof.ColdRuntime.directory.GetString()
             Configuration=$proof.ColdRuntime.configuration.GetString()
@@ -111,6 +118,7 @@ function Open-AgentsChatColdActivationRecoveryProof {
         $proof.ColdReceiptSha256 = $ReceiptSha256
         $proof.ColdIntentSha256 = $IntentSha256
         $proof.ColdHistorySha256 = $HistorySha256
+        $proof.ColdHistoryPhase = $phase
         Open-AgentsChatCompletionBundle $proof $proof.ColdRuntime.configuration.GetString() `
             $proof.ColdRuntime.sha256.GetString() $runtime
         $taskFile = Join-Path ([Environment]::SystemDirectory) "Tasks\$($proof.TaskName)"

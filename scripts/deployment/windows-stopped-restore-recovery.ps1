@@ -39,7 +39,10 @@ function Open-AgentsChatStoppedRestoreRecoveryFiles([hashtable]$Context) {
                 $expected = @('activation-intent.json', 'files-restored.json', 'owner.json')
                 if ($Context.ActivationHistory) {
                     $expected = @($expected + @('activation-start-requested.json',
-                        'activation-running.json', 'activation-stopped.json') | Sort-Object)
+                        'activation-running.json') | Sort-Object)
+                    if (@($entries | Where-Object Name -CEQ 'activation-stopped.json').Count) {
+                        $expected = @($expected + 'activation-stopped.json' | Sort-Object)
+                    }
                 }
             }
         }

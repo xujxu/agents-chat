@@ -620,7 +620,10 @@ including an exited entry process whose descendants remain in the original Job.
 Native owned-listener/HTTP acceptance passed at `1c5a72d / 38217437905`,
 including provider mismatch refusal and transient HTTP503 retry. Actual
 configuration retention across old-host retirement passed at
-`8510f67 / 38210974436`. This does not claim actual application readiness or
+`8510f67 / 38210974436`. Durable startup/shutdown journal binding passed at
+`7783994 / 38220999163`; independent read-only observation of the complete
+stopped cold journal and both empty Jobs passed at `f18dfec / 38224040058`.
+This does not claim actual application readiness or
 completed cold restore; actual startup, changed-task interruption recovery
 and terminal closeout remain separate gates.
 The subsequent native restore regression passed all seven jobs at
