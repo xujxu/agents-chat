@@ -13929,7 +13929,7 @@ private file-only result a completed restore.
 `windows-cold-restore-files.mjs`. Extend the native interrupted-copy contract
 and add `tests/deployment-windows-cold-files-receipt.mjs`.
 
-- [ ] Run native causal coverage requiring the real receipt after successful
+- [x] Run native causal coverage requiring the real receipt after successful
   copy and denying writes while its native handle is retained:
   ```js
   const receiptPath = path.join(control, 'recovery-lock/files-restored.json');
@@ -13938,19 +13938,26 @@ and add `tests/deployment-windows-cold-files-receipt.mjs`.
   await assert.rejects(writeFile(receiptPath, 'changed'));
   assert.deepEqual(await readFile(receiptPath), receiptBytes);
   ```
-- [ ] Extend exact native guard inventories to permit only the additional
+  `65a78bc / 38199742634`, job `114650281109`, failed as required at
+  `2026-10-12 03:35:22 UTC` on absent `recovery-lock/files-restored.json`
+  after the real file retry completed. Paired `c293127 / 38199887646`,
+  job `114652151673`, passed at `2026-10-12 03:45:00 UTC`. The real partial
+  copy/retry passed at03:41:40; completed-owner reentry and receipt-binding
+  negatives passed at03:42:38; original restored terminal proof passed
+  at03:44:49. Actual application restoration remains under its separate gate.
+- [x] Extend exact native guard inventories to permit only the additional
   bounded private completion file; keep staging owner-only. The Node lease
   must compare the full receipt with its derived original evidence. Retain
   all evidence handles after publication, not just the original owner.
-- [ ] Publish the receipt using the existing native private publication
+- [x] Publish the receipt using the existing native private publication
   transport with an explicit fixed receipt target. Keep the same named
   admission across observer close, publication and native proof reopen.
   Poison the lease on interrupted publication/reopen. Do not weaken ACLs.
-- [ ] On a later dead-owner takeover, validate the prior receipt before any
+- [x] On a later dead-owner takeover, validate the prior receipt before any
   mutation. Remove only its exact validated bytes before replacing the owner,
   then require a fresh full copy and new runtime bundle. A prior completion
   receipt must never authorize the new owner's uncompleted attempt.
-- [ ] Run the native gate through Actions, including changed owner digest,
+- [x] Run the native gate through Actions, including changed owner digest,
   original-state digest and runtime-path refusals, actual partial-copy retry,
   completed-owner death/reentry, preserved original lock/state/archive and
   existing terminal-proof regressions. Keep unacknowledged temporary native
@@ -14029,6 +14036,9 @@ its original readiness path from the real configuration directory.
     --ref feat/deployment-backup -f windows_application_only=true \
     -f windows_live_only=true -f windows_restore_scenario=crash
   ```
+  Actual `2cd722c / 38199570752` is running: job `114649746758` covers the
+  new file-copy crash/cold retry, paired with original crash regression
+  `114649746675`. No actual-application cold acceptance is claimed yet.
 
 ### Task 5DU: Claim a distinct durable Windows cold restore lease
 
