@@ -39,7 +39,7 @@ export async function verifyWindowsColdApplicationTerminal({ mode, directory, co
     await verifyWindowsApplicationApi('restored', chatId);
   };
   process.stderr.write(`${new Date().toISOString()} Actual cold terminal state: ${target}\n`);
-  await unchanged({ authorityHeld: true });
+  await unchanged();
   const result = await recovery.publishWindowsColdTerminalState({
     control, pwsh, acceptDataLoss: true,
     onProgress: async progress => {
@@ -49,7 +49,7 @@ export async function verifyWindowsColdApplicationTerminal({ mode, directory, co
       if (target === 'state-staged') {
         assert.equal((await readFile(`${statePath}.lock`)).toString('utf8'), marker.nextState);
       } else { await assert.rejects(lstat(`${statePath}.lock`), { code: 'ENOENT' }); }
-      await unchanged();
+      await unchanged({ authorityHeld: true });
       await interruptWindowsColdApplication({
         status: 'cold-terminal-state-interrupted', step: progress.step, operationId: marker.operationId,
         runtime: marker.runtime, lease: 'released',
