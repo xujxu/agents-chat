@@ -117,7 +117,8 @@ function Assert-AgentsChatStoppedRestoreProof([hashtable]$Context) {
 
 function Open-AgentsChatStoppedRestoreEvidence {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Control, [switch]$Recovery, [switch]$ActivationHistory, [switch]$PolicyRecovery)
+    param([Parameter(Mandatory)][string]$Control, [switch]$Recovery, [switch]$ActivationHistory,
+        [switch]$PolicyRecovery, [switch]$CompletionHistory)
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
     $context = @{
@@ -125,13 +126,14 @@ function Open-AgentsChatStoppedRestoreEvidence {
         Files=[Collections.Generic.List[IDisposable]]::new()
         Closed=$false; Poisoned=$false; Busy=$false; Owner=$null; Instance=$null; Folder=$null; Stage='directories'
         Recovery=[bool]$Recovery; ActivationHistory=[bool]$ActivationHistory
-        PolicyRecovery=[bool]$PolicyRecovery
+        PolicyRecovery=[bool]$PolicyRecovery; CompletionHistory=[bool]$CompletionHistory
         AbsentOwner=$false; RuntimeSessionId=$null
     }
     try {
         if ($PSVersionTable.PSVersion.Major -lt 7 -or -not $IsWindows -or
             $Control -cnotmatch '^[A-Za-z]:\\' -or [IO.Path]::GetFullPath($Control) -cne $Control -or
-            ($ActivationHistory -and -not $Recovery) -or ($PolicyRecovery -and -not $ActivationHistory)) {
+            ($ActivationHistory -and -not $Recovery) -or ($PolicyRecovery -and -not $ActivationHistory) -or
+            ($CompletionHistory -and (-not $ActivationHistory -or $PolicyRecovery))) {
             throw 'Stopped restore proof requires native Windows and canonical control.'
         }
         foreach ($directory in @($Control, (Join-Path $Control 'lock'), $context.Directory)) {

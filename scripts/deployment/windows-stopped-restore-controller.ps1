@@ -5,11 +5,13 @@ param(
     [switch]$Recovery,
     [switch]$ColdActivation,
     [switch]$ColdPolicyRecovery,
+    [switch]$ColdCompletion,
     [string]$OwnerSha256,
     [string]$ReceiptSha256,
     [string]$IntentSha256,
     [string]$HistorySha256,
-    [string]$PolicySha256
+    [string]$PolicySha256,
+    [string]$CompletionSha256
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -22,7 +24,7 @@ try {
         (Join-Path $PSScriptRoot 'WindowsWorkerJob.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeDomain.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimePipe.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeControl.cs'),
         (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
-        (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'))
+        (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-stopped-restore-proof.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
@@ -31,18 +33,28 @@ try {
         if (-not $Recovery -or
             @(@($OwnerSha256, $ReceiptSha256, $IntentSha256, $HistorySha256) | Where-Object { $_ -cnotmatch '^[a-f0-9]{64}$' }).Count -or
             ($ColdPolicyRecovery -and $PolicySha256 -cnotmatch '^[a-f0-9]{64}$') -or
-            (-not $ColdPolicyRecovery -and $PolicySha256)) {
+            (-not $ColdPolicyRecovery -and $PolicySha256) -or
+            ($ColdCompletion -and ($ColdPolicyRecovery -or $CompletionSha256 -cnotmatch '^[a-f0-9]{64}$')) -or
+            (-not $ColdCompletion -and $CompletionSha256)) {
             throw 'Cold observation requires explicit original evidence digests.'
         }
         . (Join-Path $PSScriptRoot 'windows-cold-activation-recovery-proof.ps1')
         . (Join-Path $PSScriptRoot 'windows-cold-policy-recovery.ps1')
         . (Join-Path $PSScriptRoot 'windows-cold-policy-archive.ps1')
-        $proof = Open-AgentsChatColdActivationRecoveryProof $Control $OwnerSha256 $ReceiptSha256 $IntentSha256 $HistorySha256 `
-            -PolicyRecovery:$ColdPolicyRecovery -PolicySha256 $PolicySha256 `
-            -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
-        $observed = Assert-AgentsChatColdActivationRecoveryProof $proof
+        if ($ColdCompletion) {
+            . (Join-Path $PSScriptRoot 'windows-cold-completion-proof.ps1')
+            $proof = Open-AgentsChatColdCompletionProof $Control $OwnerSha256 $ReceiptSha256 `
+                $IntentSha256 $HistorySha256 $CompletionSha256
+            $observed = Assert-AgentsChatColdCompletionProof $proof
+        } else {
+            $proof = Open-AgentsChatColdActivationRecoveryProof $Control $OwnerSha256 $ReceiptSha256 $IntentSha256 $HistorySha256 `
+                -PolicyRecovery:$ColdPolicyRecovery -PolicySha256 $PolicySha256 `
+                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
+            $observed = Assert-AgentsChatColdActivationRecoveryProof $proof
+        }
     } else {
-        if ($OwnerSha256 -or $ReceiptSha256 -or $IntentSha256 -or $HistorySha256 -or $ColdPolicyRecovery -or $PolicySha256) {
+        if ($OwnerSha256 -or $ReceiptSha256 -or $IntentSha256 -or $HistorySha256 -or $ColdPolicyRecovery -or
+            $PolicySha256 -or $ColdCompletion -or $CompletionSha256) {
             throw 'Stopped observation cannot accept cold activation digests.'
         }
         $proof = Open-AgentsChatStoppedRestoreProof -Control $Control -Recovery:$Recovery
@@ -77,6 +89,7 @@ try {
             $value = 'close'
         } elseif ($method -ceq 'archive') { $value = Archive-AgentsChatColdPolicyJournal $proof }
         elseif ($method -ceq 'advance') { $value = Advance-AgentsChatColdPolicyRecovery $proof }
+        elseif ($ColdCompletion) { $value = Assert-AgentsChatColdCompletionProof $proof }
         elseif ($ColdActivation) { $value = Assert-AgentsChatColdActivationRecoveryProof $proof }
         else { $value = Assert-AgentsChatStoppedRestoreProof $proof }
         [Console]::Out.WriteLine((@{

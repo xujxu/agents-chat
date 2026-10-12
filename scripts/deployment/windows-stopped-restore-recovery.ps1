@@ -43,6 +43,14 @@ function Open-AgentsChatStoppedRestoreRecoveryFiles([hashtable]$Context) {
                     if (@($entries | Where-Object Name -CEQ 'activation-stopped.json').Count) {
                         $expected = @($expected + 'activation-stopped.json' | Sort-Object)
                     }
+                    if ($Context.CompletionHistory) {
+                        if ($expected -ccontains 'activation-stopped.json') {
+                            throw 'Completed cold runtime cannot contain stopped history.'
+                        }
+                        $expected = @($expected + @('prepared', 'policy-requested', 'policy-staged',
+                            'release-requested', 'released', 'policy-restore-requested', 'policy-restored',
+                            'enable-requested', 'complete' | ForEach-Object { "completion-$_.json" }) | Sort-Object)
+                    }
                     if ($Context.PolicyRecovery) {
                         $policy = @($entries | Where-Object { $_.Name -cmatch '^policy-[0-9]{6}\.json$' })
                         $policyBytes = 0

@@ -60,87 +60,95 @@ function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
     } finally { $Context.Busy = $false }
 }
 
+function Read-AgentsChatColdActivationRecoveryHistory {
+    param([hashtable]$Proof, [string]$OwnerSha256, [string]$ReceiptSha256,
+        [string]$IntentSha256, [string]$HistorySha256)
+    $Control = $Proof.Control
+    if (-not $proof.AbsentOwner -or
+        ($proof.RecoveryNames -join ',') -cne 'recovery-lock') {
+        throw 'Cold activation observation requires an absent original owner and no staged recovery.'
+    }
+    $ownerFile = Open-AgentsChatCompletionFile $proof (Join-Path $Control 'recovery-lock/owner.json') $OwnerSha256
+    $ownerRecord = $ownerFile.ReadText() | ConvertFrom-Json
+    Read-AgentsChatColdRestoreRecords $proof $OwnerSha256 $ReceiptSha256 `
+        $ownerRecord.owner.pid $ownerRecord.owner.processIdentity
+    Read-AgentsChatColdActivationIntent $proof $OwnerSha256 $ReceiptSha256 $IntentSha256
+    $schema = @('version', 'phase', 'operationId', 'ownerSha256', 'filesReceiptSha256', 'intentSha256',
+        'previousSha256', 'controllerPid', 'controllerIdentity', 'taskName', 'definition',
+        'securityDescriptor', 'configuration', 'configurationSha256', 'runtime')
+    $previous = $IntentSha256
+    $first = $running = $null
+    $phases = @('start-requested', 'running')
+    if ($proof.RecoveryFiles['recovery-lock'] -ccontains 'activation-stopped.json') {
+        $phases += 'stopped'
+    }
+    foreach ($phase in $phases) {
+        $file = Open-AgentsChatCompletionFile $proof (Join-Path $Control "recovery-lock/activation-$phase.json") ''
+        $record = Read-AgentsChatMaintenanceFields ($file.ReadText()) $schema
+        if ($record.version.GetInt32() -ne 1 -or $record.phase.GetString() -cne $phase -or
+            $record.operationId.GetString() -cne $proof.OperationId -or
+            $record.ownerSha256.GetString() -cne $OwnerSha256 -or
+            $record.filesReceiptSha256.GetString() -cne $ReceiptSha256 -or
+            $record.intentSha256.GetString() -cne $IntentSha256 -or
+            $record.previousSha256.GetString() -cne $previous -or
+            $record.taskName.GetString() -cne $proof.TaskName -or
+            $record.securityDescriptor.GetString() -cne $proof.SecurityDescriptor -or
+            $record.configuration.GetString() -cne $proof.ColdRuntime.configuration.GetString() -or
+            $record.configurationSha256.GetString() -cne $proof.ColdRuntime.sha256.GetString()) {
+            throw 'Cold activation history differs from its original stopped transaction.'
+        }
+        Assert-AgentsChatCompletionProcessIdentity $record.controllerPid.GetInt32() $record.controllerIdentity.GetString()
+        if ($phase -ceq 'start-requested') {
+            if ($record.runtime.ValueKind -ne [Text.Json.JsonValueKind]::Null) {
+                throw 'Cold activation start request already contains a runtime.'
+            }
+            $first = $record
+        } else {
+            Assert-AgentsChatCompletionFields $record $first @('controllerPid', 'controllerIdentity', 'definition')
+            $runtime = ConvertFrom-AgentsChatCompletionRuntime $record.runtime.GetRawText()
+            if ($runtime.generation -ceq $proof.Admission.generation.GetString() -or
+                $runtime.configurationSha256 -cne $proof.ColdRuntime.sha256.GetString() -or
+                $runtime.pid -eq $record.controllerPid.GetInt32()) {
+                throw 'Cold activation history reused or changed its runtime.'
+            }
+            if ($phase -ceq 'running') { $running = $record }
+            else { Assert-AgentsChatCompletionFields $record $running @('runtime') }
+        }
+        $previous = $file.Sha256
+    }
+    if ($previous -cne $HistorySha256) { throw 'Original inactive cold history digest changed.' }
+    $policy = @{
+        Definition=$proof.Definition; Bundle=$proof.ColdRuntime.directory.GetString()
+        Configuration=$proof.ColdRuntime.configuration.GetString()
+        ConfigurationSha256=$proof.ColdRuntime.sha256.GetString(); Stage='cold-policy'
+    }
+    $expected = Get-AgentsChatColdActivationDefinition $policy `
+        $first.controllerPid.GetInt32() $first.controllerIdentity.GetString()
+    if (([xml]$record.definition.GetString()).OuterXml -cne $expected) {
+        throw 'Stopped cold task is not its original literal guarded replacement.'
+    }
+    $proof.ActivationBridgePid = $first.controllerPid.GetInt32()
+    $proof.ActivationBridgeIdentity = $first.controllerIdentity.GetString()
+    $proof.Runtime = $runtime
+    $proof.ColdDefinition = $record.definition.GetString()
+    $proof.CurrentDefinition = $proof.ColdDefinition
+    $proof.ColdOwnerSha256 = $OwnerSha256
+    $proof.ColdReceiptSha256 = $ReceiptSha256
+    $proof.ColdIntentSha256 = $IntentSha256
+    $proof.ColdHistorySha256 = $HistorySha256
+    $proof.ColdHistoryPhase = $phase
+    $proof.ColdRunningRecord = $running
+    Open-AgentsChatCompletionBundle $proof $proof.ColdRuntime.configuration.GetString() `
+        $proof.ColdRuntime.sha256.GetString() $runtime
+}
+
 function Open-AgentsChatColdActivationRecoveryProof {
     param([string]$Control, [string]$OwnerSha256, [string]$ReceiptSha256,
         [string]$IntentSha256, [string]$HistorySha256, [switch]$PolicyRecovery,
         [string]$PolicySha256, [int]$ControllerPid, [string]$ControllerIdentity)
     $proof = Open-AgentsChatStoppedRestoreEvidence -Control $Control -Recovery -ActivationHistory -PolicyRecovery:$PolicyRecovery
     try {
-        if (-not $proof.AbsentOwner -or
-            ($proof.RecoveryNames -join ',') -cne 'recovery-lock') {
-            throw 'Cold activation observation requires an absent original owner and no staged recovery.'
-        }
-        $ownerFile = Open-AgentsChatCompletionFile $proof (Join-Path $Control 'recovery-lock/owner.json') $OwnerSha256
-        $ownerRecord = $ownerFile.ReadText() | ConvertFrom-Json
-        Read-AgentsChatColdRestoreRecords $proof $OwnerSha256 $ReceiptSha256 `
-            $ownerRecord.owner.pid $ownerRecord.owner.processIdentity
-        Read-AgentsChatColdActivationIntent $proof $OwnerSha256 $ReceiptSha256 $IntentSha256
-        $schema = @('version', 'phase', 'operationId', 'ownerSha256', 'filesReceiptSha256', 'intentSha256',
-            'previousSha256', 'controllerPid', 'controllerIdentity', 'taskName', 'definition',
-            'securityDescriptor', 'configuration', 'configurationSha256', 'runtime')
-        $previous = $IntentSha256
-        $first = $running = $null
-        $phases = @('start-requested', 'running')
-        if ($proof.RecoveryFiles['recovery-lock'] -ccontains 'activation-stopped.json') {
-            $phases += 'stopped'
-        }
-        foreach ($phase in $phases) {
-            $file = Open-AgentsChatCompletionFile $proof (Join-Path $Control "recovery-lock/activation-$phase.json") ''
-            $record = Read-AgentsChatMaintenanceFields ($file.ReadText()) $schema
-            if ($record.version.GetInt32() -ne 1 -or $record.phase.GetString() -cne $phase -or
-                $record.operationId.GetString() -cne $proof.OperationId -or
-                $record.ownerSha256.GetString() -cne $OwnerSha256 -or
-                $record.filesReceiptSha256.GetString() -cne $ReceiptSha256 -or
-                $record.intentSha256.GetString() -cne $IntentSha256 -or
-                $record.previousSha256.GetString() -cne $previous -or
-                $record.taskName.GetString() -cne $proof.TaskName -or
-                $record.securityDescriptor.GetString() -cne $proof.SecurityDescriptor -or
-                $record.configuration.GetString() -cne $proof.ColdRuntime.configuration.GetString() -or
-                $record.configurationSha256.GetString() -cne $proof.ColdRuntime.sha256.GetString()) {
-                throw 'Cold activation history differs from its original stopped transaction.'
-            }
-            Assert-AgentsChatCompletionProcessIdentity $record.controllerPid.GetInt32() $record.controllerIdentity.GetString()
-            if ($phase -ceq 'start-requested') {
-                if ($record.runtime.ValueKind -ne [Text.Json.JsonValueKind]::Null) {
-                    throw 'Cold activation start request already contains a runtime.'
-                }
-                $first = $record
-            } else {
-                Assert-AgentsChatCompletionFields $record $first @('controllerPid', 'controllerIdentity', 'definition')
-                $runtime = ConvertFrom-AgentsChatCompletionRuntime $record.runtime.GetRawText()
-                if ($runtime.generation -ceq $proof.Admission.generation.GetString() -or
-                    $runtime.configurationSha256 -cne $proof.ColdRuntime.sha256.GetString() -or
-                    $runtime.pid -eq $record.controllerPid.GetInt32()) {
-                    throw 'Cold activation history reused or changed its runtime.'
-                }
-                if ($phase -ceq 'running') { $running = $record }
-                else { Assert-AgentsChatCompletionFields $record $running @('runtime') }
-            }
-            $previous = $file.Sha256
-        }
-        if ($previous -cne $HistorySha256) { throw 'Original inactive cold history digest changed.' }
-        $policy = @{
-            Definition=$proof.Definition; Bundle=$proof.ColdRuntime.directory.GetString()
-            Configuration=$proof.ColdRuntime.configuration.GetString()
-            ConfigurationSha256=$proof.ColdRuntime.sha256.GetString(); Stage='cold-policy'
-        }
-        $expected = Get-AgentsChatColdActivationDefinition $policy `
-            $first.controllerPid.GetInt32() $first.controllerIdentity.GetString()
-        if (([xml]$record.definition.GetString()).OuterXml -cne $expected) {
-            throw 'Stopped cold task is not its original literal guarded replacement.'
-        }
-        $proof.ActivationBridgePid = $first.controllerPid.GetInt32()
-        $proof.ActivationBridgeIdentity = $first.controllerIdentity.GetString()
-        $proof.Runtime = $runtime
-        $proof.ColdDefinition = $record.definition.GetString()
-        $proof.CurrentDefinition = $proof.ColdDefinition
-        $proof.ColdOwnerSha256 = $OwnerSha256
-        $proof.ColdReceiptSha256 = $ReceiptSha256
-        $proof.ColdIntentSha256 = $IntentSha256
-        $proof.ColdHistorySha256 = $HistorySha256
-        $proof.ColdHistoryPhase = $phase
-        Open-AgentsChatCompletionBundle $proof $proof.ColdRuntime.configuration.GetString() `
-            $proof.ColdRuntime.sha256.GetString() $runtime
+        Read-AgentsChatColdActivationRecoveryHistory $proof $OwnerSha256 $ReceiptSha256 $IntentSha256 $HistorySha256
         if ($PolicyRecovery) {
             $proof.PolicyControllerPid = $ControllerPid
             $proof.PolicyControllerIdentity = $ControllerIdentity

@@ -13940,6 +13940,8 @@ Include the new native helper in the explicit saved-engine dependency closure.
   Preserve pre-abort, poison on foreign inventory, reopen after removing only
   the test-created foreign file, and preserve exact root state/lock/journal.
   Run the existing native command selector, first test-only then paired.
+  Test-only `8f40b9f / 38247065722`, job `114803503092`, is running.
+  It also corrects Task 5EN's independent-parent listener bootstrap.
 - [ ] Admit only the exact running activation prefix followed by all nine
   completion records. Retain and validate their original owner, snapshot,
   configuration, byte chain, definitions, listener and released runtime.
@@ -13948,6 +13950,11 @@ Include the new native helper in the explicit saved-engine dependency closure.
   runtime/Job and original cold Node/native controllers absent; the new runtime
   must remain live. Do not enable inactive policy recovery or copying through
   this observer, and do not publish terminal root state or release root lock.
+  Implementation retains the exact complete inventory separately from inactive
+  recovery, shares the original activation-history reader, and uses the existing
+  warm runtime/instance/listener proof. Node rechecks all nine receipt bytes on
+  every native acknowledgement. A fourth focused unit covers pre-abort and
+  invalid-path refusal; saved-engine closure includes the new native helper.
 
 ### Task 5EN: Complete the cold runtime's permanent task policy and original lease
 

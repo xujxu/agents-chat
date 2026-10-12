@@ -6,6 +6,15 @@ import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { writeWorkerFile } from '../scripts/deployment/worker-files.mjs';
 import { captureWindowsColdRuntimeCompletion } from '../scripts/deployment/windows-cold-runtime-completion.mjs';
+import { inspectWindowsColdRuntimeCompletion } from '../scripts/deployment/windows-cold-activation-recovery.mjs';
+
+test('cold completed-runtime observation rejects abort and invalid paths before admission', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(inspectWindowsColdRuntimeCompletion({ signal: controller.signal }), { name: 'AbortError' });
+  await assert.rejects(inspectWindowsColdRuntimeCompletion({ control: 'relative', pwsh: 'relative' }),
+    { code: 'DEPLOYMENT_WINDOWS_COLD_ACTIVATION_OBSERVATION_REFUSED', recoveryAllowed: false });
+});
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const phases = ['prepared', 'policy-requested', 'policy-staged', 'release-requested', 'released',

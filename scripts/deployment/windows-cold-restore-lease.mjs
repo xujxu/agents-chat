@@ -16,6 +16,7 @@ import { createWindowsColdActivationIntent } from './windows-cold-activation-int
 import { openWindowsColdActivation } from './windows-cold-activation.mjs';
 import { waitWindowsReadiness } from './windows-readiness.mjs';
 import { captureWindowsColdActivationHistory } from './windows-cold-activation-history.mjs';
+import { windowsColdCompletionPhases } from './windows-cold-runtime-completion.mjs';
 
 const leases = new WeakMap();
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -36,7 +37,11 @@ async function directoryIdentity(directory) {
   return { dev: info.dev.toString(), ino: info.ino.toString() };
 }
 
-async function inspectLease(control, expected, configurationSha256, targetCommit, activationTaskName, policyRecovery = false) {
+async function inspectLease(control, expected, configurationSha256, targetCommit, activationTaskName,
+  policyRecovery = false, completionHistory = false) {
+  if (completionHistory && (policyRecovery || activationTaskName === undefined)) {
+    throw new Error('Cold completion observation conflicts with inactive recovery.');
+  }
   const inspect = async name => {
     const directory = path.join(control, name);
     try { await lstat(directory); }
@@ -49,9 +54,12 @@ async function inspectLease(control, expected, configurationSha256, targetCommit
     const phases = activationTaskName !== undefined && hasIntent
       ? ['start-requested', 'running', 'stopped'].filter(phase => names.includes(`activation-${phase}.json`)) : [];
     const policyNames = policyRecovery && phases.length ? names.filter(name => /^policy-[0-9]{6}\.json$/.test(name)) : [];
+    const completionNames = completionHistory && hasIntent
+      ? windowsColdCompletionPhases.map(phase => `completion-${phase}.json`) : [];
     if (!same(names, [...(hasIntent ? ['activation-intent.json'] : []),
       ...(hasReceipt ? ['files-restored.json'] : []), 'owner.json',
-      ...phases.map(phase => `activation-${phase}.json`), ...policyNames].sort())) {
+      ...phases.map(phase => `activation-${phase}.json`), ...policyNames, ...completionNames].sort())
+      || completionHistory && name === 'recovery-lock' && !same(phases, ['start-requested', 'running'])) {
       throw new Error('Cold restore lease contains incomplete or foreign evidence.');
     }
     if (policyNames.length > 256) throw new Error('Cold policy recovery exceeds its record budget.');

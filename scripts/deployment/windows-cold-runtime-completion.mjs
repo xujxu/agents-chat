@@ -7,9 +7,10 @@ import { captureTaskListener, windowsTaskCompletionSteps } from './windows-task-
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const parse = bytes => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-const phases = windowsTaskCompletionSteps.filter(step => ![
+export const windowsColdCompletionPhases = Object.freeze(windowsTaskCompletionSteps.filter(step => ![
   'policy-applied', 'lease-released', 'permanent-policy-applied', 'enable-applied',
-].includes(step));
+].includes(step)));
+const phases = windowsColdCompletionPhases;
 const bindingFields = [
   'operationId', 'ownerSha256', 'filesReceiptSha256', 'intentSha256', 'historySha256', 'stateSha256',
   'controllerPid', 'controllerIdentity', 'runtime', 'taskName', 'configuration', 'configurationSha256',

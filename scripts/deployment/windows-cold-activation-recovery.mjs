@@ -13,6 +13,7 @@ import { captureActivatedRuntime } from './windows-task-controller.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { captureWindowsColdPolicyHistory } from './windows-cold-policy-history.mjs';
 import { captureWindowsColdArchiveFiles, verifyWindowsColdArchiveFiles } from './windows-cold-policy-archive.mjs';
+import { captureWindowsColdRuntimeCompletion } from './windows-cold-runtime-completion.mjs';
 
 const script = fileURLToPath(new URL('./windows-stopped-restore-controller.ps1', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -25,13 +26,17 @@ export async function inspectWindowsColdActivationRecovery({ control, pwsh, sign
   return openRecovery({ control, pwsh, signal }, false);
 }
 
+export async function inspectWindowsColdRuntimeCompletion({ control, pwsh, signal } = {}) {
+  return openRecovery({ control, pwsh, signal }, false, true);
+}
+
 export async function prepareWindowsColdPolicyRecovery({ control, pwsh, signal, acceptDataLoss } = {}) {
   signal?.throwIfAborted();
   if (acceptDataLoss !== true) throw new Error('Cold policy recovery requires explicit data-loss acknowledgement.');
   return openRecovery({ control, pwsh, signal }, true);
 }
 
-async function openRecovery({ control, pwsh, signal }, policyRecovery) {
+async function openRecovery({ control, pwsh, signal }, policyRecovery, completedRuntime = false) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value => typeof value === 'string'
     && value.length <= 4096 && path.isAbsolute(value) && path.resolve(value) === value && !/[\0\r\n]/.test(value))) {
@@ -62,7 +67,7 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery) {
       lock, state, stateSha256: digest(stateBytes),
     };
     const prior = await inspectWindowsColdRestoreEvidence(control, expected,
-      snapshot.runtime.task.configurationSha256, snapshot.source.commit, original.taskName, policyRecovery);
+      snapshot.runtime.task.configurationSha256, snapshot.source.commit, original.taskName, policyRecovery, completedRuntime);
     const { guard, staging } = prior;
     const history = guard?.history;
     if (staging || !history || !['running', 'stopped'].includes(history.phase)
@@ -72,7 +77,7 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery) {
     const deadOwners = async () => {
       for (const owner of [lock, guard.record.owner,
         { pid: history.controllerPid, processIdentity: history.controllerIdentity },
-        { pid: history.runtime.pid, processIdentity: history.runtime.identity }]) {
+        ...(!completedRuntime ? [{ pid: history.runtime.pid, processIdentity: history.runtime.identity }] : [])]) {
         if (await processIdentity(owner.pid) === owner.processIdentity) {
           throw new Error('Original cold activation owner, bridge or runtime is still alive.');
         }
@@ -83,13 +88,33 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery) {
     const controllerIdentity = await processIdentity(process.pid);
     if (!controllerIdentity) throw new Error('Original cold activation observer identity is unavailable.');
     const expectedObservation = {
-      status: policyRecovery ? 'cold-policy-recovery'
+      status: completedRuntime ? 'cold-runtime-completed' : policyRecovery ? 'cold-policy-recovery'
         : history.phase === 'stopped' ? 'cold-activation-stopped' : 'cold-activation-inactive',
       mutationAuthority: policyRecovery,
       operationId: lock.operationId, taskName: original.taskName, stateSha256: expected.stateSha256,
       ownerSha256: digest(guard.bytes), filesReceiptSha256: digest(guard.receipt.bytes),
       intentSha256: digest(guard.intent.bytes), historySha256: history.sha256, runtime: history.runtime,
     };
+    let completion;
+    const captureCompletion = value => captureWindowsColdRuntimeCompletion({
+      control, running: history.records.at(-1),
+      ownerSha256: expectedObservation.ownerSha256, receiptSha256: expectedObservation.filesReceiptSha256,
+      intentSha256: expectedObservation.intentSha256, port: value.port, providers: value.providers, value,
+    });
+    if (completedRuntime) {
+      const bytes = await readWorkerFile(path.join(control, 'recovery-lock/completion-complete.json'),
+        1048576, { privateMode: true });
+      const last = parse(bytes);
+      completion = await captureCompletion({
+        status: 'runtime-policy-restored', step: 'complete', lease: 'released', completionSha256: digest(bytes),
+        runtime: history.runtime, taskName: original.taskName, configuration: history.records.at(-1).configuration,
+        definition: last.definition, enabled: last.enabled, port: last.port, providers: last.providers,
+      });
+      Object.assign(expectedObservation, {
+        completionSha256: completion.completionSha256, port: completion.port,
+        providers: completion.providers, lease: 'released',
+      });
+    }
     let policyBinding;
     let initialPolicy;
     if (policyRecovery) {
@@ -105,12 +130,13 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery) {
       initialPolicy = captureWindowsColdPolicyHistory({ binding: policyBinding, records: guard.policyRecords });
     }
     bridge = windowsControllerTransport({
-      pwsh, refused, label: 'Native inactive cold activation observer',
+      pwsh, refused, label: completedRuntime ? 'Native completed cold runtime observer' : 'Native inactive cold activation observer',
       args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
         '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity, '-Recovery', '-ColdActivation',
         '-OwnerSha256', expectedObservation.ownerSha256, '-ReceiptSha256', expectedObservation.filesReceiptSha256,
         '-IntentSha256', expectedObservation.intentSha256, '-HistorySha256', expectedObservation.historySha256,
-        ...(policyRecovery ? ['-ColdPolicyRecovery', '-PolicySha256', initialPolicy.sha256] : [])],
+        ...(policyRecovery ? ['-ColdPolicyRecovery', '-PolicySha256', initialPolicy.sha256] : []),
+        ...(completedRuntime ? ['-ColdCompletion', '-CompletionSha256', completion.completionSha256] : [])],
     });
     const ready = captureWorkerFields(await bridge.wire.receive({ signal, timeoutMs: 60000 }),
       ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'cold observation readiness');
@@ -123,7 +149,8 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery) {
         ...(policyRecovery ? ['step', 'claimed', 'policySequence', 'policySha256'] : [])], 'cold activation observation');
       const runtime = Object.freeze(captureActivatedRuntime(observation.runtime));
       const base = Object.fromEntries(Object.keys(expectedObservation).map(key => [key, observation[key]]));
-      if (!same(base, expectedObservation)) throw new Error('Original inactive cold activation observation differs.');
+      if (!same(base, expectedObservation)) throw new Error('Original cold activation observation differs.');
+      if (completedRuntime) await captureCompletion(completion);
       if (policyRecovery) {
         const current = await inspectWindowsColdRestoreEvidence(control, expected,
           snapshot.runtime.task.configurationSha256, snapshot.source.commit, original.taskName, true);
@@ -141,7 +168,8 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery) {
           throw new Error('Cold policy recovery acknowledgement differs from its durable owner journal.');
         }
       }
-      return Object.freeze({ ...observation, runtime });
+      return Object.freeze({ ...observation, runtime,
+        ...(completedRuntime ? { providers: Object.freeze([...observation.providers]) } : {}) });
     };
     const observation = await capture(ready.value);
     let latest = observation;
