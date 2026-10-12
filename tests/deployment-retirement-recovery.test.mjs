@@ -120,6 +120,33 @@ test('saved recovery bundle closes module dependencies after its source disappea
   assert.ok(names.has('windows-first-retirement-record.ps1'));
   assert.ok(names.has('windows-first-deployment-retirement.ps1'));
   assert.ok(names.has('windows-first-deployment-retirement-controller.ps1'));
+  const coldFiles = [
+    'windows-stopped-restore-proof.mjs', 'windows-stopped-restore-snapshot.mjs',
+    'windows-stopped-restore-controller.ps1', 'windows-stopped-restore-proof.ps1',
+    'windows-stopped-restore-workers.ps1', 'windows-stopped-restore-recovery.ps1',
+    'windows-cold-restore-lease.mjs', 'windows-cold-restore-files.mjs',
+    'windows-cold-restore-runtime.mjs', 'windows-cold-restore-configuration.mjs',
+    'windows-cold-restore-publication.mjs', 'windows-cold-restore-publication.ps1',
+    'windows-cold-restore-retirement.mjs', 'windows-cold-restore-retirement.ps1',
+    'windows-cold-restore-authority.ps1',
+    'windows-cold-activation-intent.mjs', 'windows-cold-activation-history.mjs',
+    'windows-cold-activation.mjs', 'windows-cold-activation.ps1',
+    'windows-cold-activation-context.ps1', 'windows-cold-activation-runtime.ps1',
+    'windows-cold-activation-recovery.mjs', 'windows-cold-activation-recovery-proof.ps1',
+    'windows-cold-policy-history.mjs', 'windows-cold-policy-history.ps1',
+    'windows-cold-policy-recovery.ps1',
+    'windows-cold-policy-archive.mjs', 'windows-cold-policy-archive.ps1',
+  ];
+  for (const name of coldFiles) {
+    assert.ok(names.has(name), `Missing saved cold recovery helper ${name}`);
+    const text = await readFile(path.join(saved.directory, name), 'utf8');
+    const references = name.endsWith('.mjs')
+      ? /['"]\.\/([^'"]+\.(?:mjs|ps1|cs))['"]/g
+      : /Join-Path \$PSScriptRoot ['"]([^'"]+\.(?:ps1|cs))['"]/g;
+    for (const [, dependency] of text.matchAll(references)) {
+      assert.ok(names.has(dependency), `${name} requires missing saved native dependency ${dependency}`);
+    }
+  }
   const modules = [
     'linux-restore.mjs', 'linux-service-recovery.mjs', 'retirement-recovery.mjs',
     'windows-configuration.mjs', 'windows-first-install.mjs', 'windows-first-runtime.mjs',
@@ -127,6 +154,7 @@ test('saved recovery bundle closes module dependencies after its source disappea
     'windows-first-completion-recovery.mjs',
     'windows-first-deployment-retirement.mjs',
     'windows-restore.mjs',
+    ...coldFiles.filter(name => name.endsWith('.mjs')),
   ];
   const urls = modules.map(name => pathToFileURL(path.join(saved.directory, name)).href);
   await execute(process.execPath, ['--input-type=module', '--eval',

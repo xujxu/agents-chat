@@ -13915,6 +13915,34 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EM: Preserve the cold recovery dependency closure outside the project
+
+**Files:** `scripts/deployment/saved-recovery-engine.mjs`,
+`tests/deployment-retirement-recovery.test.mjs`.
+
+- [ ] Extend the existing source-disappearance contract to require all stopped
+  proof, cold copy, activation, policy and archival helpers. Check native
+  `Join-Path $PSScriptRoot` and Node relative native asset references as well as
+  the existing JavaScript dependency closure. Dynamically import every saved
+  cold Node module in an isolated child after displacing its source directory:
+
+  ```js
+  const urls = modules.map(name => pathToFileURL(path.join(saved.directory, name)).href);
+  await execute(process.execPath, ['--input-type=module', '--eval',
+    `for (const url of ${JSON.stringify(urls)}) await import(url);`], {
+    cwd: root, timeout: 30000, maxBuffer: 8192,
+    env: Object.fromEntries(Object.entries(process.env)
+      .filter(([key]) => !['NODE_OPTIONS', 'NODE_PATH'].includes(key.toUpperCase()))),
+  });
+  ```
+
+- [ ] Publish the missing explicit manifest entries only after pinning the
+  test-only Actions contract. Keep existing 256-file, 1 MiB/file, 16 MiB
+  aggregate and 32 KiB manifest limits; do not bypass integrity verification.
+- [ ] Run the existing command gate's saved dependency case and cold native
+  regressions. This packages private primitives for subsequent public integration;
+  it does not enable public cold restore or claim independent terminal completion.
+
 ### Task 5EL: Archive reconciled policy evidence and admit a fresh complete cold copy
 
 **Files:** add `scripts/deployment/windows-cold-policy-archive.{mjs,ps1}`;
