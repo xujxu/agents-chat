@@ -13958,8 +13958,10 @@ liveness, an open foreign port or caller-supplied providers.
   data while the new runtime remains leased. No public cold restore,
   advanced-prefix recovery or terminal completion is accepted by this step.
   Causal `f683475 / 38217307058` is dispatched after the guarded startup gate.
-  Its job `114704951760` is running; production `1c5a72d` is paired in
-  `38217437905`, queued only after the causal became in progress.
+  Its job `114704951760` failed as expected at `2026-10-12 07:37:12 UTC`
+  on missing `activation.waitReady`, after the owned HTTP fixture and guarded
+  startup. Production `1c5a72d` is paired in `38217437905`, job
+  `114709653981`, queued only after the causal became in progress.
 
 ### Task 5EC: Start and settle a distinct guarded runtime under cold ownership
 
@@ -14075,14 +14077,18 @@ security comparison for the small configuration subset.
   `2026-10-12 06:05:58 UTC`: exact configuration retained across retirement
   at06:01:55, distinct absent-owner claim at06:02:10 and original restored
   terminal proof at06:05:44.
-- [ ] Extend the existing actual copy-crash actor to retain snapshot-bound
+- [x] Extend the existing actual copy-crash actor to retain snapshot-bound
   startup configuration before original-runtime retirement, check it after
   retirement and after final artifact/data/evidence verification, and close
   configuration and lease with explicit aggregated cleanup failures. Run
   only after native configuration acceptance; do not count the earlier
   actual retirement run as configuration-retention evidence.
   Actual extension `e17c295` is included in `8510f67 / 38210974436`,
-  queued behind the earlier actual retirement gate.
+  which passed both jobs: copy-crash `114689653145` completed at
+  `2026-10-12 07:40:26 UTC` (cold actor1,903,144 ms), and original crash
+  regression `114689653523` at07:21:09. Existing actor/workflow bounds
+  were unchanged. This accepts retained configuration across actual retirement,
+  not actual guarded application startup or HTTP readiness.
 
 ### Task 5DZ: Accept cold-owned retirement of the actual application runtime
 
