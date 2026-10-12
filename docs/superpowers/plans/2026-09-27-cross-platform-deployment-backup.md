@@ -14211,10 +14211,12 @@ script while retaining separate saved-process protocol tests.
   Keep all fault-injection scenarios on their already accepted direct core path.
   Public offline acceptance completed with update1,066,388ms, no-op161,946ms,
   public restore+closeout1,668,291ms and independent read-only confirmation
- 26,150ms (full actual3,190,259ms). The unchanged backup, absence of lock and
- successful captures, restored authenticated data and executable egress rules
- all passed. Full53 remains51 passed/2 running at this checkpoint; do not
- claim whole-matrix success before both remaining jobs finish.
+  26,150ms (full actual3,190,259ms). The unchanged backup, absence of lock and
+  successful captures, restored authenticated data and executable egress rules
+  all passed. Full53 subsequently passed at `2026-10-12 01:58:50 UTC`;
+  normal public restoration job `114616945708` and crash job `114616945773`
+  also passed. This closes the public live restore gate, not cold recovery,
+  remaining compatibility/options, or final deployment/voice delivery.
 
 ### Task 5DO: Admit public Windows restoration without importing historical code
 

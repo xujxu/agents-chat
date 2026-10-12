@@ -587,8 +587,10 @@ then completes independent finalization before returning success. Acceptance
 requires restored source/artifacts/environment and authenticated pre-backup
 data, the unchanged backup, removed lock and no successful controller captures.
 A later read-only actor confirms the restored runtime is not restarted.
-The whole 53-job run is still pending; this is actual public live-restore
-acceptance, not cold recovery or final deployment release acceptance.
+The whole 53-job dual-platform run subsequently passed at
+`2026-10-12 01:58:50 UTC`, including normal public restoration and all four
+interruption regressions. This accepts the public live-restore path, not cold
+recovery or the remaining deployment compatibility/final release work.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
