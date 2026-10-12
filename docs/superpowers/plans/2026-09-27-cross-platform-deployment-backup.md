@@ -13962,12 +13962,31 @@ its original readiness path from the real configuration directory.
   Return only `files-restored` plus the relocated runtime bundle. Keep the
   original application state/lock/receipts unchanged; do not restart a task,
   publish a deployment receipt, retire evidence or report terminal restored.
-- [ ] Run the original native gate through Actions. Require actual partial-copy
+- [x] Run the original native gate through Actions. Require actual partial-copy
   retry, exact archived project bytes, unchanged original external runtime
   bytes/file IDs, unchanged backup/lock/state, forged lease/ack refusal,
   previous two-controller lease-loss cases and terminal-proof regression.
-  Initial implementation `b4d99cb` is under paired native validation at
-  `455c429 / 38198442964`, job `114646626385`; acceptance remains pending.
+  Initial implementation `b4d99cb` passed paired native validation at
+  `455c429 / 38198442964`, job `114646626385`, completed
+  `2026-10-12 03:21:47 UTC`. The real partial-copy retry assertion passed
+  at03:17:56, followed by the original restored terminal-proof regressions.
+  This accepts the small native fixture, not actual application restoration
+  or public cold activation/closeout.
+- [ ] Extend the existing actual `copy-crashed` application scenario with a
+  distinct `restore-cold-files` actor after crash evidence verification.
+  `tests/deployment-windows-cold-application-files.mjs` loads captured current
+  cold helpers, admits the historically bound backup, and restores the real
+  Next.js artifacts, native SQLite addon, environment and database bytes.
+  Require exactly one fresh cold-owner runtime bundle, unchanged original
+  external paths/identities, unchanged original lock/state/deployment receipt
+  and backup, and the same stopped/inhibited task with no listener or writers.
+  Reuse the existing 45-minute restore actor bound and crash selector without
+  adding workflow inputs or extending job deadlines. Run:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=crash
+  ```
 
 ### Task 5DU: Claim a distinct durable Windows cold restore lease
 

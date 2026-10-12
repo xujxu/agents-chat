@@ -27,6 +27,10 @@ export async function verifyWindowsLiveRestore({ mode, directory, project, contr
     const { verifyWindowsCrashedRestore } = await import('./deployment-windows-crashed-restore.mjs');
     return verifyWindowsCrashedRestore({ project, control, backup, snapshot, recovery });
   }
+  if (mode === 'restore-cold-files') {
+    const { verifyWindowsColdApplicationFiles } = await import('./deployment-windows-cold-application-files.mjs');
+    return verifyWindowsColdApplicationFiles({ directory, project, control, backup, snapshot, pwsh });
+  }
   if (['restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed'].includes(mode)) {
     const { verifyWindowsInterruptedRestore } = await import('./deployment-windows-interrupted-restore.mjs');
     return verifyWindowsInterruptedRestore({
