@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { claimWindowsColdRestore } from '../scripts/deployment/windows-cold-restore-lease.mjs';
 import { restoreWindowsColdFiles } from '../scripts/deployment/windows-cold-restore-files.mjs';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
@@ -34,6 +35,7 @@ try {
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(activation.completeRuntime({ port, signal: controller.signal }), { name: 'AbortError' });
+  await assert.rejects(activation.completeRuntime({ port, onProgress: true }), { name: 'TypeError' });
   await activation.check();
   const steps = [];
   completed = await activation.completeRuntime({
@@ -43,6 +45,10 @@ try {
       assert.match(progress.completionSha256, /^[a-f0-9]{64}$/);
       assert.equal(progress.lease, steps.length >= windowsTaskCompletionSteps.indexOf('lease-released') ? 'released' : 'guarded');
       steps.push(progress.step);
+      const directory = path.join(control, 'recovery-lock');
+      const inventory = (await readdir(directory)).sort();
+      await delay(100);
+      assert.deepEqual((await readdir(directory)).sort(), inventory);
     },
   });
   assert.deepEqual(steps, windowsTaskCompletionSteps);

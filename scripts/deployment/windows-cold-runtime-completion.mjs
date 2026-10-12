@@ -18,14 +18,11 @@ const bindingFields = [
   'port', 'providers', 'listenerPid', 'listenerIdentity', 'listenerAddress', 'listenerCreatedAt', 'listenerPairedRecords',
 ];
 
-export async function captureWindowsColdRuntimeCompletion({
-  control, running, ownerSha256, receiptSha256, intentSha256, port, providers, value, signal,
+export async function captureWindowsColdCompletionPrefix({
+  control, running, ownerSha256, receiptSha256, intentSha256, port, providers, phase: finalPhase, signal,
 }) {
   signal?.throwIfAborted();
-  const result = captureWorkerFields(value, [
-    'status', 'step', 'lease', 'completionSha256', 'runtime', 'taskName', 'configuration',
-    'definition', 'enabled', 'port', 'providers',
-  ], 'cold runtime completion');
+  if (!phases.includes(finalPhase)) throw new Error('Unsupported cold completion receipt phase.');
   const directory = path.join(control, 'recovery-lock');
   const intentBytes = await readWorkerFile(path.join(directory, 'activation-intent.json'), 65536, { privateMode: true });
   if (digest(intentBytes) !== intentSha256) throw new Error('Cold completion intent changed.');
@@ -42,7 +39,7 @@ export async function captureWindowsColdRuntimeCompletion({
   let previousSha256 = expected.historySha256;
   let binding;
   let previous;
-  for (const phase of phases) {
+  for (const phase of phases.slice(0, phases.indexOf(finalPhase) + 1)) {
     signal?.throwIfAborted();
     const bytes = await readWorkerFile(path.join(directory, `completion-${phase}.json`), 1048576, { privateMode: true });
     const record = captureWorkerFields(parse(bytes),
@@ -73,10 +70,28 @@ export async function captureWindowsColdRuntimeCompletion({
     previous = record;
     previousSha256 = digest(bytes);
   }
+  return Object.freeze({
+    sha256: previousSha256,
+    record: Object.freeze({ ...previous, runtime: Object.freeze({ ...previous.runtime }),
+      providers: Object.freeze([...previous.providers]) }),
+  });
+}
+
+export async function captureWindowsColdRuntimeCompletion({
+  control, running, ownerSha256, receiptSha256, intentSha256, port, providers, value, signal,
+}) {
+  signal?.throwIfAborted();
+  const result = captureWorkerFields(value, [
+    'status', 'step', 'lease', 'completionSha256', 'runtime', 'taskName', 'configuration',
+    'definition', 'enabled', 'port', 'providers',
+  ], 'cold runtime completion');
+  const prefix = await captureWindowsColdCompletionPrefix({
+    control, running, ownerSha256, receiptSha256, intentSha256, port, providers, phase: 'complete', signal,
+  });
   if (!same(result, {
-    status: 'runtime-policy-restored', step: 'complete', lease: 'released', completionSha256: previousSha256,
+    status: 'runtime-policy-restored', step: 'complete', lease: 'released', completionSha256: prefix.sha256,
     runtime: running.runtime, taskName: running.taskName, configuration: running.configuration,
-    definition: previous.definition, enabled: previous.enabled, port, providers,
+    definition: prefix.record.definition, enabled: prefix.record.enabled, port, providers,
   })) throw new Error('Cold runtime completion acknowledgement differs from its retained journal.');
   return Object.freeze({ ...result, runtime: Object.freeze({ ...result.runtime }), providers: Object.freeze([...providers]) });
 }

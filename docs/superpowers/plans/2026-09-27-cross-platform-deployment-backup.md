@@ -13934,6 +13934,9 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 
   Exercise all nine phases, invalid phase and pre-abort. The existing full
   capture must still require all nine receipts and the exact final reply.
+  Test-only `fbe5b47 / 38262253556`, job `114855465969`, failed as expected
+  at `2026-10-12 14:21:22 UTC`: the prefix decoder export was missing;
+  the other 30 unit contracts passed.
 - [ ] Require the existing native actor to observe exactly
   `windowsTaskCompletionSteps`, in order:
 

@@ -90,10 +90,9 @@ function Publish-AgentsChatColdCompletionPolicy([hashtable]$Context, [string]$De
 }
 
 function Complete-AgentsChatColdRuntime([hashtable]$Context, [int]$Port, [string[]]$Providers) {
+    $prepared = $Context.CompletionPrepared
     Prepare-AgentsChatColdRuntimeCompletion $Context $Port $Providers
-    for ($index = 0; $index -lt 13; $index++) {
-        $null = Assert-AgentsChatColdActivatedRuntime $Context
-        $Context.Listener.Check()
+    if ($prepared) {
         $Context.Stage = "cold-completion-$($Context.CompletionStep)"
         switch -CaseSensitive ($Context.CompletionStep) {
             'prepared' { Write-AgentsChatColdCompletionReceipt $Context 'policy-requested' }
@@ -132,16 +131,23 @@ function Complete-AgentsChatColdRuntime([hashtable]$Context, [int]$Port, [string
                 $Context.CompletionStep = 'enable-applied'
             }
             'enable-applied' { Write-AgentsChatColdCompletionReceipt $Context 'complete' }
-            'complete' {
-                return [ordered]@{
-                    status='runtime-policy-restored'; step='complete'; lease='released'
-                    completionSha256=$Context.CompletionSha256; runtime=$Context.Runtime; taskName=$Context.TaskName
-                    configuration=$Context.Configuration; definition=$Context.Definition; enabled=$Context.Enabled
-                    port=$Context.CompletionPort; providers=$Context.CompletionProviders
-                }
-            }
+            'complete' { }
             default { throw 'Cold runtime completion has an unsupported step.' }
         }
     }
-    throw 'Cold runtime completion exceeded its finite step sequence.'
+    $null = Assert-AgentsChatColdActivatedRuntime $Context
+    $Context.Listener.Check()
+    if ($Context.CompletionStep -ceq 'complete') {
+        return [ordered]@{
+            status='runtime-policy-restored'; step='complete'; lease='released'
+            completionSha256=$Context.CompletionSha256; runtime=$Context.Runtime; taskName=$Context.TaskName
+            configuration=$Context.Configuration; definition=$Context.Definition; enabled=$Context.Enabled
+            port=$Context.CompletionPort; providers=$Context.CompletionProviders
+        }
+    }
+    return [ordered]@{
+        status='runtime-policy-progress'; step=$Context.CompletionStep
+        lease=$(if ($Context.LeaseReleased) { 'released' } else { 'guarded' })
+        completionSha256=$Context.CompletionSha256
+    }
 }

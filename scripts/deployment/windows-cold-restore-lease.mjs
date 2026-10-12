@@ -451,8 +451,11 @@ export async function claimWindowsColdRestore({
                 throw error;
               } finally { publishing = false; }
             },
-            async completeRuntime({ port, waitSeconds = 120, signal: completionSignal = signal } = {}) {
+            async completeRuntime({ port, waitSeconds = 120, onProgress, signal: completionSignal = signal } = {}) {
               completionSignal?.throwIfAborted();
+              if (onProgress !== undefined && typeof onProgress !== 'function') {
+                throw new TypeError('Cold completion progress callback must be a function.');
+              }
               if (!active) throw new Error('Cold completion requires its original started runtime.');
               await checkIntent({ signal: completionSignal });
               await waitWindowsReadiness({
@@ -462,7 +465,7 @@ export async function claimWindowsColdRestore({
               publishing = true;
               try {
                 const result = await active.completeRuntime({
-                  port, providers: configuration.providers, signal: completionSignal,
+                  port, providers: configuration.providers, signal: completionSignal, onProgress,
                 });
                 publishing = false;
                 await checkIntent({ signal: completionSignal });
