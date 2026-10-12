@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual as same } from 'node:util';
@@ -13,7 +14,8 @@ import { captureActivatedRuntime } from './windows-task-controller.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { captureWindowsColdPolicyHistory } from './windows-cold-policy-history.mjs';
 import { captureWindowsColdArchiveFiles, verifyWindowsColdArchiveFiles } from './windows-cold-policy-archive.mjs';
-import { captureWindowsColdRuntimeCompletion } from './windows-cold-runtime-completion.mjs';
+import { captureWindowsColdRuntimeCompletion, captureWindowsColdCompletionPrefix,
+  windowsColdCompletionPhases } from './windows-cold-runtime-completion.mjs';
 
 const script = fileURLToPath(new URL('./windows-stopped-restore-controller.ps1', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -30,13 +32,19 @@ export async function inspectWindowsColdRuntimeCompletion({ control, pwsh, signa
   return openRecovery({ control, pwsh, signal }, false, true);
 }
 
+export async function prepareWindowsColdCompletionRecovery({ control, pwsh, signal, acceptDataLoss } = {}) {
+  signal?.throwIfAborted();
+  if (acceptDataLoss !== true) throw new Error('Cold completion recovery requires explicit data-loss acknowledgement.');
+  return openRecovery({ control, pwsh, signal }, false, true, true);
+}
+
 export async function prepareWindowsColdPolicyRecovery({ control, pwsh, signal, acceptDataLoss } = {}) {
   signal?.throwIfAborted();
   if (acceptDataLoss !== true) throw new Error('Cold policy recovery requires explicit data-loss acknowledgement.');
   return openRecovery({ control, pwsh, signal }, true);
 }
 
-async function openRecovery({ control, pwsh, signal }, policyRecovery, completedRuntime = false) {
+async function openRecovery({ control, pwsh, signal }, policyRecovery, completedRuntime = false, completionRecovery = false) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value => typeof value === 'string'
     && value.length <= 4096 && path.isAbsolute(value) && path.resolve(value) === value && !/[\0\r\n]/.test(value))) {
@@ -67,7 +75,8 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
       lock, state, stateSha256: digest(stateBytes),
     };
     const prior = await inspectWindowsColdRestoreEvidence(control, expected,
-      snapshot.runtime.task.configurationSha256, snapshot.source.commit, original.taskName, policyRecovery, completedRuntime);
+      snapshot.runtime.task.configurationSha256, snapshot.source.commit, original.taskName,
+      policyRecovery, completionRecovery ? 'released-prefix' : completedRuntime);
     const { guard, staging } = prior;
     const history = guard?.history;
     if (staging || !history || !['running', 'stopped'].includes(history.phase)
@@ -88,20 +97,48 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
     const controllerIdentity = await processIdentity(process.pid);
     if (!controllerIdentity) throw new Error('Original cold activation observer identity is unavailable.');
     const expectedObservation = {
-      status: completedRuntime ? 'cold-runtime-completed' : policyRecovery ? 'cold-policy-recovery'
+      status: completionRecovery ? 'cold-completion-recovery' : completedRuntime ? 'cold-runtime-completed' : policyRecovery ? 'cold-policy-recovery'
         : history.phase === 'stopped' ? 'cold-activation-stopped' : 'cold-activation-inactive',
-      mutationAuthority: policyRecovery,
+      mutationAuthority: policyRecovery || completionRecovery,
       operationId: lock.operationId, taskName: original.taskName, stateSha256: expected.stateSha256,
       ownerSha256: digest(guard.bytes), filesReceiptSha256: digest(guard.receipt.bytes),
       intentSha256: digest(guard.intent.bytes), historySha256: history.sha256, runtime: history.runtime,
     };
     let completion;
+    let initialCompletionPrefix;
+    const completionSteps = ['release-requested', 'released', 'policy-restore-requested',
+      'permanent-policy-applied', 'policy-restored', 'enable-requested', 'enable-applied', 'complete'];
+    const completionPhase = step => ({
+      'permanent-policy-applied': 'policy-restore-requested', 'enable-applied': 'enable-requested',
+    }[step] ?? step);
+    const capturePrefix = async (phase, port, providers) => {
+      const expectedNames = ['owner.json', 'files-restored.json', 'activation-intent.json',
+        ...history.records.map(record => `activation-${record.phase}.json`),
+        ...windowsColdCompletionPhases.slice(0, windowsColdCompletionPhases.indexOf(phase) + 1)
+          .map(value => `completion-${value}.json`)].sort();
+      if (!same((await readdir(path.join(control, 'recovery-lock'))).sort(), expectedNames)) {
+        throw new Error('Cold completion recovery prefix inventory changed.');
+      }
+      return captureWindowsColdCompletionPrefix({
+        control, running: history.records.at(-1), ownerSha256: expectedObservation.ownerSha256,
+        receiptSha256: expectedObservation.filesReceiptSha256, intentSha256: expectedObservation.intentSha256,
+        phase, port, providers,
+      });
+    };
     const captureCompletion = value => captureWindowsColdRuntimeCompletion({
       control, running: history.records.at(-1),
       ownerSha256: expectedObservation.ownerSha256, receiptSha256: expectedObservation.filesReceiptSha256,
       intentSha256: expectedObservation.intentSha256, port: value.port, providers: value.providers, value,
     });
-    if (completedRuntime) {
+    if (completionRecovery) {
+      const phase = guard.completionPhases.at(-1);
+      const bytes = await readWorkerFile(path.join(control, 'recovery-lock', `completion-${phase}.json`),
+        1048576, { privateMode: true });
+      const record = parse(bytes);
+      initialCompletionPrefix = await capturePrefix(phase, record.port, record.providers);
+      if (initialCompletionPrefix.sha256 !== digest(bytes)) throw new Error('Cold completion prefix changed before admission.');
+      Object.assign(expectedObservation, { port: record.port, providers: record.providers, lease: 'released' });
+    } else if (completedRuntime) {
       const bytes = await readWorkerFile(path.join(control, 'recovery-lock/completion-complete.json'),
         1048576, { privateMode: true });
       const last = parse(bytes);
@@ -136,7 +173,9 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
         '-OwnerSha256', expectedObservation.ownerSha256, '-ReceiptSha256', expectedObservation.filesReceiptSha256,
         '-IntentSha256', expectedObservation.intentSha256, '-HistorySha256', expectedObservation.historySha256,
         ...(policyRecovery ? ['-ColdPolicyRecovery', '-PolicySha256', initialPolicy.sha256] : []),
-        ...(completedRuntime ? ['-ColdCompletion', '-CompletionSha256', completion.completionSha256] : [])],
+        ...(completedRuntime ? ['-ColdCompletion', '-CompletionSha256',
+          completionRecovery ? initialCompletionPrefix.sha256 : completion.completionSha256] : []),
+        ...(completionRecovery ? ['-ColdCompletionRecovery'] : [])],
     });
     const ready = captureWorkerFields(await bridge.wire.receive({ signal, timeoutMs: 60000 }),
       ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'cold observation readiness');
@@ -146,11 +185,18 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
     }
     const capture = async value => {
       const observation = captureWorkerFields(value, [...Object.keys(expectedObservation),
-        ...(policyRecovery ? ['step', 'claimed', 'policySequence', 'policySha256'] : [])], 'cold activation observation');
+        ...(policyRecovery ? ['step', 'claimed', 'policySequence', 'policySha256'] : []),
+        ...(completionRecovery ? ['phase', 'step', 'completionSha256'] : [])], 'cold activation observation');
       const runtime = Object.freeze(captureActivatedRuntime(observation.runtime));
       const base = Object.fromEntries(Object.keys(expectedObservation).map(key => [key, observation[key]]));
       if (!same(base, expectedObservation)) throw new Error('Original cold activation observation differs.');
-      if (completedRuntime) await captureCompletion(completion);
+      if (completionRecovery) {
+        if (!completionSteps.includes(observation.step) || completionPhase(observation.step) !== observation.phase) {
+          throw new Error('Unsupported cold completion recovery boundary.');
+        }
+        const prefix = await capturePrefix(observation.phase, observation.port, observation.providers);
+        if (prefix.sha256 !== observation.completionSha256) throw new Error('Cold completion prefix acknowledgement changed.');
+      } else if (completedRuntime) await captureCompletion(completion);
       if (policyRecovery) {
         const current = await inspectWindowsColdRestoreEvidence(control, expected,
           snapshot.runtime.task.configurationSha256, snapshot.source.commit, original.taskName, true);
@@ -172,6 +218,10 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
         ...(completedRuntime ? { providers: Object.freeze([...observation.providers]) } : {}) });
     };
     const observation = await capture(ready.value);
+    if (completionRecovery && (observation.phase !== initialCompletionPrefix.record.phase
+      || observation.completionSha256 !== initialCompletionPrefix.sha256)) {
+      throw new Error('Cold completion recovery advanced before authority was acknowledged.');
+    }
     let latest = observation;
     let closed = false;
     let finished = false;
@@ -231,6 +281,15 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
           return Object.freeze({ ...archived, identity: Object.freeze({ ...archived.identity }) });
         }
         const current = await capture(reply.value);
+        if (completionRecovery) {
+          const next = completionSteps[Math.min(completionSteps.indexOf(latest.step) + 1, completionSteps.length - 1)];
+          if (method === 'check' ? !same(current, latest)
+            : method !== 'advance' || current.step !== next
+              || (current.phase === latest.phase) !== (current.completionSha256 === latest.completionSha256)) {
+            throw new Error('Cold completion recovery skipped an acknowledged write-ahead boundary.');
+          }
+          latest = current;
+        }
         if (policyRecovery) {
           const nextStep = !latest.claimed ? latest.step : {
             initial: 'requested', requested: 'policy-applied', 'policy-applied': 'restored', restored: 'restored',
@@ -254,6 +313,10 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
     return Object.freeze({
       observation,
       check: ({ signal: checkSignal } = {}) => request('check', checkSignal),
+      ...(completionRecovery ? {
+        identity: Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity }),
+        advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal),
+      } : {}),
       ...(policyRecovery ? {
         advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal),
         archive: ({ signal: archiveSignal } = {}) => request('archive', archiveSignal),

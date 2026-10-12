@@ -653,6 +653,12 @@ unchanged warm-crash regression. The cold actor took 2,001,517 ms and the
 independent observer 21,505 ms, within their unchanged bounds. Interrupted
 completion recovery, cold terminal closeout and public cold restore are not yet
 complete.
+The released-prefix recovery implementation is pending native acceptance. It
+requires explicit data-loss acknowledgement, an already released live runtime,
+the original receipt chain and exclusive native ownership of the original
+transaction file. It resumes permanent-policy and enabled-state acknowledgements
+without restarting the runtime; it does not yet publish terminal restore state
+or remove the original lock.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

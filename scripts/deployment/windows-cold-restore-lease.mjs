@@ -39,6 +39,7 @@ async function directoryIdentity(directory) {
 
 async function inspectLease(control, expected, configurationSha256, targetCommit, activationTaskName,
   policyRecovery = false, completionHistory = false) {
+  if (![false, true, 'released-prefix'].includes(completionHistory)) throw new Error('Unsupported cold completion inventory mode.');
   if (completionHistory && (policyRecovery || activationTaskName === undefined)) {
     throw new Error('Cold completion observation conflicts with inactive recovery.');
   }
@@ -54,8 +55,13 @@ async function inspectLease(control, expected, configurationSha256, targetCommit
     const phases = activationTaskName !== undefined && hasIntent
       ? ['start-requested', 'running', 'stopped'].filter(phase => names.includes(`activation-${phase}.json`)) : [];
     const policyNames = policyRecovery && phases.length ? names.filter(name => /^policy-[0-9]{6}\.json$/.test(name)) : [];
-    const completionNames = completionHistory && hasIntent
-      ? windowsColdCompletionPhases.map(phase => `completion-${phase}.json`) : [];
+    let completionPhases = completionHistory && hasIntent ? [...windowsColdCompletionPhases] : [];
+    if (completionHistory === 'released-prefix') {
+      const missing = completionPhases.findIndex(phase => !names.includes(`completion-${phase}.json`));
+      if (missing !== -1) completionPhases = completionPhases.slice(0, missing);
+      if (completionPhases.length < 4) throw new Error('Cold completion recovery requires at least release intent.');
+    }
+    const completionNames = completionPhases.map(phase => `completion-${phase}.json`);
     if (!same(names, [...(hasIntent ? ['activation-intent.json'] : []),
       ...(hasReceipt ? ['files-restored.json'] : []), 'owner.json',
       ...phases.map(phase => `activation-${phase}.json`), ...policyNames, ...completionNames].sort())
@@ -118,7 +124,7 @@ async function inspectLease(control, expected, configurationSha256, targetCommit
         readWorkerFile(path.join(directory, `activation-${phase}.json`), 4194304, { privateMode: true }))),
     }) : null;
     return { directory, identity, record: { ...record, owner }, bytes, receipt, intent, history,
-      ...(policyRecovery ? { policyRecords } : {}) };
+      ...(policyRecovery ? { policyRecords } : {}), ...(completionHistory ? { completionPhases } : {}) };
   };
   const guard = await inspect('recovery-lock');
   const staging = await inspect('cold-restore-staging');

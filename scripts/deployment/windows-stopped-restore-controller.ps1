@@ -6,6 +6,7 @@ param(
     [switch]$ColdActivation,
     [switch]$ColdPolicyRecovery,
     [switch]$ColdCompletion,
+    [switch]$ColdCompletionRecovery,
     [string]$OwnerSha256,
     [string]$ReceiptSha256,
     [string]$IntentSha256,
@@ -35,6 +36,7 @@ try {
             ($ColdPolicyRecovery -and $PolicySha256 -cnotmatch '^[a-f0-9]{64}$') -or
             (-not $ColdPolicyRecovery -and $PolicySha256) -or
             ($ColdCompletion -and ($ColdPolicyRecovery -or $CompletionSha256 -cnotmatch '^[a-f0-9]{64}$')) -or
+            ($ColdCompletionRecovery -and -not $ColdCompletion) -or
             (-not $ColdCompletion -and $CompletionSha256)) {
             throw 'Cold observation requires explicit original evidence digests.'
         }
@@ -43,8 +45,14 @@ try {
         . (Join-Path $PSScriptRoot 'windows-cold-policy-archive.ps1')
         if ($ColdCompletion) {
             . (Join-Path $PSScriptRoot 'windows-cold-completion-proof.ps1')
-            $proof = Open-AgentsChatColdCompletionProof $Control $OwnerSha256 $ReceiptSha256 `
-                $IntentSha256 $HistorySha256 $CompletionSha256
+            if ($ColdCompletionRecovery) {
+                . (Join-Path $PSScriptRoot 'windows-cold-completion-recovery.ps1')
+                $proof = Open-AgentsChatColdCompletionRecovery $Control $OwnerSha256 $ReceiptSha256 `
+                    $IntentSha256 $HistorySha256 $CompletionSha256
+            } else {
+                $proof = Open-AgentsChatColdCompletionProof $Control $OwnerSha256 $ReceiptSha256 `
+                    $IntentSha256 $HistorySha256 $CompletionSha256
+            }
             $observed = Assert-AgentsChatColdCompletionProof $proof
         } else {
             $proof = Open-AgentsChatColdActivationRecoveryProof $Control $OwnerSha256 $ReceiptSha256 $IntentSha256 $HistorySha256 `
@@ -54,7 +62,7 @@ try {
         }
     } else {
         if ($OwnerSha256 -or $ReceiptSha256 -or $IntentSha256 -or $HistorySha256 -or $ColdPolicyRecovery -or
-            $PolicySha256 -or $ColdCompletion -or $CompletionSha256) {
+            $PolicySha256 -or $ColdCompletion -or $CompletionSha256 -or $ColdCompletionRecovery) {
             throw 'Stopped observation cannot accept cold activation digests.'
         }
         $proof = Open-AgentsChatStoppedRestoreProof -Control $Control -Recovery:$Recovery
@@ -74,6 +82,7 @@ try {
         $method = $request.method.GetString()
         $methods = @('check', 'close')
         if ($ColdPolicyRecovery) { $methods += @('advance', 'archive') }
+        if ($ColdCompletionRecovery) { $methods += 'advance' }
         if ($id -ne $sequence + 1 -or $method -cnotin $methods) {
             throw 'Invalid read-only stopped restore proof request.'
         }
@@ -88,6 +97,7 @@ try {
             $proof = $null
             $value = 'close'
         } elseif ($method -ceq 'archive') { $value = Archive-AgentsChatColdPolicyJournal $proof }
+        elseif ($method -ceq 'advance' -and $ColdCompletionRecovery) { $value = Advance-AgentsChatColdCompletionRecovery $proof }
         elseif ($method -ceq 'advance') { $value = Advance-AgentsChatColdPolicyRecovery $proof }
         elseif ($ColdCompletion) { $value = Assert-AgentsChatColdCompletionProof $proof }
         elseif ($ColdActivation) { $value = Assert-AgentsChatColdActivationRecoveryProof $proof }

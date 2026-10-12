@@ -47,9 +47,18 @@ function Open-AgentsChatStoppedRestoreRecoveryFiles([hashtable]$Context) {
                         if ($expected -ccontains 'activation-stopped.json') {
                             throw 'Completed cold runtime cannot contain stopped history.'
                         }
-                        $expected = @($expected + @('prepared', 'policy-requested', 'policy-staged',
+                        $phases = @('prepared', 'policy-requested', 'policy-staged',
                             'release-requested', 'released', 'policy-restore-requested', 'policy-restored',
-                            'enable-requested', 'complete' | ForEach-Object { "completion-$_.json" }) | Sort-Object)
+                            'enable-requested', 'complete')
+                        if ($Context.CompletionRecovery) {
+                            $count = 0
+                            while ($count -lt $phases.Count -and
+                                @($entries | Where-Object Name -CEQ "completion-$($phases[$count]).json").Count) { $count++ }
+                            if ($count -lt 4) { throw 'Cold completion recovery requires at least release intent.' }
+                            $phases = $phases[0..($count - 1)]
+                        }
+                        $Context.CompletionPhases = $phases
+                        $expected = @($expected + @($phases | ForEach-Object { "completion-$_.json" }) | Sort-Object)
                     }
                     if ($Context.PolicyRecovery) {
                         $policy = @($entries | Where-Object { $_.Name -cmatch '^policy-[0-9]{6}\.json$' })

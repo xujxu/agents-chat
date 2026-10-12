@@ -13930,8 +13930,9 @@ Extend the existing native completion fixture with
   await assert.rejects(recovery.prepareWindowsColdCompletionRecovery(), /data-loss acknowledgement/);
   ```
 
-  Dispatch the existing native command selector after Task 5EQ's pending run
-  completes, recording the missing-export causal failure before production.
+  Queue the existing native command selector behind Task 5EQ's active run,
+  recording the missing-export causal failure before paired acceptance.
+  Test-only `af7dd10 / 38265802145` is queued without replacing that predecessor.
 - [ ] Admit only exact contiguous completion prefixes from `release-requested`
   through `complete`, while retaining complete-only read-only observation.
   Require the original controllers absent, old Job empty, exact new Scheduler
