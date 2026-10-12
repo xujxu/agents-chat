@@ -59,7 +59,10 @@ function Read-AgentsChatStoppedRestoreState([hashtable]$Context) {
 function Assert-AgentsChatStoppedRestoreRuntime([hashtable]$Context) {
     $admission = $Context.Admission
     $Context.Stage = 'runtime-owner'
-    if ($Context.Owner.HasExited -or
+    if ($Context.AbsentOwner) {
+        if (-not $Context.Recovery) { throw 'Absent original runtime requires explicit cold recovery admission.' }
+        Assert-AgentsChatCompletionProcessAbsent $admission.ownerPid.GetInt32() $admission.ownerIdentity.GetString()
+    } elseif ($Context.Owner.HasExited -or
         "$($Context.Owner.Id):$($Context.Owner.StartTime.ToUniversalTime().Ticks)" -cne $admission.ownerIdentity.GetString()) {
         throw 'Original stopped runtime owner exited or changed.'
     }
@@ -68,6 +71,12 @@ function Assert-AgentsChatStoppedRestoreRuntime([hashtable]$Context) {
     if ($task.Enabled -or [string]$task.Xml -cne $Context.Definition -or
         [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor) {
         throw 'Original stopped task policy changed.'
+    }
+    if ($Context.AbsentOwner) {
+        $Context.Stage = 'absent-runtime-domain'
+        if ($task.GetInstances(0).Count -ne 0) { throw 'Absent original runtime has a Scheduler instance.' }
+        [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$admission.generation.GetString(), $Context.RuntimeSessionId)
+        return
     }
     $binding = Get-AgentsChatTaskOwnerBinding -TaskName $Context.TaskName `
         -OwnerPid $admission.ownerPid.GetInt32() -OwnerIdentity $admission.ownerIdentity.GetString() `
@@ -116,6 +125,7 @@ function Open-AgentsChatStoppedRestoreProof {
         Files=[Collections.Generic.List[IDisposable]]::new()
         Closed=$false; Poisoned=$false; Busy=$false; Owner=$null; Instance=$null; Folder=$null; Stage='directories'
         Recovery=[bool]$Recovery
+        AbsentOwner=$false; RuntimeSessionId=$null
     }
     try {
         if ($PSVersionTable.PSVersion.Major -lt 7 -or -not $IsWindows -or
@@ -137,10 +147,22 @@ function Open-AgentsChatStoppedRestoreProof {
         Open-AgentsChatCompletionBundle $context $admission.configuration.GetString() $admission.configurationSha256.GetString() @{
             pid=$admission.ownerPid.GetInt32(); identity=$admission.ownerIdentity.GetString()
             generation=$admission.generation.GetString(); readySha256=$admission.readySha256.GetString()
-        }
+        } -RetainSession
         $context.Stage = 'runtime-owner'
-        $context.Owner = [Diagnostics.Process]::GetProcessById($admission.ownerPid.GetInt32())
-        $null = $context.Owner.Handle
+        try {
+            $context.Owner = [Diagnostics.Process]::GetProcessById($admission.ownerPid.GetInt32())
+            $null = $context.Owner.Handle
+        } catch [ArgumentException] {
+            if (-not $Recovery) { throw }
+            $context.AbsentOwner = $true
+        }
+        if ($context.Owner -and ($context.Owner.HasExited -or
+            "$($context.Owner.Id):$($context.Owner.StartTime.ToUniversalTime().Ticks)" -cne $admission.ownerIdentity.GetString())) {
+            if (-not $Recovery) { throw 'Original stopped runtime owner exited or changed.' }
+            $context.Owner.Dispose()
+            $context.Owner = $null
+            $context.AbsentOwner = $true
+        }
         $context.Stage = 'task-policy'
         $scheduler = New-Object -ComObject 'Schedule.Service'
         $scheduler.Connect()
