@@ -13933,7 +13933,7 @@ Add `tests/deployment-windows-cold-restore-files.mjs`. Only the opted-in
 stopped-proof fixture separates the runtime bundle from the project; derive
 its original readiness path from the real configuration directory.
 
-- [ ] Run causal native coverage first:
+- [x] Run causal native coverage first:
   ```js
   const restored = await restoreWindowsColdFiles({
     control, lease, acceptDataLoss: true,
@@ -13948,12 +13948,16 @@ its original readiness path from the real configuration directory.
   to SIGKILL itself, after all project files have been removed but before
   `writer.cjs` is copied. The next actor must prove archived environment bytes
   are present and that later file absent, then retry the full restoration.
-- [ ] Publish a fresh archived runtime bundle under the original WeakMap-bound
+  `86a6a45 / 38198072745`, job `114645116166`, reached the expected missing
+  `windows-cold-restore-files.mjs` boundary at `2026-10-12 03:08:10 UTC`,
+  after the separated external-runtime fixture passed snapshot and lease
+  admission. No fixture failure substituted for the causal result.
+- [x] Publish a fresh archived runtime bundle under the original WeakMap-bound
   cold lease. Reuse the existing native publisher and archive-member protocol;
   preserve all live publication scope checks and prohibit replacement of
   existing bundle directories. Bind readiness/digest/close to the real
   native child and recheck the lease before and after publication.
-- [ ] Implement bounded project/external stages with the existing restoration
+- [x] Implement bounded project/external stages with the existing restoration
   helpers, explicit data-loss acknowledgement and lease-backed stopped checks.
   Return only `files-restored` plus the relocated runtime bundle. Keep the
   original application state/lock/receipts unchanged; do not restart a task,
@@ -13962,6 +13966,8 @@ its original readiness path from the real configuration directory.
   retry, exact archived project bytes, unchanged original external runtime
   bytes/file IDs, unchanged backup/lock/state, forged lease/ack refusal,
   previous two-controller lease-loss cases and terminal-proof regression.
+  Initial implementation `b4d99cb` is under paired native validation at
+  `455c429 / 38198442964`, job `114646626385`; acceptance remains pending.
 
 ### Task 5DU: Claim a distinct durable Windows cold restore lease
 

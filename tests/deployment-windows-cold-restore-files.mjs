@@ -78,7 +78,10 @@ if (mode === 'crash-copy') {
     ]);
     assert.equal(held.pid, child.pid);
     await exited;
-    assert.deepEqual(JSON.parse(await readFile(boundary, 'utf8')), { pid: child.pid, stage: 'project-file-copy' });
+    let evidence;
+    try { evidence = await readFile(boundary, 'utf8'); }
+    catch (cause) { throw new Error(`Cold copy actor missed its interruption boundary: ${diagnostic}`, { cause }); }
+    assert.deepEqual(JSON.parse(evidence), { pid: child.pid, stage: 'project-file-copy' });
   } finally {
     if (child.exitCode === null && child.signalCode === null) child.kill();
     await exited;
