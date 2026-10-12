@@ -1,4 +1,5 @@
 . (Join-Path $PSScriptRoot 'windows-task-completion-proof.ps1')
+. (Join-Path $PSScriptRoot 'windows-stopped-restore-workers.ps1')
 
 function Assert-AgentsChatStoppedRestoreInventory([hashtable]$Context) {
     $Context.Stage = 'inventory'
@@ -8,6 +9,7 @@ function Assert-AgentsChatStoppedRestoreInventory([hashtable]$Context) {
             throw 'Stopped restore conflicts with existing retirement authority.'
         }
     }
+    if ($Context.ContainsKey('WorkerNames')) { Assert-AgentsChatStoppedRestoreWorkerInventory $Context }
 }
 
 function Assert-AgentsChatStoppedRestoreOwnerAbsent([hashtable]$Context) {
@@ -122,6 +124,7 @@ function Open-AgentsChatStoppedRestoreProof {
         Read-AgentsChatTaskCompletionHistory $context $context.RecordNames -StoppedOnly
         Assert-AgentsChatStoppedRestoreOwnerAbsent $context
         Read-AgentsChatStoppedRestoreState $context
+        Open-AgentsChatStoppedRestoreWorkers $context
         $admission = $context.Admission
         $context.Stage = 'runtime-bundle'
         Open-AgentsChatCompletionBundle $context $admission.configuration.GetString() $admission.configurationSha256.GetString() @{

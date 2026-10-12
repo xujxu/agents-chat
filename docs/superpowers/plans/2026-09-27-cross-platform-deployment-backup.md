@@ -13940,6 +13940,10 @@ inventory/record/content negatives to the existing native stopped-proof test.
   each negative fixture. Existing task/lock/state/native bridge cases remain.
 - [ ] Run the paired native command gate and record the actual missing
   worker-retention/inventory check failure before implementation.
+  Causal `8e91bfb / 38191690448` failed at `2026-10-12 01:29:07 UTC`:
+  the original worker-operation file could still be overwritten while the
+  stopped proof was open. The fixture reached a genuine stopped runtime and
+  dead original actor; this is not a missing-module proxy.
 - [ ] Add native worker admission to stopped-proof opening after state
   admission. Read only bounded complete newline-terminated records with exact
   fields `version,phase,lock,manifestSha256,workerId`. Require one opened record

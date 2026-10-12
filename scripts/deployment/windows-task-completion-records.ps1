@@ -179,6 +179,7 @@ function Read-AgentsChatTaskCompletionHistory([hashtable]$Context, [string[]]$Re
         $Context.Project = $project
         $Context.InitialState = $initial
         $Context.InitialStateSha256 = $transaction.initialStateSha256.GetString()
+        $Context.OriginalLock = $lock
         $Context.Definition = $records['stop-stopped'].definition.GetString()
         return
     }

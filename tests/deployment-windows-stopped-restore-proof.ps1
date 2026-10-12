@@ -27,7 +27,10 @@ if ($LiveOwner) {
 $directory = Join-Path $Control 'task-maintenance'
 $files = @((Join-Path $Control 'lock/owner.json'), (Join-Path $Control 'state.json'),
     (Join-Path $Control 'worker-operation.ndjson')) +
-    @(Get-ChildItem -LiteralPath $directory -File | ForEach-Object FullName)
+    @(Get-ChildItem -LiteralPath $directory -File | ForEach-Object FullName) +
+    @(Get-ChildItem -LiteralPath (Join-Path $Control 'worker-engine') -File | ForEach-Object FullName)
+$workerManifest = Get-Content -LiteralPath (Join-Path $Control 'worker-engine/manifest.json') -Raw | ConvertFrom-Json
+$workerHelper = Join-Path (Join-Path $Control 'worker-engine') $workerManifest.files[0].name
 $before = @($files | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash })
 $proof = Open-AgentsChatStoppedRestoreProof -Control $Control
 try {
@@ -44,6 +47,10 @@ try {
     try { [IO.File]::WriteAllText((Join-Path $Control 'worker-operation.ndjson'), 'changed') }
     catch [IO.IOException] { $denied = $true }
     Assert $denied 'Retained original worker evidence allowed replacement'
+    $denied = $false
+    try { [IO.File]::WriteAllText($workerHelper, 'changed') }
+    catch [IO.IOException] { $denied = $true }
+    Assert $denied 'Retained original worker helper allowed replacement'
     $null = Assert-AgentsChatStoppedRestoreProof $proof
 } finally { Close-AgentsChatTaskCompletionProof $proof }
 
@@ -60,6 +67,16 @@ try {
     [IO.File]::WriteAllText($workerFile, $invalid, [Text.UTF8Encoding]::new($false))
     Refused 'worker-evidence'
 } finally { [IO.File]::WriteAllText($workerFile, $workerBytes, [Text.UTF8Encoding]::new($false)) }
+$helperBytes = [IO.File]::ReadAllBytes($workerHelper)
+try {
+    [IO.File]::WriteAllText($workerHelper, 'changed', [Text.UTF8Encoding]::new($false))
+    Refused 'worker-helper'
+} finally { [IO.File]::WriteAllBytes($workerHelper, $helperBytes) }
+$foreignHelper = Join-Path $Control 'worker-engine/foreign.mjs'
+$file = [Deployment.WindowsPrivateFile]::Publish($foreignHelper, '{}')
+$file.Dispose()
+try { Refused 'worker-inventory' }
+finally { [IO.File]::Delete($foreignHelper) }
 
 $foreign = Join-Path $directory 'foreign.json'
 $file = [Deployment.WindowsPrivateFile]::Publish($foreign, '{}')
