@@ -11,6 +11,7 @@ import { processIdentity } from './process-identity.mjs';
 import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 import { publishWindowsColdRestoreStaging, publishWindowsColdRestoreFilesReceipt } from './windows-cold-restore-publication.mjs';
 import { retireWindowsColdRestoreOwner } from './windows-cold-restore-retirement.mjs';
+import { inspectWindowsColdConfiguration } from './windows-cold-restore-configuration.mjs';
 
 const leases = new WeakMap();
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -229,6 +230,16 @@ export async function claimWindowsColdRestore({
       get identity() {
         if (!proof) throw new Error('Cold restore native proof is unavailable during publication.');
         return proof.identity;
+      },
+      async inspectRestoredConfiguration({ signal: checkSignal = signal } = {}) {
+        checkSignal?.throwIfAborted();
+        await check({ signal: checkSignal });
+        if (!receipt) throw new Error('Cold configuration inspection requires completed file restoration by the current owner.');
+        return inspectWindowsColdConfiguration({
+          project, backup, runtimeBundle: receipt.record.runtimeBundle, snapshot: originalSnapshot,
+          providers: admitted.providers, profile: admitted.configurationProfile, pwsh, signal: checkSignal,
+          recheck: () => check({ signal: checkSignal }),
+        });
       },
       async retireRuntime({ signal: checkSignal = signal } = {}) {
         checkSignal?.throwIfAborted();

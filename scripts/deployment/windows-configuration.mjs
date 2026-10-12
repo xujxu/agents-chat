@@ -26,20 +26,27 @@ async function finishInspection(retained, inspected, recheck, signal) {
 
 export async function inspectWindowsConfiguration({ scope, pwsh, profile, signal }) {
   const observed = await assertWindowsManagedTaskScope(scope, { signal });
-  const retained = await openWindowsConfigurationFiles({
-    project: observed.project, configuration: observed.configuration, sha256: observed.configurationSha256, pwsh, signal,
+  return inspectWindowsRuntimeConfiguration({
+    project: observed.project, configuration: observed.configuration, sha256: observed.configurationSha256,
+    pwsh, profile, signal, recheck: () => assertWindowsManagedTaskScope(scope, { signal }),
   });
+}
+
+export async function inspectWindowsRuntimeConfiguration({
+  project, configuration: file, sha256, pwsh, profile, signal, recheck,
+}) {
+  const retained = await openWindowsConfigurationFiles({ project, configuration: file, sha256, pwsh, signal });
   try {
-    const bytes = await readWorkerFile(observed.configuration, 1024 * 1024, { privateMode: true });
-    if (createHash('sha256').update(bytes).digest('hex') !== observed.configurationSha256) {
+    const bytes = await readWorkerFile(file, 1024 * 1024, { privateMode: true });
+    if (createHash('sha256').update(bytes).digest('hex') !== sha256) {
       throw new Error('Installed configuration digest changed.');
     }
     const configuration = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-    if (configuration.command.cwd !== observed.project) throw new Error('Installed configuration project changed.');
+    if (configuration.command.cwd !== project) throw new Error('Installed configuration project changed.');
     const inspected = await inspectConfigurationFiles({
-      project: observed.project, profile, environment: configuration.command.environment, signal,
+      project, profile, environment: configuration.command.environment, signal,
     });
-    return await finishInspection(retained, inspected, () => assertWindowsManagedTaskScope(scope, { signal }), signal);
+    return await finishInspection(retained, inspected, recheck, signal);
   } catch (error) {
     try { await retained.close(); }
     catch (cleanup) { throw new AggregateError([error, cleanup], 'Configuration inspection and close failed.'); }
