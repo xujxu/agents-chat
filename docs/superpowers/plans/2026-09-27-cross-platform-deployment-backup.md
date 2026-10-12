@@ -13915,6 +13915,44 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EI: Bind policy recovery to an append-only owner and write-ahead journal
+
+**Files:** `scripts/deployment/windows-cold-policy-history.mjs`,
+`tests/deployment-cold-policy-history.test.mjs`, existing native command gate.
+
+**Design:** a repeated recovery must publish its own Node/native-bridge identity
+before mutating task policy. Reusing only the first recovery publisher's identity
+would hide a later still-live bridge after another interruption. Preserve every
+claim and policy transition in a byte-hashed chain; a claim preserves the prior
+step, while a request precedes registration and a restored receipt follows it.
+The original root lock/state, activation history, source/target disabled policy
+and security remain fixed. This decoder is not mutation authority.
+
+- [ ] Add and run the causal contracts from the new test file through the
+  existing command gate. Exercise:
+
+  ```js
+  [
+    { kind: 'claim', step: 'initial' },
+    { kind: 'request', step: 'requested' },
+    { kind: 'claim', step: 'requested', ...secondOwner },
+    { kind: 'restored', step: 'restored', ...secondOwner },
+  ]
+  ```
+
+  Reject skipped or reversed transitions, changed binding, reordered/raw-byte
+  chain changes, publication by an unclaimed controller, reused prior owner
+  identities, malformed UTF-8/schema, and oversized input.
+- [ ] Implement `captureWindowsColdPolicyHistory({ binding, records })`.
+  Return frozen `mutationAuthority: false`, current `step`, sequence, original
+  byte digest, last Node/bridge owner and records. Bound to 256 records,
+  4 MiB per record and 16 MiB total. An empty journal is `initial` and chains
+  from the admitted activation-history digest.
+- [ ] Run the paired command gate with both normal and genuine bridge-death
+  fixtures. Native mutation must separately retain this journal, prove every
+  predecessor Node/bridge absent and publish a new claim before registration;
+  decoding alone never restores policy or admits a fresh cold file claim.
+
 ### Task 5EH: Observe genuine cold activation bridge death without a stopped receipt
 
 **Files:** extend the existing cold activation actor, independent observer,
