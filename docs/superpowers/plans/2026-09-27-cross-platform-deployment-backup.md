@@ -13915,6 +13915,55 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DU: Claim a distinct durable Windows cold restore lease
+
+**Scope:** reuse the Linux cold-lease publication model: separate
+`recovery-lock/owner.json`, staged predecessor-bound replacement and a distinct
+recovery owner. Keep the original application lock/state/task receipts
+unchanged. Native named admission serializes takeover; retained private handles
+bind original evidence plus any existing recovery/staging records. This does
+not yet restore application files, activate a runtime or expose public cold
+restore.
+
+**Files:** add `scripts/deployment/windows-cold-restore-lease.mjs` and
+`scripts/deployment/windows-stopped-restore-recovery.ps1`; extend only explicit
+recovery mode in `windows-stopped-restore-proof.{mjs,ps1}` and its controller.
+Keep the default stopped/terminal proof's existing-recovery refusal. Add
+`tests/deployment-windows-cold-restore-lease.mjs` to the opted-in stopped fixture.
+
+- [ ] Run the new native causal test before publishing implementation. Two
+  distinct forked controllers must claim and die after acknowledged durable
+  publication; a third controller must reacquire without replacing original
+  lock/state. Live competitors must refuse:
+  ```js
+  const lease = await claimWindowsColdRestore({
+    control, project, backup, node: process.execPath, pwsh,
+    profile: 'agents-chat-auth-638c553', acceptDataLoss: true,
+  });
+  await assertWindowsColdRestoreLease(control, lease);
+  await assert.rejects(assertWindowsColdRestoreLease(control, { ...lease }));
+  await assert.rejects(claimWindowsColdRestore(options));
+  await lease.close();
+  await assert.rejects(lease.check());
+  ```
+- [ ] Retain exact native recovery/staging directory inventories and any
+  owner file only in explicit recovery-proof mode. Default proof still refuses
+  recovery evidence. Recheck all handles/inventories on every request.
+- [ ] Implement lease admission against Task5DT. Bind directory identities,
+  original lock/state, backup ID/digest/path and saved engine. Require every
+  prior recovery owner dead by PID/start identity. Use a fresh lock token and
+  operation ID for the recovery controller; never supply the dead original
+  lock to a live-owner API. Stage the complete owner record before publishing.
+  Retain incomplete/foreign publication evidence instead of guessing ownership.
+- [ ] Reopen native proof after publication under the same named admission;
+  require unchanged original evidence and the exact newly published lease.
+  Return a WeakMap-bound lease with explicit check/close; closing leaves durable
+  recovery evidence and does not release the original application lock.
+- [ ] Run the native command gate, including both recovery-controller deaths,
+  live-owner refusal after handle closure and original terminal proof
+  regression. Add publication-prefix cases before relying on unacknowledged
+  interruption recovery; this initial gate covers acknowledged lease loss.
+
 ### Task 5DT: Bind stopped restore evidence to the original complete backup
 
 **Scope:** read-only cold admission, not a recovery lease. Reuse the retained
@@ -13952,6 +14001,9 @@ opted-in stopped-proof transaction/controller fixtures.
   Causal `7b5a880 / 38193181306`, job `114630113078`, reached the real stopped
   runtime, complete snapshot and exited original controller, then failed at
   `2026-10-12 01:50:49 UTC` on the missing stopped-snapshot module.
+  Implementation `da9e367 / 38193530348`, job `114631182040`, passed at
+  `2026-10-12 02:01:03 UTC`. Expanded archive-policy/helper tamper and invalid
+  current-project dotenv cases at `734d64d / 38193868667` await acceptance.
 - [ ] Implement read-only snapshot binding. Check native proof before reading
   original state/admission and again after all archived checks; match its state
   SHA and operation. Share policy comparison without weakening the live scope

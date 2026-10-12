@@ -4,6 +4,7 @@ import {
   assertWindowsStoppedRestoreProof, openWindowsStoppedRestoreProof,
 } from '../scripts/deployment/windows-stopped-restore-proof.mjs';
 import { verifyStoppedRestoreSnapshot } from './deployment-windows-stopped-restore-snapshot.mjs';
+import { verifyWindowsColdRestoreLease } from './deployment-windows-cold-restore-lease.mjs';
 
 const [control, pwsh, taskName, operationId] = process.argv.slice(2);
 const admission = await acquireWindowsAdmission({ control, pwsh });
@@ -38,4 +39,5 @@ try {
   try { assert.equal((await observed.check()).operationId, operationId); }
   finally { await observed.close(); }
 } finally { await again.close(); }
+await verifyWindowsColdRestoreLease({ control, pwsh });
 console.log('PASS: stopped restore bridge binds native admission, refuses forged contexts and releases its own handles');
