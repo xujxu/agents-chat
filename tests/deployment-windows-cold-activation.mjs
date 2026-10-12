@@ -6,7 +6,8 @@ import { restoreWindowsColdFiles } from '../scripts/deployment/windows-cold-rest
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
 import { verifyWindowsColdReadiness } from './deployment-windows-cold-readiness.mjs';
 
-const [control, pwsh] = process.argv.slice(2);
+const [control, pwsh, mode] = process.argv.slice(2);
+assert.ok(mode === undefined || mode === 'crash', 'Unknown cold activation fixture mode.');
 const stateBytes = await readFile(path.join(control, 'state.json'));
 const state = JSON.parse(stateBytes);
 const lockBytes = await readFile(path.join(control, 'lock/owner.json'));
@@ -44,6 +45,10 @@ try {
   });
   assert.deepEqual(await readFile(path.join(control, 'state.json')), stateBytes);
   assert.deepEqual(await readFile(path.join(control, 'lock/owner.json')), lockBytes);
+  if (mode === 'crash') {
+    console.log(JSON.stringify(running));
+    await new Promise(() => { setInterval(() => {}, 1000); });
+  }
 } finally {
   const errors = [];
   try { await lease.close(); } catch (error) { errors.push(error); }

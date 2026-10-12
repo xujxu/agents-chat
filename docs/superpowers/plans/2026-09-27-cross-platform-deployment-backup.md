@@ -13915,6 +13915,45 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EH: Observe genuine cold activation bridge death without a stopped receipt
+
+**Files:** extend the existing cold activation actor, independent observer,
+native stopped-evidence inventory and cold proof. Add
+`tests/deployment-windows-cold-activation-crash.ps1`, invoked through the
+existing stopped-proof fixture and existing command gate; no new job or timeout.
+
+- [ ] Run the existing native stopped fixture both normally and with
+  `-ColdActivationCrash`. The actor publishes its genuine running metadata
+  after owned HTTP readiness, then remains alive:
+
+  ```js
+  console.log(JSON.stringify(running));
+  await new Promise(() => { setInterval(() => {}, 1000); });
+  ```
+
+  The independent parent retains exact bridge/runtime/listener process handles,
+  kills only the original bridge and Node actor, and requires lease-driven
+  runtime/listener exit, an empty original new Job, no Scheduler instances or
+  listener, unchanged running receipt and no fabricated stopped receipt.
+- [ ] Require independent observation to return `cold-activation-inactive`
+  for the requested/running prefix, versus `cold-activation-stopped` for the
+  complete normally stopped prefix. Preserve all evidence and deny receipt
+  writes while the native proof is held.
+- [ ] Admit only these two runtime-bearing prefixes in this observer. Keep
+  requested-only, unacknowledged runtime publication and missing-helper cases
+  refused; the pure journal decoder alone is not native absence proof.
+- [ ] Run causal and paired gates using:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  ```
+
+  Require both normal and genuinely interrupted native cases, then the original
+  terminal-proof regression. Neither observation grants policy mutation,
+  archival, fresh cold claim or terminal completion.
+
 ### Task 5EG: Independently observe a fully stopped cold activation
 
 **Scope:** establish native read-only admission for the exact completed
@@ -13928,7 +13967,7 @@ stopped evidence opening and cold record/intent parsing from their existing
 helpers. Extend the stopped bridge with an explicit cold-history inspection
 mode. Keep the ordinary stopped-proof contract unchanged.
 
-- [ ] Add an early-cancellation unit contract and a separate native observer
+- [x] Add an early-cancellation unit contract and a separate native observer
   actor after the existing cold startup actor exits. The contract is:
 
   ```js
@@ -13948,24 +13987,26 @@ mode. Keep the ordinary stopped-proof contract unchanged.
   and verifies byte-exact unchanged state, original lock, archive manifest and
   every cold journal file. The parent independently rechecks task XML/security,
   zero Scheduler instances and the empty new Job.
-- [ ] Share the existing strict cold owner/files/intent decoder rather than
+- [x] Share the existing strict cold owner/files/intent decoder rather than
   synthesizing live transaction authority. Admit advanced inventory only in
   this explicit read-only mode. Reject staging, incomplete prefixes and live
   original/cold/native-bridge owners.
-- [ ] Retain original and fresh runtime helpers/readiness and all receipt
+- [x] Retain original and fresh runtime helpers/readiness and all receipt
   handles; bind both generations to their native private evidence. Require
   both owners absent and both Jobs empty in their original sessions.
-- [ ] Derive the exact guarded task policy using the same literal policy
+- [x] Derive the exact guarded task policy using the same literal policy
   builder as startup. Require the disabled task, no automatic triggers, exact
   security, and zero Scheduler instances; retain its native task file.
-- [ ] Run causal and paired native command Actions with the existing command
+- [x] Run causal and paired native command Actions with the existing command
   from Task5EF. An accepted observation remains non-authoritative and cannot
   enable public cold restoration. Earlier interrupted activation prefixes and
   write-ahead policy recovery remain distinct following work.
   Causal `9988e76 / 38223297176`, job `114724557059`, failed as expected at
   `2026-10-12 08:24:03 UTC` on the missing observer module (21/22 unit cases
   passed). Implementation `f18dfec / 38224040058`, job `114727040844`,
-  is running the paired native gate.
+  passed at `2026-10-12 08:50:18 UTC`: 22/22 unit cases, native guarded
+  startup/readiness/close, independent retained stopped-history observation
+  at `08:46:27`, and original terminal-proof regression at `08:50:03`.
 
 ### Task 5EF: Capture the original cold activation journal before takeover
 
