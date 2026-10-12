@@ -13980,11 +13980,11 @@ between the existing live-scope entry and a stopped-proof entry. Add
 `tests/deployment-windows-stopped-restore-snapshot.mjs`; extend only the
 opted-in stopped-proof transaction/controller fixtures.
 
-- [ ] Create the full native snapshot with existing `createSnapshot`,
+- [x] Create the full native snapshot with existing `createSnapshot`,
   `inspectSnapshotScope` and `saveRecoveryEngine` while the original fixture
   owns a stopped task. The initial restoring state records its predetermined
   backup ID, so no history bytes are rewritten to make admission pass.
-- [ ] Run the native command gate with the new test before implementation:
+- [x] Run the native command gate with the new test before implementation:
   ```js
   const observed = await inspectWindowsStoppedRestoreSnapshot({
     control, project, backup, node: process.execPath, pwsh, admission, proof,
@@ -14003,14 +14003,16 @@ opted-in stopped-proof transaction/controller fixtures.
   `2026-10-12 01:50:49 UTC` on the missing stopped-snapshot module.
   Implementation `da9e367 / 38193530348`, job `114631182040`, passed at
   `2026-10-12 02:01:03 UTC`. Expanded archive-policy/helper tamper and invalid
-  current-project dotenv cases at `734d64d / 38193868667` await acceptance.
-- [ ] Implement read-only snapshot binding. Check native proof before reading
+  current-project dotenv cases at `734d64d / 38193868667`, job `114632986593`,
+  passed at `2026-10-12 02:29:24 UTC`, including the unchanged terminal
+  restored-proof regression. This closes read-only admission, not file writes.
+- [x] Implement read-only snapshot binding. Check native proof before reading
   original state/admission and again after all archived checks; match its state
   SHA and operation. Share policy comparison without weakening the live scope
   check. Compare archived policy with the original pre-inhibition admission,
   not the intentionally disabled current task. Authorize only archived runtime
   external paths; return no mutation authority.
-- [ ] Run the same native gate through Actions, including original terminal
+- [x] Run the same native gate through Actions, including original terminal
   restored proof regression. Record the causal and fixed runs before further
   recovery-lease implementation:
   ```bash
