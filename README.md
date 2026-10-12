@@ -604,6 +604,10 @@ disabled task policy, no Scheduler instances and an empty/absent original Job
 are required. The query uses the recorded session, including Session 0 from
 an interactive observer; other foreign sessions remain refused. These private
 gates do not accept cold activation, public cold restore or reboot recovery.
+Full dual-platform regression `e5749c5 / 38201064684` then passed all 53 jobs
+at `2026-10-12 05:12:36 UTC`, including actual cold file restoration with its
+durable completion receipt, normal public restore and all interruption cases.
+This full baseline predates the absent-owner and cold-owned retirement changes.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

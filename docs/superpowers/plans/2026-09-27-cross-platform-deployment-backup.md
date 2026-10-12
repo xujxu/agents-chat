@@ -13959,6 +13959,7 @@ aborted signal before checking admission; explicitly prove the original
 admission child and stopped proof remain usable afterward. Mid-request
 uncertainty must still fail closed. Neither the cancelled first retirement
 attempt nor the separate absence acceptance proves this new mutation API.
+Pre-cancellation fix `c8eb4b9 / 38206988583` is running the native gate.
 
 - [ ] First exercise the real cold API through the native Actions fixture.
   Refuse retirement before the current owner's completed-file receipt exists,
@@ -14070,7 +14071,12 @@ and add `tests/deployment-windows-cold-files-receipt.mjs`.
   job `114652151673`, passed at `2026-10-12 03:45:00 UTC`. The real partial
   copy/retry passed at03:41:40; completed-owner reentry and receipt-binding
   negatives passed at03:42:38; original restored terminal proof passed
-  at03:44:49. Actual application restoration remains under its separate gate.
+  at03:44:49. Actual application file recovery with these receipts subsequently
+  passed in full regression `e5749c5 / 38201064684`, job `114654375818`,
+  at `2026-10-12 04:56:50 UTC`; its cold actor took1,636,933ms. The full
+  53-job matrix passed at05:12:36, ending with normal public live restoration
+  job `114654375971`. This full baseline predates absent-owner and cold-owned
+  retirement support and does not accept cold activation.
 - [x] Extend exact native guard inventories to permit only the additional
   bounded private completion file; keep staging owner-only. The Node lease
   must compare the full receipt with its derived original evidence. Retain
