@@ -573,7 +573,13 @@ non-loopback outbound traffic for the actual Node, PowerShell, Git and Git
 network helpers; effective rules and positive/negative TCP probes are checked.
 The restored authenticated data, artifacts, backup and no-restart closeout pass
 under those rules. This is not a whole-VM air gap or isolation of every process
-and DNS service. Public/saved command composition and cold reentry remain gated.
+and DNS service. The saved Windows process entry subsequently passed the full
+53-job dual-platform matrix at `3e72433 / 38184729161`, completed
+`2026-10-12 00:29:12 UTC`. Both complete restoration and executable-scoped
+egress-denied restoration invoke the verified saved entry as a distinct process,
+then pass independent closeout and authenticated data checks. The matrix also
+repeats all four interruption scenarios. Public-command actual acceptance and
+cold reentry remain gated; this baseline predates public `restore.ps1`.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

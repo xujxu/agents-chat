@@ -13963,6 +13963,7 @@ until the later exclusive lease/restoration/activation path is accepted.
   `windows-stopped-restore-proof.ps1`, as expected. Implementation retains the
   original state/lock/receipt/runtime handles; the fixed gate also repeats
   existing terminal restored completion proof to protect the shared parser.
+  Implementation `99f6834` is under native gate `38188243495`.
 - [ ] Implement native retained proof. The stopped-prefix parser accepts
   exactly `stop-intent`, `stop-inhibited`, `stop-stop-requested`, `stop-stopped`,
   validates their original transaction/lock/initial-state hashes and returns
@@ -13988,6 +13989,12 @@ until the later exclusive lease/restoration/activation path is accepted.
 do not introduce another native supervisor. Reuse captured controller ownership,
 sanitized public context and separate saved finalizer. Cold/inactive/interrupted
 runtime admission remains explicit refusal until block2.
+
+**Accepted saved-process prerequisite:** full `3e72433 / 38184729161` passed
+53/53 at `2026-10-12 00:29:12 UTC`, including complete saved-process restore
+job `114604515883` (restore 1,476,266 ms, closeout 83,445 ms) and egress-denied
+saved-process restore job `114604515786` (restore 1,521,985 ms, closeout
+103,342 ms). This does not validate the later public wrapper or cold proof.
 
 **Files:** add `scripts/restore.ps1` and
 `scripts/deployment/windows-restore-command.mjs`; extend public-command/context,
