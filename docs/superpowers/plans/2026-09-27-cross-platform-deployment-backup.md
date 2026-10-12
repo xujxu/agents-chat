@@ -14180,7 +14180,10 @@ the accepted native stopped-proof fixture after its original actor exits.
   subsequently started. Its native Linux worker job `114632535428` passed,
   including exact512 acceptance/513 refusal and unchanged byte budgets at
   `2026-10-12 02:02:11 UTC`. Both-platform boundary cases are now accepted;
-  the remaining full-matrix jobs are still running/queued.
+  the entire 53-job matrix subsequently passed at `2026-10-12 03:04:17 UTC`.
+  Its final actual jobs were normal public live deployment `114632535690`
+  (`03:03:30 UTC`) and thrown-error restore `114632535547`
+  (`03:04:16 UTC`). This baseline predates the private cold-file writer.
 - [ ] Implement a dedicated read-only native bridge. Load the same private
   file/runtime helpers as the accepted proof, watch the exact Node PID/start
   identity, open the proof and emit bounded ready/reply frames. Accept only

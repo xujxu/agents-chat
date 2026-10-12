@@ -591,6 +591,10 @@ The whole 53-job dual-platform run subsequently passed at
 `2026-10-12 01:58:50 UTC`, including normal public restoration and all four
 interruption regressions. This accepts the public live-restore path, not cold
 recovery or the remaining deployment compatibility/final release work.
+The subsequent capture-inventory correction also passed all 53 jobs at
+`a57fad4 / 38190945815`, completed `2026-10-12 03:04:17 UTC`, including the
+Linux and Windows 512-helper boundary checks and actual restore regressions.
+This full baseline predates the private Windows cold-file restoration work.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
