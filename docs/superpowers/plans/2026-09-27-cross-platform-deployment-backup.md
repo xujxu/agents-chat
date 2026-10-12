@@ -13915,6 +13915,50 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DR: Expose retained stopped restore proof under native admission
+
+**Scope:** use the existing Windows named admission and framed native-controller
+transport to expose Task5DQ's read-only handles to the saved Node orchestrator.
+Do not replace the original lock, invent cold acceptance or authorize writes.
+
+**Files:** add `scripts/deployment/windows-stopped-restore-proof.mjs`,
+`scripts/deployment/windows-stopped-restore-controller.ps1` and
+`tests/deployment-windows-stopped-restore-controller.mjs`; call the new test from
+the accepted native stopped-proof fixture after its original actor exits.
+
+- [ ] Add Node integration assertions before implementing the bridge:
+  ```js
+  const admission = await acquireWindowsAdmission({ control, pwsh });
+  const proof = await openWindowsStoppedRestoreProof({ control, pwsh, admission });
+  assert.equal(proof.observation.mutationAuthority, false);
+  assert.equal(proof.observation.taskName, taskName);
+  assert.equal(proof.observation.operationId, operationId);
+  assert.deepEqual(await assertWindowsStoppedRestoreProof(control, proof, admission), proof.observation);
+  await assert.rejects(acquireWindowsAdmission({ control, pwsh }));
+  await assert.rejects(assertWindowsStoppedRestoreProof(control, { ...proof }, admission));
+  await assert.rejects(assertWindowsStoppedRestoreProof(control, proof, {}));
+  await proof.close();
+  await assert.rejects(proof.check());
+  await admission.close();
+  ```
+  Repeat acquisition after release to demonstrate no leaked native admission.
+  Preserve original evidence bytes, task identity and empty stopped runtime.
+  Run the paired command-only Actions gate; require missing-module causal failure.
+- [ ] Implement a dedicated read-only native bridge. Load the same private
+  file/runtime helpers as the accepted proof, watch the exact Node PID/start
+  identity, open the proof and emit bounded ready/reply frames. Accept only
+  sequenced `check` and `close`; reject all mutation methods. Close retained
+  proof/watch handles in finally and report cleanup failures. Reuse
+  `windowsControllerTransport` in Node; require the original
+  `assertWindowsAdmission` before open and around each check. Validate exact
+  observation fields/status/UUID/task/digest/booleans, freeze the result and
+  bind the returned object/control/admission in a WeakMap. Repeated checks
+  must equal the original observation. Do not release a caller-owned admission.
+- [ ] Push and obtain the native bridge/negative/admission/cleanup contracts
+  together with the existing stopped proof and terminal restored proof. Then
+  proceed to saved snapshot/worker admission and durable recovery lease, not
+  direct source mutation from this read-only object.
+
 ### Task 5DQ: Retain original stopped Windows restore evidence after actor exit
 
 **Scope:** block2 starts with read-only native admission, not lock deletion or
@@ -13963,7 +14007,10 @@ until the later exclusive lease/restoration/activation path is accepted.
   `windows-stopped-restore-proof.ps1`, as expected. Implementation retains the
   original state/lock/receipt/runtime handles; the fixed gate also repeats
   existing terminal restored completion proof to protect the shared parser.
-  Implementation `99f6834` is under native gate `38188243495`.
+  Implementation `99f6834` passed native gate `38188243495` at
+  `2026-10-12 00:38:42 UTC`. Stopped proof passed at00:34:56; unchanged terminal
+  restored proof passed at00:38:27. Full53 `4e1aed1 / 38188828721` is running,
+  including public complete/offline restoration and this shared parser.
 - [ ] Implement native retained proof. The stopped-prefix parser accepts
   exactly `stop-intent`, `stop-inhibited`, `stop-stop-requested`, `stop-stopped`,
   validates their original transaction/lock/initial-state hashes and returns

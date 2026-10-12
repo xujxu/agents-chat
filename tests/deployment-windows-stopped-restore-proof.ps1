@@ -73,4 +73,9 @@ try {
 
 $after = @($files | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash })
 Assert (($before -join ',') -ceq ($after -join ',')) 'Stopped proof changed original recovery evidence'
+& (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-stopped-restore-controller.mjs') `
+    $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) $TaskName $OperationId
+Assert ($LASTEXITCODE -eq 0) 'Stopped restore native bridge contracts failed'
+$after = @($files | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash })
+Assert (($before -join ',') -ceq ($after -join ',')) 'Stopped restore bridge changed original evidence'
 Write-Output 'PASS: stopped restore proof retains original evidence and refuses live owner, policy, inventory and state drift'
