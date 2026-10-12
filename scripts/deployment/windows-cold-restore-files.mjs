@@ -32,6 +32,6 @@ export async function restoreWindowsColdFiles({
       ...options, runtimeBundle, authorizedPaths: lease.authorizedPaths, signal: stageSignal,
     });
   });
-  await stage('cold-restored-files', stageSignal => lease.check({ signal: stageSignal }));
+  await stage('cold-restored-files', stageSignal => lease.markFilesRestored({ runtimeBundle, signal: stageSignal }));
   return Object.freeze({ status: 'files-restored', runtimeBundle });
 }

@@ -11,8 +11,8 @@ function Assert-AgentsChatStoppedRestoreRecoveryInventory([hashtable]$Context) {
         throw 'Original cold restore recovery inventory changed.'
     }
     foreach ($name in $names) {
-        $entries = @(Get-ChildItem -LiteralPath (Join-Path $Context.Control $name) -Force)
-        $expected = if ($Context.RecoveryOwners.Contains($name)) { @('owner.json') } else { @() }
+        $entries = @(Get-ChildItem -LiteralPath (Join-Path $Context.Control $name) -Force | Sort-Object Name)
+        $expected = $Context.RecoveryFiles[$name]
         if (@($entries | Where-Object PSIsContainer).Count -or
             (@($entries | ForEach-Object Name) -join ',') -cne ($expected -join ',')) {
             throw 'Original cold restore owner inventory changed.'
@@ -23,18 +23,25 @@ function Assert-AgentsChatStoppedRestoreRecoveryInventory([hashtable]$Context) {
 function Open-AgentsChatStoppedRestoreRecoveryFiles([hashtable]$Context) {
     $Context.Stage = 'recovery-evidence'
     $Context.RecoveryNames = @(Get-AgentsChatStoppedRestoreRecoveryNames $Context)
-    $Context.RecoveryOwners = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $Context.RecoveryFiles = @{}
     foreach ($name in $Context.RecoveryNames) {
         $directory = Join-Path $Context.Control $name
         $Context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory($directory))
-        $entries = @(Get-ChildItem -LiteralPath $directory -Force)
-        if ($entries.Count -eq 0 -and $name -ceq 'cold-restore-staging') { continue }
-        if ($entries.Count -ne 1 -or $entries[0].Name -cne 'owner.json' -or
-            $entries[0].PSIsContainer -or $entries[0].Length -gt 65536) {
+        $entries = @(Get-ChildItem -LiteralPath $directory -Force | Sort-Object Name)
+        if ($entries.Count -eq 0 -and $name -ceq 'cold-restore-staging') {
+            $Context.RecoveryFiles[$name] = @()
+            continue
+        }
+        $expected = @('owner.json')
+        if ($name -ceq 'recovery-lock' -and @($entries | Where-Object Name -CEQ 'files-restored.json').Count) {
+            $expected = @('files-restored.json', 'owner.json')
+        }
+        if ((@($entries | ForEach-Object Name) -join ',') -cne ($expected -join ',') -or
+            @($entries | Where-Object { $_.PSIsContainer -or $_.Length -gt 65536 }).Count) {
             throw 'Incomplete or foreign cold restore owner evidence.'
         }
-        $null = $Context.RecoveryOwners.Add($name)
-        $null = Open-AgentsChatCompletionFile $Context $entries[0].FullName ''
+        $Context.RecoveryFiles[$name] = $expected
+        foreach ($entry in $entries) { $null = Open-AgentsChatCompletionFile $Context $entry.FullName '' }
     }
     Assert-AgentsChatStoppedRestoreRecoveryInventory $Context
 }

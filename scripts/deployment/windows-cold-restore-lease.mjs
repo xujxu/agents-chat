@@ -9,19 +9,28 @@ import { captureLockOwner } from './state.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
-import { publishWindowsColdRestoreStaging } from './windows-cold-restore-publication.mjs';
+import { publishWindowsColdRestoreStaging, publishWindowsColdRestoreFilesReceipt } from './windows-cold-restore-publication.mjs';
 
 const leases = new WeakMap();
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const parse = bytes => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
 const validDigest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+const filesReceipt = (control, record, bytes, configurationSha256) => {
+  const directory = path.join(control, `runtime-${record.owner.operationId}`);
+  return {
+    version: 1, phase: 'files-restored', ownerSha256: digest(bytes),
+    operationId: record.lock.operationId, backupId: record.backupId,
+    snapshotSha256: record.snapshotSha256, stateSha256: record.stateSha256,
+    runtimeBundle: { directory, configuration: path.join(directory, 'configuration.json'), sha256: configurationSha256 },
+  };
+};
 async function directoryIdentity(directory) {
   await canonicalWorkerDirectory(directory, { privateMode: true });
   const info = await lstat(directory, { bigint: true });
   return { dev: info.dev.toString(), ino: info.ino.toString() };
 }
 
-async function inspectLease(control, expected) {
+async function inspectLease(control, expected, configurationSha256) {
   const inspect = async name => {
     const directory = path.join(control, name);
     try { await lstat(directory); }
@@ -29,7 +38,10 @@ async function inspectLease(control, expected) {
     const identity = await directoryIdentity(directory);
     const names = (await readdir(directory)).sort();
     if (name === 'cold-restore-staging' && !names.length) return { directory, identity, record: null, bytes: null };
-    if (!same(names, ['owner.json'])) throw new Error('Cold restore lease contains incomplete or foreign evidence.');
+    const hasReceipt = name === 'recovery-lock' && names.includes('files-restored.json');
+    if (!same(names, [...(hasReceipt ? ['files-restored.json'] : []), 'owner.json'])) {
+      throw new Error('Cold restore lease contains incomplete or foreign evidence.');
+    }
     const bytes = await readWorkerFile(path.join(directory, 'owner.json'), 65536, { privateMode: true });
     const record = captureWorkerFields(parse(bytes),
       [...Object.keys(expected), 'owner', 'guardIdentity', 'stagingIdentity', 'predecessor'], 'Windows cold restore lease');
@@ -50,7 +62,16 @@ async function inspectLease(control, expected) {
     if (!same(name === 'recovery-lock' ? record.guardIdentity : record.stagingIdentity, identity)) {
       throw new Error('Original cold restore lease directory was replaced.');
     }
-    return { directory, identity, record: { ...record, owner }, bytes };
+    let receipt = null;
+    if (hasReceipt) {
+      const receiptBytes = await readWorkerFile(path.join(directory, 'files-restored.json'), 65536, { privateMode: true });
+      const receiptRecord = parse(receiptBytes);
+      if (!same(receiptRecord, filesReceipt(control, record, bytes, configurationSha256))) {
+        throw new Error('Cold restore completion receipt differs from original owner, archive or runtime.');
+      }
+      receipt = { record: receiptRecord, bytes: receiptBytes };
+    }
+    return { directory, identity, record: { ...record, owner }, bytes, receipt };
   };
   const guard = await inspect('recovery-lock');
   const staging = await inspect('cold-restore-staging');
@@ -82,6 +103,8 @@ export async function claimWindowsColdRestore({
   let proof;
   let admitted;
   let closed = false;
+  let publishing = false;
+  let poisoned = false;
   const close = async () => {
     if (closed) return;
     closed = true;
@@ -90,10 +113,10 @@ export async function claimWindowsColdRestore({
     try { await admission.close(); } catch (error) { errors.push(error); }
     if (errors.length) throw new AggregateError(errors, 'Cold restore lease cleanup failed.');
   };
-  const open = async () => {
-    proof = await openWindowsStoppedRestoreProof({ control, pwsh, admission, recovery: true, signal });
+  const open = async (openSignal = signal) => {
+    proof = await openWindowsStoppedRestoreProof({ control, pwsh, admission, recovery: true, signal: openSignal });
     admitted = await inspectWindowsStoppedRestoreSnapshot({
-      control, project, backup, node, pwsh, profile, admission, proof, signal,
+      control, project, backup, node, pwsh, profile, admission, proof, signal: openSignal,
     });
   };
   try {
@@ -103,6 +126,7 @@ export async function claimWindowsColdRestore({
     const stateBytes = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
     const state = parse(stateBytes);
     const originalSnapshot = admitted.snapshot;
+    const configurationSha256 = originalSnapshot.runtime.task.configurationSha256;
     const expected = {
       version: 1, project, backup, backupId: originalSnapshot.id,
       snapshotSha256: digest(Buffer.from(JSON.stringify(originalSnapshot))),
@@ -110,7 +134,7 @@ export async function claimWindowsColdRestore({
       controlIdentity: await directoryIdentity(control), lockIdentity: await directoryIdentity(path.join(control, 'lock')),
       lock, state, stateSha256: digest(stateBytes),
     };
-    const prior = await inspectLease(control, expected);
+    const prior = await inspectLease(control, expected, configurationSha256);
     for (const slot of [prior.guard, prior.staging]) {
       if (slot?.record && await processIdentity(slot.record.owner.pid) === slot.record.owner.processIdentity) {
         throw new Error('Previous cold restore lease owner is still alive.');
@@ -129,6 +153,15 @@ export async function claimWindowsColdRestore({
     const stage = path.join(control, 'cold-restore-staging');
     const guard = path.join(control, 'recovery-lock');
     // Release only observer handles; the same named admission spans publication.
+    if (prior.guard?.receipt) {
+      const file = path.join(guard, 'files-restored.json');
+      if (!same(await directoryIdentity(guard), prior.guard.identity)
+        || !(await readWorkerFile(path.join(guard, 'owner.json'), 65536, { privateMode: true })).equals(prior.guard.bytes)
+        || !(await readWorkerFile(file, 65536, { privateMode: true })).equals(prior.guard.receipt.bytes)) {
+        throw new Error('Prior cold restore completion receipt changed before takeover.');
+      }
+      await unlink(file);
+    }
     if (prior.staging) {
       if (!same(await directoryIdentity(stage), prior.staging.identity)) throw new Error('Cold staging directory changed.');
       if (prior.staging.record) {
@@ -162,8 +195,10 @@ export async function claimWindowsColdRestore({
     } else { await rename(stage, guard); }
     await open();
     if (!same(admitted.snapshot, originalSnapshot)) throw new Error('Cold restore backup changed during lease publication.');
+    let receipt = null;
     const checkStopped = async ({ signal: checkSignal = signal } = {}) => {
       if (closed) throw new Error('Cold restore lease is closed.');
+      if (publishing || poisoned) throw new Error('Cold restore lease publication is unavailable or uncertain.');
       await assertWindowsAdmission(control, admission, { signal: checkSignal });
       await proof.check({ signal: checkSignal });
       if (proof.observation.stateSha256 !== expected.stateSha256
@@ -171,9 +206,10 @@ export async function claimWindowsColdRestore({
         || !same(await directoryIdentity(path.join(control, 'lock')), expected.lockIdentity)) {
         throw new Error('Original cold restore evidence changed during publication.');
       }
-      const current = await inspectLease(control, expected);
+      const current = await inspectLease(control, expected, configurationSha256);
       if (current.staging || !current.guard || !same(current.guard.record, record)
-        || !current.guard.bytes.equals(bytes) || await processIdentity(owner.pid) !== owner.processIdentity) {
+        || !current.guard.bytes.equals(bytes) || !same(current.guard.receipt, receipt)
+        || await processIdentity(owner.pid) !== owner.processIdentity) {
         throw new Error('Original cold restore recovery owner changed.');
       }
       await proof.check({ signal: checkSignal });
@@ -188,7 +224,41 @@ export async function claimWindowsColdRestore({
     const lease = Object.freeze({
       owner: Object.freeze({ ...owner }), lock: Object.freeze({ ...lock }), state: Object.freeze({ ...state }),
       snapshot: structuredClone(originalSnapshot), providers: admitted.providers, authorizedPaths: admitted.authorizedPaths,
-      backup, pwsh, identity: proof.identity, admissionIdentity: admission.identity, check, checkStopped, close,
+      backup, pwsh, admissionIdentity: admission.identity, check, checkStopped, close,
+      get identity() {
+        if (!proof) throw new Error('Cold restore native proof is unavailable during publication.');
+        return proof.identity;
+      },
+      async markFilesRestored({ runtimeBundle, signal: checkSignal = signal }) {
+        await check({ signal: checkSignal });
+        const expectedReceipt = filesReceipt(control, record, bytes, configurationSha256);
+        if (!same(runtimeBundle, expectedReceipt.runtimeBundle)) {
+          throw new Error('Cold file completion requires the original recovery owner runtime bundle.');
+        }
+        if (receipt) return;
+        publishing = true;
+        try {
+          await proof.close();
+          proof = null;
+          receipt = await publishWindowsColdRestoreFilesReceipt({
+            control, pwsh, admission, signal: checkSignal,
+            async makeRecord() {
+              if (!same(await directoryIdentity(guard), record.guardIdentity)
+                || !(await readWorkerFile(path.join(guard, 'owner.json'), 65536, { privateMode: true })).equals(bytes)) {
+                throw new Error('Cold file completion owner changed before publication.');
+              }
+              return expectedReceipt;
+            },
+          });
+          await open(checkSignal);
+          if (!same(admitted.snapshot, originalSnapshot)) throw new Error('Cold file completion backup changed.');
+          publishing = false;
+          await check({ signal: checkSignal });
+        } catch (error) {
+          poisoned = true;
+          throw error;
+        } finally { publishing = false; }
+      },
     });
     leases.set(lease, control);
     return lease;

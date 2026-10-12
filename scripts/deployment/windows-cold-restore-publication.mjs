@@ -11,7 +11,15 @@ const refused = cause => Object.assign(new Error('Cold restore lease publication
   code: 'DEPLOYMENT_WINDOWS_COLD_LEASE_PUBLICATION_REFUSED', recoveryAllowed: false,
 });
 
-export async function publishWindowsColdRestoreStaging({ control, pwsh, admission, signal, makeRecord }) {
+export function publishWindowsColdRestoreStaging(options) {
+  return publishColdRestoreRecord(options, false);
+}
+
+export function publishWindowsColdRestoreFilesReceipt(options) {
+  return publishColdRestoreRecord(options, true);
+}
+
+async function publishColdRestoreRecord({ control, pwsh, admission, signal, makeRecord }, filesRestored) {
   signal?.throwIfAborted();
   await assertWindowsAdmission(control, admission, { signal });
   const controllerIdentity = await processIdentity(process.pid);
@@ -19,6 +27,7 @@ export async function publishWindowsColdRestoreStaging({ control, pwsh, admissio
   const bridge = windowsControllerTransport({
     pwsh, refused, label: 'Native cold lease publisher',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
+      ...(filesRestored ? ['-FilesRestored'] : []),
       '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
   });
   try {
@@ -26,7 +35,7 @@ export async function publishWindowsColdRestoreStaging({ control, pwsh, admissio
       ['type', 'pid', 'processIdentity', 'controllerIdentity', 'directory'], 'cold lease publication readiness');
     if (ready.type !== 'ready' || ready.pid !== bridge.child.pid || ready.controllerIdentity !== controllerIdentity
       || ready.processIdentity !== await processIdentity(bridge.child.pid)
-      || ready.directory !== path.join(control, 'cold-restore-staging')) {
+      || ready.directory !== path.join(control, filesRestored ? 'recovery-lock' : 'cold-restore-staging')) {
       throw new Error('Original cold lease publisher readiness differs.');
     }
     await assertWindowsAdmission(control, admission, { signal });

@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory)][string]$Control,
     [Parameter(Mandatory)][int]$ControllerPid,
-    [Parameter(Mandatory)][string]$ControllerIdentity
+    [Parameter(Mandatory)][string]$ControllerIdentity,
+    [switch]$FilesRestored
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -18,8 +19,9 @@ try {
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
     $stage = 'private-directory'
-    $destination = Join-Path $Control 'cold-restore-staging'
-    $directory = [Deployment.WindowsPrivateFile]::CreateDirectory($destination)
+    $destination = Join-Path $Control $(if ($FilesRestored) { 'recovery-lock' } else { 'cold-restore-staging' })
+    $directory = if ($FilesRestored) { [Deployment.WindowsPrivateFile]::OpenDirectory($destination) }
+        else { [Deployment.WindowsPrivateFile]::CreateDirectory($destination) }
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; controllerIdentity=$ControllerIdentity
         directory=$destination
@@ -36,7 +38,8 @@ try {
     }
     $stage = 'owner-publication'
     $directory.Check()
-    $file = [Deployment.WindowsPrivateFile]::Publish((Join-Path $destination 'owner.json'), $text)
+    $name = if ($FilesRestored) { 'files-restored.json' } else { 'owner.json' }
+    $file = [Deployment.WindowsPrivateFile]::Publish((Join-Path $destination $name), $text)
     $directory.Check()
     [Console]::Out.WriteLine((@{ id=1; type='reply'; value=$file.Sha256; processIdentity=$identity } | ConvertTo-Json -Compress))
     [Console]::Out.Flush()

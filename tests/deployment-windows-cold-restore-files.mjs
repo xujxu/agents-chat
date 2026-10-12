@@ -108,6 +108,11 @@ if (mode === 'crash-copy') {
     await assert.rejects(restoreWindowsColdFiles({ control, lease, acceptDataLoss: true, timeoutSeconds: 0 }));
     await assert.rejects(restoreWindowsColdFiles({ control, lease, acceptDataLoss: true, onProgress: true }));
     await assert.rejects(restoreWindowsColdFiles({ control, lease, acceptDataLoss: true, signal: AbortSignal.abort() }));
+    await assert.rejects(lease.markFilesRestored({ runtimeBundle: {
+      directory: control, configuration: path.join(control, 'configuration.json'),
+      sha256: snapshot.runtime.task.configurationSha256,
+    } }), /runtime bundle/);
+    await assert.rejects(lstat(path.join(control, 'recovery-lock/files-restored.json')), { code: 'ENOENT' });
     const restored = await restoreWindowsColdFiles({ control, lease, acceptDataLoss: true });
     assert.equal(restored.status, 'files-restored');
     assert.equal(restored.runtimeBundle.directory, path.join(control, `runtime-${lease.owner.operationId}`));
