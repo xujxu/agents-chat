@@ -13915,6 +13915,40 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EK: Preserve a reconciled cold journal by native handle-bound archival
+
+**Files:** extend `scripts/deployment/WindowsPrivateFile.cs`'s existing
+identity-bound `RetirementDirectory`; add
+`tests/deployment-windows-private-archive.ps1` to the existing command step.
+
+**Scope:** before integrating archival into the policy authority, establish
+one same-parent, no-overwrite directory rename using the original DELETE-access
+handle. Do not emulate it by deleting receipts, copying them, or replacing an
+existing destination. Reuse the already accepted `FileRenameInfoEx` layout
+from source-file publication, with replacement flags zero.
+
+- [ ] Run the genuine native missing-method contract:
+
+  ```powershell
+  $held = [Deployment.WindowsPrivateFile]::RetainDirectoryForRetirement(
+      $source, $identity.Dev, $identity.Ino)
+  try {
+      $held.ArchiveTo($target)
+      $held.Check()
+  } finally { $held.Dispose() }
+  ```
+
+  Retain the same private parent; require canonical distinct destination in
+  that parent. A stale source identity, different parent, self-rename or existing
+  destination must fail. Preserve both source and occupied destination on refusal.
+- [ ] Add the native handle rename, update the retained object's expected
+  path only after success, and recheck original directory metadata, permissions
+  and parent. Preserve original inode, receipt bytes and security after closure.
+- [ ] Run paired existing command gate, including the existing policy and
+  bridge-death regressions. The primitive alone does not authorize archival of
+  a cold transaction; the subsequent authority must first prove policy restored,
+  all old/new writers absent and its own current journal claim.
+
 ### Task 5EJ: Resume exact disabled cold task policy recovery across repeated controller death
 
 **Files:** add `scripts/deployment/windows-cold-policy-history.ps1` and
