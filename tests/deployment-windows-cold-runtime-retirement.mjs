@@ -31,6 +31,8 @@ try {
   controller.abort();
   await assert.rejects(lease.retireRuntime({ signal: controller.signal }), { name: 'AbortError' });
   assert.equal(await processIdentity(admission.ownerPid), admission.ownerIdentity);
+  assert.equal(await processIdentity(lease.admissionIdentity.pid), lease.admissionIdentity.processIdentity);
+  await lease.checkStopped();
   const expected = { retired: true, inhibited: true, operationId: lease.owner.operationId };
   assert.deepEqual(await lease.retireRuntime(), expected);
   assert.notEqual(await processIdentity(admission.ownerPid), admission.ownerIdentity);

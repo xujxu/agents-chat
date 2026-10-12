@@ -231,6 +231,7 @@ export async function claimWindowsColdRestore({
         return proof.identity;
       },
       async retireRuntime({ signal: checkSignal = signal } = {}) {
+        checkSignal?.throwIfAborted();
         await check({ signal: checkSignal });
         if (!receipt) throw new Error('Cold runtime retirement requires completed file restoration by the current owner.');
         publishing = true;

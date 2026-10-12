@@ -13950,10 +13950,15 @@ with `retireRuntime`, and replace the fixture's manual retirement with a real
 distinct cold actor in `tests/deployment-windows-cold-runtime-retirement.mjs`.
 
 Implementation `3120246` is pushed, not yet accepted. Corrected retirement
-causal `17465db / 38204488708`, job `114667508459`, is running after its
-namespace prerequisite passed. Paired `3120246 / 38205515059` is queued
-behind it. Neither the cancelled first retirement attempt nor the separate
-absence acceptance proves this new mutation API.
+causal `17465db / 38204488708`, job `114667508459`, failed as expected at
+`2026-10-12 05:01:01 UTC` on the missing `lease.retireRuntime` function.
+Paired `3120246 / 38205515059`, job `114669952345`, exposed a pre-cancelled
+request bug at05:10:08: cancellation reached the admission transport and
+poisoned its retained ownership before retirement began. Reject an already
+aborted signal before checking admission; explicitly prove the original
+admission child and stopped proof remain usable afterward. Mid-request
+uncertainty must still fail closed. Neither the cancelled first retirement
+attempt nor the separate absence acceptance proves this new mutation API.
 
 - [ ] First exercise the real cold API through the native Actions fixture.
   Refuse retirement before the current owner's completed-file receipt exists,
