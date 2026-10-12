@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual as same } from 'node:util';
 import { assertWindowsAdmission } from './windows-admission.mjs';
@@ -5,6 +7,8 @@ import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { captureActivatedRuntime, captureTaskListener } from './windows-task-controller.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
+import { readWorkerFile } from './worker-files.mjs';
+import { captureWindowsColdActivationHistory } from './windows-cold-activation-history.mjs';
 
 const script = fileURLToPath(new URL('./windows-cold-activation.ps1', import.meta.url));
 const refused = cause => Object.assign(new Error('Cold guarded startup refused; preserve activation evidence.', { cause }), {
@@ -51,6 +55,29 @@ export async function openWindowsColdActivation({
       }
       return Object.freeze({ ...result, runtime: Object.freeze(runtime) });
     };
+    const checkHistory = async (phase, expected) => {
+      const directory = path.join(control, 'recovery-lock');
+      const intentBytes = await readWorkerFile(path.join(directory, 'activation-intent.json'),
+        65536, { privateMode: true });
+      if (createHash('sha256').update(intentBytes).digest('hex') !== intentSha256) {
+        throw new Error('Original cold activation intent changed before acknowledgement.');
+      }
+      const intent = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(intentBytes));
+      if (intent.ownerSha256 !== ownerSha256 || intent.filesReceiptSha256 !== receiptSha256
+        || !same(intent.runtimeBundle, runtimeBundle)) {
+        throw new Error('Cold activation journal differs from the admitted owner or runtime bundle.');
+      }
+      const phases = ['start-requested', 'running', ...(phase === 'stopped' ? ['stopped'] : [])];
+      const records = await Promise.all(phases.map(name =>
+        readWorkerFile(path.join(directory, `activation-${name}.json`), 4194304, { privateMode: true })));
+      const history = captureWindowsColdActivationHistory({ intent, intentBytes, records, taskName });
+      const last = history.records.at(-1);
+      if (history.phase !== phase || history.controllerPid !== ready.pid
+        || history.controllerIdentity !== ready.processIdentity || !same(history.runtime, expected.runtime)
+        || last.definition !== expected.definition || last.securityDescriptor !== expected.securityDescriptor) {
+        throw new Error('Cold activation acknowledgement differs from its durable native journal.');
+      }
+    };
     const request = async (method, requestSignal, options = {}) => {
       requestSignal?.throwIfAborted();
       if (closed || busy) throw new Error('Cold guarded startup is closed or busy.');
@@ -72,6 +99,7 @@ export async function openWindowsColdActivation({
           if (reply.value !== 'close') throw new Error('Cold startup close acknowledgement differs.');
           const result = await bridge.waitForExit();
           if (result.code !== 0 || result.signal !== null) throw new Error('Cold startup bridge did not close cleanly.');
+          if (running) await checkHistory('stopped', running);
           closed = true;
           bridge.wire.close();
           return;
@@ -83,6 +111,7 @@ export async function openWindowsColdActivation({
         }
         const current = capture(reply.value);
         if (running && !same(current, running)) throw new Error('Original cold guarded runtime changed.');
+        if (method === 'start') await checkHistory('running', current);
         running = current;
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
         return running;
