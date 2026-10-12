@@ -12,12 +12,7 @@ $failure = $null
 $stage = 'bootstrap'
 
 function Assert-AgentsChatColdRetirementEvidence {
-    if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
-        throw 'Original cold retirement controller changed.'
-    }
-    foreach ($file in $proof.Files) { $file.Check() }
-    Assert-AgentsChatStoppedRestoreInventory $proof
-    Assert-AgentsChatStoppedRestoreOwnerAbsent $proof
+    Assert-AgentsChatColdRestoreAuthority $proof
     $task = $proof.Folder.GetTask($proof.TaskName)
     if ($task.Path -cne "\$($proof.TaskName)" -or $task.Enabled -or
         [string]$task.Xml -cne $proof.Definition -or
@@ -37,39 +32,12 @@ try {
         (Join-Path $PSScriptRoot 'WindowsRuntimePipe.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeControl.cs'),
         (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'))
-    . (Join-Path $PSScriptRoot 'windows-stopped-restore-proof.ps1')
+    . (Join-Path $PSScriptRoot 'windows-cold-restore-authority.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'proof-open'
-    $proof = Open-AgentsChatStoppedRestoreProof -Control $Control -Recovery
-    $stage = 'cold-owner'
-    $ownerFile = Open-AgentsChatCompletionFile $proof (Join-Path $Control 'recovery-lock/owner.json') $OwnerSha256
-    $record = $ownerFile.ReadText() | ConvertFrom-Json
-    $owner = Read-AgentsChatMaintenanceFields ($record.owner | ConvertTo-Json -Compress) `
-        @('version', 'project', 'token', 'operationId', 'pid', 'processIdentity', 'createdAt')
-    if ($owner.version.GetInt32() -ne 1 -or $owner.pid.GetInt32() -ne $ControllerPid -or
-        $owner.processIdentity.GetString() -cne $ControllerIdentity -or
-        $record.stateSha256 -cne $proof.StateSha256 -or
-        $record.lock.operationId -cne $proof.OperationId) {
-        throw 'Cold retirement owner differs from the original recovery controller.'
-    }
-    $stage = 'completed-files'
-    $receiptFile = Open-AgentsChatCompletionFile $proof (Join-Path $Control 'recovery-lock/files-restored.json') $ReceiptSha256
-    $receipt = Read-AgentsChatMaintenanceFields ($receiptFile.ReadText()) @(
-        'version', 'phase', 'ownerSha256', 'operationId', 'backupId', 'snapshotSha256', 'stateSha256', 'runtimeBundle')
-    $runtime = Read-AgentsChatMaintenanceFields ($receipt.runtimeBundle.GetRawText()) @('directory', 'configuration', 'sha256')
-    $directory = Join-Path $Control "runtime-$($owner.operationId.GetString())"
-    if ($receipt.version.GetInt32() -ne 1 -or $receipt.phase.GetString() -cne 'files-restored' -or
-        $receipt.ownerSha256.GetString() -cne $OwnerSha256 -or
-        $receipt.operationId.GetString() -cne $proof.OperationId -or
-        $receipt.backupId.GetString() -cne $record.backupId -or
-        $receipt.snapshotSha256.GetString() -cne $record.snapshotSha256 -or
-        $receipt.stateSha256.GetString() -cne $proof.StateSha256 -or
-        $runtime.directory.GetString() -cne $directory -or
-        $runtime.configuration.GetString() -cne (Join-Path $directory 'configuration.json') -or
-        $runtime.sha256.GetString() -cnotmatch '^[a-f0-9]{64}$') {
-        throw 'Cold retirement requires the current original completed-file receipt.'
-    }
+    $proof = Open-AgentsChatColdRestoreAuthority -Control $Control -OwnerSha256 $OwnerSha256 `
+        -ReceiptSha256 $ReceiptSha256 -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
     $null = Assert-AgentsChatStoppedRestoreProof $proof
     $null = Assert-AgentsChatColdRetirementEvidence
     [Console]::Out.WriteLine((@{

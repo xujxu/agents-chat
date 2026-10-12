@@ -13,6 +13,7 @@ import { publishWindowsColdRestoreStaging, publishWindowsColdRestoreFilesReceipt
 import { retireWindowsColdRestoreOwner } from './windows-cold-restore-retirement.mjs';
 import { inspectWindowsColdConfiguration } from './windows-cold-restore-configuration.mjs';
 import { createWindowsColdActivationIntent } from './windows-cold-activation-intent.mjs';
+import { openWindowsColdActivation } from './windows-cold-activation.mjs';
 
 const leases = new WeakMap();
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -118,10 +119,12 @@ export async function claimWindowsColdRestore({
   let closed = false;
   let publishing = false;
   let poisoned = false;
+  let active;
   const close = async () => {
     if (closed) return;
     closed = true;
     const errors = [];
+    try { await active?.close(); } catch (error) { errors.push(error); }
     try { await proof?.close(); } catch (error) { errors.push(error); }
     try { await admission.close(); } catch (error) { errors.push(error); }
     if (errors.length) throw new AggregateError(errors, 'Cold restore lease cleanup failed.');
@@ -249,9 +252,9 @@ export async function claimWindowsColdRestore({
     };
     const checkUnused = async ({ signal: checkSignal = signal } = {}) => {
       checkSignal?.throwIfAborted();
-      const result = await check({ signal: checkSignal });
+      if (closed) throw new Error('Cold restore lease is closed.');
       if (activationIntent) throw new Error('Cold activation is already prepared; original file authority is consumed.');
-      return result;
+      return check({ signal: checkSignal });
     };
     await check();
     const lease = Object.freeze({
@@ -259,9 +262,9 @@ export async function claimWindowsColdRestore({
       snapshot: structuredClone(originalSnapshot), providers: admitted.providers, authorizedPaths: admitted.authorizedPaths,
       backup, pwsh, admissionIdentity: admission.identity, check: checkUnused, close,
       async checkStopped(options) {
-        const result = await checkStopped(options);
+        if (closed) throw new Error('Cold restore lease is closed.');
         if (activationIntent) throw new Error('Cold activation is already prepared; original file authority is consumed.');
-        return result;
+        return checkStopped(options);
       },
       get identity() {
         if (!proof) throw new Error('Cold restore native proof is unavailable during publication.');
@@ -358,14 +361,45 @@ export async function claimWindowsColdRestore({
           await open(checkSignal);
           if (!same(admitted.snapshot, originalSnapshot)) throw new Error('Cold activation backup changed during intent publication.');
           publishing = false;
+          let startAttempted = false;
           const checkIntent = async ({ signal: intentSignal = signal } = {}) => {
             intentSignal?.throwIfAborted();
-            await check({ signal: intentSignal });
+            if (closed) throw new Error('Cold restore lease is closed.');
+            if (publishing || poisoned) throw new Error('Cold activation is unavailable or uncertain.');
+            if (active) await active.check({ signal: intentSignal });
+            else await check({ signal: intentSignal });
             await configuration.checkFiles({ signal: intentSignal });
             return structuredClone(intent.state);
           };
           await checkIntent({ signal: checkSignal });
-          return Object.freeze({ state: Object.freeze(structuredClone(intent.state)), check: checkIntent });
+          return Object.freeze({
+            state: Object.freeze(structuredClone(intent.state)), check: checkIntent,
+            async start({ signal: startSignal = signal } = {}) {
+              startSignal?.throwIfAborted();
+              if (startAttempted) throw new Error('Cold guarded runtime is already started or startup was attempted.');
+              await checkIntent({ signal: startSignal });
+              startAttempted = true;
+              publishing = true;
+              try {
+                const taskName = proof.observation.taskName;
+                await proof.close();
+                proof = null;
+                active = await openWindowsColdActivation({
+                  control, pwsh, admission, ownerSha256: digest(bytes), receiptSha256: digest(receipt.bytes),
+                  intentSha256: digest(activationIntent.bytes), taskName, runtimeBundle: receipt.record.runtimeBundle,
+                  originalGeneration: state.runtimeIdentity, signal: startSignal,
+                });
+                await configuration.checkFiles({ signal: startSignal });
+                const running = await active.start({ signal: startSignal });
+                publishing = false;
+                await checkIntent({ signal: startSignal });
+                return running;
+              } catch (error) {
+                poisoned = true;
+                throw error;
+              } finally { publishing = false; }
+            },
+          });
         } catch (error) {
           poisoned = true;
           throw error;
