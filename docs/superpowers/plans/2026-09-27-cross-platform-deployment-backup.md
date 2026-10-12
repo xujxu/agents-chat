@@ -13915,6 +13915,46 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DS: Retain the original restore's empty worker domain
+
+**Scope:** an empty application Job is not sufficient evidence that deployment
+workers are settled. Before cold restore can acquire write authority, retain
+the original restore worker journal and saved helper inventory too. Current
+live restore opens a worker operation before native stop but enrolls no workers.
+Accept that exact opened prefix or its empty sealed form; do not accept
+enrolled/unsettled workers, infer settlement from a dead PID, or manufacture a
+sealed record. Interrupted update workers require their separate recovery path.
+
+**Files:** add `scripts/deployment/windows-stopped-restore-workers.ps1`; call
+it from `windows-stopped-restore-proof.ps1`, retaining all opened files in the
+existing proof context. Extend the opted-in original transaction fixture to
+create its real saved worker engine/operation before stopping. Add worker
+inventory/record/content negatives to the existing native stopped-proof test.
+
+- [ ] Write causal tests first: the original fixture uses
+  `saveWorkerEngine` and `createWorkerOperation`, never fabricates evidence.
+  After controller exit, require the original worker journal to resist writes
+  while the proof is open. A foreign `worker-foreign.ndjson` must cause
+  `worker-inventory` refusal; a single `sealed` record replacing `opened`
+  must cause `worker-evidence` refusal. Restore the exact original bytes after
+  each negative fixture. Existing task/lock/state/native bridge cases remain.
+- [ ] Run the paired native command gate and record the actual missing
+  worker-retention/inventory check failure before implementation.
+- [ ] Add native worker admission to stopped-proof opening after state
+  admission. Read only bounded complete newline-terminated records with exact
+  fields `version,phase,lock,manifestSha256,workerId`. Require one opened record
+  or opened+sealed, all workerId=null, same original retained lock and digest.
+  Require root worker inventory exactly worker-engine and
+  worker-operation.ndjson. Retain the helper directory, manifest and each
+  declared private file. Verify version/project/operationId/digest, unique
+  simple names, declared bytes/hashes, at most256 helper files, 1MiB/file and
+  16MiB total. Recheck both inventories along with existing retained file
+  handles on every stopped-proof check. No journal writes and no cleanup of
+  original recovery evidence.
+- [ ] Run native positives/negatives/bridge and unchanged terminal proof.
+  Only after this gate may the cold admission layer bind this proof to the
+  complete saved snapshot and acquire a durable recovery lease.
+
 ### Task 5DR: Expose retained stopped restore proof under native admission
 
 **Scope:** use the existing Windows named admission and framed native-controller
@@ -13954,6 +13994,11 @@ the accepted native stopped-proof fixture after its original actor exits.
   total limits, exact inventories, native private handles and link refusals.
   Add exact512 acceptance,513 refusal and both byte-budget regressions on both
   platforms; this is a helper-count correction, not a timeout increase.
+  Correction `a57fad4 / 38190943465` passed the Windows capture limits, native
+  bridge and original completed restore proof at `2026-10-12 01:20:03 UTC`;
+  bridge assertions passed at01:16:32. Full dual-platform `38190945815` is
+  pending behind the public-wrapper baseline, so Linux limit acceptance is
+  not yet claimed.
 - [ ] Implement a dedicated read-only native bridge. Load the same private
   file/runtime helpers as the accepted proof, watch the exact Node PID/start
   identity, open the proof and emit bounded ready/reply frames. Accept only

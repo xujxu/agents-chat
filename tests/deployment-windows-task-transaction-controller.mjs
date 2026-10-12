@@ -54,6 +54,11 @@ if (admission.discoverTask) {
   state = makeState(record.generation);
   await writeState(control, state);
 }
+if (proofMode === 'stopped-proof') {
+  const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
+  const saved = await saveWorkerEngine({ source, control, project, operationId: lock.operationId });
+  workerOperation = await createWorkerOperation({ control, lock, saved });
+}
 const options = { ...admission, pwsh, control, lock };
 await assert.rejects(stopWindowsTaskTransaction(options));
 state = { ...state, phase: operation === 'restore' ? 'restoring' : 'stopped', previousPhase: state.phase };

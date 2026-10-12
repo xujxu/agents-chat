@@ -25,7 +25,8 @@ if ($LiveOwner) {
     return
 }
 $directory = Join-Path $Control 'task-maintenance'
-$files = @((Join-Path $Control 'lock/owner.json'), (Join-Path $Control 'state.json')) +
+$files = @((Join-Path $Control 'lock/owner.json'), (Join-Path $Control 'state.json'),
+    (Join-Path $Control 'worker-operation.ndjson')) +
     @(Get-ChildItem -LiteralPath $directory -File | ForEach-Object FullName)
 $before = @($files | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash })
 $proof = Open-AgentsChatStoppedRestoreProof -Control $Control
@@ -39,8 +40,26 @@ try {
     try { [IO.File]::WriteAllText((Join-Path $Control 'lock/owner.json'), 'changed') }
     catch [IO.IOException] { $denied = $true }
     Assert $denied 'Retained original lock allowed replacement'
+    $denied = $false
+    try { [IO.File]::WriteAllText((Join-Path $Control 'worker-operation.ndjson'), 'changed') }
+    catch [IO.IOException] { $denied = $true }
+    Assert $denied 'Retained original worker evidence allowed replacement'
     $null = Assert-AgentsChatStoppedRestoreProof $proof
 } finally { Close-AgentsChatTaskCompletionProof $proof }
+
+$foreignWorker = Join-Path $Control 'worker-foreign.ndjson'
+$file = [Deployment.WindowsPrivateFile]::Publish($foreignWorker, '{}')
+$file.Dispose()
+try { Refused 'worker-inventory' }
+finally { [IO.File]::Delete($foreignWorker) }
+$workerFile = Join-Path $Control 'worker-operation.ndjson'
+$workerBytes = [IO.File]::ReadAllText($workerFile)
+try {
+    $invalid = $workerBytes.Replace('"phase":"opened"', '"phase":"sealed"')
+    Assert ($invalid -cne $workerBytes) 'Fixture did not change the original opened worker operation'
+    [IO.File]::WriteAllText($workerFile, $invalid, [Text.UTF8Encoding]::new($false))
+    Refused 'worker-evidence'
+} finally { [IO.File]::WriteAllText($workerFile, $workerBytes, [Text.UTF8Encoding]::new($false)) }
 
 $foreign = Join-Path $directory 'foreign.json'
 $file = [Deployment.WindowsPrivateFile]::Publish($foreign, '{}')
