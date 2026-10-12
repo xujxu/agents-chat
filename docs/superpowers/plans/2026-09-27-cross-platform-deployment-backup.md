@@ -13915,6 +13915,88 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EX: Bind cold restored receipts to actual application acceptance
+
+**Files:** create `scripts/deployment/windows-cold-receipt-recovery.mjs`
+and `tests/deployment-windows-cold-application-receipt.mjs`.
+Extend the receipt writer's cold-only awaited progress hook, saved recovery
+manifest/closure test, focused completion contracts, and existing actual
+application restore dispatcher/parent.
+
+- [ ] Add and push the missing-module acknowledgement/pre-abort contract.
+  Run the native selector after the indispensable 5EW gate completes:
+
+  ```js
+  const { recoverWindowsColdRestoredDeploymentReceipt } =
+    await import('../scripts/deployment/windows-cold-receipt-recovery.mjs');
+  await assert.rejects(recoverWindowsColdRestoredDeploymentReceipt(), /data-loss acknowledgement/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(recoverWindowsColdRestoredDeploymentReceipt({
+    acceptDataLoss: true, signal: controller.signal,
+  }), { name: 'AbortError' });
+  ```
+
+  Require one missing-module failure and the preceding 38 contracts passing.
+- [ ] Implement the focused orchestration using existing production acceptance:
+  open the opaque cold terminal authority; derive project/commit/task/port and
+  runtime from that retained authority, not caller identities. Open
+  `inspectWindowsManagedTask`, require the exact completion runtime and
+  released lease, then `inspectWindowsConfiguration` and exact providers.
+  Capture `inspectGitMetadata` at `authority.state.targetCommit`,
+  `inspectBuildArtifacts`, and `captureWindowsDeploymentAcceptance`.
+  Publish via `publishWindowsColdRestoredDeploymentReceipt`, verify readback
+  and recheck retained authority. Close configuration, managed scope and cold
+  authority in reverse order; aggregate cleanup failures without success fallback.
+  Reject absent acknowledgement and pre-abort before opening resources.
+- [ ] Extend only the cold writer with optional awaited `onProgress`.
+  Validate callback type after opaque authority validation. A `receipt-staged`
+  event follows exact stage parsing; fresh acceptance and path checks still
+  precede rename. A `receipt-published` event follows final exact inode/byte
+  readback, including idempotent entry. The actual orchestrator decorates
+  these immutable events with the original runtime and released lease:
+
+  ```js
+  const result = await recoverWindowsColdRestoredDeploymentReceipt({
+    control, pwsh, acceptDataLoss: true,
+    onProgress: async progress => {
+      if (progress.step === requestedBoundary) {
+        await interruptWindowsColdApplication({
+          ...progress, status: 'cold-restored-receipt-interrupted',
+        });
+      }
+    },
+  });
+  ```
+
+  No caller-provided identity or acceptance callback is accepted by the
+  actual orchestrator. Add the module to the saved closure.
+- [ ] Reuse the actual application's single cold copy/start and accepted
+  terminal-state chain. Append `restore-cold-receipt-staged`,
+  `restore-cold-receipt-published`, and `restore-cold-receipt-completed`.
+  First two actors exit exactly 91 inside the awaited progress hook.
+  Parent captures the exact staged receipt hash/inode and requires both after
+  publication and final independent reentry. Final actor preserves receipt
+  bytes/inode/acceptedAt. Each verifies unchanged root state, terminal marker,
+  transaction, journal and backup manifest; transaction reads while authority
+  is held must return EBUSY. Parent independently verifies transaction inode,
+  runtime PID/start identity/Scheduler instance/released lease and restored API.
+  New receipt actors have a 15-minute bound for real artifact hashing; do not
+  change existing actor bounds or the 115-minute job bound.
+- [ ] Push and run native selector, then actual crash pair:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=crash
+  ```
+
+  Inspect completed native and both actual logs. Receipt acceptance does not
+  retire recovery evidence, unlock, or complete the public cold restore entry.
+
 ### Task 5EW: Publish restored receipts under retained cold terminal authority
 
 **Files:** extend `scripts/deployment/windows-cold-activation-recovery.mjs`

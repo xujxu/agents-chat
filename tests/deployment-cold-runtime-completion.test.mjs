@@ -14,6 +14,18 @@ import { readWindowsColdTerminalSource, inspectWindowsColdTerminalState,
   captureWindowsColdTerminalStateReply } from '../scripts/deployment/windows-cold-terminal-state.mjs';
 import * as receipts from '../scripts/deployment/deployment-receipt.mjs';
 
+test('actual cold receipt recovery requires acknowledgement and honors pre-abort', async () => {
+  const { recoverWindowsColdRestoredDeploymentReceipt } =
+    await import('../scripts/deployment/windows-cold-receipt-recovery.mjs');
+  assert.equal(typeof recoverWindowsColdRestoredDeploymentReceipt, 'function');
+  await assert.rejects(recoverWindowsColdRestoredDeploymentReceipt(), /data-loss acknowledgement/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(recoverWindowsColdRestoredDeploymentReceipt({
+    acceptDataLoss: true, signal: controller.signal,
+  }), { name: 'AbortError' });
+});
+
 test('cold receipt authority requires acknowledgement and honors pre-abort', async () => {
   assert.equal(typeof recovery.openWindowsColdReceiptAuthority, 'function');
   await assert.rejects(recovery.openWindowsColdReceiptAuthority(), /data-loss acknowledgement/);
