@@ -13923,7 +13923,7 @@ Extend the receipt writer's cold-only awaited progress hook, saved recovery
 manifest/closure test, focused completion contracts, and existing actual
 application restore dispatcher/parent.
 
-- [ ] Add and push the missing-module acknowledgement/pre-abort contract.
+- [x] Add and push the missing-module acknowledgement/pre-abort contract.
   Run the native selector after the indispensable 5EW gate completes:
 
   ```js
@@ -13938,7 +13938,9 @@ application restore dispatcher/parent.
   ```
 
   Require one missing-module failure and the preceding 38 contracts passing.
-- [ ] Implement the focused orchestration using existing production acceptance:
+  Observed `c54178d / 38321254086`, job `115056012806`, at
+  2026-10-12 23:39:55 UTC: one `ERR_MODULE_NOT_FOUND`, 38 other contracts passed.
+- [x] Implement the focused orchestration using existing production acceptance:
   open the opaque cold terminal authority; derive project/commit/task/port and
   runtime from that retained authority, not caller identities. Open
   `inspectWindowsManagedTask`, require the exact completion runtime and
@@ -13949,7 +13951,7 @@ application restore dispatcher/parent.
   and recheck retained authority. Close configuration, managed scope and cold
   authority in reverse order; aggregate cleanup failures without success fallback.
   Reject absent acknowledgement and pre-abort before opening resources.
-- [ ] Extend only the cold writer with optional awaited `onProgress`.
+- [x] Extend only the cold writer with optional awaited `onProgress`.
   Validate callback type after opaque authority validation. A `receipt-staged`
   event follows exact stage parsing; fresh acceptance and path checks still
   precede rename. A `receipt-published` event follows final exact inode/byte
@@ -13971,7 +13973,11 @@ application restore dispatcher/parent.
 
   No caller-provided identity or acceptance callback is accepted by the
   actual orchestrator. Add the module to the saved closure.
-- [ ] Reuse the actual application's single cold copy/start and accepted
+  Published callbacks are followed by another authority and exact receipt
+  readback check; the actual orchestrator also repeats fresh real acceptance
+  before returning. Original disabled task policy is not rejected merely
+  because it is disabled: native completion already binds original policy.
+- [x] Reuse the actual application's single cold copy/start and accepted
   terminal-state chain. Append `restore-cold-receipt-staged`,
   `restore-cold-receipt-published`, and `restore-cold-receipt-completed`.
   First two actors exit exactly 91 inside the awaited progress hook.
@@ -14069,7 +14075,7 @@ every fresh acceptance check and atomic receipt replacement.
   acceptance must supply the existing real source/artifact/config/service checks.
   The native command workflow already includes the full existing receipt suite;
   no duplicate workflow step is needed.
-- [ ] Push implementation and run the native selector with the existing
+- [x] Push implementation and run the native selector with the existing
   receipt suite included:
 
   ```bash
@@ -14081,6 +14087,12 @@ every fresh acceptance check and atomic receipt replacement.
   Require new authority/refusal contracts, existing warm receipt contracts,
   saved dependency closure, both cold completion/state/receipt interruption
   cases, and the old warm terminal regression. Inspect completed logs.
+  Accepted `7c84f84 / 38320959400`, job `115048675442`, at
+  2026-10-12 23:39:26 UTC: 38 focused contracts, all five warm receipt tests,
+  saved closure, both cold receipt interruption/reentry cases and the prior
+  warm terminal regression passed. The receipt cases completed at
+  23:26:53 and 23:37:13 UTC; original staged receipt and transaction inodes,
+  terminal state, journals and released runtimes were preserved.
   Follow with a focused actual acceptance orchestrator reusing
   `captureWindowsDeploymentAcceptance`, retained managed task/configuration,
   `inspectGitMetadata` and `inspectBuildArtifacts`; do not accept arbitrary

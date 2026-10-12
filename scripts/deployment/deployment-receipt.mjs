@@ -61,18 +61,19 @@ export function publishRestoredDeploymentReceipt(options) {
 }
 
 export async function publishWindowsColdRestoredDeploymentReceipt(options = {}) {
-  const { control, lock, authority, signal } = options;
+  const { control, lock, authority, signal, onProgress } = options;
   signal?.throwIfAborted();
   const { assertWindowsColdReceiptAuthority } = await import('./windows-cold-activation-recovery.mjs');
   const checkAuthority = (control, lock) => assertWindowsColdReceiptAuthority({
     control, lock, authority, signal,
   });
   await checkAuthority(control, lock);
-  return publishReceipt(options, true, checkAuthority, true);
+  if (onProgress !== undefined && typeof onProgress !== 'function') throw new Error('Invalid cold receipt progress callback.');
+  return publishReceipt(options, true, checkAuthority, true, onProgress);
 }
 
 async function publishReceipt({ control, lock: supplied, identity, checkAccepted, signal }, restored,
-  checkAuthority = assertLockOwner, strictOperation = false) {
+  checkAuthority = assertLockOwner, strictOperation = false, onProgress) {
   signal?.throwIfAborted();
   const lock = captureLockOwner(supplied);
   const expected = captureIdentity(identity);
@@ -111,6 +112,15 @@ async function publishReceipt({ control, lock: supplied, identity, checkAccepted
   }, lock.project);
   const destination = path.join(root, 'deployment.json');
   const stage = path.join(root, '.deployment.json.staging');
+  const notify = async (step, published) => {
+    if (!onProgress) return;
+    await onProgress(Object.freeze({ step, operationId: lock.operationId }));
+    signal?.throwIfAborted();
+    if (published) {
+      await checkAuthority(root, lock);
+      if (!same(await observe(destination), published)) throw new Error('Published deployment receipt changed during notification.');
+    }
+  };
   const previous = await observe(destination);
   if (previous) {
     const existing = decode(previous, lock.project);
@@ -127,6 +137,7 @@ async function publishReceipt({ control, lock: supplied, identity, checkAccepted
   if (previous && same(decode(previous, lock.project), receipt) && !staged) {
     await check();
     if (!same(await observe(destination), previous)) throw new Error('Deployment receipt changed.');
+    await notify('receipt-published', previous);
     return receipt;
   }
   if (!staged) {
@@ -135,6 +146,7 @@ async function publishReceipt({ control, lock: supplied, identity, checkAccepted
     staged = await observe(stage);
     if (!staged || !same(decode(staged, lock.project), receipt)) throw new Error('Staged deployment receipt changed.');
   }
+  await notify('receipt-staged');
   await check();
   if (!same(await observe(stage), staged) || !same(await observe(destination), previous)) {
     throw new Error('Deployment receipt publication paths changed.');
@@ -143,5 +155,6 @@ async function publishReceipt({ control, lock: supplied, identity, checkAccepted
   await syncWorkerDirectory(root);
   await check();
   if (!same(await observe(destination), staged)) throw new Error('Published deployment receipt changed.');
+  await notify('receipt-published', staged);
   return receipt;
 }
