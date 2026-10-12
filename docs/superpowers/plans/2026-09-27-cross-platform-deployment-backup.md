@@ -13934,7 +13934,7 @@ next state, original lock, complete cold chain and released runtime. Its
 exclusive original transaction and Windows admission stay retained throughout
 every fresh acceptance check and atomic receipt replacement.
 
-- [ ] Add acknowledgement/abort and forged-authority contracts:
+- [x] Add acknowledgement/abort and forged-authority contracts:
 
   ```js
   assert.equal(typeof recovery.openWindowsColdReceiptAuthority, 'function');
@@ -13946,13 +13946,15 @@ every fresh acceptance check and atomic receipt replacement.
 
   Push test-only and run the native command selector. Expect the two missing
   exports to fail while the original 36 contracts remain green.
-- [ ] Issue a narrow frozen facade with `observation`, `lock`, `state`,
-  `check` and `close`. Register its exact object in a private WeakMap only
+  Observed `dcbb24c / 38320337441`, job `115046670331`,
+  2026-10-12 23:06:26 UTC: exactly two missing exports, 36 other contracts passed.
+- [x] Issue a narrow frozen facade with `observation`, `lock`, `state`,
+  native bridge `identity`, `check` and `close`. Register its exact object in a private WeakMap only
   after successful complete terminal admission and physical published-state
   verification. Reject forged, closed, wrong-control or wrong-lock handles;
   recheck native proof and exact terminal marker/state at every use. Do not
   expose root-state mutation methods through this receipt facade.
-- [ ] Add the separate receipt publisher:
+- [x] Add the separate receipt publisher:
 
   ```js
   const authority = await recovery.openWindowsColdReceiptAuthority({
@@ -13973,7 +13975,7 @@ every fresh acceptance check and atomic receipt replacement.
   points keep their original authorization and behavior.
   A receipt already published for this restore operation must match exactly;
   refuse a different same-operation identity rather than replacing it.
-- [ ] Add native fixture actors after accepted root-state publication:
+- [x] Add native fixture actors after accepted root-state publication:
   seed a valid prior receipt, hold the genuine cold authority, and interrupt
   inside `checkAccepted` first when the exact stage exists and then after
   the final receipt replaces it. Parent terminates exact actors, verifies the
@@ -13983,6 +13985,8 @@ every fresh acceptance check and atomic receipt replacement.
   forged/closed authority or changed same-operation identity. Use synthetic
   identity fingerprints only in this native writer fixture; actual application
   acceptance must supply the existing real source/artifact/config/service checks.
+  The native command workflow already includes the full existing receipt suite;
+  no duplicate workflow step is needed.
 - [ ] Push implementation and run the native selector with the existing
   receipt suite included:
 

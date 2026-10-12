@@ -23,6 +23,7 @@ import { readWindowsColdTerminalSource, inspectWindowsColdTerminalState,
 const script = fileURLToPath(new URL('./windows-stopped-restore-controller.ps1', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const parse = bytes => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+const receiptAuthorities = new WeakMap();
 const refused = cause => Object.assign(new Error('Cold activation observation refused; retain original recovery evidence.', { cause }), {
   code: 'DEPLOYMENT_WINDOWS_COLD_ACTIVATION_OBSERVATION_REFUSED', recoveryAllowed: false,
 });
@@ -60,6 +61,25 @@ export async function publishWindowsColdTerminalState({ control, pwsh, signal, a
   if (onProgress !== undefined && typeof onProgress !== 'function') throw new Error('Invalid cold terminal progress callback.');
   const recovery = await openRecovery({ control, pwsh, signal }, false, true, true, true);
   return finishWindowsColdTerminalState(recovery, { signal, onProgress });
+}
+
+export async function openWindowsColdReceiptAuthority({ control, pwsh, signal, acceptDataLoss } = {}) {
+  signal?.throwIfAborted();
+  if (acceptDataLoss !== true) throw new Error('Cold receipt publication requires explicit data-loss acknowledgement.');
+  return openRecovery({ control, pwsh, signal }, false, true, true, 'receipt');
+}
+
+export async function assertWindowsColdReceiptAuthority({ control, lock, authority, signal } = {}) {
+  signal?.throwIfAborted();
+  const retained = receiptAuthorities.get(authority);
+  if (!retained || retained.control !== control || !same(retained.lock, lock)) {
+    throw new Error('Original cold terminal authority is required for this control and lock.');
+  }
+  await authority.check({ signal });
+  if (!(await inspectWindowsColdTerminalState(control, retained.source)).published) {
+    throw new Error('Cold receipt publication requires its exact published terminal state.');
+  }
+  signal?.throwIfAborted();
 }
 
 export async function prepareWindowsColdPolicyRecovery({ control, pwsh, signal, acceptDataLoss } = {}) {
@@ -196,7 +216,10 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
         lockIdentity: expected.lockIdentity, recoveryIdentity: guard.identity, files: terminalFiles,
       });
       if (initialCompletionPrefix.record.phase !== 'complete') throw new Error('Cold terminal publication requires complete policy.');
-      await inspectWindowsColdTerminalState(control, terminalSource);
+      const physical = await inspectWindowsColdTerminalState(control, terminalSource);
+      if (terminalState === 'receipt' && !physical.published) {
+        throw new Error('Cold receipt publication requires its exact published terminal state.');
+      }
     }
     if (policyRecovery) {
       const stopped = parse(await readWorkerFile(path.join(control, 'task-maintenance/task-stop-stopped.json'),
@@ -381,15 +404,19 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
       } finally { busy = false; }
     };
     await assertWindowsAdmission(control, admission, { signal });
-    return Object.freeze({
+    const result = Object.freeze({
       observation,
       check: ({ signal: checkSignal } = {}) => request('check', checkSignal),
       ...(completionRecovery ? {
         identity: Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity }),
-        advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal),
-        prepareTerminal: ({ signal: terminalSignal } = {}) => request('prepare-terminal', terminalSignal),
+        ...(terminalState === 'receipt' ? {
+          lock: Object.freeze({ ...lock }), state: Object.freeze(parse(terminalSource.nextBytes)),
+        } : {
+          advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal),
+          prepareTerminal: ({ signal: terminalSignal } = {}) => request('prepare-terminal', terminalSignal),
+        }),
       } : {}),
-      ...(terminalState ? {
+      ...(terminalState === true ? {
         stageTerminalState: ({ signal: stateSignal } = {}) => request('stage-terminal-state', stateSignal),
         publishTerminalState: ({ signal: stateSignal } = {}) => request('publish-terminal-state', stateSignal),
       } : {}),
@@ -400,6 +427,7 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
       async close() {
         if (busy) throw new Error('Cannot close an active cold activation observation.');
         if (finished) return;
+        receiptAuthorities.delete(result);
         finished = true;
         const errors = [];
         try { if (!closed) await request('close'); } catch (error) { errors.push(error); }
@@ -407,6 +435,13 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
         if (errors.length) throw new AggregateError(errors, 'Cold activation observation cleanup failed.');
       },
     });
+    if (terminalState === 'receipt') {
+      if (!(await inspectWindowsColdTerminalState(control, terminalSource)).published) {
+        throw new Error('Cold receipt terminal state changed before admission.');
+      }
+      receiptAuthorities.set(result, { control, lock, source: terminalSource });
+    }
+    return result;
   } catch (cause) {
     const failure = bridge ? await bridge.abandon(cause) : cause;
     try { await admission.close(); }

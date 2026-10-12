@@ -68,6 +68,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Cold terminal handoff or independent reentry failed.' }
     }
     & (Join-Path $PSScriptRoot 'deployment-windows-cold-terminal-state.ps1') -Control $Control
+    & (Join-Path $PSScriptRoot 'deployment-windows-cold-receipt.ps1') -Control $Control
 } finally {
     if ($owner) {
         try {

@@ -60,7 +60,19 @@ export function publishRestoredDeploymentReceipt(options) {
   return publishReceipt(options, true);
 }
 
-async function publishReceipt({ control, lock: supplied, identity, checkAccepted, signal }, restored) {
+export async function publishWindowsColdRestoredDeploymentReceipt(options = {}) {
+  const { control, lock, authority, signal } = options;
+  signal?.throwIfAborted();
+  const { assertWindowsColdReceiptAuthority } = await import('./windows-cold-activation-recovery.mjs');
+  const checkAuthority = (control, lock) => assertWindowsColdReceiptAuthority({
+    control, lock, authority, signal,
+  });
+  await checkAuthority(control, lock);
+  return publishReceipt(options, true, checkAuthority, true);
+}
+
+async function publishReceipt({ control, lock: supplied, identity, checkAccepted, signal }, restored,
+  checkAuthority = assertLockOwner, strictOperation = false) {
   signal?.throwIfAborted();
   const lock = captureLockOwner(supplied);
   const expected = captureIdentity(identity);
@@ -80,7 +92,7 @@ async function publishReceipt({ control, lock: supplied, identity, checkAccepted
     signal?.throwIfAborted();
     await externalWorkerDirectory(root, lock.project);
     if (!same(fileIdentity(await lstat(root, { bigint: true })), original)) throw new Error('Deployment control identity changed.');
-    await assertLockOwner(root, lock);
+    await checkAuthority(root, lock);
     if (!same(await loadState(root), state) || !same(await observe(stateFile), stateEvidence)) {
       throw new Error('Accepted deployment state changed.');
     }
@@ -88,7 +100,7 @@ async function publishReceipt({ control, lock: supplied, identity, checkAccepted
       throw new Error('Accepted deployment identity changed.');
     }
     signal?.throwIfAborted();
-    await assertLockOwner(root, lock);
+    await checkAuthority(root, lock);
     if (!same(fileIdentity(await lstat(root, { bigint: true })), original)
       || !same(await observe(stateFile), stateEvidence)) throw new Error('Accepted deployment state changed during verification.');
   };
@@ -100,7 +112,12 @@ async function publishReceipt({ control, lock: supplied, identity, checkAccepted
   const destination = path.join(root, 'deployment.json');
   const stage = path.join(root, '.deployment.json.staging');
   const previous = await observe(destination);
-  if (previous) decode(previous, lock.project);
+  if (previous) {
+    const existing = decode(previous, lock.project);
+    if (strictOperation && existing.operationId === lock.operationId && !same(existing, receipt)) {
+      throw new Error('Published cold restore receipt changed its original operation identity.');
+    }
+  }
   let staged = await observe(stage);
   if (staged) {
     try {

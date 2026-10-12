@@ -690,6 +690,11 @@ The staged/published interruption actors and final idempotent recovery preserved
 the original staged inode, transaction digest/inode, released runtime and
 authenticated restored data. Both actual crash jobs passed. This does not yet publish
 the deployment receipt, retire evidence or remove the original lock.
+The follow-on cold receipt entry reuses the staged receipt writer under a
+separate retained native terminal authority; ordinary warm publication still
+requires the current lock owner. Its new interruption and authority-refusal
+fixtures are pending Actions acceptance. Actual receipt acceptance, evidence
+retirement and public cold restore completion remain unfinished.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
