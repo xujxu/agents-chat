@@ -13971,6 +13971,10 @@ extend `scripts/deployment/windows-cold-activation.mjs` and
   readiness and owned close pass. This task does not yet normalize an
   interrupted task, replace ownership, release a runtime lease or complete
   public cold restoration.
+  Causal `d19ff16 / 38220801318`, job `114716319566`, failed as expected
+  at `2026-10-12 07:59:06 UTC` on the missing history module (19/21 unit
+  cases passed). Implementation `7783994 / 38220999163`, job
+  `114716958998`, is running the paired native gate.
 
 ### Task 5EE: Exercise cold guarded startup against the restored application
 
