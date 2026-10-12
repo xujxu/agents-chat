@@ -13949,6 +13949,9 @@ opted-in stopped-proof transaction/controller fixtures.
   ```
   Require forged-proof/admission, foreign project/backup/Node, unsupported
   profile, cancellation, changed backup and closed original proof refusal.
+  Causal `7b5a880 / 38193181306`, job `114630113078`, reached the real stopped
+  runtime, complete snapshot and exited original controller, then failed at
+  `2026-10-12 01:50:49 UTC` on the missing stopped-snapshot module.
 - [ ] Implement read-only snapshot binding. Check native proof before reading
   original state/admission and again after all archived checks; match its state
   SHA and operation. Share policy comparison without weakening the live scope

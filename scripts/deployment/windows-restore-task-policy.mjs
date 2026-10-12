@@ -14,13 +14,24 @@ function refused(cause) {
 
 export async function inspectWindowsRestoreTaskPolicy({ scope, task: supplied, pwsh, signal }) {
   signal?.throwIfAborted();
+  try {
+    const original = await assertWindowsManagedTaskScope(scope, { signal });
+    return await compareWindowsRestoreTaskPolicy({
+      original, task: supplied, pwsh, signal,
+      check: () => assertWindowsManagedTaskScope(scope, { signal }),
+    });
+  } catch (cause) { throw refused(cause); }
+}
+
+export async function compareWindowsRestoreTaskPolicy({ original, task: supplied, pwsh, check, signal }) {
+  signal?.throwIfAborted();
   let bridge;
   try {
     if (process.platform !== 'win32' || typeof pwsh !== 'string' || !path.isAbsolute(pwsh)
       || path.resolve(pwsh) !== pwsh || /[\0\r\n]/.test(pwsh)) {
       throw new Error('Restore policy inspection requires explicit canonical Windows PowerShell.');
     }
-    const original = await assertWindowsManagedTaskScope(scope, { signal });
+    await check();
     const task = captureWorkerFields(supplied,
       ['version', 'name', 'definition', 'securityDescriptor', 'configuration', 'configurationSha256'], 'saved restore task');
     if (task.version !== 1 || task.name !== original.taskName
@@ -47,7 +58,7 @@ export async function inspectWindowsRestoreTaskPolicy({ scope, task: supplied, p
       || ready.processIdentity !== await processIdentity(bridge.child.pid) || ready.value !== 'same-task-policy') {
       throw new Error('Original native restore policy observation differs.');
     }
-    await assertWindowsManagedTaskScope(scope, { signal });
+    await check();
     await bridge.wire.send({ id: 3, method: 'close' });
     const reply = captureWorkerFields(await bridge.wire.receive({ signal, timeoutMs: 30000 }),
       ['id', 'type', 'value', 'processIdentity'], 'restore policy close');
@@ -57,7 +68,7 @@ export async function inspectWindowsRestoreTaskPolicy({ scope, task: supplied, p
     const result = await bridge.waitForExit();
     if (result.code !== 0 || result.signal !== null) throw new Error('Native restore policy observer did not close cleanly.');
     bridge.wire.close();
-    await assertWindowsManagedTaskScope(scope, { signal });
+    await check();
     return Object.freeze({ status: 'same-task-policy', runtimeAuthority: false, taskName: original.taskName });
   } catch (cause) {
     if (!bridge) throw refused(cause);
