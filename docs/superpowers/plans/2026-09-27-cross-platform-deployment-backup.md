@@ -13915,6 +13915,48 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EV: Accept cold terminal state interruption with the actual application
+
+**Files:** add `tests/deployment-windows-cold-application-terminal.mjs`;
+extend `tests/deployment-windows-live-application.{mjs,ps1}` and
+`tests/deployment-windows-live-restore.mjs`.
+
+- [ ] Reuse the existing single actual cold copy/start and completed-runtime
+  observer. Add captured actors `restore-cold-state-staged`,
+  `restore-cold-state-published`, and `restore-cold-state-completed`.
+  The first prepares the immutable terminal handoff; both interrupted actors
+  use the existing exact-exit-91 helper from inside an awaited callback:
+
+  ```js
+  await interruptWindowsColdApplication({
+    status: 'cold-terminal-state-interrupted', step: progress.step,
+    operationId: marker.operationId, runtime: marker.runtime, lease: 'released',
+  });
+  ```
+
+  Before each interruption, require exact old or proposed root state,
+  expected stage presence, unchanged marker/original lock/deployment receipt/
+  completion journal, and authenticated restored API data. The parent
+  terminates the original actor Job, verifies exact exit/status/step, original
+  runtime PID/start identity/Scheduler instance and released lease, then
+  independently queries restored authenticated API data.
+- [ ] Capture the original staged file identity in the parent and require
+  the published root state to retain that inode after the second actor exits
+  and after final recovery. Final recovery must repeat publication without
+  changing state bytes, inode or timestamp. Keep existing 45-minute cold
+  copy/start and five-minute recovery actor bounds; do not add another copy.
+- [ ] Push the test integration and dispatch both existing actual crash jobs:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=crash
+  ```
+
+  Require both warm-crash regression and copy-crash/cold-terminal chain.
+  Inspect completed logs and record exact acceptance. This does not accept
+  deployment receipt replacement, evidence retirement or public cold restore.
+
 ### Task 5EU: Publish the prepared cold terminal state with interruption reentry
 
 **Prerequisite:** Task 5ET's immutable handoff and native acceptance.
@@ -13934,7 +13976,7 @@ checked destination metadata, native handle rename, and original-target
 unlink check provide atomic publication under the existing exclusive
 original-transaction authority.
 
-- [ ] Write the early API contract and native interruption actors:
+- [x] Write the early API contract and native interruption actors:
 
   ```js
   assert.equal(typeof recovery.publishWindowsColdTerminalState, 'function');
@@ -13960,7 +14002,7 @@ original-transaction authority.
   exact proposed bytes and timestamp, no remaining stage, unchanged terminal
   marker/lock/transaction/backup/journal, and the same live released runtime.
   Keep the existing three-minute actor and fifteen-second exit bounds.
-- [ ] Push the test-only commit and queue one causal native run without
+- [x] Push the test-only commit and queue one causal native run without
   replacing Task 5ET's required run:
 
   ```bash
@@ -13974,14 +14016,14 @@ original-transaction authority.
   Test-only `95a2f9c / 38287037098`, job `114943744564`, failed as expected
   at `2026-10-12 18:08:25 UTC`: the new export was undefined at test line 15;
   the other 34 focused contracts passed.
-- [ ] Implement explicit terminal handoff consumption. Only this mode may
+- [x] Implement explicit terminal handoff consumption. Only this mode may
   derive the original stopped-state binding from the retained marker's exact
   `oldState`; it must independently validate all marker bindings and require
   physical `state.json` to match either the original inode/bytes or the exact
   proposed next bytes. Keep ordinary stopped/completed observers unchanged.
   Retain the marker, original transaction exclusively, original directory
   identities, completion chain and released runtime throughout.
-- [ ] Stage the exact prepared `nextState`, then publish through the existing
+- [x] Stage the exact prepared `nextState`, then publish through the existing
   source-file primitive:
 
   ```powershell
@@ -13997,7 +14039,7 @@ original-transaction authority.
   Refuse foreign or incomplete publication files. Reuse an exact staged file
   after interruption; recognize an already-published exact next state without
   overwriting it or refreshing its timestamp.
-- [ ] Independently verify physical state and stage evidence in Node after
+- [x] Independently verify physical state and stage evidence in Node after
   each acknowledgement, await the finite progress callbacks, and always close
   the native authority. Return exactly the following immutable acknowledgement,
   not overall restore success:
@@ -14011,11 +14053,17 @@ original-transaction authority.
 
   This task does not replace deployment receipts, retire evidence, remove locks,
   or connect the public cold restore entry.
-- [ ] Push implementation and run the same native selector after the causal
+- [x] Push implementation and run the same native selector after the causal
   failure is inspected. Require 36 focused contracts, saved dependency closure,
   both old cold completion/observation/handoff cases, new staged/published
   interruption recovery, and the existing warm terminal regression. Record
   completed logs and acceptance; then continue receipt publication and cleanup.
+  Native `ab3aee3 / 38289886125`, job `114947154600`, passed at
+  `2026-10-12 18:51:43 UTC`: all 36 focused contracts, saved helper closure,
+  both original cold completion/observation/handoff cases, new staged and
+  published state interruptions with two fresh reentry actors, and the warm
+  terminal regression. Normal state recovery passed at `18:35:03 UTC`;
+  repeated-completion-crash state recovery passed at `18:48:48 UTC`.
 
 ### Task 5ET: Prepare the cold terminal handoff before replacing root state
 

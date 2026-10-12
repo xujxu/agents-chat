@@ -682,7 +682,10 @@ proposed terminal state, original file/directory identities and completion
 receipts in a no-overwrite private marker. Preparation alone does not write
 `restored`, replace the deployment receipt, retire evidence or remove the lock.
 Consuming that handoff for staged, atomic root-state publication and interrupted
-reentry is implemented but awaiting its native gate. It does not yet publish
+reentry passed the native gate at `ab3aee3 / 38289886125`: all 36 focused
+contracts and both cold cases passed, including interruption after staging and
+publication, original staged-inode preservation and two fresh reentry actors.
+Actual application acceptance of those state boundaries is pending. This does not yet publish
 the deployment receipt, retire evidence or remove the original lock.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native

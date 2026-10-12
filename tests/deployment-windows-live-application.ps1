@@ -27,6 +27,7 @@ $capture = $null
 $actor = $null
 $egress = $null
 $coldOwner = $null
+$coldStateStage = $null
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 try {
@@ -42,7 +43,8 @@ try {
         else { @('update', 'verify-closed', 'current', "restore-$RestoreScenario") }
     if ($RestoreScenario -eq 'copy-crashed') {
         $modes += @('restore-cold-files', 'restore-cold-policy-crashed', 'restore-cold-enable-crashed',
-            'restore-cold-completed', 'restore-cold-observed')
+            'restore-cold-completed', 'restore-cold-observed',
+            'restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed')
     }
     foreach ($mode in $modes) {
         if ($RestoreScenario -eq 'offline' -and $mode -eq 'restore') {
@@ -100,7 +102,8 @@ try {
             continue
         }
         $completionInterrupted = $mode -in @('restore-cold-files', 'restore-cold-policy-crashed', 'restore-cold-enable-crashed')
-        $expectedCode = if ($completionInterrupted) { 91 } else { 0 }
+        $terminalInterrupted = $mode -in @('restore-cold-state-staged', 'restore-cold-state-published')
+        $expectedCode = if ($completionInterrupted -or $terminalInterrupted) { 91 } else { 0 }
         Assert ($code -eq $expectedCode) "Live controller $mode returned an unexpected exit code ${code}: $text"
         $result = $text | ConvertFrom-Json
         $expected = switch ($mode) {
@@ -114,6 +117,9 @@ try {
             restore-cold-enable-crashed { 'cold-completion-interrupted' }
             restore-cold-completed { 'cold-runtime-recovered' }
             restore-cold-observed { 'cold-runtime-observed' }
+            restore-cold-state-staged { 'cold-terminal-state-interrupted' }
+            restore-cold-state-published { 'cold-terminal-state-interrupted' }
+            restore-cold-state-completed { 'cold-terminal-state-recovered' }
         }
         Assert ($result.status -ceq $expected) "Unexpected live controller $mode status"
         $actor.Dispose()
@@ -180,6 +186,40 @@ try {
                 $result.runtime.identity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($originalPid) -and
                 $result.runtime.instanceGuid -ceq ([guid]$originalInstance).ToString('D')) `
                 'Independent cold observation did not retain the original released application'
+        }
+        if ($mode -in @('restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed')) {
+            $runtime = $result.runtime
+            Assert ($runtime.pid -eq $originalPid -and
+                $runtime.identity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($originalPid) -and
+                $runtime.instanceGuid -ceq ([guid]$originalInstance).ToString('D') -and $result.lease -ceq 'released' -and
+                [Deployment.WindowsRuntimeControl]::Exchange(
+                    [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') `
+                'Actual terminal publication lost or restarted its original released runtime'
+            $expectedStep = switch ($mode) {
+                'restore-cold-state-staged' { 'state-staged' }
+                'restore-cold-state-published' { 'state-published' }
+                'restore-cold-state-completed' { 'complete' }
+            }
+            Assert ($result.step -ceq $expectedStep) 'Actual terminal publication skipped its requested boundary'
+            $terminal = Get-Content -LiteralPath (Join-Path $control 'cold-restore-terminal.json') -Raw | ConvertFrom-Json
+            $currentState = Get-Content -LiteralPath (Join-Path $control 'state.json') -Raw
+            if ($mode -ceq 'restore-cold-state-staged') {
+                Assert ($currentState -ceq $terminal.oldState) 'Staging already replaced original state'
+                $file = [Deployment.WindowsPrivateFile]::Open((Join-Path $control 'state.json.lock'), '')
+                try {
+                    Assert ($file.ReadText() -ceq $terminal.nextState) 'Actual staged state differs from its original handoff'
+                    $coldStateStage = $file.CaptureIdentity()
+                } finally { $file.Dispose() }
+            } else {
+                Assert ($currentState -ceq $terminal.nextState) 'Actual terminal state differs from its original handoff'
+                Assert (-not (Test-Path -LiteralPath (Join-Path $control 'state.json.lock'))) 'Actual publication retained its stage'
+                $file = [Deployment.WindowsPrivateFile]::Open((Join-Path $control 'state.json'), '')
+                try {
+                    $identity = $file.CaptureIdentity()
+                    Assert ($coldStateStage -and $identity.Dev -ceq $coldStateStage.Dev -and $identity.Ino -ceq $coldStateStage.Ino) `
+                        'Actual terminal publication did not preserve its original staged inode'
+                } finally { $file.Dispose() }
+            }
         }
         if ($mode -in @('restore-cancelled', 'restore-failed', 'restore-crash-verified')) {
             Assert ($after.Item(1).EnginePID -eq $originalPid -and $after.Item(1).InstanceGuid -ceq $originalInstance -and
