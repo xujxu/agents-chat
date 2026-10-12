@@ -12,7 +12,7 @@ try {
         (Join-Path $PSScriptRoot 'deployment-windows-cold-activation.mjs'), $Control,
         [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, 'crash'), $Control, $environment)
     $diagnostic = $actor.StandardError.ReadToEndAsync()
-    $frame = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync($actor.StandardOutput, 1048576)
+    $frame = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync($actor.StandardOutput, 131072)
     if (-not $frame.Wait(600000)) { throw 'Cold crash actor did not publish its admitted running runtime.' }
     $running = $frame.GetAwaiter().GetResult() | ConvertFrom-Json
     $bridge = [Diagnostics.Process]::GetProcessById($running.controllerPid)
