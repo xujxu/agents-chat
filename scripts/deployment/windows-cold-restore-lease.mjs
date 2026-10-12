@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, readdir, rename, rmdir, unlink } from 'node:fs/promises';
+import { lstat, readdir, rename, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
 import { acquireWindowsAdmission, assertWindowsAdmission } from './windows-admission.mjs';
@@ -8,7 +8,8 @@ import { inspectWindowsStoppedRestoreSnapshot } from './windows-stopped-restore-
 import { captureLockOwner } from './state.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
-import { canonicalWorkerDirectory, readWorkerFile, writeWorkerFile } from './worker-files.mjs';
+import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
+import { publishWindowsColdRestoreStaging } from './windows-cold-restore-publication.mjs';
 
 const leases = new WeakMap();
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -140,15 +141,16 @@ export async function claimWindowsColdRestore({
       await rmdir(stage);
     }
     await assertWindowsAdmission(control, admission, { signal });
-    await mkdir(stage, { mode: 0o700 });
-    const stagingIdentity = await directoryIdentity(stage);
-    const record = {
-      ...expected, owner, guardIdentity: prior.guard?.identity ?? stagingIdentity, stagingIdentity,
-      predecessor: prior.guard ? digest(prior.guard.bytes) : null,
-    };
-    const bytes = Buffer.from(`${JSON.stringify(record)}\n`);
-    if (bytes.length > 65536) throw new Error('Cold restore owner exceeds the supported evidence budget.');
-    await writeWorkerFile(path.join(stage, 'owner.json'), bytes);
+    const { record, bytes } = await publishWindowsColdRestoreStaging({
+      control, pwsh, admission, signal,
+      async makeRecord() {
+        const stagingIdentity = await directoryIdentity(stage);
+        return {
+          ...expected, owner, guardIdentity: prior.guard?.identity ?? stagingIdentity, stagingIdentity,
+          predecessor: prior.guard ? digest(prior.guard.bytes) : null,
+        };
+      },
+    });
     await assertWindowsAdmission(control, admission, { signal });
     if (prior.guard) {
       if (!same(await directoryIdentity(guard), prior.guard.identity)

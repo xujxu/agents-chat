@@ -13926,7 +13926,9 @@ not yet restore application files, activate a runtime or expose public cold
 restore.
 
 **Files:** add `scripts/deployment/windows-cold-restore-lease.mjs` and
-`scripts/deployment/windows-stopped-restore-recovery.ps1`; extend only explicit
+`scripts/deployment/windows-stopped-restore-recovery.ps1`, plus the narrowly
+scoped `windows-cold-restore-publication.{mjs,ps1}` native private publisher;
+extend only explicit
 recovery mode in `windows-stopped-restore-proof.{mjs,ps1}` and its controller.
 Keep the default stopped/terminal proof's existing-recovery refusal. Add
 `tests/deployment-windows-cold-restore-lease.mjs` to the opted-in stopped fixture.
@@ -13946,6 +13948,15 @@ Keep the default stopped/terminal proof's existing-recovery refusal. Add
   await lease.close();
   await assert.rejects(lease.check());
   ```
+  Causal `582a11c / 38194283120`, job `114638595157`, failed on the missing
+  lease module at `2026-10-12 02:34:46 UTC` after prior snapshot cases passed.
+  Initial implementation `f81688d / 38196399698`, job `114639906210`, reached
+  first lease publication but failed native reopening at `02:41:24 UTC`:
+  Node-created staging permissions were not private enough for retained
+  native evidence. Do not weaken ACL admission. Use the existing
+  `WindowsPrivateFile.CreateDirectory` and `Publish` primitives under an
+  exact-owner native bridge, retain its directory/file handles through the
+  digest acknowledgement, then close it before the staged rename.
 - [ ] Retain exact native recovery/staging directory inventories and any
   owner file only in explicit recovery-proof mode. Default proof still refuses
   recovery evidence. Recheck all handles/inventories on every request.
