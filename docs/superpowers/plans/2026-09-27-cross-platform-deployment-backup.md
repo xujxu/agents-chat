@@ -13915,6 +13915,56 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EP: Accept completed cold runtime policy with the real Windows application
+
+**Files:** `tests/deployment-windows-cold-application-files.mjs`,
+`tests/deployment-windows-live-restore.mjs`,
+`tests/deployment-windows-live-application.{mjs,ps1}`.
+
+- [ ] Extend the already accepted actual partial-copy recovery fixture without
+  another full cold copy. After restored authenticated API data and owned HTTP:
+
+  ```js
+  const completed = await activation.completeRuntime({ port: 3010 });
+  assert.equal(completed.status, 'runtime-policy-restored');
+  assert.equal(completed.lease, 'released');
+  assert.deepEqual(completed.runtime, running.runtime);
+  await activation.check();
+  await verifyWindowsApplicationApi('restored', chatId);
+  ```
+
+  Closing the actor now preserves the released runtime. The independent parent
+  requires its same PID/start identity, Scheduler instance, permanent definition,
+  enabled value and security. The old generation's Job must remain empty.
+- [ ] Add `restore-cold-observed` as a separate captured-controller actor after
+  original cold controller exit:
+
+  ```js
+  const proof = await inspectWindowsColdRuntimeCompletion({ control, pwsh });
+  try {
+    assert.equal(proof.observation.mutationAuthority, false);
+    assert.equal(proof.observation.lease, 'released');
+    await verifyWindowsApplicationApi('restored', chatId);
+    assert.deepEqual(await proof.check(), proof.observation);
+  } finally { await proof.close(); }
+  ```
+
+  Require byte-identical original state, lock and deployment receipt. Check
+  authenticated data again from the parent after this observer exits. Retain
+  existing 45-minute copy actor and five-minute observation actor bounds;
+  ordinary fixture cleanup still disables/stops the exact test task.
+- [ ] After the native Task 5EN/5EO pair passes, dispatch the existing actual
+  crash selector, including its unchanged warm crash regression:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=crash
+  ```
+
+  Require genuine application readiness, restored API data and surviving
+  released runtime. This is not terminal root closeout or public cold restore.
+
 ### Task 5EO: Observe a completed cold runtime after its original controllers exit
 
 **Files:** add `tests/deployment-windows-cold-completion-proof.mjs` and
@@ -13940,8 +13990,10 @@ Include the new native helper in the explicit saved-engine dependency closure.
   Preserve pre-abort, poison on foreign inventory, reopen after removing only
   the test-created foreign file, and preserve exact root state/lock/journal.
   Run the existing native command selector, first test-only then paired.
-  Test-only `8f40b9f / 38247065722`, job `114803503092`, is running.
-  It also corrects Task 5EN's independent-parent listener bootstrap.
+  Test-only `8f40b9f / 38247065722`, job `114803503092`, failed as expected
+  at `2026-10-12 12:27:22 UTC`: the new exported observer was missing.
+  Task 5EN's corrected independent parent passed at `12:27:21 UTC`, including
+  the original live released runtime, permanent policy and retained listener.
 - [ ] Admit only the exact running activation prefix followed by all nine
   completion records. Retain and validate their original owner, snapshot,
   configuration, byte chain, definitions, listener and released runtime.
@@ -13955,8 +14007,9 @@ Include the new native helper in the explicit saved-engine dependency closure.
   warm runtime/instance/listener proof. Node rechecks all nine receipt bytes on
   every native acknowledgement. A fourth focused unit covers pre-abort and
   invalid-path refusal; saved-engine closure includes the new native helper.
-  Production `6d556dd` is pinned to paired run `38247756830`, queued behind
-  causal `38247065722`; both watchers are attached. Neither Task 5EN nor 5EO is
+  Production `6d556dd` is pinned to paired run `38247756830`,
+  job `114810577913`, now running after the causal. Its watcher is attached.
+  Neither Task 5EN nor 5EO is
   accepted until both original stopped-history and bridge-death cases pass.
 
 ### Task 5EN: Complete the cold runtime's permanent task policy and original lease

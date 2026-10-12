@@ -6,6 +6,10 @@ import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-
 import { invokePublicWindowsRestore } from './deployment-windows-public-restore.mjs';
 
 export async function verifyWindowsLiveRestore({ mode, directory, project, control, taskName, pwsh, chatId }) {
+  if (mode === 'restore-cold-observed') {
+    const { verifyWindowsColdApplicationCompletion } = await import('./deployment-windows-cold-application-files.mjs');
+    return verifyWindowsColdApplicationCompletion({ directory, control, pwsh, chatId });
+  }
   const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
   const { verifyRecoveryEngine } = await captured('saved-recovery-engine.mjs');
   const { verifySnapshot } = await captured('snapshot.mjs');

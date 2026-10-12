@@ -87,10 +87,17 @@ export async function verifyWindowsColdApplicationFiles({ directory, project, co
     assert.deepEqual(await readFile(path.join(control, 'deployment.json')), receipt);
     assert.deepEqual(await readFile(path.join(control, 'recovery-lock/owner.json')), ownerBytes);
     assert.deepEqual(await readFile(path.join(control, 'recovery-lock/files-restored.json')), filesReceipt);
-    process.stderr.write(`${new Date().toISOString()} Actual cold restoration: owned HTTP and restored authenticated data accepted; closing guarded runtime\n`);
+    process.stderr.write(`${new Date().toISOString()} Actual cold restoration: completing permanent task policy and releasing the original runtime lease\n`);
+    const completed = await activation.completeRuntime({ port: 3010 });
+    assert.equal(completed.status, 'runtime-policy-restored');
+    assert.equal(completed.lease, 'released');
+    assert.deepEqual(completed.runtime, running.runtime);
+    assert.deepEqual(completed.providers, lease.providers);
+    await activation.check();
+    await verifyWindowsApplicationApi('restored', chatId);
     return {
-      status: 'guarded-stopped', retired: true, operationId: lease.owner.operationId,
-      runtime: proof.runtime, activation: running, readiness,
+      status: 'runtime-policy-restored', retired: true, operationId: lease.owner.operationId,
+      runtime: proof.runtime, activation: running, readiness, completed,
     };
   } finally {
     const errors = [];
@@ -98,4 +105,28 @@ export async function verifyWindowsColdApplicationFiles({ directory, project, co
     try { await configuration?.close(); } catch (error) { errors.push(error); }
     if (errors.length) throw new AggregateError(errors, 'Actual cold configuration and lease cleanup failed.');
   }
+}
+
+export async function verifyWindowsColdApplicationCompletion({ directory, control, pwsh, chatId }) {
+  const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
+  const { inspectWindowsColdRuntimeCompletion } = await captured('windows-cold-activation-recovery.mjs');
+  const before = await Promise.all(['state.json', 'lock/owner.json', 'deployment.json']
+    .map(name => readFile(path.join(control, name))));
+  process.stderr.write(`${new Date().toISOString()} Actual cold restoration: independently observing released application after original controller exit\n`);
+  const proof = await inspectWindowsColdRuntimeCompletion({ control, pwsh });
+  let observation;
+  try {
+    observation = proof.observation;
+    assert.equal(observation.status, 'cold-runtime-completed');
+    assert.equal(observation.mutationAuthority, false);
+    assert.equal(observation.lease, 'released');
+    assert.equal(observation.port, 3010);
+    assert.equal(proof.advance, undefined);
+    assert.equal(proof.archive, undefined);
+    await verifyWindowsApplicationApi('restored', chatId);
+    assert.deepEqual(await proof.check(), observation);
+  } finally { await proof.close(); }
+  assert.deepEqual(await Promise.all(['state.json', 'lock/owner.json', 'deployment.json']
+    .map(name => readFile(path.join(control, name)))), before);
+  return { ...observation, status: 'cold-runtime-observed' };
 }

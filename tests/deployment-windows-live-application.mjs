@@ -12,7 +12,7 @@ const { loadState, acquireLock, releaseLock } = await captured('state.mjs');
 const restoreModes = [
   'restore', 'restore-closed', 'restore-cancelled', 'restore-failed',
   'restore-crashed', 'restore-copy-crashed', 'restore-crash-verified',
-  'restore-cold-files',
+  'restore-cold-files', 'restore-cold-observed',
 ];
 assert.ok(['update', 'verify-closed', 'current', ...restoreModes].includes(mode));
 assert.match(targetCommit, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);

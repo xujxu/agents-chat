@@ -40,7 +40,7 @@ try {
     $modes = if ($RestoreScenario -in @('complete', 'offline')) { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
         elseif ($RestoreScenario -in @('crashed', 'copy-crashed')) { @('update', 'verify-closed', 'current', "restore-$RestoreScenario", 'restore-crash-verified') }
         else { @('update', 'verify-closed', 'current', "restore-$RestoreScenario") }
-    if ($RestoreScenario -eq 'copy-crashed') { $modes += 'restore-cold-files' }
+    if ($RestoreScenario -eq 'copy-crashed') { $modes += @('restore-cold-files', 'restore-cold-observed') }
     foreach ($mode in $modes) {
         if ($RestoreScenario -eq 'offline' -and $mode -eq 'restore') {
             $egress = Enable-WindowsRestoreEgressBlock -Node $Node -Pwsh $pwsh -Git $git
@@ -104,7 +104,8 @@ try {
             restore-cancelled { 'cancelled' }
             restore-failed { 'failed' }
             restore-crash-verified { 'crash-verified' }
-            restore-cold-files { 'guarded-stopped' }
+            restore-cold-files { 'runtime-policy-restored' }
+            restore-cold-observed { 'cold-runtime-observed' }
         }
         Assert ($result.status -ceq $expected) "Unexpected live controller $mode status"
         $actor.Dispose()
@@ -115,27 +116,40 @@ try {
             Assert ($result.retired -eq $true -and $result.runtime.pid -eq $originalPid -and
                 $result.runtime.identity -ceq $coldIdentity) 'Cold restoration did not bind original runtime retirement'
             Assert ($coldOwner.WaitForExit(15000) -and $coldOwner.ExitCode -eq 0) 'Cold original runtime did not retire cleanly'
-            Assert ($after.Count -eq 0) 'Cold retirement retained a Scheduler instance'
+            Assert ($after.Count -eq 1 -and $after.Item(1).EnginePID -eq $result.completed.runtime.pid -and
+                ([guid]$after.Item(1).InstanceGuid).ToString('D') -ceq $result.completed.runtime.instanceGuid) `
+                'Cold completion lost its original new Scheduler instance'
             $coldTask = $scheduler.GetFolder('\').GetTask($TaskName)
             Assert ($result.activation.status -ceq 'guarded-running' -and
                 $result.activation.runtime.generation -cne $result.runtime.generation -and
                 $result.readiness.status -ceq 'ready' -and $result.readiness.port -eq 3010 -and
                 $result.readiness.generation -ceq $result.activation.runtime.generation) 'Cold application readiness lacks its new owned generation'
-            Assert (-not $coldTask.Enabled -and [string]$coldTask.Xml -ceq $result.activation.definition -and
-                [string]$coldTask.Xml -cne $coldDefinition -and $coldTask.Definition.Triggers.Count -eq 0 -and
+            Assert ([bool]$coldTask.Enabled -eq $result.completed.enabled -and
+                [string]$coldTask.Xml -ceq $result.completed.definition -and
+                [string]$coldTask.Xml -cne $coldDefinition -and
                 [string]$coldTask.GetSecurityDescriptor(7) -ceq $coldSecurity -and
-                $result.activation.securityDescriptor -ceq $coldSecurity) 'Cold startup changed security or lost its exact inhibited guarded policy'
+                $result.activation.securityDescriptor -ceq $coldSecurity) 'Cold completion changed security or lost its exact acknowledged permanent policy'
             [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$result.runtime.generation, $coldSession)
-            [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
-                [guid]$result.activation.runtime.generation, $result.activation.runtime.sessionId)
-            Assert (@(Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq 3010).Count -eq 0) `
-                'Cold retirement retained the application listener'
+            $runtime = $result.completed.runtime
+            Assert ($runtime.generation -ceq $result.activation.runtime.generation -and
+                $runtime.identity -ceq $result.activation.runtime.identity -and
+                [Deployment.WindowsWorkerJob]::ProcessIdentity($runtime.pid) -ceq $runtime.identity -and
+                [Deployment.WindowsRuntimeControl]::Exchange(
+                    [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') `
+                'Cold application did not survive its original controller with its released lease'
             $coldOwner.Dispose()
             $coldOwner = $null
-            Write-Output "PASS: real Windows cold restoration starts an owned ready application with restored API data and closes its guarded Job without terminal success; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            Write-Output "PASS: real Windows cold restoration releases its owned ready application with restored API data and permanent task policy without terminal success; elapsedMs=$($elapsed.ElapsedMilliseconds)"
             continue
         }
         Assert ($after.Count -eq 1) 'Live deployment lost the application task'
+        if ($mode -eq 'restore-cold-observed') {
+            Assert ($result.mutationAuthority -eq $false -and $result.lease -ceq 'released' -and
+                $result.port -eq 3010 -and $result.runtime.pid -eq $originalPid -and
+                $result.runtime.identity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($originalPid) -and
+                $result.runtime.instanceGuid -ceq ([guid]$originalInstance).ToString('D')) `
+                'Independent cold observation did not retain the original released application'
+        }
         if ($mode -in @('restore-cancelled', 'restore-failed', 'restore-crash-verified')) {
             Assert ($after.Item(1).EnginePID -eq $originalPid -and $after.Item(1).InstanceGuid -ceq $originalInstance -and
                 $result.runtime.pid -eq $originalPid) 'Interrupted restore replaced the original runtime'
