@@ -34,12 +34,13 @@ test('public Windows restore invocation verifies historical bytes without import
   await writeFile(manifestFile, manifestBytes, { mode: 0o600 });
   const recoveryEngine = hash(manifestBytes);
   await writeFile(path.join(project, 'fixture.txt'), 'historical data\n');
-  await createSnapshot({
+  const snapshotOptions = {
     project, destination: backup, id: 'historical-windows-engine', files: ['fixture.txt'],
     source: { commit: 'a'.repeat(40), provenance: 'observed' }, recoveryEngine,
     runtime: { platform: 'win32', state: 'stopped', task: { name: taskName } },
     projectScope: true, excludedPaths: projectSnapshotExclusions,
-  });
+  };
+  await createSnapshot(snapshotOptions);
   const options = { project, taskName, pwsh, waitSeconds: 120, timeoutSeconds: 60 };
   const before = (await readdir(control)).sort();
   const invocation = await prepareWindowsRestoreInvocation(options);
@@ -62,16 +63,16 @@ test('public Windows restore invocation verifies historical bytes without import
   await writeFile(manifestFile, JSON.stringify({ version: 1, files: [...files].reverse() }));
   await assert.rejects(prepareWindowsRestoreInvocation(options), /digest/i);
   await writeFile(manifestFile, manifestBytes);
-  const snapshotFile = path.join(backup, 'manifest.json');
-  const snapshotBytes = await readFile(snapshotFile);
   const oldManifest = Buffer.from(JSON.stringify({
     version: 1, files: files.filter(file => file.name !== 'windows-restore-entry.mjs'),
   }));
   await rename(helper, path.join(root, 'held-helper.mjs'));
   await writeFile(manifestFile, oldManifest);
-  await writeFile(snapshotFile, JSON.stringify({ ...JSON.parse(snapshotBytes), recoveryEngine: hash(oldManifest) }));
+  await rename(backup, `${backup}.held`);
+  await createSnapshot({ ...snapshotOptions, recoveryEngine: hash(oldManifest) });
   await assert.rejects(prepareWindowsRestoreInvocation(options), { code: 'DEPLOYMENT_SAVED_RESTORE_UNSUPPORTED' });
-  await writeFile(snapshotFile, snapshotBytes);
+  await rename(backup, path.join(root, 'unsupported-backup'));
+  await rename(`${backup}.held`, backup);
   await writeFile(manifestFile, manifestBytes);
   await rename(path.join(root, 'held-helper.mjs'), helper);
   await rename(backup, `${backup}.held`);

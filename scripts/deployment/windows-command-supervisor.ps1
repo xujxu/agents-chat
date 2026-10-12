@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('deploy', 'update')][string]$Operation,
+    [Parameter(Mandatory)][ValidateSet('deploy', 'update', 'restore')][string]$Operation,
     [Parameter(Mandatory)][string]$Source,
     [Parameter(Mandatory)][string]$Project,
     [Parameter(Mandatory)][string]$Control,
@@ -8,8 +8,8 @@ param(
     [Parameter(Mandatory)][string]$TaskName,
     [Parameter(Mandatory)][string]$Node,
     [Parameter(Mandatory)][string]$PowerShell,
-    [Parameter(Mandatory)][string]$Git,
-    [Parameter(Mandatory)][string]$NpmCli,
+    [Parameter(Mandatory)][AllowEmptyString()][string]$Git,
+    [Parameter(Mandatory)][AllowEmptyString()][string]$NpmCli,
     [Parameter(Mandatory)][string]$ArgumentsJson,
     [switch]$PrepareDirectories,
     [switch]$ReturnOutcome
@@ -108,10 +108,11 @@ try {
     $outcome = Invoke-OriginalCapturedProcess -Arguments (@($entry, $Operation, $Project, $Control,
         $TaskName, $PowerShell, $Git, $NpmCli) + [string[]]$arguments) -Phase 'command'
     $result = $outcome.Value
+    $successStatuses = if ($Operation -eq 'restore') { @('restored') } else { @('accepted', 'already-current') }
     if ($result.closeoutRequired -isnot [bool] -or
-        ($outcome.Code -eq 0 -and $result.status -cnotin @('accepted', 'already-current')) -or
+        ($outcome.Code -eq 0 -and $result.status -cnotin $successStatuses) -or
         ($outcome.Code -eq 1 -and $result.status -cne 'failed') -or
-        ($result.status -ceq 'accepted' -and -not $result.closeoutRequired) -or
+        ($result.status -cin @('accepted', 'restored') -and -not $result.closeoutRequired) -or
         ($result.status -ceq 'already-current' -and $result.closeoutRequired)) {
         throw 'Command result does not match its original exit status.'
     }
@@ -121,7 +122,7 @@ try {
             $result.recoveryEngine -isnot [string] -or $result.recoveryEngine -cnotmatch '^[a-f0-9]{64}$') {
             throw 'Command closeout requires its exact original operation and saved recovery binding.'
         }
-        $phase = if ($outcome.Code -eq 0) { 'accepted' } else { 'prior-runtime-restored' }
+        $phase = if ($Operation -eq 'restore') { 'restored' } elseif ($outcome.Code -eq 0) { 'accepted' } else { 'prior-runtime-restored' }
         $finalizer = Join-Path $capture.Directory 'scripts/deployment/windows-command-finalize-entry.mjs'
         $closed = Invoke-OriginalCapturedProcess -Arguments @($finalizer, $Control, $Project,
             $result.operationId, $result.recoveryEngine, $PowerShell, $phase) -Phase 'closeout'

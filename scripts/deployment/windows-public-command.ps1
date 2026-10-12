@@ -1,6 +1,6 @@
 function Invoke-WindowsPublicCommand {
     param(
-        [Parameter(Mandatory)][ValidateSet('deploy', 'update')][string]$Operation,
+        [Parameter(Mandatory)][ValidateSet('deploy', 'update', 'restore')][string]$Operation,
         [Parameter(Mandatory)][string]$Source,
         [Parameter(Mandatory)][Collections.IDictionary]$Options
     )
@@ -46,6 +46,34 @@ Successful helper captures are retired; failed captures and recovery evidence
 must be retained for inspection. Never manually remove an operation lock.
 "@
             }
+            if ($Operation -eq 'restore') {
+                $result.message = @"
+Usage: pwsh -NoProfile -File scripts/restore.ps1 -AcceptDataLoss [options]
+
+Restore the retained complete backup through its verified saved engine.
+This replaces source, dependencies, build artifacts, configuration and data.
+Export post-backup data before acknowledging its loss. No install/build or
+Git fetch is performed. Requires elevated PowerShell 7.4+ and Node.js 24.
+  -ProjectDir PATH       Installed checkout (default: this tools checkout)
+  -TaskName NAME         Task name (default: Agents-Chat-Startup)
+  -AcceptDataLoss        Required acknowledgement of post-backup data loss
+  -TimeoutSeconds N     Positive per-stage deadline (default: 1800)
+  -Json                 One JSON result; diagnostics stay on stderr
+  -Help                 Read-only help without tools or installation access
+
+Live managed tasks only; stopped/interrupted and legacy cold recovery are
+not yet supported. Readiness uses port3010 and a120-second wait.
+The original backup must contain a saved Windows restore process entry.
+Successful restoration includes independent closeout; failed captures and
+all lock/recovery evidence must be retained. Never manually remove a lock.
+If the installed checkout lacks these tools, use a separate tools checkout
+with -ProjectDir pointing to the installed project.
+"@
+            }
+        } elseif ($Operation -eq 'restore' -and -not $Options['AcceptDataLoss']) {
+            $code = 1
+            $result = @{ status = 'failed'; code = 'DEPLOYMENT_DATA_LOSS_ACKNOWLEDGEMENT_REQUIRED'
+                message = 'Export post-backup data, then provide -AcceptDataLoss to authorize restoration.' }
         } else {
             $unsupported = $Options['NoWait'] -or $Options['Verify'] -or $Options['DryRun'] -or $Options['RemoveTask'] -or
                 ($Options.ContainsKey('WaitSeconds') -and $Options['WaitSeconds'] -eq 0)
@@ -71,7 +99,7 @@ must be retained for inspection. Never manually remove an operation lock.
                 }
                 $arguments = [Collections.Generic.List[string]]::new()
                 foreach ($pair in @(@('SkipGitPull', '--no-pull'), @('NoInstall', '--no-install'), @('Status', '--status'),
-                    @('NoTunnel', '--no-tunnel'))) {
+                    @('NoTunnel', '--no-tunnel'), @('AcceptDataLoss', '--accept-data-loss'))) {
                     if ($Options[$pair[0]]) { $arguments.Add($pair[1]) }
                 }
                 if ($Options.ContainsKey('Revision')) {
@@ -80,7 +108,7 @@ must be retained for inspection. Never manually remove an operation lock.
                 foreach ($pair in @(@('TaskLogonType', '--task-logon-type'), @('TaskTriggerType', '--task-trigger-type'))) {
                     if ($Options.ContainsKey($pair[0])) { $arguments.Add($pair[1]); $arguments.Add($Options[$pair[0]]) }
                 }
-                if (-not $Options['Status'] -or $Options.ContainsKey('WaitSeconds')) {
+                if ($Operation -ne 'restore' -and (-not $Options['Status'] -or $Options.ContainsKey('WaitSeconds'))) {
                     $arguments.Add('--wait')
                     $arguments.Add($(if ($Options.ContainsKey('WaitSeconds')) { [string]$Options['WaitSeconds'] } else { '180' }))
                 }
@@ -92,7 +120,8 @@ must be retained for inspection. Never manually remove an operation lock.
                 $project = [IO.Path]::GetFullPath($project)
                 $taskName = if ($Options.ContainsKey('TaskName')) { $Options['TaskName'] } else { 'Agents-Chat-Startup' }
                 $node = (Get-Command node.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
-                $git = (Get-Command git.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+                $git = if ($Operation -eq 'restore') { '' }
+                    else { (Get-Command git.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source }
                 $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
                 $jsonArguments = ConvertTo-Json -InputObject $arguments.ToArray() -Compress
                 $nodeOptions = [Environment]::GetEnvironmentVariable('NODE_OPTIONS', 'Process')

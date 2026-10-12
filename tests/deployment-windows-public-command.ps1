@@ -114,6 +114,31 @@ for (const executable of [pwsh, path.join(path.dirname(pwsh), path.basename(pwsh
     $result = ($text -join "`n") | ConvertFrom-Json
     Assert ($result.status -ceq 'failed') 'Invalid revision returned success'
     Assert (@(Get-ChildItem -LiteralPath $root -Force).Count -eq 2) 'Invalid revision created control/capture files'
+    $restoreWithoutGit = @'
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const [pwsh, entry, project, temporary] = process.argv.slice(1);
+const child = spawnSync(pwsh, ['-NoProfile', '-NonInteractive', '-File', entry,
+  '-ProjectDir', project, '-AcceptDataLoss', '-TimeoutSeconds', '60', '-Json'], {
+  env: {
+    SystemRoot: process.env.SystemRoot,
+    PATH: [path.dirname(process.execPath), path.dirname(pwsh)].join(';'),
+    TEMP: temporary, TMP: temporary,
+    NODE_OPTIONS: '--require=agents-restore-must-not-load',
+    NODE_PATH: path.join(temporary, 'must-not-load'),
+  },
+  encoding: 'utf8', timeout: 120000, maxBuffer: 32768,
+});
+assert.ifError(child.error);
+process.stderr.write(child.stderr);
+assert.equal(child.status, 1, child.stdout);
+assert.equal(JSON.parse(child.stdout).code, 'DEPLOYMENT_BACKUP_MISSING');
+'@
+    & $node -e $restoreWithoutGit $pwsh $restore $project $root
+    Assert ($LASTEXITCODE -eq 0) 'Public restore admission incorrectly requires Git or inherits Node hooks'
+    Assert (@(Get-ChildItem -LiteralPath $project -Force).Count -eq 0) 'Refused restore mutated project files'
+    Assert (-not (Test-Path -LiteralPath (Join-Path $root '.project.deployment/lock'))) 'Missing backup restore acquired a lock'
     Write-Output 'PASS: public Windows help, unsupported modes and status have no deployment side effects'
 } finally {
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }

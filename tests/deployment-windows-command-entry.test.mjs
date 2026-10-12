@@ -11,13 +11,13 @@ import { promisify } from 'node:util';
 const entry = fileURLToPath(new URL('../scripts/deployment/windows-command-entry.mjs', import.meta.url));
 const execute = promisify(execFile);
 
-async function invoke(args) {
+async function invoke(args, operation = 'update') {
   assert.ok(await lstat(entry).then(() => true, error => {
     if (error.code === 'ENOENT') return false;
     throw error;
   }), 'Missing captured Windows command process entry');
   const root = path.join(os.tmpdir(), `agents-command-entry-${randomUUID()}`);
-  const command = [entry, 'update', root, `${root}-control`, 'Agents-Entry-Test',
+  const command = [entry, operation, root, `${root}-control`, 'Agents-Entry-Test',
     path.join(root, 'pwsh.exe'), path.join(root, 'git.exe'), path.join(root, 'npm-cli.js'), ...args];
   let output;
   let code = 0;
@@ -63,4 +63,14 @@ test('private Windows command entry does not echo rejected arguments or raw erro
   assert.ok(Array.isArray(result.diagnostics));
   assert.ok(!JSON.stringify(result).includes(marker));
   assert.ok(!stderr.includes(marker));
+});
+
+test('private Windows restore command refuses missing acknowledgement before installation access', async () => {
+  const help = await invoke(['--help'], 'restore');
+  assert.equal(help.code, 0);
+  assert.equal(help.result.status, 'help');
+  const refused = await invoke([], 'restore');
+  assert.equal(refused.code, 1);
+  assert.equal(refused.result.code, 'DEPLOYMENT_DATA_LOSS_ACKNOWLEDGEMENT_REQUIRED');
+  assert.equal(refused.result.closeoutRequired, false);
 });

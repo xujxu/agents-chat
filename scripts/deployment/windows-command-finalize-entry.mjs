@@ -1,18 +1,30 @@
 import { execFile } from 'node:child_process';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual as same, promisify } from 'node:util';
 import { deploymentDiagnostics } from './deployment-diagnostics.mjs';
 import { loadState } from './state.mjs';
 import { verifyRecoveryEngine, retirementRecoveryInvocation } from './saved-recovery-engine.mjs';
+import { inspectRecoveryEngineFiles, locateRecoveryEngine } from './recovery-engine-files.mjs';
 
 const [control, project, operationId, manifestSha256, pwsh, phase] = process.argv.slice(2);
 try {
-  if (!['accepted', 'prior-runtime-restored'].includes(phase)) throw new Error('Unsupported command closeout phase.');
+  if (!['accepted', 'prior-runtime-restored', 'restored'].includes(phase)) throw new Error('Unsupported command closeout phase.');
   const state = await loadState(control);
   if (state?.project !== project || state.operationId !== operationId || state.phase !== phase) {
     throw new Error('Original command closeout state changed.');
   }
-  const engine = await verifyRecoveryEngine({ control, manifestSha256 });
+  let engine;
+  if (phase === 'restored') {
+    const directory = await locateRecoveryEngine({ control, manifestSha256 });
+    const inspected = await inspectRecoveryEngineFiles({ directory, manifestSha256 });
+    if (!inspected.manifest.files.some(file => file.name === 'retirement-recovery-entry.mjs')) {
+      throw new Error('Saved restore engine lacks its independent finalizer.');
+    }
+    engine = { directory, manifestSha256, entrypoint: path.join(directory, 'retirement-recovery-entry.mjs') };
+  } else {
+    engine = await verifyRecoveryEngine({ control, manifestSha256 });
+  }
   const command = retirementRecoveryInvocation(engine, { control, project, operationId, pwsh, kind: 'task' });
   const result = await promisify(execFile)(command.file, command.args, {
     cwd: fileURLToPath(new URL('../../', import.meta.url)), env: command.env,

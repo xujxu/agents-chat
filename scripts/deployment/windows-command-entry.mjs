@@ -2,10 +2,12 @@ import { deploymentDiagnostics } from './deployment-diagnostics.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
 import { hasUnsettledWorker } from './worker-errors.mjs';
 import { runWindowsDeploymentCommand } from './windows-deployment-command.mjs';
+import { runWindowsRestoreCommand } from './windows-restore-command.mjs';
 
 const [operation, project, control, taskName, pwsh, git, npmCli, ...args] = process.argv.slice(2);
 try {
-  const result = await runWindowsDeploymentCommand({
+  const run = operation === 'restore' ? runWindowsRestoreCommand : runWindowsDeploymentCommand;
+  const result = await run({
     operation, args, project, control, taskName, pwsh, git, npmCli, node: process.execPath,
     onProgress: ({ phase }) => process.stderr.write(`${new Date().toISOString()} Windows deployment phase: ${phase}\n`),
   });
