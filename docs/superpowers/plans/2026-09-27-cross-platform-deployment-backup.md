@@ -13977,7 +13977,7 @@ cold observation facade, stopped-evidence inventory and bridge. Extract the
 shared cold activation history reader without changing inactive recovery.
 Include the new native helper in the explicit saved-engine dependency closure.
 
-- [ ] Reuse both Task 5EN native fixtures after original actor exit:
+- [x] Reuse both Task 5EN native fixtures after original actor exit:
 
   ```js
   const proof = await recovery.inspectWindowsColdRuntimeCompletion({ control, pwsh });
@@ -13998,7 +13998,7 @@ Include the new native helper in the explicit saved-engine dependency closure.
   at `2026-10-12 12:27:22 UTC`: the new exported observer was missing.
   Task 5EN's corrected independent parent passed at `12:27:21 UTC`, including
   the original live released runtime, permanent policy and retained listener.
-- [ ] Admit only the exact running activation prefix followed by all nine
+- [x] Admit only the exact running activation prefix followed by all nine
   completion records. Retain and validate their original owner, snapshot,
   configuration, byte chain, definitions, listener and released runtime.
   Reuse `Initialize-AgentsChatCompletionRuntime`,
@@ -14018,7 +14018,10 @@ Include the new native helper in the explicit saved-engine dependency closure.
   `13:00:31 UTC`: repeated `Add-Type` in one PowerShell process used different
   source sets (with/without the listener), producing duplicate existing types.
   Use one constant bootstrap assembly input set for every runtime-host fixture.
-  Do not mark the overall native gate accepted until that regression rerun passes.
+  Corrected `97d0d87 / 38252902245`, job `114823457552`, passed the whole
+  native gate at `2026-10-12 13:38:57 UTC`: normal runtime/proof at
+  `13:20:50 / 13:21:04`, bridge-death runtime/proof at `13:34:42 / 13:34:57`,
+  original terminal proof at `13:38:42`, 30 focused units and saved closure.
 
 ### Task 5EN: Complete the cold runtime's permanent task policy and original lease
 
@@ -14027,7 +14030,7 @@ extend the existing cold activation context/controller/Node bridge and lease
 facade. Add `tests/deployment-windows-cold-runtime-completion.{mjs,ps1}` after
 the accepted archival/fresh-copy fixture, reusing both current native cases.
 
-- [ ] Require a new actual cold claim/copy/configuration/start/readiness cycle,
+- [x] Require a new actual cold claim/copy/configuration/start/readiness cycle,
   then:
 
   ```js
@@ -14043,17 +14046,17 @@ the accepted archival/fresh-copy fixture, reusing both current native cases.
   Pre-aborted completion preserves the authority; repeated identical completion
   is idempotent. Root state and lock remain byte-exact: this is runtime completion,
   not terminal restore success.
-- [ ] Reuse the warm completion order and durable phases: prepare retained
+- [x] Reuse the warm completion order and durable phases: prepare retained
   readiness, request/stage the permanent action with automation still suppressed,
   publish release intent, release only from the original native bridge, publish
   released, request/restore original automation, request/restore original enabled
   policy, then publish complete. Bind every receipt to original cold owner,
   file receipt, activation intent/running history, runtime and listener.
-- [ ] Bind Node acknowledgements to the exact journal and finite existing
+- [x] Bind Node acknowledgements to the exact journal and finite existing
   `windowsTaskCompletionSteps`. Permit definition/lease changes only when
   acknowledged by that progression. Closing a completed or released runtime
   must close controller handles without stopping the accepted generation.
-- [ ] Independent parent retains exact live process, released lease, original
+- [x] Independent parent retains exact live process, released lease, original
   Scheduler instance and listener after Node/native controller exit. Compare all
   original registration, principal, settings, triggers, enabled value and security;
   require the literal permanent action with no controller arguments. Settle only
