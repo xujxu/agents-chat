@@ -32,7 +32,14 @@ function Read-AgentsChatStoppedRestoreState([hashtable]$Context) {
     if ((Get-Item -LiteralPath (Join-Path $Context.Control 'state.json')).Length -gt 65536) {
         throw 'Oversized stopped restore state.'
     }
-    $fields = Read-AgentsChatMaintenanceFields ($stateFile.ReadText()) ([string[]]@($initial.Keys))
+    $stateText = $stateFile.ReadText()
+    $stateHash = $stateFile.Sha256
+    if ($Context.ColdTerminalState) {
+        $source = Read-AgentsChatColdTerminalSource $Context $stateFile
+        $stateText = $source.Text
+        $stateHash = $source.Sha256
+    }
+    $fields = Read-AgentsChatMaintenanceFields $stateText ([string[]]@($initial.Keys))
     $state = @{ version=$fields.version.GetInt32() }
     foreach ($name in $fields.Keys) {
         if ($name -cne 'version') { $state[$name] = $fields[$name].GetString() }
@@ -42,7 +49,7 @@ function Read-AgentsChatStoppedRestoreState([hashtable]$Context) {
             $state[$name] -cne $initial[$name]) { throw 'Stopped restore identity changed.' }
     }
     if ($state.phase -ceq 'restoring') {
-        if ($stateFile.Sha256 -cne $Context.InitialStateSha256) { throw 'Original restoring state changed.' }
+        if ($stateHash -cne $Context.InitialStateSha256) { throw 'Original restoring state changed.' }
     } elseif ($state.phase -ceq 'recovery-required') {
         if ($state.previousPhase -cne 'restoring' -or $state.errorCode -cnotmatch '^[a-zA-Z0-9_.:-]+$') {
             throw 'Restore failure is not an original stopped prefix.'
@@ -53,7 +60,7 @@ function Read-AgentsChatStoppedRestoreState([hashtable]$Context) {
             [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)
         if ($updated -lt $prior) { throw 'Stopped restore state predates its initial stop.' }
     } else { throw 'Restore has advanced beyond its original stopped prefix.' }
-    $Context.StateSha256 = $stateFile.Sha256
+    $Context.StateSha256 = $stateHash
 }
 
 function Assert-AgentsChatStoppedRestoreRuntime([hashtable]$Context) {
@@ -118,7 +125,8 @@ function Assert-AgentsChatStoppedRestoreProof([hashtable]$Context) {
 function Open-AgentsChatStoppedRestoreEvidence {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Control, [switch]$Recovery, [switch]$ActivationHistory,
-        [switch]$PolicyRecovery, [switch]$CompletionHistory, [switch]$CompletionRecovery)
+        [switch]$PolicyRecovery, [switch]$CompletionHistory, [switch]$CompletionRecovery,
+        [switch]$ColdTerminalState, [string]$TerminalSha256)
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
     $context = @{
@@ -128,6 +136,7 @@ function Open-AgentsChatStoppedRestoreEvidence {
         Recovery=[bool]$Recovery; ActivationHistory=[bool]$ActivationHistory
         PolicyRecovery=[bool]$PolicyRecovery; CompletionHistory=[bool]$CompletionHistory
         CompletionRecovery=[bool]$CompletionRecovery
+        ColdTerminalState=[bool]$ColdTerminalState; TerminalSha256=$TerminalSha256
         AbsentOwner=$false; RuntimeSessionId=$null
     }
     try {
@@ -135,7 +144,9 @@ function Open-AgentsChatStoppedRestoreEvidence {
             $Control -cnotmatch '^[A-Za-z]:\\' -or [IO.Path]::GetFullPath($Control) -cne $Control -or
             ($ActivationHistory -and -not $Recovery) -or ($PolicyRecovery -and -not $ActivationHistory) -or
             ($CompletionHistory -and (-not $ActivationHistory -or $PolicyRecovery)) -or
-            ($CompletionRecovery -and -not $CompletionHistory)) {
+            ($CompletionRecovery -and -not $CompletionHistory) -or
+            ($ColdTerminalState -and (-not $CompletionRecovery -or $TerminalSha256 -cnotmatch '^[a-f0-9]{64}$')) -or
+            (-not $ColdTerminalState -and $TerminalSha256)) {
             throw 'Stopped restore proof requires native Windows and canonical control.'
         }
         foreach ($directory in @($Control, (Join-Path $Control 'lock'), $context.Directory)) {

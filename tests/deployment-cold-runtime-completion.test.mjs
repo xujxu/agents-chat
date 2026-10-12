@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
@@ -10,6 +10,8 @@ import * as completion from '../scripts/deployment/windows-cold-runtime-completi
 import { inspectWindowsColdRuntimeCompletion } from '../scripts/deployment/windows-cold-activation-recovery.mjs';
 import * as recovery from '../scripts/deployment/windows-cold-activation-recovery.mjs';
 import { captureWindowsColdTerminalIntent } from '../scripts/deployment/windows-cold-terminal-intent.mjs';
+import { readWindowsColdTerminalSource, inspectWindowsColdTerminalState,
+  captureWindowsColdTerminalStateReply } from '../scripts/deployment/windows-cold-terminal-state.mjs';
 
 test('cold terminal state publication requires acknowledgement and honors pre-abort', async () => {
   assert.equal(typeof recovery.publishWindowsColdTerminalState, 'function');
@@ -19,6 +21,55 @@ test('cold terminal state publication requires acknowledgement and honors pre-ab
   await assert.rejects(recovery.publishWindowsColdTerminalState({
     acceptDataLoss: true, signal: controller.signal,
   }), { name: 'AbortError' });
+});
+
+test('cold terminal physical evidence admits only original, staged and exactly published states', async t => {
+  const control = await temporaryDeployment(t);
+  const statePath = path.join(control, 'state.json');
+  const markerPath = path.join(control, 'cold-restore-terminal.json');
+  const oldState = '{"phase":"restoring"}\n';
+  const nextState = '{"phase":"restored"}\n';
+  await writeWorkerFile(statePath, Buffer.from(oldState));
+  const info = await lstat(statePath, { bigint: true });
+  const record = {
+    operationId: '11111111-1111-4111-8111-111111111111', oldState, nextState,
+    files: { state: {
+      dev: info.dev.toString(), ino: info.ino.toString(), bytes: Buffer.byteLength(oldState), sha256: digest(Buffer.from(oldState)),
+    } },
+  };
+  await writeWorkerFile(markerPath, Buffer.from(JSON.stringify(record)));
+  const source = await readWindowsColdTerminalSource(control);
+  const initial = await inspectWindowsColdTerminalState(control, source);
+  assert.equal(initial.published, false);
+  assert.equal(initial.stage, null);
+  const reply = {
+    status: 'cold-terminal-state-staged', operationId: record.operationId,
+    terminalSha256: digest(source.bytes), stateSha256: digest(Buffer.from(nextState)),
+  };
+  await assert.rejects(captureWindowsColdTerminalStateReply(control, source, reply, 'stage-terminal-state', initial));
+  await writeWorkerFile(`${statePath}.lock`, Buffer.from(nextState));
+  assert.ok(Object.isFrozen(await captureWindowsColdTerminalStateReply(
+    control, source, reply, 'stage-terminal-state', initial)));
+  const staged = await inspectWindowsColdTerminalState(control, source);
+  await rename(`${statePath}.lock`, statePath);
+  const published = { ...reply, status: 'cold-terminal-state-published' };
+  await assert.rejects(captureWindowsColdTerminalStateReply(
+    control, source, published, 'stage-terminal-state', staged), /boundary/);
+  await captureWindowsColdTerminalStateReply(control, source, published, 'publish-terminal-state', staged);
+  const current = await inspectWindowsColdTerminalState(control, source);
+  await captureWindowsColdTerminalStateReply(control, source, published, 'stage-terminal-state', current);
+  await writeWorkerFile(`${statePath}.lock`, Buffer.from(nextState));
+  await assert.rejects(inspectWindowsColdTerminalState(control, source), /Foreign.*staged/);
+  await unlink(`${statePath}.lock`);
+  await writeFile(statePath, oldState);
+  await assert.rejects(inspectWindowsColdTerminalState(control, source), /original inode/);
+  await writeFile(statePath, nextState);
+  await writeWorkerFile(`${statePath}.lock.pending-fixture`, Buffer.from('partial'));
+  await assert.rejects(inspectWindowsColdTerminalState(control, source), /Incomplete/);
+  await unlink(`${statePath}.lock.pending-fixture`);
+  await writeWorkerFile(`${markerPath}.replacement`, source.bytes);
+  await rename(`${markerPath}.replacement`, markerPath);
+  await assert.rejects(inspectWindowsColdTerminalState(control, source), /handoff changed/);
 });
 
 test('cold terminal handoff requires explicit acknowledgement and honors pre-abort', async () => {

@@ -36,6 +36,14 @@ export function captureWindowsColdTerminalIntent(value, expected) {
     'rootIdentity', 'lockIdentity', 'recoveryIdentity', 'files', 'creator',
   ], 'cold terminal handoff');
   const files = captureWorkerFields(record.files, ['state', 'lock', 'transaction'], 'cold terminal files');
+  for (const [name, maximum] of [['state', 65536], ['lock', 65536], ['transaction', 1048576]]) {
+    const file = captureWorkerFields(files[name], ['dev', 'ino', 'bytes', 'sha256'], 'cold terminal file');
+    if (![file.dev, file.ino].every(value => typeof value === 'string' && /^[0-9]+$/.test(value))
+      || !Number.isSafeInteger(file.bytes) || file.bytes < 1 || file.bytes > maximum
+      || typeof file.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(file.sha256)) {
+      throw new Error('Invalid cold terminal file descriptor.');
+    }
+  }
   const creator = captureWorkerFields(record.creator,
     ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'], 'cold terminal creator');
   for (const [pid, identity] of [[creator.pid, creator.processIdentity], [creator.bridgePid, creator.bridgeIdentity]]) {

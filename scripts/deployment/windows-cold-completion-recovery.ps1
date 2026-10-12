@@ -100,9 +100,10 @@ function Advance-AgentsChatColdCompletionRecovery([hashtable]$Context) {
 
 function Open-AgentsChatColdCompletionRecovery {
     param([string]$Control, [string]$OwnerSha256, [string]$ReceiptSha256,
-        [string]$IntentSha256, [string]$HistorySha256, [string]$CompletionSha256)
+        [string]$IntentSha256, [string]$HistorySha256, [string]$CompletionSha256,
+        [switch]$ColdTerminalState, [string]$TerminalSha256)
     $proof = Open-AgentsChatStoppedRestoreEvidence -Control $Control -Recovery -ActivationHistory `
-        -CompletionHistory -CompletionRecovery
+        -CompletionHistory -CompletionRecovery -ColdTerminalState:$ColdTerminalState -TerminalSha256 $TerminalSha256
     try {
         Read-AgentsChatColdActivationRecoveryHistory $proof $OwnerSha256 $ReceiptSha256 $IntentSha256 $HistorySha256
         Read-AgentsChatColdCompletionHistory $proof $CompletionSha256

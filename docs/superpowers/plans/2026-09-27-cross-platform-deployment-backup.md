@@ -13971,6 +13971,9 @@ original-transaction authority.
 
   Expected failure: missing `publishWindowsColdTerminalState`; the existing
   34 focused contracts must remain green.
+  Test-only `95a2f9c / 38287037098`, job `114943744564`, failed as expected
+  at `2026-10-12 18:08:25 UTC`: the new export was undefined at test line 15;
+  the other 34 focused contracts passed.
 - [ ] Implement explicit terminal handoff consumption. Only this mode may
   derive the original stopped-state binding from the retained marker's exact
   `oldState`; it must independently validate all marker bindings and require
@@ -14009,7 +14012,7 @@ original-transaction authority.
   This task does not replace deployment receipts, retire evidence, remove locks,
   or connect the public cold restore entry.
 - [ ] Push implementation and run the same native selector after the causal
-  failure is inspected. Require 35 focused contracts, saved dependency closure,
+  failure is inspected. Require 36 focused contracts, saved dependency closure,
   both old cold completion/observation/handoff cases, new staged/published
   interruption recovery, and the existing warm terminal regression. Record
   completed logs and acceptance; then continue receipt publication and cleanup.
@@ -14029,7 +14032,7 @@ subsequent publication/retirement consume that exact handoff. This task only
 prepares the handoff; it does not publish state, replace the deployment receipt,
 delete evidence or unlock.
 
-- [ ] Add early acknowledgement/cancellation and native reentry contracts:
+- [x] Add early acknowledgement/cancellation and native reentry contracts:
 
   ```js
   const prepared = await recovery.prepareWindowsColdTerminalRestore({
@@ -14049,7 +14052,7 @@ delete evidence or unlock.
   Test-only `5392259 / 38283441818`, job `114926014100`, failed as expected
   at `2026-10-12 17:20:00 UTC`: `prepareWindowsColdTerminalRestore` was
   undefined; the other 32 contracts passed.
-- [ ] Admit preparation only from the exact complete nine-record chain under
+- [x] Admit preparation only from the exact complete nine-record chain under
   the accepted native exclusive original-transaction authority. Publish
   `cold-restore-terminal.json` using the existing no-overwrite native primitive.
   Bind original owner/file/intent/history/completion hashes, runtime and HTTP
@@ -14068,7 +14071,7 @@ delete evidence or unlock.
   owner; a previous native bridge must still be absent.
   Refuse leftover `cold-restore-terminal.json.pending-*` publication files
   rather than ignoring an interrupted atomic publication.
-- [ ] Independently decode the saved marker in Node on every acknowledgement.
+- [x] Independently decode the saved marker in Node on every acknowledgement.
   Require exact schema, bounded private bytes, all original digests/identities,
   original state text, permitted next-state transformation and valid creator.
   Reject unknown fields or invented terminal success. Add the new helpers to
@@ -14080,6 +14083,13 @@ delete evidence or unlock.
     -f windows_live_only=true -f windows_commands_only=true
   ```
 
+  Native `f91e454 / 38284227745`, job `114928617323`, passed at
+  `2026-10-12 18:08:02 UTC`: all 34 focused contracts, saved dependency
+  closure, both normal/repeated-crash cold completion and independent
+  observation cases, same/new-actor terminal marker reentry and incomplete
+  publication refusal, plus the original warm terminal regression.
+  Normal handoff actors passed at `17:47:11 / 17:47:33 UTC`; repeated-crash
+  handoff actors passed at `18:03:32 / 18:03:56 UTC`.
   Future root-state/deployment-receipt publication and ordered evidence/lock
   retirement remain explicitly unaccepted until their own interrupted reentry
   and actual application gates pass.

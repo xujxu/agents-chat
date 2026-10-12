@@ -17,6 +17,8 @@ import { captureWindowsColdArchiveFiles, verifyWindowsColdArchiveFiles } from '.
 import { captureWindowsColdRuntimeCompletion, captureWindowsColdCompletionPrefix,
   windowsColdCompletionPhases } from './windows-cold-runtime-completion.mjs';
 import { captureWindowsColdTerminalFiles, captureWindowsColdTerminalIntent } from './windows-cold-terminal-intent.mjs';
+import { readWindowsColdTerminalSource, inspectWindowsColdTerminalState,
+  captureWindowsColdTerminalStateReply, finishWindowsColdTerminalState } from './windows-cold-terminal-state.mjs';
 
 const script = fileURLToPath(new URL('./windows-stopped-restore-controller.ps1', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -52,13 +54,22 @@ export async function prepareWindowsColdTerminalRestore(options = {}) {
   }
 }
 
+export async function publishWindowsColdTerminalState({ control, pwsh, signal, acceptDataLoss, onProgress } = {}) {
+  signal?.throwIfAborted();
+  if (acceptDataLoss !== true) throw new Error('Cold terminal publication requires explicit data-loss acknowledgement.');
+  if (onProgress !== undefined && typeof onProgress !== 'function') throw new Error('Invalid cold terminal progress callback.');
+  const recovery = await openRecovery({ control, pwsh, signal }, false, true, true, true);
+  return finishWindowsColdTerminalState(recovery, { signal, onProgress });
+}
+
 export async function prepareWindowsColdPolicyRecovery({ control, pwsh, signal, acceptDataLoss } = {}) {
   signal?.throwIfAborted();
   if (acceptDataLoss !== true) throw new Error('Cold policy recovery requires explicit data-loss acknowledgement.');
   return openRecovery({ control, pwsh, signal }, true);
 }
 
-async function openRecovery({ control, pwsh, signal }, policyRecovery, completedRuntime = false, completionRecovery = false) {
+async function openRecovery({ control, pwsh, signal }, policyRecovery, completedRuntime = false,
+  completionRecovery = false, terminalState = false) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value => typeof value === 'string'
     && value.length <= 4096 && path.isAbsolute(value) && path.resolve(value) === value && !/[\0\r\n]/.test(value))) {
@@ -67,7 +78,9 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
   const admission = await acquireWindowsAdmission({ control, pwsh, signal });
   let bridge;
   try {
-    const stateBytes = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
+    const terminalSource = terminalState ? await readWindowsColdTerminalSource(control) : null;
+    const stateBytes = terminalSource?.oldBytes
+      ?? await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
     const state = parse(stateBytes);
     const lockBytes = await readWorkerFile(path.join(control, 'lock/owner.json'), 65536, { privateMode: true });
     const lock = captureLockOwner(parse(lockBytes));
@@ -168,10 +181,22 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
     }
     let policyBinding;
     let initialPolicy;
-    const terminalFiles = completionRecovery ? await captureWindowsColdTerminalFiles(control) : null;
+    const actualTerminalFiles = completionRecovery ? await captureWindowsColdTerminalFiles(control) : null;
+    const terminalFiles = terminalSource
+      ? { ...actualTerminalFiles, state: terminalSource.record.files.state } : actualTerminalFiles;
     if (terminalFiles && (terminalFiles.state.sha256 !== expected.stateSha256
       || terminalFiles.lock.sha256 !== digest(lockBytes))) {
       throw new Error('Cold terminal source files changed before native admission.');
+    }
+    if (terminalSource) {
+      captureWindowsColdTerminalIntent(terminalSource.record, {
+        project: state.project, observation: { ...expectedObservation, completionSha256: initialCompletionPrefix.sha256 },
+        oldState: new TextDecoder('utf-8', { fatal: true }).decode(stateBytes),
+        activationState: parse(guard.intent.bytes).state, rootIdentity: expected.controlIdentity,
+        lockIdentity: expected.lockIdentity, recoveryIdentity: guard.identity, files: terminalFiles,
+      });
+      if (initialCompletionPrefix.record.phase !== 'complete') throw new Error('Cold terminal publication requires complete policy.');
+      await inspectWindowsColdTerminalState(control, terminalSource);
     }
     if (policyRecovery) {
       const stopped = parse(await readWorkerFile(path.join(control, 'task-maintenance/task-stop-stopped.json'),
@@ -194,7 +219,8 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
         ...(policyRecovery ? ['-ColdPolicyRecovery', '-PolicySha256', initialPolicy.sha256] : []),
         ...(completedRuntime ? ['-ColdCompletion', '-CompletionSha256',
           completionRecovery ? initialCompletionPrefix.sha256 : completion.completionSha256] : []),
-        ...(completionRecovery ? ['-ColdCompletionRecovery'] : [])],
+        ...(completionRecovery ? ['-ColdCompletionRecovery'] : []),
+        ...(terminalSource ? ['-ColdTerminalState', '-TerminalSha256', terminalSource.descriptor.sha256] : [])],
     });
     const ready = captureWorkerFields(await bridge.wire.receive({ signal, timeoutMs: 60000 }),
       ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'cold observation readiness');
@@ -255,10 +281,15 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
       if (method === 'prepare-terminal' && (!completionRecovery || latest.step !== 'complete')) {
         throw new Error('Cold terminal handoff requires completed runtime policy.');
       }
+      const stateMethod = ['stage-terminal-state', 'publish-terminal-state'].includes(method);
+      if (stateMethod && (!terminalSource || latest.step !== 'complete')) {
+        throw new Error('Cold terminal state publication requires its original complete handoff.');
+      }
       busy = true;
       try {
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
         if (method !== 'close') await deadOwners();
+        const terminalBefore = stateMethod ? await inspectWindowsColdTerminalState(control, terminalSource) : null;
         const archivedFiles = method === 'archive' ? await captureWindowsColdArchiveFiles({
           control, identity: guard.identity, signal: requestSignal,
           names: ['owner.json', 'files-restored.json', 'activation-intent.json',
@@ -292,6 +323,11 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
           });
           await assertWindowsAdmission(control, admission, { signal: requestSignal });
           return Object.freeze({ ...result, record });
+        }
+        if (stateMethod) {
+          const result = await captureWindowsColdTerminalStateReply(control, terminalSource, reply.value, method, terminalBefore);
+          await assertWindowsAdmission(control, admission, { signal: requestSignal });
+          return result;
         }
         if (method === 'archive') {
           const expectedArchive = {
@@ -352,6 +388,10 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
         identity: Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity }),
         advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal),
         prepareTerminal: ({ signal: terminalSignal } = {}) => request('prepare-terminal', terminalSignal),
+      } : {}),
+      ...(terminalState ? {
+        stageTerminalState: ({ signal: stateSignal } = {}) => request('stage-terminal-state', stateSignal),
+        publishTerminalState: ({ signal: stateSignal } = {}) => request('publish-terminal-state', stateSignal),
       } : {}),
       ...(policyRecovery ? {
         advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal),

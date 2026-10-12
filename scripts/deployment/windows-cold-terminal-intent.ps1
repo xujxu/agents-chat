@@ -34,8 +34,14 @@ function Get-AgentsChatColdTerminalState([hashtable]$Context, [string]$UpdatedAt
     return '{' + ($properties -join ',') + '}'
 }
 
+function Get-AgentsChatColdTerminalFields {
+    return @('version', 'phase', 'project', 'operationId', 'taskName', 'stateSha256', 'ownerSha256',
+        'filesReceiptSha256', 'intentSha256', 'historySha256', 'completionSha256', 'runtime', 'port', 'providers',
+        'oldState', 'nextState', 'rootIdentity', 'lockIdentity', 'recoveryIdentity', 'files', 'creator')
+}
+
 function Prepare-AgentsChatColdTerminalRestore {
-    param([hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity)
+    param([hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Consume)
     $null = Assert-AgentsChatColdCompletionProof $Context
     if (-not $Context.CompletionRecovery -or $Context.Phase -cne 'complete' -or $Context.Step -cne 'complete') {
         throw 'Cold terminal handoff requires completed runtime policy.'
@@ -48,9 +54,10 @@ function Prepare-AgentsChatColdTerminalRestore {
     if ([IO.Directory]::GetFileSystemEntries($Context.Control, 'cold-restore-terminal.json.pending-*').Length) {
         throw 'Incomplete cold terminal publication evidence requires inspection.'
     }
-    $fields = @('version', 'phase', 'project', 'operationId', 'taskName', 'stateSha256', 'ownerSha256',
-        'filesReceiptSha256', 'intentSha256', 'historySha256', 'completionSha256', 'runtime', 'port', 'providers',
-        'oldState', 'nextState', 'rootIdentity', 'lockIdentity', 'recoveryIdentity', 'files', 'creator')
+    $fields = @(Get-AgentsChatColdTerminalFields)
+    if ($Consume -and (-not $Context.ColdTerminalState -or -not (Test-Path -LiteralPath $path))) {
+        throw 'Cold terminal state consumption requires its original prepared handoff.'
+    }
     $existing = $stored = $null
     $updatedAt = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ', [Globalization.CultureInfo]::InvariantCulture)
     if (Test-Path -LiteralPath $path) {
@@ -71,7 +78,10 @@ function Prepare-AgentsChatColdTerminalRestore {
             Assert-AgentsChatCompletionProcessAbsent $creator.bridgePid.GetInt32() $creator.bridgeIdentity.GetString()
         }
     }
-    $state = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'state.json') $Context.StateSha256
+    $stateHash = if ($Consume) { '' } else { $Context.StateSha256 }
+    $state = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'state.json') $stateHash
+    $oldState = if ($Consume) { $Context.TerminalRecord.oldState.GetString() } else { $state.ReadText() }
+    $stateDescriptor = if ($Consume) { $Context.TerminalOriginalState } else { Get-AgentsChatColdTerminalFile $state }
     $lock = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'lock/owner.json') ''
     $runtime = [ordered]@{}
     foreach ($name in @('pid', 'identity', 'generation', 'instanceGuid', 'sessionId',
@@ -82,12 +92,12 @@ function Prepare-AgentsChatColdTerminalRestore {
         ownerSha256=$Context.ColdOwnerSha256; filesReceiptSha256=$Context.ColdReceiptSha256
         intentSha256=$Context.ColdIntentSha256; historySha256=$Context.ColdHistorySha256
         completionSha256=$Context.CompletionSha256; runtime=$runtime; port=$Context.Port; providers=$Context.Providers
-        oldState=$state.ReadText(); nextState=(Get-AgentsChatColdTerminalState $Context $updatedAt ($state.ReadText()))
+        oldState=$oldState; nextState=(Get-AgentsChatColdTerminalState $Context $updatedAt $oldState)
         rootIdentity=(Get-AgentsChatColdTerminalDirectory $Context $Context.Control)
         lockIdentity=(Get-AgentsChatColdTerminalDirectory $Context (Join-Path $Context.Control 'lock'))
         recoveryIdentity=(Get-AgentsChatColdTerminalDirectory $Context (Join-Path $Context.Control 'recovery-lock'))
         files=[ordered]@{
-            state=(Get-AgentsChatColdTerminalFile $state); lock=(Get-AgentsChatColdTerminalFile $lock)
+            state=$stateDescriptor; lock=(Get-AgentsChatColdTerminalFile $lock)
             transaction=(Get-AgentsChatColdTerminalFile $Context.CompletionAuthority)
         }
         creator=[ordered]@{

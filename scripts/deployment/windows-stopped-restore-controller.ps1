@@ -7,6 +7,8 @@ param(
     [switch]$ColdPolicyRecovery,
     [switch]$ColdCompletion,
     [switch]$ColdCompletionRecovery,
+    [switch]$ColdTerminalState,
+    [string]$TerminalSha256,
     [string]$OwnerSha256,
     [string]$ReceiptSha256,
     [string]$IntentSha256,
@@ -24,7 +26,8 @@ try {
     Add-Type -Path @(
         (Join-Path $PSScriptRoot 'WindowsWorkerJob.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeDomain.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimePipe.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeControl.cs'),
-        (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
+        (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsPrivateFile.SourceSecurity.cs'),
+        (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-stopped-restore-proof.ps1')
     $stage = 'controller'
@@ -37,6 +40,8 @@ try {
             (-not $ColdPolicyRecovery -and $PolicySha256) -or
             ($ColdCompletion -and ($ColdPolicyRecovery -or $CompletionSha256 -cnotmatch '^[a-f0-9]{64}$')) -or
             ($ColdCompletionRecovery -and -not $ColdCompletion) -or
+            ($ColdTerminalState -and (-not $ColdCompletionRecovery -or $TerminalSha256 -cnotmatch '^[a-f0-9]{64}$')) -or
+            (-not $ColdTerminalState -and $TerminalSha256) -or
             (-not $ColdCompletion -and $CompletionSha256)) {
             throw 'Cold observation requires explicit original evidence digests.'
         }
@@ -48,8 +53,13 @@ try {
             if ($ColdCompletionRecovery) {
                 . (Join-Path $PSScriptRoot 'windows-cold-completion-recovery.ps1')
                 . (Join-Path $PSScriptRoot 'windows-cold-terminal-intent.ps1')
+                . (Join-Path $PSScriptRoot 'windows-cold-terminal-state.ps1')
                 $proof = Open-AgentsChatColdCompletionRecovery $Control $OwnerSha256 $ReceiptSha256 `
-                    $IntentSha256 $HistorySha256 $CompletionSha256
+                    $IntentSha256 $HistorySha256 $CompletionSha256 `
+                    -ColdTerminalState:$ColdTerminalState -TerminalSha256 $TerminalSha256
+                if ($ColdTerminalState) {
+                    $null = Prepare-AgentsChatColdTerminalRestore $proof $ControllerPid $ControllerIdentity -Consume
+                }
             } else {
                 $proof = Open-AgentsChatColdCompletionProof $Control $OwnerSha256 $ReceiptSha256 `
                     $IntentSha256 $HistorySha256 $CompletionSha256
@@ -84,6 +94,7 @@ try {
         $methods = @('check', 'close')
         if ($ColdPolicyRecovery) { $methods += @('advance', 'archive') }
         if ($ColdCompletionRecovery) { $methods += @('advance', 'prepare-terminal') }
+        if ($ColdTerminalState) { $methods += @('stage-terminal-state', 'publish-terminal-state') }
         if ($id -ne $sequence + 1 -or $method -cnotin $methods) {
             throw 'Invalid read-only stopped restore proof request.'
         }
@@ -100,6 +111,10 @@ try {
         } elseif ($method -ceq 'archive') { $value = Archive-AgentsChatColdPolicyJournal $proof }
         elseif ($method -ceq 'prepare-terminal') {
             $value = Prepare-AgentsChatColdTerminalRestore $proof $ControllerPid $ControllerIdentity
+        }
+        elseif ($method -cin @('stage-terminal-state', 'publish-terminal-state')) {
+            $value = Publish-AgentsChatColdTerminalState $proof $ControllerPid $ControllerIdentity `
+                -Publish:($method -ceq 'publish-terminal-state')
         }
         elseif ($method -ceq 'advance' -and $ColdCompletionRecovery) { $value = Advance-AgentsChatColdCompletionRecovery $proof }
         elseif ($method -ceq 'advance') { $value = Advance-AgentsChatColdPolicyRecovery $proof }
