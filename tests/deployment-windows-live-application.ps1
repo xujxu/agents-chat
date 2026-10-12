@@ -40,7 +40,10 @@ try {
     $modes = if ($RestoreScenario -in @('complete', 'offline')) { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
         elseif ($RestoreScenario -in @('crashed', 'copy-crashed')) { @('update', 'verify-closed', 'current', "restore-$RestoreScenario", 'restore-crash-verified') }
         else { @('update', 'verify-closed', 'current', "restore-$RestoreScenario") }
-    if ($RestoreScenario -eq 'copy-crashed') { $modes += @('restore-cold-files', 'restore-cold-observed') }
+    if ($RestoreScenario -eq 'copy-crashed') {
+        $modes += @('restore-cold-files', 'restore-cold-policy-crashed', 'restore-cold-enable-crashed',
+            'restore-cold-completed', 'restore-cold-observed')
+    }
     foreach ($mode in $modes) {
         if ($RestoreScenario -eq 'offline' -and $mode -eq 'restore') {
             $egress = Enable-WindowsRestoreEgressBlock -Node $Node -Pwsh $pwsh -Git $git
@@ -96,7 +99,9 @@ try {
             Write-Output "Original restore actor terminated without a result; verifying its retained crash evidence; elapsedMs=$($elapsed.ElapsedMilliseconds)"
             continue
         }
-        Assert ($code -eq 0) "Live controller $mode failed: $text"
+        $completionInterrupted = $mode -in @('restore-cold-files', 'restore-cold-policy-crashed', 'restore-cold-enable-crashed')
+        $expectedCode = if ($completionInterrupted) { 91 } else { 0 }
+        Assert ($code -eq $expectedCode) "Live controller $mode returned an unexpected exit code ${code}: $text"
         $result = $text | ConvertFrom-Json
         $expected = switch ($mode) {
             update { 'accepted' } verify-closed { 'completed' } current { 'already-current' }
@@ -104,7 +109,10 @@ try {
             restore-cancelled { 'cancelled' }
             restore-failed { 'failed' }
             restore-crash-verified { 'crash-verified' }
-            restore-cold-files { 'runtime-policy-restored' }
+            restore-cold-files { 'cold-completion-interrupted' }
+            restore-cold-policy-crashed { 'cold-completion-interrupted' }
+            restore-cold-enable-crashed { 'cold-completion-interrupted' }
+            restore-cold-completed { 'cold-runtime-recovered' }
             restore-cold-observed { 'cold-runtime-observed' }
         }
         Assert ($result.status -ceq $expected) "Unexpected live controller $mode status"
@@ -116,33 +124,56 @@ try {
             Assert ($result.retired -eq $true -and $result.runtime.pid -eq $originalPid -and
                 $result.runtime.identity -ceq $coldIdentity) 'Cold restoration did not bind original runtime retirement'
             Assert ($coldOwner.WaitForExit(15000) -and $coldOwner.ExitCode -eq 0) 'Cold original runtime did not retire cleanly'
-            Assert ($after.Count -eq 1 -and $after.Item(1).EnginePID -eq $result.completed.runtime.pid -and
-                ([guid]$after.Item(1).InstanceGuid).ToString('D') -ceq $result.completed.runtime.instanceGuid) `
+            Assert ($after.Count -eq 1 -and $after.Item(1).EnginePID -eq $result.activation.runtime.pid -and
+                ([guid]$after.Item(1).InstanceGuid).ToString('D') -ceq $result.activation.runtime.instanceGuid) `
                 'Cold completion lost its original new Scheduler instance'
             $coldTask = $scheduler.GetFolder('\').GetTask($TaskName)
             Assert ($result.activation.status -ceq 'guarded-running' -and
                 $result.activation.runtime.generation -cne $result.runtime.generation -and
                 $result.readiness.status -ceq 'ready' -and $result.readiness.port -eq 3010 -and
                 $result.readiness.generation -ceq $result.activation.runtime.generation) 'Cold application readiness lacks its new owned generation'
-            Assert ([bool]$coldTask.Enabled -eq $result.completed.enabled -and
-                [string]$coldTask.Xml -ceq $result.completed.definition -and
+            Assert (-not $coldTask.Enabled -and $result.enabled -eq $false -and
+                [string]$coldTask.Xml -ceq $result.definition -and
                 [string]$coldTask.Xml -cne $coldDefinition -and
                 [string]$coldTask.GetSecurityDescriptor(7) -ceq $coldSecurity -and
-                $result.activation.securityDescriptor -ceq $coldSecurity) 'Cold completion changed security or lost its exact acknowledged permanent policy'
+                $result.activation.securityDescriptor -ceq $coldSecurity -and
+                $result.progress.step -ceq 'lease-released' -and $result.progress.lease -ceq 'released') `
+                'Interrupted cold completion changed security or lost its staged released boundary'
+            Assert (-not (Test-Path -LiteralPath (Join-Path $control 'recovery-lock/completion-released.json'))) `
+                'Cold release interruption already has its durable acknowledgement'
             [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$result.runtime.generation, $coldSession)
-            $runtime = $result.completed.runtime
-            Assert ($runtime.generation -ceq $result.activation.runtime.generation -and
-                $runtime.identity -ceq $result.activation.runtime.identity -and
-                [Deployment.WindowsWorkerJob]::ProcessIdentity($runtime.pid) -ceq $runtime.identity -and
+            $runtime = $result.activation.runtime
+            Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($runtime.pid) -ceq $runtime.identity -and
                 [Deployment.WindowsRuntimeControl]::Exchange(
                     [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') `
                 'Cold application did not survive its original controller with its released lease'
             $coldOwner.Dispose()
             $coldOwner = $null
-            Write-Output "PASS: real Windows cold restoration releases its owned ready application with restored API data and permanent task policy without terminal success; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs') restored $ChatId
+            Assert ($LASTEXITCODE -eq 0) 'Authenticated restored data was lost after cold release interruption'
+            Write-Output "PASS: real Windows cold application survives released-lease controller death before its durable acknowledgement; elapsedMs=$($elapsed.ElapsedMilliseconds)"
             continue
         }
         Assert ($after.Count -eq 1) 'Live deployment lost the application task'
+        if ($mode -in @('restore-cold-policy-crashed', 'restore-cold-enable-crashed', 'restore-cold-completed')) {
+            $runtime = $result.runtime
+            Assert ($runtime.pid -eq $originalPid -and $runtime.identity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($originalPid) -and
+                $runtime.instanceGuid -ceq ([guid]$originalInstance).ToString('D') -and $result.lease -ceq 'released' -and
+                [Deployment.WindowsRuntimeControl]::Exchange(
+                    [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') `
+                'Actual completion recovery lost or restarted its original released application'
+            $expectedStep = switch ($mode) {
+                'restore-cold-policy-crashed' { 'permanent-policy-applied' }
+                'restore-cold-enable-crashed' { 'enable-applied' }
+                'restore-cold-completed' { 'complete' }
+            }
+            Assert ($result.step -ceq $expectedStep) 'Actual completion recovery skipped its requested boundary'
+            if ($completionInterrupted) {
+                $missing = if ($mode -ceq 'restore-cold-policy-crashed') { 'policy-restored' } else { 'complete' }
+                Assert (-not (Test-Path -LiteralPath (Join-Path $control "recovery-lock/completion-$missing.json"))) `
+                    'Actual physical completion interruption already has its durable acknowledgement'
+            }
+        }
         if ($mode -eq 'restore-cold-observed') {
             Assert ($result.mutationAuthority -eq $false -and $result.lease -ceq 'released' -and
                 $result.port -eq 3010 -and $result.runtime.pid -eq $originalPid -and

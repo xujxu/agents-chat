@@ -4,6 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-evidence.mjs';
 import { verifyWindowsApplicationApi } from './deployment-windows-application-api-helpers.mjs';
+import { interruptWindowsColdApplication } from './deployment-windows-cold-application-recovery.mjs';
 
 export async function verifyWindowsColdApplicationFiles({ directory, project, control, backup, snapshot, pwsh, chatId }) {
   const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
@@ -88,17 +89,25 @@ export async function verifyWindowsColdApplicationFiles({ directory, project, co
     assert.deepEqual(await readFile(path.join(control, 'recovery-lock/owner.json')), ownerBytes);
     assert.deepEqual(await readFile(path.join(control, 'recovery-lock/files-restored.json')), filesReceipt);
     process.stderr.write(`${new Date().toISOString()} Actual cold restoration: completing permanent task policy and releasing the original runtime lease\n`);
-    const completed = await activation.completeRuntime({ port: 3010 });
-    assert.equal(completed.status, 'runtime-policy-restored');
-    assert.equal(completed.lease, 'released');
-    assert.deepEqual(completed.runtime, running.runtime);
-    assert.deepEqual(completed.providers, lease.providers);
-    await activation.check();
-    await verifyWindowsApplicationApi('restored', chatId);
-    return {
-      status: 'runtime-policy-restored', retired: true, operationId: lease.owner.operationId,
-      runtime: proof.runtime, activation: running, readiness, completed,
-    };
+    await activation.completeRuntime({
+      port: 3010,
+      async onProgress(progress) {
+        if (progress.step !== 'lease-released') return;
+        assert.equal(progress.lease, 'released');
+        await assert.rejects(lstat(path.join(control, 'recovery-lock/completion-released.json')), { code: 'ENOENT' });
+        const requested = JSON.parse(await readFile(path.join(control, 'recovery-lock/completion-release-requested.json')));
+        await verifyWindowsApplicationApi('restored', chatId);
+        assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+        assert.deepEqual(await readFile(path.join(control, 'lock/owner.json')), lock);
+        assert.deepEqual(await readFile(path.join(control, 'deployment.json')), receipt);
+        await interruptWindowsColdApplication({
+          status: 'cold-completion-interrupted', retired: true, operationId: lease.owner.operationId,
+          runtime: proof.runtime, activation: running, readiness, progress,
+          definition: requested.definition, enabled: requested.enabled,
+        });
+      },
+    });
+    assert.fail('Actual cold completion skipped its interrupted release boundary.');
   } finally {
     const errors = [];
     try { await lease.close(); } catch (error) { errors.push(error); }

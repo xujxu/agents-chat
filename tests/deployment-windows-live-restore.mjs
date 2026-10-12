@@ -6,6 +6,10 @@ import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-
 import { invokePublicWindowsRestore } from './deployment-windows-public-restore.mjs';
 
 export async function verifyWindowsLiveRestore({ mode, directory, project, control, taskName, pwsh, chatId }) {
+  if (['restore-cold-policy-crashed', 'restore-cold-enable-crashed', 'restore-cold-completed'].includes(mode)) {
+    const { verifyWindowsColdApplicationRecovery } = await import('./deployment-windows-cold-application-recovery.mjs');
+    return verifyWindowsColdApplicationRecovery({ mode, directory, control, pwsh, chatId });
+  }
   if (mode === 'restore-cold-observed') {
     const { verifyWindowsColdApplicationCompletion } = await import('./deployment-windows-cold-application-files.mjs');
     return verifyWindowsColdApplicationCompletion({ directory, control, pwsh, chatId });

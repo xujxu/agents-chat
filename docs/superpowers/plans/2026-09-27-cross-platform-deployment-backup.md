@@ -13915,6 +13915,45 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5ES: Accept interrupted completion recovery with the actual Windows application
+
+**Files:** `tests/deployment-windows-cold-application-files.mjs`,
+`tests/deployment-windows-cold-application-recovery.mjs`,
+`tests/deployment-windows-live-restore.mjs`,
+`tests/deployment-windows-live-application.{mjs,ps1}`.
+
+- [ ] Reuse the existing actual partial-copy crash and single cold application
+  activation. Terminate its captured Node actor at the awaited `lease-released`
+  boundary with a flushed structured interrupted result and exit code 91:
+
+  ```js
+  process.stdout.write(`${JSON.stringify(result)}\n`, () => process.exit(91));
+  await new Promise(() => {});
+  ```
+
+  The parent must require that exact nonzero exit, terminate the original actor
+  Job, and observe the same released application and original Scheduler instance.
+  Preserve restored authenticated data, old runtime retirement and original
+  state/lock/deployment receipt. Do not add another complete file copy or raise
+  the existing 45-minute cold actor bound.
+- [ ] Run three separate captured recovery actors against that same runtime:
+  interrupt after `permanent-policy-applied`, interrupt after `enable-applied`,
+  then reach `complete` and close normally. Require the recovered initial step
+  to recognize each lost acknowledgement, exact previous receipt bytes,
+  unchanged original transaction files and authenticated API data before and
+  after each actor exits. Keep the existing five-minute recovery actor bound.
+  The existing separate read-only completed observer remains the final check.
+- [ ] Dispatch both existing actual crash cases, retaining the warm-crash case:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=crash
+  ```
+
+  This accepts application-level released-prefix recovery, not root terminal
+  publication, lock retirement or public cold restore integration.
+
 ### Task 5ER: Recover released cold completion prefixes without restarting the runtime
 
 **Files:** extend `windows-cold-completion-proof.ps1`, the stopped restore
@@ -13923,7 +13962,7 @@ engine inventory. Add `windows-cold-completion-recovery.ps1` beside the proof.
 Extend the existing native completion fixture with
 `tests/deployment-windows-cold-completion-recovery.{mjs,ps1}`.
 
-- [ ] Add early acknowledgement/abort/path contracts:
+- [x] Add early acknowledgement/abort/path contracts:
 
   ```js
   assert.equal(typeof recovery.prepareWindowsColdCompletionRecovery, 'function');
@@ -13935,22 +13974,25 @@ Extend the existing native completion fixture with
   Test-only `af7dd10 / 38265802145`, job `114872132302`, failed as expected
   at `2026-10-12 15:01:45 UTC`: the new recovery export was undefined;
   the other 31 unit contracts passed. Implementation `999a3ed` is pinned by
-  paired native gate `38267393844`; acceptance is pending.
-- [ ] Admit only exact contiguous completion prefixes from `release-requested`
+  paired native gate `38267393844`, job `114872887968`, passed at
+  `2026-10-12 15:41:10 UTC`: 32 unit contracts, saved dependency closure,
+  unchanged normal completion, all three physical interruption boundaries,
+  independent completed observation and original terminal regression.
+- [x] Admit only exact contiguous completion prefixes from `release-requested`
   through `complete`, while retaining complete-only read-only observation.
   Require the original controllers absent, old Job empty, exact new Scheduler
   instance/listener/configuration and an already released runtime. Do not release
   a guarded lease from a new peer or restart the task. Reuse warm
   `Resolve-AgentsChatCompletionRecoveryPolicy` to recognize lost registration
   and enable acknowledgements.
-- [ ] Acquire native exclusive authority on the original
+- [x] Acquire native exclusive authority on the original
   `task-maintenance/transaction.json` identity, bytes and digest, after releasing
   every retained handle to that identity. Keep this handle through bridge exit.
   This existing immutable transaction anchors the original stop history and
   blocks new native admission even if the Node owner dies first. Unlike an
   exclusive completion record, it does not require cached journal bytes or
   relaxing Node's live prefix rereads.
-- [ ] Expose only finite `check`, `advance` and `close` operations:
+- [x] Expose only finite `check`, `advance` and `close` operations:
 
   ```js
   const recovery = await prepareWindowsColdCompletionRecovery({ control, pwsh, acceptDataLoss: true });
@@ -13966,7 +14008,7 @@ Extend the existing native completion fixture with
   unchanged. Retain task-file identity except during the exact admitted native
   registration/enable operation. Node verifies exact inventory, prefix hash,
   step order and immutable runtime on every acknowledgement.
-- [ ] Reuse the bridge-death-source fixture's single fresh activation. Interrupt
+- [x] Reuse the bridge-death-source fixture's single fresh activation. Interrupt
   at `lease-released`, recover and interrupt at `permanent-policy-applied`,
   recover and interrupt at `enable-applied`, then finish:
 
@@ -13983,6 +14025,9 @@ Extend the existing native completion fixture with
   read-only observer then validates the complete chain. Keep the normal
   completion fixture unchanged and existing time bounds. Run the same Actions
   selector with implementation and retain saved dependency closure coverage.
+  Recovered final runtime and independent observation passed at
+  `2026-10-12 15:37:02 / 15:37:17 UTC`; the normal case passed at
+  `15:22:17 / 15:22:31 UTC`.
 
 ### Task 5EQ: Acknowledge every finite cold completion boundary
 

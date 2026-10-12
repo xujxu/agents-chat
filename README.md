@@ -659,7 +659,9 @@ prefix before an optional awaited progress callback. Both native cold histories,
 their independent completion observers, saved dependencies and the original
 terminal-completion regression passed; this gate does not itself prove
 interrupted-prefix recovery.
-The released-prefix recovery implementation is pending native acceptance. It
+Released-prefix recovery passed native acceptance at `999a3ed / 38267393844`
+(`2026-10-12 15:41:10 UTC`), including repeated interruption after physical
+lease release, permanent-policy registration and task enablement. It
 requires explicit data-loss acknowledgement, an already released live runtime,
 the original receipt chain and exclusive native ownership of the original
 transaction file. It resumes permanent-policy and enabled-state acknowledgements
