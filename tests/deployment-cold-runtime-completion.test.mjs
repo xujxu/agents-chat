@@ -11,6 +11,16 @@ import { inspectWindowsColdRuntimeCompletion } from '../scripts/deployment/windo
 import * as recovery from '../scripts/deployment/windows-cold-activation-recovery.mjs';
 import { captureWindowsColdTerminalIntent } from '../scripts/deployment/windows-cold-terminal-intent.mjs';
 
+test('cold terminal state publication requires acknowledgement and honors pre-abort', async () => {
+  assert.equal(typeof recovery.publishWindowsColdTerminalState, 'function');
+  await assert.rejects(recovery.publishWindowsColdTerminalState(), /data-loss acknowledgement/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(recovery.publishWindowsColdTerminalState({
+    acceptDataLoss: true, signal: controller.signal,
+  }), { name: 'AbortError' });
+});
+
 test('cold terminal handoff requires explicit acknowledgement and honors pre-abort', async () => {
   assert.equal(typeof recovery.prepareWindowsColdTerminalRestore, 'function');
   await assert.rejects(recovery.prepareWindowsColdTerminalRestore(), /data-loss acknowledgement/);

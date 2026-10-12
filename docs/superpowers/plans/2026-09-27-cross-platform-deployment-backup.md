@@ -13915,6 +13915,105 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EU: Publish the prepared cold terminal state with interruption reentry
+
+**Prerequisite:** Task 5ET's immutable handoff and native acceptance.
+**Files:** add `scripts/deployment/windows-cold-terminal-state.{mjs,ps1}` for
+handoff consumption and finite state publication; compose it from
+`windows-cold-activation-recovery.mjs` and `windows-stopped-restore-controller.ps1`.
+Extend the explicit terminal mode in `windows-stopped-restore-proof.ps1`,
+`windows-cold-completion-recovery.ps1`, and the saved recovery helper inventory.
+Add `tests/deployment-windows-cold-terminal-state.{mjs,ps1}` to the existing
+normal and interrupted native cold completion cases. Extend
+`tests/deployment-cold-runtime-completion.test.mjs`.
+
+Use the existing native `WindowsPrivateFile.PublishSourceFile` primitive
+(`WindowsPrivateFile.SourceSecurity.cs`), already used for Git metadata,
+rather than adding another rename implementation. Its retained source inode,
+checked destination metadata, native handle rename, and original-target
+unlink check provide atomic publication under the existing exclusive
+original-transaction authority.
+
+- [ ] Write the early API contract and native interruption actors:
+
+  ```js
+  assert.equal(typeof recovery.publishWindowsColdTerminalState, 'function');
+  await assert.rejects(recovery.publishWindowsColdTerminalState(), /data-loss acknowledgement/);
+  const result = await recovery.publishWindowsColdTerminalState({
+    control, pwsh, acceptDataLoss: true,
+    onProgress: async progress => {
+      if (progress.step === target) {
+        process.stdout.write(`${JSON.stringify({ progress })}\n`);
+        await new Promise(() => {});
+      }
+    },
+  });
+  assert.equal(result.status, 'cold-terminal-state-published');
+  ```
+
+  Require frozen progress with `step`, `operationId`, and native bridge
+  `identity`. First interrupt after `state-staged`, retaining exact old root
+  state and `state.json.lock` containing the prepared next state. Recover
+  and interrupt after `state-published`, killing the exact retained bridge
+  before its Node controller. Then run two fresh completion actors.
+  Require the published root file to retain the first staged inode,
+  exact proposed bytes and timestamp, no remaining stage, unchanged terminal
+  marker/lock/transaction/backup/journal, and the same live released runtime.
+  Keep the existing three-minute actor and fifteen-second exit bounds.
+- [ ] Push the test-only commit and queue one causal native run without
+  replacing Task 5ET's required run:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  ```
+
+  Expected failure: missing `publishWindowsColdTerminalState`; the existing
+  34 focused contracts must remain green.
+- [ ] Implement explicit terminal handoff consumption. Only this mode may
+  derive the original stopped-state binding from the retained marker's exact
+  `oldState`; it must independently validate all marker bindings and require
+  physical `state.json` to match either the original inode/bytes or the exact
+  proposed next bytes. Keep ordinary stopped/completed observers unchanged.
+  Retain the marker, original transaction exclusively, original directory
+  identities, completion chain and released runtime throughout.
+- [ ] Stage the exact prepared `nextState`, then publish through the existing
+  source-file primitive:
+
+  ```powershell
+  $staged = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($Control, 'state.json.lock', 'file')
+  $before = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($Control, 'state.json', 'file')
+  [Deployment.WindowsPrivateFile]::PublishSourceFile(
+      $Control, 'state.json', $staged, $before, $nextHash, $oldHash)
+  ```
+
+  Check all evidence immediately before each boundary. Release only original
+  state-file handles for the atomic operation, retain the new exact file
+  immediately afterwards, and preserve all other evidence/runtime authority.
+  Refuse foreign or incomplete publication files. Reuse an exact staged file
+  after interruption; recognize an already-published exact next state without
+  overwriting it or refreshing its timestamp.
+- [ ] Independently verify physical state and stage evidence in Node after
+  each acknowledgement, await the finite progress callbacks, and always close
+  the native authority. Return exactly the following immutable acknowledgement,
+  not overall restore success:
+
+  ```js
+  {
+    status: 'cold-terminal-state-published', operationId,
+    terminalSha256, stateSha256,
+  }
+  ```
+
+  This task does not replace deployment receipts, retire evidence, remove locks,
+  or connect the public cold restore entry.
+- [ ] Push implementation and run the same native selector after the causal
+  failure is inspected. Require 35 focused contracts, saved dependency closure,
+  both old cold completion/observation/handoff cases, new staged/published
+  interruption recovery, and the existing warm terminal regression. Record
+  completed logs and acceptance; then continue receipt publication and cleanup.
+
 ### Task 5ET: Prepare the cold terminal handoff before replacing root state
 
 **Files:** add `scripts/deployment/windows-cold-terminal-intent.{mjs,ps1}`;
