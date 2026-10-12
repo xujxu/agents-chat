@@ -11,7 +11,7 @@ function Assert-AgentsChatColdActivatedRuntime([hashtable]$Context) {
         $binding.sessionId -ne $runtime.sessionId) { throw 'Original cold activated Scheduler instance changed.' }
     $domain = [Deployment.WindowsRuntimeControl]::Exchange(
         [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'observe', 15000) | ConvertFrom-Json
-    if ($domain.phase -cne 'admitted' -or $domain.quiescent -or $domain.applicationHealthy -or
+    if ($domain.phase -cnotin @('admitted', 'root-exited') -or $domain.quiescent -or $domain.applicationHealthy -or
         $domain.members -notcontains $runtime.launcherPid -or
         [Deployment.WindowsRuntimeControl]::Exchange(
             [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -cne 'guarded') {

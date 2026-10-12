@@ -9,8 +9,11 @@ function Open-AgentsChatColdRestoreAuthority {
     try {
         $ownerFile = Open-AgentsChatCompletionFile $proof (Join-Path $Control 'recovery-lock/owner.json') $OwnerSha256
         $record = $ownerFile.ReadText() | ConvertFrom-Json
-        $owner = Read-AgentsChatMaintenanceFields ($record.owner | ConvertTo-Json -Compress) `
-            @('version', 'project', 'token', 'operationId', 'pid', 'processIdentity', 'createdAt')
+        $document = [Text.Json.JsonDocument]::Parse($ownerFile.ReadText())
+        try {
+            $owner = Read-AgentsChatMaintenanceFields ($document.RootElement.GetProperty('owner').GetRawText()) `
+                @('version', 'project', 'token', 'operationId', 'pid', 'processIdentity', 'createdAt')
+        } finally { $document.Dispose() }
         if ($owner.version.GetInt32() -ne 1 -or $owner.pid.GetInt32() -ne $ControllerPid -or
             $owner.processIdentity.GetString() -cne $ControllerIdentity -or
             $record.stateSha256 -cne $proof.StateSha256 -or

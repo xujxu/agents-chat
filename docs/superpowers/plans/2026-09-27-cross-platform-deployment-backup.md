@@ -13943,6 +13943,16 @@ or expose public cold restore.
   no automation or instances and an empty new Job after actor exit. Run causal
   and paired native Actions; actual startup and interrupted-prefix recovery
   follow separately.
+  Causal `881e62e / 38213204671`, job `114691850263`, failed as expected at
+  `2026-10-12 06:46:17 UTC` on missing `activation.start`.
+  Implementation `eebc6a4 / 38213778511`, job `114694927115`, reached actual
+  startup but failed at07:00:15 because it admitted only the `admitted` domain
+  phase. The original fixture intentionally exits its entry process while a
+  detached writer remains in the same guarded Job; the existing domain protocol
+  and live activation support `root-exited`. Accept both non-stopped phases
+  while retaining exact launcher membership, task binding and guarded lease;
+  do not invent application health. The new native intent timestamp comparison
+  also reads the owner's raw JSON string, avoiding PowerShell date reserialization.
 
 ### Task 5EB: Persist original-owner cold activation intent before task mutation
 
