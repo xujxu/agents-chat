@@ -623,9 +623,11 @@ configuration retention across old-host retirement passed at
 `8510f67 / 38210974436`. Durable startup/shutdown journal binding passed at
 `7783994 / 38220999163`; independent read-only observation of the complete
 stopped cold journal and both empty Jobs passed at `f18dfec / 38224040058`.
-This does not claim actual application readiness or
-completed cold restore; actual startup, changed-task interruption recovery
-and terminal closeout remain separate gates.
+Actual cold application startup, owned HTTP, authenticated restored API data
+and guarded shutdown passed at `dfd2ad0 / 38220610437` on
+`2026-10-12 09:15:38 UTC`, within the unchanged 45-minute cold actor bound.
+This does not claim completed cold restore; changed-task interruption recovery,
+public cold integration and terminal closeout remain separate gates.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

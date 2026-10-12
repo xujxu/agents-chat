@@ -14161,23 +14161,26 @@ readiness gate. Keep byte-exact project/database checks before startup;
 after startup verify authenticated pre-backup chat data instead of requiring
 the live database to remain byte-identical.
 
-- [ ] Pass the existing fixture chat ID to the cold actor. Reuse one API
+- [x] Pass the existing fixture chat ID to the cold actor. Reuse one API
   assertion helper from both the existing CLI and the leased cold actor.
-- [ ] Retain exact restored configuration across original-host retirement,
+- [x] Retain exact restored configuration across original-host retirement,
   distinct guarded startup, owned port3010 readiness and restored API checks.
   Recheck unchanged backup and original state/lock/deployment/files evidence.
-- [ ] Close the new guarded runtime before releasing configuration handles.
+- [x] Close the new guarded runtime before releasing configuration handles.
   Independently verify old clean retirement, both empty Jobs, no Scheduler
   instances/listener, and the exact inhibited new policy with unchanged
   security and no automatic triggers. Do not report terminal restoration.
-- [ ] Run the existing actual crash pair after native readiness acceptance.
+- [x] Run the existing actual crash pair after native readiness acceptance.
   Do not add workflow jobs, inputs or increase actor/workflow timeouts.
   Implementation tests `7a9140c` were dispatched at `dfd2ad0 / 38220610437`
   after native readiness acceptance: copy-crash job `114715682138` and
   original crash regression `114715682436`.
   The original crash regression passed at `2026-10-12 08:39:38 UTC`;
-  copy-crash/guarded startup remains running, so actual readiness is not
-  accepted by that earlier-prefix regression.
+  copy-crash/guarded application startup passed at `2026-10-12 09:15:38 UTC`.
+  The actual cold actor accepted owned HTTP, authenticated restored API data
+  and guarded shutdown at `09:15:35`, taking `2177744ms` within the unchanged
+  45-minute actor bound. This accepts actual readiness, not public cold
+  completion or interrupted task-policy recovery.
 
 ### Task 5ED: Verify the guarded cold runtime's owned HTTP readiness
 
