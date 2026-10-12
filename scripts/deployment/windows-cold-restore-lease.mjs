@@ -66,7 +66,9 @@ async function inspectLease(control, expected) {
 }
 
 export async function assertWindowsColdRestoreLease(control, lease, options) {
-  if (leases.get(lease) !== control) throw new Error('Original Windows cold restore lease does not match control.');
+  if (!leases.has(lease) || leases.get(lease) !== control) {
+    throw new Error('Original Windows cold restore lease does not match control.');
+  }
   return lease.check(options);
 }
 

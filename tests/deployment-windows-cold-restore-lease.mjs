@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
+import { acquireWindowsAdmission } from '../scripts/deployment/windows-admission.mjs';
+import { openWindowsStoppedRestoreProof } from '../scripts/deployment/windows-stopped-restore-proof.mjs';
 
 const implementation = new URL('../scripts/deployment/windows-cold-restore-lease.mjs', import.meta.url);
 async function options(control, pwsh) {
@@ -34,6 +36,7 @@ export async function verifyWindowsColdRestoreLease({ control, pwsh }) {
   const stateFile = path.join(control, 'state.json');
   const originalLock = await readFile(lockFile);
   const originalState = await readFile(stateFile);
+  await assert.rejects(assertWindowsColdRestoreLease(undefined, { check: async () => ({ stopped: true, inhibited: true }) }));
   await assert.rejects(claimWindowsColdRestore({ ...supplied, acceptDataLoss: false }));
   let predecessor;
   for (let round = 0; round < 2; round++) {
@@ -75,6 +78,26 @@ export async function verifyWindowsColdRestoreLease({ control, pwsh }) {
     }
     assert.deepEqual(await readFile(lockFile), originalLock);
     assert.deepEqual(await readFile(stateFile), originalState);
+    if (round === 0) {
+      const admission = await acquireWindowsAdmission({ control, pwsh });
+      try {
+        await assert.rejects(openWindowsStoppedRestoreProof({ control, pwsh, admission }),
+          { code: 'DEPLOYMENT_WINDOWS_STOPPED_RESTORE_PROOF_REFUSED' });
+      } finally { await admission.close(); }
+      const ownerFile = path.join(control, 'recovery-lock', 'owner.json');
+      const bytes = await readFile(ownerFile);
+      const record = JSON.parse(bytes);
+      for (const change of [
+        { backupId: 'foreign-backup' }, { stateSha256: '0'.repeat(64) },
+        { owner: { ...record.owner, operationId: JSON.parse(originalLock).operationId } },
+        { guardIdentity: { ...record.guardIdentity, ino: `${record.guardIdentity.ino}0` } },
+      ]) {
+        try {
+          await writeFile(ownerFile, JSON.stringify({ ...record, ...change }));
+          await assert.rejects(claimWindowsColdRestore(supplied));
+        } finally { await writeFile(ownerFile, bytes); }
+      }
+    }
   }
   const lease = await claimWindowsColdRestore(supplied);
   try {
@@ -85,6 +108,7 @@ export async function verifyWindowsColdRestoreLease({ control, pwsh }) {
     assert.deepEqual(lease.lock, JSON.parse(originalLock));
     assert.deepEqual(lease.state, JSON.parse(originalState));
     assert.equal(lease.snapshot.id, lease.state.backupId);
+    await assert.rejects(writeFile(path.join(control, 'recovery-lock', 'owner.json'), 'changed'));
     await assert.rejects(claimWindowsColdRestore(supplied));
     await lease.check();
   } finally { await lease.close(); }
