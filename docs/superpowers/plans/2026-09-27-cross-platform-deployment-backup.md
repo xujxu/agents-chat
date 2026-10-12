@@ -13915,6 +13915,46 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EN: Complete the cold runtime's permanent task policy and original lease
+
+**Files:** add `scripts/deployment/windows-cold-runtime-completion.ps1`;
+extend the existing cold activation context/controller/Node bridge and lease
+facade. Add `tests/deployment-windows-cold-runtime-completion.{mjs,ps1}` after
+the accepted archival/fresh-copy fixture, reusing both current native cases.
+
+- [ ] Require a new actual cold claim/copy/configuration/start/readiness cycle,
+  then:
+
+  ```js
+  const completed = await activation.completeRuntime({ port, waitSeconds: 15 });
+  assert.equal(completed.status, 'runtime-policy-restored');
+  assert.equal(completed.lease, 'released');
+  assert.deepEqual(completed.runtime, running.runtime);
+  await lease.close();
+  assert.equal(await processIdentity(running.runtime.pid), running.runtime.identity);
+  assert.notEqual(await processIdentity(running.controllerPid), running.controllerIdentity);
+  ```
+
+  Pre-aborted completion preserves the authority; repeated identical completion
+  is idempotent. Root state and lock remain byte-exact: this is runtime completion,
+  not terminal restore success.
+- [ ] Reuse the warm completion order and durable phases: prepare retained
+  readiness, request/stage the permanent action with automation still suppressed,
+  publish release intent, release only from the original native bridge, publish
+  released, request/restore original automation, request/restore original enabled
+  policy, then publish complete. Bind every receipt to original cold owner,
+  file receipt, activation intent/running history, runtime and listener.
+- [ ] Bind Node acknowledgements to the exact journal and finite existing
+  `windowsTaskCompletionSteps`. Permit definition/lease changes only when
+  acknowledged by that progression. Closing a completed or released runtime
+  must close controller handles without stopping the accepted generation.
+- [ ] Independent parent retains exact live process, released lease, original
+  Scheduler instance and listener after Node/native controller exit. Compare all
+  original registration, principal, settings, triggers, enabled value and security;
+  require the literal permanent action with no controller arguments. Settle only
+  the retained test generation in cleanup. Do not claim cold terminal closeout,
+  public integration or interrupted completion recovery from this gate.
+
 ### Task 5EM: Preserve the cold recovery dependency closure outside the project
 
 **Files:** `scripts/deployment/saved-recovery-engine.mjs`,
@@ -13939,9 +13979,11 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 - [ ] Publish the missing explicit manifest entries only after pinning the
   test-only Actions contract. Keep existing 256-file, 1 MiB/file, 16 MiB
   aggregate and 32 KiB manifest limits; do not bypass integrity verification.
-  Causal `ff353ba / 38236035542` is running after the accepted
-  authorized-archive pair. Implementation `5c33578` adds the 28 explicit helpers
-  and is pinned to paired run `38239407765`, queued behind its causal.
+  Causal `ff353ba / 38236035542`, job `114777731203`, failed as expected
+  at `2026-10-12 10:58:23 UTC` on missing saved
+  `windows-stopped-restore-proof.mjs`; the existing saved Windows entry and
+  public invocation cases passed. Implementation `5c33578` adds the 28 explicit
+  helpers and is pinned to paired run `38239407765`, now running.
 - [ ] Run the existing command gate's saved dependency case and cold native
   regressions. This packages private primitives for subsequent public integration;
   it does not enable public cold restore or claim independent terminal completion.
