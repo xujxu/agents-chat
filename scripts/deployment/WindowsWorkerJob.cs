@@ -225,10 +225,15 @@ namespace Deployment
         {
             if (generation == Guid.Empty || sessionId < 0)
                 throw new ArgumentException("Original Job generation and session are required.");
+            string prefix;
             using (Process current = Process.GetCurrentProcess())
-                if (current.SessionId != sessionId)
+            {
+                if (current.SessionId == sessionId) prefix = @"Local\";
+                else if (sessionId == 0) prefix = @"Global\";
+                else
                     throw new InvalidOperationException("Cannot establish original Job absence across sessions.");
-            IntPtr opened = OpenJobObjectW(0x0004, false, @"Local\agents-deploy-" + generation.ToString("D"));
+            }
+            IntPtr opened = OpenJobObjectW(0x0004, false, prefix + "agents-deploy-" + generation.ToString("D"));
             if (opened == IntPtr.Zero)
             {
                 int error = Marshal.GetLastWin32Error();

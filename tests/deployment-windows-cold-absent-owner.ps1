@@ -7,27 +7,27 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $sessionId = $Owner.SessionId
+$observerSession = [Diagnostics.Process]::GetCurrentProcess().SessionId
 $emptyGeneration = [guid]::NewGuid()
 $empty = [Deployment.WindowsWorkerJob]::Create($emptyGeneration)
 try {
-    [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty($emptyGeneration, $sessionId)
+    [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty($emptyGeneration, $observerSession)
     if (-not $empty.KillOnClose -or @($empty.Members()).Count -ne 0) {
         throw 'Read-only empty-Job inspection changed the original Job.'
     }
 } finally { $empty.Dispose() }
-[Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty($emptyGeneration, $sessionId)
+[Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty($emptyGeneration, $observerSession)
 [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$Ready.generation, $sessionId)
 $refused = $false
-try { [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$Ready.generation, ($sessionId + 1)) }
+try { [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$Ready.generation, ($observerSession + 1)) }
 catch {
     if ($_.Exception.GetBaseException().Message -cne 'Cannot establish original Job absence across sessions.') { throw }
     $refused = $true
 }
 if (-not $refused) { throw 'Cross-session Job absence was accepted.' }
-& (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-runtime-retirement.mjs') `
-    $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
-if ($LASTEXITCODE -ne 0) { throw 'Cold recovery did not retire its authenticated stopped runtime.' }
-if (-not $Owner.WaitForExit(15000) -or $Owner.ExitCode -ne 0) {
+$reply = [Deployment.WindowsRuntimeControl]::Exchange(
+    [guid]$Ready.generation, $Ready.pid, $Ready.identity, 'retire', 15000)
+if ($reply -cne 'retired' -or -not $Owner.WaitForExit(15000) -or $Owner.ExitCode -ne 0) {
     throw 'Original stopped host did not retire cleanly.'
 }
 $scheduler = New-Object -ComObject 'Schedule.Service'

@@ -13954,8 +13954,10 @@ distinct cold actor in `tests/deployment-windows-cold-runtime-retirement.mjs`.
 and an original host that has exited. Only explicit recovery-mode proof may
 admit the latter. Require the same original disabled task XML/security, zero
 Scheduler instances, absent original PID/start identity and no writers in the
-recorded native Job. The `Local` Job namespace must be checked in the recorded
-session; refuse cross-session ambiguity. This does not claim reboot or missing
+recorded native Job. Resolve the recorded namespace, not the caller's unrelated
+`Local` namespace: use `Local` in the same session and the Session 0 global
+namespace from an interactive observer; refuse other cross-session ambiguity.
+This does not claim reboot or missing
 runtime-file support, or authorize activation.
 
 **Files:** extend `WindowsWorkerJob.cs`, `windows-task-completion-proof.ps1`
@@ -13974,6 +13976,16 @@ only after the existing opted-in stopped-proof fixture completes.
   Cancel the queued/running paired `38201626671` with the same fixture defect.
   Repeat the corrected causal fixture against the prior alive-only native
   proof, then restore the implemented absence branch for paired validation.
+  Corrected `f20cb6f / 38203799917`, job `114662722176`, found a separate
+  real session boundary at `2026-10-12 04:31:44 UTC`: the original live Job
+  runs in Session 0, unlike the observer. The query refused before the absence
+  case. Cancel paired `38203845339` and the subsequently queued retirement
+  causal `38204186173`; neither can validate their intended boundary.
+  Correct the namespace query and use the observer session for the fixture's
+  own empty Job. Keep the live original-writer refusal as a mandatory test:
+  querying a wrong empty namespace must not masquerade as proof of absence.
+  The retirement test remains checked in but temporarily unwired while this
+  prerequisite is validated.
 - [ ] Add a read-only, query-only native Job emptiness assertion. Validate
   nonempty generation and the recorded session, distinguish only genuine
   not-found from other native errors, reject surviving members and preserve
