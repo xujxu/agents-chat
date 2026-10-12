@@ -635,6 +635,11 @@ archival followed by a fresh complete file-recovery claim passed for both normal
 shutdown and genuine bridge-death histories at `fc9914c / 38234299468`
 (`2026-10-12 10:55:15 UTC`). Completed cold restore, public cold integration and
 terminal closeout remain separate gates.
+The saved recovery engine now retains the private stopped/cold/policy/archive
+dependency closure. Source-disappearance imports, native asset references,
+saved/public entry regressions and both archival/fresh-copy cases passed at
+`5c33578 / 38239407765` (`2026-10-12 11:32:25 UTC`), without raising the existing
+saved-engine inventory or byte limits.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

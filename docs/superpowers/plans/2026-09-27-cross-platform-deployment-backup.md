@@ -13954,8 +13954,9 @@ the accepted archival/fresh-copy fixture, reusing both current native cases.
   require the literal permanent action with no controller arguments. Settle only
   the retained test generation in cleanup. Do not claim cold terminal closeout,
   public integration or interrupted completion recovery from this gate.
-  Test-only `4cb81c9 / 38240359191` is pinned and queued behind saved dependency
-  acceptance. Production also adds three focused journal contracts (including
+  Test-only `4cb81c9 / 38240359191` is running after saved dependency acceptance.
+  Production `4423191` is pinned to paired run `38243322347`, queued behind
+  its causal. Production also adds three focused journal contracts (including
   exact 1 MiB receipt acceptance and over-limit refusal) to existing unit steps,
   and retains both completion helpers in the explicit saved-engine closure.
 
@@ -13964,7 +13965,7 @@ the accepted archival/fresh-copy fixture, reusing both current native cases.
 **Files:** `scripts/deployment/saved-recovery-engine.mjs`,
 `tests/deployment-retirement-recovery.test.mjs`.
 
-- [ ] Extend the existing source-disappearance contract to require all stopped
+- [x] Extend the existing source-disappearance contract to require all stopped
   proof, cold copy, activation, policy and archival helpers. Check native
   `Join-Path $PSScriptRoot` and Node relative native asset references as well as
   the existing JavaScript dependency closure. Dynamically import every saved
@@ -13980,15 +13981,18 @@ the accepted archival/fresh-copy fixture, reusing both current native cases.
   });
   ```
 
-- [ ] Publish the missing explicit manifest entries only after pinning the
+- [x] Publish the missing explicit manifest entries only after pinning the
   test-only Actions contract. Keep existing 256-file, 1 MiB/file, 16 MiB
   aggregate and 32 KiB manifest limits; do not bypass integrity verification.
   Causal `ff353ba / 38236035542`, job `114777731203`, failed as expected
   at `2026-10-12 10:58:23 UTC` on missing saved
   `windows-stopped-restore-proof.mjs`; the existing saved Windows entry and
   public invocation cases passed. Implementation `5c33578` adds the 28 explicit
-  helpers and is pinned to paired run `38239407765`, now running.
-- [ ] Run the existing command gate's saved dependency case and cold native
+  helpers. Paired `5c33578 / 38239407765`, job `114778825525`, passed at
+  `2026-10-12 11:32:25 UTC`: source-disappearance and both saved/public entry
+  cases passed `11:02:15 UTC`; normal and bridge-death archive/fresh-copy cases
+  passed `11:15:45` and `11:28:20`; existing terminal proof passed `11:32:08 UTC`.
+- [x] Run the existing command gate's saved dependency case and cold native
   regressions. This packages private primitives for subsequent public integration;
   it does not enable public cold restore or claim independent terminal completion.
 
