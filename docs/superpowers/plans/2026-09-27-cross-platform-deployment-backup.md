@@ -13991,7 +13991,12 @@ the accepted archival/fresh-copy fixture, reusing both current native cases.
   Test-only `4cb81c9 / 38240359191`, job `114790941604`, failed as expected
   at `2026-10-12 11:47:29 UTC`: after genuine cold readiness,
   `activation.completeRuntime` was `undefined` instead of `function`.
-  Production `4423191 / 38243322347`, job `114796315157`, is running.
+  Production `4423191 / 38243322347`, job `114796315157`, passed all 29
+  units and the native completion actor, but failed at `12:06:23 UTC` in
+  the independent parent: its bootstrap omitted `WindowsRuntimeListener.cs`
+  for `-StoppedProof`. Include that existing observer helper in this fixture's
+  original `Add-Type` compilation; do not weaken the listener assertion.
+  The next native gate also carries Task 5EO's test-only observation contract.
   Production also adds three focused journal contracts (including
   exact 1 MiB receipt acceptance and over-limit refusal) to existing unit steps,
   and retains both completion helpers in the explicit saved-engine closure.

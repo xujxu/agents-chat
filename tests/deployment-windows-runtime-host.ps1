@@ -28,7 +28,7 @@ $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment
 $helpers = @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
     'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeLease.cs', 'WindowsRuntimeHost.cs',
     'windows-worker-launcher.ps1', 'windows-runtime-host.ps1')
-$observerHelpers = @(if ($Scenario.StartsWith('listener-')) { Join-Path $source 'WindowsRuntimeListener.cs' })
+$observerHelpers = @(if ($StoppedProof -or $Scenario.StartsWith('listener-')) { Join-Path $source 'WindowsRuntimeListener.cs' })
 Add-Type -Path (@((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
     (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'),
     (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsRuntimeLease.cs'), (Join-Path $source 'WindowsRuntimeHost.cs'),
