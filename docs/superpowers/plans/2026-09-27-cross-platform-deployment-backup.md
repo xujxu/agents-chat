@@ -13966,6 +13966,13 @@ extend `tests/deployment-windows-live-application.{mjs,ps1}` and
   parent independently verify the original transaction hash and inode after
   each interrupted actor Job is terminated. Rerun the same actual crash pair
   without changing timeouts or weakening native authority.
+  Retry `e1f0b19 / 38303216862` passed warm-crash job `114991224693` at
+  `21:11:36 UTC`, but copy-crash job `114991225133` failed at `21:36:36 UTC`
+  before starting the terminal actor: its new parent assertion called
+  `WindowsPrivateFile.Open` with an empty digest. Unlike the completion-file
+  wrapper, this native API requires an explicit SHA-256. Supply the observed
+  transaction digest and the prepared next-state digest for all three new
+  parent opens; retain checksum, inode, exclusivity and interruption checks.
 
 ### Task 5EU: Publish the prepared cold terminal state with interruption reentry
 

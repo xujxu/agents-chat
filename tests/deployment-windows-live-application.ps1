@@ -67,7 +67,9 @@ try {
             $coldSecurity = [string]$coldTask.GetSecurityDescriptor(7)
         }
         if ($mode -eq 'restore-cold-state-staged') {
-            $file = [Deployment.WindowsPrivateFile]::Open((Join-Path $control 'task-maintenance/transaction.json'), '')
+            $transactionPath = Join-Path $control 'task-maintenance/transaction.json'
+            $transactionHash = (Get-FileHash -LiteralPath $transactionPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $file = [Deployment.WindowsPrivateFile]::Open($transactionPath, $transactionHash)
             try { $coldTransaction = @{ identity=$file.CaptureIdentity(); sha256=$file.Sha256 } }
             finally { $file.Dispose() }
         }
@@ -215,10 +217,12 @@ try {
             }
             Assert ($result.step -ceq $expectedStep) 'Actual terminal publication skipped its requested boundary'
             $terminal = Get-Content -LiteralPath (Join-Path $control 'cold-restore-terminal.json') -Raw | ConvertFrom-Json
+            $nextHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
+                [Text.Encoding]::UTF8.GetBytes($terminal.nextState))).ToLowerInvariant()
             $currentState = Get-Content -LiteralPath (Join-Path $control 'state.json') -Raw
             if ($mode -ceq 'restore-cold-state-staged') {
                 Assert ($currentState -ceq $terminal.oldState) 'Staging already replaced original state'
-                $file = [Deployment.WindowsPrivateFile]::Open((Join-Path $control 'state.json.lock'), '')
+                $file = [Deployment.WindowsPrivateFile]::Open((Join-Path $control 'state.json.lock'), $nextHash)
                 try {
                     Assert ($file.ReadText() -ceq $terminal.nextState) 'Actual staged state differs from its original handoff'
                     $coldStateStage = $file.CaptureIdentity()
@@ -226,7 +230,7 @@ try {
             } else {
                 Assert ($currentState -ceq $terminal.nextState) 'Actual terminal state differs from its original handoff'
                 Assert (-not (Test-Path -LiteralPath (Join-Path $control 'state.json.lock'))) 'Actual publication retained its stage'
-                $file = [Deployment.WindowsPrivateFile]::Open((Join-Path $control 'state.json'), '')
+                $file = [Deployment.WindowsPrivateFile]::Open((Join-Path $control 'state.json'), $nextHash)
                 try {
                     $identity = $file.CaptureIdentity()
                     Assert ($coldStateStage -and $identity.Dev -ceq $coldStateStage.Dev -and $identity.Ino -ceq $coldStateStage.Ino) `
