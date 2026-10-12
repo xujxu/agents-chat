@@ -608,6 +608,12 @@ Full dual-platform regression `e5749c5 / 38201064684` then passed all 53 jobs
 at `2026-10-12 05:12:36 UTC`, including actual cold file restoration with its
 durable completion receipt, normal public restore and all interruption cases.
 This full baseline predates the absent-owner and cold-owned retirement changes.
+Native cold-owned retirement passed at `c8eb4b9 / 38206988583`, and exact
+restored startup configuration retention passed at `684acbc / 38209032489`.
+The latter retains environment/agent file presence, bytes, ACLs and attributes
+across original-host retirement. Neither gate starts the restored application;
+actual application retirement/configuration acceptance and cold activation
+remain separate gates.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

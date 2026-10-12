@@ -13941,8 +13941,9 @@ the application or publish terminal success.
   original-state preservation and subsequent distinct-owner takeover in
   Actions after the configuration gate. Guarded startup and recovery of
   changed-task prefixes remain separate, unaccepted work.
-  Causal `eae4e4f / 38209665045` is queued behind native configuration
-  acceptance. The existing command-contract step also runs the shared
+  Causal `eae4e4f / 38209665045`, job `114684608368`, is running after
+  native configuration acceptance; implementation `8510f67 / 38210972185`
+  is queued. The existing command-contract step also runs the shared
   Linux/Windows cold activation-state unit tests; no workflow job or input
   is added.
 
@@ -13962,27 +13963,32 @@ its private completed-file receipt and original snapshot, not caller-mutable
 snapshot properties. Reuse native snapshot-security inspection and restored
 security comparison for the small configuration subset.
 
-- [ ] Native causal coverage requires `lease.inspectRestoredConfiguration`;
+- [x] Native causal coverage requires `lease.inspectRestoredConfiguration`;
   refuse before current-owner file completion and reject pre-aborted requests
   before entering retained admission transport.
-- [ ] Reject changed bytes even when auth providers are unchanged, and reject
+- [x] Reject changed bytes even when auth providers are unchanged, and reject
   a newly added originally absent environment file. Close failed observations
   so the fixture can restore its original bytes without weakening permissions.
-- [ ] Retain exact native file handles and snapshot security; deny writes to
+- [x] Retain exact native file handles and snapshot security; deny writes to
   the admitted environment. Recheck after original-host retirement, preserve
   original state/lock/archive/receipts and reject a closed configuration.
-- [ ] Run the native gate in Actions. Keep existing live/first configuration
+- [x] Run the native gate in Actions. Keep existing live/first configuration
   authority checks and signatures unchanged; no public cold activation is
   enabled by this step.
   Causal `8b82218 / 38208777933`, job `114678062819`, failed as expected at
   `2026-10-12 05:49:18 UTC` on the missing configuration inspection API.
-  Implementation `684acbc / 38209032489` is running, not yet accepted.
+  Implementation `684acbc / 38209032489`, job `114680676528`, passed at
+  `2026-10-12 06:05:58 UTC`: exact configuration retained across retirement
+  at06:01:55, distinct absent-owner claim at06:02:10 and original restored
+  terminal proof at06:05:44.
 - [ ] Extend the existing actual copy-crash actor to retain snapshot-bound
   startup configuration before original-runtime retirement, check it after
   retirement and after final artifact/data/evidence verification, and close
   configuration and lease with explicit aggregated cleanup failures. Run
   only after native configuration acceptance; do not count the earlier
   actual retirement run as configuration-retention evidence.
+  Actual extension `e17c295` is included in `8510f67 / 38210974436`,
+  queued behind the earlier actual retirement gate.
 
 ### Task 5DZ: Accept cold-owned retirement of the actual application runtime
 
