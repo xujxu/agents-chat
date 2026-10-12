@@ -13915,6 +13915,54 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EG: Independently observe a fully stopped cold activation
+
+**Scope:** establish native read-only admission for the exact completed
+requested/running/stopped prefix after its cold owner and bridge have exited.
+This is a prerequisite for controlled policy recovery, not permission to
+normalize a task, delete a journal or bypass the original-policy cold claim.
+
+**Files:** add `scripts/deployment/windows-cold-activation-recovery.mjs` and
+`scripts/deployment/windows-cold-activation-recovery-proof.ps1`; share original
+stopped evidence opening and cold record/intent parsing from their existing
+helpers. Extend the stopped bridge with an explicit cold-history inspection
+mode. Keep the ordinary stopped-proof contract unchanged.
+
+- [ ] Add an early-cancellation unit contract and a separate native observer
+  actor after the existing cold startup actor exits. The contract is:
+
+  ```js
+  const proof = await inspectWindowsColdActivationRecovery({ control, pwsh });
+  try {
+    assert.equal(proof.observation.status, 'cold-activation-stopped');
+    assert.equal(proof.observation.mutationAuthority, false);
+    assert.deepEqual(await proof.check(), proof.observation);
+  } finally {
+    await proof.close();
+  }
+  await assert.rejects(proof.check(), /closed/);
+  ```
+
+  The complete fixture additionally binds original operation/task/runtime and
+  stopped-receipt digest, attempts a forbidden write to the retained receipt,
+  and verifies byte-exact unchanged state, original lock, archive manifest and
+  every cold journal file. The parent independently rechecks task XML/security,
+  zero Scheduler instances and the empty new Job.
+- [ ] Share the existing strict cold owner/files/intent decoder rather than
+  synthesizing live transaction authority. Admit advanced inventory only in
+  this explicit read-only mode. Reject staging, incomplete prefixes and live
+  original/cold/native-bridge owners.
+- [ ] Retain original and fresh runtime helpers/readiness and all receipt
+  handles; bind both generations to their native private evidence. Require
+  both owners absent and both Jobs empty in their original sessions.
+- [ ] Derive the exact guarded task policy using the same literal policy
+  builder as startup. Require the disabled task, no automatic triggers, exact
+  security, and zero Scheduler instances; retain its native task file.
+- [ ] Run causal and paired native command Actions with the existing command
+  from Task5EF. An accepted observation remains non-authoritative and cannot
+  enable public cold restoration. Earlier interrupted activation prefixes and
+  write-ahead policy recovery remain distinct following work.
+
 ### Task 5EF: Capture the original cold activation journal before takeover
 
 **Goal:** introduce one bounded, non-authoritative decoder for the existing
@@ -13974,7 +14022,9 @@ extend `scripts/deployment/windows-cold-activation.mjs` and
   Causal `d19ff16 / 38220801318`, job `114716319566`, failed as expected
   at `2026-10-12 07:59:06 UTC` on the missing history module (19/21 unit
   cases passed). Implementation `7783994 / 38220999163`, job
-  `114716958998`, is running the paired native gate.
+  `114716958998`, passed at `2026-10-12 08:18:04 UTC`: all21 unit contracts
+  at08:00:58, genuine journal-bound cold startup/readiness/close at08:14:35,
+  and original terminal proof at08:17:50.
 
 ### Task 5EE: Exercise cold guarded startup against the restored application
 

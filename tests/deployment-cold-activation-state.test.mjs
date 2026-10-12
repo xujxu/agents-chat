@@ -222,3 +222,10 @@ test('Windows cold journal refuses altered owners, chain, task, runtime and unsu
     assert.throws(() => captureWindowsColdActivationHistory({ ...fixture, records: [bytes] }));
   }
 });
+
+test('Windows cold activation recovery inspection honors cancellation before opening authority', async () => {
+  const { inspectWindowsColdActivationRecovery } = await import('../scripts/deployment/windows-cold-activation-recovery.mjs');
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(inspectWindowsColdActivationRecovery({ signal: controller.signal }), { name: 'AbortError' });
+});

@@ -65,3 +65,13 @@ if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
 }
 [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)
 Write-Output 'PASS: cold activation starts a distinct leased runtime and closes only its original new Job without terminal state or automatic task triggers'
+& (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-activation-recovery.mjs') `
+    $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+if ($LASTEXITCODE -ne 0) { throw 'Independent cold activation inspection did not retain its original stopped history.' }
+$task = $folder.GetTask($TaskName)
+if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
+    [string]$task.Xml -cne $activated.definition -or
+    [string]$task.GetSecurityDescriptor(7) -cne $activated.securityDescriptor) {
+    throw 'Read-only cold activation inspection changed task policy or started a runtime.'
+}
+[Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)
