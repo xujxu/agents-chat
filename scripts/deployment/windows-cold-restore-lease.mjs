@@ -10,6 +10,7 @@ import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 import { publishWindowsColdRestoreStaging, publishWindowsColdRestoreFilesReceipt } from './windows-cold-restore-publication.mjs';
+import { retireWindowsColdRestoreOwner } from './windows-cold-restore-retirement.mjs';
 
 const leases = new WeakMap();
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -228,6 +229,26 @@ export async function claimWindowsColdRestore({
       get identity() {
         if (!proof) throw new Error('Cold restore native proof is unavailable during publication.');
         return proof.identity;
+      },
+      async retireRuntime({ signal: checkSignal = signal } = {}) {
+        await check({ signal: checkSignal });
+        if (!receipt) throw new Error('Cold runtime retirement requires completed file restoration by the current owner.');
+        publishing = true;
+        try {
+          await proof.close();
+          proof = null;
+          await retireWindowsColdRestoreOwner({
+            control, pwsh, admission, ownerSha256: digest(bytes), receiptSha256: digest(receipt.bytes), signal: checkSignal,
+          });
+          await open(checkSignal);
+          if (!same(admitted.snapshot, originalSnapshot)) throw new Error('Cold runtime retirement backup changed.');
+          publishing = false;
+          await check({ signal: checkSignal });
+          return Object.freeze({ retired: true, inhibited: true, operationId: owner.operationId });
+        } catch (error) {
+          poisoned = true;
+          throw error;
+        } finally { publishing = false; }
       },
       async markFilesRestored({ runtimeBundle, signal: checkSignal = signal }) {
         await check({ signal: checkSignal });
