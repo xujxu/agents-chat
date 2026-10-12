@@ -13915,6 +13915,56 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DP: Compose public restore.ps1 with the existing owned supervisor
+
+**Scope:** finish block1's live public command using the approved saved entry;
+do not introduce another native supervisor. Reuse captured controller ownership,
+sanitized public context and separate saved finalizer. Cold/inactive/interrupted
+runtime admission remains explicit refusal until block2.
+
+**Files:** add `scripts/restore.ps1` and
+`scripts/deployment/windows-restore-command.mjs`; extend public-command/context,
+command-entry/supervisor/finalize-entry and their focused tests. Update README
+after actual acceptance, and route complete/offline fixture through the public
+script while retaining separate saved-process protocol tests.
+
+- [ ] Extend native public/supervisor contracts before implementation: restore
+  help without tools/installation, required acknowledgement before access,
+  malformed timeout refusal, and restored-phase finalization after original
+  actor death. Require successful captures retired, failed captures retained,
+  and update's existing accepted/prior-runtime-restored semantics unchanged.
+  Run paired command-only Actions to record missing restore.ps1 failure.
+- [ ] Public restore exposes only ProjectDir, TaskName, AcceptDataLoss,
+  TimeoutSeconds, Json and Help; fixed readiness120sec/port3010 match Linux.
+  Reuse `parseArguments('restore', args)`, and require only external Node24 and
+  PowerShell, not Git/npm. Context admits paths without loading historical code.
+  ```powershell
+  pwsh -NoProfile -File scripts/restore.ps1 -ProjectDir C:\apps\agents-chat `
+      -AcceptDataLoss -Json
+  ```
+  The captured command invokes `prepareWindowsRestoreInvocation`, then its
+  manifest-bound saved subprocess with exact bounded stdin and sanitized env.
+  Verify status, backupId, operationId, closeoutRequired and recoveryEngine
+  against original invocation before returning; preserve failure exit status.
+- [ ] Extend supervisor's allowed operation/result mapping narrowly:
+  restore accepts only restored success with closeoutRequired=true, never
+  already-current. Its independent finalizer receives phase restored after
+  the command process and descendants settle. Historical finalizer admission
+  uses saved manifest inspection rather than the current engine inventory:
+  ```js
+  const directory = await locateRecoveryEngine({ control, manifestSha256 });
+  await inspectRecoveryEngineFiles({ directory, manifestSha256 });
+  const engine = { directory, manifestSha256,
+    entrypoint: path.join(directory, 'retirement-recovery-entry.mjs') };
+  ```
+  Require that entry in the verified inventory and retain exact state/result
+  checks. Saved entry validates its own generation before executing recovery.
+- [ ] Run focused native public/protocol contracts, then actual offline public
+  restoration and full regression. Require restored artifacts/authenticated
+  data, unchanged authoritative backup, distinct runtime and lock removal.
+  A later read-only actor must confirm closeout did not restart that runtime.
+  Keep all fault-injection scenarios on their already accepted direct core path.
+
 ### Task 5DO: Admit public Windows restoration without importing historical code
 
 **Scope:** block1's public wrapper needs a read-only descriptor for the verified

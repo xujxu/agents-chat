@@ -11,6 +11,21 @@ $pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
 $root = Join-Path ([IO.Path]::GetTempPath()) "agents-public-$([guid]::NewGuid()) space"
 $missing = Join-Path $root 'absent'
 try {
+    $restore = Join-Path $repository 'scripts/restore.ps1'
+    Assert (Test-Path -LiteralPath $restore -PathType Leaf) 'Missing public Windows restore entry'
+    $text = & $pwsh -NoProfile -NonInteractive -File $restore -Help -Json -ProjectDir $missing
+    Assert ($LASTEXITCODE -eq 0) 'Public restore help failed'
+    $result = ($text -join "`n") | ConvertFrom-Json
+    Assert ($result.status -ceq 'help' -and $result.message.Contains('-AcceptDataLoss')) 'Restore help omits data-loss acknowledgement'
+    $text = & $pwsh -NoProfile -NonInteractive -File $restore -ProjectDir $missing -Json
+    Assert ($LASTEXITCODE -eq 1) 'Public restore started without acknowledgement'
+    $result = ($text -join "`n") | ConvertFrom-Json
+    Assert ($result.code -ceq 'DEPLOYMENT_DATA_LOSS_ACKNOWLEDGEMENT_REQUIRED') 'Restore acknowledgement was not explicitly required'
+    $text = & $pwsh -NoProfile -NonInteractive -File $restore -ProjectDir $missing -AcceptDataLoss -TimeoutSeconds 0 -Json
+    Assert ($LASTEXITCODE -eq 1) 'Public restore accepted zero stage timeout'
+    $result = ($text -join "`n") | ConvertFrom-Json
+    Assert ($result.status -ceq 'failed') 'Invalid restore timeout returned success'
+    Assert (-not (Test-Path -LiteralPath $root)) 'Public restore refusal created installation files'
     foreach ($operation in @('deploy', 'update')) {
         $entry = Join-Path $repository "scripts/$operation.ps1"
         $text = & $pwsh -NoProfile -NonInteractive -File $entry -Help -Json -ProjectDir $missing

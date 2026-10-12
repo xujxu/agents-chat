@@ -41,7 +41,7 @@ if (!identity) throw new Error('Missing original command process identity');
 fs.writeFileSync(path.join(control, 'actor.json'), JSON.stringify({ pid: process.pid, identity, scenario }));
 const prior = scenario === 'prior';
 console.log(JSON.stringify({
-  status: prior ? 'failed' : scenario === 'current' ? 'already-current' : 'accepted',
+  status: prior ? 'failed' : scenario === 'current' ? 'already-current' : scenario === 'restored' ? 'restored' : 'accepted',
   closeoutRequired: !['current', 'invalid'].includes(scenario),
   operationId: '11111111-1111-4111-8111-111111111111',
   recoveryEngine: 'a'.repeat(64), code: prior ? 'DEPLOYMENT_TEST_FAILURE' : undefined,
@@ -67,24 +67,25 @@ if (actor.scenario === 'closeout-failed') {
 '@
     [IO.File]::WriteAllText((Join-Path $source 'scripts/deployment/windows-command-entry.mjs'), $entry)
     [IO.File]::WriteAllText((Join-Path $source 'scripts/deployment/windows-command-finalize-entry.mjs'), $finalizer)
-    foreach ($scenario in @('accepted', 'prior', 'current', 'invalid', 'closeout-failed', 'exit-invalid')) {
+    foreach ($scenario in @('accepted', 'prior', 'current', 'invalid', 'closeout-failed', 'exit-invalid', 'restored')) {
         $case = Join-Path $root $scenario
         $control = Join-Path $case 'control'
         foreach ($directory in @($case, $control)) { [Deployment.WindowsPrivateFile]::CreateDirectory($directory).Dispose() }
         $arguments = ConvertTo-Json -InputObject @($scenario) -Compress
-        $text = & $pwsh -NoProfile -NonInteractive -File $supervisor -Operation update -Source $source `
+        $operation = if ($scenario -eq 'restored') { 'restore' } else { 'update' }
+        $text = & $pwsh -NoProfile -NonInteractive -File $supervisor -Operation $operation -Source $source `
             -Project $project -Control $control -Directory (Join-Path $case 'capture') -TemporaryDirectory $case `
             -TaskName Agents-Supervisor-Fixture -Node $node -PowerShell $pwsh -Git (Get-Command git).Source `
             -NpmCli (Join-Path (Split-Path $node) 'node_modules/npm/bin/npm-cli.js') -ArgumentsJson $arguments
         $code = $LASTEXITCODE
         $result = ($text -join "`n") | ConvertFrom-Json
-        $expectedCode = if ($scenario -in @('accepted', 'current')) { 0 } else { 1 }
+        $expectedCode = if ($scenario -in @('accepted', 'current', 'restored')) { 0 } else { 1 }
         Assert ($code -eq $expectedCode) "Supervisor lost original $scenario exit status"
         Assert ((Test-Path -LiteralPath (Join-Path $case 'capture')) -eq ($expectedCode -ne 0)) `
             'Supervisor must retire successful captures and retain failed command evidence'
-        if ($scenario -in @('accepted', 'prior')) {
-            $phase = if ($scenario -eq 'prior') { 'prior-runtime-restored' } else { 'accepted' }
-            $status = if ($scenario -eq 'prior') { 'failed' } else { 'accepted' }
+        if ($scenario -in @('accepted', 'prior', 'restored')) {
+            $phase = if ($scenario -eq 'prior') { 'prior-runtime-restored' } else { $scenario }
+            $status = if ($scenario -eq 'prior') { 'failed' } else { $scenario }
             Assert ($result.status -ceq $status -and $result.closeoutStatus -ceq 'completed' -and
                 -not $result.closeoutRequired) 'Supervisor replaced the original outcome with finalizer success'
             Assert ([IO.File]::ReadAllText((Join-Path $control 'finalized')) -ceq $phase) 'Supervisor finalized the wrong phase'
