@@ -14108,9 +14108,11 @@ the accepted native stopped-proof fixture after its original actor exits.
   platforms; this is a helper-count correction, not a timeout increase.
   Correction `a57fad4 / 38190943465` passed the Windows capture limits, native
   bridge and original completed restore proof at `2026-10-12 01:20:03 UTC`;
-  bridge assertions passed at01:16:32. Full dual-platform `38190945815` is
-  pending behind the public-wrapper baseline, so Linux limit acceptance is
-  not yet claimed.
+  bridge assertions passed at01:16:32. Full dual-platform `38190945815`
+  subsequently started. Its native Linux worker job `114632535428` passed,
+  including exact512 acceptance/513 refusal and unchanged byte budgets at
+  `2026-10-12 02:02:11 UTC`. Both-platform boundary cases are now accepted;
+  the remaining full-matrix jobs are still running/queued.
 - [ ] Implement a dedicated read-only native bridge. Load the same private
   file/runtime helpers as the accepted proof, watch the exact Node PID/start
   identity, open the proof and emit bounded ready/reply frames. Accept only
@@ -14229,7 +14231,9 @@ script while retaining separate saved-process protocol tests.
   including acknowledgement/no-Git admission, restored-phase supervisor and
   historical saved-entry checks. `8e565af` routes actual complete/offline restore
   through public `restore.ps1`; dedicated actual offline run `38187335322`
-  remains active. Full-matrix actual public offline job `114616945668` at
+  passed at `2026-10-12 02:07:44 UTC`, job `114616991649`, with public
+  restore+closeout2,013,592ms and later read-only confirmation29,206ms.
+  Full-matrix actual public offline job `114616945668` at
   `4e1aed1 / 38188828721` passed at `2026-10-12 01:36:22 UTC`.
 - [x] Public restore exposes only ProjectDir, TaskName, AcceptDataLoss,
   TimeoutSeconds, Json and Help; fixed readiness120sec/port3010 match Linux.
