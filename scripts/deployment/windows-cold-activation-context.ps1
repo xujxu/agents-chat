@@ -32,6 +32,7 @@ function Read-AgentsChatColdActivationIntent([hashtable]$Proof, [string]$OwnerSh
         $state.errorCode.ValueKind -ne [Text.Json.JsonValueKind]::Null) {
         throw 'Cold activation state differs from its original intent.'
     }
+    $proof.ColdActivationState = $state
 }
 
 function Open-AgentsChatColdActivationContext {

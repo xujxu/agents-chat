@@ -17,8 +17,9 @@ function Retain-AgentsChatColdCompletionAuthority([hashtable]$Context) {
         }
     }
     # This immutable original transaction stays exclusive after the Node owner exits.
-    $Context.Files.Add([Deployment.WindowsPrivateFile]::OpenExclusive(
-        $path, $sha256, $identity.Dev, $identity.Ino, $bytes))
+    $Context.CompletionAuthority = [Deployment.WindowsPrivateFile]::OpenExclusive(
+        $path, $sha256, $identity.Dev, $identity.Ino, $bytes)
+    $Context.Files.Add($Context.CompletionAuthority)
 }
 
 function Write-AgentsChatRecoveredColdCompletion([hashtable]$Context, [string]$Phase) {

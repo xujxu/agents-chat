@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { lstat, readFile, readdir } from 'node:fs/promises';
+import { lstat, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as recovery from '../scripts/deployment/windows-cold-activation-recovery.mjs';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
@@ -13,6 +13,12 @@ const journal = path.join(control, 'recovery-lock');
 const names = (await readdir(journal)).sort();
 const intent = JSON.parse(await readFile(path.join(journal, 'activation-intent.json')));
 const completed = JSON.parse(await readFile(path.join(journal, 'completion-complete.json')));
+const pending = path.join(control, 'cold-restore-terminal.json.pending-fixture');
+await writeFile(pending, 'incomplete fixture publication', { flag: 'wx' });
+try {
+  await assert.rejects(recovery.prepareWindowsColdTerminalRestore({ control, pwsh, acceptDataLoss: true }),
+    { code: 'DEPLOYMENT_WINDOWS_COLD_ACTIVATION_OBSERVATION_REFUSED' });
+} finally { await unlink(pending); }
 const prepared = await recovery.prepareWindowsColdTerminalRestore({ control, pwsh, acceptDataLoss: true });
 assert.equal(prepared.status, 'cold-terminal-prepared');
 assert.equal(prepared.operationId, intent.operationId);

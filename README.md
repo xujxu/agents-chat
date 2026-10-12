@@ -673,6 +673,11 @@ Every actor exit retained the same released runtime and authenticated restored
 data; a separate final observer verified the completed journal. The original
 warm-crash regression also passed. The single cold copy/start actor took
 2,342,229 ms, within its unchanged 45-minute bound.
+Cold terminal handoff preparation is implemented but pending native acceptance.
+It retains the complete released-runtime proof while binding exact old and
+proposed terminal state, original file/directory identities and completion
+receipts in a no-overwrite private marker. Preparation alone does not write
+`restored`, replace the deployment receipt, retire evidence or remove the lock.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

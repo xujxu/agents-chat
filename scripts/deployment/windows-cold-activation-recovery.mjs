@@ -16,6 +16,7 @@ import { captureWindowsColdPolicyHistory } from './windows-cold-policy-history.m
 import { captureWindowsColdArchiveFiles, verifyWindowsColdArchiveFiles } from './windows-cold-policy-archive.mjs';
 import { captureWindowsColdRuntimeCompletion, captureWindowsColdCompletionPrefix,
   windowsColdCompletionPhases } from './windows-cold-runtime-completion.mjs';
+import { captureWindowsColdTerminalFiles, captureWindowsColdTerminalIntent } from './windows-cold-terminal-intent.mjs';
 
 const script = fileURLToPath(new URL('./windows-stopped-restore-controller.ps1', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -36,6 +37,19 @@ export async function prepareWindowsColdCompletionRecovery({ control, pwsh, sign
   signal?.throwIfAborted();
   if (acceptDataLoss !== true) throw new Error('Cold completion recovery requires explicit data-loss acknowledgement.');
   return openRecovery({ control, pwsh, signal }, false, true, true);
+}
+
+export async function prepareWindowsColdTerminalRestore(options = {}) {
+  const recovery = await prepareWindowsColdCompletionRecovery(options);
+  let failure;
+  try { return await recovery.prepareTerminal({ signal: options.signal }); }
+  catch (error) { failure = error; throw error; }
+  finally {
+    try { await recovery.close(); }
+    catch (error) {
+      throw new AggregateError(failure ? [failure, error] : [error], 'Cold terminal handoff cleanup failed.');
+    }
+  }
 }
 
 export async function prepareWindowsColdPolicyRecovery({ control, pwsh, signal, acceptDataLoss } = {}) {
@@ -154,6 +168,11 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
     }
     let policyBinding;
     let initialPolicy;
+    const terminalFiles = completionRecovery ? await captureWindowsColdTerminalFiles(control) : null;
+    if (terminalFiles && (terminalFiles.state.sha256 !== expected.stateSha256
+      || terminalFiles.lock.sha256 !== digest(lockBytes))) {
+      throw new Error('Cold terminal source files changed before native admission.');
+    }
     if (policyRecovery) {
       const stopped = parse(await readWorkerFile(path.join(control, 'task-maintenance/task-stop-stopped.json'),
         4194304, { privateMode: true }));
@@ -233,6 +252,9 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
       if (method === 'archive' && (!policyRecovery || !latest.claimed || latest.step !== 'restored')) {
         throw new Error('Cold journal archival requires its original claimed restored policy.');
       }
+      if (method === 'prepare-terminal' && (!completionRecovery || latest.step !== 'complete')) {
+        throw new Error('Cold terminal handoff requires completed runtime policy.');
+      }
       busy = true;
       try {
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
@@ -257,6 +279,19 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
           closed = true;
           bridge.wire.close();
           return;
+        }
+        if (method === 'prepare-terminal') {
+          const result = captureWorkerFields(reply.value, ['status', 'operationId', 'sha256'], 'cold terminal handoff reply');
+          const bytes = await readWorkerFile(path.join(control, 'cold-restore-terminal.json'), 1048576, { privateMode: true });
+          if (result.status !== 'cold-terminal-prepared' || result.operationId !== lock.operationId
+            || result.sha256 !== digest(bytes)) throw new Error('Cold terminal handoff acknowledgement differs.');
+          const record = captureWindowsColdTerminalIntent(parse(bytes), {
+            project: state.project, observation: latest, oldState: new TextDecoder('utf-8', { fatal: true }).decode(stateBytes),
+            activationState: parse(guard.intent.bytes).state, rootIdentity: expected.controlIdentity,
+            lockIdentity: expected.lockIdentity, recoveryIdentity: guard.identity, files: terminalFiles,
+          });
+          await assertWindowsAdmission(control, admission, { signal: requestSignal });
+          return Object.freeze({ ...result, record });
         }
         if (method === 'archive') {
           const expectedArchive = {
@@ -316,6 +351,7 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
       ...(completionRecovery ? {
         identity: Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity }),
         advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal),
+        prepareTerminal: ({ signal: terminalSignal } = {}) => request('prepare-terminal', terminalSignal),
       } : {}),
       ...(policyRecovery ? {
         advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal),

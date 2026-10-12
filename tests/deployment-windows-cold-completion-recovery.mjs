@@ -19,6 +19,7 @@ try {
   assert.equal(initial.step, {
     'permanent-policy-applied': 'release-requested', 'enable-applied': 'permanent-policy-applied', complete: 'enable-applied',
   }[target]);
+  await assert.rejects(recovery.prepareTerminal(), /completed runtime policy/);
   const transaction = path.join(control, 'task-maintenance/transaction.json');
   await assert.rejects(readFile(transaction), error => ['EBUSY', 'EACCES', 'EPERM'].includes(error.code));
   const controller = new AbortController();

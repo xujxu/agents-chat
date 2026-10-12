@@ -9,6 +9,7 @@ import { captureWindowsColdRuntimeCompletion } from '../scripts/deployment/windo
 import * as completion from '../scripts/deployment/windows-cold-runtime-completion.mjs';
 import { inspectWindowsColdRuntimeCompletion } from '../scripts/deployment/windows-cold-activation-recovery.mjs';
 import * as recovery from '../scripts/deployment/windows-cold-activation-recovery.mjs';
+import { captureWindowsColdTerminalIntent } from '../scripts/deployment/windows-cold-terminal-intent.mjs';
 
 test('cold terminal handoff requires explicit acknowledgement and honors pre-abort', async () => {
   assert.equal(typeof recovery.prepareWindowsColdTerminalRestore, 'function');
@@ -115,6 +116,52 @@ test('cold completion prefix capture binds all nine finite durable boundaries', 
   await assert.rejects(completion.captureWindowsColdCompletionPrefix({
     ...f, phase: 'policy-requested', ownerSha256: '0'.repeat(64),
   }), /binding/);
+});
+
+test('cold terminal intent preserves exact state transformation and original immutable evidence', async t => {
+  const f = await fixture(t);
+  const old = {
+    version: 1, operationId: 'original-operation', project: f.control, operation: 'restore',
+    phase: 'recovery-required', previousPhase: 'restoring', sourceCommit: 'a'.repeat(40),
+    targetCommit: 'b'.repeat(40), backupId: 'original-backup', priorRuntime: 'running',
+    runtimeIdentity: '44444444-4444-4444-8444-444444444444',
+    startedAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:01:00.000Z', errorCode: 'fixture-crash',
+  };
+  const oldState = `${JSON.stringify(old)}\n`;
+  const activationState = { ...old, phase: 'restore-activating', previousPhase: 'restoring', errorCode: null };
+  const next = { ...activationState, phase: 'restored', previousPhase: 'restore-activating',
+    updatedAt: '2026-10-01T00:02:00.000Z' };
+  const observation = {
+    operationId: old.operationId, taskName: f.running.taskName, stateSha256: digest(Buffer.from(oldState)),
+    ownerSha256: f.ownerSha256, filesReceiptSha256: f.receiptSha256, intentSha256: f.intentSha256,
+    historySha256: 'e'.repeat(64), completionSha256: f.value.completionSha256,
+    runtime: f.running.runtime, port: f.port, providers: f.providers,
+  };
+  const descriptor = sha256 => ({ dev: '1', ino: '2', bytes: 100, sha256 });
+  const expected = {
+    project: f.control, observation, oldState, activationState,
+    rootIdentity: { dev: '1', ino: '3' }, lockIdentity: { dev: '1', ino: '4' }, recoveryIdentity: { dev: '1', ino: '5' },
+    files: { state: { ...descriptor(observation.stateSha256), bytes: Buffer.byteLength(oldState) }, lock: descriptor('c'.repeat(64)),
+      transaction: descriptor('d'.repeat(64)) },
+  };
+  const value = {
+    version: 1, phase: 'prepared', project: f.control, ...observation, oldState, nextState: JSON.stringify(next),
+    rootIdentity: expected.rootIdentity, lockIdentity: expected.lockIdentity, recoveryIdentity: expected.recoveryIdentity,
+    files: expected.files, creator: { pid: 90, processIdentity: '90:1234', bridgePid: 91, bridgeIdentity: '91:1234' },
+  };
+  const captured = captureWindowsColdTerminalIntent(value, expected);
+  assert.deepEqual(captured, value);
+  assert.ok(Object.isFrozen(captured) && Object.isFrozen(captured.runtime) && Object.isFrozen(captured.creator));
+  assert.ok(Object.isFrozen(captured.files) && Object.isFrozen(captured.files.state) && Object.isFrozen(captured.providers));
+  for (const change of [
+    { extra: true }, { phase: 'restored' }, { oldState: `${oldState}\n` }, { completionSha256: '0'.repeat(64) },
+    { rootIdentity: { dev: '1', ino: '8' } }, { runtime: { ...value.runtime, pid: 999 } },
+    { creator: { ...value.creator, bridgePid: 90, bridgeIdentity: '90:1234' } },
+    { files: { ...value.files, transaction: { ...value.files.transaction, sha256: '0'.repeat(64) } } },
+    ...[{ phase: 'accepted' }, { errorCode: 'foreign' }, { targetCommit: 'c'.repeat(40) },
+      { updatedAt: old.startedAt }, { updatedAt: '2026-10-01T00:02:00Z' }, { extra: true }]
+      .map(fields => ({ nextState: JSON.stringify({ ...next, ...fields }) })),
+  ]) assert.throws(() => captureWindowsColdTerminalIntent({ ...value, ...change }, expected));
 });
 
 test('cold runtime completion binds every original receipt and returns immutable runtime-only progress', async t => {

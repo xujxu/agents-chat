@@ -13947,6 +13947,9 @@ delete evidence or unlock.
   result and identical terminal marker bytes/inode on reentry, first within the
   same actor and then from a new actor. Run the native command selector test-only
   to confirm the new export is missing.
+  Test-only `5392259 / 38283441818`, job `114926014100`, failed as expected
+  at `2026-10-12 17:20:00 UTC`: `prepareWindowsColdTerminalRestore` was
+  undefined; the other 32 contracts passed.
 - [ ] Admit preparation only from the exact complete nine-record chain under
   the accepted native exclusive original-transaction authority. Publish
   `cold-restore-terminal.json` using the existing no-overwrite native primitive.
@@ -13964,6 +13967,8 @@ delete evidence or unlock.
   must match every binding and proposed state; never overwrite one or refresh
   its timestamp. Require previous creators absent except the exact current Node
   owner; a previous native bridge must still be absent.
+  Refuse leftover `cold-restore-terminal.json.pending-*` publication files
+  rather than ignoring an interrupted atomic publication.
 - [ ] Independently decode the saved marker in Node on every acknowledgement.
   Require exact schema, bounded private bytes, all original digests/identities,
   original state text, permitted next-state transformation and valid creator.

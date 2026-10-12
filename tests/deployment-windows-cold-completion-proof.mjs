@@ -22,6 +22,7 @@ try {
   assert.deepEqual(proof.observation.providers, completed.providers);
   assert.equal(proof.advance, undefined);
   assert.equal(proof.archive, undefined);
+  assert.equal(proof.prepareTerminal, undefined);
   assert.ok(Object.isFrozen(proof.observation.runtime));
   const controller = new AbortController();
   controller.abort();

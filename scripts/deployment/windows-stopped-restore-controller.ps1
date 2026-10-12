@@ -47,6 +47,7 @@ try {
             . (Join-Path $PSScriptRoot 'windows-cold-completion-proof.ps1')
             if ($ColdCompletionRecovery) {
                 . (Join-Path $PSScriptRoot 'windows-cold-completion-recovery.ps1')
+                . (Join-Path $PSScriptRoot 'windows-cold-terminal-intent.ps1')
                 $proof = Open-AgentsChatColdCompletionRecovery $Control $OwnerSha256 $ReceiptSha256 `
                     $IntentSha256 $HistorySha256 $CompletionSha256
             } else {
@@ -82,7 +83,7 @@ try {
         $method = $request.method.GetString()
         $methods = @('check', 'close')
         if ($ColdPolicyRecovery) { $methods += @('advance', 'archive') }
-        if ($ColdCompletionRecovery) { $methods += 'advance' }
+        if ($ColdCompletionRecovery) { $methods += @('advance', 'prepare-terminal') }
         if ($id -ne $sequence + 1 -or $method -cnotin $methods) {
             throw 'Invalid read-only stopped restore proof request.'
         }
@@ -97,6 +98,9 @@ try {
             $proof = $null
             $value = 'close'
         } elseif ($method -ceq 'archive') { $value = Archive-AgentsChatColdPolicyJournal $proof }
+        elseif ($method -ceq 'prepare-terminal') {
+            $value = Prepare-AgentsChatColdTerminalRestore $proof $ControllerPid $ControllerIdentity
+        }
         elseif ($method -ceq 'advance' -and $ColdCompletionRecovery) { $value = Advance-AgentsChatColdCompletionRecovery $proof }
         elseif ($method -ceq 'advance') { $value = Advance-AgentsChatColdPolicyRecovery $proof }
         elseif ($ColdCompletion) { $value = Assert-AgentsChatColdCompletionProof $proof }

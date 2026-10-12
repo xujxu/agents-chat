@@ -50,6 +50,7 @@ const files = Object.freeze([...new Set([
   'windows-cold-runtime-completion.mjs', 'windows-cold-runtime-completion.ps1',
   'windows-cold-activation-recovery.mjs', 'windows-cold-activation-recovery-proof.ps1',
   'windows-cold-completion-proof.ps1', 'windows-cold-completion-recovery.ps1',
+  'windows-cold-terminal-intent.mjs', 'windows-cold-terminal-intent.ps1',
   'windows-cold-policy-history.mjs', 'windows-cold-policy-history.ps1',
   'windows-cold-policy-recovery.ps1',
   'windows-cold-policy-archive.mjs', 'windows-cold-policy-archive.ps1',
