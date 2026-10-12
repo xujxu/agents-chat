@@ -27,7 +27,6 @@ export function prepareWindowsRestoreRuntimeBundle(options) {
 
 async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, pwsh, signal, backup, snapshot }, restore) {
   signal?.throwIfAborted();
-  let bridge;
   try {
     const { root, lock, observation, check } = await inspectWindowsWorkerScope({
       scope, control, lock: suppliedLock, node, pwsh, signal,
@@ -68,16 +67,29 @@ async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, 
     };
     await authority();
     const directory = path.join(root, `runtime-${lock.operationId}`);
+    return publishWindowsRuntimeBundle({
+      directory, sourceConfiguration, sha256, archiveFiles: archived?.files, pwsh, signal, check: authority,
+    });
+  } catch (cause) { throw refused(cause); }
+}
+
+export async function publishWindowsRuntimeBundle({
+  directory, sourceConfiguration, sha256, archiveFiles, pwsh, signal, check,
+}) {
+  signal?.throwIfAborted();
+  let bridge;
+  try {
+    await check();
     const configuration = path.join(directory, 'configuration.json');
     const controllerIdentity = await processIdentity(process.pid);
     if (!controllerIdentity) throw new Error('Original runtime publisher identity is unavailable.');
     bridge = windowsControllerTransport({
       pwsh, refused, label: 'Native runtime publisher',
       args: ['-NoProfile', '-NonInteractive', '-File', script, '-Configuration', sourceConfiguration,
-        '-Sha256', sha256, '-Directory', directory, ...(restore ? ['-Archived'] : []),
+        '-Sha256', sha256, '-Directory', directory, ...(archiveFiles ? ['-Archived'] : []),
         '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
     });
-    if (archived) await bridge.wire.send({ id: 0, method: 'archive', files: archived.files });
+    if (archiveFiles) await bridge.wire.send({ id: 0, method: 'archive', files: archiveFiles });
     const ready = captureWorkerFields(await bridge.wire.receive({ signal, timeoutMs: 60000 }),
       ['type', 'pid', 'processIdentity', 'controllerIdentity', 'directory', 'configuration', 'sha256'], 'runtime publication');
     if (ready.type !== 'ready' || ready.pid !== bridge.child.pid || ready.controllerIdentity !== controllerIdentity
@@ -85,7 +97,7 @@ async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, 
       || ready.directory !== directory || ready.configuration !== configuration || ready.sha256 !== sha256) {
       throw new Error('Original native runtime publication differs.');
     }
-    await authority();
+    await check();
     await bridge.wire.send({ id: 1, method: 'close' });
     const reply = captureWorkerFields(await bridge.wire.receive({ signal, timeoutMs: 30000 }),
       ['id', 'type', 'value', 'processIdentity'], 'runtime publication close');
@@ -95,7 +107,7 @@ async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, 
     const result = await bridge.waitForExit();
     if (result.code !== 0 || result.signal !== null) throw new Error('Native runtime publisher did not close cleanly.');
     bridge.wire.close();
-    await authority();
+    await check();
     return Object.freeze({ directory, configuration, sha256 });
   } catch (cause) {
     if (!bridge) throw refused(cause);

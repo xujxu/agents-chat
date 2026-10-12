@@ -162,10 +162,10 @@ export async function claimWindowsColdRestore({
     } else { await rename(stage, guard); }
     await open();
     if (!same(admitted.snapshot, originalSnapshot)) throw new Error('Cold restore backup changed during lease publication.');
-    const check = async ({ signal: checkSignal = signal } = {}) => {
+    const checkStopped = async ({ signal: checkSignal = signal } = {}) => {
       if (closed) throw new Error('Cold restore lease is closed.');
       await assertWindowsAdmission(control, admission, { signal: checkSignal });
-      await admitted.check({ signal: checkSignal });
+      await proof.check({ signal: checkSignal });
       if (proof.observation.stateSha256 !== expected.stateSha256
         || !same(await directoryIdentity(control), expected.controlIdentity)
         || !same(await directoryIdentity(path.join(control, 'lock')), expected.lockIdentity)) {
@@ -179,11 +179,16 @@ export async function claimWindowsColdRestore({
       await proof.check({ signal: checkSignal });
       return Object.freeze({ stopped: true, inhibited: true, operationId: owner.operationId });
     };
+    const check = async ({ signal: checkSignal = signal } = {}) => {
+      await checkStopped({ signal: checkSignal });
+      await admitted.check({ signal: checkSignal });
+      return checkStopped({ signal: checkSignal });
+    };
     await check();
     const lease = Object.freeze({
       owner: Object.freeze({ ...owner }), lock: Object.freeze({ ...lock }), state: Object.freeze({ ...state }),
       snapshot: structuredClone(originalSnapshot), providers: admitted.providers, authorizedPaths: admitted.authorizedPaths,
-      identity: proof.identity, admissionIdentity: admission.identity, check, close,
+      backup, pwsh, identity: proof.identity, admissionIdentity: admission.identity, check, checkStopped, close,
     });
     leases.set(lease, control);
     return lease;

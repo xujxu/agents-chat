@@ -101,6 +101,9 @@ if (mode === 'crash-copy') {
   try {
     await assert.rejects(restoreWindowsColdFiles({ control, lease: { ...lease }, acceptDataLoss: true }));
     await assert.rejects(restoreWindowsColdFiles({ control, lease, acceptDataLoss: false }));
+    await assert.rejects(restoreWindowsColdFiles({ control, lease, acceptDataLoss: true, timeoutSeconds: 0 }));
+    await assert.rejects(restoreWindowsColdFiles({ control, lease, acceptDataLoss: true, onProgress: true }));
+    await assert.rejects(restoreWindowsColdFiles({ control, lease, acceptDataLoss: true, signal: AbortSignal.abort() }));
     const restored = await restoreWindowsColdFiles({ control, lease, acceptDataLoss: true });
     assert.equal(restored.status, 'files-restored');
     assert.equal(restored.runtimeBundle.directory, path.join(control, `runtime-${lease.owner.operationId}`));
@@ -121,5 +124,6 @@ if (mode === 'crash-copy') {
     assert.deepEqual(await readFile(path.join(control, 'state.json')), stateBytes);
     assert.deepEqual(await readFile(path.join(control, 'lock', 'owner.json')), lockBytes);
   } finally { await lease.close(); }
+  await assert.rejects(lease.checkStopped(), /closed/);
   console.log('PASS: cold file restoration retries an actual partial copy with a fresh archived runtime bundle and unchanged original evidence');
 }
