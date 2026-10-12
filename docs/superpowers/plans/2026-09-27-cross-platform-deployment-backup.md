@@ -13915,6 +13915,52 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EQ: Acknowledge every finite cold completion boundary
+
+**Files:** `scripts/deployment/windows-cold-runtime-completion.{mjs,ps1}`,
+`scripts/deployment/windows-cold-activation.mjs`,
+`scripts/deployment/windows-cold-restore-lease.mjs`,
+`tests/deployment-cold-runtime-completion.test.mjs`,
+`tests/deployment-windows-cold-runtime-completion.mjs`.
+
+- [ ] Require the original nine-record decoder to support an explicit bounded
+  prefix, retaining all existing byte-chain and binding checks:
+
+  ```js
+  const prefix = await completion.captureWindowsColdCompletionPrefix({ ...fixture, phase });
+  assert.equal(prefix.record.phase, phase);
+  assert.equal(prefix.sha256, digest(await readFile(receiptPath)));
+  ```
+
+  Exercise all nine phases, invalid phase and pre-abort. The existing full
+  capture must still require all nine receipts and the exact final reply.
+- [ ] Require the existing native actor to observe exactly
+  `windowsTaskCompletionSteps`, in order:
+
+  ```js
+  const steps = [];
+  const completed = await activation.completeRuntime({
+    port, waitSeconds: 15,
+    async onProgress(progress) {
+      assert.ok(Object.isFrozen(progress));
+      steps.push(progress.step);
+    },
+  });
+  assert.deepEqual(steps, windowsTaskCompletionSteps);
+  ```
+
+  Run the unchanged native command selector first with these tests and then
+  with implementation. Do not add a test-only runtime mutation protocol.
+- [ ] Make each existing private `complete` request perform one finite step;
+  the Node wrapper drives the existing 13-step sequence before returning the
+  same final result. A repeated completion remains terminal. Each intermediate
+  native reply binds its current step, lease and latest durable receipt hash.
+  Node verifies that receipt prefix before awaiting optional `onProgress`.
+  Validate callback type before readiness or mutation. Between callbacks the
+  bridge waits for the next ordinary request, enabling deterministic original
+  controller death after physical release/registration but before its receipt.
+  This supplies interruption boundaries, not recovery of incomplete prefixes.
+
 ### Task 5EP: Accept completed cold runtime policy with the real Windows application
 
 **Files:** `tests/deployment-windows-cold-application-files.mjs`,

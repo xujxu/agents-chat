@@ -5,6 +5,7 @@ import { claimWindowsColdRestore } from '../scripts/deployment/windows-cold-rest
 import { restoreWindowsColdFiles } from '../scripts/deployment/windows-cold-restore-files.mjs';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
 import { verifyWindowsColdReadiness } from './deployment-windows-cold-readiness.mjs';
+import { windowsTaskCompletionSteps } from '../scripts/deployment/windows-task-controller.mjs';
 
 const [control, pwsh] = process.argv.slice(2);
 const stateBytes = await readFile(path.join(control, 'state.json'));
@@ -34,7 +35,17 @@ try {
   controller.abort();
   await assert.rejects(activation.completeRuntime({ port, signal: controller.signal }), { name: 'AbortError' });
   await activation.check();
-  completed = await activation.completeRuntime({ port, waitSeconds: 15 });
+  const steps = [];
+  completed = await activation.completeRuntime({
+    port, waitSeconds: 15,
+    async onProgress(progress) {
+      assert.ok(Object.isFrozen(progress));
+      assert.match(progress.completionSha256, /^[a-f0-9]{64}$/);
+      assert.equal(progress.lease, steps.length >= windowsTaskCompletionSteps.indexOf('lease-released') ? 'released' : 'guarded');
+      steps.push(progress.step);
+    },
+  });
+  assert.deepEqual(steps, windowsTaskCompletionSteps);
   assert.equal(completed.status, 'runtime-policy-restored');
   assert.equal(completed.lease, 'released');
   assert.deepEqual(completed.runtime, running.runtime);

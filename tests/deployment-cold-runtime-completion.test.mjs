@@ -6,6 +6,7 @@ import test from 'node:test';
 import { temporaryDeployment } from './deployment-fixture.mjs';
 import { writeWorkerFile } from '../scripts/deployment/worker-files.mjs';
 import { captureWindowsColdRuntimeCompletion } from '../scripts/deployment/windows-cold-runtime-completion.mjs';
+import * as completion from '../scripts/deployment/windows-cold-runtime-completion.mjs';
 import { inspectWindowsColdRuntimeCompletion } from '../scripts/deployment/windows-cold-activation-recovery.mjs';
 
 test('cold completed-runtime observation rejects abort and invalid paths before admission', async () => {
@@ -69,6 +70,28 @@ async function fixture(t) {
   };
   return { ...options, value, directory };
 }
+
+test('cold completion prefix capture binds all nine finite durable boundaries', async t => {
+  assert.equal(typeof completion.captureWindowsColdCompletionPrefix, 'function');
+  const f = await fixture(t);
+  for (const phase of phases) {
+    const prefix = await completion.captureWindowsColdCompletionPrefix({ ...f, phase });
+    assert.equal(prefix.record.phase, phase);
+    assert.equal(prefix.sha256, digest(await readFile(path.join(f.directory, `completion-${phase}.json`))));
+    assert.ok(Object.isFrozen(prefix));
+    assert.ok(Object.isFrozen(prefix.record));
+    assert.ok(Object.isFrozen(prefix.record.runtime));
+  }
+  await assert.rejects(completion.captureWindowsColdCompletionPrefix({ ...f, phase: 'policy-applied' }), /phase/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(completion.captureWindowsColdCompletionPrefix({
+    ...f, phase: 'prepared', signal: controller.signal,
+  }), { name: 'AbortError' });
+  await assert.rejects(completion.captureWindowsColdCompletionPrefix({
+    ...f, phase: 'policy-requested', ownerSha256: '0'.repeat(64),
+  }), /binding/);
+});
 
 test('cold runtime completion binds every original receipt and returns immutable runtime-only progress', async t => {
   const f = await fixture(t);
