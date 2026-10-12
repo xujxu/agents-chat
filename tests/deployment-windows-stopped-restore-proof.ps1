@@ -115,6 +115,9 @@ Assert ($LASTEXITCODE -eq 0) 'Stopped restore native bridge contracts failed'
 & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-restore-files.mjs') `
     $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
 Assert ($LASTEXITCODE -eq 0) 'Cold restore original-backup file retry failed'
+& (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-files-receipt.mjs') `
+    $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+Assert ($LASTEXITCODE -eq 0) 'Cold restore durable file-completion receipt failed'
 $after = @($files | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash })
 Assert (($before -join ',') -ceq ($after -join ',')) 'Stopped restore bridge changed original evidence'
 Write-Output 'PASS: stopped restore proof retains original evidence and refuses live owner, policy, inventory and state drift'

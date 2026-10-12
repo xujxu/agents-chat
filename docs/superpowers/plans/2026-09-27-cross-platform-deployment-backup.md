@@ -13915,6 +13915,48 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DW: Persist Windows cold restored-file completion before activation
+
+**Scope:** follow the existing Linux cold recovery's separate
+`recovery-lock/files-restored.json` receipt. Bind it to the exact current
+recovery-owner bytes, original state, backup digest and fresh runtime bundle.
+Do not publish activation intent, change application state or call the
+private file-only result a completed restore.
+
+**Files:** extend `windows-cold-restore-lease.mjs`,
+`windows-cold-restore-publication.{mjs,ps1}`,
+`windows-stopped-restore-recovery.ps1` and
+`windows-cold-restore-files.mjs`. Extend the native interrupted-copy contract
+and add `tests/deployment-windows-cold-files-receipt.mjs`.
+
+- [ ] Run native causal coverage requiring the real receipt after successful
+  copy and denying writes while its native handle is retained:
+  ```js
+  const receiptPath = path.join(control, 'recovery-lock/files-restored.json');
+  const receiptBytes = await readFile(receiptPath);
+  assert.deepEqual(JSON.parse(receiptBytes).runtimeBundle, restored.runtimeBundle);
+  await assert.rejects(writeFile(receiptPath, 'changed'));
+  assert.deepEqual(await readFile(receiptPath), receiptBytes);
+  ```
+- [ ] Extend exact native guard inventories to permit only the additional
+  bounded private completion file; keep staging owner-only. The Node lease
+  must compare the full receipt with its derived original evidence. Retain
+  all evidence handles after publication, not just the original owner.
+- [ ] Publish the receipt using the existing native private publication
+  transport with an explicit fixed receipt target. Keep the same named
+  admission across observer close, publication and native proof reopen.
+  Poison the lease on interrupted publication/reopen. Do not weaken ACLs.
+- [ ] On a later dead-owner takeover, validate the prior receipt before any
+  mutation. Remove only its exact validated bytes before replacing the owner,
+  then require a fresh full copy and new runtime bundle. A prior completion
+  receipt must never authorize the new owner's uncompleted attempt.
+- [ ] Run the native gate through Actions, including changed owner digest,
+  original-state digest and runtime-path refusals, actual partial-copy retry,
+  completed-owner death/reentry, preserved original lock/state/archive and
+  existing terminal-proof regressions. Keep unacknowledged temporary native
+  publication debris conservatively refused pending its separate recovery
+  admission work.
+
 ### Task 5DV: Retry original Windows files under the distinct cold lease
 
 **Scope:** restore project files and relocate archived external runtime files,

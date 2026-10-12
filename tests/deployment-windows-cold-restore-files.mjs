@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import streams, { writeFileSync } from 'node:fs';
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -111,6 +112,18 @@ if (mode === 'crash-copy') {
     assert.equal(restored.status, 'files-restored');
     assert.equal(restored.runtimeBundle.directory, path.join(control, `runtime-${lease.owner.operationId}`));
     assert.equal(restored.runtimeBundle.sha256, snapshot.runtime.task.configurationSha256);
+    const receiptPath = path.join(control, 'recovery-lock/files-restored.json');
+    const receiptBytes = await readFile(receiptPath);
+    const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+    assert.deepEqual(JSON.parse(receiptBytes), {
+      version: 1, phase: 'files-restored',
+      ownerSha256: digest(await readFile(path.join(control, 'recovery-lock/owner.json'))),
+      operationId: lease.lock.operationId, backupId: snapshot.id,
+      snapshotSha256: digest(Buffer.from(JSON.stringify(snapshot))),
+      stateSha256: digest(stateBytes), runtimeBundle: restored.runtimeBundle,
+    });
+    await assert.rejects(writeFile(receiptPath, 'changed'));
+    assert.deepEqual(await readFile(receiptPath), receiptBytes);
     assert.deepEqual(await lease.checkStopped(), {
       stopped: true, inhibited: true, operationId: lease.owner.operationId,
     });
