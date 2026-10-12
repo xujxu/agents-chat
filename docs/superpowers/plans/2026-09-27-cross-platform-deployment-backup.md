@@ -13955,6 +13955,8 @@ extend the explicit policy-recovery factory/controller and existing
   Run the existing native command gate for both normal and bridge-crash sources.
   No public cold completion, missing-runtime/reboot recovery or ready-runtime
   lease release is claimed by this namespace handoff.
+  Test-only `9ecde54 / 38232768263` is running; production `fc9914c`
+  is pinned to paired run `38234299468`, queued without replacing its causal.
 
 ### Task 5EK: Preserve a reconciled cold journal by native handle-bound archival
 
@@ -13968,7 +13970,7 @@ handle. Do not emulate it by deleting receipts, copying them, or replacing an
 existing destination. Reuse the already accepted `FileRenameInfoEx` layout
 from source-file publication, with replacement flags zero.
 
-- [ ] Run the genuine native missing-method contract:
+- [x] Run the genuine native missing-method contract:
 
   ```powershell
   $held = [Deployment.WindowsPrivateFile]::RetainDirectoryForRetirement(
@@ -13982,17 +13984,19 @@ from source-file publication, with replacement flags zero.
   Retain the same private parent; require canonical distinct destination in
   that parent. A stale source identity, different parent, self-rename or existing
   destination must fail. Preserve both source and occupied destination on refusal.
-- [ ] Add the native handle rename, update the retained object's expected
+- [x] Add the native handle rename, update the retained object's expected
   path only after success, and recheck original directory metadata, permissions
   and parent. Preserve original inode, receipt bytes and security after closure.
-- [ ] Run paired existing command gate, including the existing policy and
+- [x] Run paired existing command gate, including the existing policy and
   bridge-death regressions. The primitive alone does not authorize archival of
   a cold transaction; the subsequent authority must first prove policy restored,
   all old/new writers absent and its own current journal claim.
   Causal `0cd2702 / 38230727400`, job `114751501000`, failed as expected at
   `2026-10-12 09:40:59 UTC` on missing `ArchiveTo`; all 26 unit cases passed.
   Implementation `85f30d3` is included in corrected policy/archive pair
-  `4df3e81 / 38231631286`.
+  `4df3e81 / 38231631286`, job `114752258726`, which passed at
+  `2026-10-12 10:06:56 UTC`. The original-handle archival primitive passed
+  at `09:43:00 UTC`; this does not yet accept Task 5EL's authorized handoff.
 
 ### Task 5EJ: Resume exact disabled cold task policy recovery across repeated controller death
 
@@ -14007,7 +14011,7 @@ original **disabled** task definition, preserving security and zero instances.
 It does not release a runtime lease, archive/delete the cold journal, start a
 new runtime, change original root state/lock or complete restore.
 
-- [ ] Exercise both normally stopped and genuinely crashed activation histories
+- [x] Exercise both normally stopped and genuinely crashed activation histories
   through this contract:
 
   ```js
@@ -14023,18 +14027,18 @@ new runtime, change original root state/lock or complete restore.
 
   First claim preserves the admitted durable step. Subsequent advances publish
   request, register exact original disabled policy, then publish restored.
-- [ ] The parent kills the first claimed Node owner after request publication,
+- [x] The parent kills the first claimed Node owner after request publication,
   waits for its exact native bridge to exit, then runs a second controller.
   Kill the second after registration but before restored publication. A third
   distinct claim must recognize already-applied policy without re-registering;
   prove task-file identity unchanged after that boundary. A fourth independent
   inspection closes without adding a journal record.
-- [ ] Retain all claim/transition files, validate both Node and native receipt
+- [x] Retain all claim/transition files, validate both Node and native receipt
   chains, and check absence of every predecessor Node/native bridge. Keep task
   file retained except around the one authorized registration. Refuse unknown
   inventory, changed policy/security, live predecessors, and premature or
   unclaimed transitions. Normal stopped/cold claims never accept this inventory.
-- [ ] Verify exact five-record chain (claim/request/claim/claim/restored),
+- [x] Verify exact five-record chain (claim/request/claim/claim/restored),
   immutable earlier prefixes/state/lock/archive, forbidden receipt writes,
   unchanged security, no task instances, and empty new runtime Job. Run causal
   and paired existing command gates; no new job, workflow input or timeout.
@@ -14047,7 +14051,10 @@ new runtime, change original root state/lock or complete restore.
   `2026-10-12 09:40:28 UTC` before policy mutation because empty
   `Measure-Object` output has no `Sum` under StrictMode. Commit `4df3e81`
   replaces that access with an explicit zero-initialized accumulation;
-  corrected pair `38231631286` is running.
+  corrected pair `4df3e81 / 38231631286`, job `114752258726`, passed at
+  `2026-10-12 10:06:56 UTC`. Normal stopped and genuine bridge-death policy
+  recovery passed at `09:55:48` and `10:04:03 UTC`, respectively, including
+  both request and unacknowledged-registration interruptions.
 
 ### Task 5EI: Bind policy recovery to an append-only owner and write-ahead journal
 
@@ -14062,7 +14069,7 @@ step, while a request precedes registration and a restored receipt follows it.
 The original root lock/state, activation history, source/target disabled policy
 and security remain fixed. This decoder is not mutation authority.
 
-- [ ] Add and run the causal contracts from the new test file through the
+- [x] Add and run the causal contracts from the new test file through the
   existing command gate. Exercise:
 
   ```js
@@ -14077,15 +14084,17 @@ and security remain fixed. This decoder is not mutation authority.
   Reject skipped or reversed transitions, changed binding, reordered/raw-byte
   chain changes, publication by an unclaimed controller, reused prior owner
   identities, malformed UTF-8/schema, and oversized input.
-- [ ] Implement `captureWindowsColdPolicyHistory({ binding, records })`.
+- [x] Implement `captureWindowsColdPolicyHistory({ binding, records })`.
   Return frozen `mutationAuthority: false`, current `step`, sequence, original
   byte digest, last Node/bridge owner and records. Bound to 256 records,
   4 MiB per record and 16 MiB total. An empty journal is `initial` and chains
   from the admitted activation-history digest.
-- [ ] Run the paired command gate with both normal and genuine bridge-death
+- [x] Run the paired command gate with both normal and genuine bridge-death
   fixtures. Native mutation must separately retain this journal, prove every
   predecessor Node/bridge absent and publish a new claim before registration;
   decoding alone never restores policy or admits a fresh cold file claim.
+  All 26 units and both native policy cases passed at
+  `4df3e81 / 38231631286`; see Task 5EJ for the causal and complete gate.
 
 ### Task 5EH: Observe genuine cold activation bridge death without a stopped receipt
 
@@ -14094,7 +14103,7 @@ native stopped-evidence inventory and cold proof. Add
 `tests/deployment-windows-cold-activation-crash.ps1`, invoked through the
 existing stopped-proof fixture and existing command gate; no new job or timeout.
 
-- [ ] Run the existing native stopped fixture both normally and with
+- [x] Run the existing native stopped fixture both normally and with
   `-ColdActivationCrash`. The actor publishes its genuine running metadata
   after owned HTTP readiness, then remains alive:
 
@@ -14107,14 +14116,14 @@ existing stopped-proof fixture and existing command gate; no new job or timeout.
   kills only the original bridge and Node actor, and requires lease-driven
   runtime/listener exit, an empty original new Job, no Scheduler instances or
   listener, unchanged running receipt and no fabricated stopped receipt.
-- [ ] Require independent observation to return `cold-activation-inactive`
+- [x] Require independent observation to return `cold-activation-inactive`
   for the requested/running prefix, versus `cold-activation-stopped` for the
   complete normally stopped prefix. Preserve all evidence and deny receipt
   writes while the native proof is held.
-- [ ] Admit only these two runtime-bearing prefixes in this observer. Keep
+- [x] Admit only these two runtime-bearing prefixes in this observer. Keep
   requested-only, unacknowledged runtime publication and missing-helper cases
   refused; the pure journal decoder alone is not native absence proof.
-- [ ] Run causal and paired gates using:
+- [x] Run causal and paired gates using:
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -14131,7 +14140,10 @@ existing stopped-proof fixture and existing command gate; no new job or timeout.
   failure, not a demonstrated missing-feature failure. Commit `55693c2` uses
   the existing 128 KiB cap without changing the helper. Obsolete paired run
   `38226911823` was cancelled because it contained the same fixture error.
-  Corrected bridge-death acceptance is included in the integrated policy gate.
+  Corrected `4df3e81 / 38231631286`, job `114752258726`, passed at
+  `2026-10-12 10:06:56 UTC`. Genuine bridge-death running-prefix observation
+  passed `10:03:39 UTC`, and the unchanged original terminal-proof regression
+  passed `10:06:44 UTC`; no stopped receipt was fabricated.
 
 ### Task 5EG: Independently observe a fully stopped cold activation
 

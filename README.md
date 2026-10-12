@@ -626,8 +626,13 @@ stopped cold journal and both empty Jobs passed at `f18dfec / 38224040058`.
 Actual cold application startup, owned HTTP, authenticated restored API data
 and guarded shutdown passed at `dfd2ad0 / 38220610437` on
 `2026-10-12 09:15:38 UTC`, within the unchanged 45-minute cold actor bound.
-This does not claim completed cold restore; changed-task interruption recovery,
-public cold integration and terminal closeout remain separate gates.
+Genuine cold bridge death, independent inactive-runtime observation, repeated
+policy-recovery controller deaths, and the native no-overwrite directory archival
+primitive passed at `4df3e81 / 38231631286` (`2026-10-12 10:06:56 UTC`).
+Policy recovery restores only the exact original disabled task, retaining its
+security and full owner journal; it does not restart the task. Authorized journal
+archival with a fresh file-recovery claim, completed cold restore, public cold
+integration and terminal closeout remain separate gates.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
