@@ -13934,6 +13934,10 @@ script while retaining separate saved-process protocol tests.
   actor death. Require successful captures retired, failed captures retained,
   and update's existing accepted/prior-runtime-restored semantics unchanged.
   Run paired command-only Actions to record missing restore.ps1 failure.
+  Causal `a675bb7 / 38186763839` failed at `2026-10-12 00:09:16 UTC`:
+  the original supervisor rejects Operation=restore. Implementation `3497176`
+  adds public restore, captured routing and restored-phase independent
+  finalization; native gate `38187043591` is running. No public acceptance yet.
 - [ ] Public restore exposes only ProjectDir, TaskName, AcceptDataLoss,
   TimeoutSeconds, Json and Help; fixed readiness120sec/port3010 match Linux.
   Reuse `parseArguments('restore', args)`, and require only external Node24 and
@@ -13993,6 +13997,10 @@ saved-entry contracts in the Windows command gate.
   Run command-only Actions and record the missing-module red gate first.
   Causal `7896e53 / 38184789788` failed at `2026-10-12 00:03:37 UTC`
   with the expected missing `windows-restore-invocation.mjs` module.
+  Implementation `41f142e / 38186694042` reached the historical missing-entry
+  test but correctly refused its stale snapshot completion hash. `3497176`
+  fixes that fixture by creating a real complete snapshot with the historical
+  engine binding instead of modifying the existing manifest in place.
 - [ ] Implement `prepareWindowsRestoreInvocation` as a bounded admission stage:
   validate canonical native paths/deadlines/task, canonical private sibling
   control, complete version3 matching Windows project/task snapshot, exact
