@@ -724,8 +724,31 @@ and no previous deployment state/evidence. Its default policy is the current
 account with Interactive/AtLogOn; optional `-TaskLogonType Interactive|S4U`
 and `-TaskTriggerType AtLogOn|AtStartup` require this same fresh NoTunnel mode.
 These options cannot reconfigure an existing installation or an update.
-Default-tunnel first deployment and public restore remain unfinished; do not
-use the old task installer as an automatic recovery fallback.
+Default-tunnel first deployment remains unfinished; do not use the old task
+installer as an automatic recovery fallback.
+
+**Windows restore candidate (actual public-command acceptance pending).**
+The public entry and its saved-engine invocation passed native contracts at
+`3497176 / 38187043591`. It currently admits only an existing running managed
+task with settled deployment state, not a stopped/legacy task or an interrupted
+operation. Do not remove a retained lock to bypass that refusal.
+
+```powershell
+# Export post-backup data separately before acknowledging its loss
+pwsh -NoProfile -File .\scripts\restore.ps1 -ProjectDir C:\apps\agents-chat -AcceptDataLoss -Json
+```
+
+Restore accepts only `-TaskName` (default `Agents-Chat-Startup`), `-ProjectDir`
+(default tools checkout), `-AcceptDataLoss`, `-TimeoutSeconds` (positive
+per-stage limit, default 1800), `-Json` and `-Help`. Use elevated PowerShell
+7.4 or newer and Node.js 24 from outside the installed checkout. Git and npm
+are not required on PATH. Readiness is fixed at port 3010 with a 120-second
+wait. The command verifies the backup's historical saved engine without
+importing it into current controller code, then executes that saved entry.
+It restores archived artifacts without installation or rebuilding and retains
+the backup. Success requires separate-controller closeout after the restore
+actor has exited; only then are the original lock and successful helper capture
+removed. Failed or interrupted operations retain their evidence for recovery.
 
 ### Deployment (Linux systemd)
 

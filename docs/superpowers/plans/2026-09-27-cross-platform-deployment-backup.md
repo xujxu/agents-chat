@@ -13937,7 +13937,11 @@ script while retaining separate saved-process protocol tests.
   Causal `a675bb7 / 38186763839` failed at `2026-10-12 00:09:16 UTC`:
   the original supervisor rejects Operation=restore. Implementation `3497176`
   adds public restore, captured routing and restored-phase independent
-  finalization; native gate `38187043591` is running. No public acceptance yet.
+  finalization; native gate `38187043591` passed at `2026-10-12 00:15:08 UTC`,
+  including acknowledgement/no-Git admission, restored-phase supervisor and
+  historical saved-entry checks. `8e565af` routes actual complete/offline restore
+  through public `restore.ps1`; actual offline run `38187335322` is pending.
+  No actual public acceptance yet.
 - [ ] Public restore exposes only ProjectDir, TaskName, AcceptDataLoss,
   TimeoutSeconds, Json and Help; fixed readiness120sec/port3010 match Linux.
   Reuse `parseArguments('restore', args)`, and require only external Node24 and
