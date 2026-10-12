@@ -28,12 +28,12 @@ $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment
 $helpers = @('WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
     'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsRuntimeLease.cs', 'WindowsRuntimeHost.cs',
     'windows-worker-launcher.ps1', 'windows-runtime-host.ps1')
-$observerHelpers = @(if ($StoppedProof -or $Scenario.StartsWith('listener-')) { Join-Path $source 'WindowsRuntimeListener.cs' })
-Add-Type -Path (@((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
+# Repeated fixtures in one PowerShell process must use the same assembly input set.
+Add-Type -Path @((Join-Path $source 'WindowsWorkerJob.cs'), (Join-Path $source 'WindowsRuntimeDomain.cs'),
     (Join-Path $source 'WindowsRuntimePipe.cs'), (Join-Path $source 'WindowsRuntimeControl.cs'),
     (Join-Path $source 'WindowsPrivateFile.cs'), (Join-Path $source 'WindowsRuntimeLease.cs'), (Join-Path $source 'WindowsRuntimeHost.cs'),
     (Join-Path $source 'WindowsControllerToken.cs'),
-    (Join-Path $source 'WindowsControllerProcess.cs')) + $observerHelpers)
+    (Join-Path $source 'WindowsControllerProcess.cs'), (Join-Path $source 'WindowsRuntimeListener.cs'))
 . (Join-Path $source 'windows-task-owner-binding.ps1')
 . (Join-Path $source 'windows-runtime-bundle.ps1')
 function Assert([bool]$Condition, [string]$Message) {

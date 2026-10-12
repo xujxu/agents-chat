@@ -13953,7 +13953,7 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   authenticated data again from the parent after this observer exits. Retain
   existing 45-minute copy actor and five-minute observation actor bounds;
   ordinary fixture cleanup still disables/stops the exact test task.
-- [ ] After the native Task 5EN/5EO pair passes, dispatch the existing actual
+- [ ] After both native Task 5EN/5EO cases pass, dispatch the existing actual
   crash selector, including its unchanged warm crash regression:
 
   ```bash
@@ -13964,6 +13964,10 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 
   Require genuine application readiness, restored API data and surviving
   released runtime. This is not terminal root closeout or public cold restore.
+  Both native cases passed in `6d556dd / 38247756830`; actual acceptance may
+  run in its separate `-windows-live` concurrency group while the native
+  `-windows-live-commands` group reruns the subsequent fixture-bootstrap
+  regression described below. No production helper changed after `6d556dd`.
 
 ### Task 5EO: Observe a completed cold runtime after its original controllers exit
 
@@ -14007,10 +14011,14 @@ Include the new native helper in the explicit saved-engine dependency closure.
   warm runtime/instance/listener proof. Node rechecks all nine receipt bytes on
   every native acknowledgement. A fourth focused unit covers pre-abort and
   invalid-path refusal; saved-engine closure includes the new native helper.
-  Production `6d556dd` is pinned to paired run `38247756830`,
-  job `114810577913`, now running after the causal. Its watcher is attached.
-  Neither Task 5EN nor 5EO is
-  accepted until both original stopped-history and bridge-death cases pass.
+  Production `6d556dd / 38247756830`, job `114810577913`, passed normal
+  runtime completion at `12:46:06 UTC` and independent observation at
+  `12:46:20 UTC`; the genuine bridge-death case passed at `13:00:16` and
+  `13:00:30 UTC`. The following original terminal regression failed at
+  `13:00:31 UTC`: repeated `Add-Type` in one PowerShell process used different
+  source sets (with/without the listener), producing duplicate existing types.
+  Use one constant bootstrap assembly input set for every runtime-host fixture.
+  Do not mark the overall native gate accepted until that regression rerun passes.
 
 ### Task 5EN: Complete the cold runtime's permanent task policy and original lease
 
