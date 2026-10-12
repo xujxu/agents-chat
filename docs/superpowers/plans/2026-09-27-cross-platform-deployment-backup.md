@@ -13956,6 +13956,16 @@ extend `tests/deployment-windows-live-application.{mjs,ps1}` and
   Require both warm-crash regression and copy-crash/cold-terminal chain.
   Inspect completed logs and record exact acceptance. This does not accept
   deployment receipt replacement, evidence retirement or public cold restore.
+  Initial `e5ca003 / 38294083373` passed warm-crash job `114960870598` at
+  `2026-10-12 19:52:59 UTC`, but copy-crash job `114960870906` failed at
+  `20:14:46 UTC`. Actual copying, runtime release, repeated completion recovery
+  and independent observation passed; the terminal stage callback incorrectly
+  tried to reread the exclusively held original transaction and received
+  `EBUSY`. Correct the test, not production sharing: require `EBUSY` while
+  native authority is held, compare bytes before/after close, and have the
+  parent independently verify the original transaction hash and inode after
+  each interrupted actor Job is terminated. Rerun the same actual crash pair
+  without changing timeouts or weakening native authority.
 
 ### Task 5EU: Publish the prepared cold terminal state with interruption reentry
 

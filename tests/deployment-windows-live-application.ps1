@@ -28,6 +28,7 @@ $actor = $null
 $egress = $null
 $coldOwner = $null
 $coldStateStage = $null
+$coldTransaction = $null
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 try {
@@ -64,6 +65,11 @@ try {
             $coldTask = $scheduler.GetFolder('\').GetTask($TaskName)
             $coldDefinition = [string]$coldTask.Xml
             $coldSecurity = [string]$coldTask.GetSecurityDescriptor(7)
+        }
+        if ($mode -eq 'restore-cold-state-staged') {
+            $file = [Deployment.WindowsPrivateFile]::Open((Join-Path $control 'task-maintenance/transaction.json'), '')
+            try { $coldTransaction = @{ identity=$file.CaptureIdentity(); sha256=$file.Sha256 } }
+            finally { $file.Dispose() }
         }
         $actor = [Deployment.WindowsControllerProcess]::Start($Node,
             @((Join-Path $PSScriptRoot 'deployment-windows-live-application.mjs'),
@@ -188,6 +194,13 @@ try {
                 'Independent cold observation did not retain the original released application'
         }
         if ($mode -in @('restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed')) {
+            $file = [Deployment.WindowsPrivateFile]::Open(
+                (Join-Path $control 'task-maintenance/transaction.json'), $coldTransaction.sha256)
+            try {
+                $identity = $file.CaptureIdentity()
+                Assert ($identity.Dev -ceq $coldTransaction.identity.Dev -and $identity.Ino -ceq $coldTransaction.identity.Ino) `
+                    'Actual terminal recovery changed the original exclusive transaction inode'
+            } finally { $file.Dispose() }
             $runtime = $result.runtime
             Assert ($runtime.pid -eq $originalPid -and
                 $runtime.identity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($originalPid) -and

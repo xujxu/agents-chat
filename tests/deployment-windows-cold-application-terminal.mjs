@@ -15,7 +15,9 @@ export async function verifyWindowsColdApplicationTerminal({ mode, directory, co
   const recovery = await import(pathToFileURL(
     path.join(directory, 'scripts/deployment/windows-cold-activation-recovery.mjs')));
   const journal = path.join(control, 'recovery-lock');
-  const names = ['lock/owner.json', 'task-maintenance/transaction.json', 'deployment.json', 'backup/manifest.json',
+  const transactionPath = path.join(control, 'task-maintenance/transaction.json');
+  const transactionBytes = await readFile(transactionPath);
+  const names = ['lock/owner.json', 'deployment.json', 'backup/manifest.json',
     ...(await readdir(journal)).map(name => `recovery-lock/${name}`)];
   const before = await Promise.all(names.map(name => readFile(path.join(control, name))));
   const statePath = path.join(control, 'state.json');
@@ -29,13 +31,15 @@ export async function verifyWindowsColdApplicationTerminal({ mode, directory, co
   }
   const markerBytes = await readFile(markerPath);
   const marker = JSON.parse(markerBytes);
-  const unchanged = async () => {
+  const unchanged = async ({ authorityHeld = false } = {}) => {
     assert.deepEqual(await readFile(markerPath), markerBytes);
     assert.deepEqual(await Promise.all(names.map(name => readFile(path.join(control, name)))), before);
+    if (authorityHeld) await assert.rejects(readFile(transactionPath), { code: 'EBUSY' });
+    else assert.deepEqual(await readFile(transactionPath), transactionBytes);
     await verifyWindowsApplicationApi('restored', chatId);
   };
   process.stderr.write(`${new Date().toISOString()} Actual cold terminal state: ${target}\n`);
-  await unchanged();
+  await unchanged({ authorityHeld: true });
   const result = await recovery.publishWindowsColdTerminalState({
     control, pwsh, acceptDataLoss: true,
     onProgress: async progress => {
