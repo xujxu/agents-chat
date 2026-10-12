@@ -36,7 +36,7 @@ async function directoryIdentity(directory) {
   return { dev: info.dev.toString(), ino: info.ino.toString() };
 }
 
-async function inspectLease(control, expected, configurationSha256, targetCommit, activationTaskName) {
+async function inspectLease(control, expected, configurationSha256, targetCommit, activationTaskName, policyRecovery = false) {
   const inspect = async name => {
     const directory = path.join(control, name);
     try { await lstat(directory); }
@@ -48,10 +48,23 @@ async function inspectLease(control, expected, configurationSha256, targetCommit
     const hasIntent = hasReceipt && names.includes('activation-intent.json');
     const phases = activationTaskName !== undefined && hasIntent
       ? ['start-requested', 'running', 'stopped'].filter(phase => names.includes(`activation-${phase}.json`)) : [];
+    const policyNames = policyRecovery && phases.length ? names.filter(name => /^policy-[0-9]{6}\.json$/.test(name)) : [];
     if (!same(names, [...(hasIntent ? ['activation-intent.json'] : []),
       ...(hasReceipt ? ['files-restored.json'] : []), 'owner.json',
-      ...phases.map(phase => `activation-${phase}.json`)].sort())) {
+      ...phases.map(phase => `activation-${phase}.json`), ...policyNames].sort())) {
       throw new Error('Cold restore lease contains incomplete or foreign evidence.');
+    }
+    if (policyNames.length > 256) throw new Error('Cold policy recovery exceeds its record budget.');
+    const policyRecords = [];
+    let policyBytes = 0;
+    for (const name of policyNames) {
+      if (name !== `policy-${String(policyRecords.length + 1).padStart(6, '0')}.json`) {
+        throw new Error('Cold policy recovery sequence is incomplete.');
+      }
+      const bytes = await readWorkerFile(path.join(directory, name), 4194304, { privateMode: true });
+      policyBytes += bytes.length;
+      if (policyBytes > 16777216) throw new Error('Cold policy recovery exceeds its total byte budget.');
+      policyRecords.push(bytes);
     }
     const bytes = await readWorkerFile(path.join(directory, 'owner.json'), 65536, { privateMode: true });
     const record = captureWorkerFields(parse(bytes),
@@ -96,7 +109,8 @@ async function inspectLease(control, expected, configurationSha256, targetCommit
       records: await Promise.all(phases.map(phase =>
         readWorkerFile(path.join(directory, `activation-${phase}.json`), 4194304, { privateMode: true }))),
     }) : null;
-    return { directory, identity, record: { ...record, owner }, bytes, receipt, intent, history };
+    return { directory, identity, record: { ...record, owner }, bytes, receipt, intent, history,
+      ...(policyRecovery ? { policyRecords } : {}) };
   };
   const guard = await inspect('recovery-lock');
   const staging = await inspect('cold-restore-staging');

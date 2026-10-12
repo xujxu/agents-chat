@@ -1,4 +1,12 @@
 . (Join-Path $PSScriptRoot 'windows-cold-activation-context.ps1')
+. (Join-Path $PSScriptRoot 'windows-cold-policy-history.ps1')
+
+function Retain-AgentsChatColdRecoveryTaskFile([hashtable]$Context) {
+    $taskFile = Join-Path ([Environment]::SystemDirectory) "Tasks\$($Context.TaskName)"
+    $hash = (Get-FileHash -LiteralPath $taskFile -Algorithm SHA256).Hash.ToLowerInvariant()
+    $Context.TaskFile = [Deployment.WindowsPrivateFile]::OpenSourceFile($taskFile, $hash)
+    $Context.Files.Add($Context.TaskFile)
+}
 
 function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
     if ($Context.Closed -or $Context.Poisoned -or $Context.Busy) {
@@ -15,27 +23,37 @@ function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
             Assert-AgentsChatCompletionProcessAbsent $Context.ColdControllerPid $Context.ColdControllerIdentity
             Assert-AgentsChatCompletionProcessAbsent $Context.ActivationBridgePid $Context.ActivationBridgeIdentity
             Assert-AgentsChatCompletionProcessAbsent $Context.Runtime.pid $Context.Runtime.identity
+            if ($Context.PolicyRecovery) { Assert-AgentsChatColdPolicyOwnersAbsent $Context }
             [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
                 [guid]$original.generation.GetString(), $Context.RuntimeSessionId)
             [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
                 [guid]$Context.Runtime.generation, $Context.Runtime.sessionId)
             $task = $Context.Folder.GetTask($Context.TaskName)
             if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
-                [string]$task.Xml -cne $Context.ColdDefinition -or $task.Definition.Triggers.Count -ne 0 -or
+                [string]$task.Xml -cne $Context.CurrentDefinition -or
+                (-not $Context.PolicyRecovery -and $task.Definition.Triggers.Count -ne 0) -or
                 [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor) {
                 throw 'Inactive cold activation task policy, security or instance changed.'
             }
         }
-        return [ordered]@{
-            status=$(if ($Context.ColdHistoryPhase -ceq 'stopped') {
+        $observation = [ordered]@{
+            status=$(if ($Context.PolicyRecovery) { 'cold-policy-recovery' }
+            elseif ($Context.ColdHistoryPhase -ceq 'stopped') {
                 'cold-activation-stopped'
             } else { 'cold-activation-inactive' })
-            mutationAuthority=$false
+            mutationAuthority=$Context.PolicyRecovery
             operationId=$Context.OperationId; taskName=$Context.TaskName; stateSha256=$Context.StateSha256
             ownerSha256=$Context.ColdOwnerSha256; filesReceiptSha256=$Context.ColdReceiptSha256
             intentSha256=$Context.ColdIntentSha256; historySha256=$Context.ColdHistorySha256
             runtime=$Context.Runtime
         }
+        if ($Context.PolicyRecovery) {
+            $observation['step'] = $Context.PolicyStep
+            $observation['claimed'] = $Context.PolicyClaimed
+            $observation['policySequence'] = $Context.PolicySequence
+            $observation['policySha256'] = $Context.PolicySha256
+        }
+        return $observation
     } catch {
         $Context.Poisoned = $true
         throw [InvalidOperationException]::new('Cold activation observation refused.', $_.Exception)
@@ -44,8 +62,9 @@ function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
 
 function Open-AgentsChatColdActivationRecoveryProof {
     param([string]$Control, [string]$OwnerSha256, [string]$ReceiptSha256,
-        [string]$IntentSha256, [string]$HistorySha256)
-    $proof = Open-AgentsChatStoppedRestoreEvidence -Control $Control -Recovery -ActivationHistory
+        [string]$IntentSha256, [string]$HistorySha256, [switch]$PolicyRecovery,
+        [string]$PolicySha256, [int]$ControllerPid, [string]$ControllerIdentity)
+    $proof = Open-AgentsChatStoppedRestoreEvidence -Control $Control -Recovery -ActivationHistory -PolicyRecovery:$PolicyRecovery
     try {
         if (-not $proof.AbsentOwner -or
             ($proof.RecoveryNames -join ',') -cne 'recovery-lock') {
@@ -114,6 +133,7 @@ function Open-AgentsChatColdActivationRecoveryProof {
         $proof.ActivationBridgeIdentity = $first.controllerIdentity.GetString()
         $proof.Runtime = $runtime
         $proof.ColdDefinition = $record.definition.GetString()
+        $proof.CurrentDefinition = $proof.ColdDefinition
         $proof.ColdOwnerSha256 = $OwnerSha256
         $proof.ColdReceiptSha256 = $ReceiptSha256
         $proof.ColdIntentSha256 = $IntentSha256
@@ -121,9 +141,13 @@ function Open-AgentsChatColdActivationRecoveryProof {
         $proof.ColdHistoryPhase = $phase
         Open-AgentsChatCompletionBundle $proof $proof.ColdRuntime.configuration.GetString() `
             $proof.ColdRuntime.sha256.GetString() $runtime
-        $taskFile = Join-Path ([Environment]::SystemDirectory) "Tasks\$($proof.TaskName)"
-        $hash = (Get-FileHash -LiteralPath $taskFile -Algorithm SHA256).Hash.ToLowerInvariant()
-        $proof.Files.Add([Deployment.WindowsPrivateFile]::OpenSourceFile($taskFile, $hash))
+        if ($PolicyRecovery) {
+            $proof.PolicyControllerPid = $ControllerPid
+            $proof.PolicyControllerIdentity = $ControllerIdentity
+            $proof.PolicyBridgeIdentity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            Read-AgentsChatColdPolicyHistory $proof $PolicySha256
+        }
+        Retain-AgentsChatColdRecoveryTaskFile $proof
         $null = Assert-AgentsChatColdActivationRecoveryProof $proof
         return $proof
     } catch {

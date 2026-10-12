@@ -11,6 +11,7 @@ import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { captureActivatedRuntime } from './windows-task-controller.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
+import { captureWindowsColdPolicyHistory } from './windows-cold-policy-history.mjs';
 
 const script = fileURLToPath(new URL('./windows-stopped-restore-controller.ps1', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -20,6 +21,16 @@ const refused = cause => Object.assign(new Error('Cold activation observation re
 });
 
 export async function inspectWindowsColdActivationRecovery({ control, pwsh, signal } = {}) {
+  return openRecovery({ control, pwsh, signal }, false);
+}
+
+export async function prepareWindowsColdPolicyRecovery({ control, pwsh, signal, acceptDataLoss } = {}) {
+  signal?.throwIfAborted();
+  if (acceptDataLoss !== true) throw new Error('Cold policy recovery requires explicit data-loss acknowledgement.');
+  return openRecovery({ control, pwsh, signal }, true);
+}
+
+async function openRecovery({ control, pwsh, signal }, policyRecovery) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value => typeof value === 'string'
     && value.length <= 4096 && path.isAbsolute(value) && path.resolve(value) === value && !/[\0\r\n]/.test(value))) {
@@ -50,7 +61,7 @@ export async function inspectWindowsColdActivationRecovery({ control, pwsh, sign
       lock, state, stateSha256: digest(stateBytes),
     };
     const prior = await inspectWindowsColdRestoreEvidence(control, expected,
-      snapshot.runtime.task.configurationSha256, snapshot.source.commit, original.taskName);
+      snapshot.runtime.task.configurationSha256, snapshot.source.commit, original.taskName, policyRecovery);
     const { guard, staging } = prior;
     const history = guard?.history;
     if (staging || !history || !['running', 'stopped'].includes(history.phase)
@@ -71,18 +82,34 @@ export async function inspectWindowsColdActivationRecovery({ control, pwsh, sign
     const controllerIdentity = await processIdentity(process.pid);
     if (!controllerIdentity) throw new Error('Original cold activation observer identity is unavailable.');
     const expectedObservation = {
-      status: history.phase === 'stopped' ? 'cold-activation-stopped' : 'cold-activation-inactive',
-      mutationAuthority: false,
+      status: policyRecovery ? 'cold-policy-recovery'
+        : history.phase === 'stopped' ? 'cold-activation-stopped' : 'cold-activation-inactive',
+      mutationAuthority: policyRecovery,
       operationId: lock.operationId, taskName: original.taskName, stateSha256: expected.stateSha256,
       ownerSha256: digest(guard.bytes), filesReceiptSha256: digest(guard.receipt.bytes),
       intentSha256: digest(guard.intent.bytes), historySha256: history.sha256, runtime: history.runtime,
     };
+    let policyBinding;
+    let initialPolicy;
+    if (policyRecovery) {
+      const stopped = parse(await readWorkerFile(path.join(control, 'task-maintenance/task-stop-stopped.json'),
+        4194304, { privateMode: true }));
+      policyBinding = {
+        operationId: lock.operationId, taskName: original.taskName,
+        ownerSha256: expectedObservation.ownerSha256, filesReceiptSha256: expectedObservation.filesReceiptSha256,
+        intentSha256: expectedObservation.intentSha256, historySha256: history.sha256, stateSha256: expected.stateSha256,
+        sourceDefinition: history.records.at(-1).definition, targetDefinition: stopped.definition,
+        securityDescriptor: history.records.at(-1).securityDescriptor,
+      };
+      initialPolicy = captureWindowsColdPolicyHistory({ binding: policyBinding, records: guard.policyRecords });
+    }
     bridge = windowsControllerTransport({
       pwsh, refused, label: 'Native inactive cold activation observer',
       args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
         '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity, '-Recovery', '-ColdActivation',
         '-OwnerSha256', expectedObservation.ownerSha256, '-ReceiptSha256', expectedObservation.filesReceiptSha256,
-        '-IntentSha256', expectedObservation.intentSha256, '-HistorySha256', expectedObservation.historySha256],
+        '-IntentSha256', expectedObservation.intentSha256, '-HistorySha256', expectedObservation.historySha256,
+        ...(policyRecovery ? ['-ColdPolicyRecovery', '-PolicySha256', initialPolicy.sha256] : [])],
     });
     const ready = captureWorkerFields(await bridge.wire.receive({ signal, timeoutMs: 60000 }),
       ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'cold observation readiness');
@@ -90,13 +117,33 @@ export async function inspectWindowsColdActivationRecovery({ control, pwsh, sign
       || ready.controllerIdentity !== controllerIdentity || ready.processIdentity !== await processIdentity(ready.pid)) {
       throw new Error('Original cold activation observer bridge differs.');
     }
-    const capture = value => {
-      const observation = captureWorkerFields(value, Object.keys(expectedObservation), 'cold activation observation');
+    const capture = async value => {
+      const observation = captureWorkerFields(value, [...Object.keys(expectedObservation),
+        ...(policyRecovery ? ['step', 'claimed', 'policySequence', 'policySha256'] : [])], 'cold activation observation');
       const runtime = Object.freeze(captureActivatedRuntime(observation.runtime));
-      if (!same(observation, expectedObservation)) throw new Error('Original inactive cold activation observation differs.');
+      const base = Object.fromEntries(Object.keys(expectedObservation).map(key => [key, observation[key]]));
+      if (!same(base, expectedObservation)) throw new Error('Original inactive cold activation observation differs.');
+      if (policyRecovery) {
+        const current = await inspectWindowsColdRestoreEvidence(control, expected,
+          snapshot.runtime.task.configurationSha256, snapshot.source.commit, original.taskName, true);
+        if (current.staging || !current.guard || !current.guard.bytes.equals(guard.bytes)) {
+          throw new Error('Original cold policy recovery owner changed.');
+        }
+        const policy = captureWindowsColdPolicyHistory({ binding: policyBinding, records: current.guard.policyRecords });
+        if (!['initial', 'requested', 'policy-applied', 'restored'].includes(observation.step)
+          || (observation.step === 'policy-applied' ? 'requested' : observation.step) !== policy.step
+          || observation.policySequence !== policy.sequence || observation.policySha256 !== policy.sha256
+          || typeof observation.claimed !== 'boolean'
+          || observation.claimed && !same(policy.owner, {
+            controllerPid: process.pid, controllerIdentity, bridgePid: ready.pid, bridgeIdentity: ready.processIdentity,
+          })) {
+          throw new Error('Cold policy recovery acknowledgement differs from its durable owner journal.');
+        }
+      }
       return Object.freeze({ ...observation, runtime });
     };
-    const observation = capture(ready.value);
+    const observation = await capture(ready.value);
+    let latest = observation;
     let closed = false;
     let finished = false;
     let busy = false;
@@ -123,7 +170,19 @@ export async function inspectWindowsColdActivationRecovery({ control, pwsh, sign
           bridge.wire.close();
           return;
         }
-        const current = capture(reply.value);
+        const current = await capture(reply.value);
+        if (policyRecovery) {
+          const nextStep = !latest.claimed ? latest.step : {
+            initial: 'requested', requested: 'policy-applied', 'policy-applied': 'restored', restored: 'restored',
+          }[latest.step];
+          const increment = !latest.claimed || ['initial', 'policy-applied'].includes(latest.step) ? 1 : 0;
+          if (method === 'check' ? !same(current, latest)
+            : method !== 'advance' || !current.claimed || current.step !== nextStep
+              || current.policySequence !== latest.policySequence + increment) {
+            throw new Error('Cold policy recovery skipped its original claimed write-ahead transition.');
+          }
+          latest = current;
+        }
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
         return current;
       } catch (cause) {
@@ -135,6 +194,7 @@ export async function inspectWindowsColdActivationRecovery({ control, pwsh, sign
     return Object.freeze({
       observation,
       check: ({ signal: checkSignal } = {}) => request('check', checkSignal),
+      ...(policyRecovery ? { advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal) } : {}),
       async close() {
         if (busy) throw new Error('Cannot close an active cold activation observation.');
         if (finished) return;

@@ -4,10 +4,12 @@ param(
     [Parameter(Mandatory)][string]$ControllerIdentity,
     [switch]$Recovery,
     [switch]$ColdActivation,
+    [switch]$ColdPolicyRecovery,
     [string]$OwnerSha256,
     [string]$ReceiptSha256,
     [string]$IntentSha256,
-    [string]$HistorySha256
+    [string]$HistorySha256,
+    [string]$PolicySha256
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -27,14 +29,19 @@ try {
     $stage = 'proof-open'
     if ($ColdActivation) {
         if (-not $Recovery -or
-            @(@($OwnerSha256, $ReceiptSha256, $IntentSha256, $HistorySha256) | Where-Object { $_ -cnotmatch '^[a-f0-9]{64}$' }).Count) {
+            @(@($OwnerSha256, $ReceiptSha256, $IntentSha256, $HistorySha256) | Where-Object { $_ -cnotmatch '^[a-f0-9]{64}$' }).Count -or
+            ($ColdPolicyRecovery -and $PolicySha256 -cnotmatch '^[a-f0-9]{64}$') -or
+            (-not $ColdPolicyRecovery -and $PolicySha256)) {
             throw 'Cold observation requires explicit original evidence digests.'
         }
         . (Join-Path $PSScriptRoot 'windows-cold-activation-recovery-proof.ps1')
-        $proof = Open-AgentsChatColdActivationRecoveryProof $Control $OwnerSha256 $ReceiptSha256 $IntentSha256 $HistorySha256
+        . (Join-Path $PSScriptRoot 'windows-cold-policy-recovery.ps1')
+        $proof = Open-AgentsChatColdActivationRecoveryProof $Control $OwnerSha256 $ReceiptSha256 $IntentSha256 $HistorySha256 `
+            -PolicyRecovery:$ColdPolicyRecovery -PolicySha256 $PolicySha256 `
+            -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
         $observed = Assert-AgentsChatColdActivationRecoveryProof $proof
     } else {
-        if ($OwnerSha256 -or $ReceiptSha256 -or $IntentSha256 -or $HistorySha256) {
+        if ($OwnerSha256 -or $ReceiptSha256 -or $IntentSha256 -or $HistorySha256 -or $ColdPolicyRecovery -or $PolicySha256) {
             throw 'Stopped observation cannot accept cold activation digests.'
         }
         $proof = Open-AgentsChatStoppedRestoreProof -Control $Control -Recovery:$Recovery
@@ -52,7 +59,9 @@ try {
         $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close')) {
+        $methods = @('check', 'close')
+        if ($ColdPolicyRecovery) { $methods += 'advance' }
+        if ($id -ne $sequence + 1 -or $method -cnotin $methods) {
             throw 'Invalid read-only stopped restore proof request.'
         }
         $sequence = $id
@@ -65,7 +74,8 @@ try {
             Close-AgentsChatTaskCompletionProof $proof
             $proof = $null
             $value = 'close'
-        } elseif ($ColdActivation) { $value = Assert-AgentsChatColdActivationRecoveryProof $proof }
+        } elseif ($method -ceq 'advance') { $value = Advance-AgentsChatColdPolicyRecovery $proof }
+        elseif ($ColdActivation) { $value = Assert-AgentsChatColdActivationRecoveryProof $proof }
         else { $value = Assert-AgentsChatStoppedRestoreProof $proof }
         [Console]::Out.WriteLine((@{
             id=$id; type='reply'; value=$value

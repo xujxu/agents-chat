@@ -13959,6 +13959,10 @@ new runtime, change original root state/lock or complete restore.
   immutable earlier prefixes/state/lock/archive, forbidden receipt writes,
   unchanged security, no task instances, and empty new runtime Job. Run causal
   and paired existing command gates; no new job, workflow input or timeout.
+  Integrated causal `55693c2 / 38229549329`, job `114745421957`, failed as
+  expected at `2026-10-12 09:23:48 UTC`: 22/26 cases passed, three policy-journal
+  cases lacked the decoder module and the explicit factory contract lacked
+  `prepareWindowsColdPolicyRecovery`. Native policy cases were not reached.
 
 ### Task 5EI: Bind policy recovery to an append-only owner and write-ahead journal
 
@@ -14036,6 +14040,13 @@ existing stopped-proof fixture and existing command gate; no new job or timeout.
   Require both normal and genuinely interrupted native cases, then the original
   terminal-proof regression. Neither observation grants policy mutation,
   archival, fresh cold claim or terminal completion.
+  Initial `1324914 / 38226814320`, job `114736243998`, failed at
+  `2026-10-12 09:21:59 UTC` before the crash behavior: the new fixture requested
+  a 1 MiB frame while `ReadFrameAsync` allows at most 128 KiB. This is a fixture
+  failure, not a demonstrated missing-feature failure. Commit `55693c2` uses
+  the existing 128 KiB cap without changing the helper. Obsolete paired run
+  `38226911823` was cancelled because it contained the same fixture error.
+  Corrected bridge-death acceptance is included in the integrated policy gate.
 
 ### Task 5EG: Independently observe a fully stopped cold activation
 
