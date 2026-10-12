@@ -13915,6 +13915,35 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EA: Retain the restored Windows configuration before cold activation
+
+**Scope:** a completed-file receipt alone does not prevent configuration drift
+before startup. Under the authentic cold lease, retain the fresh private runtime
+configuration and the current environment/agent files. Require the snapshot's
+exact file presence, bytes, checksums, ACLs and attributes and the admitted auth
+providers. Retain the read-only handles across original-runtime retirement.
+This is configuration preparation, not activation or terminal restore.
+
+**Implementation:** share the existing runtime configuration inspection in
+`windows-configuration.mjs` without adding a dependency to its saved live
+closure. Add a focused cold configuration inspector and a lease method using
+its private completed-file receipt and original snapshot, not caller-mutable
+snapshot properties. Reuse native snapshot-security inspection and restored
+security comparison for the small configuration subset.
+
+- [ ] Native causal coverage requires `lease.inspectRestoredConfiguration`;
+  refuse before current-owner file completion and reject pre-aborted requests
+  before entering retained admission transport.
+- [ ] Reject changed bytes even when auth providers are unchanged, and reject
+  a newly added originally absent environment file. Close failed observations
+  so the fixture can restore its original bytes without weakening permissions.
+- [ ] Retain exact native file handles and snapshot security; deny writes to
+  the admitted environment. Recheck after original-host retirement, preserve
+  original state/lock/archive/receipts and reject a closed configuration.
+- [ ] Run the native gate in Actions. Keep existing live/first configuration
+  authority checks and signatures unchanged; no public cold activation is
+  enabled by this step.
+
 ### Task 5DZ: Accept cold-owned retirement of the actual application runtime
 
 **Scope:** extend the existing actual copy-crash cold-file actor, rather than
@@ -13959,22 +13988,26 @@ aborted signal before checking admission; explicitly prove the original
 admission child and stopped proof remain usable afterward. Mid-request
 uncertainty must still fail closed. Neither the cancelled first retirement
 attempt nor the separate absence acceptance proves this new mutation API.
-Pre-cancellation fix `c8eb4b9 / 38206988583` is running the native gate.
+Pre-cancellation fix `c8eb4b9 / 38206988583`, job `114672549605`, passed at
+`2026-10-12 05:29:24 UTC`. Cold-owned original-host retirement passed at
+05:25:29, subsequent distinct absent-owner claim at05:25:42 and original
+restored terminal proof at05:29:10. Actual application retirement is running
+separately at `adfdef0 / 38208188366`.
 
-- [ ] First exercise the real cold API through the native Actions fixture.
+- [x] First exercise the real cold API through the native Actions fixture.
   Refuse retirement before the current owner's completed-file receipt exists,
   without retiring the host; refuse an already aborted request without mutation.
-- [ ] Close only the old native observer, retaining named admission. The
+- [x] Close only the old native observer, retaining named admission. The
   separate bridge must retain exact original proof, private recovery owner and
   completion receipt, verify the current controller identity, and retire only
   the admitted PID/start identity via its authenticated runtime channel.
   Require clean original process exit, settled Scheduler instances, unchanged
   disabled policy and empty/absent original native Job.
-- [ ] Reopen the original read-only proof in explicit recovery mode after
+- [x] Reopen the original read-only proof in explicit recovery mode after
   native acknowledgement and clean bridge exit. Any uncertain mutation or
   reopen poisons the lease; a later distinct owner can retry the existing
   stopped/absent prefix. Do not silently change a live observer's liveness mode.
-- [ ] Prove repeated retirement of an already absent original is idempotent;
+- [x] Prove repeated retirement of an already absent original is idempotent;
   original state, lock, backup and recovery receipt remain byte-for-byte bound.
   A closed lease refuses. This retirement only removes the old empty host;
   activation intent, guarded replacement startup and terminal closeout remain
