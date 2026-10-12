@@ -24,9 +24,10 @@ catch {
     $refused = $true
 }
 if (-not $refused) { throw 'Cross-session Job absence was accepted.' }
-$reply = [Deployment.WindowsRuntimeControl]::Exchange(
-    [guid]$Ready.generation, $Ready.pid, $Ready.identity, 'retire', 15000)
-if ($reply -cne 'retired' -or -not $Owner.WaitForExit(15000) -or $Owner.ExitCode -ne 0) {
+& (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-runtime-retirement.mjs') `
+    $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+if ($LASTEXITCODE -ne 0) { throw 'Cold recovery did not retire its authenticated stopped runtime.' }
+if (-not $Owner.WaitForExit(15000) -or $Owner.ExitCode -ne 0) {
     throw 'Original stopped host did not retire cleanly.'
 }
 $scheduler = New-Object -ComObject 'Schedule.Service'

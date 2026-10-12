@@ -13915,6 +13915,39 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DY: Retire the original stopped Windows runtime under cold ownership
+
+**Scope:** after the current cold owner has completed its full file restoration,
+retire only the authenticated original stopped host. Keep the read-only proof
+transport read-only. Use a separate native retirement bridge, the same named
+admission and the exact private owner/completed-files receipt hashes. Never
+fabricate live transaction authority, change task XML, enable/start a task or
+publish terminal success.
+
+**Files:** add `windows-cold-restore-retirement.{mjs,ps1}`, extend the cold lease
+with `retireRuntime`, and replace the fixture's manual retirement with a real
+distinct cold actor in `tests/deployment-windows-cold-runtime-retirement.mjs`.
+
+- [ ] First exercise the real cold API through the native Actions fixture.
+  Refuse retirement before the current owner's completed-file receipt exists,
+  without retiring the host; refuse an already aborted request without mutation.
+- [ ] Close only the old native observer, retaining named admission. The
+  separate bridge must retain exact original proof, private recovery owner and
+  completion receipt, verify the current controller identity, and retire only
+  the admitted PID/start identity via its authenticated runtime channel.
+  Require clean original process exit, settled Scheduler instances, unchanged
+  disabled policy and empty/absent original native Job.
+- [ ] Reopen the original read-only proof in explicit recovery mode after
+  native acknowledgement and clean bridge exit. Any uncertain mutation or
+  reopen poisons the lease; a later distinct owner can retry the existing
+  stopped/absent prefix. Do not silently change a live observer's liveness mode.
+- [ ] Prove repeated retirement of an already absent original is idempotent;
+  original state, lock, backup and recovery receipt remain byte-for-byte bound.
+  A closed lease refuses. This retirement only removes the old empty host;
+  activation intent, guarded replacement startup and terminal closeout remain
+  separate work. No new durable phase is required for this monotone step:
+  every interrupted result is already an accepted stopped-or-absent prefix.
+
 ### Task 5DX: Admit an absent original Windows runtime without inventing liveness
 
 **Scope:** before wiring cold activation, cover both an original stopped host
