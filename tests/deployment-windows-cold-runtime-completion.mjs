@@ -8,7 +8,8 @@ import { processIdentity } from '../scripts/deployment/process-identity.mjs';
 import { verifyWindowsColdReadiness } from './deployment-windows-cold-readiness.mjs';
 import { windowsTaskCompletionSteps } from '../scripts/deployment/windows-task-controller.mjs';
 
-const [control, pwsh] = process.argv.slice(2);
+const [control, pwsh, target] = process.argv.slice(2);
+assert.ok(target === undefined || target === 'lease-released');
 const stateBytes = await readFile(path.join(control, 'state.json'));
 const state = JSON.parse(stateBytes);
 const lockBytes = await readFile(path.join(control, 'lock/owner.json'));
@@ -49,6 +50,12 @@ try {
       const inventory = (await readdir(directory)).sort();
       await delay(100);
       assert.deepEqual((await readdir(directory)).sort(), inventory);
+      if (progress.step === target) {
+        console.log(JSON.stringify({
+          running, progress, identity: { pid: running.controllerPid, processIdentity: running.controllerIdentity },
+        }));
+        await new Promise(() => { setInterval(() => {}, 1000); });
+      }
     },
   });
   assert.deepEqual(steps, windowsTaskCompletionSteps);

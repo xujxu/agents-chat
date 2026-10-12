@@ -1,14 +1,19 @@
 param(
     [Parameter(Mandatory)][string]$Control,
-    [Parameter(Mandatory)][string]$TaskName
+    [Parameter(Mandatory)][string]$TaskName,
+    [switch]$CompletionRecovery
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $owner = $null
 try {
-    $output = & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-runtime-completion.mjs') `
-        $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
-    if ($LASTEXITCODE -ne 0) { throw 'Cold runtime completion actor failed.' }
+    if ($CompletionRecovery) {
+        $output = & (Join-Path $PSScriptRoot 'deployment-windows-cold-completion-recovery.ps1') -Control $Control
+    } else {
+        $output = & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-runtime-completion.mjs') `
+            $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+        if ($LASTEXITCODE -ne 0) { throw 'Cold runtime completion actor failed.' }
+    }
     $result = ($output -join "`n") | ConvertFrom-Json
     $runtime = $result.completed.runtime
     $owner = [Diagnostics.Process]::GetProcessById($runtime.pid)

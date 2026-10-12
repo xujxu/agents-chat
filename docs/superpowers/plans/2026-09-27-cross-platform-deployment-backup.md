@@ -13915,6 +13915,71 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5ER: Recover released cold completion prefixes without restarting the runtime
+
+**Files:** extend `windows-cold-completion-proof.ps1`, the stopped restore
+inventory/controller, `windows-cold-activation-recovery.mjs`, and the saved
+engine inventory. Add `windows-cold-completion-recovery.ps1` beside the proof.
+Extend the existing native completion fixture with
+`tests/deployment-windows-cold-completion-recovery.{mjs,ps1}`.
+
+- [ ] Add early acknowledgement/abort/path contracts:
+
+  ```js
+  assert.equal(typeof recovery.prepareWindowsColdCompletionRecovery, 'function');
+  await assert.rejects(recovery.prepareWindowsColdCompletionRecovery(), /data-loss acknowledgement/);
+  ```
+
+  Dispatch the existing native command selector after Task 5EQ's pending run
+  completes, recording the missing-export causal failure before production.
+- [ ] Admit only exact contiguous completion prefixes from `release-requested`
+  through `complete`, while retaining complete-only read-only observation.
+  Require the original controllers absent, old Job empty, exact new Scheduler
+  instance/listener/configuration and an already released runtime. Do not release
+  a guarded lease from a new peer or restart the task. Reuse warm
+  `Resolve-AgentsChatCompletionRecoveryPolicy` to recognize lost registration
+  and enable acknowledgements.
+- [ ] Acquire native exclusive authority on the original
+  `task-maintenance/transaction.json` identity, bytes and digest, after releasing
+  every retained handle to that identity. Keep this handle through bridge exit.
+  This existing immutable transaction anchors the original stop history and
+  blocks new native admission even if the Node owner dies first. Unlike an
+  exclusive completion record, it does not require cached journal bytes or
+  relaxing Node's live prefix rereads.
+- [ ] Expose only finite `check`, `advance` and `close` operations:
+
+  ```js
+  const recovery = await prepareWindowsColdCompletionRecovery({ control, pwsh, acceptDataLoss: true });
+  const next = await recovery.advance();
+  assert.deepEqual(await recovery.check(), next);
+  await recovery.close();
+  ```
+
+  Each mutation retains original bindings, writes one missing receipt or applies
+  one recognized task-policy transition, and rechecks native state. Preserve
+  original controller fields in receipts; update only phase, previous hash,
+  acknowledged policy/enabled state and released lease. Root state/lock are
+  unchanged. Retain task-file identity except during the exact admitted native
+  registration/enable operation. Node verifies exact inventory, prefix hash,
+  step order and immutable runtime on every acknowledgement.
+- [ ] Reuse the bridge-death-source fixture's single fresh activation. Interrupt
+  at `lease-released`, recover and interrupt at `permanent-policy-applied`,
+  recover and interrupt at `enable-applied`, then finish:
+
+  ```js
+  while (progress.step !== target) progress = await recovery.advance();
+  console.log(JSON.stringify({ progress, identity: recovery.identity }));
+  await new Promise(() => { setInterval(() => {}, 1000); });
+  ```
+
+  The parent kills only the exact original controllers after an awaited
+  acknowledgement, not a file-watch race. Require missing durable receipts at
+  each physical boundary, identical live runtime after every death, all prior
+  receipt bytes unchanged and final permanent policy. A separate existing
+  read-only observer then validates the complete chain. Keep the normal
+  completion fixture unchanged and existing time bounds. Run the same Actions
+  selector with implementation and retain saved dependency closure coverage.
+
 ### Task 5EQ: Acknowledge every finite cold completion boundary
 
 **Files:** `scripts/deployment/windows-cold-runtime-completion.{mjs,ps1}`,

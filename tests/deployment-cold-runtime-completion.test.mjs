@@ -8,6 +8,20 @@ import { writeWorkerFile } from '../scripts/deployment/worker-files.mjs';
 import { captureWindowsColdRuntimeCompletion } from '../scripts/deployment/windows-cold-runtime-completion.mjs';
 import * as completion from '../scripts/deployment/windows-cold-runtime-completion.mjs';
 import { inspectWindowsColdRuntimeCompletion } from '../scripts/deployment/windows-cold-activation-recovery.mjs';
+import * as recovery from '../scripts/deployment/windows-cold-activation-recovery.mjs';
+
+test('cold released-prefix recovery requires acknowledgement and validates abort before admission', async () => {
+  assert.equal(typeof recovery.prepareWindowsColdCompletionRecovery, 'function');
+  await assert.rejects(recovery.prepareWindowsColdCompletionRecovery(), /data-loss acknowledgement/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(recovery.prepareWindowsColdCompletionRecovery({
+    acceptDataLoss: true, signal: controller.signal,
+  }), { name: 'AbortError' });
+  await assert.rejects(recovery.prepareWindowsColdCompletionRecovery({
+    acceptDataLoss: true, control: 'relative', pwsh: 'relative',
+  }), { code: 'DEPLOYMENT_WINDOWS_COLD_ACTIVATION_OBSERVATION_REFUSED', recoveryAllowed: false });
+});
 
 test('cold completed-runtime observation rejects abort and invalid paths before admission', async () => {
   const controller = new AbortController();
