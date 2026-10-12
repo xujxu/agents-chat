@@ -6,6 +6,7 @@ import { restoreWindowsColdFiles } from '../scripts/deployment/windows-cold-rest
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 import { verifyWindowsColdConfiguration } from './deployment-windows-cold-configuration.mjs';
+import { verifyWindowsColdActivationIntent } from './deployment-windows-cold-activation-intent.mjs';
 
 const [control, pwsh] = process.argv.slice(2);
 const stateBytes = await readFile(path.join(control, 'state.json'));
@@ -20,7 +21,10 @@ const lease = await claimWindowsColdRestore({
   profile: 'agents-chat-auth-638c553', acceptDataLoss: true,
 });
 let configuration;
+let activation;
 try {
+  assert.equal(typeof lease.prepareActivation, 'function', 'Cold activation requires durable original-owner intent.');
+  await assert.rejects(lease.prepareActivation(), /requires completed file restoration and original runtime retirement/);
   assert.equal(typeof lease.inspectRestoredConfiguration, 'function', 'Cold activation requires retained restored configuration.');
   await assert.rejects(lease.inspectRestoredConfiguration(), /requires completed file restoration/);
   assert.equal(typeof lease.retireRuntime, 'function', 'Cold lease must retire only its authenticated original runtime.');
@@ -29,6 +33,7 @@ try {
   await lease.checkStopped();
   await restoreWindowsColdFiles({ control, lease, acceptDataLoss: true });
   configuration = await verifyWindowsColdConfiguration({ lease, project: state.project, pwsh });
+  await assert.rejects(lease.prepareActivation({ configuration }), /requires completed file restoration and original runtime retirement/);
   const receiptFile = path.join(control, 'recovery-lock/files-restored.json');
   const receiptBytes = await readFile(receiptFile);
   const ownerBytes = await readFile(path.join(control, 'recovery-lock/owner.json'));
@@ -50,11 +55,13 @@ try {
   assert.deepEqual(await readFile(path.join(control, 'state.json')), stateBytes);
   assert.deepEqual(await readFile(path.join(control, 'lock/owner.json')), lockBytes);
   assert.deepEqual(await verifySnapshot(backup), snapshot);
+  activation = await verifyWindowsColdActivationIntent({ control, lease, configuration, snapshot });
 } finally {
   const results = await Promise.allSettled([configuration?.close(), lease.close()]);
   const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
   if (errors.length) throw new AggregateError(errors, 'Cold configuration and lease cleanup failed.');
 }
 await assert.rejects(configuration.checkFiles(), /closed/);
+await assert.rejects(activation.check(), /closed/);
 await assert.rejects(lease.retireRuntime(), /closed/);
-console.log('PASS: completed cold file owner retains exact restored configuration across original runtime retirement and preserves all original evidence');
+console.log('PASS: completed cold file owner retains restored configuration across retirement and publishes bound activation intent without changing original state or task');

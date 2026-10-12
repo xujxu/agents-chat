@@ -13915,6 +13915,33 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EB: Persist original-owner cold activation intent before task mutation
+
+**Scope:** follow the existing Linux write-ahead activation pattern, while
+preserving Windows' native generation format and original stopped proof.
+Preparing activation must not update root state, change task policy, start
+the application or publish terminal success.
+
+- [ ] Require this lease's completed-file receipt, acknowledged original
+  runtime retirement and its genuine retained restored configuration.
+  Reject a copied configuration object, a closed guard and pre-cancellation
+  before mutation. Never trust caller-mutated snapshot fields.
+- [ ] Publish a private `recovery-lock/activation-intent.json` binding exact
+  owner/completed-file receipt hashes, original state/snapshot/backup and the
+  fresh runtime bundle. Store the `restore-activating` state in the intent,
+  not root state. Reopen retained proof and verify acknowledged publication.
+- [ ] Consume original file-restoration/retirement authority after preparation;
+  return only a read-only intent check for this step. Preserve caller-owned
+  configuration handles. Uncertain publication poisons the current lease.
+- [ ] Admit and discard an unused predecessor intent only after the original
+  stopped/absent runtime proof independently confirms unchanged disabled task
+  policy, zero writers and dead predecessor. Do not adopt an intent after task
+  replacement or activation through this original-policy path.
+- [ ] Exercise genuine native publication, immutable evidence, preconditions,
+  original-state preservation and subsequent distinct-owner takeover in
+  Actions after the configuration gate. Guarded startup and recovery of
+  changed-task prefixes remain separate, unaccepted work.
+
 ### Task 5EA: Retain the restored Windows configuration before cold activation
 
 **Scope:** a completed-file receipt alone does not prevent configuration drift
