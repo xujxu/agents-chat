@@ -122,3 +122,103 @@ test('Windows cold activation binds original owner and file-completion bytes wit
     ...receipt, bytes: Buffer.concat([receipt.bytes, Buffer.from('\n')]),
   }, source.targetCommit).filesReceiptSha256, expected.filesReceiptSha256);
 });
+
+const coldHistoryFixture = () => {
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  const source = {
+    ...record('running'), project: 'C:\\application',
+    snapshotSha256: 'c'.repeat(64), stateSha256: 'd'.repeat(64),
+    state: { sourceCommit: 'a'.repeat(40), priorRuntime: 'running',
+      runtimeIdentity: '12345678-1234-1234-1234-123456789abc' },
+  };
+  const runtimeBundle = { directory: 'C:\\control\\runtime-new',
+    configuration: 'C:\\control\\runtime-new\\configuration.json', sha256: 'e'.repeat(64) };
+  const intent = createWindowsColdActivationIntent(source, Buffer.from(JSON.stringify(source)), {
+    record: { runtimeBundle }, bytes: Buffer.from(JSON.stringify({ runtimeBundle })),
+  }, source.targetCommit);
+  const intentBytes = Buffer.from(JSON.stringify(intent));
+  const runtime = {
+    pid: 33, identity: '33:1234', generation: '22345678-1234-1234-1234-123456789abc',
+    instanceGuid: '32345678-1234-1234-1234-123456789abc', sessionId: 0,
+    configurationSha256: runtimeBundle.sha256, launcherPid: 34, readySha256: 'f'.repeat(64),
+  };
+  const common = {
+    version: 1, operationId: intent.operationId, ownerSha256: intent.ownerSha256,
+    filesReceiptSha256: intent.filesReceiptSha256, intentSha256: digest(intentBytes),
+    controllerPid: 22, controllerIdentity: '22:1234', taskName: 'fixture-task',
+    definition: '<Task />', securityDescriptor: 'O:SYG:SYD:P(A;;FA;;;SY)',
+    configuration: runtimeBundle.configuration, configurationSha256: runtimeBundle.sha256,
+  };
+  const encode = entries => {
+    let previousSha256 = digest(intentBytes);
+    return entries.map(entry => {
+      const bytes = Buffer.from(`${JSON.stringify({ ...common, previousSha256, ...entry })}\n`);
+      previousSha256 = digest(bytes);
+      return bytes;
+    });
+  };
+  return { intent, intentBytes, runtime, taskName: common.taskName, encode };
+};
+
+test('Windows cold journal captures exact requested, running and stopped prefixes without mutation authority', async () => {
+  const { captureWindowsColdActivationHistory } = await import('../scripts/deployment/windows-cold-activation-history.mjs');
+  const fixture = coldHistoryFixture();
+  const requested = { phase: 'start-requested', runtime: null };
+  const running = { phase: 'running', runtime: fixture.runtime };
+  for (const entries of [
+    [requested], [requested, running], [requested, { phase: 'stopped', runtime: null }],
+    [requested, { phase: 'stopped', runtime: fixture.runtime }],
+    [requested, running, { phase: 'stopped', runtime: fixture.runtime }],
+  ]) {
+    const records = fixture.encode(entries);
+    const captured = captureWindowsColdActivationHistory({ ...fixture, records });
+    assert.equal(captured.mutationAuthority, false);
+    assert.equal(captured.phase, entries.at(-1).phase);
+    assert.equal(captured.controllerPid, 22);
+    assert.equal(captured.controllerIdentity, '22:1234');
+    assert.deepEqual(captured.runtime, entries.at(-1).runtime);
+    assert.equal(captured.sha256, createHash('sha256').update(records.at(-1)).digest('hex'));
+    assert.equal(captured.records.length, entries.length);
+    assert.ok(Object.isFrozen(captured) && Object.isFrozen(captured.records));
+    assert.ok(captured.records.every(Object.isFrozen));
+    if (captured.runtime) assert.ok(Object.isFrozen(captured.runtime));
+  }
+});
+
+test('Windows cold journal refuses altered owners, chain, task, runtime and unsupported prefixes', async () => {
+  const { captureWindowsColdActivationHistory } = await import('../scripts/deployment/windows-cold-activation-history.mjs');
+  const fixture = coldHistoryFixture();
+  const requested = { phase: 'start-requested', runtime: null };
+  const running = { phase: 'running', runtime: fixture.runtime };
+  const stopped = { phase: 'stopped', runtime: fixture.runtime };
+  const capture = entries => captureWindowsColdActivationHistory({ ...fixture, records: fixture.encode(entries) });
+  for (const changed of [
+    { version: 2 }, { operationId: 'another-operation' }, { ownerSha256: '0'.repeat(64) },
+    { filesReceiptSha256: '0'.repeat(64) }, { intentSha256: '0'.repeat(64) },
+    { previousSha256: '0'.repeat(64) }, { controllerPid: 23, controllerIdentity: '23:1234' },
+    { controllerIdentity: '22:5678' }, { taskName: 'another-task' },
+    { configuration: 'C:\\foreign\\configuration.json' }, { configurationSha256: '0'.repeat(64) },
+    { definition: '' }, { securityDescriptor: 'foreign' }, { runtime: null }, { unknown: true },
+    { runtime: { ...fixture.runtime, generation: fixture.intent.state.runtimeIdentity } },
+    { runtime: { ...fixture.runtime, configurationSha256: '0'.repeat(64) } },
+    { runtime: { ...fixture.runtime, pid: 22, identity: '22:1234' } },
+  ]) assert.throws(() => capture([requested, { ...running, ...changed }]));
+  for (const entries of [
+    [], [running], [stopped], [requested, requested], [requested, running, running],
+    [requested, stopped, running], [requested, running, stopped, stopped],
+    [{ ...requested, runtime: fixture.runtime }],
+    [{ ...requested, controllerPid: 0, controllerIdentity: '0:1234' }],
+    [{ ...requested, controllerIdentity: '22:0' }],
+    [requested, running, { ...stopped, runtime: null }],
+    [requested, running, { ...stopped, runtime: { ...fixture.runtime, readySha256: '0'.repeat(64) } }],
+  ]) assert.throws(() => capture(entries));
+  const records = fixture.encode([requested, running]);
+  records[0] = Buffer.concat([records[0], Buffer.from('\n')]);
+  assert.throws(() => captureWindowsColdActivationHistory({ ...fixture, records }));
+  assert.throws(() => captureWindowsColdActivationHistory({
+    ...fixture, intentBytes: Buffer.from('{}'), records: fixture.encode([requested]),
+  }));
+  for (const bytes of [Buffer.from([0xff]), Buffer.from('{'), Buffer.alloc(4194305), '{}']) {
+    assert.throws(() => captureWindowsColdActivationHistory({ ...fixture, records: [bytes] }));
+  }
+});

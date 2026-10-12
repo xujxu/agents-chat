@@ -617,9 +617,12 @@ state, lock, backup and restored data. Native write-ahead activation intent and
 unused-intent takeover passed at `8510f67 / 38210972185`. Native guarded cold
 startup and owned shutdown subsequently passed at `45b150d / 38215561820`,
 including an exited entry process whose descendants remain in the original Job.
-This does not claim actual application readiness or completed cold restore;
-HTTP acceptance, changed-task interruption recovery and terminal closeout
-remain separate gates.
+Native owned-listener/HTTP acceptance passed at `1c5a72d / 38217437905`,
+including provider mismatch refusal and transient HTTP503 retry. Actual
+configuration retention across old-host retirement passed at
+`8510f67 / 38210974436`. This does not claim actual application readiness or
+completed cold restore; actual startup, changed-task interruption recovery
+and terminal closeout remain separate gates.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

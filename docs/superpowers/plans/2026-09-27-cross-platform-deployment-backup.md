@@ -13915,6 +13915,63 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EF: Capture the original cold activation journal before takeover
+
+**Goal:** introduce one bounded, non-authoritative decoder for the existing
+`start-requested`, `running` and `stopped` receipts. Use it immediately at the
+current live bridge's start/close acknowledgements, then reuse it for independent
+interruption admission. Decoding a journal must never grant mutation authority
+or make the original-policy cold claim accept a changed task.
+
+**Files:** add `scripts/deployment/windows-cold-activation-history.mjs`;
+extend `scripts/deployment/windows-cold-activation.mjs` and
+`tests/deployment-cold-activation-state.test.mjs`.
+
+- [ ] Add causal unit contracts to the existing activation-state suite. Accept
+  only requested, requested/running, requested/stopped and
+  requested/running/stopped histories; a stopped receipt without a running
+  receipt may carry an already captured runtime. Reject reordered/extra
+  phases, altered byte digests, unknown fields, foreign owner/task/bundle,
+  changed controllers, reused original generation and changed final runtime.
+  The exact test entry point is:
+
+  ```js
+  const { captureWindowsColdActivationHistory } =
+    await import('../scripts/deployment/windows-cold-activation-history.mjs');
+  const captured = captureWindowsColdActivationHistory({
+    intent, intentBytes, records, taskName,
+  });
+  assert.equal(captured.mutationAuthority, false);
+  ```
+
+- [ ] Implement the decoder with fatal UTF-8, strict record fields, at most
+  three records and the existing native four-MiB evidence budget. Chain each
+  digest over the original bytes, never reserialized JSON. Bind every record
+  to the already admitted intent and one native bridge identity. Reuse
+  `captureActivatedRuntime`, return frozen copies, and leave XML policy
+  equivalence and actual process/Job observation to native authority.
+- [ ] At successful start and clean close, read the original private receipt
+  bytes under the still-held named admission. Require the matching running/
+  stopped phase, bridge identity, exact returned runtime and final native
+  definition/security. A failed acknowledgement remains uncertain; do not
+  downgrade it to success or delete any recovery evidence.
+- [ ] Push causal tests and dispatch the existing native command gate, then
+  push implementation and dispatch its pair after the causal is in progress.
+  The exact command remains:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup \
+    -f windows_application_only=true -f windows_live_only=true \
+    -f windows_commands_only=true
+  ```
+
+  Expected causal boundary: missing `windows-cold-activation-history.mjs`.
+  Expected paired outcome: unit contracts plus genuine native startup,
+  readiness and owned close pass. This task does not yet normalize an
+  interrupted task, replace ownership, release a runtime lease or complete
+  public cold restoration.
+
 ### Task 5EE: Exercise cold guarded startup against the restored application
 
 **Scope:** extend the existing actual copy-crash actor after the native
@@ -13933,6 +13990,9 @@ the live database to remain byte-identical.
   security and no automatic triggers. Do not report terminal restoration.
 - [ ] Run the existing actual crash pair after native readiness acceptance.
   Do not add workflow jobs, inputs or increase actor/workflow timeouts.
+  Implementation tests `7a9140c` were dispatched at `dfd2ad0 / 38220610437`
+  after native readiness acceptance: copy-crash job `114715682138` and
+  original crash regression `114715682436`.
 
 ### Task 5ED: Verify the guarded cold runtime's owned HTTP readiness
 
@@ -13942,14 +14002,14 @@ against the private admitted configuration. Reuse existing native listener
 retention and `waitWindowsReadiness`; do not infer readiness from process
 liveness, an open foreign port or caller-supplied providers.
 
-- [ ] Add bounded listener requests to the genuine cold bridge, preserving
+- [x] Add bounded listener requests to the genuine cold bridge, preserving
   task/generation/controller/configuration checks. Retain one exact native
   listener identity and release its observer before stopping the owned Job.
-- [ ] Expose `activation.waitReady` only after startup, with an explicit valid
+- [x] Expose `activation.waitReady` only after startup, with an explicit valid
   port, positive bounded wait and early pre-cancellation. Use the private
   configuration providers and recheck native/configuration authority after
   HTTP verification.
-- [ ] Extend the existing stopped-proof fixture with its existing owned HTTP
+- [x] Extend the existing stopped-proof fixture with its existing owned HTTP
   descendant fixture in the project snapshot. Verify wrong-provider refusal,
   transient HTTP503 retry, unchanged activation state, and clean listener/Job
   shutdown. Keep the existing command and application timeouts.
@@ -13962,6 +14022,8 @@ liveness, an open foreign port or caller-supplied providers.
   on missing `activation.waitReady`, after the owned HTTP fixture and guarded
   startup. Production `1c5a72d` is paired in `38217437905`, job
   `114709653981`, queued only after the causal became in progress.
+  The pair passed at `2026-10-12 07:56:08 UTC`: owned HTTP/guarded shutdown
+  completed at07:52:21 and original terminal proof at07:55:54.
 
 ### Task 5EC: Start and settle a distinct guarded runtime under cold ownership
 
