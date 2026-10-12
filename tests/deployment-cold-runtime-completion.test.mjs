@@ -10,6 +10,16 @@ import * as completion from '../scripts/deployment/windows-cold-runtime-completi
 import { inspectWindowsColdRuntimeCompletion } from '../scripts/deployment/windows-cold-activation-recovery.mjs';
 import * as recovery from '../scripts/deployment/windows-cold-activation-recovery.mjs';
 
+test('cold terminal handoff requires explicit acknowledgement and honors pre-abort', async () => {
+  assert.equal(typeof recovery.prepareWindowsColdTerminalRestore, 'function');
+  await assert.rejects(recovery.prepareWindowsColdTerminalRestore(), /data-loss acknowledgement/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(recovery.prepareWindowsColdTerminalRestore({
+    acceptDataLoss: true, signal: controller.signal,
+  }), { name: 'AbortError' });
+});
+
 test('cold released-prefix recovery requires acknowledgement and validates abort before admission', async () => {
   assert.equal(typeof recovery.prepareWindowsColdCompletionRecovery, 'function');
   await assert.rejects(recovery.prepareWindowsColdCompletionRecovery(), /data-loss acknowledgement/);

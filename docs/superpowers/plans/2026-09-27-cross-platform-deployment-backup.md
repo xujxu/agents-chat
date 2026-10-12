@@ -13915,6 +13915,71 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5ET: Prepare the cold terminal handoff before replacing root state
+
+**Files:** add `scripts/deployment/windows-cold-terminal-intent.{mjs,ps1}`;
+extend the completed-recovery facade/bridge and saved helper closure.
+Add `tests/deployment-windows-cold-terminal.mjs` to both existing native cases;
+extend `tests/deployment-cold-runtime-completion.test.mjs`.
+
+The existing cold proof retains `state.json` and requires its original
+`restoring`/`recovery-required` bytes. Writing `restored` first would destroy
+reentry authority. Follow the accepted Linux cold completion pattern: prepare
+a durable handoff while the complete native proof is still held, then let
+subsequent publication/retirement consume that exact handoff. This task only
+prepares the handoff; it does not publish state, replace the deployment receipt,
+delete evidence or unlock.
+
+- [ ] Add early acknowledgement/cancellation and native reentry contracts:
+
+  ```js
+  const prepared = await recovery.prepareWindowsColdTerminalRestore({
+    control, pwsh, acceptDataLoss: true,
+  });
+  assert.equal(prepared.status, 'cold-terminal-prepared');
+  assert.equal(prepared.record.oldState, state.toString('utf8'));
+  assert.deepEqual(await recovery.prepareWindowsColdTerminalRestore({
+    control, pwsh, acceptDataLoss: true,
+  }), prepared);
+  ```
+
+  Require unchanged state/lock/journal, live original released runtime, immutable
+  result and identical terminal marker bytes/inode on reentry, first within the
+  same actor and then from a new actor. Run the native command selector test-only
+  to confirm the new export is missing.
+- [ ] Admit preparation only from the exact complete nine-record chain under
+  the accepted native exclusive original-transaction authority. Publish
+  `cold-restore-terminal.json` using the existing no-overwrite native primitive.
+  Bind original owner/file/intent/history/completion hashes, runtime and HTTP
+  scope, root/lock/recovery directory identities, original state/lock/transaction
+  file descriptors, exact old state text and proposed next state text.
+  Derive next state from the original activation intent, changing only:
+
+  ```js
+  { ...intent.state, phase: 'restored', previousPhase: 'restore-activating', updatedAt }
+  ```
+
+  Validate the canonical timestamp without backdating it before original state
+  or activation intent. Retain creator Node/native identities. Existing markers
+  must match every binding and proposed state; never overwrite one or refresh
+  its timestamp. Require previous creators absent except the exact current Node
+  owner; a previous native bridge must still be absent.
+- [ ] Independently decode the saved marker in Node on every acknowledgement.
+  Require exact schema, bounded private bytes, all original digests/identities,
+  original state text, permitted next-state transformation and valid creator.
+  Reject unknown fields or invented terminal success. Add the new helpers to
+  saved recovery closure and run the unchanged native command selector:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  ```
+
+  Future root-state/deployment-receipt publication and ordered evidence/lock
+  retirement remain explicitly unaccepted until their own interrupted reentry
+  and actual application gates pass.
+
 ### Task 5ES: Accept interrupted completion recovery with the actual Windows application
 
 **Files:** `tests/deployment-windows-cold-application-files.mjs`,

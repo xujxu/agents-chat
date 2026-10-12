@@ -62,6 +62,11 @@ try {
     & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-completion-proof.mjs') `
         $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
     if ($LASTEXITCODE -ne 0) { throw 'Independent cold completion observation failed.' }
+    foreach ($attempt in @(1, 2)) {
+        & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-terminal.mjs') `
+            $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+        if ($LASTEXITCODE -ne 0) { throw 'Cold terminal handoff or independent reentry failed.' }
+    }
 } finally {
     if ($owner) {
         try {
