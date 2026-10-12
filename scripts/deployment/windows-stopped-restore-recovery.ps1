@@ -45,8 +45,12 @@ function Open-AgentsChatStoppedRestoreRecoveryFiles([hashtable]$Context) {
                     }
                     if ($Context.PolicyRecovery) {
                         $policy = @($entries | Where-Object { $_.Name -cmatch '^policy-[0-9]{6}\.json$' })
-                        if ($policy.Count -gt 256 -or
-                            ($policy | Measure-Object -Property Length -Sum).Sum -gt 16777216) {
+                        $policyBytes = 0
+                        foreach ($entry in $policy) {
+                            if ($entry.PSIsContainer) { throw 'Cold policy recovery record is not a file.' }
+                            $policyBytes += $entry.Length
+                        }
+                        if ($policy.Count -gt 256 -or $policyBytes -gt 16777216) {
                             throw 'Cold policy recovery exceeds its retained journal budget.'
                         }
                         $expected = @($expected + @($policy | ForEach-Object Name) | Sort-Object)
