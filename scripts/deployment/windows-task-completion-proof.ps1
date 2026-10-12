@@ -39,7 +39,8 @@ function Assert-AgentsChatCompletionControllers([hashtable]$Context) {
     Assert-AgentsChatCompletionProcessAbsent $admission.ownerPid.GetInt32() $admission.ownerIdentity.GetString()
 }
 
-function Open-AgentsChatCompletionBundle([hashtable]$Context, [string]$Configuration, [string]$Sha256, [hashtable]$Runtime) {
+function Open-AgentsChatCompletionBundle([hashtable]$Context, [string]$Configuration, [string]$Sha256, [hashtable]$Runtime,
+    [switch]$RetainSession) {
     $bundle = [IO.Path]::GetDirectoryName($Configuration)
     $hostFiles = [Deployment.WindowsRuntimeHost]::Open($Configuration, $Sha256, $bundle)
     $Context.Files.Add($hostFiles)
@@ -63,6 +64,7 @@ function Open-AgentsChatCompletionBundle([hashtable]$Context, [string]$Configura
     }
     if ($Runtime.ContainsKey('sessionId') -and ($fields.sessionId.GetInt32() -ne $Runtime.sessionId -or
         $fields.launcherPid.GetInt32() -ne $Runtime.launcherPid)) { throw 'Completed runtime readiness differs.' }
+    if ($RetainSession) { $Context.RuntimeSessionId = $fields.sessionId.GetInt32() }
 }
 
 function Close-AgentsChatTaskCompletionProof {

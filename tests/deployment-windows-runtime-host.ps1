@@ -187,6 +187,16 @@ if (process.argv[2] === 'child') {
     Assert ($binding.ownerPid -eq $ready.pid) 'Managed host is not the declared native task owner'
     $member = [Diagnostics.Process]::GetProcessById([int](Get-Content -LiteralPath (Join-Path $project 'writer-pid') -Raw))
     $null = $member.Handle
+    if ($StoppedProof) {
+        $refused = $false
+        try { [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$ready.generation, $owner.SessionId) }
+        catch {
+            if ($_.Exception.GetBaseException().Message -cne 'Original runtime Job still retains writers.') { throw }
+            $refused = $true
+        }
+        Assert $refused 'Native empty-Job proof accepted the live original writer'
+        Assert (-not $member.HasExited) 'Read-only Job proof stopped the original writer'
+    }
     $literal = Get-Content -LiteralPath (Join-Path $project 'literal.json') -Raw | ConvertFrom-Json
     Assert ($literal.Count -eq 2 -and $literal[0] -ceq 'literal %n $HOME " space' -and
         $literal[1] -ceq $literal[0]) 'Installed command reinterpreted literal argv or environment'
