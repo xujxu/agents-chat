@@ -13943,6 +13943,14 @@ security comparison for the small configuration subset.
 - [ ] Run the native gate in Actions. Keep existing live/first configuration
   authority checks and signatures unchanged; no public cold activation is
   enabled by this step.
+  Causal `8b82218 / 38208777933`, job `114678062819`, and implementation
+  `684acbc / 38209032489` are not yet accepted.
+- [ ] Extend the existing actual copy-crash actor to retain snapshot-bound
+  startup configuration before original-runtime retirement, check it after
+  retirement and after final artifact/data/evidence verification, and close
+  configuration and lease with explicit aggregated cleanup failures. Run
+  only after native configuration acceptance; do not count the earlier
+  actual retirement run as configuration-retention evidence.
 
 ### Task 5DZ: Accept cold-owned retirement of the actual application runtime
 

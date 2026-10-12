@@ -29,6 +29,7 @@ export async function verifyWindowsColdApplicationFiles({ directory, project, co
     control, project, backup, node: process.execPath, pwsh,
     profile: 'agents-chat-auth-638c553', acceptDataLoss: true,
   });
+  let configuration;
   try {
     const restored = await restoreWindowsColdFiles({
       control, lease, acceptDataLoss: true,
@@ -42,9 +43,13 @@ export async function verifyWindowsColdApplicationFiles({ directory, project, co
       [...bundles, `runtime-${lease.owner.operationId}`].sort());
     const ownerBytes = await readFile(path.join(control, 'recovery-lock/owner.json'));
     const filesReceipt = await readFile(path.join(control, 'recovery-lock/files-restored.json'));
+    process.stderr.write(`${new Date().toISOString()} Actual cold file restoration: retaining snapshot-bound startup configuration\n`);
+    configuration = await lease.inspectRestoredConfiguration();
+    assert.deepEqual(configuration.providers, lease.providers);
     process.stderr.write(`${new Date().toISOString()} Actual cold file restoration: retiring original stopped runtime\n`);
     const retired = await lease.retireRuntime();
     assert.deepEqual(retired, { retired: true, inhibited: true, operationId: lease.owner.operationId });
+    await configuration.checkFiles();
     await assertWindowsRestoredProjectBytes(project, backup);
     assert.ok(snapshot.entries.some(entry => entry.path === '.data/chats.db' && entry.kind === 'file'));
     assert.deepEqual(await readFile(path.join(project, '.data/chats.db')),
@@ -66,6 +71,11 @@ export async function verifyWindowsColdApplicationFiles({ directory, project, co
     assert.deepEqual(await readFile(path.join(control, 'recovery-lock/owner.json')), ownerBytes);
     assert.deepEqual(await readFile(path.join(control, 'recovery-lock/files-restored.json')), filesReceipt);
     await lease.checkStopped();
+    await configuration.checkFiles();
     return { status: 'files-restored', retired: true, operationId: lease.owner.operationId, runtime: proof.runtime };
-  } finally { await lease.close(); }
+  } finally {
+    const results = await Promise.allSettled([configuration?.close(), lease.close()]);
+    const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+    if (errors.length) throw new AggregateError(errors, 'Actual cold configuration and lease cleanup failed.');
+  }
 }
