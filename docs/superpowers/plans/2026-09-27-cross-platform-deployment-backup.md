@@ -13915,6 +13915,55 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DT: Bind stopped restore evidence to the original complete backup
+
+**Scope:** read-only cold admission, not a recovery lease. Reuse the retained
+native stopped proof under its caller-owned named admission. Bind the original
+state's backup ID/target commit, complete Windows snapshot, saved recovery
+engine, archived task policy, runtime executable and authentication providers.
+Never inspect possibly half-restored project dotenv files as the backup's
+configuration, never impersonate the original lock owner, and keep the public
+cold route refused until mutation/activation/closeout are implemented.
+
+**Files:** add `scripts/deployment/windows-stopped-restore-snapshot.mjs`;
+share the read-only native comparison in `windows-restore-task-policy.mjs`
+between the existing live-scope entry and a stopped-proof entry. Add
+`tests/deployment-windows-stopped-restore-snapshot.mjs`; extend only the
+opted-in stopped-proof transaction/controller fixtures.
+
+- [ ] Create the full native snapshot with existing `createSnapshot`,
+  `inspectSnapshotScope` and `saveRecoveryEngine` while the original fixture
+  owns a stopped task. The initial restoring state records its predetermined
+  backup ID, so no history bytes are rewritten to make admission pass.
+- [ ] Run the native command gate with the new test before implementation:
+  ```js
+  const observed = await inspectWindowsStoppedRestoreSnapshot({
+    control, project, backup, node: process.execPath, pwsh, admission, proof,
+    profile: 'agents-chat-auth-638c553',
+  });
+  assert.equal(observed.mutationAuthority, false);
+  assert.equal(observed.snapshot.id, state.backupId);
+  assert.equal(observed.snapshot.source.commit, state.targetCommit);
+  assert.equal(observed.recovery.manifestSha256, observed.snapshot.recoveryEngine);
+  await observed.check();
+  ```
+  Require forged-proof/admission, foreign project/backup/Node, unsupported
+  profile, cancellation, changed backup and closed original proof refusal.
+- [ ] Implement read-only snapshot binding. Check native proof before reading
+  original state/admission and again after all archived checks; match its state
+  SHA and operation. Share policy comparison without weakening the live scope
+  check. Compare archived policy with the original pre-inhibition admission,
+  not the intentionally disabled current task. Authorize only archived runtime
+  external paths; return no mutation authority.
+- [ ] Run the same native gate through Actions, including original terminal
+  restored proof regression. Record the causal and fixed runs before further
+  recovery-lease implementation:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  ```
+
 ### Task 5DS: Retain the original restore's empty worker domain
 
 **Scope:** an empty application Job is not sufficient evidence that deployment

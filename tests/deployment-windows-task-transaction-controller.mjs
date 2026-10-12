@@ -26,6 +26,7 @@ console.log(JSON.stringify({ pid: process.pid, identity: lock.processIdentity, o
 let admission = await receive();
 let sourceFixture;
 let workerOperation;
+let stoppedRecovery;
 if (admission.sourceBuild) {
   const { createWindowsSourceFixture } = await import('./deployment-windows-source-build.mjs');
   sourceFixture = await createWindowsSourceFixture({ project, control, lock, pwsh, tools: admission.sourceBuild });
@@ -35,7 +36,8 @@ const makeState = generation => ({
   phase: operation === 'restore' ? 'restore-preflight' : 'preflight',
   previousPhase: null, sourceCommit: sourceFixture?.beforeCommit ?? 'a'.repeat(40),
   targetCommit: sourceFixture?.targetCommit ?? 'b'.repeat(40),
-  backupId: null, priorRuntime: 'running', runtimeIdentity: generation,
+  backupId: proofMode === 'stopped-proof' ? `stopped-${lock.operationId}` : null,
+  priorRuntime: 'running', runtimeIdentity: generation,
   startedAt: lock.createdAt, updatedAt: new Date().toISOString(), errorCode: null,
 });
 let state;
@@ -58,6 +60,7 @@ if (proofMode === 'stopped-proof') {
   const source = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
   const saved = await saveWorkerEngine({ source, control, project, operationId: lock.operationId });
   workerOperation = await createWorkerOperation({ control, lock, saved });
+  stoppedRecovery = await saveRecoveryEngine({ source, control });
 }
 const options = { ...admission, pwsh, control, lock };
 await assert.rejects(stopWindowsTaskTransaction(options));
@@ -102,6 +105,10 @@ for (const phase of ['intent', 'inhibited', 'stop-requested', 'stopped']) {
   assert.equal(receipt.transactionSha256, hash(evidenceBytes));
 }
 await context.check();
+if (proofMode === 'stopped-proof') {
+  const { captureStoppedRestoreSnapshot } = await import('./deployment-windows-stopped-restore-snapshot.mjs');
+  await captureStoppedRestoreSnapshot({ control, project, state, recovery: stoppedRecovery, pwsh, context });
+}
 await assert.rejects(writeFile(path.join(control, 'lock', 'owner.json'), 'changed'));
 await context.check();
 await sourceFixture?.refuseSnapshot(context);

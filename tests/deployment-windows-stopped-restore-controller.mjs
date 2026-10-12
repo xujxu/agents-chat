@@ -3,6 +3,7 @@ import { acquireWindowsAdmission } from '../scripts/deployment/windows-admission
 import {
   assertWindowsStoppedRestoreProof, openWindowsStoppedRestoreProof,
 } from '../scripts/deployment/windows-stopped-restore-proof.mjs';
+import { verifyStoppedRestoreSnapshot } from './deployment-windows-stopped-restore-snapshot.mjs';
 
 const [control, pwsh, taskName, operationId] = process.argv.slice(2);
 const admission = await acquireWindowsAdmission({ control, pwsh });
@@ -22,6 +23,7 @@ try {
   await assert.rejects(assertWindowsStoppedRestoreProof(control, { ...proof }, admission));
   await assert.rejects(assertWindowsStoppedRestoreProof(control, proof, {}));
   await assert.rejects(assertWindowsStoppedRestoreProof(`${control}-foreign`, proof, admission));
+  await verifyStoppedRestoreSnapshot({ control, pwsh, admission, proof });
   await proof.close();
   await proof.close();
   await assert.rejects(proof.check(), { code: 'DEPLOYMENT_WINDOWS_STOPPED_RESTORE_PROOF_REFUSED' });
