@@ -37,9 +37,9 @@ export async function assertWindowsStoppedRestoreProof(control, proof, admission
   return proof.check(options);
 }
 
-export async function openWindowsStoppedRestoreProof({ control, pwsh, admission, signal }) {
+export async function openWindowsStoppedRestoreProof({ control, pwsh, admission, signal, recovery = false }) {
   signal?.throwIfAborted();
-  if (process.platform !== 'win32' || ![control, pwsh].every(value =>
+  if (process.platform !== 'win32' || typeof recovery !== 'boolean' || ![control, pwsh].every(value =>
     typeof value === 'string' && value.length <= 4096 && path.isAbsolute(value)
     && path.resolve(value) === value && !/[\0\r\n]/.test(value))) {
     throw refused(new Error('Canonical native Windows control and PowerShell paths are required.'));
@@ -51,7 +51,7 @@ export async function openWindowsStoppedRestoreProof({ control, pwsh, admission,
   const { child, wire, waitForExit, abandon } = windowsControllerTransport({
     pwsh, refused, label: 'Native stopped restore proof controller',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
-      '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
+      '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity, ...(recovery ? ['-Recovery'] : [])],
   });
   let closed = false;
   let busy = false;

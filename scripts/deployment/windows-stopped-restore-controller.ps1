@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory)][string]$Control,
     [Parameter(Mandatory)][int]$ControllerPid,
-    [Parameter(Mandatory)][string]$ControllerIdentity
+    [Parameter(Mandatory)][string]$ControllerIdentity,
+    [switch]$Recovery
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -19,7 +20,7 @@ try {
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'proof-open'
-    $proof = Open-AgentsChatStoppedRestoreProof -Control $Control
+    $proof = Open-AgentsChatStoppedRestoreProof -Control $Control -Recovery:$Recovery
     $observed = Assert-AgentsChatStoppedRestoreProof $proof
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)

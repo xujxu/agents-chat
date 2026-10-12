@@ -1,15 +1,20 @@
 . (Join-Path $PSScriptRoot 'windows-task-completion-proof.ps1')
 . (Join-Path $PSScriptRoot 'windows-stopped-restore-workers.ps1')
+. (Join-Path $PSScriptRoot 'windows-stopped-restore-recovery.ps1')
 
 function Assert-AgentsChatStoppedRestoreInventory([hashtable]$Context) {
     $Context.Stage = 'inventory'
-    Assert-AgentsChatCompletionInventory $Context
+    Assert-AgentsChatCompletionInventory $Context -AllowRecovery:$Context.Recovery
+    if (-not $Context.Recovery -and (Test-Path -LiteralPath (Join-Path $Context.Control 'cold-restore-staging'))) {
+        throw 'Stopped restore conflicts with staged recovery authority.'
+    }
     foreach ($name in @('task-retirement.json', 'task-retirement-checkpoint.json', 'worker-retirement.json')) {
         if (Test-Path -LiteralPath (Join-Path $Context.Control $name)) {
             throw 'Stopped restore conflicts with existing retirement authority.'
         }
     }
     if ($Context.ContainsKey('WorkerNames')) { Assert-AgentsChatStoppedRestoreWorkerInventory $Context }
+    if ($Context.ContainsKey('RecoveryNames')) { Assert-AgentsChatStoppedRestoreRecoveryInventory $Context }
 }
 
 function Assert-AgentsChatStoppedRestoreOwnerAbsent([hashtable]$Context) {
@@ -103,13 +108,14 @@ function Assert-AgentsChatStoppedRestoreProof([hashtable]$Context) {
 
 function Open-AgentsChatStoppedRestoreProof {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Control)
+    param([Parameter(Mandatory)][string]$Control, [switch]$Recovery)
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
     $context = @{
         Control=$Control; Directory=(Join-Path $Control 'task-maintenance')
         Files=[Collections.Generic.List[IDisposable]]::new()
         Closed=$false; Poisoned=$false; Busy=$false; Owner=$null; Instance=$null; Folder=$null; Stage='directories'
+        Recovery=[bool]$Recovery
     }
     try {
         if ($PSVersionTable.PSVersion.Major -lt 7 -or -not $IsWindows -or
@@ -125,6 +131,7 @@ function Open-AgentsChatStoppedRestoreProof {
         Assert-AgentsChatStoppedRestoreOwnerAbsent $context
         Read-AgentsChatStoppedRestoreState $context
         Open-AgentsChatStoppedRestoreWorkers $context
+        if ($Recovery) { Open-AgentsChatStoppedRestoreRecoveryFiles $context }
         $admission = $context.Admission
         $context.Stage = 'runtime-bundle'
         Open-AgentsChatCompletionBundle $context $admission.configuration.GetString() $admission.configurationSha256.GetString() @{

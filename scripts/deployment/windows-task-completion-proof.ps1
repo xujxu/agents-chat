@@ -16,9 +16,11 @@ function Assert-AgentsChatCompletionProcessAbsent([int]$ProcessId, [string]$Iden
     } finally { if ($process) { $process.Dispose() } }
 }
 
-function Assert-AgentsChatCompletionInventory([hashtable]$Context) {
+function Assert-AgentsChatCompletionInventory([hashtable]$Context, [switch]$AllowRecovery) {
     $Context.Stage = 'inventory'
-    if (Test-Path -LiteralPath (Join-Path $Context.Control 'recovery-lock')) { throw 'Exclusive recovery authority exists.' }
+    if (-not $AllowRecovery -and (Test-Path -LiteralPath (Join-Path $Context.Control 'recovery-lock'))) {
+        throw 'Exclusive recovery authority exists.'
+    }
     $expected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $null = $expected.Add('admission.json')
     $null = $expected.Add('transaction.json')
