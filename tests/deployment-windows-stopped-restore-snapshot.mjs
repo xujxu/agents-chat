@@ -30,6 +30,7 @@ export async function captureStoppedRestoreSnapshot({ control, project, state, r
   });
   assert.equal(snapshot.id, state.backupId);
   assert.deepEqual(await verifySnapshot(path.join(control, 'backup')), snapshot);
+  await writeFile(path.join(project, '.env.local'), 'interrupted restore: invalid dotenv $value\n');
 }
 
 export async function verifyStoppedRestoreSnapshot({ control, pwsh, admission, proof }) {
@@ -50,6 +51,31 @@ export async function verifyStoppedRestoreSnapshot({ control, pwsh, admission, p
   assert.deepEqual(observed.authorizedPaths, observed.snapshot.externalFiles.map(file => file.path).sort());
   assert.equal(observed.recovery.manifestSha256, observed.snapshot.recoveryEngine);
   assert.equal(observed.runtime.task.name, proof.observation.taskName);
+  await observed.check();
+  assert.equal(await readFile(path.join(state.project, '.env.local'), 'utf8'),
+    'interrupted restore: invalid dotenv $value\n');
+  const { compareWindowsRestoreTaskPolicy } = await import('../scripts/deployment/windows-restore-task-policy.mjs');
+  const original = JSON.parse(await readFile(path.join(control, 'task-maintenance', 'admission.json'), 'utf8'));
+  for (const change of [
+    { name: `${original.taskName}-foreign` },
+    { securityDescriptor: `${original.securityDescriptor}S:` },
+    { definition: '<invalid' },
+    { definition: observed.runtime.task.definition.replace(/(<Settings>)/, '$1<Enabled>false</Enabled>') },
+  ]) {
+    if (change.definition) assert.notEqual(change.definition, observed.runtime.task.definition);
+    await assert.rejects(compareWindowsRestoreTaskPolicy({
+      original, task: { ...observed.runtime.task, ...change }, pwsh, check: () => proof.check(),
+    }), { code: 'DEPLOYMENT_WINDOWS_RESTORE_POLICY_REFUSED' });
+    await proof.check();
+  }
+  const engineManifest = JSON.parse(await readFile(path.join(observed.recovery.directory, 'manifest.json'), 'utf8'));
+  const helper = path.join(observed.recovery.directory, engineManifest.files[0].name);
+  const helperBytes = await readFile(helper);
+  try {
+    await writeFile(helper, 'throw new Error("changed recovery helper");\n');
+    await assert.rejects(observed.check(), /integrity/);
+    await assert.rejects(inspectWindowsStoppedRestoreSnapshot(options), /integrity/);
+  } finally { await writeFile(helper, helperBytes); }
   await observed.check();
   const manifest = path.join(options.backup, 'manifest.json');
   const bytes = await readFile(manifest);
