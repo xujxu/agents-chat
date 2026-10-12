@@ -13915,6 +13915,27 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DZ: Accept cold-owned retirement of the actual application runtime
+
+**Scope:** extend the existing actual copy-crash cold-file actor, rather than
+copying the complete application a second time or adding another workflow
+input/job. After its completed-file receipt, retire the exact original host.
+No activation, task policy change, application-state update or terminal
+deployment receipt is accepted by this case.
+
+- [ ] Extend `deployment-windows-cold-application-files.mjs` to call the
+  authenticated lease retirement API before its final artifact, native addon,
+  database, external identity, backup and original journal checks. Preserve
+  exact current recovery owner and completed-file receipt bytes.
+- [ ] In the parent PowerShell observer retain the actual original process
+  handle, identity, session and disabled task XML/security before actor start.
+  After actor and descendants settle, require clean old-host exit, zero
+  Scheduler instances, unchanged disabled policy, empty/absent original Job
+  and no application listener.
+- [ ] Run the existing actual crash selector in Actions after native retirement
+  acceptance. Keep the 45-minute actor and existing outer bounds unchanged.
+  Also repeat the original independent after-project crash regression.
+
 ### Task 5DY: Retire the original stopped Windows runtime under cold ownership
 
 **Scope:** after the current cold owner has completed its full file restoration,

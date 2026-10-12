@@ -40,6 +40,11 @@ export async function verifyWindowsColdApplicationFiles({ directory, project, co
     assert.equal(restored.runtimeBundle.directory, path.join(control, `runtime-${lease.owner.operationId}`));
     assert.deepEqual((await readdir(control)).filter(name => name.startsWith('runtime-')).sort(),
       [...bundles, `runtime-${lease.owner.operationId}`].sort());
+    const ownerBytes = await readFile(path.join(control, 'recovery-lock/owner.json'));
+    const filesReceipt = await readFile(path.join(control, 'recovery-lock/files-restored.json'));
+    process.stderr.write(`${new Date().toISOString()} Actual cold file restoration: retiring original stopped runtime\n`);
+    const retired = await lease.retireRuntime();
+    assert.deepEqual(retired, { retired: true, inhibited: true, operationId: lease.owner.operationId });
     await assertWindowsRestoredProjectBytes(project, backup);
     assert.ok(snapshot.entries.some(entry => entry.path === '.data/chats.db' && entry.kind === 'file'));
     assert.deepEqual(await readFile(path.join(project, '.data/chats.db')),
@@ -58,7 +63,9 @@ export async function verifyWindowsColdApplicationFiles({ directory, project, co
     assert.deepEqual(await readFile(path.join(control, 'lock', 'owner.json')), lock);
     assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
     assert.deepEqual(await readFile(path.join(control, 'deployment.json')), receipt);
+    assert.deepEqual(await readFile(path.join(control, 'recovery-lock/owner.json')), ownerBytes);
+    assert.deepEqual(await readFile(path.join(control, 'recovery-lock/files-restored.json')), filesReceipt);
     await lease.checkStopped();
-    return { status: 'files-restored', operationId: lease.owner.operationId, runtime: proof.runtime };
+    return { status: 'files-restored', retired: true, operationId: lease.owner.operationId, runtime: proof.runtime };
   } finally { await lease.close(); }
 }

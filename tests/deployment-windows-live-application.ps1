@@ -26,6 +26,7 @@ $directory = Join-Path $Root 'captured-controller'
 $capture = $null
 $actor = $null
 $egress = $null
+$coldOwner = $null
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 try {
@@ -50,6 +51,15 @@ try {
         Assert ($before.Count -eq 1) 'Live application must have one original task instance'
         $originalPid = $before.Item(1).EnginePID
         $originalInstance = $before.Item(1).InstanceGuid
+        if ($mode -eq 'restore-cold-files') {
+            $coldOwner = [Diagnostics.Process]::GetProcessById([int]$originalPid)
+            $null = $coldOwner.Handle
+            $coldIdentity = [Deployment.WindowsWorkerJob]::ProcessIdentity($coldOwner.Id)
+            $coldSession = $coldOwner.SessionId
+            $coldTask = $scheduler.GetFolder('\').GetTask($TaskName)
+            $coldDefinition = [string]$coldTask.Xml
+            $coldSecurity = [string]$coldTask.GetSecurityDescriptor(7)
+        }
         $actor = [Deployment.WindowsControllerProcess]::Start($Node,
             @((Join-Path $PSScriptRoot 'deployment-windows-live-application.mjs'),
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine), $directory, $environment)
@@ -101,8 +111,24 @@ try {
         $actor = $null
         $capture.Check()
         $after = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
+        if ($mode -eq 'restore-cold-files') {
+            Assert ($result.retired -eq $true -and $result.runtime.pid -eq $originalPid -and
+                $result.runtime.identity -ceq $coldIdentity) 'Cold restoration did not bind original runtime retirement'
+            Assert ($coldOwner.WaitForExit(15000) -and $coldOwner.ExitCode -eq 0) 'Cold original runtime did not retire cleanly'
+            Assert ($after.Count -eq 0) 'Cold retirement retained a Scheduler instance'
+            $coldTask = $scheduler.GetFolder('\').GetTask($TaskName)
+            Assert (-not $coldTask.Enabled -and [string]$coldTask.Xml -ceq $coldDefinition -and
+                [string]$coldTask.GetSecurityDescriptor(7) -ceq $coldSecurity) 'Cold retirement changed original disabled policy'
+            [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$result.runtime.generation, $coldSession)
+            Assert (@(Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq 3010).Count -eq 0) `
+                'Cold retirement retained the application listener'
+            $coldOwner.Dispose()
+            $coldOwner = $null
+            Write-Output "PASS: real Windows cold restoration recovers files and retires only the original stopped host with unchanged backup, state, lock and policy; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            continue
+        }
         Assert ($after.Count -eq 1) 'Live deployment lost the application task'
-        if ($mode -in @('restore-cancelled', 'restore-failed', 'restore-crash-verified', 'restore-cold-files')) {
+        if ($mode -in @('restore-cancelled', 'restore-failed', 'restore-crash-verified')) {
             Assert ($after.Item(1).EnginePID -eq $originalPid -and $after.Item(1).InstanceGuid -ceq $originalInstance -and
                 $result.runtime.pid -eq $originalPid) 'Interrupted restore replaced the original runtime'
             Assert (-not $scheduler.GetFolder('\').GetTask($TaskName).Enabled) 'Interrupted restore enabled restart'
@@ -144,6 +170,7 @@ try {
     try {
         if ($egress) { Disable-WindowsRestoreEgressBlock $egress }
     } finally {
+        if ($coldOwner) { $coldOwner.Dispose() }
         if ($actor) { $actor.Dispose() }
         if ($capture) { $capture.Dispose() }
         $owners = @($scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0) | ForEach-Object {
