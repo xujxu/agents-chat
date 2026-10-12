@@ -200,7 +200,7 @@ jobs:
       - name: Verify native Windows command contracts
         shell: pwsh
         run: |
-          node --test tests/deployment-process-identity.test.mjs tests/deployment-windows-command.test.mjs tests/deployment-windows-command-entry.test.mjs
+          node --test tests/deployment-process-identity.test.mjs tests/deployment-windows-command.test.mjs tests/deployment-windows-command-entry.test.mjs tests/deployment-cold-activation-state.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Native process identity or command admission contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-controller-capture.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Native controller capture contracts failed.' }

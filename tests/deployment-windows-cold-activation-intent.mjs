@@ -12,6 +12,10 @@ export async function verifyWindowsColdActivationIntent({ control, lease, config
   await assert.rejects(lease.prepareActivation({ configuration, signal: controller.signal }), { name: 'AbortError' });
   await lease.checkStopped();
   await configuration.checkFiles();
+  const closedConfiguration = await lease.inspectRestoredConfiguration();
+  await closedConfiguration.close();
+  await assert.rejects(lease.prepareActivation({ configuration: closedConfiguration }), /closed/);
+  await lease.checkStopped();
   const stateBytes = await readFile(path.join(control, 'state.json'));
   const ownerBytes = await readFile(path.join(control, 'recovery-lock/owner.json'));
   const receiptBytes = await readFile(path.join(control, 'recovery-lock/files-restored.json'));

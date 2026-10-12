@@ -35,6 +35,9 @@ function Open-AgentsChatStoppedRestoreRecoveryFiles([hashtable]$Context) {
         $expected = @('owner.json')
         if ($name -ceq 'recovery-lock' -and @($entries | Where-Object Name -CEQ 'files-restored.json').Count) {
             $expected = @('files-restored.json', 'owner.json')
+            if (@($entries | Where-Object Name -CEQ 'activation-intent.json').Count) {
+                $expected = @('activation-intent.json', 'files-restored.json', 'owner.json')
+            }
         }
         if ((@($entries | ForEach-Object Name) -join ',') -cne ($expected -join ',') -or
             @($entries | Where-Object { $_.PSIsContainer -or $_.Length -gt 65536 }).Count) {

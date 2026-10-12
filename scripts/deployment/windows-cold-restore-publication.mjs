@@ -12,14 +12,18 @@ const refused = cause => Object.assign(new Error('Cold restore lease publication
 });
 
 export function publishWindowsColdRestoreStaging(options) {
-  return publishColdRestoreRecord(options, false);
+  return publishColdRestoreRecord(options, 'owner');
 }
 
 export function publishWindowsColdRestoreFilesReceipt(options) {
-  return publishColdRestoreRecord(options, true);
+  return publishColdRestoreRecord(options, 'files');
 }
 
-async function publishColdRestoreRecord({ control, pwsh, admission, signal, makeRecord }, filesRestored) {
+export function publishWindowsColdActivationIntent(options) {
+  return publishColdRestoreRecord(options, 'activation');
+}
+
+async function publishColdRestoreRecord({ control, pwsh, admission, signal, makeRecord }, kind) {
   signal?.throwIfAborted();
   await assertWindowsAdmission(control, admission, { signal });
   const controllerIdentity = await processIdentity(process.pid);
@@ -27,7 +31,7 @@ async function publishColdRestoreRecord({ control, pwsh, admission, signal, make
   const bridge = windowsControllerTransport({
     pwsh, refused, label: 'Native cold lease publisher',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
-      ...(filesRestored ? ['-FilesRestored'] : []),
+      ...(kind === 'files' ? ['-FilesRestored'] : kind === 'activation' ? ['-ActivationIntent'] : []),
       '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
   });
   try {
@@ -35,7 +39,7 @@ async function publishColdRestoreRecord({ control, pwsh, admission, signal, make
       ['type', 'pid', 'processIdentity', 'controllerIdentity', 'directory'], 'cold lease publication readiness');
     if (ready.type !== 'ready' || ready.pid !== bridge.child.pid || ready.controllerIdentity !== controllerIdentity
       || ready.processIdentity !== await processIdentity(bridge.child.pid)
-      || ready.directory !== path.join(control, filesRestored ? 'recovery-lock' : 'cold-restore-staging')) {
+      || ready.directory !== path.join(control, kind === 'owner' ? 'cold-restore-staging' : 'recovery-lock')) {
       throw new Error('Original cold lease publisher readiness differs.');
     }
     await assertWindowsAdmission(control, admission, { signal });

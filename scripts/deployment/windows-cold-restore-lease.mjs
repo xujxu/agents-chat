@@ -9,9 +9,10 @@ import { captureLockOwner } from './state.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
-import { publishWindowsColdRestoreStaging, publishWindowsColdRestoreFilesReceipt } from './windows-cold-restore-publication.mjs';
+import { publishWindowsColdRestoreStaging, publishWindowsColdRestoreFilesReceipt, publishWindowsColdActivationIntent } from './windows-cold-restore-publication.mjs';
 import { retireWindowsColdRestoreOwner } from './windows-cold-restore-retirement.mjs';
 import { inspectWindowsColdConfiguration } from './windows-cold-restore-configuration.mjs';
+import { createWindowsColdActivationIntent } from './windows-cold-activation-intent.mjs';
 
 const leases = new WeakMap();
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -32,7 +33,7 @@ async function directoryIdentity(directory) {
   return { dev: info.dev.toString(), ino: info.ino.toString() };
 }
 
-async function inspectLease(control, expected, configurationSha256) {
+async function inspectLease(control, expected, configurationSha256, targetCommit) {
   const inspect = async name => {
     const directory = path.join(control, name);
     try { await lstat(directory); }
@@ -41,7 +42,8 @@ async function inspectLease(control, expected, configurationSha256) {
     const names = (await readdir(directory)).sort();
     if (name === 'cold-restore-staging' && !names.length) return { directory, identity, record: null, bytes: null };
     const hasReceipt = name === 'recovery-lock' && names.includes('files-restored.json');
-    if (!same(names, [...(hasReceipt ? ['files-restored.json'] : []), 'owner.json'])) {
+    const hasIntent = hasReceipt && names.includes('activation-intent.json');
+    if (!same(names, [...(hasIntent ? ['activation-intent.json'] : []), ...(hasReceipt ? ['files-restored.json'] : []), 'owner.json'])) {
       throw new Error('Cold restore lease contains incomplete or foreign evidence.');
     }
     const bytes = await readWorkerFile(path.join(directory, 'owner.json'), 65536, { privateMode: true });
@@ -73,7 +75,16 @@ async function inspectLease(control, expected, configurationSha256) {
       }
       receipt = { record: receiptRecord, bytes: receiptBytes };
     }
-    return { directory, identity, record: { ...record, owner }, bytes, receipt };
+    let intent = null;
+    if (hasIntent) {
+      const intentBytes = await readWorkerFile(path.join(directory, 'activation-intent.json'), 65536, { privateMode: true });
+      const intentRecord = parse(intentBytes);
+      if (!same(intentRecord, createWindowsColdActivationIntent(record, bytes, receipt, targetCommit))) {
+        throw new Error('Cold activation intent differs from original owner, completion receipt or snapshot.');
+      }
+      intent = { record: intentRecord, bytes: intentBytes };
+    }
+    return { directory, identity, record: { ...record, owner }, bytes, receipt, intent };
   };
   const guard = await inspect('recovery-lock');
   const staging = await inspect('cold-restore-staging');
@@ -136,7 +147,8 @@ export async function claimWindowsColdRestore({
       controlIdentity: await directoryIdentity(control), lockIdentity: await directoryIdentity(path.join(control, 'lock')),
       lock, state, stateSha256: digest(stateBytes),
     };
-    const prior = await inspectLease(control, expected, configurationSha256);
+    const targetCommit = originalSnapshot.source.commit;
+    const prior = await inspectLease(control, expected, configurationSha256, targetCommit);
     for (const slot of [prior.guard, prior.staging]) {
       if (slot?.record && await processIdentity(slot.record.owner.pid) === slot.record.owner.processIdentity) {
         throw new Error('Previous cold restore lease owner is still alive.');
@@ -155,6 +167,15 @@ export async function claimWindowsColdRestore({
     const stage = path.join(control, 'cold-restore-staging');
     const guard = path.join(control, 'recovery-lock');
     // Release only observer handles; the same named admission spans publication.
+    if (prior.guard?.intent) {
+      const file = path.join(guard, 'activation-intent.json');
+      if (!same(await directoryIdentity(guard), prior.guard.identity)
+        || !(await readWorkerFile(path.join(guard, 'owner.json'), 65536, { privateMode: true })).equals(prior.guard.bytes)
+        || !(await readWorkerFile(file, 65536, { privateMode: true })).equals(prior.guard.intent.bytes)) {
+        throw new Error('Unused cold activation intent changed before takeover.');
+      }
+      await unlink(file);
+    }
     if (prior.guard?.receipt) {
       const file = path.join(guard, 'files-restored.json');
       if (!same(await directoryIdentity(guard), prior.guard.identity)
@@ -198,6 +219,9 @@ export async function claimWindowsColdRestore({
     await open();
     if (!same(admitted.snapshot, originalSnapshot)) throw new Error('Cold restore backup changed during lease publication.');
     let receipt = null;
+    let activationIntent = null;
+    let retired = false;
+    const configurations = new WeakSet();
     const checkStopped = async ({ signal: checkSignal = signal } = {}) => {
       if (closed) throw new Error('Cold restore lease is closed.');
       if (publishing || poisoned) throw new Error('Cold restore lease publication is unavailable or uncertain.');
@@ -208,9 +232,10 @@ export async function claimWindowsColdRestore({
         || !same(await directoryIdentity(path.join(control, 'lock')), expected.lockIdentity)) {
         throw new Error('Original cold restore evidence changed during publication.');
       }
-      const current = await inspectLease(control, expected, configurationSha256);
+      const current = await inspectLease(control, expected, configurationSha256, targetCommit);
       if (current.staging || !current.guard || !same(current.guard.record, record)
         || !current.guard.bytes.equals(bytes) || !same(current.guard.receipt, receipt)
+        || !same(current.guard.intent, activationIntent)
         || await processIdentity(owner.pid) !== owner.processIdentity) {
         throw new Error('Original cold restore recovery owner changed.');
       }
@@ -222,28 +247,41 @@ export async function claimWindowsColdRestore({
       await admitted.check({ signal: checkSignal });
       return checkStopped({ signal: checkSignal });
     };
+    const checkUnused = async ({ signal: checkSignal = signal } = {}) => {
+      checkSignal?.throwIfAborted();
+      const result = await check({ signal: checkSignal });
+      if (activationIntent) throw new Error('Cold activation is already prepared; original file authority is consumed.');
+      return result;
+    };
     await check();
     const lease = Object.freeze({
       owner: Object.freeze({ ...owner }), lock: Object.freeze({ ...lock }), state: Object.freeze({ ...state }),
       snapshot: structuredClone(originalSnapshot), providers: admitted.providers, authorizedPaths: admitted.authorizedPaths,
-      backup, pwsh, admissionIdentity: admission.identity, check, checkStopped, close,
+      backup, pwsh, admissionIdentity: admission.identity, check: checkUnused, close,
+      async checkStopped(options) {
+        const result = await checkStopped(options);
+        if (activationIntent) throw new Error('Cold activation is already prepared; original file authority is consumed.');
+        return result;
+      },
       get identity() {
         if (!proof) throw new Error('Cold restore native proof is unavailable during publication.');
         return proof.identity;
       },
       async inspectRestoredConfiguration({ signal: checkSignal = signal } = {}) {
         checkSignal?.throwIfAborted();
-        await check({ signal: checkSignal });
+        await checkUnused({ signal: checkSignal });
         if (!receipt) throw new Error('Cold configuration inspection requires completed file restoration by the current owner.');
-        return inspectWindowsColdConfiguration({
+        const configuration = await inspectWindowsColdConfiguration({
           project, backup, runtimeBundle: receipt.record.runtimeBundle, snapshot: originalSnapshot,
           providers: admitted.providers, profile: admitted.configurationProfile, pwsh, signal: checkSignal,
           recheck: () => check({ signal: checkSignal }),
         });
+        configurations.add(configuration);
+        return configuration;
       },
       async retireRuntime({ signal: checkSignal = signal } = {}) {
         checkSignal?.throwIfAborted();
-        await check({ signal: checkSignal });
+        await checkUnused({ signal: checkSignal });
         if (!receipt) throw new Error('Cold runtime retirement requires completed file restoration by the current owner.');
         publishing = true;
         try {
@@ -256,6 +294,7 @@ export async function claimWindowsColdRestore({
           if (!same(admitted.snapshot, originalSnapshot)) throw new Error('Cold runtime retirement backup changed.');
           publishing = false;
           await check({ signal: checkSignal });
+          retired = true;
           return Object.freeze({ retired: true, inhibited: true, operationId: owner.operationId });
         } catch (error) {
           poisoned = true;
@@ -263,7 +302,7 @@ export async function claimWindowsColdRestore({
         } finally { publishing = false; }
       },
       async markFilesRestored({ runtimeBundle, signal: checkSignal = signal }) {
-        await check({ signal: checkSignal });
+        await checkUnused({ signal: checkSignal });
         const expectedReceipt = filesReceipt(control, record, bytes, configurationSha256);
         if (!same(runtimeBundle, expectedReceipt.runtimeBundle)) {
           throw new Error('Cold file completion requires the original recovery owner runtime bundle.');
@@ -287,6 +326,46 @@ export async function claimWindowsColdRestore({
           if (!same(admitted.snapshot, originalSnapshot)) throw new Error('Cold file completion backup changed.');
           publishing = false;
           await check({ signal: checkSignal });
+        } catch (error) {
+          poisoned = true;
+          throw error;
+        } finally { publishing = false; }
+      },
+      async prepareActivation({ configuration, signal: checkSignal = signal } = {}) {
+        await checkUnused({ signal: checkSignal });
+        if (!receipt || !retired) {
+          throw new Error('Cold activation requires completed file restoration and original runtime retirement.');
+        }
+        if (!configurations.has(configuration)) throw new Error('Cold activation requires its original retained configuration.');
+        await configuration.checkFiles({ signal: checkSignal });
+        const intent = createWindowsColdActivationIntent(record, bytes, receipt, targetCommit);
+        publishing = true;
+        try {
+          await proof.close();
+          proof = null;
+          activationIntent = await publishWindowsColdActivationIntent({
+            control, pwsh, admission, signal: checkSignal,
+            async makeRecord() {
+              if (!same(await directoryIdentity(guard), record.guardIdentity)
+                || !(await readWorkerFile(path.join(guard, 'owner.json'), 65536, { privateMode: true })).equals(bytes)
+                || !(await readWorkerFile(path.join(guard, 'files-restored.json'), 65536, { privateMode: true })).equals(receipt.bytes)) {
+                throw new Error('Cold activation owner or completion receipt changed before intent publication.');
+              }
+              await configuration.checkFiles({ signal: checkSignal });
+              return intent;
+            },
+          });
+          await open(checkSignal);
+          if (!same(admitted.snapshot, originalSnapshot)) throw new Error('Cold activation backup changed during intent publication.');
+          publishing = false;
+          const checkIntent = async ({ signal: intentSignal = signal } = {}) => {
+            intentSignal?.throwIfAborted();
+            await check({ signal: intentSignal });
+            await configuration.checkFiles({ signal: intentSignal });
+            return structuredClone(intent.state);
+          };
+          await checkIntent({ signal: checkSignal });
+          return Object.freeze({ state: Object.freeze(structuredClone(intent.state)), check: checkIntent });
         } catch (error) {
           poisoned = true;
           throw error;

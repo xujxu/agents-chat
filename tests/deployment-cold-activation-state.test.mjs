@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import {
   createColdActivationState, captureColdActivationIntent,
 } from '../scripts/deployment/linux-cold-activation-state.mjs';
 import { linuxOriginalServiceHistory } from '../scripts/deployment/linux-service-stop-evidence.mjs';
+import { createWindowsColdActivationIntent } from '../scripts/deployment/windows-cold-activation-intent.mjs';
 
 test('original running history requires a real positive process and invocation identity', () => {
   const runtime = { mainPid: 7, activeState: 'active', processIdentity: 'retained-process', invocationId: 'a'.repeat(32) };
@@ -70,4 +72,53 @@ test('cold activation refuses unsupported original roles and unbound stopped mar
   const legacy = record('running');
   assert.notEqual(legacy.state.runtimeIdentity, legacy.runtimeIdentity);
   assert.equal(createColdActivationState(legacy).state.runtimeIdentity, legacy.runtimeIdentity);
+});
+
+test('Windows cold activation binds original owner and file-completion bytes without changing root state', () => {
+  const source = {
+    ...record('running'), project: 'C:\\application',
+    snapshotSha256: 'c'.repeat(64), stateSha256: 'd'.repeat(64),
+    state: { sourceCommit: 'a'.repeat(40), priorRuntime: 'running',
+      runtimeIdentity: '12345678-1234-1234-1234-123456789abc' },
+  };
+  const original = structuredClone(source);
+  const ownerBytes = Buffer.from(`${JSON.stringify(source)}\n`);
+  const runtimeBundle = { directory: 'C:\\control\\runtime-new',
+    configuration: 'C:\\control\\runtime-new\\configuration.json', sha256: 'e'.repeat(64) };
+  const receipt = { record: { runtimeBundle }, bytes: Buffer.from(`${JSON.stringify({ runtimeBundle })}\n`) };
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  const expected = {
+    version: 1, phase: 'activation-intent', ownerSha256: digest(ownerBytes),
+    filesReceiptSha256: digest(receipt.bytes), operationId: source.lock.operationId,
+    backupId: source.backupId, snapshotSha256: source.snapshotSha256,
+    stateSha256: source.stateSha256, runtimeBundle,
+    state: {
+      version: 1, operationId: source.lock.operationId, project: source.project, operation: 'restore',
+      phase: 'restore-activating', previousPhase: 'restoring', sourceCommit: source.state.sourceCommit,
+      targetCommit: source.targetCommit, backupId: source.backupId, priorRuntime: 'running',
+      runtimeIdentity: source.state.runtimeIdentity,
+      startedAt: source.owner.createdAt, updatedAt: source.owner.createdAt, errorCode: null,
+    },
+  };
+  assert.deepEqual(createWindowsColdActivationIntent(source, ownerBytes, receipt, source.targetCommit), expected);
+  assert.deepEqual(source, original);
+  for (const runtimeIdentity of ['', null, 'a'.repeat(32), '00000000-0000-0000-0000-000000000000',
+    source.state.runtimeIdentity.toUpperCase(), `stopped:${'a'.repeat(64)}`]) {
+    assert.throws(() => createWindowsColdActivationIntent({
+      ...source, state: { ...source.state, runtimeIdentity },
+    }, ownerBytes, receipt, source.targetCommit), /original Windows cold activation/);
+  }
+  assert.throws(() => createWindowsColdActivationIntent({
+    ...source, state: { ...source.state, priorRuntime: 'stopped' },
+  }, ownerBytes, receipt, source.targetCommit), /original Windows cold activation/);
+  for (const target of [null, '', 'not-a-commit', 'a'.repeat(41)]) {
+    assert.throws(() => createWindowsColdActivationIntent(source, ownerBytes, receipt, target), /target commit/);
+  }
+  const sha256Commit = 'b'.repeat(64);
+  assert.equal(createWindowsColdActivationIntent(source, ownerBytes, receipt, sha256Commit).state.targetCommit, sha256Commit);
+  assert.notEqual(createWindowsColdActivationIntent(source, Buffer.concat([ownerBytes, Buffer.from('\n')]),
+    receipt, source.targetCommit).ownerSha256, expected.ownerSha256);
+  assert.notEqual(createWindowsColdActivationIntent(source, ownerBytes, {
+    ...receipt, bytes: Buffer.concat([receipt.bytes, Buffer.from('\n')]),
+  }, source.targetCommit).filesReceiptSha256, expected.filesReceiptSha256);
 });

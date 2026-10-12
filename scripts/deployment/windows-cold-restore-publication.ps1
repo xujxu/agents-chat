@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][string]$Control,
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][string]$ControllerIdentity,
-    [switch]$FilesRestored
+    [switch]$FilesRestored,
+    [switch]$ActivationIntent
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -11,7 +12,8 @@ $failure = $null
 $stage = 'bootstrap'
 try {
     if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7 -or
-        $Control -cnotmatch '^[A-Za-z]:\\' -or [IO.Path]::GetFullPath($Control) -cne $Control) {
+        $Control -cnotmatch '^[A-Za-z]:\\' -or [IO.Path]::GetFullPath($Control) -cne $Control -or
+        ($FilesRestored -and $ActivationIntent)) {
         throw 'Cold lease publication requires native Windows and canonical control.'
     }
     Add-Type -Path @((Join-Path $PSScriptRoot 'WindowsWorkerJob.cs'), (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'))
@@ -19,8 +21,9 @@ try {
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
     $stage = 'private-directory'
-    $destination = Join-Path $Control $(if ($FilesRestored) { 'recovery-lock' } else { 'cold-restore-staging' })
-    $directory = if ($FilesRestored) { [Deployment.WindowsPrivateFile]::OpenDirectory($destination) }
+    $existing = $FilesRestored -or $ActivationIntent
+    $destination = Join-Path $Control $(if ($existing) { 'recovery-lock' } else { 'cold-restore-staging' })
+    $directory = if ($existing) { [Deployment.WindowsPrivateFile]::OpenDirectory($destination) }
         else { [Deployment.WindowsPrivateFile]::CreateDirectory($destination) }
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; controllerIdentity=$ControllerIdentity
@@ -38,7 +41,7 @@ try {
     }
     $stage = 'owner-publication'
     $directory.Check()
-    $name = if ($FilesRestored) { 'files-restored.json' } else { 'owner.json' }
+    $name = if ($FilesRestored) { 'files-restored.json' } elseif ($ActivationIntent) { 'activation-intent.json' } else { 'owner.json' }
     $file = [Deployment.WindowsPrivateFile]::Publish((Join-Path $destination $name), $text)
     $directory.Check()
     [Console]::Out.WriteLine((@{ id=1; type='reply'; value=$file.Sha256; processIdentity=$identity } | ConvertTo-Json -Compress))

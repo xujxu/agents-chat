@@ -13941,6 +13941,10 @@ the application or publish terminal success.
   original-state preservation and subsequent distinct-owner takeover in
   Actions after the configuration gate. Guarded startup and recovery of
   changed-task prefixes remain separate, unaccepted work.
+  Causal `eae4e4f / 38209665045` is queued behind native configuration
+  acceptance. The existing command-contract step also runs the shared
+  Linux/Windows cold activation-state unit tests; no workflow job or input
+  is added.
 
 ### Task 5EA: Retain the restored Windows configuration before cold activation
 
@@ -13970,8 +13974,9 @@ security comparison for the small configuration subset.
 - [ ] Run the native gate in Actions. Keep existing live/first configuration
   authority checks and signatures unchanged; no public cold activation is
   enabled by this step.
-  Causal `8b82218 / 38208777933`, job `114678062819`, and implementation
-  `684acbc / 38209032489` are not yet accepted.
+  Causal `8b82218 / 38208777933`, job `114678062819`, failed as expected at
+  `2026-10-12 05:49:18 UTC` on the missing configuration inspection API.
+  Implementation `684acbc / 38209032489` is running, not yet accepted.
 - [ ] Extend the existing actual copy-crash actor to retain snapshot-bound
   startup configuration before original-runtime retirement, check it after
   retirement and after final artifact/data/evidence verification, and close
