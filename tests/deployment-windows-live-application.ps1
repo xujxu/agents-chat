@@ -29,6 +29,7 @@ $egress = $null
 $coldOwner = $null
 $coldStateStage = $null
 $coldTransaction = $null
+$coldReceiptStage = $null
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 try {
@@ -45,7 +46,8 @@ try {
     if ($RestoreScenario -eq 'copy-crashed') {
         $modes += @('restore-cold-files', 'restore-cold-policy-crashed', 'restore-cold-enable-crashed',
             'restore-cold-completed', 'restore-cold-observed',
-            'restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed')
+            'restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed',
+            'restore-cold-receipt-staged', 'restore-cold-receipt-published', 'restore-cold-receipt-completed')
     }
     foreach ($mode in $modes) {
         if ($RestoreScenario -eq 'offline' -and $mode -eq 'restore') {
@@ -78,7 +80,7 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine, $ChatId), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed', 'restore-cold-files')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } else { 300000 }
+        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed', 'restore-cold-files')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } elseif ($mode -like 'restore-cold-receipt-*') { 900000 } else { 300000 }
         $exited = $actor.WaitForExit($actorTimeout)
         $actor.Kill()
         Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'
@@ -110,7 +112,8 @@ try {
             continue
         }
         $completionInterrupted = $mode -in @('restore-cold-files', 'restore-cold-policy-crashed', 'restore-cold-enable-crashed')
-        $terminalInterrupted = $mode -in @('restore-cold-state-staged', 'restore-cold-state-published')
+        $terminalInterrupted = $mode -in @('restore-cold-state-staged', 'restore-cold-state-published',
+            'restore-cold-receipt-staged', 'restore-cold-receipt-published')
         $expectedCode = if ($completionInterrupted -or $terminalInterrupted) { 91 } else { 0 }
         Assert ($code -eq $expectedCode) "Live controller $mode returned an unexpected exit code ${code}: $text"
         $result = $text | ConvertFrom-Json
@@ -128,6 +131,9 @@ try {
             restore-cold-state-staged { 'cold-terminal-state-interrupted' }
             restore-cold-state-published { 'cold-terminal-state-interrupted' }
             restore-cold-state-completed { 'cold-terminal-state-recovered' }
+            restore-cold-receipt-staged { 'cold-restored-receipt-interrupted' }
+            restore-cold-receipt-published { 'cold-restored-receipt-interrupted' }
+            restore-cold-receipt-completed { 'cold-restored-receipt-recovered' }
         }
         Assert ($result.status -ceq $expected) "Unexpected live controller $mode status"
         $actor.Dispose()
@@ -195,7 +201,8 @@ try {
                 $result.runtime.instanceGuid -ceq ([guid]$originalInstance).ToString('D')) `
                 'Independent cold observation did not retain the original released application'
         }
-        if ($mode -in @('restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed')) {
+        if ($mode -in @('restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed',
+            'restore-cold-receipt-staged', 'restore-cold-receipt-published', 'restore-cold-receipt-completed')) {
             $file = [Deployment.WindowsPrivateFile]::Open(
                 (Join-Path $control 'task-maintenance/transaction.json'), $coldTransaction.sha256)
             try {
@@ -214,9 +221,36 @@ try {
                 'restore-cold-state-staged' { 'state-staged' }
                 'restore-cold-state-published' { 'state-published' }
                 'restore-cold-state-completed' { 'complete' }
+                'restore-cold-receipt-staged' { 'receipt-staged' }
+                'restore-cold-receipt-published' { 'receipt-published' }
+                'restore-cold-receipt-completed' { 'complete' }
+            }
+            $terminal = Get-Content -LiteralPath (Join-Path $control 'cold-restore-terminal.json') -Raw | ConvertFrom-Json
+            if ($mode -like 'restore-cold-receipt-*') {
+                $receiptPath = if ($mode -ceq 'restore-cold-receipt-staged') {
+                    Join-Path $control '.deployment.json.staging'
+                } else { Join-Path $control 'deployment.json' }
+                $receiptHash = if ($mode -ceq 'restore-cold-receipt-staged') {
+                    (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                } else { $coldReceiptStage.sha256 }
+                $file = [Deployment.WindowsPrivateFile]::Open($receiptPath, $receiptHash)
+                try {
+                    $identity = $file.CaptureIdentity()
+                    $receipt = $file.ReadText() | ConvertFrom-Json
+                    Assert ($receipt.operationId -ceq $terminal.operationId -and
+                        $receipt.acceptedAt -ceq ($terminal.nextState | ConvertFrom-Json).updatedAt) `
+                        'Actual cold receipt changed its original terminal operation or timestamp'
+                    if ($mode -ceq 'restore-cold-receipt-staged') {
+                        $coldReceiptStage = @{ identity=$identity; sha256=$receiptHash }
+                    } else {
+                        Assert ($identity.Dev -ceq $coldReceiptStage.identity.Dev -and $identity.Ino -ceq $coldReceiptStage.identity.Ino) `
+                            'Actual cold receipt did not preserve its original staged inode'
+                        Assert (-not (Test-Path -LiteralPath (Join-Path $control '.deployment.json.staging'))) `
+                            'Actual cold receipt publication retained its stage'
+                    }
+                } finally { $file.Dispose() }
             }
             Assert ($result.step -ceq $expectedStep) 'Actual terminal publication skipped its requested boundary'
-            $terminal = Get-Content -LiteralPath (Join-Path $control 'cold-restore-terminal.json') -Raw | ConvertFrom-Json
             $nextHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
                 [Text.Encoding]::UTF8.GetBytes($terminal.nextState))).ToLowerInvariant()
             $currentState = Get-Content -LiteralPath (Join-Path $control 'state.json') -Raw

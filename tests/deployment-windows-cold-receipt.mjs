@@ -55,31 +55,42 @@ try {
   await assert.rejects(publishRestoredDeploymentReceipt({
     ...options, checkAccepted: forbiddenCheck,
   }), /current lock owner/);
+  await assert.rejects(publishWindowsColdRestoredDeploymentReceipt({
+    ...options, checkAccepted: forbiddenCheck, onProgress: 42,
+  }), /progress callback/);
   assert.equal(invalidCallbacks, 0);
+  let checks = 0;
   const checkAccepted = async () => {
+    checks++;
     await assert.rejects(readFile(path.join(control, 'task-maintenance/transaction.json')), { code: 'EBUSY' });
+    return identity;
+  };
+  const progressSteps = [];
+  const onProgress = async progress => {
+    assert.ok(Object.isFrozen(progress));
+    assert.equal(progress.operationId, marker.operationId);
+    assert.ok(checks > 0);
+    progressSteps.push(progress.step);
+    if (progress.step !== target) return;
     const current = await readDeploymentReceipt(control, marker.project);
     let staged = null;
     try { staged = JSON.parse(await readFile(stage)); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
-    if ((target === 'receipt-staged' && staged)
-      || (target === 'receipt-published' && current.operationId === marker.operationId)) {
-      const receipt = target === 'receipt-staged' ? staged : current;
-      assert.equal(receipt.operationId, marker.operationId);
-      assert.equal(receipt.acceptedAt, state.updatedAt);
-      assert.deepEqual(receipt.identity, identity);
-      if (target === 'receipt-staged') assert.deepEqual(await readFile(destination), beforeReceipt);
-      else assert.equal(staged, null);
-      process.stdout.write(`${JSON.stringify({ progress: {
-        step: target, operationId: marker.operationId, identity: authority.identity,
-      } })}\n`);
-      await new Promise(() => {});
-    }
-    return identity;
+    const receipt = target === 'receipt-staged' ? staged : current;
+    assert.equal(receipt.operationId, marker.operationId);
+    assert.equal(receipt.acceptedAt, state.updatedAt);
+    assert.deepEqual(receipt.identity, identity);
+    if (target === 'receipt-staged') assert.deepEqual(await readFile(destination), beforeReceipt);
+    else assert.equal(staged, null);
+    process.stdout.write(`${JSON.stringify({ progress: {
+      ...progress, identity: authority.identity,
+    } })}\n`);
+    await new Promise(() => {});
   };
-  result = await publishWindowsColdRestoredDeploymentReceipt({ ...options, checkAccepted });
+  result = await publishWindowsColdRestoredDeploymentReceipt({ ...options, checkAccepted, onProgress });
   assert.equal(target, 'complete', 'Receipt interruption boundary was skipped.');
-  assert.deepEqual(await publishWindowsColdRestoredDeploymentReceipt({ ...options, checkAccepted }), result);
+  assert.deepEqual(await publishWindowsColdRestoredDeploymentReceipt({ ...options, checkAccepted, onProgress }), result);
+  assert.deepEqual(progressSteps, ['receipt-published', 'receipt-published']);
   const changed = { ...identity, service: 'f'.repeat(64) };
   await assert.rejects(publishWindowsColdRestoredDeploymentReceipt({
     ...options, identity: changed, checkAccepted: async () => changed,

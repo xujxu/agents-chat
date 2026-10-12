@@ -19,6 +19,9 @@ test('actual cold receipt recovery requires acknowledgement and honors pre-abort
     await import('../scripts/deployment/windows-cold-receipt-recovery.mjs');
   assert.equal(typeof recoverWindowsColdRestoredDeploymentReceipt, 'function');
   await assert.rejects(recoverWindowsColdRestoredDeploymentReceipt(), /data-loss acknowledgement/);
+  await assert.rejects(recoverWindowsColdRestoredDeploymentReceipt({
+    acceptDataLoss: true, onProgress: 42,
+  }), /progress callback/);
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(recoverWindowsColdRestoredDeploymentReceipt({

@@ -137,6 +137,7 @@ test('saved recovery bundle closes module dependencies after its source disappea
     'windows-cold-completion-proof.ps1', 'windows-cold-completion-recovery.ps1',
     'windows-cold-terminal-intent.mjs', 'windows-cold-terminal-intent.ps1',
     'windows-cold-terminal-state.mjs', 'windows-cold-terminal-state.ps1',
+    'windows-cold-receipt-recovery.mjs',
     'windows-cold-policy-history.mjs', 'windows-cold-policy-history.ps1',
     'windows-cold-policy-recovery.ps1',
     'windows-cold-policy-archive.mjs', 'windows-cold-policy-archive.ps1',
