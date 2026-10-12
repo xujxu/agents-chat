@@ -13941,6 +13941,8 @@ saved-entry contracts in the Windows command gate.
   code, wrong task/project, missing Windows entry, altered bytes/manifest,
   extra engine file, invalid deadline, and mutable in-project executables.
   Run command-only Actions and record the missing-module red gate first.
+  Causal `7896e53 / 38184789788` failed at `2026-10-12 00:03:37 UTC`
+  with the expected missing `windows-restore-invocation.mjs` module.
 - [ ] Implement `prepareWindowsRestoreInvocation` as a bounded admission stage:
   validate canonical native paths/deadlines/task, canonical private sibling
   control, complete version3 matching Windows project/task snapshot, exact

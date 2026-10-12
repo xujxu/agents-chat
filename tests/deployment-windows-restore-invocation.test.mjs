@@ -62,6 +62,18 @@ test('public Windows restore invocation verifies historical bytes without import
   await writeFile(manifestFile, JSON.stringify({ version: 1, files: [...files].reverse() }));
   await assert.rejects(prepareWindowsRestoreInvocation(options), /digest/i);
   await writeFile(manifestFile, manifestBytes);
+  const snapshotFile = path.join(backup, 'manifest.json');
+  const snapshotBytes = await readFile(snapshotFile);
+  const oldManifest = Buffer.from(JSON.stringify({
+    version: 1, files: files.filter(file => file.name !== 'windows-restore-entry.mjs'),
+  }));
+  await rename(helper, path.join(root, 'held-helper.mjs'));
+  await writeFile(manifestFile, oldManifest);
+  await writeFile(snapshotFile, JSON.stringify({ ...JSON.parse(snapshotBytes), recoveryEngine: hash(oldManifest) }));
+  await assert.rejects(prepareWindowsRestoreInvocation(options), { code: 'DEPLOYMENT_SAVED_RESTORE_UNSUPPORTED' });
+  await writeFile(snapshotFile, snapshotBytes);
+  await writeFile(manifestFile, manifestBytes);
+  await rename(path.join(root, 'held-helper.mjs'), helper);
   await rename(backup, `${backup}.held`);
   await assert.rejects(prepareWindowsRestoreInvocation(options), { code: 'DEPLOYMENT_BACKUP_MISSING' });
   await rename(`${backup}.held`, backup);
