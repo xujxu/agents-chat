@@ -653,6 +653,12 @@ unchanged warm-crash regression. The cold actor took 2,001,517 ms and the
 independent observer 21,505 ms, within their unchanged bounds. Interrupted
 completion recovery, cold terminal closeout and public cold restore are not yet
 complete.
+Finite cold completion acknowledgements passed at `041df63 / 38262682824`
+(`2026-10-12 15:01:23 UTC`): each of the 13 steps binds its durable receipt
+prefix before an optional awaited progress callback. Both native cold histories,
+their independent completion observers, saved dependencies and the original
+terminal-completion regression passed; this gate does not itself prove
+interrupted-prefix recovery.
 The released-prefix recovery implementation is pending native acceptance. It
 requires explicit data-loss acknowledgement, an already released live runtime,
 the original receipt chain and exclusive native ownership of the original

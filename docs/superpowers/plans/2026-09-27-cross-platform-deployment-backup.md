@@ -13932,7 +13932,10 @@ Extend the existing native completion fixture with
 
   Queue the existing native command selector behind Task 5EQ's active run,
   recording the missing-export causal failure before paired acceptance.
-  Test-only `af7dd10 / 38265802145` is queued without replacing that predecessor.
+  Test-only `af7dd10 / 38265802145`, job `114872132302`, failed as expected
+  at `2026-10-12 15:01:45 UTC`: the new recovery export was undefined;
+  the other 31 unit contracts passed. Implementation `999a3ed` is pinned by
+  paired native gate `38267393844`; acceptance is pending.
 - [ ] Admit only exact contiguous completion prefixes from `release-requested`
   through `complete`, while retaining complete-only read-only observation.
   Require the original controllers absent, old Job empty, exact new Scheduler
@@ -13989,7 +13992,7 @@ Extend the existing native completion fixture with
 `tests/deployment-cold-runtime-completion.test.mjs`,
 `tests/deployment-windows-cold-runtime-completion.mjs`.
 
-- [ ] Require the original nine-record decoder to support an explicit bounded
+- [x] Require the original nine-record decoder to support an explicit bounded
   prefix, retaining all existing byte-chain and binding checks:
 
   ```js
@@ -14003,7 +14006,7 @@ Extend the existing native completion fixture with
   Test-only `fbe5b47 / 38262253556`, job `114855465969`, failed as expected
   at `2026-10-12 14:21:22 UTC`: the prefix decoder export was missing;
   the other 30 unit contracts passed.
-- [ ] Require the existing native actor to observe exactly
+- [x] Require the existing native actor to observe exactly
   `windowsTaskCompletionSteps`, in order:
 
   ```js
@@ -14020,7 +14023,7 @@ Extend the existing native completion fixture with
 
   Run the unchanged native command selector first with these tests and then
   with implementation. Do not add a test-only runtime mutation protocol.
-- [ ] Make each existing private `complete` request perform one finite step;
+- [x] Make each existing private `complete` request perform one finite step;
   the Node wrapper drives the existing 13-step sequence before returning the
   same final result. A repeated completion remains terminal. Each intermediate
   native reply binds its current step, lease and latest durable receipt hash.
@@ -14029,6 +14032,12 @@ Extend the existing native completion fixture with
   bridge waits for the next ordinary request, enabling deterministic original
   controller death after physical release/registration but before its receipt.
   This supplies interruption boundaries, not recovery of incomplete prefixes.
+  Paired `041df63 / 38262682824`, job `114856938295`, passed at
+  `2026-10-12 15:01:23 UTC`: all 31 focused contracts, saved dependency closure,
+  both finite-step cold completion cases and their independent observers,
+  followed by the original terminal-completion regression. Normal completion
+  and observation passed at `14:42:59 / 14:43:14 UTC`; bridge-death-source
+  completion and observation passed at `14:57:10 / 14:57:24 UTC`.
 
 ### Task 5EP: Accept completed cold runtime policy with the real Windows application
 
