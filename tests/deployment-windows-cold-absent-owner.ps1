@@ -48,3 +48,20 @@ if ($folder.GetTask($TaskName).Enabled -or $folder.GetTask($TaskName).GetInstanc
     throw 'Cold absence admission started or enabled the original task.'
 }
 Write-Output 'PASS: cold recovery admits an absent original host with no Scheduler instance and unchanged task inhibition'
+$output = & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-activation.mjs') `
+    $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+if ($LASTEXITCODE -ne 0) { throw 'Cold recovery did not start and settle its own guarded replacement.' }
+$activated = ($output -join "`n") | ConvertFrom-Json
+if ($activated.status -cne 'guarded-running' -or $activated.taskName -cne $TaskName -or
+    $activated.runtime.generation -ceq $Ready.generation) {
+    throw 'Cold activation reported a foreign or reused runtime.'
+}
+$task = $folder.GetTask($TaskName)
+if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
+    [string]$task.Xml -cne $activated.definition -or
+    [string]$task.GetSecurityDescriptor(7) -cne $activated.securityDescriptor -or
+    $task.Definition.Triggers.Count -ne 0) {
+    throw 'Closed cold activation did not preserve its inhibited guarded policy.'
+}
+[Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)
+Write-Output 'PASS: cold activation starts a distinct leased runtime and closes only its original new Job without terminal state or automatic task triggers'

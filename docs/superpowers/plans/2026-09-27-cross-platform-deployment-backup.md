@@ -13915,6 +13915,35 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EC: Start and settle a distinct guarded runtime under cold ownership
+
+**Scope:** use the accepted intent and retained configuration to start the
+restored application under a new native controller lease. This private step
+does not perform HTTP acceptance, release the lease, publish terminal state
+or expose public cold restore.
+
+- [ ] Open a distinct cold native authority using exact private owner,
+  completed-files and activation-intent hashes and original stopped/absent
+  evidence. Require the original runtime to be absent. Retain fresh runtime
+  helpers and configuration; do not fabricate live transaction authority.
+- [ ] Reuse existing native policy comparison and runtime/Job primitives.
+  Persist requested task mutation before registration; keep task security
+  unchanged, remove automatic triggers/restart and use the new native
+  controller PID/start identity as the runtime lease.
+- [ ] Demand-start only the exact prepared task, inhibit it again, retain
+  Scheduler instance/process/readiness identities and require a distinct
+  generation with its expected guarded Job. Reject pre-cancellation without
+  mutation and reject repeated starts.
+- [ ] On close, stop/retire only the exact new owned runtime and settle its
+  Scheduler instance. Retain all nonterminal evidence and unchanged original
+  state/lock. An uncertain start must fail closed; changed-policy prefixes
+  remain refused by original-policy takeover until explicit recovery exists.
+- [ ] Extend the existing absent-owner native fixture with a distinct cold
+  actor. The parent independently verifies inhibited exact task XML/security,
+  no automation or instances and an empty new Job after actor exit. Run causal
+  and paired native Actions; actual startup and interrupted-prefix recovery
+  follow separately.
+
 ### Task 5EB: Persist original-owner cold activation intent before task mutation
 
 **Scope:** follow the existing Linux write-ahead activation pattern, while
@@ -13922,28 +13951,31 @@ preserving Windows' native generation format and original stopped proof.
 Preparing activation must not update root state, change task policy, start
 the application or publish terminal success.
 
-- [ ] Require this lease's completed-file receipt, acknowledged original
+- [x] Require this lease's completed-file receipt, acknowledged original
   runtime retirement and its genuine retained restored configuration.
   Reject a copied configuration object, a closed guard and pre-cancellation
   before mutation. Never trust caller-mutated snapshot fields.
-- [ ] Publish a private `recovery-lock/activation-intent.json` binding exact
+- [x] Publish a private `recovery-lock/activation-intent.json` binding exact
   owner/completed-file receipt hashes, original state/snapshot/backup and the
   fresh runtime bundle. Store the `restore-activating` state in the intent,
   not root state. Reopen retained proof and verify acknowledged publication.
-- [ ] Consume original file-restoration/retirement authority after preparation;
+- [x] Consume original file-restoration/retirement authority after preparation;
   return only a read-only intent check for this step. Preserve caller-owned
   configuration handles. Uncertain publication poisons the current lease.
-- [ ] Admit and discard an unused predecessor intent only after the original
+- [x] Admit and discard an unused predecessor intent only after the original
   stopped/absent runtime proof independently confirms unchanged disabled task
   policy, zero writers and dead predecessor. Do not adopt an intent after task
   replacement or activation through this original-policy path.
-- [ ] Exercise genuine native publication, immutable evidence, preconditions,
+- [x] Exercise genuine native publication, immutable evidence, preconditions,
   original-state preservation and subsequent distinct-owner takeover in
   Actions after the configuration gate. Guarded startup and recovery of
   changed-task prefixes remain separate, unaccepted work.
-  Causal `eae4e4f / 38209665045`, job `114684608368`, is running after
-  native configuration acceptance; implementation `8510f67 / 38210972185`
-  is queued. The existing command-contract step also runs the shared
+  Causal `eae4e4f / 38209665045`, job `114684608368`, failed at
+  `2026-10-12 06:17:25 UTC` on missing `lease.prepareActivation`.
+  Implementation `8510f67 / 38210972185`, job `114687430275`, passed at
+  06:31:43: native intent at06:28:33, distinct unused-prefix takeover
+  at06:28:44 and original terminal proof at06:31:29.
+  The existing command-contract step also runs the shared
   Linux/Windows cold activation-state unit tests; no workflow job or input
   is added.
 
@@ -13998,18 +14030,23 @@ input/job. After its completed-file receipt, retire the exact original host.
 No activation, task policy change, application-state update or terminal
 deployment receipt is accepted by this case.
 
-- [ ] Extend `deployment-windows-cold-application-files.mjs` to call the
+- [x] Extend `deployment-windows-cold-application-files.mjs` to call the
   authenticated lease retirement API before its final artifact, native addon,
   database, external identity, backup and original journal checks. Preserve
   exact current recovery owner and completed-file receipt bytes.
-- [ ] In the parent PowerShell observer retain the actual original process
+- [x] In the parent PowerShell observer retain the actual original process
   handle, identity, session and disabled task XML/security before actor start.
   After actor and descendants settle, require clean old-host exit, zero
   Scheduler instances, unchanged disabled policy, empty/absent original Job
   and no application listener.
-- [ ] Run the existing actual crash selector in Actions after native retirement
+- [x] Run the existing actual crash selector in Actions after native retirement
   acceptance. Keep the 45-minute actor and existing outer bounds unchanged.
   Also repeat the original independent after-project crash regression.
+  `adfdef0 / 38208188366` passed both jobs: copy-crash job
+  `114676266261` completed at `2026-10-12 06:26:18 UTC`, with the cold actor
+  completing in1,331,120ms and the whole suite in3,131,784ms.
+  Original after-project crash job `114676266119` passed at06:24:40.
+  No actor or workflow timeout was increased.
 
 ### Task 5DY: Retire the original stopped Windows runtime under cold ownership
 

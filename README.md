@@ -611,9 +611,12 @@ This full baseline predates the absent-owner and cold-owned retirement changes.
 Native cold-owned retirement passed at `c8eb4b9 / 38206988583`, and exact
 restored startup configuration retention passed at `684acbc / 38209032489`.
 The latter retains environment/agent file presence, bytes, ACLs and attributes
-across original-host retirement. Neither gate starts the restored application;
-actual application retirement/configuration acceptance and cold activation
-remain separate gates.
+across original-host retirement. Actual copy-crash recovery and original-host
+retirement passed at `adfdef0 / 38208188366`, preserving original task policy,
+state, lock, backup and restored data. Native write-ahead activation intent and
+unused-intent takeover passed at `8510f67 / 38210972185`. None of these gates
+starts the restored application; actual configuration retention, guarded
+startup and complete cold recovery remain separate gates.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
