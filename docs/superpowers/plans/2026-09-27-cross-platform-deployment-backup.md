@@ -13939,6 +13939,9 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 - [ ] Publish the missing explicit manifest entries only after pinning the
   test-only Actions contract. Keep existing 256-file, 1 MiB/file, 16 MiB
   aggregate and 32 KiB manifest limits; do not bypass integrity verification.
+  Causal `ff353ba / 38236035542` is running after the accepted
+  authorized-archive pair. Implementation `5c33578` adds the 28 explicit helpers
+  and is pinned to paired run `38239407765`, queued behind its causal.
 - [ ] Run the existing command gate's saved dependency case and cold native
   regressions. This packages private primitives for subsequent public integration;
   it does not enable public cold restore or claim independent terminal completion.
@@ -13949,7 +13952,7 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 extend the explicit policy-recovery factory/controller and existing
 `tests/deployment-windows-cold-policy-recovery.{mjs,ps1}`.
 
-- [ ] Require a fifth independent controller after policy recovery. It first
+- [x] Require a fifth independent controller after policy recovery. It first
   appends a distinct claim preserving `restored`, then:
 
   ```js
@@ -13966,25 +13969,30 @@ extend the explicit policy-recovery factory/controller and existing
 
   Early-aborted or unclaimed/unrestored archival must not consume the authority.
   The read-only inspector must expose neither `advance` nor `archive`.
-- [ ] Native archival rechecks the full inactive runtime/policy/owner proof,
+- [x] Native archival rechecks the full inactive runtime/policy/owner proof,
   releases only retained handles identified as the exact old journal files
   and directory, and reopens that directory by its original inode for atomic
   no-overwrite archival to `cold-policy-<last-policy-sha256>`. Keep original
   state/lock/runtime/task handles until the rename; close the native bridge
   before acknowledging namespace handoff.
-- [ ] Node retains the same named admission across the operation, captures the
+- [x] Node retains the same named admission across the operation, captures the
   bounded exact original journal inventory/bytes, and verifies moved inode,
   unchanged inventory/bytes/state/lock and absence of the old active name.
   Return non-authoritative `cold-policy-archived`, not restore success.
-- [ ] Parent verifies the original five-record prefix remains byte-exact,
+- [x] Parent verifies the original five-record prefix remains byte-exact,
   sixth claim is retained in the archive, fresh active directory has a different
   inode and only fresh owner/completed-copy records, and exact original disabled
   task/security/file identity remains unchanged with no instances or new Job.
   Run the existing native command gate for both normal and bridge-crash sources.
   No public cold completion, missing-runtime/reboot recovery or ready-runtime
   lease release is claimed by this namespace handoff.
-  Test-only `9ecde54 / 38232768263` is running; production `fc9914c`
-  is pinned to paired run `38234299468`, queued without replacing its causal.
+  Test-only `9ecde54 / 38232768263`, job `114760968691`, failed as expected
+  at `2026-10-12 10:22:43 UTC`: native recovery opened, then
+  `typeof recovery.archive` was `undefined` instead of `function`.
+  Production `fc9914c / 38234299468`, job `114766512759`, passed at
+  `2026-10-12 10:55:15 UTC`: normal stopped-history archival/fresh copy passed
+  at `10:39:25`, genuine bridge-death history at `10:51:16`, and the existing
+  terminal runtime proof at `10:55:01 UTC`. All 26 units also passed.
 
 ### Task 5EK: Preserve a reconciled cold journal by native handle-bound archival
 

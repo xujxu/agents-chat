@@ -631,8 +631,10 @@ policy-recovery controller deaths, and the native no-overwrite directory archiva
 primitive passed at `4df3e81 / 38231631286` (`2026-10-12 10:06:56 UTC`).
 Policy recovery restores only the exact original disabled task, retaining its
 security and full owner journal; it does not restart the task. Authorized journal
-archival with a fresh file-recovery claim, completed cold restore, public cold
-integration and terminal closeout remain separate gates.
+archival followed by a fresh complete file-recovery claim passed for both normal
+shutdown and genuine bridge-death histories at `fc9914c / 38234299468`
+(`2026-10-12 10:55:15 UTC`). Completed cold restore, public cold integration and
+terminal closeout remain separate gates.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
