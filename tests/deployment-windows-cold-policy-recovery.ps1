@@ -22,7 +22,7 @@ $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 $appliedIdentity = $null
 $sequence = 0
-foreach ($target in @('requested', 'policy-applied', 'restored', 'inspect')) {
+foreach ($target in @('requested', 'policy-applied', 'restored', 'inspect', 'archive')) {
     $actor = $bridge = $diagnostic = $null
     try {
         $actor = [Deployment.WindowsControllerProcess]::Start((Get-Command node).Source, [string[]]@(
@@ -32,7 +32,7 @@ foreach ($target in @('requested', 'policy-applied', 'restored', 'inspect')) {
         $frame = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync($actor.StandardOutput, 16384)
         if (-not $frame.Wait(180000)) { throw "Cold policy actor did not reach $target." }
         $result = $frame.GetAwaiter().GetResult() | ConvertFrom-Json
-        $expected = if ($target -ceq 'inspect') { 'restored' } else { $target }
+        $expected = if ($target -cin @('inspect', 'archive')) { 'restored' } else { $target }
         if ($result.progress.step -cne $expected) { throw 'Cold policy actor skipped its intended boundary.' }
         if ($target -cin @('requested', 'policy-applied')) {
             $bridge = [Diagnostics.Process]::GetProcessById($result.owner.bridgePid)
@@ -46,26 +46,58 @@ foreach ($target in @('requested', 'policy-applied', 'restored', 'inspect')) {
             if (-not $actor.WaitForExit(15000) -or -not $bridge.WaitForExit(15000)) {
                 throw 'Original claimed policy controller or bridge survived interruption.'
             }
-        } elseif ($result.status -cne 'closed' -or -not $actor.WaitForExit(15000) -or $actor.ExitCode -ne 0) {
-            throw 'Cold policy recovery actor did not close cleanly.'
+        } else {
+            $status = if ($target -ceq 'archive') { 'archived-and-copied' } else { 'closed' }
+            if ($result.status -cne $status -or -not $actor.WaitForExit(15000) -or $actor.ExitCode -ne 0) {
+                throw 'Cold policy recovery actor did not close cleanly.'
+            }
         }
         $expectedSequence = switch ($target) {
             'requested' { 2 }
             'policy-applied' { 3 }
+            'archive' { 6 }
             default { 5 }
         }
         if ($result.progress.policySequence -ne $expectedSequence) {
             throw 'Cold policy recovery did not preserve each distinct takeover claim.'
         }
         foreach ($file in @($originals.Keys)) {
-            if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -cne $originals[$file]) {
+            $current = if ($target -ceq 'archive' -and $file.StartsWith("$journal\", [StringComparison]::OrdinalIgnoreCase)) {
+                Join-Path $result.archived.archive $file.Substring($journal.Length + 1)
+            } else { $file }
+            if ((Get-FileHash -LiteralPath $current -Algorithm SHA256).Hash -cne $originals[$file]) {
                 throw 'Cold policy recovery changed its original state, lock, snapshot or journal prefix.'
             }
         }
-        $records = @(Get-ChildItem -LiteralPath $journal -Filter 'policy-*.json' -File | Sort-Object Name)
+        $retained = if ($target -ceq 'archive') { $result.archived.archive } else { $journal }
+        $records = @(Get-ChildItem -LiteralPath $retained -Filter 'policy-*.json' -File | Sort-Object Name)
         if ($records.Count -ne $expectedSequence) { throw 'Cold policy journal contains missing or extra records.' }
         foreach ($file in $records) {
             $originals[$file.FullName] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+        }
+        if ($target -ceq 'archive') {
+            $archive = [Deployment.WindowsPrivateFile]::OpenDirectory($result.archived.archive)
+            $fresh = $null
+            try {
+                $fresh = [Deployment.WindowsPrivateFile]::OpenDirectory($journal)
+                $oldIdentity = $archive.CaptureIdentity()
+                $newIdentity = $fresh.CaptureIdentity()
+                if ($oldIdentity.Dev -cne $result.archived.identity.dev -or
+                    $oldIdentity.Ino -cne $result.archived.identity.ino -or
+                    ($newIdentity.Dev -ceq $oldIdentity.Dev -and $newIdentity.Ino -ceq $oldIdentity.Ino)) {
+                    throw 'Fresh cold claim reused or replaced the archived original journal.'
+                }
+            } finally {
+                if ($fresh) { $fresh.Dispose() }
+                $archive.Dispose()
+            }
+            $names = @(Get-ChildItem -LiteralPath $journal -Force | ForEach-Object Name | Sort-Object)
+            $owner = Get-Content -LiteralPath (Join-Path $journal 'owner.json') -Raw | ConvertFrom-Json
+            if (($names -join ',') -cne 'files-restored.json,owner.json' -or
+                $owner.owner.operationId -cne $result.ownerId -or
+                $result.runtimeBundle -cne (Join-Path $Control "runtime-$($result.ownerId)")) {
+                throw 'Archived cold policy did not admit a fresh original-policy claim and completed copy.'
+            }
         }
         $task = $scheduler.GetFolder('\').GetTask($TaskName)
         if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
@@ -101,5 +133,5 @@ foreach ($target in @('requested', 'policy-applied', 'restored', 'inspect')) {
         foreach ($process in @($bridge, $actor)) { if ($process) { $process.Dispose() } }
     }
 }
-if ($sequence -ne 5) { throw 'Cold policy recovery did not complete its retained journal.' }
-Write-Output 'PASS: cold policy recovery survives request and unacknowledged registration crashes with distinct claimed owners, unchanged evidence and no task restart'
+if ($sequence -ne 6) { throw 'Cold policy recovery did not complete its retained journal and archival claim.' }
+Write-Output 'PASS: cold policy recovery survives repeated crashes, archives its exact original journal and admits a fresh complete cold copy without task restart'

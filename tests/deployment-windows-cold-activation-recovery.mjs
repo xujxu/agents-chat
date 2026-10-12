@@ -25,6 +25,7 @@ try {
   assert.equal(proof.observation.status, phase === 'stopped' ? 'cold-activation-stopped' : 'cold-activation-inactive');
   assert.equal(proof.observation.mutationAuthority, false);
   assert.equal(proof.advance, undefined);
+  assert.equal(proof.archive, undefined);
   assert.equal(proof.observation.operationId, state.operationId);
   assert.equal(proof.observation.taskName, stopped.taskName);
   assert.equal(proof.observation.historySha256, createHash('sha256').update(stoppedBytes).digest('hex'));
