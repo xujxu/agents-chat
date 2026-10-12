@@ -66,7 +66,10 @@ function Read-AgentsChatTaskCompletionRecords([hashtable]$Context) {
     $Context.Completed = $Context.CompletionRecord
 }
 
-function Read-AgentsChatTaskCompletionHistory([hashtable]$Context, [string[]]$RecordNames) {
+function Read-AgentsChatTaskCompletionHistory([hashtable]$Context, [string[]]$RecordNames, [switch]$StoppedOnly) {
+    if ($StoppedOnly -and ($RecordNames -join ',') -cne 'stop-intent,stop-inhibited,stop-stop-requested,stop-stopped') {
+        throw 'Stopped history requires the exact complete stop prefix.'
+    }
     $Context.Stage = 'records-admission'
     $admitted = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Directory 'admission.json') ''
     $admission = Read-AgentsChatMaintenanceFields ($admitted.ReadText()) @(
@@ -171,6 +174,13 @@ function Read-AgentsChatTaskCompletionHistory([hashtable]$Context, [string[]]$Re
         if ($name -cne 'stop-intent') {
             Assert-AgentsChatCompletionFields $records[$name] $records['stop-inhibited'] @('definition')
         }
+    }
+    if ($StoppedOnly) {
+        $Context.Project = $project
+        $Context.InitialState = $initial
+        $Context.InitialStateSha256 = $transaction.initialStateSha256.GetString()
+        $Context.Definition = $records['stop-stopped'].definition.GetString()
+        return
     }
     $prepared = $records['complete-prepared']
     $prior = ConvertFrom-AgentsChatTaskTransactionState $scope $prepared.activatingState.GetRawText()

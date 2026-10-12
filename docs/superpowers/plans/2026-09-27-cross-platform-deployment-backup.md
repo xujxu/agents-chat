@@ -13958,6 +13958,11 @@ until the later exclusive lease/restoration/activation path is accepted.
     --ref feat/deployment-backup -f windows_application_only=true \
     -f windows_live_only=true -f windows_commands_only=true
   ```
+  Causal `afec3a5 / 38187867756` reached the real stopped restore task at
+  `2026-10-12 00:28:39 UTC` and failed on the missing
+  `windows-stopped-restore-proof.ps1`, as expected. Implementation retains the
+  original state/lock/receipt/runtime handles; the fixed gate also repeats
+  existing terminal restored completion proof to protect the shared parser.
 - [ ] Implement native retained proof. The stopped-prefix parser accepts
   exactly `stop-intent`, `stop-inhibited`, `stop-stop-requested`, `stop-stopped`,
   validates their original transaction/lock/initial-state hashes and returns
