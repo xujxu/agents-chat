@@ -13915,6 +13915,30 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5ED: Verify the guarded cold runtime's owned HTTP readiness
+
+**Scope:** before any lease release or terminal success, retain the listener
+inside the exact newly started runtime Job and verify HTTP auth providers
+against the private admitted configuration. Reuse existing native listener
+retention and `waitWindowsReadiness`; do not infer readiness from process
+liveness, an open foreign port or caller-supplied providers.
+
+- [ ] Add bounded listener requests to the genuine cold bridge, preserving
+  task/generation/controller/configuration checks. Retain one exact native
+  listener identity and release its observer before stopping the owned Job.
+- [ ] Expose `activation.waitReady` only after startup, with an explicit valid
+  port, positive bounded wait and early pre-cancellation. Use the private
+  configuration providers and recheck native/configuration authority after
+  HTTP verification.
+- [ ] Extend the existing stopped-proof fixture with its existing owned HTTP
+  descendant fixture in the project snapshot. Verify wrong-provider refusal,
+  transient HTTP503 retry, unchanged activation state, and clean listener/Job
+  shutdown. Keep the existing command and application timeouts.
+- [ ] Run native causal/paired Actions after guarded startup acceptance, then
+  extend actual cold application acceptance with owned HTTP and restored API
+  data while the new runtime remains leased. No public cold restore,
+  advanced-prefix recovery or terminal completion is accepted by this step.
+
 ### Task 5EC: Start and settle a distinct guarded runtime under cold ownership
 
 **Scope:** use the accepted intent and retained configuration to start the

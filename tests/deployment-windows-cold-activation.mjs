@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { lstat, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { claimWindowsColdRestore } from '../scripts/deployment/windows-cold-restore-lease.mjs';
 import { restoreWindowsColdFiles } from '../scripts/deployment/windows-cold-restore-files.mjs';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
+import { verifyWindowsColdReadiness } from './deployment-windows-cold-readiness.mjs';
 
 const [control, pwsh] = process.argv.slice(2);
 const stateBytes = await readFile(path.join(control, 'state.json'));
@@ -20,6 +21,7 @@ let running;
 try {
   await restoreWindowsColdFiles({ control, lease, acceptDataLoss: true });
   configuration = await lease.inspectRestoredConfiguration();
+  const originalListener = await lstat(path.join(state.project, 'listener.json'), { bigint: true });
   await lease.retireRuntime();
   activation = await lease.prepareActivation({ configuration });
   assert.equal(typeof activation.start, 'function', 'Cold activation requires an original guarded startup authority.');
@@ -37,6 +39,9 @@ try {
   assert.deepEqual(await activation.check(), activation.state);
   await configuration.checkFiles();
   await assert.rejects(activation.start(), /already started/);
+  await verifyWindowsColdReadiness({
+    activation, project: state.project, originalListener, runtime: running.runtime, providers: lease.providers,
+  });
   assert.deepEqual(await readFile(path.join(control, 'state.json')), stateBytes);
   assert.deepEqual(await readFile(path.join(control, 'lock/owner.json')), lockBytes);
 } finally {

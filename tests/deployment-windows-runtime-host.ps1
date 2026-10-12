@@ -61,9 +61,9 @@ try {
     $environment.Add('SystemRoot', $env:SystemRoot)
     $environment.Add('PATH', $env:PATH)
     $environment.Add('RUNTIME_LITERAL', 'literal %n $HOME " space')
-    if ($Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
+    if ($StoppedProof -or $Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
         $address = switch ($Scenario) { 'listener-v4' { '127.0.0.1' } 'listener-v6' { '::' } default { 'independent' } }
-        if ($Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) { $address = '127.0.0.1' }
+        if ($StoppedProof -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) { $address = '127.0.0.1' }
         $environment.Add('RUNTIME_LISTENER_ADDRESS', $address)
     }
     $bundle = New-AgentsChatRuntimeBundle -Source $source -Directory $root -File $node `
@@ -80,8 +80,8 @@ try {
         try { $retained.Check() }
         finally { $retained.Dispose() }
     }
-    if ($Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
-        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'deployment-windows-runtime-listener.cjs') -Destination (Join-Path $root 'listener-fixture.cjs')
+    if ($StoppedProof -or $Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'deployment-windows-runtime-listener.cjs') -Destination (Join-Path $project 'listener-fixture.cjs')
     }
     @'
 const fs = require('node:fs');
