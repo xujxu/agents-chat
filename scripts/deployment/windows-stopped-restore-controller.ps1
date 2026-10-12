@@ -2,7 +2,12 @@ param(
     [Parameter(Mandatory)][string]$Control,
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][string]$ControllerIdentity,
-    [switch]$Recovery
+    [switch]$Recovery,
+    [switch]$ColdActivation,
+    [string]$OwnerSha256,
+    [string]$ReceiptSha256,
+    [string]$IntentSha256,
+    [string]$HistorySha256
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -20,8 +25,21 @@ try {
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'proof-open'
-    $proof = Open-AgentsChatStoppedRestoreProof -Control $Control -Recovery:$Recovery
-    $observed = Assert-AgentsChatStoppedRestoreProof $proof
+    if ($ColdActivation) {
+        if (-not $Recovery -or
+            @(@($OwnerSha256, $ReceiptSha256, $IntentSha256, $HistorySha256) | Where-Object { $_ -cnotmatch '^[a-f0-9]{64}$' }).Count) {
+            throw 'Cold observation requires explicit original evidence digests.'
+        }
+        . (Join-Path $PSScriptRoot 'windows-cold-activation-recovery-proof.ps1')
+        $proof = Open-AgentsChatColdActivationRecoveryProof $Control $OwnerSha256 $ReceiptSha256 $IntentSha256 $HistorySha256
+        $observed = Assert-AgentsChatColdActivationRecoveryProof $proof
+    } else {
+        if ($OwnerSha256 -or $ReceiptSha256 -or $IntentSha256 -or $HistorySha256) {
+            throw 'Stopped observation cannot accept cold activation digests.'
+        }
+        $proof = Open-AgentsChatStoppedRestoreProof -Control $Control -Recovery:$Recovery
+        $observed = Assert-AgentsChatStoppedRestoreProof $proof
+    }
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
         control=$Control; controllerIdentity=$ControllerIdentity; value=$observed
@@ -47,7 +65,8 @@ try {
             Close-AgentsChatTaskCompletionProof $proof
             $proof = $null
             $value = 'close'
-        } else { $value = Assert-AgentsChatStoppedRestoreProof $proof }
+        } elseif ($ColdActivation) { $value = Assert-AgentsChatColdActivationRecoveryProof $proof }
+        else { $value = Assert-AgentsChatStoppedRestoreProof $proof }
         [Console]::Out.WriteLine((@{
             id=$id; type='reply'; value=$value
             processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)

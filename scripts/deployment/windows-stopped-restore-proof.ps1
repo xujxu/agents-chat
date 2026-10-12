@@ -115,21 +115,22 @@ function Assert-AgentsChatStoppedRestoreProof([hashtable]$Context) {
     } finally { $Context.Busy = $false }
 }
 
-function Open-AgentsChatStoppedRestoreProof {
+function Open-AgentsChatStoppedRestoreEvidence {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Control, [switch]$Recovery)
+    param([Parameter(Mandatory)][string]$Control, [switch]$Recovery, [switch]$ActivationHistory)
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
     $context = @{
         Control=$Control; Directory=(Join-Path $Control 'task-maintenance')
         Files=[Collections.Generic.List[IDisposable]]::new()
         Closed=$false; Poisoned=$false; Busy=$false; Owner=$null; Instance=$null; Folder=$null; Stage='directories'
-        Recovery=[bool]$Recovery
+        Recovery=[bool]$Recovery; ActivationHistory=[bool]$ActivationHistory
         AbsentOwner=$false; RuntimeSessionId=$null
     }
     try {
         if ($PSVersionTable.PSVersion.Major -lt 7 -or -not $IsWindows -or
-            $Control -cnotmatch '^[A-Za-z]:\\' -or [IO.Path]::GetFullPath($Control) -cne $Control) {
+            $Control -cnotmatch '^[A-Za-z]:\\' -or [IO.Path]::GetFullPath($Control) -cne $Control -or
+            ($ActivationHistory -and -not $Recovery)) {
             throw 'Stopped restore proof requires native Windows and canonical control.'
         }
         foreach ($directory in @($Control, (Join-Path $Control 'lock'), $context.Directory)) {
@@ -167,6 +168,23 @@ function Open-AgentsChatStoppedRestoreProof {
         $scheduler = New-Object -ComObject 'Schedule.Service'
         $scheduler.Connect()
         $context.Folder = $scheduler.GetFolder('\')
+        return $context
+    } catch {
+        $failure = [InvalidOperationException]::new("Stopped restore evidence open refused: $($context.Stage).", $_.Exception)
+        try { Close-AgentsChatTaskCompletionProof $context }
+        catch { throw [AggregateException]::new('Stopped evidence and cleanup failed.', [Exception[]]@($failure, $_.Exception)) }
+        throw $failure
+    }
+}
+
+function Open-AgentsChatStoppedRestoreProof {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Control, [switch]$Recovery)
+    $ErrorActionPreference = 'Stop'
+    Set-StrictMode -Version Latest
+    $context = Open-AgentsChatStoppedRestoreEvidence -Control $Control -Recovery:$Recovery
+    try {
+        $admission = $context.Admission
         $task = $context.Folder.GetTask($context.TaskName)
         $bundle = [IO.Path]::GetDirectoryName($admission.configuration.GetString())
         $hostFile = Join-Path $bundle 'windows-runtime-host.ps1'

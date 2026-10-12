@@ -15,6 +15,7 @@ import { inspectWindowsColdConfiguration } from './windows-cold-restore-configur
 import { createWindowsColdActivationIntent } from './windows-cold-activation-intent.mjs';
 import { openWindowsColdActivation } from './windows-cold-activation.mjs';
 import { waitWindowsReadiness } from './windows-readiness.mjs';
+import { captureWindowsColdActivationHistory } from './windows-cold-activation-history.mjs';
 
 const leases = new WeakMap();
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -35,7 +36,7 @@ async function directoryIdentity(directory) {
   return { dev: info.dev.toString(), ino: info.ino.toString() };
 }
 
-async function inspectLease(control, expected, configurationSha256, targetCommit) {
+async function inspectLease(control, expected, configurationSha256, targetCommit, activationTaskName) {
   const inspect = async name => {
     const directory = path.join(control, name);
     try { await lstat(directory); }
@@ -45,7 +46,11 @@ async function inspectLease(control, expected, configurationSha256, targetCommit
     if (name === 'cold-restore-staging' && !names.length) return { directory, identity, record: null, bytes: null };
     const hasReceipt = name === 'recovery-lock' && names.includes('files-restored.json');
     const hasIntent = hasReceipt && names.includes('activation-intent.json');
-    if (!same(names, [...(hasIntent ? ['activation-intent.json'] : []), ...(hasReceipt ? ['files-restored.json'] : []), 'owner.json'])) {
+    const phases = activationTaskName !== undefined && hasIntent
+      ? ['start-requested', 'running', 'stopped'].filter(phase => names.includes(`activation-${phase}.json`)) : [];
+    if (!same(names, [...(hasIntent ? ['activation-intent.json'] : []),
+      ...(hasReceipt ? ['files-restored.json'] : []), 'owner.json',
+      ...phases.map(phase => `activation-${phase}.json`)].sort())) {
       throw new Error('Cold restore lease contains incomplete or foreign evidence.');
     }
     const bytes = await readWorkerFile(path.join(directory, 'owner.json'), 65536, { privateMode: true });
@@ -86,7 +91,12 @@ async function inspectLease(control, expected, configurationSha256, targetCommit
       }
       intent = { record: intentRecord, bytes: intentBytes };
     }
-    return { directory, identity, record: { ...record, owner }, bytes, receipt, intent };
+    const history = phases.length ? captureWindowsColdActivationHistory({
+      intent: intent.record, intentBytes: intent.bytes, taskName: activationTaskName,
+      records: await Promise.all(phases.map(phase =>
+        readWorkerFile(path.join(directory, `activation-${phase}.json`), 4194304, { privateMode: true }))),
+    }) : null;
+    return { directory, identity, record: { ...record, owner }, bytes, receipt, intent, history };
   };
   const guard = await inspect('recovery-lock');
   const staging = await inspect('cold-restore-staging');
@@ -101,6 +111,8 @@ async function inspectLease(control, expected, configurationSha256, targetCommit
   }
   return { guard, staging };
 }
+
+export { inspectLease as inspectWindowsColdRestoreEvidence, directoryIdentity as windowsColdDirectoryIdentity };
 
 export async function assertWindowsColdRestoreLease(control, lease, options) {
   if (!leases.has(lease) || leases.get(lease) !== control) {

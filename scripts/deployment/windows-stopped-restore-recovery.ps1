@@ -37,10 +37,15 @@ function Open-AgentsChatStoppedRestoreRecoveryFiles([hashtable]$Context) {
             $expected = @('files-restored.json', 'owner.json')
             if (@($entries | Where-Object Name -CEQ 'activation-intent.json').Count) {
                 $expected = @('activation-intent.json', 'files-restored.json', 'owner.json')
+                if ($Context.ActivationHistory) {
+                    $expected = @($expected + @('activation-start-requested.json',
+                        'activation-running.json', 'activation-stopped.json') | Sort-Object)
+                }
             }
         }
+        $maximum = if ($Context.ActivationHistory) { 4194304 } else { 65536 }
         if ((@($entries | ForEach-Object Name) -join ',') -cne ($expected -join ',') -or
-            @($entries | Where-Object { $_.PSIsContainer -or $_.Length -gt 65536 }).Count) {
+            @($entries | Where-Object { $_.PSIsContainer -or $_.Length -gt $maximum }).Count) {
             throw 'Incomplete or foreign cold restore owner evidence.'
         }
         $Context.RecoveryFiles[$name] = $expected
