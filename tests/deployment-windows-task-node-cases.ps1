@@ -93,7 +93,7 @@ try {
         $task = $scheduler.GetFolder('\').GetTask($TaskName)
         Assert ([string]$task.GetSecurityDescriptor(7) -cne $originalDescriptor) 'Fixture must exercise nondefault task permissions'
     }
-    $readyFile = Join-Path $Root "runtime-$($Ready.identity.Replace(':', '-')).json"
+    $readyFile = Join-Path ([IO.Path]::GetDirectoryName($Configuration)) "runtime-$($Ready.identity.Replace(':', '-')).json"
     $directory = Join-Path $controllerRoot $(if ($Transactional) { 'task-maintenance' } else { 'node-maintenance' })
     $record = [ordered]@{
         version=1; operationId=$(if ($Transactional) { $hello.operationId } else { [guid]::NewGuid().ToString('D') })

@@ -48,6 +48,7 @@ $taskName = "Agents-Chat-Runtime-Host-Test-$([guid]::NewGuid())"
 $parent = & $node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" ([IO.Path]::GetTempPath())
 Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize installed host fixture parent'
 $root = Join-Path $parent "$taskName space"
+$project = if ($StoppedProof) { "$root-project" } else { $root }
 $registered = $false
 $owner = $null
 $member = $null
@@ -55,6 +56,7 @@ $unexpectedOwner = $null
 $guardController = $null
 $guardDiagnostic = $null
 try {
+    if ($StoppedProof) { [Deployment.WindowsPrivateFile]::CreateDirectory($project).Dispose() }
     $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
     $environment.Add('SystemRoot', $env:SystemRoot)
     $environment.Add('PATH', $env:PATH)
@@ -65,8 +67,8 @@ try {
         $environment.Add('RUNTIME_LISTENER_ADDRESS', $address)
     }
     $bundle = New-AgentsChatRuntimeBundle -Source $source -Directory $root -File $node `
-        -Arguments @((Join-Path $root 'writer.cjs'), 'literal %n $HOME " space') `
-        -WorkingDirectory $root -Environment $environment
+        -Arguments @((Join-Path $project 'writer.cjs'), 'literal %n $HOME " space') `
+        -WorkingDirectory $project -Environment $environment
     $configFile = $bundle.Configuration
     $text = [IO.File]::ReadAllText($configFile)
     $configuration = $text | ConvertFrom-Json -AsHashtable
@@ -94,7 +96,7 @@ if (process.argv[2] === 'child') {
     { detached: true, stdio: 'ignore' });
   child.unref();
 }
-'@ | Set-Content -LiteralPath (Join-Path $root 'writer.cjs')
+'@ | Set-Content -LiteralPath (Join-Path $project 'writer.cjs')
     $hostFile = Join-Path $root 'windows-runtime-host.ps1'
     foreach ($mode in @('digest', 'duplicate', 'unknown', 'environment', 'helper', 'controller')) {
         $candidate = $text
@@ -114,7 +116,7 @@ if (process.argv[2] === 'child') {
             & $pwsh -NoProfile -NonInteractive -File $hostFile -Configuration $configFile -Sha256 $digest 2>&1
         }
         Assert ($LASTEXITCODE -ne 0 -and ($output -join "`n") -match "Managed runtime startup refused: $stage\.") "Unsupported $mode configuration was not explicitly refused"
-        Assert (-not (Test-Path -LiteralPath (Join-Path $root 'writes')) -and
+        Assert (-not (Test-Path -LiteralPath (Join-Path $project 'writes')) -and
             @(Get-ChildItem -LiteralPath $root -Filter 'runtime-*.json').Count -eq 0) 'Refused startup published readiness or admitted target work'
         $global:LASTEXITCODE = 0
     }
@@ -165,7 +167,7 @@ if (process.argv[2] === 'child') {
     $null = $owner.Handle
     $ownerIdentity = [Deployment.WindowsWorkerJob]::ProcessIdentity($owner.Id)
     $readyFile = Join-Path $root "runtime-$($ownerIdentity.Replace(':', '-')).json"
-    while (-not (Test-Path -LiteralPath $readyFile) -or -not (Test-Path -LiteralPath (Join-Path $root 'writes'))) {
+    while (-not (Test-Path -LiteralPath $readyFile) -or -not (Test-Path -LiteralPath (Join-Path $project 'writes'))) {
         Assert (-not $owner.HasExited -and [DateTime]::UtcNow -lt $deadline) 'Installed runtime failed before readiness'
         Start-Sleep -Milliseconds 100
     }
@@ -183,9 +185,9 @@ if (process.argv[2] === 'child') {
     $binding = Get-AgentsChatTaskOwnerBinding -TaskName $taskName -OwnerPid $owner.Id -OwnerIdentity $ownerIdentity `
         -Definition ([string]$task.Xml) -SecurityDescriptor ([string]$task.GetSecurityDescriptor(7))
     Assert ($binding.ownerPid -eq $ready.pid) 'Managed host is not the declared native task owner'
-    $member = [Diagnostics.Process]::GetProcessById([int](Get-Content -LiteralPath (Join-Path $root 'writer-pid') -Raw))
+    $member = [Diagnostics.Process]::GetProcessById([int](Get-Content -LiteralPath (Join-Path $project 'writer-pid') -Raw))
     $null = $member.Handle
-    $literal = Get-Content -LiteralPath (Join-Path $root 'literal.json') -Raw | ConvertFrom-Json
+    $literal = Get-Content -LiteralPath (Join-Path $project 'literal.json') -Raw | ConvertFrom-Json
     Assert ($literal.Count -eq 2 -and $literal[0] -ceq 'literal %n $HOME " space' -and
         $literal[1] -ceq $literal[0]) 'Installed command reinterpreted literal argv or environment'
     foreach ($file in @($configFile, (Join-Path $root 'windows-worker-launcher.ps1'), $readyFile)) {
@@ -273,7 +275,7 @@ if (process.argv[2] === 'child') {
             elseif ($Scenario.StartsWith('transaction-activate-complete-retirement')) { 'activate-complete-retirement' } `
             elseif ($Scenario.StartsWith('transaction-activate-complete-recovery')) { 'activate-complete-recovery' } `
             elseif ($Scenario -in @('transaction-activate-complete-restore', 'transaction-activate-complete-disabled')) { 'activate-complete' } else { $Scenario.Substring(12) }
-        & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $root -TaskName $taskName `
+        & (Join-Path $PSScriptRoot 'deployment-windows-task-node-cases.ps1') -Root $project -TaskName $taskName `
             -Owner $owner -Ready $ready -Configuration $configFile -Sha256 $digest -Binding $binding `
             -Action $transactionAction -Transactional -Restore:$restoreTransaction -CrashStep $CrashStep `
             -DiscoverManagedTask:$DiscoverManagedTask -DiscoveredAdmission:$DiscoveredAdmission -OwnedSourceBuild:$OwnedSourceBuild `
@@ -387,4 +389,5 @@ if (process.argv[2] === 'child') {
         } finally { $guardController.Dispose() }
     }
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+    if ($StoppedProof -and (Test-Path -LiteralPath $project)) { Remove-Item -LiteralPath $project -Recurse -Force }
 }

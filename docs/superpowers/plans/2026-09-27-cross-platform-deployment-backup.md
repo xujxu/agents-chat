@@ -13915,6 +13915,54 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DV: Retry original Windows files under the distinct cold lease
+
+**Scope:** restore project files and relocate archived external runtime files,
+without activation or terminal success. The caller owns the accepted cold
+lease for the entire operation. Every recovery attempt gets a fresh runtime
+bundle named for its distinct recovery operation, so an interrupted external
+copy cannot force reuse of an incomplete candidate. Do not impersonate the
+original dead lock or call live-scope publication with a fabricated scope.
+
+**Files:** add `scripts/deployment/windows-cold-restore-files.mjs` and
+`scripts/deployment/windows-cold-restore-runtime.mjs`; share native runtime
+publication transport with `windows-runtime-publication.mjs`. Extend the cold
+lease with its bound backup/PowerShell paths and a stopped-authority check
+that does not repeatedly hash the entire backup during each copied group.
+Add `tests/deployment-windows-cold-restore-files.mjs`. Only the opted-in
+stopped-proof fixture separates the runtime bundle from the project; derive
+its original readiness path from the real configuration directory.
+
+- [ ] Run causal native coverage first:
+  ```js
+  const restored = await restoreWindowsColdFiles({
+    control, lease, acceptDataLoss: true,
+  });
+  assert.equal(restored.status, 'files-restored');
+  assert.equal(restored.runtimeBundle.directory,
+    path.join(control, `runtime-${lease.owner.operationId}`));
+  assert.deepEqual(await lease.checkStopped(),
+    { stopped: true, inhibited: true, operationId: lease.owner.operationId });
+  ```
+  A distinct actor uses the actual `.env.local` write-stream finish boundary
+  to SIGKILL itself, after all project files have been removed but before
+  `writer.cjs` is copied. The next actor must prove archived environment bytes
+  are present and that later file absent, then retry the full restoration.
+- [ ] Publish a fresh archived runtime bundle under the original WeakMap-bound
+  cold lease. Reuse the existing native publisher and archive-member protocol;
+  preserve all live publication scope checks and prohibit replacement of
+  existing bundle directories. Bind readiness/digest/close to the real
+  native child and recheck the lease before and after publication.
+- [ ] Implement bounded project/external stages with the existing restoration
+  helpers, explicit data-loss acknowledgement and lease-backed stopped checks.
+  Return only `files-restored` plus the relocated runtime bundle. Keep the
+  original application state/lock/receipts unchanged; do not restart a task,
+  publish a deployment receipt, retire evidence or report terminal restored.
+- [ ] Run the original native gate through Actions. Require actual partial-copy
+  retry, exact archived project bytes, unchanged original external runtime
+  bytes/file IDs, unchanged backup/lock/state, forged lease/ack refusal,
+  previous two-controller lease-loss cases and terminal-proof regression.
+
 ### Task 5DU: Claim a distinct durable Windows cold restore lease
 
 **Scope:** reuse the Linux cold-lease publication model: separate
