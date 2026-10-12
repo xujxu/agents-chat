@@ -13955,6 +13955,9 @@ Include the new native helper in the explicit saved-engine dependency closure.
   warm runtime/instance/listener proof. Node rechecks all nine receipt bytes on
   every native acknowledgement. A fourth focused unit covers pre-abort and
   invalid-path refusal; saved-engine closure includes the new native helper.
+  Production `6d556dd` is pinned to paired run `38247756830`, queued behind
+  causal `38247065722`; both watchers are attached. Neither Task 5EN nor 5EO is
+  accepted until both original stopped-history and bridge-death cases pass.
 
 ### Task 5EN: Complete the cold runtime's permanent task policy and original lease
 
