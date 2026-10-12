@@ -280,6 +280,11 @@ if (process.argv[2] === 'child') {
             -Action $transactionAction -Transactional -Restore:$restoreTransaction -CrashStep $CrashStep `
             -DiscoverManagedTask:$DiscoverManagedTask -DiscoveredAdmission:$DiscoveredAdmission -OwnedSourceBuild:$OwnedSourceBuild `
             -CompletedCloseout:$CompletedCloseout -PriorRuntimeRecovery $PriorRuntimeRecovery -StoppedProof:$StoppedProof
+        if ($StoppedProof) {
+            & (Join-Path $PSScriptRoot 'deployment-windows-cold-absent-owner.ps1') `
+                -Control "$project-control" -TaskName $taskName -Ready $ready -Owner $owner
+            return
+        }
         if ($transactionAction -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
             'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state',
             'activate-complete-proof', 'activate-complete-retirement', 'activate-complete-recovery')) {

@@ -13915,6 +13915,38 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DX: Admit an absent original Windows runtime without inventing liveness
+
+**Scope:** before wiring cold activation, cover both an original stopped host
+and an original host that has exited. Only explicit recovery-mode proof may
+admit the latter. Require the same original disabled task XML/security, zero
+Scheduler instances, absent original PID/start identity and no writers in the
+recorded native Job. The `Local` Job namespace must be checked in the recorded
+session; refuse cross-session ambiguity. This does not claim reboot or missing
+runtime-file support, or authorize activation.
+
+**Files:** extend `WindowsWorkerJob.cs`, `windows-task-completion-proof.ps1`
+and `windows-stopped-restore-proof.ps1`; add native fixture
+`tests/deployment-windows-cold-absent-owner.ps1` and its Node contract, called
+only after the existing opted-in stopped-proof fixture completes.
+
+- [ ] Retire the actual original stopped host, wait for its process and exact
+  Scheduler instance to settle, then claim cold recovery from a distinct
+  actor. The causal run must fail at original runtime absence, not a mock or
+  unrelated fixture failure.
+- [ ] Add a read-only, query-only native Job emptiness assertion. Validate
+  nonempty generation and the recorded session, distinguish only genuine
+  not-found from other native errors, reject surviving members and preserve
+  existing Job limits. Never stop arbitrary PIDs or create a replacement Job.
+- [ ] Retain the readiness session during proof admission. Select an absent
+  owner only at explicit recovery proof open; never silently change an active
+  proof's liveness mode when its original owner dies. Recheck owner absence,
+  exact disabled policy, zero instances and Job emptiness on every assertion.
+- [ ] Run native Actions coverage for authentic dead-owner claim, unchanged
+  original lock/state/archive and no task start, plus all preceding receipt,
+  copy interruption, takeover and terminal-proof regressions. Add direct
+  native empty-Job, nonempty-Job and cross-session refusal contracts.
+
 ### Task 5DW: Persist Windows cold restored-file completion before activation
 
 **Scope:** follow the existing Linux cold recovery's separate
