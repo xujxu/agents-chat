@@ -13957,6 +13957,13 @@ Keep the default stopped/terminal proof's existing-recovery refusal. Add
   `WindowsPrivateFile.CreateDirectory` and `Publish` primitives under an
   exact-owner native bridge, retain its directory/file handles through the
   digest acknowledgement, then close it before the staged rename.
+  Correction `c0de23a / 38196923222`, job `114641546741`, passed at
+  `2026-10-12 02:55:05 UTC`. Two successive recovery-controller deaths,
+  distinct third ownership, live overlap/forgery/changed-record refusal,
+  native guard write denial and unchanged original lock/state passed at
+  `02:51:12 UTC`; original terminal restored proof passed at `02:54:50 UTC`.
+  This accepts acknowledged lease takeover, not application file restoration
+  or every unacknowledged publication prefix.
 - [ ] Retain exact native recovery/staging directory inventories and any
   owner file only in explicit recovery-proof mode. Default proof still refuses
   recovery evidence. Recheck all handles/inventories on every request.
