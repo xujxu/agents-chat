@@ -19,7 +19,8 @@ param(
     [AllowEmptyString()][ValidateSet('', 'copying', 'backup-ready', 'source-selected')]
     [string]$PriorRuntimeRecovery = '',
     [switch]$Transactional,
-    [switch]$Restore
+    [switch]$Restore,
+    [switch]$StoppedProof
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -44,6 +45,10 @@ if ($Transactional) {
     $arguments.Add($control)
     $arguments.Add($Root)
     $arguments.Add($(if ($Restore) { 'restore' } else { 'update' }))
+    if ($StoppedProof) {
+        Assert ($Restore -and $Action -ceq 'close') 'Stopped proof requires original restore stop'
+        $arguments.Add('stopped-proof')
+    }
 }
 $controllerRoot = if ($Transactional) { $control } else { "$Root-controller" }
 $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -141,6 +146,10 @@ try {
     Assert ($stopped.bridge.processIdentity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($bridge.Id)) `
         'Native bridge process identity differs'
     $stoppedDefinition = [string]$scheduler.GetFolder('\').GetTask($TaskName).Xml
+    if ($StoppedProof) {
+        & (Join-Path $PSScriptRoot 'deployment-windows-stopped-restore-proof.ps1') `
+            -Control $control -TaskName $TaskName -OperationId $hello.operationId -LiveOwner
+    }
     $request = @{ action=$Action }
     if ($PriorRuntimeRecovery) {
         Assert (-not $Restore -and -not $OwnedSourceBuild -and
@@ -199,6 +208,10 @@ try {
     if ($Action -ne 'exit') { Assert ((Receive-Controller).phase -ceq 'closed') 'Node close was not acknowledged' }
     Assert ($controller.WaitForExit(15000) -and $controller.ExitCode -eq 0 -and
         $bridge.WaitForExit(15000)) 'Original Node controller or bridge survived completion'
+    if ($StoppedProof) {
+        & (Join-Path $PSScriptRoot 'deployment-windows-stopped-restore-proof.ps1') `
+            -Control $control -TaskName $TaskName -OperationId $hello.operationId
+    }
     if ($Action -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument')) {
         Assert ($Owner.WaitForExit(15000) -and $Owner.ExitCode -eq 0) 'Original task owner did not retire cleanly'
         $task = $scheduler.GetFolder('\').GetTask($TaskName)

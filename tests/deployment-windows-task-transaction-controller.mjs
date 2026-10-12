@@ -12,8 +12,9 @@ import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs'
 import { saveRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 
-const [pwsh, control, project, operation] = process.argv.slice(2);
+const [pwsh, control, project, operation, proofMode] = process.argv.slice(2);
 assert.ok(['update', 'restore'].includes(operation));
+assert.ok(proofMode === undefined || proofMode === 'stopped-proof' && operation === 'restore');
 const lock = await acquireLock(control, { project, operationId: randomUUID(), pwsh });
 const lines = createInterface({ input: process.stdin })[Symbol.asyncIterator]();
 const receive = async () => {
@@ -99,8 +100,10 @@ await context.check();
 await assert.rejects(writeFile(path.join(control, 'lock', 'owner.json'), 'changed'));
 await context.check();
 await sourceFixture?.refuseSnapshot(context);
-state = { ...state, phase: operation === 'restore' ? 'restore-activating' : 'copying', previousPhase: state.phase };
-await writeState(control, state);
+if (proofMode !== 'stopped-proof') {
+  state = { ...state, phase: operation === 'restore' ? 'restore-activating' : 'copying', previousPhase: state.phase };
+  await writeState(control, state);
+}
 const snapshot = await sourceFixture?.snapshot(context);
 if (snapshot) state = { ...state, backupId: snapshot.id };
 await context.check();

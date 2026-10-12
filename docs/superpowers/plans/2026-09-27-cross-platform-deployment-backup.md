@@ -13915,6 +13915,68 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5DQ: Retain original stopped Windows restore evidence after actor exit
+
+**Scope:** block2 starts with read-only native admission, not lock deletion or
+automatic task adoption. The approved interrupted-restore requirement needs
+the original stop receipt chain, dead original actor, unchanged task/Job and
+stopped writers proved before any new recovery lease can authorize mutation.
+Reuse native private handles and the existing receipt-chain parser; do not
+create another task-ownership mechanism. Public cold restore remains refused
+until the later exclusive lease/restoration/activation path is accepted.
+
+**Files:**
+- Create `scripts/deployment/windows-stopped-restore-proof.ps1`.
+- Extend `scripts/deployment/windows-task-completion-records.ps1` with an
+  explicit four-record stopped-prefix path that returns before completion
+  parsing; all existing complete-prefix callers keep the old full checks.
+- Create `tests/deployment-windows-stopped-restore-proof.ps1`; extend existing
+  runtime-host, task-node-cases and transaction-controller fixtures with an
+  opt-in stopped-proof mode. No production test switch.
+- Add the native fixture to the existing command-only Actions gate.
+
+- [ ] Add native fixture first. Keep the original restore journal at
+  `restoring` and the existing native stop context alive. The observer must
+  reject that live owner, then succeed only after both actor and bridge exit:
+  ```powershell
+  $proof = Open-AgentsChatStoppedRestoreProof -Control $Control
+  try {
+      $result = Assert-AgentsChatStoppedRestoreProof $proof
+      Assert ($result.status -ceq 'observed' -and -not $result.mutationAuthority) 'Unexpected mutation authority'
+      Assert ($result.operationId -ceq $OperationId -and $result.taskName -ceq $TaskName) 'Original binding differs'
+      Assert ($result.stopped -and $result.inhibited) 'Original runtime is not settled'
+  } finally { Close-AgentsChatTaskCompletionProof $proof }
+  ```
+  Exercise both original `restoring` and settled `recovery-required`/
+  previousPhase=`restoring` state, preserved original lock and receipts,
+  retained-file write refusal, foreign inventory and enabled-task refusal.
+  No fixture may delete the original lock to obtain proof.
+- [ ] Run the paired native command gate and record the expected missing
+  stopped-proof module/function failure:
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  ```
+- [ ] Implement native retained proof. The stopped-prefix parser accepts
+  exactly `stop-intent`, `stop-inhibited`, `stop-stop-requested`, `stop-stopped`,
+  validates their original transaction/lock/initial-state hashes and returns
+  the original admission, initial state and disabled definition. New proof
+  holds private control/lock/maintenance directories and all evidence files,
+  requires dead admission controller and no competing recovery/retirement
+  evidence, and matches the complete current state to the initial restore
+  identity. Only phase/previousPhase/updatedAt/errorCode may differ for the
+  explicit recovery-required state. Open the original archived runtime bundle
+  and readiness record through `Open-AgentsChatCompletionBundle`; retain its
+  owner process, require exact Scheduler binding/security/disabled definition
+  and observe the original named runtime's stopped, quiescent, empty Job.
+  Recheck evidence, inventory, dead actor and native runtime before returning.
+  Return read-only operation/task/state digest plus stopped/inhibited booleans.
+  Use the existing reverse-order handle cleanup on all failures.
+- [ ] Obtain native positive/negative acceptance plus unchanged terminal
+  completion contracts. Only then wire this proof to exclusive cold recovery
+  admission; neither the proof nor a stale PID alone grants mutation authority.
+
 ### Task 5DP: Compose public restore.ps1 with the existing owned supervisor
 
 **Scope:** finish block1's live public command using the approved saved entry;
