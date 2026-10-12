@@ -522,7 +522,8 @@ preparation. Native snapshot/restoration now has an independent
 the full lifecycle matrix contains 36 jobs. Linux service recovery and
 interrupted-recovery resumption run separately under unchanged 10-minute
 limits, preserving all 66 existing cases without name-based filtering.
-Public Windows task-backed restore composition remains gated. Component-level
+Before the live public acceptance recorded below, Windows task-backed restore
+composition was gated. Component-level
 saved-engine archive inspection, native task-policy comparison and distinct
 runtime bundle publication passed all seven focused native jobs at
 `4a20946 / 38095473152`. Publication uses archived configuration/helpers even
@@ -578,8 +579,16 @@ and DNS service. The saved Windows process entry subsequently passed the full
 `2026-10-12 00:29:12 UTC`. Both complete restoration and executable-scoped
 egress-denied restoration invoke the verified saved entry as a distinct process,
 then pass independent closeout and authenticated data checks. The matrix also
-repeats all four interruption scenarios. Public-command actual acceptance and
-cold reentry remain gated; this baseline predates public `restore.ps1`.
+repeats all four interruption scenarios. This baseline predates public `restore.ps1`; cold reentry remains gated.
+Actual public `restore.ps1` passed executable-scoped egress-denied restoration
+at `4e1aed1 / 38188828721`, job `114616945668`, completed
+`2026-10-12 01:36:22 UTC`. The public command verifies and runs the saved entry,
+then completes independent finalization before returning success. Acceptance
+requires restored source/artifacts/environment and authenticated pre-backup
+data, the unchanged backup, removed lock and no successful controller captures.
+A later read-only actor confirms the restored runtime is not restarted.
+The whole 53-job run is still pending; this is actual public live-restore
+acceptance, not cold recovery or final deployment release acceptance.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
@@ -733,9 +742,10 @@ These options cannot reconfigure an existing installation or an update.
 Default-tunnel first deployment remains unfinished; do not use the old task
 installer as an automatic recovery fallback.
 
-**Windows restore candidate (actual public-command acceptance pending).**
-The public entry and its saved-engine invocation passed native contracts at
-`3497176 / 38187043591`. It currently admits only an existing running managed
+**Windows restore (running managed task).** The public entry and its saved-engine
+invocation passed native contracts at `3497176 / 38187043591` and actual
+egress-denied restoration at `4e1aed1 / 38188828721`, job `114616945668`.
+It currently admits only an existing running managed
 task with settled deployment state, not a stopped/legacy task or an interrupted
 operation. Do not remove a retained lock to bypass that refusal.
 

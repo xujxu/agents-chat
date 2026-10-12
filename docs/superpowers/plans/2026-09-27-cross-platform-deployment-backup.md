@@ -13944,6 +13944,10 @@ inventory/record/content negatives to the existing native stopped-proof test.
   the original worker-operation file could still be overwritten while the
   stopped proof was open. The fixture reached a genuine stopped runtime and
   dead original actor; this is not a missing-module proxy.
+  Implementation `e378a07 / 38192219700` passed at
+  `2026-10-12 01:40:40 UTC`, including worker journal/helper write denial,
+  foreign inventory, malformed journal and changed helper refusal, bridge
+  admission and unchanged terminal restored proof. No cold mutation yet.
 - [ ] Add native worker admission to stopped-proof opening after state
   admission. Read only bounded complete newline-terminated records with exact
   fields `version,phase,lock,manifestSha256,workerId`. Require one opened record
@@ -14108,7 +14112,7 @@ command-entry/supervisor/finalize-entry and their focused tests. Update README
 after actual acceptance, and route complete/offline fixture through the public
 script while retaining separate saved-process protocol tests.
 
-- [ ] Extend native public/supervisor contracts before implementation: restore
+- [x] Extend native public/supervisor contracts before implementation: restore
   help without tools/installation, required acknowledgement before access,
   malformed timeout refusal, and restored-phase finalization after original
   actor death. Require successful captures retired, failed captures retained,
@@ -14120,9 +14124,10 @@ script while retaining separate saved-process protocol tests.
   finalization; native gate `38187043591` passed at `2026-10-12 00:15:08 UTC`,
   including acknowledgement/no-Git admission, restored-phase supervisor and
   historical saved-entry checks. `8e565af` routes actual complete/offline restore
-  through public `restore.ps1`; actual offline run `38187335322` is pending.
-  No actual public acceptance yet.
-- [ ] Public restore exposes only ProjectDir, TaskName, AcceptDataLoss,
+  through public `restore.ps1`; dedicated actual offline run `38187335322`
+  remains active. Full-matrix actual public offline job `114616945668` at
+  `4e1aed1 / 38188828721` passed at `2026-10-12 01:36:22 UTC`.
+- [x] Public restore exposes only ProjectDir, TaskName, AcceptDataLoss,
   TimeoutSeconds, Json and Help; fixed readiness120sec/port3010 match Linux.
   Reuse `parseArguments('restore', args)`, and require only external Node24 and
   PowerShell, not Git/npm. Context admits paths without loading historical code.
@@ -14134,7 +14139,7 @@ script while retaining separate saved-process protocol tests.
   manifest-bound saved subprocess with exact bounded stdin and sanitized env.
   Verify status, backupId, operationId, closeoutRequired and recoveryEngine
   against original invocation before returning; preserve failure exit status.
-- [ ] Extend supervisor's allowed operation/result mapping narrowly:
+- [x] Extend supervisor's allowed operation/result mapping narrowly:
   restore accepts only restored success with closeoutRequired=true, never
   already-current. Its independent finalizer receives phase restored after
   the command process and descendants settle. Historical finalizer admission
@@ -14152,6 +14157,12 @@ script while retaining separate saved-process protocol tests.
   data, unchanged authoritative backup, distinct runtime and lock removal.
   A later read-only actor must confirm closeout did not restart that runtime.
   Keep all fault-injection scenarios on their already accepted direct core path.
+  Public offline acceptance completed with update1,066,388ms, no-op161,946ms,
+  public restore+closeout1,668,291ms and independent read-only confirmation
+ 26,150ms (full actual3,190,259ms). The unchanged backup, absence of lock and
+ successful captures, restored authenticated data and executable egress rules
+ all passed. Full53 remains51 passed/2 running at this checkpoint; do not
+ claim whole-matrix success before both remaining jobs finish.
 
 ### Task 5DO: Admit public Windows restoration without importing historical code
 
