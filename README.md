@@ -595,6 +595,15 @@ The subsequent capture-inventory correction also passed all 53 jobs at
 `a57fad4 / 38190945815`, completed `2026-10-12 03:04:17 UTC`, including the
 Linux and Windows 512-helper boundary checks and actual restore regressions.
 This full baseline predates the private Windows cold-file restoration work.
+Private cold file restoration subsequently passed actual application recovery
+at `2cd722c / 38199570752`, including interrupted copy, restored native addon
+and database bytes, with the original task still inhibited. Native completion
+receipts and completed-owner reentry passed at `c293127 / 38199887646`.
+Absent-original-host admission passed at `078471a / 38204381123`: exact
+disabled task policy, no Scheduler instances and an empty/absent original Job
+are required. The query uses the recorded session, including Session 0 from
+an interactive observer; other foreign sessions remain refused. These private
+gates do not accept cold activation, public cold restore or reboot recovery.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

@@ -13928,6 +13928,12 @@ publish terminal success.
 with `retireRuntime`, and replace the fixture's manual retirement with a real
 distinct cold actor in `tests/deployment-windows-cold-runtime-retirement.mjs`.
 
+Implementation `3120246` is pushed, not yet accepted. Corrected retirement
+causal `17465db / 38204488708`, job `114667508459`, is running after its
+namespace prerequisite passed. Paired `3120246 / 38205515059` is queued
+behind it. Neither the cancelled first retirement attempt nor the separate
+absence acceptance proves this new mutation API.
+
 - [ ] First exercise the real cold API through the native Actions fixture.
   Refuse retirement before the current owner's completed-file receipt exists,
   without retiring the host; refuse an already aborted request without mutation.
@@ -13965,10 +13971,10 @@ and `windows-stopped-restore-proof.ps1`; add native fixture
 `tests/deployment-windows-cold-absent-owner.ps1` and its Node contract, called
 only after the existing opted-in stopped-proof fixture completes.
 
-- [ ] Retire the actual original stopped host, wait for its process and exact
+- [x] Retire the actual original stopped host, wait for its process and exact
   Scheduler instance to settle, then claim cold recovery from a distinct
-  actor. The causal run must fail at original runtime absence, not a mock or
-  unrelated fixture failure.
+  actor. Do not count a mock or unrelated fixture failure as an isolated
+  original-runtime-absence causal result.
   Initial `01bf208 / 38201465771`, job `114655593499`, instead failed at
   `2026-10-12 04:23:10 UTC` because the enclosing Node-case fixture had
   already removed its control directory. This is not valid causal evidence.
@@ -13986,18 +13992,28 @@ only after the existing opted-in stopped-proof fixture completes.
   querying a wrong empty namespace must not masquerade as proof of absence.
   The retirement test remains checked in but temporarily unwired while this
   prerequisite is validated.
-- [ ] Add a read-only, query-only native Job emptiness assertion. Validate
+  Native `078471a / 38204381123`, job `114664512251`, passed at
+  `2026-10-12 04:49:27 UTC`; genuine absent-host claim passed at04:45:53.
+  This validates actual absence and the Session 0 query, not an isolated
+  alive-only/absent-owner red/green pair. Both prior failures above remain
+  classified by their actual fixture/namespace causes. Retirement API coverage
+  was rewired separately in `17465db`.
+- [x] Add a read-only, query-only native Job emptiness assertion. Validate
   nonempty generation and the recorded session, distinguish only genuine
   not-found from other native errors, reject surviving members and preserve
   existing Job limits. Never stop arbitrary PIDs or create a replacement Job.
-- [ ] Retain the readiness session during proof admission. Select an absent
+- [x] Retain the readiness session during proof admission. Select an absent
   owner only at explicit recovery proof open; never silently change an active
   proof's liveness mode when its original owner dies. Recheck owner absence,
   exact disabled policy, zero instances and Job emptiness on every assertion.
-- [ ] Run native Actions coverage for authentic dead-owner claim, unchanged
+- [x] Run native Actions coverage for authentic dead-owner claim, unchanged
   original lock/state/archive and no task start, plus all preceding receipt,
   copy interruption, takeover and terminal-proof regressions. Add direct
   native empty-Job, nonempty-Job and cross-session refusal contracts.
+  The mandatory live original-writer refusal proves that the Session 0 query
+  does not accidentally accept an unrelated empty interactive namespace.
+  Partial-copy retry passed at04:44:14, completed-file receipt reentry at
+  04:45:38 and original restored terminal-proof regression at04:49:16.
 
 ### Task 5DW: Persist Windows cold restored-file completion before activation
 
