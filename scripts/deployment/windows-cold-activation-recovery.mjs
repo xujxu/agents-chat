@@ -12,6 +12,7 @@ import { processIdentity } from './process-identity.mjs';
 import { captureActivatedRuntime } from './windows-task-controller.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { captureWindowsColdPolicyHistory } from './windows-cold-policy-history.mjs';
+import { captureWindowsColdArchiveFiles, verifyWindowsColdArchiveFiles } from './windows-cold-policy-archive.mjs';
 
 const script = fileURLToPath(new URL('./windows-stopped-restore-controller.ps1', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -41,8 +42,8 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery) {
   try {
     const stateBytes = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
     const state = parse(stateBytes);
-    const lock = captureLockOwner(parse(await readWorkerFile(path.join(control, 'lock/owner.json'),
-      65536, { privateMode: true })));
+    const lockBytes = await readWorkerFile(path.join(control, 'lock/owner.json'), 65536, { privateMode: true });
+    const lock = captureLockOwner(parse(lockBytes));
     const original = parse(await readWorkerFile(path.join(control, 'task-maintenance/admission.json'),
       1048576, { privateMode: true }));
     const backup = path.join(control, 'backup');
@@ -151,10 +152,19 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery) {
     const request = async (method, requestSignal) => {
       requestSignal?.throwIfAborted();
       if (closed || busy) throw new Error('Cold activation observation is closed or busy.');
+      if (method === 'archive' && (!policyRecovery || !latest.claimed || latest.step !== 'restored')) {
+        throw new Error('Cold journal archival requires its original claimed restored policy.');
+      }
       busy = true;
       try {
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
         if (method !== 'close') await deadOwners();
+        const archivedFiles = method === 'archive' ? await captureWindowsColdArchiveFiles({
+          control, identity: guard.identity, signal: requestSignal,
+          names: ['owner.json', 'files-restored.json', 'activation-intent.json',
+            ...history.records.map(record => `activation-${record.phase}.json`),
+            ...Array.from({ length: latest.policySequence }, (_, index) => `policy-${String(index + 1).padStart(6, '0')}.json`)],
+        }) : null;
         const id = ++sequence;
         await bridge.wire.send({ id, method });
         const reply = captureWorkerFields(await bridge.wire.receive({ signal: requestSignal, timeoutMs: 30000 }),
@@ -169,6 +179,28 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery) {
           closed = true;
           bridge.wire.close();
           return;
+        }
+        if (method === 'archive') {
+          const expectedArchive = {
+            status: 'cold-policy-archived', mutationAuthority: false,
+            operationId: lock.operationId, taskName: original.taskName, policySha256: latest.policySha256,
+            archive: path.join(control, `cold-policy-${latest.policySha256}`), identity: guard.identity,
+          };
+          const archived = captureWorkerFields(reply.value, Object.keys(expectedArchive), 'cold journal archival');
+          if (!same(archived, expectedArchive)) throw new Error('Cold journal archival acknowledgement differs.');
+          const result = await bridge.waitForExit();
+          if (result.code !== 0 || result.signal !== null) throw new Error('Cold archival bridge did not close cleanly.');
+          closed = true;
+          bridge.wire.close();
+          await verifyWindowsColdArchiveFiles({
+            control, archive: archived.archive, identity: guard.identity, files: archivedFiles, signal: requestSignal,
+          });
+          if (!(await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true })).equals(stateBytes)
+            || !(await readWorkerFile(path.join(control, 'lock/owner.json'), 65536, { privateMode: true })).equals(lockBytes)) {
+            throw new Error('Original restore state or lock changed during cold journal archival.');
+          }
+          await assertWindowsAdmission(control, admission, { signal: requestSignal });
+          return Object.freeze({ ...archived, identity: Object.freeze({ ...archived.identity }) });
         }
         const current = await capture(reply.value);
         if (policyRecovery) {
@@ -194,7 +226,10 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery) {
     return Object.freeze({
       observation,
       check: ({ signal: checkSignal } = {}) => request('check', checkSignal),
-      ...(policyRecovery ? { advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal) } : {}),
+      ...(policyRecovery ? {
+        advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal),
+        archive: ({ signal: archiveSignal } = {}) => request('archive', archiveSignal),
+      } : {}),
       async close() {
         if (busy) throw new Error('Cannot close an active cold activation observation.');
         if (finished) return;

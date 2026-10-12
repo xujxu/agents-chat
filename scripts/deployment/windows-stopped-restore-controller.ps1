@@ -36,6 +36,7 @@ try {
         }
         . (Join-Path $PSScriptRoot 'windows-cold-activation-recovery-proof.ps1')
         . (Join-Path $PSScriptRoot 'windows-cold-policy-recovery.ps1')
+        . (Join-Path $PSScriptRoot 'windows-cold-policy-archive.ps1')
         $proof = Open-AgentsChatColdActivationRecoveryProof $Control $OwnerSha256 $ReceiptSha256 $IntentSha256 $HistorySha256 `
             -PolicyRecovery:$ColdPolicyRecovery -PolicySha256 $PolicySha256 `
             -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
@@ -60,7 +61,7 @@ try {
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
         $methods = @('check', 'close')
-        if ($ColdPolicyRecovery) { $methods += 'advance' }
+        if ($ColdPolicyRecovery) { $methods += @('advance', 'archive') }
         if ($id -ne $sequence + 1 -or $method -cnotin $methods) {
             throw 'Invalid read-only stopped restore proof request.'
         }
@@ -74,7 +75,8 @@ try {
             Close-AgentsChatTaskCompletionProof $proof
             $proof = $null
             $value = 'close'
-        } elseif ($method -ceq 'advance') { $value = Advance-AgentsChatColdPolicyRecovery $proof }
+        } elseif ($method -ceq 'archive') { $value = Archive-AgentsChatColdPolicyJournal $proof }
+        elseif ($method -ceq 'advance') { $value = Advance-AgentsChatColdPolicyRecovery $proof }
         elseif ($ColdActivation) { $value = Assert-AgentsChatColdActivationRecoveryProof $proof }
         else { $value = Assert-AgentsChatStoppedRestoreProof $proof }
         [Console]::Out.WriteLine((@{
@@ -82,7 +84,7 @@ try {
             processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
         } | ConvertTo-Json -Depth 4 -Compress))
         [Console]::Out.Flush()
-        if ($method -ceq 'close') { break }
+        if ($method -cin @('close', 'archive')) { break }
     }
 } catch {
     $failure = $_.Exception
