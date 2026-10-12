@@ -13915,13 +13915,99 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EW: Publish restored receipts under retained cold terminal authority
+
+**Files:** extend `scripts/deployment/windows-cold-activation-recovery.mjs`
+with opaque receipt authority, and `scripts/deployment/deployment-receipt.mjs`
+with an explicit cold restored-receipt entry using the existing staged writer.
+Add `tests/deployment-windows-cold-receipt.{mjs,ps1}` after terminal-state
+reentry in `tests/deployment-windows-cold-runtime-completion.ps1`.
+Extend `tests/deployment-cold-runtime-completion.test.mjs` and run the existing
+`tests/deployment-receipt.test.mjs` suite in the native contract gate.
+
+Reuse the existing staged receipt publication algorithm rather than introducing
+another native receipt protocol or replacing the original lock owner.
+Warm callers retain their current-process `assertLockOwner` requirement.
+The separate cold entry requires an unforgeable, module-registered authority
+issued only after the existing native terminal proof admits the exact published
+next state, original lock, complete cold chain and released runtime. Its
+exclusive original transaction and Windows admission stay retained throughout
+every fresh acceptance check and atomic receipt replacement.
+
+- [ ] Add acknowledgement/abort and forged-authority contracts:
+
+  ```js
+  assert.equal(typeof recovery.openWindowsColdReceiptAuthority, 'function');
+  await assert.rejects(recovery.openWindowsColdReceiptAuthority(), /data-loss acknowledgement/);
+  await assert.rejects(receipts.publishWindowsColdRestoredDeploymentReceipt({
+    control: 'relative', authority: Object.freeze({ async check() {} }),
+  }), /original cold terminal authority/i);
+  ```
+
+  Push test-only and run the native command selector. Expect the two missing
+  exports to fail while the original 36 contracts remain green.
+- [ ] Issue a narrow frozen facade with `observation`, `lock`, `state`,
+  `check` and `close`. Register its exact object in a private WeakMap only
+  after successful complete terminal admission and physical published-state
+  verification. Reject forged, closed, wrong-control or wrong-lock handles;
+  recheck native proof and exact terminal marker/state at every use. Do not
+  expose root-state mutation methods through this receipt facade.
+- [ ] Add the separate receipt publisher:
+
+  ```js
+  const authority = await recovery.openWindowsColdReceiptAuthority({
+    control, pwsh, acceptDataLoss: true,
+  });
+  try {
+    await receipts.publishWindowsColdRestoredDeploymentReceipt({
+      control, authority, lock: authority.lock, identity, checkAccepted,
+    });
+  } finally { await authority.close(); }
+  ```
+
+  The explicit cold entry validates opaque authority before filesystem or
+  acceptance callbacks, then uses the shared bounded receipt parser, exact
+  terminal state, `.deployment.json.staging`, fresh acceptance checks,
+  atomic rename and original staged inode readback. The shared writer's
+  authority callback is internal, not caller-supplied. Existing warm entry
+  points keep their original authorization and behavior.
+  A receipt already published for this restore operation must match exactly;
+  refuse a different same-operation identity rather than replacing it.
+- [ ] Add native fixture actors after accepted root-state publication:
+  seed a valid prior receipt, hold the genuine cold authority, and interrupt
+  inside `checkAccepted` first when the exact stage exists and then after
+  the final receipt replaces it. Parent terminates exact actors, verifies the
+  original transaction/terminal state/journal and released runtime, retains
+  the staged inode, and requires that inode after publication. Run two fresh
+  final actors, require immutable receipt bytes/acceptedAt/inode, and reject
+  forged/closed authority or changed same-operation identity. Use synthetic
+  identity fingerprints only in this native writer fixture; actual application
+  acceptance must supply the existing real source/artifact/config/service checks.
+- [ ] Push implementation and run the native selector with the existing
+  receipt suite included:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  ```
+
+  Require new authority/refusal contracts, existing warm receipt contracts,
+  saved dependency closure, both cold completion/state/receipt interruption
+  cases, and the old warm terminal regression. Inspect completed logs.
+  Follow with a focused actual acceptance orchestrator reusing
+  `captureWindowsDeploymentAcceptance`, retained managed task/configuration,
+  `inspectGitMetadata` and `inspectBuildArtifacts`; do not accept arbitrary
+  caller-provided fingerprints as actual deployment acceptance.
+  Evidence retirement, unlock and public cold restore remain separate work.
+
 ### Task 5EV: Accept cold terminal state interruption with the actual application
 
 **Files:** add `tests/deployment-windows-cold-application-terminal.mjs`;
 extend `tests/deployment-windows-live-application.{mjs,ps1}` and
 `tests/deployment-windows-live-restore.mjs`.
 
-- [ ] Reuse the existing single actual cold copy/start and completed-runtime
+- [x] Reuse the existing single actual cold copy/start and completed-runtime
   observer. Add captured actors `restore-cold-state-staged`,
   `restore-cold-state-published`, and `restore-cold-state-completed`.
   The first prepares the immutable terminal handoff; both interrupted actors
@@ -13940,12 +14026,12 @@ extend `tests/deployment-windows-live-application.{mjs,ps1}` and
   terminates the original actor Job, verifies exact exit/status/step, original
   runtime PID/start identity/Scheduler instance and released lease, then
   independently queries restored authenticated API data.
-- [ ] Capture the original staged file identity in the parent and require
+- [x] Capture the original staged file identity in the parent and require
   the published root state to retain that inode after the second actor exits
   and after final recovery. Final recovery must repeat publication without
   changing state bytes, inode or timestamp. Keep existing 45-minute cold
   copy/start and five-minute recovery actor bounds; do not add another copy.
-- [ ] Push the test integration and dispatch both existing actual crash jobs:
+- [x] Push the test integration and dispatch both existing actual crash jobs:
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -13973,6 +14059,13 @@ extend `tests/deployment-windows-live-application.{mjs,ps1}` and
   wrapper, this native API requires an explicit SHA-256. Supply the observed
   transaction digest and the prepared next-state digest for all three new
   parent opens; retain checksum, inode, exclusivity and interruption checks.
+  Final `14870b1 / 38311921706` passed both jobs: copy-crash
+  `115019438445` at `2026-10-12 23:00:56 UTC`, warm-crash `115019438726`
+  at `22:32:56 UTC`. Actual terminal staged/published/completed actors took
+  `51,680 / 29,522 / 53,083 ms`, preserving original stage and transaction
+  identities, exact state, released runtime and authenticated restored data.
+  The one cold copy/start actor took `2,157,281 ms`, within the unchanged
+  45-minute bound. Both completed logs and the watcher were inspected.
 
 ### Task 5EU: Publish the prepared cold terminal state with interruption reentry
 

@@ -12,6 +12,32 @@ import * as recovery from '../scripts/deployment/windows-cold-activation-recover
 import { captureWindowsColdTerminalIntent } from '../scripts/deployment/windows-cold-terminal-intent.mjs';
 import { readWindowsColdTerminalSource, inspectWindowsColdTerminalState,
   captureWindowsColdTerminalStateReply } from '../scripts/deployment/windows-cold-terminal-state.mjs';
+import * as receipts from '../scripts/deployment/deployment-receipt.mjs';
+
+test('cold receipt authority requires acknowledgement and honors pre-abort', async () => {
+  assert.equal(typeof recovery.openWindowsColdReceiptAuthority, 'function');
+  await assert.rejects(recovery.openWindowsColdReceiptAuthority(), /data-loss acknowledgement/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(recovery.openWindowsColdReceiptAuthority({
+    acceptDataLoss: true, signal: controller.signal,
+  }), { name: 'AbortError' });
+});
+
+test('cold restored receipt publication rejects forged authority before invoking callbacks', async () => {
+  assert.equal(typeof receipts.publishWindowsColdRestoredDeploymentReceipt, 'function');
+  let checked = false;
+  await assert.rejects(receipts.publishWindowsColdRestoredDeploymentReceipt({
+    control: 'relative', authority: Object.freeze({ async check() { checked = true; } }),
+    async checkAccepted() { checked = true; },
+  }), /original cold terminal authority/i);
+  assert.equal(checked, false);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(receipts.publishWindowsColdRestoredDeploymentReceipt({
+    signal: controller.signal,
+  }), { name: 'AbortError' });
+});
 
 test('cold terminal state publication requires acknowledgement and honors pre-abort', async () => {
   assert.equal(typeof recovery.publishWindowsColdTerminalState, 'function');

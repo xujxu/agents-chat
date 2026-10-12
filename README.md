@@ -685,7 +685,10 @@ Consuming that handoff for staged, atomic root-state publication and interrupted
 reentry passed the native gate at `ab3aee3 / 38289886125`: all 36 focused
 contracts and both cold cases passed, including interruption after staging and
 publication, original staged-inode preservation and two fresh reentry actors.
-Actual application acceptance of those state boundaries is pending. This does not yet publish
+Actual application acceptance also passed at `14870b1 / 38311921706`.
+The staged/published interruption actors and final idempotent recovery preserved
+the original staged inode, transaction digest/inode, released runtime and
+authenticated restored data. Both actual crash jobs passed. This does not yet publish
 the deployment receipt, retire evidence or remove the original lock.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
