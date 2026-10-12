@@ -13915,6 +13915,40 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EO: Observe a completed cold runtime after its original controllers exit
+
+**Files:** add `tests/deployment-windows-cold-completion-proof.mjs` and
+`scripts/deployment/windows-cold-completion-proof.ps1`; extend the existing
+cold observation facade, stopped-evidence inventory and bridge. Extract the
+shared cold activation history reader without changing inactive recovery.
+Include the new native helper in the explicit saved-engine dependency closure.
+
+- [ ] Reuse both Task 5EN native fixtures after original actor exit:
+
+  ```js
+  const proof = await recovery.inspectWindowsColdRuntimeCompletion({ control, pwsh });
+  assert.equal(proof.observation.status, 'cold-runtime-completed');
+  assert.equal(proof.observation.mutationAuthority, false);
+  assert.equal(proof.observation.lease, 'released');
+  assert.equal(proof.advance, undefined);
+  assert.equal(proof.archive, undefined);
+  assert.deepEqual(await proof.check(), proof.observation);
+  await proof.close();
+  assert.equal(await processIdentity(completed.runtime.pid), completed.runtime.identity);
+  ```
+
+  Preserve pre-abort, poison on foreign inventory, reopen after removing only
+  the test-created foreign file, and preserve exact root state/lock/journal.
+  Run the existing native command selector, first test-only then paired.
+- [ ] Admit only the exact running activation prefix followed by all nine
+  completion records. Retain and validate their original owner, snapshot,
+  configuration, byte chain, definitions, listener and released runtime.
+  Reuse `Initialize-AgentsChatCompletionRuntime`,
+  `Assert-AgentsChatCompletionRuntime` and its final observation. Require old
+  runtime/Job and original cold Node/native controllers absent; the new runtime
+  must remain live. Do not enable inactive policy recovery or copying through
+  this observer, and do not publish terminal root state or release root lock.
+
 ### Task 5EN: Complete the cold runtime's permanent task policy and original lease
 
 **Files:** add `scripts/deployment/windows-cold-runtime-completion.{mjs,ps1}`;
@@ -13954,9 +13988,11 @@ the accepted archival/fresh-copy fixture, reusing both current native cases.
   require the literal permanent action with no controller arguments. Settle only
   the retained test generation in cleanup. Do not claim cold terminal closeout,
   public integration or interrupted completion recovery from this gate.
-  Test-only `4cb81c9 / 38240359191` is running after saved dependency acceptance.
-  Production `4423191` is pinned to paired run `38243322347`, queued behind
-  its causal. Production also adds three focused journal contracts (including
+  Test-only `4cb81c9 / 38240359191`, job `114790941604`, failed as expected
+  at `2026-10-12 11:47:29 UTC`: after genuine cold readiness,
+  `activation.completeRuntime` was `undefined` instead of `function`.
+  Production `4423191 / 38243322347`, job `114796315157`, is running.
+  Production also adds three focused journal contracts (including
   exact 1 MiB receipt acceptance and over-limit refusal) to existing unit steps,
   and retains both completion helpers in the explicit saved-engine closure.
 

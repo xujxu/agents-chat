@@ -54,6 +54,9 @@ try {
         [guid]$runtime.generation, $runtime.pid, $runtime.identity, $runtime.launcherPid, $result.completed.port)
     try { $listener.Check() } finally { $listener.Dispose() }
     Write-Output 'PASS: cold runtime survives original controller exit with released lease, original permanent task policy and unchanged transaction evidence'
+    & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-completion-proof.mjs') `
+        $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+    if ($LASTEXITCODE -ne 0) { throw 'Independent cold completion observation failed.' }
 } finally {
     if ($owner) {
         try {
