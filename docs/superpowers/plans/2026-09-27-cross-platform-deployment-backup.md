@@ -13922,7 +13922,7 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 `tests/deployment-windows-live-restore.mjs`,
 `tests/deployment-windows-live-application.{mjs,ps1}`.
 
-- [ ] Reuse the existing actual partial-copy crash and single cold application
+- [x] Reuse the existing actual partial-copy crash and single cold application
   activation. Terminate its captured Node actor at the awaited `lease-released`
   boundary with a flushed structured interrupted result and exit code 91:
 
@@ -13936,14 +13936,14 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   Preserve restored authenticated data, old runtime retirement and original
   state/lock/deployment receipt. Do not add another complete file copy or raise
   the existing 45-minute cold actor bound.
-- [ ] Run three separate captured recovery actors against that same runtime:
+- [x] Run three separate captured recovery actors against that same runtime:
   interrupt after `permanent-policy-applied`, interrupt after `enable-applied`,
   then reach `complete` and close normally. Require the recovered initial step
   to recognize each lost acknowledgement, exact previous receipt bytes,
   unchanged original transaction files and authenticated API data before and
   after each actor exits. Keep the existing five-minute recovery actor bound.
   The existing separate read-only completed observer remains the final check.
-- [ ] Dispatch both existing actual crash cases, retaining the warm-crash case:
+- [x] Dispatch both existing actual crash cases, retaining the warm-crash case:
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -13953,6 +13953,14 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 
   This accepts application-level released-prefix recovery, not root terminal
   publication, lock retirement or public cold restore integration.
+  Actual `de762f2 / 38272482169` passed both cases: copy-crash job
+  `114889880265` completed at `2026-10-12 17:12:35 UTC`; warm-crash job
+  `114889880403` completed at `16:42:56 UTC`. The cold copy/start/release-crash
+  actor took `2,342,229 ms` (39.04 minutes), below its unchanged 45-minute
+  bound. Permanent-policy crash, enable crash, completion and independent
+  observation took `30,312 / 30,496 / 28,821 / 24,722 ms`, respectively,
+  below their unchanged five-minute bounds. Authenticated restored data and
+  the same released runtime survived every original actor exit.
 
 ### Task 5ER: Recover released cold completion prefixes without restarting the runtime
 

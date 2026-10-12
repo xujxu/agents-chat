@@ -667,6 +667,12 @@ the original receipt chain and exclusive native ownership of the original
 transaction file. It resumes permanent-policy and enabled-state acknowledgements
 without restarting the runtime; it does not yet publish terminal restore state
 or remove the original lock.
+The same three interruption boundaries passed with the actual restored
+application at `de762f2 / 38272482169` (`2026-10-12 17:12:35 UTC`).
+Every actor exit retained the same released runtime and authenticated restored
+data; a separate final observer verified the completed journal. The original
+warm-crash regression also passed. The single cold copy/start actor took
+2,342,229 ms, within its unchanged 45-minute bound.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
