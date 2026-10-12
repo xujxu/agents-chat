@@ -13938,6 +13938,7 @@ liveness, an open foreign port or caller-supplied providers.
   extend actual cold application acceptance with owned HTTP and restored API
   data while the new runtime remains leased. No public cold restore,
   advanced-prefix recovery or terminal completion is accepted by this step.
+  Causal `f683475 / 38217307058` is dispatched after the guarded startup gate.
 
 ### Task 5EC: Start and settle a distinct guarded runtime under cold ownership
 
@@ -13946,23 +13947,23 @@ restored application under a new native controller lease. This private step
 does not perform HTTP acceptance, release the lease, publish terminal state
 or expose public cold restore.
 
-- [ ] Open a distinct cold native authority using exact private owner,
+- [x] Open a distinct cold native authority using exact private owner,
   completed-files and activation-intent hashes and original stopped/absent
   evidence. Require the original runtime to be absent. Retain fresh runtime
   helpers and configuration; do not fabricate live transaction authority.
-- [ ] Reuse existing native policy comparison and runtime/Job primitives.
+- [x] Reuse existing native policy comparison and runtime/Job primitives.
   Persist requested task mutation before registration; keep task security
   unchanged, remove automatic triggers/restart and use the new native
   controller PID/start identity as the runtime lease.
-- [ ] Demand-start only the exact prepared task, inhibit it again, retain
+- [x] Demand-start only the exact prepared task, inhibit it again, retain
   Scheduler instance/process/readiness identities and require a distinct
   generation with its expected guarded Job. Reject pre-cancellation without
   mutation and reject repeated starts.
-- [ ] On close, stop/retire only the exact new owned runtime and settle its
+- [x] On close, stop/retire only the exact new owned runtime and settle its
   Scheduler instance. Retain all nonterminal evidence and unchanged original
   state/lock. An uncertain start must fail closed; changed-policy prefixes
   remain refused by original-policy takeover until explicit recovery exists.
-- [ ] Extend the existing absent-owner native fixture with a distinct cold
+- [x] Extend the existing absent-owner native fixture with a distinct cold
   actor. The parent independently verifies inhibited exact task XML/security,
   no automation or instances and an empty new Job after actor exit. Run causal
   and paired native Actions; actual startup and interrupted-prefix recovery
@@ -13977,6 +13978,12 @@ or expose public cold restore.
   while retaining exact launcher membership, task binding and guarded lease;
   do not invent application health. The new native intent timestamp comparison
   also reads the owner's raw JSON string, avoiding PowerShell date reserialization.
+  Corrected `45b150d / 38215561820`, job `114699351634`, passed at
+  `2026-10-12 07:20:54 UTC`. The distinct cold actor's guarded startup and
+  owned shutdown passed at07:17:07; the earlier intent/takeover regressions
+  passed at07:15:35/07:15:50 and original terminal proof at07:20:39.
+  This is native owned startup/close acceptance, not actual application HTTP
+  readiness, advanced-prefix recovery or terminal cold restore.
 
 ### Task 5EB: Persist original-owner cold activation intent before task mutation
 

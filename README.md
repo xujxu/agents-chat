@@ -614,9 +614,12 @@ The latter retains environment/agent file presence, bytes, ACLs and attributes
 across original-host retirement. Actual copy-crash recovery and original-host
 retirement passed at `adfdef0 / 38208188366`, preserving original task policy,
 state, lock, backup and restored data. Native write-ahead activation intent and
-unused-intent takeover passed at `8510f67 / 38210972185`. None of these gates
-starts the restored application; actual configuration retention, guarded
-startup and complete cold recovery remain separate gates.
+unused-intent takeover passed at `8510f67 / 38210972185`. Native guarded cold
+startup and owned shutdown subsequently passed at `45b150d / 38215561820`,
+including an exited entry process whose descendants remain in the original Job.
+This does not claim actual application readiness or completed cold restore;
+HTTP acceptance, changed-task interruption recovery and terminal closeout
+remain separate gates.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

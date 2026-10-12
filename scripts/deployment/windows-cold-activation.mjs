@@ -3,7 +3,7 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { assertWindowsAdmission } from './windows-admission.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
-import { captureActivatedRuntime } from './windows-task-controller.mjs';
+import { captureActivatedRuntime, captureTaskListener } from './windows-task-controller.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 
 const script = fileURLToPath(new URL('./windows-cold-activation.ps1', import.meta.url));
@@ -51,15 +51,18 @@ export async function openWindowsColdActivation({
       }
       return Object.freeze({ ...result, runtime: Object.freeze(runtime) });
     };
-    const request = async (method, requestSignal) => {
+    const request = async (method, requestSignal, options = {}) => {
       requestSignal?.throwIfAborted();
       if (closed || busy) throw new Error('Cold guarded startup is closed or busy.');
       if (method === 'start' && running) throw new Error('Cold guarded runtime is already started.');
+      if (method === 'listener' && (!running || !Number.isSafeInteger(options.port) || options.port < 1 || options.port > 65535)) {
+        throw new Error('Cold listener requires a started runtime and valid port.');
+      }
       busy = true;
       try {
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
         const id = ++sequence;
-        await bridge.wire.send({ id, method });
+        await bridge.wire.send({ id, method, ...options });
         const reply = captureWorkerFields(await bridge.wire.receive({ signal: requestSignal, timeoutMs: 120000 }),
           ['id', 'type', 'processIdentity', 'value'], 'cold startup acknowledgement');
         if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== ready.processIdentity) {
@@ -72,6 +75,11 @@ export async function openWindowsColdActivation({
           closed = true;
           bridge.wire.close();
           return;
+        }
+        if (method === 'listener') {
+          const listener = captureTaskListener(reply.value, running.runtime, options.port);
+          await assertWindowsAdmission(control, admission, { signal: requestSignal });
+          return Object.freeze(listener);
         }
         const current = capture(reply.value);
         if (running && !same(current, running)) throw new Error('Original cold guarded runtime changed.');
@@ -86,6 +94,7 @@ export async function openWindowsColdActivation({
     return Object.freeze({
       start: ({ signal } = {}) => request('start', signal),
       check: ({ signal } = {}) => request('check', signal),
+      listener: ({ port, signal }) => request('listener', signal, { port }),
       close: async () => { if (!closed) await request('close'); },
     });
   } catch (cause) {

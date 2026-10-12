@@ -47,7 +47,7 @@ function Open-AgentsChatColdActivationContext {
             Bundle=$runtime.directory.GetString(); TaskName=$proof.TaskName
             Definition=$proof.Definition; SecurityDescriptor=$proof.SecurityDescriptor
             PlannedDefinition=$null; Enabled=$false; Attempted=$false; Requested=$false; Runtime=$null
-            Owner=$null; Instance=$null; InstanceGuid=$null; Stopped=$false; Stage='admitted'
+            Owner=$null; Instance=$null; InstanceGuid=$null; Listener=$null; Stopped=$false; Stage='admitted'
             Identity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
             OwnerSha256=$OwnerSha256; ReceiptSha256=$ReceiptSha256; IntentSha256=$IntentSha256
             PreviousSha256=$IntentSha256

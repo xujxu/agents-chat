@@ -14,6 +14,7 @@ import { retireWindowsColdRestoreOwner } from './windows-cold-restore-retirement
 import { inspectWindowsColdConfiguration } from './windows-cold-restore-configuration.mjs';
 import { createWindowsColdActivationIntent } from './windows-cold-activation-intent.mjs';
 import { openWindowsColdActivation } from './windows-cold-activation.mjs';
+import { waitWindowsReadiness } from './windows-readiness.mjs';
 
 const leases = new WeakMap();
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -374,6 +375,23 @@ export async function claimWindowsColdRestore({
           await checkIntent({ signal: checkSignal });
           return Object.freeze({
             state: Object.freeze(structuredClone(intent.state)), check: checkIntent,
+            async waitReady({ port, waitSeconds = 120, signal: readySignal = signal } = {}) {
+              readySignal?.throwIfAborted();
+              if (!active || !Number.isSafeInteger(port) || port < 1 || port > 65535) {
+                throw new Error('Cold readiness requires a started runtime and valid port.');
+              }
+              await checkIntent({ signal: readySignal });
+              return waitWindowsReadiness({
+                context: {
+                  listener: async options => {
+                    await checkIntent({ signal: options.signal });
+                    return active.listener(options);
+                  },
+                  check: checkIntent,
+                },
+                port, providers: configuration.providers, waitSeconds, signal: readySignal,
+              });
+            },
             async start({ signal: startSignal = signal } = {}) {
               startSignal?.throwIfAborted();
               if (startAttempted) throw new Error('Cold guarded runtime is already started or startup was attempted.');

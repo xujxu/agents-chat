@@ -99,10 +99,42 @@ function Start-AgentsChatColdActivatedRuntime([hashtable]$Context) {
     return Assert-AgentsChatColdActivatedRuntime $Context
 }
 
+function Open-AgentsChatColdActivatedListener([hashtable]$Context, [int]$Port) {
+    if ($Port -lt 1 -or $Port -gt 65535) { throw 'Cold readiness requires a valid listener port.' }
+    $null = Assert-AgentsChatColdActivatedRuntime $Context
+    if ($Context.Listener) {
+        if ($Context.Listener.Port -ne $Port) { throw 'Original cold listener port differs.' }
+        $Context.Listener.Check()
+    } else {
+        $runtime = $Context.Runtime
+        try {
+            $Context.Listener = [Deployment.WindowsRuntimeListener]::Retain(
+                [guid]$runtime.generation, $runtime.pid, $runtime.identity, $runtime.launcherPid, $Port)
+        } catch {
+            if ($_.Exception.GetBaseException() -isnot [Deployment.WindowsRuntimeListenerNotReadyException]) { throw }
+            $null = Assert-AgentsChatColdActivatedRuntime $Context
+            return @{ status='not-ready' }
+        }
+        $Context.Proof.Files.Add($Context.Listener)
+    }
+    $null = Assert-AgentsChatColdActivatedRuntime $Context
+    return [ordered]@{
+        status='retained'; generation=$Context.Runtime.generation; port=$Port
+        pid=$Context.Listener.ListenerPid; identity=$Context.Listener.ListenerIdentity
+        address=$Context.Listener.Address; createdAt=$Context.Listener.CreatedAt; pairedRecords=$Context.Listener.PairedRecords
+    }
+}
+
 function Stop-AgentsChatColdActivatedRuntime([hashtable]$Context) {
     if (-not $Context.Requested -or $Context.Stopped) { return }
     $Context.Stage = 'stop'
     $task = Assert-AgentsChatColdActivationContext $Context
+    if ($Context.Listener) {
+        $Context.Listener.Check()
+        $Context.Listener.Dispose()
+        $null = $Context.Proof.Files.Remove($Context.Listener)
+        $Context.Listener = $null
+    }
     if ($Context.Enabled) {
         $task.Enabled = $false
         $Context.Enabled = $false

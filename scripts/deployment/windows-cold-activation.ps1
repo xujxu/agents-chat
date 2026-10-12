@@ -20,7 +20,7 @@ try {
         (Join-Path $PSScriptRoot 'WindowsWorkerJob.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeDomain.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimePipe.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeControl.cs'),
         (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
-        (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'))
+        (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-cold-activation-context.ps1')
     . (Join-Path $PSScriptRoot 'windows-cold-activation-runtime.ps1')
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
@@ -34,14 +34,20 @@ try {
     [Console]::Out.Flush()
     while ($true) {
         $line = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync([Console]::In, 4096)
-        $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
+        $text = $line.GetAwaiter().GetResult()
+        $document = [Text.Json.JsonDocument]::Parse($text)
+        try { $method = $document.RootElement.GetProperty('method').GetString() }
+        finally { $document.Dispose() }
+        $fields = @('id', 'method')
+        if ($method -ceq 'listener') { $fields += 'port' }
+        $request = Read-AgentsChatMaintenanceFields $text $fields
         $sequence++
-        $method = $request.method.GetString()
-        if ($request.id.GetInt32() -ne $sequence -or $method -cnotin @('start', 'check', 'close')) {
+        if ($request.id.GetInt32() -ne $sequence -or $method -cnotin @('start', 'check', 'listener', 'close')) {
             throw 'Unexpected cold activation request.'
         }
         if ($method -ceq 'close') { break }
         $value = if ($method -ceq 'start') { Start-AgentsChatColdActivatedRuntime $context }
+            elseif ($method -ceq 'listener') { Open-AgentsChatColdActivatedListener $context $request.port.GetInt32() }
             else { Assert-AgentsChatColdActivatedRuntime $context }
         [Console]::Out.WriteLine((@{
             id=$sequence; type='reply'; processIdentity=$context.Identity; value=$value
