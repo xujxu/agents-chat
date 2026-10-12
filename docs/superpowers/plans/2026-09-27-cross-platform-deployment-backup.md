@@ -13915,6 +13915,51 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EJ: Resume exact disabled cold task policy recovery across repeated controller death
+
+**Files:** add `scripts/deployment/windows-cold-policy-history.ps1` and
+`scripts/deployment/windows-cold-policy-recovery.ps1`; extend the existing
+Node recovery factory, native stopped controller/proof and mode-specific
+evidence inventory. Add `tests/deployment-windows-cold-policy-recovery.{mjs,ps1}`.
+
+**Boundary:** mutation is a separate explicit data-loss-acknowledged factory,
+not a method on the read-only observation. It may only restore the exact
+original **disabled** task definition, preserving security and zero instances.
+It does not release a runtime lease, archive/delete the cold journal, start a
+new runtime, change original root state/lock or complete restore.
+
+- [ ] Exercise both normally stopped and genuinely crashed activation histories
+  through this contract:
+
+  ```js
+  const recovery = await prepareWindowsColdPolicyRecovery({
+    control, pwsh, acceptDataLoss: true,
+  });
+  let progress = recovery.observation;
+  while (!progress.claimed || progress.step !== 'restored') {
+    progress = await recovery.advance();
+  }
+  await recovery.close();
+  ```
+
+  First claim preserves the admitted durable step. Subsequent advances publish
+  request, register exact original disabled policy, then publish restored.
+- [ ] The parent kills the first claimed Node owner after request publication,
+  waits for its exact native bridge to exit, then runs a second controller.
+  Kill the second after registration but before restored publication. A third
+  distinct claim must recognize already-applied policy without re-registering;
+  prove task-file identity unchanged after that boundary. A fourth independent
+  inspection closes without adding a journal record.
+- [ ] Retain all claim/transition files, validate both Node and native receipt
+  chains, and check absence of every predecessor Node/native bridge. Keep task
+  file retained except around the one authorized registration. Refuse unknown
+  inventory, changed policy/security, live predecessors, and premature or
+  unclaimed transitions. Normal stopped/cold claims never accept this inventory.
+- [ ] Verify exact five-record chain (claim/request/claim/claim/restored),
+  immutable earlier prefixes/state/lock/archive, forbidden receipt writes,
+  unchanged security, no task instances, and empty new runtime Job. Run causal
+  and paired existing command gates; no new job, workflow input or timeout.
+
 ### Task 5EI: Bind policy recovery to an append-only owner and write-ahead journal
 
 **Files:** `scripts/deployment/windows-cold-policy-history.mjs`,

@@ -94,3 +94,26 @@ test('cold policy recovery refuses phase rollback, owner reuse and unbound polic
     binding: { ...binding, unknown: true }, records: [],
   }));
 });
+
+test('cold policy journal enforces its exact aggregate byte budget without reserializing records', async () => {
+  const { captureWindowsColdPolicyHistory } = await import('../scripts/deployment/windows-cold-policy-history.mjs');
+  const { binding, encode } = fixture();
+  const records = [];
+  for (let index = 0; index < 5; index++) {
+    const [bytes] = encode([{
+      kind: 'claim', step: 'initial', ...owner(100 + index * 2), sequence: index + 1,
+      previousSha256: index ? digest(records.at(-1)) : binding.historySha256,
+    }]);
+    records.push(Buffer.concat([bytes, Buffer.alloc(4194304 - bytes.length, 32)]));
+  }
+  assert.equal(captureWindowsColdPolicyHistory({ binding, records: records.slice(0, 4) }).sequence, 4);
+  assert.throws(() => captureWindowsColdPolicyHistory({ binding, records }), /total byte budget/);
+});
+
+test('cold policy recovery requires explicit acknowledgement and honors early cancellation', async () => {
+  const { prepareWindowsColdPolicyRecovery } = await import('../scripts/deployment/windows-cold-activation-recovery.mjs');
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(prepareWindowsColdPolicyRecovery({ signal: controller.signal }), { name: 'AbortError' });
+  await assert.rejects(prepareWindowsColdPolicyRecovery(), /data-loss acknowledgement/);
+});

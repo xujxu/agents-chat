@@ -81,3 +81,5 @@ if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
     throw 'Read-only cold activation inspection changed task policy or started a runtime.'
 }
 [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)
+& (Join-Path $PSScriptRoot 'deployment-windows-cold-policy-recovery.ps1') -Control $Control -TaskName $TaskName
+[Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)
