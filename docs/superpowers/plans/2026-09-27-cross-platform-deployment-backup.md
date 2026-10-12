@@ -13962,6 +13962,10 @@ mode. Keep the ordinary stopped-proof contract unchanged.
   from Task5EF. An accepted observation remains non-authoritative and cannot
   enable public cold restoration. Earlier interrupted activation prefixes and
   write-ahead policy recovery remain distinct following work.
+  Causal `9988e76 / 38223297176`, job `114724557059`, failed as expected at
+  `2026-10-12 08:24:03 UTC` on the missing observer module (21/22 unit cases
+  passed). Implementation `f18dfec / 38224040058`, job `114727040844`,
+  is running the paired native gate.
 
 ### Task 5EF: Capture the original cold activation journal before takeover
 
@@ -13975,7 +13979,7 @@ or make the original-policy cold claim accept a changed task.
 extend `scripts/deployment/windows-cold-activation.mjs` and
 `tests/deployment-cold-activation-state.test.mjs`.
 
-- [ ] Add causal unit contracts to the existing activation-state suite. Accept
+- [x] Add causal unit contracts to the existing activation-state suite. Accept
   only requested, requested/running, requested/stopped and
   requested/running/stopped histories; a stopped receipt without a running
   receipt may carry an already captured runtime. Reject reordered/extra
@@ -13992,18 +13996,18 @@ extend `scripts/deployment/windows-cold-activation.mjs` and
   assert.equal(captured.mutationAuthority, false);
   ```
 
-- [ ] Implement the decoder with fatal UTF-8, strict record fields, at most
+- [x] Implement the decoder with fatal UTF-8, strict record fields, at most
   three records and the existing native four-MiB evidence budget. Chain each
   digest over the original bytes, never reserialized JSON. Bind every record
   to the already admitted intent and one native bridge identity. Reuse
   `captureActivatedRuntime`, return frozen copies, and leave XML policy
   equivalence and actual process/Job observation to native authority.
-- [ ] At successful start and clean close, read the original private receipt
+- [x] At successful start and clean close, read the original private receipt
   bytes under the still-held named admission. Require the matching running/
   stopped phase, bridge identity, exact returned runtime and final native
   definition/security. A failed acknowledgement remains uncertain; do not
   downgrade it to success or delete any recovery evidence.
-- [ ] Push causal tests and dispatch the existing native command gate, then
+- [x] Push causal tests and dispatch the existing native command gate, then
   push implementation and dispatch its pair after the causal is in progress.
   The exact command remains:
 
@@ -14047,6 +14051,9 @@ the live database to remain byte-identical.
   Implementation tests `7a9140c` were dispatched at `dfd2ad0 / 38220610437`
   after native readiness acceptance: copy-crash job `114715682138` and
   original crash regression `114715682436`.
+  The original crash regression passed at `2026-10-12 08:39:38 UTC`;
+  copy-crash/guarded startup remains running, so actual readiness is not
+  accepted by that earlier-prefix regression.
 
 ### Task 5ED: Verify the guarded cold runtime's owned HTTP readiness
 
