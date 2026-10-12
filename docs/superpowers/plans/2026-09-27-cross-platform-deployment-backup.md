@@ -13944,6 +13944,9 @@ the accepted native stopped-proof fixture after its original actor exits.
   Repeat acquisition after release to demonstrate no leaked native admission.
   Preserve original evidence bytes, task identity and empty stopped runtime.
   Run the paired command-only Actions gate; require missing-module causal failure.
+  Causal `e38f99c / 38188906616` reached the accepted native stopped fixture
+  and failed at `2026-10-12 01:06:58 UTC` with the expected missing
+  `windows-stopped-restore-proof.mjs` module.
 - [ ] Implement a dedicated read-only native bridge. Load the same private
   file/runtime helpers as the accepted proof, watch the exact Node PID/start
   identity, open the proof and emit bounded ready/reply frames. Accept only
