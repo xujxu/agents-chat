@@ -3,8 +3,9 @@ import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-evidence.mjs';
+import { verifyWindowsApplicationApi } from './deployment-windows-application-api-helpers.mjs';
 
-export async function verifyWindowsColdApplicationFiles({ directory, project, control, backup, snapshot, pwsh }) {
+export async function verifyWindowsColdApplicationFiles({ directory, project, control, backup, snapshot, pwsh, chatId }) {
   const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
   const { claimWindowsColdRestore } = await captured('windows-cold-restore-lease.mjs');
   const { restoreWindowsColdFiles } = await captured('windows-cold-restore-files.mjs');
@@ -72,10 +73,29 @@ export async function verifyWindowsColdApplicationFiles({ directory, project, co
     assert.deepEqual(await readFile(path.join(control, 'recovery-lock/files-restored.json')), filesReceipt);
     await lease.checkStopped();
     await configuration.checkFiles();
-    return { status: 'files-restored', retired: true, operationId: lease.owner.operationId, runtime: proof.runtime };
+    process.stderr.write(`${new Date().toISOString()} Actual cold restoration: starting guarded archived application\n`);
+    const activation = await lease.prepareActivation({ configuration });
+    const running = await activation.start();
+    const readiness = await activation.waitReady({ port: 3010 });
+    assert.equal(readiness.generation, running.runtime.generation);
+    await verifyWindowsApplicationApi('restored', chatId);
+    await activation.check();
+    await configuration.checkFiles();
+    assert.deepEqual(await verifySnapshot(backup), snapshot);
+    assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+    assert.deepEqual(await readFile(path.join(control, 'lock/owner.json')), lock);
+    assert.deepEqual(await readFile(path.join(control, 'deployment.json')), receipt);
+    assert.deepEqual(await readFile(path.join(control, 'recovery-lock/owner.json')), ownerBytes);
+    assert.deepEqual(await readFile(path.join(control, 'recovery-lock/files-restored.json')), filesReceipt);
+    process.stderr.write(`${new Date().toISOString()} Actual cold restoration: owned HTTP and restored authenticated data accepted; closing guarded runtime\n`);
+    return {
+      status: 'guarded-stopped', retired: true, operationId: lease.owner.operationId,
+      runtime: proof.runtime, activation: running, readiness,
+    };
   } finally {
-    const results = await Promise.allSettled([configuration?.close(), lease.close()]);
-    const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+    const errors = [];
+    try { await lease.close(); } catch (error) { errors.push(error); }
+    try { await configuration?.close(); } catch (error) { errors.push(error); }
     if (errors.length) throw new AggregateError(errors, 'Actual cold configuration and lease cleanup failed.');
   }
 }

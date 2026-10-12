@@ -62,7 +62,7 @@ try {
         }
         $actor = [Deployment.WindowsControllerProcess]::Start($Node,
             @((Join-Path $PSScriptRoot 'deployment-windows-live-application.mjs'),
-                $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine), $directory, $environment)
+                $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine, $ChatId), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
         $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed', 'restore-cold-files')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } else { 300000 }
@@ -104,7 +104,7 @@ try {
             restore-cancelled { 'cancelled' }
             restore-failed { 'failed' }
             restore-crash-verified { 'crash-verified' }
-            restore-cold-files { 'files-restored' }
+            restore-cold-files { 'guarded-stopped' }
         }
         Assert ($result.status -ceq $expected) "Unexpected live controller $mode status"
         $actor.Dispose()
@@ -117,14 +117,22 @@ try {
             Assert ($coldOwner.WaitForExit(15000) -and $coldOwner.ExitCode -eq 0) 'Cold original runtime did not retire cleanly'
             Assert ($after.Count -eq 0) 'Cold retirement retained a Scheduler instance'
             $coldTask = $scheduler.GetFolder('\').GetTask($TaskName)
-            Assert (-not $coldTask.Enabled -and [string]$coldTask.Xml -ceq $coldDefinition -and
-                [string]$coldTask.GetSecurityDescriptor(7) -ceq $coldSecurity) 'Cold retirement changed original disabled policy'
+            Assert ($result.activation.status -ceq 'guarded-running' -and
+                $result.activation.runtime.generation -cne $result.runtime.generation -and
+                $result.readiness.status -ceq 'ready' -and $result.readiness.port -eq 3010 -and
+                $result.readiness.generation -ceq $result.activation.runtime.generation) 'Cold application readiness lacks its new owned generation'
+            Assert (-not $coldTask.Enabled -and [string]$coldTask.Xml -ceq $result.activation.definition -and
+                [string]$coldTask.Xml -cne $coldDefinition -and $coldTask.Definition.Triggers.Count -eq 0 -and
+                [string]$coldTask.GetSecurityDescriptor(7) -ceq $coldSecurity -and
+                $result.activation.securityDescriptor -ceq $coldSecurity) 'Cold startup changed security or lost its exact inhibited guarded policy'
             [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$result.runtime.generation, $coldSession)
+            [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
+                [guid]$result.activation.runtime.generation, $result.activation.runtime.sessionId)
             Assert (@(Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq 3010).Count -eq 0) `
                 'Cold retirement retained the application listener'
             $coldOwner.Dispose()
             $coldOwner = $null
-            Write-Output "PASS: real Windows cold restoration recovers files and retires only the original stopped host with unchanged backup, state, lock and policy; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            Write-Output "PASS: real Windows cold restoration starts an owned ready application with restored API data and closes its guarded Job without terminal success; elapsedMs=$($elapsed.ElapsedMilliseconds)"
             continue
         }
         Assert ($after.Count -eq 1) 'Live deployment lost the application task'

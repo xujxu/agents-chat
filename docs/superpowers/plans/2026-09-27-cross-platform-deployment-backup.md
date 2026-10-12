@@ -13915,6 +13915,25 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EE: Exercise cold guarded startup against the restored application
+
+**Scope:** extend the existing actual copy-crash actor after the native
+readiness gate. Keep byte-exact project/database checks before startup;
+after startup verify authenticated pre-backup chat data instead of requiring
+the live database to remain byte-identical.
+
+- [ ] Pass the existing fixture chat ID to the cold actor. Reuse one API
+  assertion helper from both the existing CLI and the leased cold actor.
+- [ ] Retain exact restored configuration across original-host retirement,
+  distinct guarded startup, owned port3010 readiness and restored API checks.
+  Recheck unchanged backup and original state/lock/deployment/files evidence.
+- [ ] Close the new guarded runtime before releasing configuration handles.
+  Independently verify old clean retirement, both empty Jobs, no Scheduler
+  instances/listener, and the exact inhibited new policy with unchanged
+  security and no automatic triggers. Do not report terminal restoration.
+- [ ] Run the existing actual crash pair after native readiness acceptance.
+  Do not add workflow jobs, inputs or increase actor/workflow timeouts.
+
 ### Task 5ED: Verify the guarded cold runtime's owned HTTP readiness
 
 **Scope:** before any lease release or terminal success, retain the listener
@@ -13939,6 +13958,8 @@ liveness, an open foreign port or caller-supplied providers.
   data while the new runtime remains leased. No public cold restore,
   advanced-prefix recovery or terminal completion is accepted by this step.
   Causal `f683475 / 38217307058` is dispatched after the guarded startup gate.
+  Its job `114704951760` is running; production `1c5a72d` is paired in
+  `38217437905`, queued only after the causal became in progress.
 
 ### Task 5EC: Start and settle a distinct guarded runtime under cold ownership
 

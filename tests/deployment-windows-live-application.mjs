@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
-const [mode, directory, project, control, taskName, pwsh, git, npmCli, targetCommit, recoveryEngine] = process.argv.slice(2);
+const [mode, directory, project, control, taskName, pwsh, git, npmCli, targetCommit, recoveryEngine, chatId] = process.argv.slice(2);
 const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)).href);
 const { loadState, acquireLock, releaseLock } = await captured('state.mjs');
 const restoreModes = [
@@ -18,7 +18,7 @@ assert.ok(['update', 'verify-closed', 'current', ...restoreModes].includes(mode)
 assert.match(targetCommit, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 if (restoreModes.includes(mode)) {
   const { verifyWindowsLiveRestore } = await import('./deployment-windows-live-restore.mjs');
-  console.log(JSON.stringify(await verifyWindowsLiveRestore({ mode, directory, project, control, taskName, pwsh })));
+  console.log(JSON.stringify(await verifyWindowsLiveRestore({ mode, directory, project, control, taskName, pwsh, chatId })));
 } else if (mode === 'verify-closed') {
   const { verifyRecoveryEngine } = await captured('saved-recovery-engine.mjs');
   const state = await loadState(control);
