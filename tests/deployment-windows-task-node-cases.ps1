@@ -306,6 +306,10 @@ try {
         @(Get-ChildItem -LiteralPath $directory -Filter 'task-stop-*.json').Count -eq 4) `
         'Node completion lost original stopped domain or durable evidence'
     Write-Output "PASS: private production Node controller $Action preserves native inhibition, original task owner and durable stopped evidence"
+    if ($StoppedProof) {
+        & (Join-Path $PSScriptRoot 'deployment-windows-cold-absent-owner.ps1') `
+            -Control $control -TaskName $TaskName -Ready $Ready -Owner $Owner
+    }
 } finally {
     if ($controller) {
         try {

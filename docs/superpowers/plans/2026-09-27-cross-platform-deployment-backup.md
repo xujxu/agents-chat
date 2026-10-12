@@ -13934,6 +13934,13 @@ only after the existing opted-in stopped-proof fixture completes.
   Scheduler instance to settle, then claim cold recovery from a distinct
   actor. The causal run must fail at original runtime absence, not a mock or
   unrelated fixture failure.
+  Initial `01bf208 / 38201465771`, job `114655593499`, instead failed at
+  `2026-10-12 04:23:10 UTC` because the enclosing Node-case fixture had
+  already removed its control directory. This is not valid causal evidence.
+  Move the absence case inside that fixture, before its existing cleanup.
+  Cancel the queued/running paired `38201626671` with the same fixture defect.
+  Repeat the corrected causal fixture against the prior alive-only native
+  proof, then restore the implemented absence branch for paired validation.
 - [ ] Add a read-only, query-only native Job emptiness assertion. Validate
   nonempty generation and the recorded session, distinguish only genuine
   not-found from other native errors, reject surviving members and preserve
@@ -14053,7 +14060,7 @@ its original readiness path from the real configuration directory.
   at03:17:56, followed by the original restored terminal-proof regressions.
   This accepts the small native fixture, not actual application restoration
   or public cold activation/closeout.
-- [ ] Extend the existing actual `copy-crashed` application scenario with a
+- [x] Extend the existing actual `copy-crashed` application scenario with a
   distinct `restore-cold-files` actor after crash evidence verification.
   `tests/deployment-windows-cold-application-files.mjs` loads captured current
   cold helpers, admits the historically bound backup, and restores the real
@@ -14068,9 +14075,13 @@ its original readiness path from the real configuration directory.
     --ref feat/deployment-backup -f windows_application_only=true \
     -f windows_live_only=true -f windows_restore_scenario=crash
   ```
-  Actual `2cd722c / 38199570752` is running: job `114649746758` covers the
-  new file-copy crash/cold retry, paired with original crash regression
-  `114649746675`. No actual-application cold acceptance is claimed yet.
+  Actual `2cd722c / 38199570752` passed. Job `114649746758` accepted the
+  new file-copy crash/cold retry at `2026-10-12 04:22:08 UTC`, paired with
+  successful original crash regression `114649746675`. The distinct cold
+  file actor took1,238,298ms after genuine interrupted copy and independent
+  crash verification; it restored real application/database/native-addon
+  files while keeping the same inhibited task and original evidence.
+  This accepts file-only recovery, not activation or final cold closeout.
 
 ### Task 5DU: Claim a distinct durable Windows cold restore lease
 
