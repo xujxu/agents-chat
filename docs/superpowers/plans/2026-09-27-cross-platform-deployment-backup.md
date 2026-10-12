@@ -13921,7 +13921,7 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 `tests/deployment-windows-live-restore.mjs`,
 `tests/deployment-windows-live-application.{mjs,ps1}`.
 
-- [ ] Extend the already accepted actual partial-copy recovery fixture without
+- [x] Extend the already accepted actual partial-copy recovery fixture without
   another full cold copy. After restored authenticated API data and owned HTTP:
 
   ```js
@@ -13936,7 +13936,7 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   Closing the actor now preserves the released runtime. The independent parent
   requires its same PID/start identity, Scheduler instance, permanent definition,
   enabled value and security. The old generation's Job must remain empty.
-- [ ] Add `restore-cold-observed` as a separate captured-controller actor after
+- [x] Add `restore-cold-observed` as a separate captured-controller actor after
   original cold controller exit:
 
   ```js
@@ -13953,7 +13953,7 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   authenticated data again from the parent after this observer exits. Retain
   existing 45-minute copy actor and five-minute observation actor bounds;
   ordinary fixture cleanup still disables/stops the exact test task.
-- [ ] After both native Task 5EN/5EO cases pass, dispatch the existing actual
+- [x] After both native Task 5EN/5EO cases pass, dispatch the existing actual
   crash selector, including its unchanged warm crash regression:
 
   ```bash
@@ -13968,6 +13968,11 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   run in its separate `-windows-live` concurrency group while the native
   `-windows-live-commands` group reruns the subsequent fixture-bootstrap
   regression described below. No production helper changed after `6d556dd`.
+  Actual `97d0d87 / 38252901221` passed: copy-crash job `114823455002`
+  completed at `2026-10-12 14:16:33 UTC`; warm-crash job `114823455129`
+  completed at `13:55:00 UTC`. Cold completion took `2,001,517 ms`; the
+  subsequent independent captured observer took `21,505 ms`. Both authenticated
+  data checks, surviving runtime and original state/lock/receipt invariants passed.
 
 ### Task 5EO: Observe a completed cold runtime after its original controllers exit
 

@@ -646,9 +646,13 @@ bridge-death histories at `97d0d87 / 38252902245`
 (`2026-10-12 13:38:57 UTC`). The same gate passed 30 focused unit contracts,
 saved dependency closure and the original terminal-completion regression.
 The new runtime survives its original controllers; state and lock remain
-unchanged. Actual application completion is undergoing separate acceptance;
-interrupted completion recovery, cold terminal closeout and public cold restore
-are not yet complete.
+unchanged. Actual application completion and post-controller independent
+observation passed at `97d0d87 / 38252901221`
+(`2026-10-12 14:16:33 UTC`), including authenticated restored data and the
+unchanged warm-crash regression. The cold actor took 2,001,517 ms and the
+independent observer 21,505 ms, within their unchanged bounds. Interrupted
+completion recovery, cold terminal closeout and public cold restore are not yet
+complete.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
