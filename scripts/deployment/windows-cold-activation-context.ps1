@@ -54,6 +54,7 @@ function Open-AgentsChatColdActivationContext {
             Definition=$proof.Definition; SecurityDescriptor=$proof.SecurityDescriptor
             PlannedDefinition=$null; Enabled=$false; Attempted=$false; Requested=$false; Runtime=$null
             Owner=$null; Instance=$null; InstanceGuid=$null; Listener=$null; Stopped=$false; Stage='admitted'
+            LeaseReleased=$false; CompletionPrepared=$false; CompletionStep=$null
             Identity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
             OwnerSha256=$OwnerSha256; ReceiptSha256=$ReceiptSha256; IntentSha256=$IntentSha256
             PreviousSha256=$IntentSha256
@@ -104,7 +105,7 @@ function Write-AgentsChatColdActivationReceipt([hashtable]$Context, [string]$Pha
 }
 
 function Get-AgentsChatColdActivationDefinition([hashtable]$Context, [int]$ControllerPid,
-    [string]$ControllerIdentity) {
+    [string]$ControllerIdentity, [switch]$Permanent) {
     $process = [Diagnostics.Process]::GetCurrentProcess()
     try { $powershell = $process.MainModule.FileName }
     finally { $process.Dispose() }
@@ -117,8 +118,9 @@ function Get-AgentsChatColdActivationDefinition([hashtable]$Context, [int]$Contr
     $hostFile = Join-Path $Context.Bundle 'windows-runtime-host.ps1'
     $values = [ordered]@{
         Command=$powershell; WorkingDirectory=$Context.Bundle
-        Arguments="-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$($Context.Configuration)`" -Sha256 $($Context.ConfigurationSha256) -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity"
+        Arguments="-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$($Context.Configuration)`" -Sha256 $($Context.ConfigurationSha256)"
     }
+    if (-not $Permanent) { $values.Arguments += " -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity" }
     foreach ($name in $values.Keys) {
         $nodes = $requested.SelectNodes("/t:Task/t:Actions/t:Exec/t:$name", $namespaces)
         if ($nodes.Count -ne 1) { throw 'Cold activation requires one literal native action.' }
@@ -128,8 +130,10 @@ function Get-AgentsChatColdActivationDefinition([hashtable]$Context, [int]$Contr
     $triggers = $requested.SelectNodes('/t:Task/t:Triggers', $namespaces)
     $restart = $requested.SelectNodes('/t:Task/t:Settings/t:RestartOnFailure', $namespaces)
     if ($triggers.Count -ne 1 -or $restart.Count -gt 1) { throw 'Unsupported cold task automation shape.' }
-    $triggers[0].IsEmpty = $true
-    if ($restart.Count) { $null = $restart[0].ParentNode.RemoveChild($restart[0]) }
+    if (-not $Permanent) {
+        $triggers[0].IsEmpty = $true
+        if ($restart.Count) { $null = $restart[0].ParentNode.RemoveChild($restart[0]) }
+    }
     if ($requested.OuterXml.Length -gt 262144) { throw 'Cold activation policy exceeds its evidence budget.' }
     return $requested.OuterXml
 }

@@ -23,6 +23,7 @@ try {
         (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-cold-activation-context.ps1')
     . (Join-Path $PSScriptRoot 'windows-cold-activation-runtime.ps1')
+    . (Join-Path $PSScriptRoot 'windows-cold-runtime-completion.ps1')
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $context = Open-AgentsChatColdActivationContext -Control $Control -OwnerSha256 $OwnerSha256 `
         -ReceiptSha256 $ReceiptSha256 -IntentSha256 $IntentSha256 `
@@ -40,14 +41,19 @@ try {
         finally { $document.Dispose() }
         $fields = @('id', 'method')
         if ($method -ceq 'listener') { $fields += 'port' }
+        if ($method -ceq 'complete') { $fields += @('port', 'providers') }
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $sequence++
-        if ($request.id.GetInt32() -ne $sequence -or $method -cnotin @('start', 'check', 'listener', 'close')) {
+        if ($request.id.GetInt32() -ne $sequence -or $method -cnotin @('start', 'check', 'listener', 'complete', 'close')) {
             throw 'Unexpected cold activation request.'
         }
         if ($method -ceq 'close') { break }
         $value = if ($method -ceq 'start') { Start-AgentsChatColdActivatedRuntime $context }
             elseif ($method -ceq 'listener') { Open-AgentsChatColdActivatedListener $context $request.port.GetInt32() }
+            elseif ($method -ceq 'complete') {
+                $providers = @($request.providers.EnumerateArray() | ForEach-Object { $_.GetString() })
+                Complete-AgentsChatColdRuntime $context $request.port.GetInt32() $providers
+            }
             else { Assert-AgentsChatColdActivatedRuntime $context }
         [Console]::Out.WriteLine((@{
             id=$sequence; type='reply'; processIdentity=$context.Identity; value=$value

@@ -443,6 +443,27 @@ export async function claimWindowsColdRestore({
                 throw error;
               } finally { publishing = false; }
             },
+            async completeRuntime({ port, waitSeconds = 120, signal: completionSignal = signal } = {}) {
+              completionSignal?.throwIfAborted();
+              if (!active) throw new Error('Cold completion requires its original started runtime.');
+              await checkIntent({ signal: completionSignal });
+              await waitWindowsReadiness({
+                context: { listener: options => active.listener(options), check: checkIntent },
+                port, providers: configuration.providers, waitSeconds, signal: completionSignal,
+              });
+              publishing = true;
+              try {
+                const result = await active.completeRuntime({
+                  port, providers: configuration.providers, signal: completionSignal,
+                });
+                publishing = false;
+                await checkIntent({ signal: completionSignal });
+                return result;
+              } catch (error) {
+                poisoned = true;
+                throw error;
+              } finally { publishing = false; }
+            },
           });
         } catch (error) {
           poisoned = true;

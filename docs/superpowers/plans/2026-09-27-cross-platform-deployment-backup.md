@@ -13917,7 +13917,7 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 
 ### Task 5EN: Complete the cold runtime's permanent task policy and original lease
 
-**Files:** add `scripts/deployment/windows-cold-runtime-completion.ps1`;
+**Files:** add `scripts/deployment/windows-cold-runtime-completion.{mjs,ps1}`;
 extend the existing cold activation context/controller/Node bridge and lease
 facade. Add `tests/deployment-windows-cold-runtime-completion.{mjs,ps1}` after
 the accepted archival/fresh-copy fixture, reusing both current native cases.
@@ -13954,6 +13954,10 @@ the accepted archival/fresh-copy fixture, reusing both current native cases.
   require the literal permanent action with no controller arguments. Settle only
   the retained test generation in cleanup. Do not claim cold terminal closeout,
   public integration or interrupted completion recovery from this gate.
+  Test-only `4cb81c9 / 38240359191` is pinned and queued behind saved dependency
+  acceptance. Production also adds three focused journal contracts (including
+  exact 1 MiB receipt acceptance and over-limit refusal) to existing unit steps,
+  and retains both completion helpers in the explicit saved-engine closure.
 
 ### Task 5EM: Preserve the cold recovery dependency closure outside the project
 

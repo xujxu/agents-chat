@@ -9,6 +9,8 @@ import { captureActivatedRuntime, captureTaskListener } from './windows-task-con
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 import { captureWindowsColdActivationHistory } from './windows-cold-activation-history.mjs';
+import { captureWindowsColdRuntimeCompletion } from './windows-cold-runtime-completion.mjs';
+import { validateReadinessProviders } from './http-readiness.mjs';
 
 const script = fileURLToPath(new URL('./windows-cold-activation.ps1', import.meta.url));
 const refused = cause => Object.assign(new Error('Cold guarded startup refused; preserve activation evidence.', { cause }), {
@@ -32,6 +34,7 @@ export async function openWindowsColdActivation({
   let busy = false;
   let sequence = 0;
   let running;
+  let completed;
   try {
     const ready = captureWorkerFields(await bridge.wire.receive({ signal, timeoutMs: 60000 }),
       ['type', 'pid', 'processIdentity', 'controllerIdentity', 'control', 'ownerSha256', 'receiptSha256', 'intentSha256'],
@@ -45,7 +48,7 @@ export async function openWindowsColdActivation({
       const result = captureWorkerFields(value, ['status', 'taskName', 'runtime', 'controllerPid', 'controllerIdentity',
         'configuration', 'definition', 'securityDescriptor'], 'cold guarded runtime');
       const runtime = captureActivatedRuntime(result.runtime);
-      if (result.status !== 'guarded-running' || result.taskName !== taskName
+      if (result.status !== (completed ? 'released-running' : 'guarded-running') || result.taskName !== taskName
         || result.controllerPid !== ready.pid || result.controllerIdentity !== ready.processIdentity
         || result.configuration !== runtimeBundle.configuration || runtime.configurationSha256 !== runtimeBundle.sha256
         || runtime.generation === originalGeneration
@@ -85,6 +88,15 @@ export async function openWindowsColdActivation({
       if (method === 'listener' && (!running || !Number.isSafeInteger(options.port) || options.port < 1 || options.port > 65535)) {
         throw new Error('Cold listener requires a started runtime and valid port.');
       }
+      if (method === 'complete') {
+        if (!running || !Number.isSafeInteger(options.port) || options.port < 1 || options.port > 65535) {
+          throw new Error('Cold completion requires a started runtime and valid port.');
+        }
+        validateReadinessProviders(options.providers);
+        if (completed && (completed.port !== options.port || !same(completed.providers, options.providers))) {
+          throw new Error('Original cold completion readiness differs.');
+        }
+      }
       busy = true;
       try {
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
@@ -99,7 +111,7 @@ export async function openWindowsColdActivation({
           if (reply.value !== 'close') throw new Error('Cold startup close acknowledgement differs.');
           const result = await bridge.waitForExit();
           if (result.code !== 0 || result.signal !== null) throw new Error('Cold startup bridge did not close cleanly.');
-          if (running) await checkHistory('stopped', running);
+          if (running && !completed) await checkHistory('stopped', running);
           closed = true;
           bridge.wire.close();
           return;
@@ -109,12 +121,21 @@ export async function openWindowsColdActivation({
           await assertWindowsAdmission(control, admission, { signal: requestSignal });
           return Object.freeze(listener);
         }
+        if (method === 'complete') {
+          completed = await captureWindowsColdRuntimeCompletion({
+            control, running, ownerSha256, receiptSha256, intentSha256,
+            port: options.port, providers: options.providers, value: reply.value, signal: requestSignal,
+          });
+          await assertWindowsAdmission(control, admission, { signal: requestSignal });
+          return completed;
+        }
         const current = capture(reply.value);
-        if (running && !same(current, running)) throw new Error('Original cold guarded runtime changed.');
+        const expected = completed ? { ...running, status: 'released-running', definition: completed.definition } : running;
+        if (running && !same(current, expected)) throw new Error('Original cold runtime changed outside acknowledged completion.');
         if (method === 'start') await checkHistory('running', current);
-        running = current;
+        running ??= current;
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
-        return running;
+        return current;
       } catch (cause) {
         closed = true;
         throw await bridge.abandon(cause);
@@ -124,6 +145,7 @@ export async function openWindowsColdActivation({
       start: ({ signal } = {}) => request('start', signal),
       check: ({ signal } = {}) => request('check', signal),
       listener: ({ port, signal }) => request('listener', signal, { port }),
+      completeRuntime: ({ port, providers, signal }) => request('complete', signal, { port, providers }),
       close: async () => { if (!closed) await request('close'); },
     });
   } catch (cause) {

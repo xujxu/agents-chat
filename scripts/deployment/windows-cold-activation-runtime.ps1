@@ -7,19 +7,21 @@ function Assert-AgentsChatColdActivatedRuntime([hashtable]$Context) {
     }
     $binding = Get-AgentsChatTaskOwnerBinding -TaskName $Context.TaskName -OwnerPid $runtime.pid `
         -OwnerIdentity $runtime.identity -Definition $Context.Definition -SecurityDescriptor $Context.SecurityDescriptor
-    if ($binding.enabled -or $binding.instanceGuid -cne $runtime.instanceGuid -or
+    if ([bool]$binding.enabled -ne $Context.Enabled -or $binding.instanceGuid -cne $runtime.instanceGuid -or
         $binding.sessionId -ne $runtime.sessionId) { throw 'Original cold activated Scheduler instance changed.' }
     $domain = [Deployment.WindowsRuntimeControl]::Exchange(
         [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'observe', 15000) | ConvertFrom-Json
+    $lease = if ($Context.LeaseReleased) { 'released' } else { 'guarded' }
     if ($domain.phase -cnotin @('admitted', 'root-exited') -or $domain.quiescent -or $domain.applicationHealthy -or
         $domain.members -notcontains $runtime.launcherPid -or
         [Deployment.WindowsRuntimeControl]::Exchange(
-            [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -cne 'guarded') {
-        throw 'Cold activated runtime lacks its original guarded Job.'
+            [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -cne $lease) {
+        throw 'Cold activated runtime lacks its original leased Job.'
     }
     $null = Assert-AgentsChatColdActivationContext $Context
     return [ordered]@{
-        status='guarded-running'; taskName=$Context.TaskName; runtime=$runtime
+        status=$(if ($Context.LeaseReleased) { 'released-running' } else { 'guarded-running' })
+        taskName=$Context.TaskName; runtime=$runtime
         controllerPid=$PID; controllerIdentity=$Context.Identity; configuration=$Context.Configuration
         definition=$Context.Definition; securityDescriptor=$Context.SecurityDescriptor
     }
@@ -126,7 +128,7 @@ function Open-AgentsChatColdActivatedListener([hashtable]$Context, [int]$Port) {
 }
 
 function Stop-AgentsChatColdActivatedRuntime([hashtable]$Context) {
-    if (-not $Context.Requested -or $Context.Stopped) { return }
+    if (-not $Context.Requested -or $Context.Stopped -or $Context.LeaseReleased) { return }
     $Context.Stage = 'stop'
     $task = Assert-AgentsChatColdActivationContext $Context
     if ($Context.Listener) {
