@@ -139,6 +139,51 @@ process.stdout.write('captured-dependencies-loaded');
     catch { $refused = $true }
     Assert $refused 'Controller capture accepted hardlinked source'
     Assert ((Get-Item -LiteralPath $original).Length -gt 0) 'Capture refusal removed original source'
+    [IO.File]::Delete($linked)
+    $helperDirectory = Join-Path $source 'scripts/deployment'
+    $count = @(Get-ChildItem -LiteralPath $helperDirectory -File).Count
+    Assert ($count -le 512) 'Repository helper count exceeds the explicit capture budget'
+    for ($index = $count; $index -lt 512; $index++) {
+        [IO.File]::WriteAllText((Join-Path $helperDirectory "padding-$index.mjs"), '')
+    }
+    $bounded = Join-Path $root 'bounded-capture'
+    $capture = [Deployment.WindowsControllerCapture]::Create($source, $project, $bounded)
+    $capture.Check()
+    Assert (@(Get-ChildItem -LiteralPath (Join-Path $bounded 'scripts/deployment') -File).Count -eq 512) `
+        'Controller capture did not admit the exact helper-count boundary'
+    $capture.Retire()
+    $capture = $null
+    $overflow = Join-Path $helperDirectory 'overflow.mjs'
+    [IO.File]::WriteAllText($overflow, '')
+    $refused = $false
+    $rejected = Join-Path $root 'overflow-capture'
+    try { [Deployment.WindowsControllerCapture]::Create($source, $project, $rejected).Dispose() }
+    catch {
+        if ($_.Exception.ToString() -cnotmatch 'inventory exceeds its bound') { throw }
+        $refused = $true
+    }
+    Assert ($refused -and -not (Test-Path -LiteralPath $rejected)) 'Excess helper inventory created a capture'
+    [IO.File]::Delete($overflow)
+    [IO.File]::WriteAllBytes($original, [byte[]]::new(1048577))
+    $refused = $false
+    try { [Deployment.WindowsControllerCapture]::Create($source, $project, (Join-Path $root 'oversize-capture')).Dispose() }
+    catch {
+        if ($_.Exception.ToString() -cnotmatch 'byte budget') { throw }
+        $refused = $true
+    }
+    Assert $refused 'Increased helper count removed the per-file byte limit'
+    [IO.File]::WriteAllBytes($original, [byte[]]::new(1048576))
+    foreach ($file in Get-ChildItem -LiteralPath $helperDirectory -File |
+        Where-Object FullName -ine $original | Select-Object -First 15) {
+        [IO.File]::WriteAllBytes($file.FullName, [byte[]]::new(1048576))
+    }
+    $refused = $false
+    try { [Deployment.WindowsControllerCapture]::Create($source, $project, (Join-Path $root 'total-oversize-capture')).Dispose() }
+    catch {
+        if ($_.Exception.ToString() -cnotmatch 'byte budget') { throw }
+        $refused = $true
+    }
+    Assert $refused 'Increased helper count removed the total byte limit'
     Write-Output 'PASS: private external controller captures immutable dependencies and retires only original captures after actor handles close'
 } finally {
     if ($controller) { $controller.Dispose() }

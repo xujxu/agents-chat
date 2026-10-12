@@ -10,6 +10,7 @@ namespace Deployment
     public sealed class WindowsControllerCapture : IDisposable
     {
         const int MaximumFileBytes = 1024 * 1024;
+        const int MaximumHelperFiles = 512;
         readonly List<IDisposable> resources = new List<IDisposable>();
         readonly List<WindowsPrivateFile.DirectoryLease> directories = new List<WindowsPrivateFile.DirectoryLease>();
         readonly List<WindowsPrivateFile> files = new List<WindowsPrivateFile>();
@@ -39,7 +40,7 @@ namespace Deployment
         static string[] Inventory(string directory)
         {
             string[] entries = System.IO.Directory.GetFileSystemEntries(directory);
-            if (entries.Length == 0 || entries.Length > 256)
+            if (entries.Length == 0 || entries.Length > MaximumHelperFiles)
                 throw new InvalidDataException("Controller helper inventory exceeds its bound.");
             var names = new List<string>();
             foreach (string entry in entries)

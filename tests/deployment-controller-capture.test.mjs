@@ -56,3 +56,26 @@ test('controller capture selects only an explicit deploy or update entry', async
   await rename(path.join(source, 'scripts'), path.join(source, 'old-scripts'));
   assert.equal((await import(pathToFileURL(captured.entrypoint).href)).operation, 'deploy');
 });
+
+test('controller capture admits exactly 512 helpers but retains file-count and byte limits', async t => {
+  const { captureLinuxController } = await import('../scripts/deployment/linux-controller-capture.mjs');
+  const source = await sourceFixture(t);
+  const helpers = path.join(source, 'scripts/deployment');
+  for (let index = 1; index < 512; index++) await writeFile(path.join(helpers, `padding-${index}.mjs`), '');
+  const captured = await captureLinuxController({ source, project: source });
+  try { assert.equal((await readdir(path.dirname(captured.entrypoint))).length, 512); }
+  finally { await captured.close(); }
+  const overflow = path.join(helpers, 'overflow.mjs');
+  await writeFile(overflow, '');
+  await assert.rejects(captureLinuxController({ source, project: source }), /inventory/);
+
+  const large = await sourceFixture(t);
+  const largeHelpers = path.join(large, 'scripts/deployment');
+  await writeFile(path.join(largeHelpers, 'oversize.mjs'), Buffer.alloc(1024 * 1024 + 1));
+  await assert.rejects(captureLinuxController({ source: large, project: large }), /size/);
+  await writeFile(path.join(largeHelpers, 'oversize.mjs'), Buffer.alloc(1024 * 1024));
+  for (let index = 1; index < 16; index++) {
+    await writeFile(path.join(largeHelpers, `large-${index}.mjs`), Buffer.alloc(1024 * 1024));
+  }
+  await assert.rejects(captureLinuxController({ source: large, project: large }), /byte budget/);
+});

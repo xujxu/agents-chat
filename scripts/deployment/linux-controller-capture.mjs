@@ -5,6 +5,7 @@ import { canonicalWorkerDirectory, readWorkerFile, writeWorkerFile } from './wor
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const sameDirectory = (a, b) => a.dev === b.dev && a.ino === b.ino;
+const maximumHelperFiles = 512;
 
 export async function captureLinuxController({ source, project, operation = 'update', signal }) {
   if (process.platform !== 'linux' || process.getuid() !== 0) {
@@ -23,7 +24,7 @@ export async function captureLinuxController({ source, project, operation = 'upd
   const original = await canonicalWorkerDirectory(helpers);
   const inventory = async () => {
     const entries = await readdir(helpers, { withFileTypes: true });
-    if (!entries.length || entries.length > 256 || entries.some(entry =>
+    if (!entries.length || entries.length > maximumHelperFiles || entries.some(entry =>
       !entry.isFile() || !/^[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:mjs|json|ps1|cs)$/.test(entry.name))) {
       throw new Error('Unsupported controller helper inventory or links.');
     }

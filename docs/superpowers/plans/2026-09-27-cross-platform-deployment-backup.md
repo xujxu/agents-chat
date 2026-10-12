@@ -13947,6 +13947,13 @@ the accepted native stopped-proof fixture after its original actor exits.
   Causal `e38f99c / 38188906616` reached the accepted native stopped fixture
   and failed at `2026-10-12 01:06:58 UTC` with the expected missing
   `windows-stopped-restore-proof.mjs` module.
+  Implementation `c4faa8c / 38190723694` exposed the controller capture's
+  256-helper ceiling at `2026-10-12 01:08:49 UTC`, before bridge execution.
+  Both platform captures copy the shared deployment helper directory, so both
+  require the same explicit 512-file ceiling. Retain 1 MiB per-file and 16 MiB
+  total limits, exact inventories, native private handles and link refusals.
+  Add exact512 acceptance,513 refusal and both byte-budget regressions on both
+  platforms; this is a helper-count correction, not a timeout increase.
 - [ ] Implement a dedicated read-only native bridge. Load the same private
   file/runtime helpers as the accepted proof, watch the exact Node PID/start
   identity, open the proof and emit bounded ready/reply frames. Accept only
