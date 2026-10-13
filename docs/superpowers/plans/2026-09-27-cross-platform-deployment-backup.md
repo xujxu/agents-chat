@@ -13930,6 +13930,14 @@ budgets to 120/130/140 minutes to accommodate the added retirement and public
 handoff checks, retaining existing per-actor limits and all evidence checks.
 Already-running public gate `1f3e470b / 38354204691` keeps its original
 budget and is not cancelled.
+The later `4d112c41 / 38366334006` copy job `115213842736` failed
+before application startup at 09:01:42 UTC because the private runner's
+`ValidateRange` still capped arguments at 6300. This is a missed dependent
+change in the budget adjustment, not a cold restore failure. Raise that test
+wrapper's upper bound to 7800 and extend its existing diagnostic regression
+with a 7800-second *budget* case that fails immediately inside the fixture;
+retain the existing 6300 case. The regression must see fixture output and
+the intended test failure, not a parameter-binding error.
 
 **Scope:** extend the existing public saved path by one preceding boundary:
 physically published restored state and accepted receipt, with the complete
