@@ -14044,6 +14044,18 @@ the default crash scenario retains all previously accepted actors.
   cold task XML is reconstructed using the current native process module
   filename and compared case-sensitively; executable spelling is a concrete
   remaining difference to test, not yet an established root cause.
+  Canonical-path `07438590 / 38424265463`, job `115389395903`,
+  reproduced the failure at 16:02:10 UTC: native history admission reports
+  `Stopped cold task is not its original literal guarded replacement`.
+  Only the interpreter canonicalization changed from the successful native
+  run. Fix reconstruction to preserve the recorded interpreter spelling after
+  requiring it to equal the current executable using Windows ordinal
+  case-insensitive path semantics. Keep full XML comparison case-sensitive.
+  Bind this same recorded value through permanent-policy reconstruction;
+  initial activation/completion creation retains its existing default.
+  Add focused guarded/permanent policy tests that accept only casing changes
+  and reject changed, dot-segment, empty and null interpreter paths, then
+  require both native canonical-path and actual public receipt acceptance.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
