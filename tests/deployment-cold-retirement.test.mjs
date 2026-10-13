@@ -78,6 +78,8 @@ test('cold retirement record freezes its ordered scope and preserves original di
   assert.equal(captureWindowsColdRetirementRecord(value).checkpoint.enabled, false);
   value.entries.find(entry => entry.path === 'recovery-lock\\activation-running.json').bytes = 4194304;
   captureWindowsColdRetirementRecord(value);
+  const { captureRetirementFile } = await import('../scripts/deployment/windows-task-retirement-record.mjs');
+  assert.throws(() => captureRetirementFile({ ...value.state, bytes: 1048577 }, 'state.json'));
 });
 
 test('cold retirement record refuses unsafe scope, identity substitution and reordered deletion', {

@@ -25,11 +25,11 @@ function identity(value) {
   }
   return result;
 }
-function descriptor(value, expected) {
+function descriptor(value, expected, maximumBytes = 1024 * 1024) {
   const result = captureWorkerFields(value, ['path', 'dev', 'ino', 'bytes', 'sha256'], 'retirement file');
   identity({ dev: result.dev, ino: result.ino });
   if (result.path !== expected || !Number.isSafeInteger(result.bytes) || result.bytes < 1
-    || result.bytes > 1024 * 1024 || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
+    || result.bytes > maximumBytes || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
     throw new Error('Invalid native retirement file descriptor.');
   }
   return result;
