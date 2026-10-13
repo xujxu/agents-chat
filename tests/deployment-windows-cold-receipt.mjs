@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { realpathSync } from 'node:fs';
 import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -6,7 +7,8 @@ import { verifyRecoveryEngine } from '../scripts/deployment/saved-recovery-engin
 import { writeWorkerFile } from '../scripts/deployment/worker-files.mjs';
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 
-const [control, pwsh, target] = process.argv.slice(2);
+const [control, pwshArgument, target] = process.argv.slice(2);
+const pwsh = realpathSync.native(pwshArgument);
 assert.ok(['receipt-staged', 'receipt-published', 'complete'].includes(target));
 assert.equal(process.env.PATH, undefined, 'Receipt authority must work in the public saved-entry environment.');
 const snapshot = await verifySnapshot(path.join(control, 'backup'));

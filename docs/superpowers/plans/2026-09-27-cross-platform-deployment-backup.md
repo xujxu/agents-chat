@@ -14038,6 +14038,12 @@ the default crash scenario retains all previously accepted actors.
   exactly the two new native-diagnostic assertions at 15:39:10 UTC.
   Both the synthetic filtering contract and actual native invalid-control
   refusal lacked the structured native locations, as expected.
+  The public context also canonicalizes PowerShell with `realpathSync.native`;
+  the earlier native fixture passed its raw process module filename. Match
+  this additional public boundary in the native receipt fixture. Historical
+  cold task XML is reconstructed using the current native process module
+  filename and compared case-sensitively; executable spelling is a concrete
+  remaining difference to test, not yet an established root cause.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
