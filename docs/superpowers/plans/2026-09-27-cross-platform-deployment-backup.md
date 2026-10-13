@@ -13915,6 +13915,58 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FA: Prepare public closeout from an accepted cold terminal receipt
+
+**Scope:** extend the existing public saved path by one preceding boundary:
+physically published restored state and accepted receipt, with the complete
+cold terminal proof still present but no retirement manifest. Reuse original
+native retirement preparation; do not recopy, republish state/receipt, replace
+the operation lock, or restart the released runtime. All earlier boundaries
+remain refused. No new recovery protocol or controller is needed.
+
+**Files:** extend `scripts/deployment/windows-cold-retirement-closeout.mjs`
+and `windows-restore-entry.mjs`; update restore help, native cold retirement
+actors and actual application retirement actors.
+
+- [ ] Add and run the missing-export contract in Actions before implementation:
+
+  ```js
+  const { prepareWindowsColdTerminalCloseout } =
+    await import('../scripts/deployment/windows-cold-retirement-closeout.mjs');
+  assert.equal(typeof prepareWindowsColdTerminalCloseout, 'function');
+  await assert.rejects(prepareWindowsColdTerminalCloseout(), /data-loss acknowledgement/);
+  ```
+
+- [ ] Share the existing scope and exact physical state/snapshot checks.
+  Under `openWindowsColdRetirementAuthority`, prepare the candidate, bind it
+  to the verified snapshot, check fresh HTTP readiness, and publish the
+  immutable manifest. Close that authority before calling existing read-only
+  manifest admission. Return its existing `closeoutRequired:true` result;
+  preserve and aggregate preparation/cleanup failures.
+
+- [ ] Saved entry selects this path only without a retirement manifest,
+  with restored state and an existing cold terminal file. Native authority,
+  not the presence check, must authorize preparation. Keep saved-engine
+  verification and independent supervisor deletion unchanged.
+
+- [ ] Native fixture first refuses mismatched backup/source/task without a
+  manifest, then prepares matching closeout without deleting entries. Preserve
+  existing manifest interruption/refusal actors. Actual copy-crash scenario
+  invokes public restore directly after accepted receipt; warm-crash scenario
+  keeps the existing three retirement interruptions before public closeout.
+  Both preserve runtime, operation, backup and state/receipt inodes.
+
+- [ ] Accept only after inspecting native and actual Actions logs:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=crash
+  ```
+
 ### Task 5EZ: Route an existing cold retirement manifest through public saved restore
 
 **Scope:** wire only the already-prepared version-5 cold retirement manifest
