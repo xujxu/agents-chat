@@ -14002,6 +14002,10 @@ the default crash scenario retains all previously accepted actors.
   locations, never messages, paths or native output. Re-run the focused
   saved-entry gate and actual `cold-receipt` gate, inspect the precise nested
   location, fix its cause, and require actual public completion before acceptance.
+  Causal `41d0ef90 / 38402669634`, job `115314030368`, failed at
+  13:13:19 UTC exactly at the new missing forwarded-diagnostic assertion.
+  The implementation reuses the existing filtered array without broadening
+  the public failure protocol or changing any restoration authority.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \

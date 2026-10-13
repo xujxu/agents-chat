@@ -160,13 +160,15 @@ if (errors.length) {
   const code = typeof failure.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(failure.code)
     ? failure.code : 'DEPLOYMENT_WINDOWS_RESTORE_FAILED';
   const message = 'Saved Windows restore failed; retain backup, lock and recovery evidence.';
+  const diagnostics = deploymentDiagnostics(failure, [new URL('./', import.meta.url).href]);
   process.stdout.write(`${JSON.stringify({
     status: 'failed', code, message, stage, closeoutRequired: closeout,
     operationId: closeout ? candidate.operationId : null,
     recoveryEngine: closeout ? candidate.recoveryEngine : null,
-    diagnostics: deploymentDiagnostics(failure, [new URL('./', import.meta.url).href]),
+    diagnostics,
   })}\n`);
   process.stderr.write(`${message} (${code}); stage=${stage}\n`);
+  process.stderr.write(`Saved restore diagnostics: ${JSON.stringify(diagnostics)}\n`);
   process.exitCode = 1;
 } else {
   process.stdout.write(`${JSON.stringify(result)}\n`);
