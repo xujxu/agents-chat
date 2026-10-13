@@ -760,8 +760,11 @@ the public wrapper discarded its nested diagnostic locations. Diagnostic
 fix `e7cc9130` passed native command contracts; actual run `38403397856`
 then localized the refusal to native cold authority startup (observer wire
 closed before readiness). The native receipt fixture now exercises the
-verified saved engine in the same restricted environment to obtain a smaller
-reproduction. Forwarded diagnostics expose no error messages or native output. The dedicated
+verified saved engine in the same restricted environment: `38416439987`
+passed both native chains, so those factors alone do not explain the actual
+failure. The next actual gate adds bounded native exception types and owned
+PowerShell line locations; forwarded diagnostics still expose no error messages
+or raw native output. The dedicated
 `cold-receipt` scenario preserves existing default terminal/retirement coverage;
 this public receipt path is not yet accepted.
 The subsequent native restore regression passed all seven jobs at
