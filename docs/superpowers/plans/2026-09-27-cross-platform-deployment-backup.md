@@ -13971,6 +13971,15 @@ cannot be reused unchanged because it requires `sealed`.
   at the beginning by the shard wrapper. Those results are **not** retirement
   acceptance. Prefix the suffix alternative with `.*` and assert each shard
   matches a required complete test title before rerunning it.
+  Native acceptance completed at `d2fcf8fa / 38340106069`, job
+  `115108942968`: both cold retirement cases passed at 03:32:06 and
+  03:53:18 UTC on 2026-10-13; the shared warm retirement regression passed
+  at 04:00:38 UTC. Corrected first-install run
+  `adcbdf21 / 38341682047` selected the real cases: job `115122360325`
+  passed nine cold cases (plus two file-level no-selection results) at
+  04:29:00 UTC, including retirement, retirement actor loss and saved
+  closeout. Job `115122360247` passed four foundation cases at 04:03:57 UTC.
+  Actual application retirement is still pending; do not mark this task done.
 
 - [ ] Define and test the immutable cold retirement record. Use
   `worker-retirement.json` with `version: 5`, `purpose: 'cold-restore'`.

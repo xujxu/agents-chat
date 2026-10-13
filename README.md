@@ -704,8 +704,17 @@ regression passed. Actual application receipt acceptance also passed at
 `de8f6e8 / 38331450888`: staged and published interruptions followed by
 independent recovery preserved the original staged receipt inode, receipt
 bytes/timestamp, terminal state, transaction, released runtime and restored
-authenticated data. Both actual crash jobs passed. Evidence retirement and
-public cold restore completion remain unfinished.
+authenticated data. Both actual crash jobs passed.
+Ordered cold evidence retirement passed native acceptance at
+`d2fcf8fa / 38340106069`: both cold cases resumed after manifest publication,
+early deletion and the boundary before original unlock, refused foreign,
+pending, non-prefix and replaced-inode evidence, and preserved the original
+released runtime. The shared warm deletion regression passed as well.
+Corrected first-install selection at `adcbdf21 / 38341682047` then exercised
+the actual first-install retirement, actor-loss and saved-closeout cases;
+the earlier file-level green results did not select these cases and do not
+count as acceptance. Actual application retirement and public cold restore
+completion remain unfinished.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
