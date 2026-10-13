@@ -117,10 +117,16 @@ function Read-AgentsChatColdActivationRecoveryHistory {
         $previous = $file.Sha256
     }
     if ($previous -cne $HistorySha256) { throw 'Original inactive cold history digest changed.' }
+    $guarded = [xml]$first.definition.GetString()
+    $namespaces = [Xml.XmlNamespaceManager]::new($guarded.NameTable)
+    $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+    $commands = $guarded.SelectNodes('/t:Task/t:Actions/t:Exec/t:Command', $namespaces)
+    if ($commands.Count -ne 1) { throw 'Cold activation history requires one original interpreter.' }
     $policy = @{
         Definition=$proof.Definition; Bundle=$proof.ColdRuntime.directory.GetString()
         Configuration=$proof.ColdRuntime.configuration.GetString()
         ConfigurationSha256=$proof.ColdRuntime.sha256.GetString(); Stage='cold-policy'
+        PowerShell=$commands[0].InnerText
     }
     $expected = Get-AgentsChatColdActivationDefinition $policy `
         $first.controllerPid.GetInt32() $first.controllerIdentity.GetString()
@@ -130,6 +136,7 @@ function Read-AgentsChatColdActivationRecoveryHistory {
     $proof.ActivationBridgePid = $first.controllerPid.GetInt32()
     $proof.ActivationBridgeIdentity = $first.controllerIdentity.GetString()
     $proof.Runtime = $runtime
+    $proof.ColdPowerShell = $policy.PowerShell
     $proof.ColdDefinition = $record.definition.GetString()
     $proof.CurrentDefinition = $proof.ColdDefinition
     $proof.ColdOwnerSha256 = $OwnerSha256

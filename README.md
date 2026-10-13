@@ -764,7 +764,13 @@ verified saved engine in the same restricted environment: `38416439987`
 passed both native chains, so those factors alone do not explain the actual
 failure. The next actual gate adds bounded native exception types and owned
 PowerShell line locations; forwarded diagnostics still expose no error messages
-or raw native output. The dedicated
+or raw native output. Matching the public interpreter canonicalization in
+`38424265463` reproduced the refusal: case-sensitive historical task XML
+reconstruction used the new process's executable spelling rather than the
+recorded spelling. The fix binds the recorded command to the same native
+interpreter (case-insensitive Windows path comparison) while preserving exact
+guarded/permanent XML comparison. Native and actual fixed-path acceptance
+are still required. The dedicated
 `cold-receipt` scenario preserves existing default terminal/retirement coverage;
 this public receipt path is not yet accepted.
 The subsequent native restore regression passed all seven jobs at

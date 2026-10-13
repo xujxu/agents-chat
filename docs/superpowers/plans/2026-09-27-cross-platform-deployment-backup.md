@@ -14056,6 +14056,13 @@ the default crash scenario retains all previously accepted actors.
   Add focused guarded/permanent policy tests that accept only casing changes
   and reject changed, dot-segment, empty and null interpreter paths, then
   require both native canonical-path and actual public receipt acceptance.
+  Focused causal `e402188a / 38427633234`, job `115401099680`,
+  failed at 16:06:04 UTC on lost original executable spelling after all
+  Node contracts passed. Implementation uses the original history's single
+  Command value only after ordinal case-insensitive equality with the current
+  native interpreter; the exact recorded spelling then feeds both guarded
+  and permanent reconstruction. Arguments, directories, controller identity,
+  policy, security and full historical XML checks remain exact.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \

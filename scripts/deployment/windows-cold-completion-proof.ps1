@@ -6,6 +6,7 @@ function Read-AgentsChatColdCompletionHistory([hashtable]$Context, [string]$Comp
         Definition=$Context.Definition; Bundle=$Context.ColdRuntime.directory.GetString()
         Configuration=$Context.ColdRuntime.configuration.GetString()
         ConfigurationSha256=$Context.ColdRuntime.sha256.GetString(); Stage='cold-completion-policy'
+        PowerShell=$Context.ColdPowerShell
     }
     $permanent = Get-AgentsChatColdActivationDefinition $policy `
         $Context.ActivationBridgePid $Context.ActivationBridgeIdentity -Permanent

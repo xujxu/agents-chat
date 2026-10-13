@@ -110,6 +110,13 @@ function Get-AgentsChatColdActivationDefinition([hashtable]$Context, [int]$Contr
     $process = [Diagnostics.Process]::GetCurrentProcess()
     try { $powershell = $process.MainModule.FileName }
     finally { $process.Dispose() }
+    if ($Context.ContainsKey('PowerShell')) {
+        if ($Context.PowerShell -isnot [string] -or
+            -not [string]::Equals($Context.PowerShell, $powershell, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Cold policy reconstruction requires the original native interpreter path.'
+        }
+        $powershell = $Context.PowerShell
+    }
     if ($powershell -match '%|\$\(' -or $Context.Configuration -match '%|\$\(') {
         throw 'Cold activation requires literal native runtime paths.'
     }
