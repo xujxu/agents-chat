@@ -64,6 +64,18 @@ test('cold retirement requires explicit acknowledgement and honors cancellation 
   }), { name: 'AbortError' });
 });
 
+test('saved cold retirement closeout requires acknowledgement and rejects unbound scope before admission', async () => {
+  const { prepareWindowsColdRetirementCloseout } =
+    await import('../scripts/deployment/windows-cold-retirement-closeout.mjs');
+  await assert.rejects(prepareWindowsColdRetirementCloseout(), /data-loss acknowledgement/);
+  await assert.rejects(prepareWindowsColdRetirementCloseout({ acceptDataLoss: true }), /scope/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(prepareWindowsColdRetirementCloseout({
+    acceptDataLoss: true, signal: controller.signal,
+  }), { name: 'AbortError' });
+});
+
 test('cold retirement record freezes its ordered scope and preserves original disabled policy', {
   skip: process.platform !== 'win32',
 }, async () => {

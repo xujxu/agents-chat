@@ -13915,6 +13915,58 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EZ: Route an existing cold retirement manifest through public saved restore
+
+**Scope:** wire only the already-prepared version-5 cold retirement manifest
+into the saved Windows restore entry and existing independent supervisor
+closeout. This path must not start a new restore, allocate another lock,
+copy files, change receipts or restart the application. Earlier cold prefixes,
+pre-release/startup/reboot recovery remain separate work.
+
+**Files:** add `scripts/deployment/windows-cold-retirement-closeout.mjs`;
+update `windows-restore-entry.mjs`, `windows-restore-command.mjs` and
+`saved-recovery-engine.mjs`. Extend
+`tests/deployment-cold-retirement.test.mjs` and the actual retirement fixture.
+
+- [ ] Push the missing-module acknowledgement/pre-abort/scope contract and
+  observe it fail in Actions before implementing the helper:
+
+  ```js
+  const { prepareWindowsColdRetirementCloseout } =
+    await import('../scripts/deployment/windows-cold-retirement-closeout.mjs');
+  await assert.rejects(prepareWindowsColdRetirementCloseout(), /data-loss acknowledgement/);
+  await assert.rejects(prepareWindowsColdRetirementCloseout({ acceptDataLoss: true }), /scope/);
+  ```
+
+- [ ] Implement read-only native manifest admission using existing Windows
+  admission and `openWindowsColdRetirementScope`. Match exact physical
+  state bytes to `record.state.sha256`, then bind state/project/operation,
+  restored phase, backup ID, source commit, task and verified engine digest
+  to the saved entry's verified snapshot. Close scope before admission;
+  aggregate cleanup errors and retain all evidence on refusal.
+  Return only the existing supported saved-restore success shape:
+
+  ```js
+  Object.freeze({
+    status: 'restored', operationId: state.operationId, backupId: snapshot.id,
+    recoveryEngine: snapshot.recoveryEngine,
+    closeoutRequired: true, runtimeRelocated: true,
+  });
+  ```
+
+- [ ] Dispatch only when a bounded private `worker-retirement.json` is present
+  and has version 5, before generic interrupted-operation rejection. Other
+  manifests still refuse through existing reconciliation. Validate and
+  execute the saved engine as before; never consume current-checkout code.
+  Use the existing restore deadline and independent supervisor closeout.
+
+- [ ] Change only the final actual retirement actor to invoke public
+  `restore.ps1`, assert original operation/backup/engine and completed
+  closeout, and retain exact state/receipt bytes/inodes, original released
+  runtime/Scheduler instance and authenticated data. Keep native direct
+  version-5 closeout coverage unchanged. Validate in Actions with the actual
+  crash selector after the focused native contract gate.
+
 ### Task 5EY: Retire completed cold restore evidence with resumable ordered deletion
 
 **Goal:** close the accepted cold operation without restarting its application,
