@@ -14017,6 +14017,23 @@ the default crash scenario retains all previously accepted actors.
   Its existing synthetic-data failure output retains native bridge details.
   Require the same interruption, refusal and inode assertions; do not replace
   real application acceptance with this narrower diagnosis.
+  Native `0ff60df3 / 38416439987`, job `115362023499`, passed both
+  saved-engine receipt chains at 15:07:15 and 15:25:36 UTC, both cold
+  retirement chains and warm retirement. This did not reproduce the actual
+  application failure; the saved-engine path and restricted environment alone
+  are insufficient to explain it. Preserve this stronger fixture.
+
+- [ ] Retain bounded native exception type and owned PowerShell line locations
+  from the stopped restore bridge, alongside existing Node diagnostics.
+  Do not forward native message text. Emit only validated basenames in the
+  bridge's own directory, positive line/column numbers and uppercase exception
+  type identifiers; cap the chain at eight. Extend `deploymentDiagnostics`
+  to parse only the explicit structured marker from the already bounded
+  native diagnostic tail and revalidate every field, retaining the existing
+  eight-result/three-location limit. Contract cases reject malformed JSON,
+  arbitrary codes, extra fields, path traversal and zero line numbers.
+  Run this contract first in the existing native command gate, then repeat
+  actual `cold-receipt` to obtain application-specific native failure evidence.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
