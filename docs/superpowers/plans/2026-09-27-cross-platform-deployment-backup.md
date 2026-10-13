@@ -14006,6 +14006,17 @@ the default crash scenario retains all previously accepted actors.
   13:13:19 UTC exactly at the new missing forwarded-diagnostic assertion.
   The implementation reuses the existing filtered array without broadening
   the public failure protocol or changing any restoration authority.
+  Diagnostic `e7cc9130 / 38403397856`, job `115316579933`, passed
+  native command contracts at 13:19:59 UTC, then failed actual public receipt
+  recovery at 14:45:11. The nested cause is a closed native observer wire
+  during `openWindowsColdReceiptAuthority`, before receipt recovery obtains
+  its authority; not an acceptance-fingerprint mismatch or timeout.
+  Strengthen the existing native receipt fixture to import both the authority
+  and publisher from the verified saved engine (preserving their shared opaque
+  authority registry), with only SystemRoot/TEMP/TMP as in the public child.
+  Its existing synthetic-data failure output retains native bridge details.
+  Require the same interruption, refusal and inode assertions; do not replace
+  real application acceptance with this narrower diagnosis.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \

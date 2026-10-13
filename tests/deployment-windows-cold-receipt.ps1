@@ -2,7 +2,7 @@ param([Parameter(Mandatory)][string]$Control)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
-foreach ($name in @('SystemRoot', 'PATH')) { $environment.Add($name, [Environment]::GetEnvironmentVariable($name)) }
+$environment.Add('SystemRoot', [Environment]::GetEnvironmentVariable('SystemRoot'))
 $environment.Add('TEMP', $Control)
 $environment.Add('TMP', $Control)
 $terminal = Get-Content -LiteralPath (Join-Path $Control 'cold-restore-terminal.json') -Raw | ConvertFrom-Json

@@ -1,14 +1,20 @@
 import assert from 'node:assert/strict';
 import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { openWindowsColdReceiptAuthority } from '../scripts/deployment/windows-cold-activation-recovery.mjs';
-import { publishWindowsColdRestoredDeploymentReceipt, publishRestoredDeploymentReceipt,
-  readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
+import { pathToFileURL } from 'node:url';
+import { verifyRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
 import { writeWorkerFile } from '../scripts/deployment/worker-files.mjs';
 import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 
 const [control, pwsh, target] = process.argv.slice(2);
 assert.ok(['receipt-staged', 'receipt-published', 'complete'].includes(target));
+assert.equal(process.env.PATH, undefined, 'Receipt authority must work in the public saved-entry environment.');
+const snapshot = await verifySnapshot(path.join(control, 'backup'));
+const saved = await verifyRecoveryEngine({ control, manifestSha256: snapshot.recoveryEngine });
+const { openWindowsColdReceiptAuthority } = await import(pathToFileURL(
+  path.join(saved.directory, 'windows-cold-activation-recovery.mjs')));
+const { publishWindowsColdRestoredDeploymentReceipt, publishRestoredDeploymentReceipt, readDeploymentReceipt } =
+  await import(pathToFileURL(path.join(saved.directory, 'deployment-receipt.mjs')));
 const marker = JSON.parse(await readFile(path.join(control, 'cold-restore-terminal.json')));
 const state = JSON.parse(marker.nextState);
 // Synthetic fingerprints exercise only the writer; the retained runtime proof is genuine.
@@ -33,7 +39,6 @@ const originals = new Map(await Promise.all([
   'task-maintenance/transaction.json', 'backup/manifest.json',
   ...names.map(name => `recovery-lock/${name}`),
 ].map(async name => [name, await readFile(path.join(control, name))])));
-const snapshot = await verifySnapshot(path.join(control, 'backup'));
 const stagedBefore = target === 'receipt-published'
   ? { bytes: await readFile(stage), info: await lstat(stage, { bigint: true }) } : null;
 for (const changed of [
