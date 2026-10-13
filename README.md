@@ -756,9 +756,12 @@ refusals, both cold receipt/retirement chains and the warm retirement regression
 Actual public recovery from the staged receipt failed in
 `38391317840` at `cold-receipt-closeout`, after all preceding cold actors
 passed. The saved process returned `DEPLOYMENT_WINDOWS_COLD_RECEIPT_RECOVERY_REFUSED`;
-the public wrapper discarded its nested diagnostic locations. The next
-diagnostic gate retains those existing sanitized locations on forwarded
-stderr, without exposing error messages or native output. The dedicated
+the public wrapper discarded its nested diagnostic locations. Diagnostic
+fix `e7cc9130` passed native command contracts; actual run `38403397856`
+then localized the refusal to native cold authority startup (observer wire
+closed before readiness). The native receipt fixture now exercises the
+verified saved engine in the same restricted environment to obtain a smaller
+reproduction. Forwarded diagnostics expose no error messages or native output. The dedicated
 `cold-receipt` scenario preserves existing default terminal/retirement coverage;
 this public receipt path is not yet accepted.
 The subsequent native restore regression passed all seven jobs at
