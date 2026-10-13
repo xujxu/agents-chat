@@ -14002,6 +14002,13 @@ application restore dispatcher/parent.
 
   Inspect completed native and both actual logs. Receipt acceptance does not
   retire recovery evidence, unlock, or complete the public cold restore entry.
+  Native gate `8ab226a / 38323713056`, job `115057457554`, passed at
+  2026-10-13 00:26:40 UTC. All 39 focused contracts, five warm receipt tests,
+  saved closure, both awaited receipt interruption/reentry cases and the warm
+  terminal regression passed. Receipt cases completed at 00:05:43 and
+  00:22:48 UTC. The actual crash pair `38323736543` remains running:
+  warm `115057536848`, copy `115057537027`. It was dispatched in its separate
+  group after 5EW acceptance, overlapping its build with this callback regression.
 
 ### Task 5EW: Publish restored receipts under retained cold terminal authority
 

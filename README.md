@@ -697,9 +697,11 @@ fixtures passed at `7c84f84 / 38320959400`: 38 focused contracts, five warm
 receipt tests, saved closure and both cold interruption/reentry cases passed.
 The actual receipt orchestrator now derives source, artifacts, configuration
 and readiness from the retained production observers, not caller fingerprints.
-Its awaited staged/published callbacks and actual application acceptance are
-pending Actions verification. Evidence retirement and public cold restore
-completion remain unfinished.
+Its awaited staged/published callbacks passed native acceptance at
+`8ab226a / 38323713056`: all 39 focused contracts, five warm receipt tests,
+saved closure, both cold interruption/reentry cases and the warm terminal
+regression passed. Actual application receipt acceptance remains in progress.
+Evidence retirement and public cold restore completion remain unfinished.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
