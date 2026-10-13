@@ -13915,6 +13915,73 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FB: Recover an unfinished cold receipt through public saved restore
+
+**Scope:** physically published cold terminal state with a missing restored
+receipt or an existing receipt from the preceding operation, including a
+durable staged replacement. Keep accepted-receipt and existing-retirement
+fast paths unchanged. Reuse the original cold receipt authority and atomic
+publisher, then accepted terminal-manifest preparation and independent
+public closeout. Do not alter earlier state publication/startup/reboot paths.
+
+**Files:** extend `windows-cold-retirement-closeout.mjs`,
+`windows-cold-receipt-recovery.mjs`, `windows-cold-activation-recovery.mjs`,
+`windows-restore-entry.mjs` and help under `scripts/deployment/`.
+Extend native receipt/contract tests; add the focused actual
+`tests/deployment-windows-cold-application-closeout.mjs` actor and wire it
+through existing live fixtures. Add the `cold-receipt` workflow scenario,
+which selects only copy-crash with a staged-receipt public-closeout tail;
+the default crash scenario retains all previously accepted actors.
+
+- [ ] Push the missing-export contract and observe its Actions failure:
+
+  ```js
+  const { prepareWindowsColdReceiptCloseout } =
+    await import('../scripts/deployment/windows-cold-retirement-closeout.mjs');
+  assert.equal(typeof prepareWindowsColdReceiptCloseout, 'function');
+  await assert.rejects(prepareWindowsColdReceiptCloseout(), /data-loss acknowledgement/);
+  ```
+
+- [ ] Thread optional `expectedSnapshot` from the public receipt helper through
+  receipt recovery to `openWindowsColdReceiptAuthority`. Under admission,
+  compare the independently verified snapshot with this full expected snapshot
+  before creating the native mutation authority. Refuse changed backup ID,
+  source, task, engine or inventory without receipt/stage/evidence changes.
+  Existing private callers without the option retain their existing proof.
+
+- [ ] The new public helper validates the same canonical saved scope, invokes
+  original receipt recovery with the verified expected snapshot, then calls
+  existing `prepareWindowsColdTerminalCloseout` after receipt resources close.
+  Saved entry selects it only for absent or prior-operation receipts; a
+  matching accepted receipt uses the existing terminal path. Malformed or
+  substituted evidence still fails explicitly.
+
+  ```js
+  await recoverWindowsColdRestoredDeploymentReceipt({
+    control, pwsh, acceptDataLoss: true, expectedSnapshot: snapshot, signal,
+  });
+  return prepareWindowsColdTerminalCloseout(options);
+  ```
+
+- [ ] Native receipt fixture exercises wrong expected snapshots before
+  publication, retaining original bytes and any staged inode. Actual
+  `cold-receipt` stops after the existing receipt-staged interruption, then
+  invokes public `restore.ps1` once. Require original operation/backup/engine,
+  completed closeout, staged receipt promoted with unchanged bytes/inode/mtime,
+  original state/backup bytes/inodes, released runtime/Scheduler instance,
+  authenticated restored data, and no remaining lock/journal/retirement stage.
+
+- [ ] Inspect native and actual Actions logs before accepting:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=cold-receipt
+  ```
+
 ### Task 5FA: Prepare public closeout from an accepted cold terminal receipt
 
 **Actual gate budget evidence (2026-10-13):** direct retirement
