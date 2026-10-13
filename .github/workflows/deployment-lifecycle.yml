@@ -171,7 +171,7 @@ jobs:
     if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only }}
     name: ${{ matrix.scenario == 'cancelled' && 'Actual Windows restore cancellation' || matrix.scenario == 'failed' && 'Actual Windows restore failure' || matrix.scenario == 'crashed' && 'Actual Windows restore crash' || matrix.scenario == 'copy-crashed' && 'Actual Windows file-copy restore crash' || matrix.scenario == 'offline' && 'Actual Windows restore egress denial' || 'Actual Windows live deployment' }}
     runs-on: windows-2022
-    timeout-minutes: 115
+    timeout-minutes: ${{ matrix.scenario == 'copy-crashed' && 140 || 115 }}
     strategy:
       fail-fast: false
       matrix:
@@ -252,7 +252,8 @@ jobs:
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
-          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds' -TimeoutSeconds 6300
+          $timeoutSeconds = if ($env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO -eq 'copy-crashed') { 7800 } else { 6300 }
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds' -TimeoutSeconds $timeoutSeconds
 
   windows-first-native:
     if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only) }}

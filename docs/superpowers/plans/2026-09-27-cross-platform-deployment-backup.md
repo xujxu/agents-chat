@@ -13917,6 +13917,20 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 
 ### Task 5FA: Prepare public closeout from an accepted cold terminal receipt
 
+**Actual gate budget evidence (2026-10-13):** direct retirement
+`54cbaf63 / 38352965467`, copy job `115149322371`, reached and passed
+retirement preparation and early deletion, then the managed invocation hit
+its 95-minute timeout at 07:29:45 UTC (`killed:true`, `SIGTERM`). Update took
+1,284,242 ms, initial interrupted restore 749,275 ms, cold copy/startup
+2,360,466 ms, and the three receipt actors 736,238 ms in total; no retirement
+assertion failed before the aggregate timer terminated the controller.
+This is not completed retirement acceptance. Warm job `115149322605`
+passed separately. Increase only copy-crash's aggregate managed/private/job
+budgets to 120/130/140 minutes to accommodate the added retirement and public
+handoff checks, retaining existing per-actor limits and all evidence checks.
+Already-running public gate `1f3e470b / 38354204691` keeps its original
+budget and is not cancelled.
+
 **Scope:** extend the existing public saved path by one preceding boundary:
 physically published restored state and accepted receipt, with the complete
 cold terminal proof still present but no retirement manifest. Reuse original
