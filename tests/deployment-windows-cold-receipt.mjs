@@ -5,6 +5,7 @@ import { openWindowsColdReceiptAuthority } from '../scripts/deployment/windows-c
 import { publishWindowsColdRestoredDeploymentReceipt, publishRestoredDeploymentReceipt,
   readDeploymentReceipt } from '../scripts/deployment/deployment-receipt.mjs';
 import { writeWorkerFile } from '../scripts/deployment/worker-files.mjs';
+import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 
 const [control, pwsh, target] = process.argv.slice(2);
 assert.ok(['receipt-staged', 'receipt-published', 'complete'].includes(target));
@@ -32,7 +33,30 @@ const originals = new Map(await Promise.all([
   'task-maintenance/transaction.json', 'backup/manifest.json',
   ...names.map(name => `recovery-lock/${name}`),
 ].map(async name => [name, await readFile(path.join(control, name))])));
-const authority = await openWindowsColdReceiptAuthority({ control, pwsh, acceptDataLoss: true });
+const snapshot = await verifySnapshot(path.join(control, 'backup'));
+const stagedBefore = target === 'receipt-published'
+  ? { bytes: await readFile(stage), info: await lstat(stage, { bigint: true }) } : null;
+for (const changed of [
+  { ...snapshot, id: `${snapshot.id}-foreign` },
+  { ...snapshot, source: { ...snapshot.source, commit: 'f'.repeat(40) } },
+  { ...snapshot, recoveryEngine: 'f'.repeat(64) },
+  { ...snapshot, runtime: { ...snapshot.runtime, task: { ...snapshot.runtime.task, name: 'Foreign-Receipt-Task' } } },
+  { ...snapshot, entries: [] },
+]) {
+  await assert.rejects(openWindowsColdReceiptAuthority({
+    control, pwsh, acceptDataLoss: true, expectedSnapshot: changed,
+  }), /differs from the verified saved restore snapshot/);
+  assert.deepEqual(await readFile(destination), beforeReceipt);
+  for (const [name, bytes] of originals) assert.deepEqual(await readFile(path.join(control, name)), bytes);
+  if (stagedBefore) {
+    assert.deepEqual(await readFile(stage), stagedBefore.bytes);
+    const info = await lstat(stage, { bigint: true });
+    for (const key of ['dev', 'ino', 'mtimeNs']) assert.equal(info[key], stagedBefore.info[key]);
+  }
+}
+const authority = await openWindowsColdReceiptAuthority({
+  control, pwsh, acceptDataLoss: true, expectedSnapshot: snapshot,
+});
 let result;
 try {
   assert.ok(Object.isFrozen(authority) && Object.isFrozen(authority.state) && Object.isFrozen(authority.lock));

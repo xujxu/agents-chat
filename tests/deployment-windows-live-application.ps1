@@ -48,9 +48,14 @@ try {
         $modes += @('restore-cold-files', 'restore-cold-policy-crashed', 'restore-cold-enable-crashed',
             'restore-cold-completed', 'restore-cold-observed',
             'restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed',
-            'restore-cold-receipt-staged', 'restore-cold-receipt-published', 'restore-cold-receipt-completed',
-            'restore-cold-retirement-prepared', 'restore-cold-retirement-early',
-            'restore-cold-retirement-unlock', 'restore-cold-retirement-completed')
+            'restore-cold-receipt-staged')
+        if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'receipt') {
+            $modes += 'restore-cold-receipt-closeout'
+        } else {
+            $modes += @('restore-cold-receipt-published', 'restore-cold-receipt-completed',
+                'restore-cold-retirement-prepared', 'restore-cold-retirement-early',
+                'restore-cold-retirement-unlock', 'restore-cold-retirement-completed')
+        }
     }
     foreach ($mode in $modes) {
         if ($RestoreScenario -eq 'offline' -and $mode -eq 'restore') {
@@ -138,6 +143,7 @@ try {
             restore-cold-receipt-staged { 'cold-restored-receipt-interrupted' }
             restore-cold-receipt-published { 'cold-restored-receipt-interrupted' }
             restore-cold-receipt-completed { 'cold-restored-receipt-recovered' }
+            restore-cold-receipt-closeout { 'cold-receipt-closeout-completed' }
             restore-cold-retirement-prepared { 'cold-retirement-interrupted' }
             restore-cold-retirement-early { 'cold-retirement-interrupted' }
             restore-cold-retirement-unlock { 'cold-retirement-interrupted' }
@@ -280,7 +286,7 @@ try {
                 } finally { $file.Dispose() }
             }
         }
-        if ($mode -like 'restore-cold-retirement-*') {
+        if ($mode -like 'restore-cold-retirement-*' -or $mode -ceq 'restore-cold-receipt-closeout') {
             $runtime = $result.runtime
             Assert ($runtime.pid -eq $originalPid -and
                 $runtime.identity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($originalPid) -and
@@ -300,7 +306,7 @@ try {
                 } finally { $file.Dispose() }
             }
             $marker = Join-Path $control 'worker-retirement.json'
-            if ($mode -ceq 'restore-cold-retirement-completed') {
+            if ($mode -in @('restore-cold-retirement-completed', 'restore-cold-receipt-closeout')) {
                 Assert ($result.boundary -ceq 'complete' -and -not (Test-Path -LiteralPath $marker) -and
                     -not (Test-Path -LiteralPath (Join-Path $control 'lock'))) 'Actual cold retirement did not finish original unlock'
             } else {

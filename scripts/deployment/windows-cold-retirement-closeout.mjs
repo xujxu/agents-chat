@@ -3,6 +3,7 @@ import path from 'node:path';
 import { withWindowsAdmission } from './windows-admission.mjs';
 import { openWindowsColdRetirementAuthority } from './windows-cold-activation-recovery.mjs';
 import { openWindowsColdRetirementScope } from './windows-cold-retirement-scope.mjs';
+import { recoverWindowsColdRestoredDeploymentReceipt } from './windows-cold-receipt-recovery.mjs';
 import { verifyHttpReadiness } from './http-readiness.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 import { validateState } from './state.mjs';
@@ -37,6 +38,15 @@ async function readBoundState(record, { control, project, taskName, snapshot }) 
     throw new Error('Original cold retirement differs from the verified saved restore snapshot.');
   }
   return state;
+}
+
+export async function prepareWindowsColdReceiptCloseout(options = {}) {
+  assertScope(options);
+  const { control, pwsh, snapshot, signal } = options;
+  await recoverWindowsColdRestoredDeploymentReceipt({
+    control, pwsh, acceptDataLoss: true, expectedSnapshot: snapshot, signal,
+  });
+  return prepareWindowsColdTerminalCloseout(options);
 }
 
 export async function prepareWindowsColdTerminalCloseout(options = {}) {

@@ -6,6 +6,10 @@ import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-
 import { invokePublicWindowsRestore } from './deployment-windows-public-restore.mjs';
 
 export async function verifyWindowsLiveRestore({ mode, directory, project, control, taskName, pwsh, chatId }) {
+  if (mode === 'restore-cold-receipt-closeout') {
+    const { verifyWindowsColdReceiptCloseout } = await import('./deployment-windows-cold-application-closeout.mjs');
+    return verifyWindowsColdReceiptCloseout({ directory, project, control, taskName, pwsh, chatId });
+  }
   if (['restore-cold-retirement-prepared', 'restore-cold-retirement-early',
     'restore-cold-retirement-unlock', 'restore-cold-retirement-completed'].includes(mode)) {
     const { verifyWindowsColdApplicationRetirement } = await import('./deployment-windows-cold-application-retirement.mjs');

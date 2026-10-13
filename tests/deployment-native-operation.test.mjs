@@ -257,6 +257,10 @@ test('actual application source installs and builds inside native ownership', {
         '-TargetCommit', liveRevision,
         '-RestoreScenario', restoreScenario,
       ], { timeout: liveTimeout, maxBuffer: 32768 });
+      if (process.env.DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY === 'receipt') {
+        assert.equal(restoreScenario, 'copy-crashed');
+        assert.match(live.stdout, /PASS: real Windows live deployment restore-cold-receipt-closeout /);
+      }
       console.log(live.stdout.trim());
       return;
     }

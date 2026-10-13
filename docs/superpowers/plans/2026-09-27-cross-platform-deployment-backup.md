@@ -13933,7 +13933,7 @@ through existing live fixtures. Add the `cold-receipt` workflow scenario,
 which selects only copy-crash with a staged-receipt public-closeout tail;
 the default crash scenario retains all previously accepted actors.
 
-- [ ] Push the missing-export contract and observe its Actions failure:
+- [x] Push the missing-export contract and observe its Actions failure:
 
   ```js
   const { prepareWindowsColdReceiptCloseout } =
@@ -13941,6 +13941,8 @@ the default crash scenario retains all previously accepted actors.
   assert.equal(typeof prepareWindowsColdReceiptCloseout, 'function');
   await assert.rejects(prepareWindowsColdReceiptCloseout(), /data-loss acknowledgement/);
   ```
+  Causal `a3375ce9 / 38390852404`, job `115273987140`, failed exactly
+  at the missing export at 11:32:16 UTC; the other 45 contracts passed.
 
 - [ ] Thread optional `expectedSnapshot` from the public receipt helper through
   receipt recovery to `openWindowsColdReceiptAuthority`. Under admission,

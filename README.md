@@ -747,6 +747,12 @@ rejected its increased budget; that bound and its regression were corrected.
 The older direct actual run reached early
 retirement but timed out before final unlock; the subsequent public run
 completed that branch. Earlier cold prefixes are still refused.
+The next saved-entry extension recovers a missing or prior-operation receipt
+from physically published cold terminal state, including an existing staged
+replacement, before preparing retirement. It binds the entire verified
+snapshot again under native admission before mutation. Its native and actual
+acceptance are pending; the dedicated `cold-receipt` Actions scenario preserves
+the existing default terminal/retirement coverage.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

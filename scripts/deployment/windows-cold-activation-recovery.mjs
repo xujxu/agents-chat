@@ -65,10 +65,10 @@ export async function publishWindowsColdTerminalState({ control, pwsh, signal, a
   return finishWindowsColdTerminalState(recovery, { signal, onProgress });
 }
 
-export async function openWindowsColdReceiptAuthority({ control, pwsh, signal, acceptDataLoss } = {}) {
+export async function openWindowsColdReceiptAuthority({ control, pwsh, signal, acceptDataLoss, expectedSnapshot } = {}) {
   signal?.throwIfAborted();
   if (acceptDataLoss !== true) throw new Error('Cold receipt publication requires explicit data-loss acknowledgement.');
-  return openRecovery({ control, pwsh, signal }, false, true, true, 'receipt');
+  return openRecovery({ control, pwsh, signal, expectedSnapshot }, false, true, true, 'receipt');
 }
 
 export async function openWindowsColdRetirementAuthority({ control, pwsh, signal, acceptDataLoss } = {}) {
@@ -96,7 +96,7 @@ export async function prepareWindowsColdPolicyRecovery({ control, pwsh, signal, 
   return openRecovery({ control, pwsh, signal }, true);
 }
 
-async function openRecovery({ control, pwsh, signal }, policyRecovery, completedRuntime = false,
+async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyRecovery, completedRuntime = false,
   completionRecovery = false, terminalState = false) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value => typeof value === 'string'
@@ -116,6 +116,9 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
       1048576, { privateMode: true }));
     const backup = path.join(control, 'backup');
     const snapshot = await verifySnapshot(backup, { signal });
+    if (expectedSnapshot !== undefined && !same(snapshot, expectedSnapshot)) {
+      throw new Error('Cold receipt authority differs from the verified saved restore snapshot.');
+    }
     if (state.operation !== 'restore' || state.operationId !== lock.operationId || state.project !== lock.project
       || snapshot.project !== state.project || snapshot.id !== state.backupId
       || snapshot.source.commit !== state.targetCommit || snapshot.runtime?.platform !== 'win32'

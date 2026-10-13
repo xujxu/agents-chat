@@ -96,9 +96,17 @@ try {
   }
   if (retirement?.version === 5 || coldTerminal) {
     stage = coldTerminal ? 'cold-terminal-closeout' : 'cold-retirement-admission';
-    const { prepareWindowsColdRetirementCloseout, prepareWindowsColdTerminalCloseout } =
+    const { prepareWindowsColdRetirementCloseout, prepareWindowsColdTerminalCloseout, prepareWindowsColdReceiptCloseout } =
       await import('./windows-cold-retirement-closeout.mjs');
-    const prepare = coldTerminal ? prepareWindowsColdTerminalCloseout : prepareWindowsColdRetirementCloseout;
+    let prepare = coldTerminal ? prepareWindowsColdTerminalCloseout : prepareWindowsColdRetirementCloseout;
+    if (coldTerminal) {
+      const { readDeploymentReceipt } = await import('./deployment-receipt.mjs');
+      const receipt = await readDeploymentReceipt(control, input.project);
+      if (!receipt || receipt.operationId !== originalState.operationId) {
+        stage = 'cold-receipt-closeout';
+        prepare = prepareWindowsColdReceiptCloseout;
+      }
+    }
     result = await runStage(stage, signal => prepare({
       control, project: input.project, taskName: input.taskName, snapshot, pwsh: input.pwsh,
       acceptDataLoss: true, signal,

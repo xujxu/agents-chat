@@ -8,7 +8,7 @@ import { openWindowsColdReceiptAuthority, assertWindowsColdReceiptAuthority } fr
 import { publishWindowsColdRestoredDeploymentReceipt, readDeploymentReceipt } from './deployment-receipt.mjs';
 
 export async function recoverWindowsColdRestoredDeploymentReceipt({
-  control, pwsh, acceptDataLoss, profile = 'agents-chat-auth-638c553', waitSeconds = 120, signal, onProgress,
+  control, pwsh, acceptDataLoss, profile = 'agents-chat-auth-638c553', waitSeconds = 120, signal, onProgress, expectedSnapshot,
 } = {}) {
   signal?.throwIfAborted();
   if (acceptDataLoss !== true) throw new Error('Cold receipt recovery requires explicit data-loss acknowledgement.');
@@ -17,7 +17,7 @@ export async function recoverWindowsColdRestoredDeploymentReceipt({
   const failures = [];
   let result;
   try {
-    const authority = await openWindowsColdReceiptAuthority({ control, pwsh, acceptDataLoss, signal });
+    const authority = await openWindowsColdReceiptAuthority({ control, pwsh, acceptDataLoss, signal, expectedSnapshot });
     resources.push(authority);
     const { state, lock, observation: completed } = authority;
     const project = state.project;
