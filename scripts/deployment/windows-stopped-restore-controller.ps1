@@ -139,6 +139,29 @@ try {
 } catch {
     $failure = $_.Exception
     [Console]::Error.WriteLine("Stopped restore bridge refused: $stage. $($failure.GetBaseException().Message)")
+    $diagnostics = [Collections.Generic.List[object]]::new()
+    $exception = $failure
+    $record = $_
+    while ($exception -and $diagnostics.Count -lt 8) {
+        $locations = [Collections.Generic.List[object]]::new()
+        $trace = if ($record) { [string]$record.ScriptStackTrace } else { '' }
+        if ($trace.Length -gt 16384) { $trace = $trace.Substring(0, 16384) }
+        foreach ($frame in @($trace -split '\r?\n' | Select-Object -First 64)) {
+            if ($frame -cmatch ([regex]::Escape($PSScriptRoot) + '\\([a-z][a-z0-9-]{0,80}\.ps1): line ([1-9][0-9]{0,7})$')) {
+                $locations.Add(@{ module=$Matches[1]; line=[int]$Matches[2]; column=1 })
+                if ($locations.Count -eq 3) { break }
+            }
+        }
+        $code = $exception.GetType().Name.ToUpperInvariant()
+        if ($code -cnotmatch '^[A-Z0-9_]{1,64}$') { $code = 'UNKNOWN' }
+        $diagnostics.Add(@{ code=$code; locations=@($locations.ToArray()) })
+        $exception = $exception.InnerException
+        $record = if ($exception -and $exception.PSObject.Properties['ErrorRecord']) {
+            $exception.ErrorRecord
+        } else { $null }
+    }
+    [Console]::Error.WriteLine('Deployment native diagnostics: ' +
+        (ConvertTo-Json -InputObject @($diagnostics.ToArray()) -Depth 5 -Compress))
 } finally {
     if ($proof) {
         try { Close-AgentsChatTaskCompletionProof $proof }

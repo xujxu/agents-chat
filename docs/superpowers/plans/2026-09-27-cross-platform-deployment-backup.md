@@ -14034,6 +14034,10 @@ the default crash scenario retains all previously accepted actors.
   arbitrary codes, extra fields, path traversal and zero line numbers.
   Run this contract first in the existing native command gate, then repeat
   actual `cold-receipt` to obtain application-specific native failure evidence.
+  Causal `7593c1de / 38423802811`, job `115387766287`, failed
+  exactly the two new native-diagnostic assertions at 15:39:10 UTC.
+  Both the synthetic filtering contract and actual native invalid-control
+  refusal lacked the structured native locations, as expected.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
