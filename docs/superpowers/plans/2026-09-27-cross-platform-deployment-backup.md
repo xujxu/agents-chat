@@ -13931,13 +13931,19 @@ pre-release/inactive/reboot branches.
 `deployment-windows-live-application.ps1`, `deployment-native-operation.test.mjs`;
 `.github/workflows/deployment-lifecycle.yml` and `README.md`.
 
-- [ ] Push the missing-export contract and record its Actions failure:
+- [x] Push the missing-export contract and record its Actions failure:
 
   ```js
   assert.equal(typeof prepareWindowsColdCompletionCloseout, 'function');
   await assert.rejects(prepareWindowsColdCompletionCloseout(), /data-loss acknowledgement/);
   await assert.rejects(prepareWindowsColdCompletionCloseout({ acceptDataLoss: true }), /scope/);
   ```
+
+  Causal `ea55b827 / 38448272357`, job `115498015797`, failed exactly
+  at the missing export at 19:34:06 UTC. Implementation `9fd602ba` and
+  public-help regression `e59315db` are pushed. Fixed native
+  `38455988433`, job `115498728448`, and actual `38448823591`,
+  job `115500070548`, are running; neither is accepted yet.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -14036,13 +14042,17 @@ wire `restore-cold-state-closeout` through existing live fixtures and the
   `recovery-required` or `restored`; only the first two select the new helper.
   Existing restored receipt and retirement-manifest fast paths stay unchanged.
 
-- [ ] Run the native terminal fixture from the saved engine with canonical
+- [x] Run the native terminal fixture from the saved engine with canonical
   PowerShell and no inherited PATH. Before every valid publication, reject
   changed snapshot ID, source, task, engine and inventory while preserving
   all original bytes and staged inode/mtime. Retain the original staged,
   published and idempotent interruption cases.
+  Implementation `1e476662 / 38447854547`, job `115470846193`, passed
+  at 19:33:32 UTC: all 52 focused contracts, saved dependency closure,
+  both strengthened terminal chains at 18:54:30 / 19:18:16, both receipt
+  and cold-retirement chains, and the warm-retirement regression.
 
-- [ ] Add copy-only actual `cold-state`, retaining the existing cold sequence
+- [x] Add copy-only actual `cold-state`, retaining the existing cold sequence
   through `restore-cold-state-staged`, then invoke public PowerShell once via
   `restore-cold-state-closeout`. Require original staged state bytes/inode/mtime
   promoted to `state.json`, receipt matching original operation/time/source,
@@ -14050,8 +14060,13 @@ wire `restore-cold-state-closeout` through existing live fixtures and the
   instance, authenticated data, and complete evidence cleanup. Keep the
   default and `cold-receipt` tails unchanged. The outer runner requires the
   exact new PASS marker, not only workflow success.
+  Actual `1e476662 / 38447859126`, job `115470864776`, passed at
+  19:38:00 UTC. Exact `restore-cold-state-closeout` PASS inspected:
+  public actor elapsed 362,835 ms, preserving staged state bytes/inode/mtime,
+  backup/saved engine, original runtime/Scheduler instance and authenticated
+  data, while accepting the matching receipt and removing recovery evidence.
 
-- [ ] Push and inspect both gates before acceptance:
+- [x] Push and inspect both gates before acceptance:
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
