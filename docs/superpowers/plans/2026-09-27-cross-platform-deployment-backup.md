@@ -13915,6 +13915,72 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FC: Publish staged cold terminal state through public saved restore
+
+**Scope:** original prepared terminal marker with physical old restore state,
+including `state.json.lock` staged replacement. Reuse native atomic terminal
+publication, then accepted Task 5FB receipt recovery and independent supervisor
+cleanup. No earlier completion/startup/reboot authority is added.
+
+**Files:** extend `scripts/deployment/windows-cold-retirement-closeout.mjs`,
+`windows-cold-activation-recovery.mjs`, `windows-restore-entry.mjs` and command
+help. Extend `tests/deployment-cold-retirement.test.mjs` and
+`deployment-windows-cold-terminal-state.{mjs,ps1}`. Reuse and generalize
+`deployment-windows-cold-application-closeout.mjs` for the staged state boundary;
+wire `restore-cold-state-closeout` through existing live fixtures and the
+`cold-state` scenario in `.github/workflows/deployment-lifecycle.yml`.
+
+- [ ] Push and observe the missing public state-closeout export contract:
+
+  ```js
+  const { prepareWindowsColdStateCloseout } =
+    await import('../scripts/deployment/windows-cold-retirement-closeout.mjs');
+  assert.equal(typeof prepareWindowsColdStateCloseout, 'function');
+  await assert.rejects(prepareWindowsColdStateCloseout(), /data-loss acknowledgement/);
+  ```
+
+- [ ] Add the helper after shared scope validation:
+
+  ```js
+  await publishWindowsColdTerminalState({
+    control, pwsh, acceptDataLoss: true, expectedSnapshot: snapshot, signal,
+  });
+  return prepareWindowsColdReceiptCloseout(options);
+  ```
+
+  Thread `expectedSnapshot` into the existing original `openRecovery` call,
+  comparing its full independently verified snapshot before native mutation.
+  The state publisher closes its original resources before receipt admission.
+  Saved entry recognizes a prepared marker for restore states `restoring`,
+  `recovery-required` or `restored`; only the first two select the new helper.
+  Existing restored receipt and retirement-manifest fast paths stay unchanged.
+
+- [ ] Run the native terminal fixture from the saved engine with canonical
+  PowerShell and no inherited PATH. Before every valid publication, reject
+  changed snapshot ID, source, task, engine and inventory while preserving
+  all original bytes and staged inode/mtime. Retain the original staged,
+  published and idempotent interruption cases.
+
+- [ ] Add copy-only actual `cold-state`, retaining the existing cold sequence
+  through `restore-cold-state-staged`, then invoke public PowerShell once via
+  `restore-cold-state-closeout`. Require original staged state bytes/inode/mtime
+  promoted to `state.json`, receipt matching original operation/time/source,
+  unchanged backup and saved engine, original released runtime/Scheduler
+  instance, authenticated data, and complete evidence cleanup. Keep the
+  default and `cold-receipt` tails unchanged. The outer runner requires the
+  exact new PASS marker, not only workflow success.
+
+- [ ] Push and inspect both gates before acceptance:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=cold-state
+  ```
+
 ### Task 5FB: Recover an unfinished cold receipt through public saved restore
 
 **Scope:** physically published cold terminal state with a missing restored
