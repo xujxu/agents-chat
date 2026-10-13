@@ -14037,11 +14037,13 @@ update `windows-restore-entry.mjs`, `windows-restore-command.mjs` and
   including native/JavaScript ordered-manifest parity.
   Implementation `1f3e470b / 38353404850`, job `115150701723`, passed
   all 44 contracts, five warm receipt tests, saved closure/entry/public
-  invocation and option regressions. Actual `38354204691` is queued behind
-  the still-running direct retirement acceptance `38352965467`; neither is
-  treated as accepted until its completed logs are inspected.
+  invocation and option regressions. Actual `1f3e470b / 38354204691`
+  passed: copy job `115181479909` completed at 08:57:14 UTC, including
+  prepared/early/unlock interruptions and final public PowerShell closeout.
+  Warm job `115181479645` passed at 08:18:46 UTC. Completed logs inspected.
+  The earlier direct run `38352965467` timed out, not accepted.
 
-- [ ] Implement read-only native manifest admission using existing Windows
+- [x] Implement read-only native manifest admission using existing Windows
   admission and `openWindowsColdRetirementScope`. Match exact physical
   state bytes to `record.state.sha256`, then bind state/project/operation,
   restored phase, backup ID, source commit, task and verified engine digest
@@ -14057,13 +14059,13 @@ update `windows-restore-entry.mjs`, `windows-restore-command.mjs` and
   });
   ```
 
-- [ ] Dispatch only when a bounded private `worker-retirement.json` is present
+- [x] Dispatch only when a bounded private `worker-retirement.json` is present
   and has version 5, before generic interrupted-operation rejection. Other
   manifests still refuse through existing reconciliation. Validate and
   execute the saved engine as before; never consume current-checkout code.
   Use the existing restore deadline and independent supervisor closeout.
 
-- [ ] Change only the final actual retirement actor to invoke public
+- [x] Change only the final actual retirement actor to invoke public
   `restore.ps1`, assert original operation/backup/engine and completed
   closeout, and retain exact state/receipt bytes/inodes, original released
   runtime/Scheduler instance and authenticated data. Keep native direct
@@ -14134,9 +14136,18 @@ cannot be reused unchanged because it requires `sealed`.
   passed nine cold cases (plus two file-level no-selection results) at
   04:29:00 UTC, including retirement, retirement actor loss and saved
   closeout. Job `115122360247` passed four foundation cases at 04:03:57 UTC.
-  Actual application retirement is still pending; do not mark this task done.
+  Actual application retirement passed in the later public gate
+  `1f3e470b / 38354204691`, copy job `115181479909`, at 08:57:14 UTC:
+  prepared, early deletion, pre-unlock interruption and final public closeout
+  retained the accepted runtime/data/state/receipt. The original direct run
+  timed out; its partial results are not a substitute for this completed run.
+  Add the remaining cold-specific live-creator refusal check: after terminal
+  preparation returns and closes its bridge, keep the creator Node process
+  alive while a distinct child requests retirement. Require refusal, identical
+  manifest bytes/inode/mtime, all entry inodes and accepted files unchanged.
+  Subsequent existing actors must succeed only after this creator exits.
 
-- [ ] Define and test the immutable cold retirement record. Use
+- [x] Define and test the immutable cold retirement record. Use
   `worker-retirement.json` with `version: 5`, `purpose: 'cold-restore'`.
   Capture canonical control/project, original lock and creator,
   control directory identity, exact retained state/receipt descriptors,
@@ -14160,7 +14171,7 @@ cannot be reused unchanged because it requires `sealed`.
   `lock/owner.json` and `lock` directory. The manifest is the final deletion.
   Never include backup, saved recovery engine, active runtime, state or receipt.
 
-- [ ] Prepare the manifest while the existing original cold terminal authority
+- [x] Prepare the manifest while the existing original cold terminal authority
   retains the complete chain, exact published state, accepted restored receipt,
   released runtime and original exclusive transaction. Native preparation
   reuses `Open-AgentsChatStoppedRestoreWorkers` and descriptor capture rather
@@ -14171,7 +14182,7 @@ cannot be reused unchanged because it requires `sealed`.
   Publication is no-overwrite; incomplete pending markers fail closed.
   Manifest preparation alone does not delete evidence.
 
-- [ ] Resume from the durable manifest under Windows admission and exclusive
+- [x] Resume from the durable manifest under Windows admission and exclusive
   marker ownership. Do not require already-deleted source journals on reentry.
   Revalidate exact root/state/receipt, runtime generation/PID/start identity,
   permanent policy, original enabled setting, listener and released lease.
@@ -14182,7 +14193,7 @@ cannot be reused unchanged because it requires `sealed`.
   remain before and after each deletion. Delete owner and lock only after
   all other evidence; keep the exclusive manifest through final unlock.
 
-- [ ] Implement the focused orchestrator and immutable awaited progress:
+- [x] Implement the focused orchestrator and immutable awaited progress:
 
   ```js
   await retireWindowsColdRestoredDeployment({
@@ -14214,7 +14225,7 @@ cannot be reused unchanged because it requires `sealed`.
   Preserve warm and first-install retirement behavior through their existing
   native regressions after extracting the shared deletion primitive.
 
-- [ ] Add saved closure entries and actual application retirement actors after
+- [x] Add saved closure entries and actual application retirement actors after
   the accepted actual receipt chain, reusing its single restored application.
   Verify real authenticated data and the same Scheduler instance after each
   interruption and completion; independently check the original receipt and

@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { lstat, readFile, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { retireWindowsColdRestoredDeployment } from '../scripts/deployment/windows-cold-deployment-retirement.mjs';
 import { closeCompletedWindowsDeployment } from '../scripts/deployment/windows-completed-closeout.mjs';
 import { prepareWindowsColdTerminalCloseout } from '../scripts/deployment/windows-cold-retirement-closeout.mjs';
 import { writeWorkerFile } from '../scripts/deployment/worker-files.mjs';
 
 const [control, pwsh, target] = process.argv.slice(2);
-assert.ok(['admission', 'prepared', 'refusals', 'early', 'unlock', 'complete'].includes(target));
+assert.ok(['admission', 'live-creator', 'prepared', 'refusals', 'early', 'unlock', 'complete'].includes(target));
 const preserved = new Map(await Promise.all(['state.json', 'deployment.json', 'backup/manifest.json'].map(async name => {
   const file = path.join(control, name);
   const info = await lstat(file, { bigint: true });
@@ -15,7 +18,12 @@ const preserved = new Map(await Promise.all(['state.json', 'deployment.json', 'b
 })));
 const state = JSON.parse(preserved.get('state.json').bytes);
 const options = { control, pwsh, acceptDataLoss: true };
-if (target === 'admission') {
+if (target === 'live-creator') {
+  await assert.rejects(retireWindowsColdRestoredDeployment(options), {
+    code: 'DEPLOYMENT_WINDOWS_COLD_RETIREMENT_REFUSED',
+  });
+  process.stdout.write(`${JSON.stringify({ result: 'live-creator-refused' })}\n`);
+} else if (target === 'admission') {
   assert.equal(control, path.join(path.dirname(state.project), `.${path.basename(state.project)}.deployment`));
   const terminal = JSON.parse(await readFile(path.join(control, 'cold-restore-terminal.json')));
   assert.equal(terminal.port, 3010);
@@ -40,12 +48,24 @@ if (target === 'admission') {
     status: 'restored', operationId: state.operationId, backupId: snapshot.id,
     recoveryEngine: snapshot.recoveryEngine, closeoutRequired: true, runtimeRelocated: true,
   });
-  const record = JSON.parse(await readFile(path.join(control, 'worker-retirement.json')));
+  const marker = path.join(control, 'worker-retirement.json');
+  const markerBytes = await readFile(marker);
+  const markerIdentity = await lstat(marker, { bigint: true });
+  const record = JSON.parse(markerBytes);
+  assert.equal(record.creator.pid, process.pid);
+  const child = await promisify(execFile)(process.execPath, [
+    fileURLToPath(import.meta.url), control, pwsh, 'live-creator',
+  ], { timeout: 120000, maxBuffer: 16384 });
+  assert.deepEqual(JSON.parse(child.stdout), { result: 'live-creator-refused' });
+  assert.deepEqual(await readFile(marker), markerBytes);
+  const after = await lstat(marker, { bigint: true });
+  for (const key of ['dev', 'ino', 'mtimeNs']) assert.equal(after[key], markerIdentity[key]);
   for (const entry of record.entries) {
     const info = await lstat(path.join(control, entry.path), { bigint: true });
     assert.equal(String(info.dev), entry.dev);
     assert.equal(String(info.ino), entry.ino);
   }
+  for (const [name, before] of preserved) assert.deepEqual(await readFile(path.join(control, name)), before.bytes);
   process.stdout.write(`${JSON.stringify({ result: 'snapshot-bound-terminal-closeout-prepared' })}\n`);
 } else if (target === 'refusals') {
   const marker = path.join(control, 'worker-retirement.json');

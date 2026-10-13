@@ -83,4 +83,4 @@ foreach ($target in @('admission', 'prepared', 'refusals', 'early', 'unlock', 'c
         foreach ($process in @($bridge, $actor)) { if ($process) { $process.Dispose() } }
     }
 }
-Write-Output 'PASS: cold retirement prepares snapshot-bound terminal closeout, resumes three interruption boundaries, refuses foreign/replaced/non-prefix evidence and retains the original released runtime'
+Write-Output 'PASS: cold retirement prepares snapshot-bound terminal closeout, refuses a live creator, resumes three interruption boundaries, refuses foreign/replaced/non-prefix evidence and retains the original released runtime'

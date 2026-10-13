@@ -713,25 +713,30 @@ released runtime. The shared warm deletion regression passed as well.
 Corrected first-install selection at `adcbdf21 / 38341682047` then exercised
 the actual first-install retirement, actor-loss and saved-closeout cases;
 the earlier file-level green results did not select these cases and do not
-count as acceptance. Actual application retirement and public cold restore
-completion remain unfinished.
+count as acceptance. Actual application retirement and its prepared-manifest
+public closeout passed at `1f3e470b / 38354204691`: all three interruption
+boundaries, final unlock and public `restore.ps1` completion preserved the
+original runtime, accepted state/receipt and authenticated restored data.
+This accepts the completed-runtime branch, not earlier cold recovery.
 The saved restore entry now routes an existing version-5 cold retirement
 manifest to snapshot-bound native admission and the existing independent
 closeout supervisor, rather than starting another restore. Its native gate
 passed at `1f3e470b / 38353404850`: all 44 focused contracts, five warm
 receipt tests, saved dependency closure, saved-entry refusals and public
-invocation checks passed. This narrow public path is pending actual
-acceptance. The next extension prepares that same manifest from a physically
+invocation checks passed. Its actual copy-crash job `115181479909` passed at
+2026-10-13 08:57:14 UTC; warm-crash job `115181479645` also passed.
+The next extension prepares that same manifest from a physically
 published cold restored state and accepted deployment receipt, using the
 complete original terminal proof and verified saved snapshot. It does not
 delete evidence until the independent supervisor runs. Native acceptance
 `38d6d85a / 38360471128` passed all 45 focused contracts and both cold
 terminal/retirement cases, including snapshot mismatch refusals and three
 cleanup interruption boundaries; the warm retirement regression also passed.
-Actual saved-entry preparation and public final closeout are queued in
+Actual saved-entry preparation and public final closeout are running in
 `4d112c41 / 38366334006`. The preceding direct actual run reached early
-retirement but timed out before final unlock, so actual acceptance is still
-pending. Earlier cold prefixes are still refused.
+retirement but timed out before final unlock; the subsequent public run
+completed that branch. Actual acceptance of the additional saved-entry
+preparation remains pending. Earlier cold prefixes are still refused.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
