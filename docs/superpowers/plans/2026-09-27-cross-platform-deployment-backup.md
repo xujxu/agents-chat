@@ -13944,14 +13944,14 @@ the default crash scenario retains all previously accepted actors.
   Causal `a3375ce9 / 38390852404`, job `115273987140`, failed exactly
   at the missing export at 11:32:16 UTC; the other 45 contracts passed.
 
-- [ ] Thread optional `expectedSnapshot` from the public receipt helper through
+- [x] Thread optional `expectedSnapshot` from the public receipt helper through
   receipt recovery to `openWindowsColdReceiptAuthority`. Under admission,
   compare the independently verified snapshot with this full expected snapshot
   before creating the native mutation authority. Refuse changed backup ID,
   source, task, engine or inventory without receipt/stage/evidence changes.
   Existing private callers without the option retain their existing proof.
 
-- [ ] The new public helper validates the same canonical saved scope, invokes
+- [x] The new public helper validates the same canonical saved scope, invokes
   original receipt recovery with the verified expected snapshot, then calls
   existing `prepareWindowsColdTerminalCloseout` after receipt resources close.
   Saved entry selects it only for absent or prior-operation receipts; a
@@ -13974,6 +13974,14 @@ the default crash scenario retains all previously accepted actors.
   authenticated restored data, and no remaining lock/journal/retirement stage.
 
 - [ ] Inspect native and actual Actions logs before accepting:
+
+  Native `29aca8e3 / 38391313938`, job `115275529624`, passed all
+  46 focused contracts. Both receipt chains passed at 11:57:19 and
+  12:20:09 UTC, including five full expected-snapshot substitutions and
+  staged-inode preservation. Cold retirement passed at 12:02:46 and
+  12:25:29; warm retirement at 12:32:50. Completed logs inspected.
+  The independent actual staged-receipt public gate `38391317840`, job
+  `115275541873`, remains running; this task is not yet fully accepted.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
