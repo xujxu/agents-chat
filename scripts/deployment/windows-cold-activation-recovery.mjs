@@ -57,11 +57,13 @@ export async function prepareWindowsColdTerminalRestore(options = {}) {
   }
 }
 
-export async function publishWindowsColdTerminalState({ control, pwsh, signal, acceptDataLoss, onProgress } = {}) {
+export async function publishWindowsColdTerminalState({
+  control, pwsh, signal, acceptDataLoss, onProgress, expectedSnapshot,
+} = {}) {
   signal?.throwIfAborted();
   if (acceptDataLoss !== true) throw new Error('Cold terminal publication requires explicit data-loss acknowledgement.');
   if (onProgress !== undefined && typeof onProgress !== 'function') throw new Error('Invalid cold terminal progress callback.');
-  const recovery = await openRecovery({ control, pwsh, signal }, false, true, true, true);
+  const recovery = await openRecovery({ control, pwsh, signal, expectedSnapshot }, false, true, true, true);
   return finishWindowsColdTerminalState(recovery, { signal, onProgress });
 }
 
@@ -117,7 +119,7 @@ async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyR
     const backup = path.join(control, 'backup');
     const snapshot = await verifySnapshot(backup, { signal });
     if (expectedSnapshot !== undefined && !same(snapshot, expectedSnapshot)) {
-      throw new Error('Cold receipt authority differs from the verified saved restore snapshot.');
+      throw new Error('Cold recovery authority differs from the verified saved restore snapshot.');
     }
     if (state.operation !== 'restore' || state.operationId !== lock.operationId || state.project !== lock.project
       || snapshot.project !== state.project || snapshot.id !== state.backupId

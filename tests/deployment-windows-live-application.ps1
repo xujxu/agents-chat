@@ -46,15 +46,18 @@ try {
         else { @('update', 'verify-closed', 'current', "restore-$RestoreScenario") }
     if ($RestoreScenario -eq 'copy-crashed') {
         $modes += @('restore-cold-files', 'restore-cold-policy-crashed', 'restore-cold-enable-crashed',
-            'restore-cold-completed', 'restore-cold-observed',
-            'restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed',
-            'restore-cold-receipt-staged')
-        if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'receipt') {
-            $modes += 'restore-cold-receipt-closeout'
+            'restore-cold-completed', 'restore-cold-observed', 'restore-cold-state-staged')
+        if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'state') {
+            $modes += 'restore-cold-state-closeout'
         } else {
-            $modes += @('restore-cold-receipt-published', 'restore-cold-receipt-completed',
-                'restore-cold-retirement-prepared', 'restore-cold-retirement-early',
-                'restore-cold-retirement-unlock', 'restore-cold-retirement-completed')
+            $modes += @('restore-cold-state-published', 'restore-cold-state-completed', 'restore-cold-receipt-staged')
+            if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'receipt') {
+                $modes += 'restore-cold-receipt-closeout'
+            } else {
+                $modes += @('restore-cold-receipt-published', 'restore-cold-receipt-completed',
+                    'restore-cold-retirement-prepared', 'restore-cold-retirement-early',
+                    'restore-cold-retirement-unlock', 'restore-cold-retirement-completed')
+            }
         }
     }
     foreach ($mode in $modes) {
@@ -88,7 +91,7 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine, $ChatId), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed', 'restore-cold-files')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } elseif ($mode -like 'restore-cold-receipt-*' -or $mode -like 'restore-cold-retirement-*') { 900000 } else { 300000 }
+        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed', 'restore-cold-files')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } elseif ($mode -like 'restore-cold-receipt-*' -or $mode -like 'restore-cold-retirement-*' -or $mode -eq 'restore-cold-state-closeout') { 900000 } else { 300000 }
         $exited = $actor.WaitForExit($actorTimeout)
         $actor.Kill()
         Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'
@@ -144,6 +147,7 @@ try {
             restore-cold-receipt-published { 'cold-restored-receipt-interrupted' }
             restore-cold-receipt-completed { 'cold-restored-receipt-recovered' }
             restore-cold-receipt-closeout { 'cold-receipt-closeout-completed' }
+            restore-cold-state-closeout { 'cold-state-closeout-completed' }
             restore-cold-retirement-prepared { 'cold-retirement-interrupted' }
             restore-cold-retirement-early { 'cold-retirement-interrupted' }
             restore-cold-retirement-unlock { 'cold-retirement-interrupted' }
@@ -286,7 +290,7 @@ try {
                 } finally { $file.Dispose() }
             }
         }
-        if ($mode -like 'restore-cold-retirement-*' -or $mode -ceq 'restore-cold-receipt-closeout') {
+        if ($mode -like 'restore-cold-retirement-*' -or $mode -cin @('restore-cold-receipt-closeout', 'restore-cold-state-closeout')) {
             $runtime = $result.runtime
             Assert ($runtime.pid -eq $originalPid -and
                 $runtime.identity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($originalPid) -and
@@ -294,10 +298,11 @@ try {
                 [Deployment.WindowsRuntimeControl]::Exchange(
                     [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') `
                 'Actual cold retirement changed its original runtime or Scheduler instance'
-            foreach ($evidence in @(
-                @{ name='state.json'; sha256=$nextHash; identity=$coldStateStage },
-                @{ name='deployment.json'; sha256=$coldReceiptStage.sha256; identity=$coldReceiptStage.identity }
-            )) {
+            $acceptedEvidence = @(@{ name='state.json'; sha256=$nextHash; identity=$coldStateStage })
+            if ($mode -cne 'restore-cold-state-closeout') {
+                $acceptedEvidence += @{ name='deployment.json'; sha256=$coldReceiptStage.sha256; identity=$coldReceiptStage.identity }
+            }
+            foreach ($evidence in $acceptedEvidence) {
                 $file = [Deployment.WindowsPrivateFile]::Open((Join-Path $control $evidence.name), $evidence.sha256)
                 try {
                     $identity = $file.CaptureIdentity()
@@ -306,7 +311,7 @@ try {
                 } finally { $file.Dispose() }
             }
             $marker = Join-Path $control 'worker-retirement.json'
-            if ($mode -in @('restore-cold-retirement-completed', 'restore-cold-receipt-closeout')) {
+            if ($mode -in @('restore-cold-retirement-completed', 'restore-cold-receipt-closeout', 'restore-cold-state-closeout')) {
                 Assert ($result.boundary -ceq 'complete' -and -not (Test-Path -LiteralPath $marker) -and
                     -not (Test-Path -LiteralPath (Join-Path $control 'lock'))) 'Actual cold retirement did not finish original unlock'
             } else {

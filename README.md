@@ -774,8 +774,11 @@ passed the casing/refusal contract, both saved-engine canonical-interpreter
 receipt and cold retirement chains, and warm retirement. Fixed actual
 `38427897817` passed uninterrupted public receipt completion, preserving
 the staged receipt inode, original runtime, state/backup and authenticated
-application data through final cleanup. Earlier terminal-state publication
-and completion prefixes are still not publicly integrated. The dedicated
+application data through final cleanup. The next extension handles a prepared
+terminal marker with old or staged state: it binds the full saved snapshot
+under native admission, publishes the original state atomically, then uses
+the accepted receipt/cleanup path. Its dedicated `cold-state` native/actual
+gates are pending; earlier completion/startup prefixes remain unsupported. The dedicated
 `cold-receipt` scenario preserves existing default terminal/retirement coverage;
 this public receipt path is not yet accepted.
 The subsequent native restore regression passed all seven jobs at

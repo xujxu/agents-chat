@@ -13930,7 +13930,7 @@ help. Extend `tests/deployment-cold-retirement.test.mjs` and
 wire `restore-cold-state-closeout` through existing live fixtures and the
 `cold-state` scenario in `.github/workflows/deployment-lifecycle.yml`.
 
-- [ ] Push and observe the missing public state-closeout export contract:
+- [x] Push and observe the missing public state-closeout export contract:
 
   ```js
   const { prepareWindowsColdStateCloseout } =
@@ -13938,8 +13938,10 @@ wire `restore-cold-state-closeout` through existing live fixtures and the
   assert.equal(typeof prepareWindowsColdStateCloseout, 'function');
   await assert.rejects(prepareWindowsColdStateCloseout(), /data-loss acknowledgement/);
   ```
+  Causal `0de46481 / 38447447403`, job `115469409549`, failed
+  exactly at the missing export at 18:31:48 UTC; the other contracts passed.
 
-- [ ] Add the helper after shared scope validation:
+- [x] Add the helper after shared scope validation:
 
   ```js
   await publishWindowsColdTerminalState({

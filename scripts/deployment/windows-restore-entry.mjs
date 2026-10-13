@@ -88,7 +88,8 @@ try {
       await readWorkerFile(path.join(control, 'worker-retirement.json'), 1048576, { privateMode: true })));
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   let coldTerminal = false;
-  if (!retirement && originalState.operation === 'restore' && originalState.phase === 'restored') {
+  if (!retirement && originalState.operation === 'restore'
+    && ['restoring', 'recovery-required', 'restored'].includes(originalState.phase)) {
     try {
       await lstat(path.join(control, 'cold-restore-terminal.json'));
       coldTerminal = true;
@@ -96,10 +97,14 @@ try {
   }
   if (retirement?.version === 5 || coldTerminal) {
     stage = coldTerminal ? 'cold-terminal-closeout' : 'cold-retirement-admission';
-    const { prepareWindowsColdRetirementCloseout, prepareWindowsColdTerminalCloseout, prepareWindowsColdReceiptCloseout } =
+    const { prepareWindowsColdRetirementCloseout, prepareWindowsColdTerminalCloseout,
+      prepareWindowsColdReceiptCloseout, prepareWindowsColdStateCloseout } =
       await import('./windows-cold-retirement-closeout.mjs');
     let prepare = coldTerminal ? prepareWindowsColdTerminalCloseout : prepareWindowsColdRetirementCloseout;
-    if (coldTerminal) {
+    if (coldTerminal && originalState.phase !== 'restored') {
+      stage = 'cold-state-closeout';
+      prepare = prepareWindowsColdStateCloseout;
+    } else if (coldTerminal) {
       const { readDeploymentReceipt } = await import('./deployment-receipt.mjs');
       const receipt = await readDeploymentReceipt(control, input.project);
       if (!receipt || receipt.operationId !== originalState.operationId) {
