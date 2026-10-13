@@ -19,6 +19,8 @@ try {
     Assert ($result.status -ceq 'help' -and $result.message.Contains('-AcceptDataLoss')) 'Restore help omits data-loss acknowledgement'
     Assert ($result.message.Contains('already released') -and $result.message.Contains('unfinished completion') -and
         $result.message.Contains('interrupted copies with retained stopped') -and
+        $result.message.Contains('Acknowledged guarded startup with absent') -and
+        $result.message.Contains('Unacknowledged startup, live guarded peers') -and
         $result.message.Contains('inactive/reboot and legacy recovery remain unsupported')) `
         'Restore help must distinguish released recovery from unsupported earlier prefixes'
     $text = & $pwsh -NoProfile -NonInteractive -File $restore -ProjectDir $missing -Json

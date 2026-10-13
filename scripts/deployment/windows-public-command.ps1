@@ -64,8 +64,9 @@ Git fetch is performed. Requires elevated PowerShell 7.4+ and Node.js 24.
 Supports live managed restoration and interrupted copies with retained stopped
 runtime. Cold startup settles its original controller before one independent
 continuation. Recovery for an already released cold runtime includes unfinished completion,
-terminal state and receipt publication. Interrupted guarded startup,
-inactive/reboot and legacy recovery remain unsupported.
+terminal state and receipt publication. Acknowledged guarded startup with absent
+original owners/runtime first restores disabled policy and archives its journal.
+Unacknowledged startup, live guarded peers, inactive/reboot and legacy recovery remain unsupported.
 Readiness uses port3010 and a120-second wait.
 The original backup must contain a saved Windows restore process entry.
 Successful restoration includes independent closeout; failed captures and

@@ -792,8 +792,11 @@ before finalization, preserving strict original-owner absence. Native
 `38471316945` and actual `38471320648` passed at `1d52b08f`; the single public
 invocation retired the old Job, retained its backup/data, and completed the
 new released task's state/receipt/cleanup in 2,411,631 ms.
-Interrupted guarded startup, inactive/reboot and legacy
-recovery remain unsupported publicly.
+The new `cold-startup` extension first restores disabled policy and archives an
+acknowledged interrupted guarded runtime's journal, requiring all its original
+owners and runtime to be absent. Its native and actual gates are pending.
+Unacknowledged startup, live guarded peers, inactive/reboot and legacy recovery
+remain unsupported publicly.
 The dedicated `cold-receipt`, `cold-state`, `cold-completion` and `cold-start` scenarios
 preserve existing default terminal/retirement coverage. Receipt, staged state
 and released completion, plus interrupted-copy startup, have completed actual
@@ -958,8 +961,10 @@ It admits an existing running managed task with settled deployment state.
 Saved interrupted-copy startup and released-completion, terminal-state, receipt
 and retirement recovery also require their exact original retained evidence.
 Public interrupted-copy startup passed native and actual application acceptance
-at `1d52b08f / 38471316945 / 38471320648`. Interrupted guarded startup,
-initially inactive/legacy tasks and reboot recovery remain unsupported.
+at `1d52b08f / 38471316945 / 38471320648`. Acknowledged guarded startup recovery
+is implemented but still awaiting native/actual acceptance. Unacknowledged
+startup, live guarded peers, initially inactive/legacy tasks and reboot recovery
+remain unsupported.
 Do not remove a retained lock to bypass a recovery refusal.
 
 ```powershell

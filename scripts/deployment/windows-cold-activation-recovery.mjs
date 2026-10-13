@@ -94,10 +94,10 @@ export async function assertWindowsColdReceiptAuthority({ control, lock, authori
   signal?.throwIfAborted();
 }
 
-export async function prepareWindowsColdPolicyRecovery({ control, pwsh, signal, acceptDataLoss } = {}) {
+export async function prepareWindowsColdPolicyRecovery({ control, pwsh, signal, acceptDataLoss, expectedSnapshot } = {}) {
   signal?.throwIfAborted();
   if (acceptDataLoss !== true) throw new Error('Cold policy recovery requires explicit data-loss acknowledgement.');
-  return openRecovery({ control, pwsh, signal }, true);
+  return openRecovery({ control, pwsh, signal, expectedSnapshot }, true);
 }
 
 async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyRecovery, completedRuntime = false,

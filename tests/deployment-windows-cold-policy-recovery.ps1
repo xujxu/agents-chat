@@ -15,7 +15,6 @@ foreach ($file in @(Get-ChildItem -LiteralPath $journal -File)) {
 $originalTask = Get-Content -LiteralPath (Join-Path $Control 'task-maintenance/task-stop-stopped.json') -Raw | ConvertFrom-Json
 $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
 $environment.Add('SystemRoot', $env:SystemRoot)
-$environment.Add('PATH', $env:PATH)
 $environment.Add('TEMP', $Control)
 $environment.Add('TMP', $Control)
 $scheduler = New-Object -ComObject 'Schedule.Service'

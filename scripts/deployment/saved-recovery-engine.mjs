@@ -40,6 +40,7 @@ const files = Object.freeze([...new Set([
   'windows-stopped-restore-controller.ps1', 'windows-stopped-restore-proof.ps1',
   'windows-stopped-restore-workers.ps1', 'windows-stopped-restore-recovery.ps1',
   'windows-cold-restore-lease.mjs', 'windows-cold-restore-files.mjs', 'windows-cold-restore-command.mjs',
+  'windows-cold-startup-recovery.mjs',
   'windows-cold-restore-runtime.mjs', 'windows-cold-restore-configuration.mjs',
   'windows-cold-restore-publication.mjs', 'windows-cold-restore-publication.ps1',
   'windows-cold-restore-retirement.mjs', 'windows-cold-restore-retirement.ps1',

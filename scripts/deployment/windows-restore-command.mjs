@@ -7,7 +7,7 @@ import { journalUncertain } from './evidence-journal.mjs';
 
 export async function runWindowsRestoreCommand({ args, project, control, taskName, pwsh, node }) {
   const options = parseArguments('restore', args);
-  if (options.help) return { status: 'help', message: 'Saved Windows restoration requires --accept-data-loss; interrupted copies with retained stopped runtime can restore and start before independent completion. Already released cold runtimes can finish state, receipt and retirement. Interrupted guarded startup or inactive recovery is not yet supported.' };
+  if (options.help) return { status: 'help', message: 'Saved Windows restoration requires --accept-data-loss; interrupted copies can restore and start before independent completion. Acknowledged guarded startup with absent owners/runtime first restores disabled policy and archives its journal. Released runtimes can finish state, receipt and retirement. Unacknowledged startup, live guarded peers and inactive recovery remain unsupported.' };
   if (!options.acceptDataLoss) {
     throw Object.assign(new Error('Explicit data-loss acknowledgement is required.'), {
       code: 'DEPLOYMENT_DATA_LOSS_ACKNOWLEDGEMENT_REQUIRED',

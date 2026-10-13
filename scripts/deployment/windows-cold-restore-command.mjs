@@ -1,7 +1,9 @@
 import path from 'node:path';
+import { lstat } from 'node:fs/promises';
 import { assertWindowsSavedColdScope } from './windows-cold-retirement-closeout.mjs';
 import { claimWindowsColdRestore } from './windows-cold-restore-lease.mjs';
 import { restoreWindowsColdFiles } from './windows-cold-restore-files.mjs';
+import { recoverWindowsColdStartupPolicy } from './windows-cold-startup-recovery.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
 import { runStage } from './stage-runner.mjs';
 
@@ -22,6 +24,15 @@ export async function runWindowsColdRestoreCommand(options = {}) {
   let result;
   let failure;
   try {
+    let interruptedStartup = false;
+    try {
+      await lstat(path.join(control, 'recovery-lock/activation-running.json'));
+      interruptedStartup = true;
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (interruptedStartup) {
+      await stage('cold-startup-policy-recovery', stageSignal =>
+        recoverWindowsColdStartupPolicy({ ...options, signal: stageSignal }));
+    }
     lease = await stage('cold-restore-admission', stageSignal => claimWindowsColdRestore({
       control, project, backup: path.join(control, 'backup'), node: process.execPath,
       pwsh, profile: 'agents-chat-auth-638c553', acceptDataLoss: true,

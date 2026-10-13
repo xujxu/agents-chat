@@ -6,7 +6,9 @@ import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-
 import { verifyWindowsApplicationApi } from './deployment-windows-application-api-helpers.mjs';
 import { interruptWindowsColdApplication } from './deployment-windows-cold-application-recovery.mjs';
 
-export async function verifyWindowsColdApplicationFiles({ directory, project, control, backup, snapshot, pwsh, chatId }) {
+export async function verifyWindowsColdApplicationFiles({
+  directory, project, control, backup, snapshot, pwsh, chatId, interruptStartup = false,
+}) {
   const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
   const { claimWindowsColdRestore } = await captured('windows-cold-restore-lease.mjs');
   const { restoreWindowsColdFiles } = await captured('windows-cold-restore-files.mjs');
@@ -80,6 +82,15 @@ export async function verifyWindowsColdApplicationFiles({ directory, project, co
     const readiness = await activation.waitReady({ port: 3010 });
     assert.equal(readiness.generation, running.runtime.generation);
     await verifyWindowsApplicationApi('restored', chatId);
+    if (interruptStartup) {
+      await activation.check();
+      await configuration.checkFiles();
+      await assert.rejects(lstat(path.join(control, 'recovery-lock/completion-release-requested.json')), { code: 'ENOENT' });
+      await interruptWindowsColdApplication({
+        status: 'cold-startup-interrupted', retired: true, runtime: proof.runtime, activation: running, readiness,
+      });
+      assert.fail('Actual guarded startup interruption unexpectedly returned.');
+    }
     await activation.check();
     await configuration.checkFiles();
     assert.deepEqual(await verifySnapshot(backup), snapshot);

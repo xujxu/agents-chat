@@ -1,14 +1,52 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
+import { lstat, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { prepareWindowsColdPolicyRecovery } from '../scripts/deployment/windows-cold-activation-recovery.mjs';
-import { claimWindowsColdRestore } from '../scripts/deployment/windows-cold-restore-lease.mjs';
-import { restoreWindowsColdFiles } from '../scripts/deployment/windows-cold-restore-files.mjs';
+import { pathToFileURL } from 'node:url';
+import { verifyRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
+import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 
-const [control, pwsh, target] = process.argv.slice(2);
+const [control, pwshArgument, target] = process.argv.slice(2);
+const pwsh = realpathSync.native(pwshArgument);
 assert.ok(['requested', 'policy-applied', 'restored', 'inspect', 'archive'].includes(target));
-const recovery = await prepareWindowsColdPolicyRecovery({ control, pwsh, acceptDataLoss: true });
+assert.equal(process.env.PATH, undefined);
+const snapshot = await verifySnapshot(path.join(control, 'backup'));
+const saved = await verifyRecoveryEngine({ control, manifestSha256: snapshot.recoveryEngine });
+const captured = name => import(pathToFileURL(path.join(saved.directory, name)));
+const { prepareWindowsColdPolicyRecovery } = await captured('windows-cold-activation-recovery.mjs');
+const { claimWindowsColdRestore } = await captured('windows-cold-restore-lease.mjs');
+const { restoreWindowsColdFiles } = await captured('windows-cold-restore-files.mjs');
+const journal = path.join(control, 'recovery-lock');
+const names = (await readdir(journal)).sort();
+const originals = new Map(await Promise.all([
+  'state.json', 'lock/owner.json', 'task-maintenance/transaction.json', 'backup/manifest.json',
+  ...names.map(name => `recovery-lock/${name}`),
+].map(async name => {
+  const file = path.join(control, name);
+  return [name, { bytes: await readFile(file), info: await lstat(file, { bigint: true }) }];
+})));
+for (const changed of [
+  { ...snapshot, id: `${snapshot.id}-foreign` },
+  { ...snapshot, source: { ...snapshot.source, commit: 'f'.repeat(40) } },
+  { ...snapshot, recoveryEngine: 'f'.repeat(64) },
+  { ...snapshot, runtime: { ...snapshot.runtime, task: { ...snapshot.runtime.task, name: 'Foreign-Startup-Task' } } },
+  { ...snapshot, entries: [] },
+]) {
+  await assert.rejects(prepareWindowsColdPolicyRecovery({
+    control, pwsh, acceptDataLoss: true, expectedSnapshot: changed,
+  }), /differs from the verified saved restore snapshot/);
+  for (const [name, before] of originals) {
+    const file = path.join(control, name);
+    assert.deepEqual(await readFile(file), before.bytes);
+    const after = await lstat(file, { bigint: true });
+    for (const key of ['dev', 'ino', 'mtimeNs']) assert.equal(after[key], before.info[key], `${name}: ${key}`);
+  }
+  assert.deepEqual((await readdir(journal)).sort(), names);
+}
+const recovery = await prepareWindowsColdPolicyRecovery({
+  control, pwsh, acceptDataLoss: true, expectedSnapshot: snapshot,
+});
 let progress = recovery.observation;
 assert.equal(progress.status, 'cold-policy-recovery');
 assert.equal(progress.claimed, false);
@@ -57,7 +95,7 @@ if (target === 'archive') {
   const state = JSON.parse(await readFile(path.join(control, 'state.json')));
   const lease = await claimWindowsColdRestore({
     control, project: state.project, backup: path.join(control, 'backup'), node: process.execPath, pwsh,
-    profile: 'agents-chat-auth-638c553', acceptDataLoss: true,
+    profile: 'agents-chat-auth-638c553', acceptDataLoss: true, expectedSnapshot: snapshot,
   });
   let restored;
   try {

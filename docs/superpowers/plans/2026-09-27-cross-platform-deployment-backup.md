@@ -13939,9 +13939,12 @@ name. The existing native archive fixture then closes recovery and successfully
 claims/restores a fresh cold copy in that same process. Reuse this mechanism;
 do not introduce another process launcher or weaken proof to support live peers.
 
-- [ ] After Task 5FE's gates settle, add and push the focused missing-module
+- [x] After Task 5FE's gates settle, add and push the focused missing-module
   contract below. Run the existing command-only `failed` selector and inspect
   its precise missing-module failure before accepting fixed implementation.
+  Causal `fce5d94a / 38480635765`, job `115582077501`, failed at
+  `2026-10-13 22:52:50 UTC` exactly on missing
+  `windows-cold-startup-recovery.mjs`; the job log was inspected.
 
   ```js
   test('saved interrupted startup requires acknowledgement and original scope', async () => {
@@ -13955,11 +13958,11 @@ do not introduce another process launcher or weaken proof to support live peers.
   });
   ```
 
-- [ ] Forward optional `expectedSnapshot` through
+- [x] Forward optional `expectedSnapshot` through
   `prepareWindowsColdPolicyRecovery` to its existing `openRecovery` argument;
   reuse the full-snapshot comparison already performed under native admission
   before any policy claim. Preserve callers that omit it.
-- [ ] Implement the focused wrapper with shared saved-scope validation and
+- [x] Implement the focused wrapper with shared saved-scope validation and
   the existing native finite transition protocol:
 
   ```js
@@ -13992,13 +13995,13 @@ do not introduce another process launcher or weaken proof to support live peers.
   Native proof rejects live owners, live runtimes, inconsistent history or
   unsupported staged records. Close recovery before claiming the new lease;
   retain the existing single supervisor continuation after runtime completion.
-- [ ] Strengthen the native policy fixture with full expected snapshot binding,
+- [x] Strengthen the native policy fixture with full expected snapshot binding,
   five mismatch refusals and unchanged original state/lock/manifest/journal
   identities. Keep its real `requested`, `policy-applied`, `restored`,
   read-only inspection and archival/reclaim boundaries. Use the saved engine,
   canonical PowerShell and a no-PATH environment; preserve current boundary
   assertions instead of substituting mocks.
-- [ ] Add an actual guarded interruption after the restored application passes
+- [x] Add an actual guarded interruption after the restored application passes
   owned readiness but before `completeRuntime`. Exit the fixture controller
   through its existing interruption mechanism; independently prove its guarded
   runtime/Job/listener and Scheduler instance settle, with the acknowledged
@@ -14009,11 +14012,14 @@ do not introduce another process launcher or weaken proof to support live peers.
   security and enabled policy, both retired generations and final released
   runtime. Preserve archived audit evidence deliberately; do not claim it was
   deleted with active recovery evidence.
-- [ ] Add a dedicated copy-crashed workflow selector and exact
+- [x] Add a dedicated copy-crashed workflow selector and exact
   `restore-cold-startup-closeout` PASS guard. Keep inner stage limits unchanged.
-  Account explicitly for this fixture's two cold-copy sequences when defining
-  its overall actor/job budget; do not silently enlarge existing scenarios.
-  Push implementation and require full native plus dedicated actual success.
+  Its first guarded-copy actor retains 45 minutes; public recovery retains
+  Task 5FE's 60-minute actor and 3,500,000 ms invocation limits. This distinct
+  `cold-startup` fixture adds the extra 45-minute copy to the prior overall
+  limits: managed application 165, private harness 175 and job 185 minutes.
+  Other scenarios and per-stage deadlines are unchanged.
+- [ ] Push implementation and require full native plus dedicated actual success.
   Update help/docs only to the boundary actually accepted.
 
 **Still excluded:** unacknowledged activation-start prefixes, surviving guarded
