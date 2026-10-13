@@ -6,11 +6,15 @@ import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-
 import { invokePublicWindowsRestore } from './deployment-windows-public-restore.mjs';
 
 export async function verifyWindowsLiveRestore({ mode, directory, project, control, taskName, pwsh, chatId }) {
-  if (['restore-cold-state-closeout', 'restore-cold-receipt-closeout'].includes(mode)) {
+  if (['restore-cold-completion-closeout', 'restore-cold-state-closeout', 'restore-cold-receipt-closeout'].includes(mode)) {
     const { verifyWindowsColdPublicCloseout } = await import('./deployment-windows-cold-application-closeout.mjs');
     return verifyWindowsColdPublicCloseout({
       directory, project, control, taskName, pwsh, chatId,
-      boundary: mode === 'restore-cold-state-closeout' ? 'state' : 'receipt',
+      boundary: {
+        'restore-cold-completion-closeout': 'completion',
+        'restore-cold-state-closeout': 'state',
+        'restore-cold-receipt-closeout': 'receipt',
+      }[mode],
     });
   }
   if (['restore-cold-retirement-prepared', 'restore-cold-retirement-early',

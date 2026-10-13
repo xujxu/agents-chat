@@ -88,19 +88,28 @@ try {
       await readWorkerFile(path.join(control, 'worker-retirement.json'), 1048576, { privateMode: true })));
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   let coldTerminal = false;
+  let coldCompletion = false;
   if (!retirement && originalState.operation === 'restore'
     && ['restoring', 'recovery-required', 'restored'].includes(originalState.phase)) {
     try {
       await lstat(path.join(control, 'cold-restore-terminal.json'));
       coldTerminal = true;
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (!coldTerminal && originalState.phase !== 'restored') {
+      try {
+        await lstat(path.join(control, 'recovery-lock/completion-release-requested.json'));
+        coldCompletion = true;
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
   }
-  if (retirement?.version === 5 || coldTerminal) {
-    stage = coldTerminal ? 'cold-terminal-closeout' : 'cold-retirement-admission';
+  if (retirement?.version === 5 || coldTerminal || coldCompletion) {
+    stage = coldCompletion ? 'cold-completion-closeout'
+      : coldTerminal ? 'cold-terminal-closeout' : 'cold-retirement-admission';
     const { prepareWindowsColdRetirementCloseout, prepareWindowsColdTerminalCloseout,
-      prepareWindowsColdReceiptCloseout, prepareWindowsColdStateCloseout } =
+      prepareWindowsColdReceiptCloseout, prepareWindowsColdStateCloseout, prepareWindowsColdCompletionCloseout } =
       await import('./windows-cold-retirement-closeout.mjs');
-    let prepare = coldTerminal ? prepareWindowsColdTerminalCloseout : prepareWindowsColdRetirementCloseout;
+    let prepare = coldCompletion ? prepareWindowsColdCompletionCloseout
+      : coldTerminal ? prepareWindowsColdTerminalCloseout : prepareWindowsColdRetirementCloseout;
     if (coldTerminal && originalState.phase !== 'restored') {
       stage = 'cold-state-closeout';
       prepare = prepareWindowsColdStateCloseout;

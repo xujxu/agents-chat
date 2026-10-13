@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { withWindowsAdmission } from './windows-admission.mjs';
-import { openWindowsColdRetirementAuthority, publishWindowsColdTerminalState } from './windows-cold-activation-recovery.mjs';
+import { openWindowsColdRetirementAuthority, prepareWindowsColdCompletionRecovery,
+  publishWindowsColdTerminalState } from './windows-cold-activation-recovery.mjs';
 import { openWindowsColdRetirementScope } from './windows-cold-retirement-scope.mjs';
 import { recoverWindowsColdRestoredDeploymentReceipt } from './windows-cold-receipt-recovery.mjs';
 import { verifyHttpReadiness } from './http-readiness.mjs';
@@ -38,6 +39,27 @@ async function readBoundState(record, { control, project, taskName, snapshot }) 
     throw new Error('Original cold retirement differs from the verified saved restore snapshot.');
   }
   return state;
+}
+
+export async function prepareWindowsColdCompletionCloseout(options = {}) {
+  assertScope(options);
+  const { control, pwsh, snapshot, signal } = options;
+  const recovery = await prepareWindowsColdCompletionRecovery({
+    control, pwsh, acceptDataLoss: true, expectedSnapshot: snapshot, signal,
+  });
+  let failure;
+  try {
+    let progress = recovery.observation;
+    while (progress.step !== 'complete') progress = await recovery.advance({ signal });
+    await recovery.prepareTerminal({ signal });
+  } catch (error) { failure = error; throw error; }
+  finally {
+    try { await recovery.close(); }
+    catch (error) {
+      throw new AggregateError(failure ? [failure, error] : [error], 'Cold completion closeout cleanup failed.');
+    }
+  }
+  return prepareWindowsColdStateCloseout(options);
 }
 
 export async function prepareWindowsColdStateCloseout(options = {}) {

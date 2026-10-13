@@ -13946,7 +13946,7 @@ pre-release/inactive/reboot branches.
     -f windows_restore_scenario=failed
   ```
 
-- [ ] Reuse the original finite completion authority, binding the full saved
+- [x] Reuse the original finite completion authority, binding the full saved
   snapshot through `prepareWindowsColdCompletionRecovery` into `openRecovery`
   before any native mutation. Under shared public scope validation:
 
@@ -13972,15 +13972,15 @@ pre-release/inactive/reboot branches.
   Each original `advance` already verifies the next exact finite boundary.
   After native handles close, call the existing state helper; no nested
   admissions or independent substitute publisher.
-- [ ] Route an old restore state without a terminal/retirement marker but with
+- [x] Route an old restore state without a terminal/retirement marker but with
   `recovery-lock/completion-release-requested.json` to this helper. This file
   is only a routing hint: native admission must prove an actually released
   lease, dead original owners, exact inventory/hash chain and original runtime.
-- [ ] Strengthen all three native completion takeover actors to import their
+- [x] Strengthen all three native completion takeover actors to import their
   verified saved engine, canonicalize `pwsh`, omit PATH and refuse mutated
   expected snapshots (id/source/engine/task/inventory), preserving every original
   file's bytes/dev/ino/mtime before their existing physical-boundary progression.
-- [ ] Add actual `cold-completion` copy-only selector. After the existing
+- [x] Add actual `cold-completion` copy-only selector. After the existing
   `restore-cold-files` releases its lease and dies before acknowledging it,
   invoke public PowerShell once as `restore-cold-completion-closeout` with a
   15-minute actor bound. Require the exact new PASS marker in the outer test.

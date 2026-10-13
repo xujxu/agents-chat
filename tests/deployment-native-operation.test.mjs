@@ -265,6 +265,10 @@ test('actual application source installs and builds inside native ownership', {
         assert.equal(restoreScenario, 'copy-crashed');
         assert.match(live.stdout, /PASS: real Windows live deployment restore-cold-state-closeout /);
       }
+      if (process.env.DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY === 'completion') {
+        assert.equal(restoreScenario, 'copy-crashed');
+        assert.match(live.stdout, /PASS: real Windows live deployment restore-cold-completion-closeout /);
+      }
       console.log(live.stdout.trim());
       return;
     }

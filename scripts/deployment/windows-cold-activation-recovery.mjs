@@ -38,10 +38,12 @@ export async function inspectWindowsColdRuntimeCompletion({ control, pwsh, signa
   return openRecovery({ control, pwsh, signal }, false, true);
 }
 
-export async function prepareWindowsColdCompletionRecovery({ control, pwsh, signal, acceptDataLoss } = {}) {
+export async function prepareWindowsColdCompletionRecovery({
+  control, pwsh, signal, acceptDataLoss, expectedSnapshot,
+} = {}) {
   signal?.throwIfAborted();
   if (acceptDataLoss !== true) throw new Error('Cold completion recovery requires explicit data-loss acknowledgement.');
-  return openRecovery({ control, pwsh, signal }, false, true, true);
+  return openRecovery({ control, pwsh, signal, expectedSnapshot }, false, true, true);
 }
 
 export async function prepareWindowsColdTerminalRestore(options = {}) {

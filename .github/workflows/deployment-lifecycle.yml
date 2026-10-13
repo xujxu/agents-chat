@@ -47,7 +47,7 @@ on:
       windows_restore_scenario:
         description: With the paired Windows live selector, choose the actual saved restore scenario
         type: choice
-        options: [complete, cancelled, failed, crash, cold-receipt, cold-state, offline]
+        options: [complete, cancelled, failed, crash, cold-receipt, cold-state, cold-completion, offline]
         default: complete
       windows_receipt_only:
         description: With both Windows command flags, select first-receipt integration and saved dependency tests
@@ -175,7 +175,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: ${{ fromJSON(inputs.windows_restore_scenario == 'cancelled' && '["cancelled"]' || inputs.windows_restore_scenario == 'failed' && '["failed"]' || inputs.windows_restore_scenario == 'crash' && '["crashed","copy-crashed"]' || contains(fromJSON('["cold-receipt","cold-state"]'), inputs.windows_restore_scenario) && '["copy-crashed"]' || inputs.windows_restore_scenario == 'offline' && '["offline"]' || inputs.windows_application_only && '["complete"]' || '["complete","cancelled","failed","crashed","copy-crashed","offline"]') }}
+        scenario: ${{ fromJSON(inputs.windows_restore_scenario == 'cancelled' && '["cancelled"]' || inputs.windows_restore_scenario == 'failed' && '["failed"]' || inputs.windows_restore_scenario == 'crash' && '["crashed","copy-crashed"]' || contains(fromJSON('["cold-receipt","cold-state","cold-completion"]'), inputs.windows_restore_scenario) && '["copy-crashed"]' || inputs.windows_restore_scenario == 'offline' && '["offline"]' || inputs.windows_application_only && '["complete"]' || '["complete","cancelled","failed","crashed","copy-crashed","offline"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -251,7 +251,7 @@ jobs:
           $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
           $env:DEPLOYMENT_TEST_WINDOWS_LIVE = '1'
           $env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO = '${{ matrix.scenario }}'
-          $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY = '${{ inputs.windows_restore_scenario == 'cold-state' && 'state' || inputs.windows_restore_scenario == 'cold-receipt' && 'receipt' || 'terminal' }}'
+          $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY = '${{ inputs.windows_restore_scenario == 'cold-completion' && 'completion' || inputs.windows_restore_scenario == 'cold-state' && 'state' || inputs.windows_restore_scenario == 'cold-receipt' && 'receipt' || 'terminal' }}'
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'

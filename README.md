@@ -778,9 +778,13 @@ application data through final cleanup. The next extension handles a prepared
 terminal marker with old or staged state: it binds the full saved snapshot
 under native admission, publishes the original state atomically, then uses
 the accepted receipt/cleanup path. Its dedicated `cold-state` native/actual
-gates are pending; earlier completion/startup prefixes remain unsupported. The dedicated
-`cold-receipt` scenario preserves existing default terminal/retirement coverage;
-this public receipt path is not yet accepted.
+gates are pending. The following `cold-completion` extension uses the original
+finite recovery authority to finish an already released runtime's completion
+prefix before preparing that terminal handoff; its gates are also pending.
+Pre-release, inactive and reboot prefixes remain unsupported publicly.
+The dedicated `cold-receipt`, `cold-state` and `cold-completion` scenarios
+preserve existing default terminal/retirement coverage. Only the receipt path
+has completed actual public acceptance so far.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
