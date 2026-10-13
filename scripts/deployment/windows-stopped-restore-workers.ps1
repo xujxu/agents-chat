@@ -3,6 +3,10 @@ function Assert-AgentsChatStoppedRestoreWorkerInventory([hashtable]$Context) {
     $expected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $null = $expected.Add('worker-engine')
     $null = $expected.Add('worker-operation.ndjson')
+    if ($Context.ContainsKey('ColdRetirementMarker')) {
+        $Context.ColdRetirementMarker.Check()
+        $null = $expected.Add('worker-retirement.json')
+    }
     foreach ($entry in Get-ChildItem -LiteralPath $Context.Control -Force) {
         if ($entry.Name.StartsWith('worker-', [StringComparison]::OrdinalIgnoreCase) -and
             -not $expected.Remove($entry.Name)) { throw 'Foreign stopped restore worker inventory.' }

@@ -13922,6 +13922,7 @@ recopying its backup, changing its accepted state/receipt, or unlocking early.
 
 **Files:** add `windows-cold-deployment-retirement.mjs`,
 `windows-cold-retirement-record.{mjs,ps1}`,
+`windows-cold-retirement-evidence.ps1`, `windows-cold-retirement-scope.mjs`,
 `windows-cold-deployment-retirement.ps1` and
 `windows-cold-deployment-retirement-controller.ps1` under
 `scripts/deployment/`. Reuse the existing cold terminal native admission for
@@ -13957,6 +13958,13 @@ cannot be reused unchanged because it requires `sealed`.
   all preceding 39 contracts passed. Add positive frozen-record/disabled-policy
   and adversarial scope/order/identity descriptor contracts before committing
   the record implementation.
+  The record causal run `e0d582b / 38339059242` failed at all three expected
+  missing imports. Implementation `fe65eeac / 38339289724`, job
+  `115106433748`, passed both record contracts (including retained-inode alias
+  refusal and unchanged warm 1 MiB limit) at 02:56:44 UTC; 41 of 42 contracts
+  passed, with only the not-yet-implemented orchestration import failing.
+  Native publication, consumption, interruption recovery and shared
+  warm/first-install deletion regressions remain separate acceptance gates.
 
 - [ ] Define and test the immutable cold retirement record. Use
   `worker-retirement.json` with `version: 5`, `purpose: 'cold-restore'`.

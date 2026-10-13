@@ -8,6 +8,7 @@ param(
     [switch]$ColdCompletion,
     [switch]$ColdCompletionRecovery,
     [switch]$ColdTerminalState,
+    [switch]$ColdRetirement,
     [string]$TerminalSha256,
     [string]$OwnerSha256,
     [string]$ReceiptSha256,
@@ -41,6 +42,7 @@ try {
             ($ColdCompletion -and ($ColdPolicyRecovery -or $CompletionSha256 -cnotmatch '^[a-f0-9]{64}$')) -or
             ($ColdCompletionRecovery -and -not $ColdCompletion) -or
             ($ColdTerminalState -and (-not $ColdCompletionRecovery -or $TerminalSha256 -cnotmatch '^[a-f0-9]{64}$')) -or
+            ($ColdRetirement -and -not $ColdTerminalState) -or
             (-not $ColdTerminalState -and $TerminalSha256) -or
             (-not $ColdCompletion -and $CompletionSha256)) {
             throw 'Cold observation requires explicit original evidence digests.'
@@ -54,6 +56,7 @@ try {
                 . (Join-Path $PSScriptRoot 'windows-cold-completion-recovery.ps1')
                 . (Join-Path $PSScriptRoot 'windows-cold-terminal-intent.ps1')
                 . (Join-Path $PSScriptRoot 'windows-cold-terminal-state.ps1')
+                if ($ColdRetirement) { . (Join-Path $PSScriptRoot 'windows-cold-retirement-evidence.ps1') }
                 $proof = Open-AgentsChatColdCompletionRecovery $Control $OwnerSha256 $ReceiptSha256 `
                     $IntentSha256 $HistorySha256 $CompletionSha256 `
                     -ColdTerminalState:$ColdTerminalState -TerminalSha256 $TerminalSha256
@@ -73,7 +76,7 @@ try {
         }
     } else {
         if ($OwnerSha256 -or $ReceiptSha256 -or $IntentSha256 -or $HistorySha256 -or $ColdPolicyRecovery -or
-            $PolicySha256 -or $ColdCompletion -or $CompletionSha256 -or $ColdCompletionRecovery) {
+            $PolicySha256 -or $ColdCompletion -or $CompletionSha256 -or $ColdCompletionRecovery -or $ColdRetirement) {
             throw 'Stopped observation cannot accept cold activation digests.'
         }
         $proof = Open-AgentsChatStoppedRestoreProof -Control $Control -Recovery:$Recovery
@@ -95,6 +98,7 @@ try {
         if ($ColdPolicyRecovery) { $methods += @('advance', 'archive') }
         if ($ColdCompletionRecovery) { $methods += @('advance', 'prepare-terminal') }
         if ($ColdTerminalState) { $methods += @('stage-terminal-state', 'publish-terminal-state') }
+        if ($ColdRetirement) { $methods = @('check', 'close', 'prepare-retirement', 'publish-retirement') }
         if ($id -ne $sequence + 1 -or $method -cnotin $methods) {
             throw 'Invalid read-only stopped restore proof request.'
         }
@@ -112,6 +116,10 @@ try {
         elseif ($method -ceq 'prepare-terminal') {
             $value = Prepare-AgentsChatColdTerminalRestore $proof $ControllerPid $ControllerIdentity
         }
+        elseif ($method -ceq 'prepare-retirement') {
+            $value = New-AgentsChatColdRetirementCandidate $proof $ControllerPid $ControllerIdentity
+        }
+        elseif ($method -ceq 'publish-retirement') { $value = Publish-AgentsChatColdRetirementCandidate $proof }
         elseif ($method -cin @('stage-terminal-state', 'publish-terminal-state')) {
             $value = Publish-AgentsChatColdTerminalState $proof $ControllerPid $ControllerIdentity `
                 -Publish:($method -ceq 'publish-terminal-state')
@@ -124,7 +132,7 @@ try {
         [Console]::Out.WriteLine((@{
             id=$id; type='reply'; value=$value
             processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
-        } | ConvertTo-Json -Depth 4 -Compress))
+        } | ConvertTo-Json -Depth 16 -Compress))
         [Console]::Out.Flush()
         if ($method -cin @('close', 'archive')) { break }
     }

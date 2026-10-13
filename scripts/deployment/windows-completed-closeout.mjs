@@ -7,6 +7,7 @@ import { validateState } from './state.mjs';
 import { openWindowsFirstDeploymentRetirement } from './windows-first-deployment-retirement.mjs';
 import { recoverWindowsFirstDeploymentReceipt } from './windows-first-receipt-recovery.mjs';
 import { completeWindowsFirstDeployment } from './windows-first-cold-completion.mjs';
+import { openWindowsColdRetirementScope } from './windows-cold-retirement-scope.mjs';
 import {
   openWindowsTaskCompletionProof, beginWindowsTaskRetirement, openWindowsTaskRetirement,
   retireNextWindowsTaskFile, beginWindowsDeploymentRetirement, openWindowsDeploymentRetirement,
@@ -84,6 +85,21 @@ export async function closeCompletedWindowsDeployment({ control, project, operat
           return Object.freeze({ status: 'completed', operationId, phase: state.phase });
         }
         if (await hasMarker(control, 'worker-retirement.json')) {
+          const marker = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
+            await readWorkerFile(path.join(control, 'worker-retirement.json'), 1048576, { privateMode: true })));
+          if (marker.version === 5) {
+            scope = await openWindowsColdRetirementScope({ control, pwsh, admission, signal });
+            checkProof(scope.observation);
+            if (scope.record.project !== project || state.operation !== 'restore' || state.phase !== 'restored') {
+              throw new Error('Cold retirement differs from the requested restored deployment.');
+            }
+            while (scope.observation.status !== 'retired') {
+              await checkState();
+              await scope.advance({ signal });
+            }
+            await checkState();
+            return Object.freeze({ status: 'completed', operationId, phase: state.phase });
+          }
           scope = await openWindowsDeploymentRetirement({ control, pwsh, admission, signal });
           checkProof(scope.observation.manifest.record.task.intent.intent.completion);
         } else {

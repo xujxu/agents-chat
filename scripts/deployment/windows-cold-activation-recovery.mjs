@@ -19,6 +19,8 @@ import { captureWindowsColdRuntimeCompletion, captureWindowsColdCompletionPrefix
 import { captureWindowsColdTerminalFiles, captureWindowsColdTerminalIntent } from './windows-cold-terminal-intent.mjs';
 import { readWindowsColdTerminalSource, inspectWindowsColdTerminalState,
   captureWindowsColdTerminalStateReply, finishWindowsColdTerminalState } from './windows-cold-terminal-state.mjs';
+import { captureWindowsColdRetirementRecord } from './windows-cold-retirement-record.mjs';
+import { verifyWorkerEngine } from './saved-worker-engine.mjs';
 
 const script = fileURLToPath(new URL('./windows-stopped-restore-controller.ps1', import.meta.url));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -67,6 +69,12 @@ export async function openWindowsColdReceiptAuthority({ control, pwsh, signal, a
   signal?.throwIfAborted();
   if (acceptDataLoss !== true) throw new Error('Cold receipt publication requires explicit data-loss acknowledgement.');
   return openRecovery({ control, pwsh, signal }, false, true, true, 'receipt');
+}
+
+export async function openWindowsColdRetirementAuthority({ control, pwsh, signal, acceptDataLoss } = {}) {
+  signal?.throwIfAborted();
+  if (acceptDataLoss !== true) throw new Error('Cold retirement requires explicit data-loss acknowledgement.');
+  return openRecovery({ control, pwsh, signal }, false, true, true, 'retirement');
 }
 
 export async function assertWindowsColdReceiptAuthority({ control, lock, authority, signal } = {}) {
@@ -217,7 +225,7 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
       });
       if (initialCompletionPrefix.record.phase !== 'complete') throw new Error('Cold terminal publication requires complete policy.');
       const physical = await inspectWindowsColdTerminalState(control, terminalSource);
-      if (terminalState === 'receipt' && !physical.published) {
+      if (['receipt', 'retirement'].includes(terminalState) && !physical.published) {
         throw new Error('Cold receipt publication requires its exact published terminal state.');
       }
     }
@@ -243,6 +251,7 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
         ...(completedRuntime ? ['-ColdCompletion', '-CompletionSha256',
           completionRecovery ? initialCompletionPrefix.sha256 : completion.completionSha256] : []),
         ...(completionRecovery ? ['-ColdCompletionRecovery'] : []),
+        ...(terminalState === 'retirement' ? ['-ColdRetirement'] : []),
         ...(terminalSource ? ['-ColdTerminalState', '-TerminalSha256', terminalSource.descriptor.sha256] : [])],
     });
     const ready = captureWorkerFields(await bridge.wire.receive({ signal, timeoutMs: 60000 }),
@@ -295,6 +304,7 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
     let finished = false;
     let busy = false;
     let sequence = 0;
+    let retirementRecord;
     const request = async (method, requestSignal) => {
       requestSignal?.throwIfAborted();
       if (closed || busy) throw new Error('Cold activation observation is closed or busy.');
@@ -307,6 +317,11 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
       const stateMethod = ['stage-terminal-state', 'publish-terminal-state'].includes(method);
       if (stateMethod && (!terminalSource || latest.step !== 'complete')) {
         throw new Error('Cold terminal state publication requires its original complete handoff.');
+      }
+      if (['prepare-retirement', 'publish-retirement'].includes(method)
+        && (terminalState !== 'retirement' || latest.step !== 'complete'
+          || method === 'publish-retirement' && !retirementRecord)) {
+        throw new Error('Cold retirement requires its original prepared terminal authority.');
       }
       busy = true;
       try {
@@ -346,6 +361,34 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
           });
           await assertWindowsAdmission(control, admission, { signal: requestSignal });
           return Object.freeze({ ...result, record });
+        }
+        if (method === 'prepare-retirement') {
+          const record = captureWindowsColdRetirementRecord(reply.value);
+          if (record.control !== control || !same(record.lock, lock)
+            || !same(record.completion.runtime, latest.runtime)
+            || record.state.sha256 !== digest(terminalSource.nextBytes)
+            || record.completion.completionSha256 !== latest.completionSha256
+            || !same(record.creator, {
+              pid: process.pid, processIdentity: controllerIdentity,
+              bridgePid: ready.pid, bridgeIdentity: ready.processIdentity,
+            })) throw new Error('Cold retirement candidate differs from original terminal authority.');
+          await verifyWorkerEngine({
+            control, project: record.project, operationId: lock.operationId,
+            manifestSha256: record.workerManifestSha256,
+          });
+          retirementRecord = record;
+          await assertWindowsAdmission(control, admission, { signal: requestSignal });
+          return record;
+        }
+        if (method === 'publish-retirement') {
+          const result = captureWorkerFields(reply.value, ['status', 'operationId', 'sha256'], 'cold retirement publication');
+          const bytes = await readWorkerFile(path.join(control, 'worker-retirement.json'), 1048576, { privateMode: true });
+          if (result.status !== 'cold-retirement-prepared' || result.operationId !== lock.operationId
+            || result.sha256 !== digest(bytes) || !same(captureWindowsColdRetirementRecord(parse(bytes)), retirementRecord)) {
+            throw new Error('Published cold retirement candidate changed.');
+          }
+          await assertWindowsAdmission(control, admission, { signal: requestSignal });
+          return Object.freeze({ ...result, record: retirementRecord });
         }
         if (stateMethod) {
           const result = await captureWindowsColdTerminalStateReply(control, terminalSource, reply.value, method, terminalBefore);
@@ -409,12 +452,16 @@ async function openRecovery({ control, pwsh, signal }, policyRecovery, completed
       check: ({ signal: checkSignal } = {}) => request('check', checkSignal),
       ...(completionRecovery ? {
         identity: Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity }),
-        ...(terminalState === 'receipt' ? {
+        ...(['receipt', 'retirement'].includes(terminalState) ? {
           lock: Object.freeze({ ...lock }), state: Object.freeze(parse(terminalSource.nextBytes)),
         } : {
           advance: ({ signal: stepSignal } = {}) => request('advance', stepSignal),
           prepareTerminal: ({ signal: terminalSignal } = {}) => request('prepare-terminal', terminalSignal),
         }),
+      } : {}),
+      ...(terminalState === 'retirement' ? {
+        prepareRetirement: ({ signal: retirementSignal } = {}) => request('prepare-retirement', retirementSignal),
+        publishRetirement: ({ signal: retirementSignal } = {}) => request('publish-retirement', retirementSignal),
       } : {}),
       ...(terminalState === true ? {
         stageTerminalState: ({ signal: stateSignal } = {}) => request('stage-terminal-state', stateSignal),

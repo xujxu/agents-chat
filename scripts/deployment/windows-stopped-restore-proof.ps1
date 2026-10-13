@@ -10,6 +10,10 @@ function Assert-AgentsChatStoppedRestoreInventory([hashtable]$Context) {
     }
     foreach ($name in @('task-retirement.json', 'task-retirement-checkpoint.json', 'worker-retirement.json')) {
         if (Test-Path -LiteralPath (Join-Path $Context.Control $name)) {
+            if ($name -ceq 'worker-retirement.json' -and $Context.ContainsKey('ColdRetirementMarker')) {
+                $Context.ColdRetirementMarker.Check()
+                continue
+            }
             throw 'Stopped restore conflicts with existing retirement authority.'
         }
     }

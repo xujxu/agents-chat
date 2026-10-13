@@ -44,11 +44,11 @@ function Assert-AgentsChatRetirementIdentity($Value) {
     $null = [uint64]$Value.ino
 }
 
-function Assert-AgentsChatRetirementDescriptor($Value, [string]$Relative) {
+function Assert-AgentsChatRetirementDescriptor($Value, [string]$Relative, [int]$MaximumBytes = 1048576) {
     Assert-AgentsChatRetirementFields $Value @('path', 'dev', 'ino', 'bytes', 'sha256')
     Assert-AgentsChatRetirementIdentity @{ dev=$Value.dev; ino=$Value.ino }
     if ($Value.path -isnot [string] -or $Value.path -cne $Relative -or
-        $Value.bytes -isnot [int] -or $Value.bytes -lt 1 -or $Value.bytes -gt 1048576 -or
+        $Value.bytes -isnot [int] -or $Value.bytes -lt 1 -or $Value.bytes -gt $MaximumBytes -or
         $Value.sha256 -isnot [string] -or $Value.sha256 -cnotmatch '^[a-f0-9]{64}$') {
         throw 'Invalid retirement descriptor.'
     }

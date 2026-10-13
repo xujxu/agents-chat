@@ -36,6 +36,7 @@ export const workerEngineFiles = Object.freeze([
   'windows-task-retirement-records.ps1', 'windows-task-retirement-scope.ps1', 'windows-task-retirement-scope.mjs',
   'windows-deployment-retirement-record.mjs', 'windows-deployment-retirement-evidence.mjs',
   'windows-deployment-retirement-evidence.ps1', 'windows-deployment-retirement.ps1',
+  'windows-retirement-entries.ps1',
   'evidence-journal.mjs', 'worker-operation.mjs', 'state.mjs',
   'worker-retirement.mjs',
   'linux-systemd.mjs', 'linux-runtime.mjs',

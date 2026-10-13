@@ -1,3 +1,5 @@
+. (Join-Path $PSScriptRoot 'windows-retirement-entries.ps1')
+
 function Assert-AgentsChatDeploymentEntry($Entry) {
     if ($Entry.kind -ceq 'directory') {
         Assert-AgentsChatRetirementFields $Entry @('kind', 'path', 'dev', 'ino')
@@ -179,42 +181,7 @@ function Open-AgentsChatDeploymentRetirement {
 }
 
 function Remove-AgentsChatNextDeploymentEntry([hashtable]$Context) {
-    $null = Assert-AgentsChatDeploymentRetirement $Context
-    $target = $null
-    try {
-        $index = $Context.Prefix
-        $commit = $index -eq $Context.Record.entries.Count
-        $entry = if ($commit) { $Context.Manifest.descriptor } else { $Context.Record.entries[$index] }
-        $original = if ($commit) { $Context.Marker } else { $Context.Entries[$index] }
-        $original.Check()
-        $original.Dispose()
-        $null = $Context.Files.Remove($original)
-        $file = Join-Path $Context.Control $entry.path
-        if (-not $commit -and $entry.kind -ceq 'directory') {
-            $target = [Deployment.WindowsPrivateFile]::RetainDirectoryForRetirement($file, $entry.dev, $entry.ino)
-        } else {
-            $target = [Deployment.WindowsPrivateFile]::RetainForRetirement(
-                $file, $entry.sha256, $entry.dev, $entry.ino, $entry.bytes)
-        }
-        if (-not $commit) { $Context.Target = @{ Entry=$entry; Handle=$target } }
-        $null = Assert-AgentsChatDeploymentRetirement $Context
-        $target.Check()
-        $target.Delete()
-        $target = $null
-        $Context.Target = $null
-        if ($commit) {
-            $result = [ordered]@{ status='retired'; retiredEntries=$index; manifest=$Context.Manifest }
-            Close-AgentsChatTaskCompletionProof $Context
-            return $result
-        }
-        $Context.Entries[$index] = $null
-        $Context.Prefix++
-        return Assert-AgentsChatDeploymentRetirement $Context
-    } catch {
-        $Context.Poisoned = $true
-        throw
-    } finally {
-        $Context.Target = $null
-        if ($target) { $target.Dispose() }
-    }
+    return Remove-AgentsChatRetirementEntry $Context $Context.Manifest.descriptor `
+        { param($scope) Assert-AgentsChatDeploymentRetirement $scope } `
+        { param($scope) [ordered]@{ status='retired'; retiredEntries=$scope.Prefix; manifest=$scope.Manifest } }
 }
