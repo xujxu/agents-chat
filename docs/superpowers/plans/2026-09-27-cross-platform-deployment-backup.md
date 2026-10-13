@@ -13915,6 +13915,142 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5EY: Retire completed cold restore evidence with resumable ordered deletion
+
+**Goal:** close the accepted cold operation without restarting its application,
+recopying its backup, changing its accepted state/receipt, or unlocking early.
+
+**Files:** add `windows-cold-deployment-retirement.mjs`,
+`windows-cold-retirement-record.{mjs,ps1}`,
+`windows-cold-deployment-retirement.ps1` and
+`windows-cold-deployment-retirement-controller.ps1` under
+`scripts/deployment/`. Reuse the existing cold terminal native admission for
+manifest preparation; extend `windows-cold-activation-recovery.mjs` and
+`windows-stopped-restore-controller.ps1` only for that preparation exchange.
+Extract the identical exact-handle next-entry deletion algorithm from
+`windows-first-deployment-retirement.ps1` and `windows-deployment-retirement.ps1`
+into `windows-retirement-entries.ps1`, retaining domain-specific assertions.
+Add native interruption actors and actual application follow-on actors;
+extend saved closure, focused contracts, and completed closeout dispatch.
+
+The existing warm and first-install retirement model is the prior art:
+immutable bounded manifest, exact file identities, a monotonic missing-file
+prefix, fresh retained runtime checks, original owner/lock last, manifest last.
+Do not use recursive deletion, reseal original journals, or invent substitute
+lock ownership. Cold restore admits an **empty** original worker operation
+with `opened` and optional `sealed`; `Get-AgentsChatCompletedWorkerEvidence`
+cannot be reused unchanged because it requires `sealed`.
+
+- [ ] Push the missing-module admission contract and run the native selector.
+  Require one missing-module failure and the preceding 39 contracts passing:
+
+  ```js
+  const { retireWindowsColdRestoredDeployment } =
+    await import('../scripts/deployment/windows-cold-deployment-retirement.mjs');
+  await assert.rejects(retireWindowsColdRestoredDeployment(), /data-loss acknowledgement/);
+  await assert.rejects(retireWindowsColdRestoredDeployment({
+    acceptDataLoss: true, onProgress: 42,
+  }), /progress callback/);
+  ```
+
+- [ ] Define and test the immutable cold retirement record. Use
+  `worker-retirement.json` with `version: 5`, `purpose: 'cold-restore'`.
+  Capture canonical control/project, original lock and creator,
+  control directory identity, exact retained state/receipt descriptors,
+  complete cold runtime/port/providers, configuration and permanent task
+  policy/listener checkpoint, original absent process identities, worker
+  manifest digest and the ordered entry descriptors.
+  Reuse existing retirement field, creator, runtime, identity and descriptor
+  validators; reject duplicate paths/inodes, path traversal, unknown fields,
+  partial completion, foreign state/receipt and any noncanonical deletion order.
+  Preserve the existing bounded sizes, including cold activation records'
+  supported 4 MiB limit where applicable; do not globally loosen warm parsers.
+
+  The fixed deletion inventory is:
+  six original `task-maintenance` files (`admission.json`, `transaction.json`,
+  `task-stop-intent.json`, `task-stop-inhibited.json`,
+  `task-stop-stop-requested.json`, `task-stop-stopped.json`), then that directory;
+  the exact complete `recovery-lock` inventory (owner, files receipt,
+  activation intent/start/running and nine completion records), then that
+  directory; exact declared worker helpers and their manifest, worker directory
+  and original empty operation journal; the terminal marker; original
+  `lock/owner.json` and `lock` directory. The manifest is the final deletion.
+  Never include backup, saved recovery engine, active runtime, state or receipt.
+
+- [ ] Prepare the manifest while the existing original cold terminal authority
+  retains the complete chain, exact published state, accepted restored receipt,
+  released runtime and original exclusive transaction. Native preparation
+  reuses `Open-AgentsChatStoppedRestoreWorkers` and descriptor capture rather
+  than changing the original empty journal. Node independently validates the
+  candidate bindings before admitting any destructive operation.
+  Native stopped-proof inventory must permit only its own newly retained
+  retirement manifest after publication, never an unrelated marker.
+  Publication is no-overwrite; incomplete pending markers fail closed.
+  Manifest preparation alone does not delete evidence.
+
+- [ ] Resume from the durable manifest under Windows admission and exclusive
+  marker ownership. Do not require already-deleted source journals on reentry.
+  Revalidate exact root/state/receipt, runtime generation/PID/start identity,
+  permanent policy, original enabled setting, listener and released lease.
+  Admit only a missing **prefix** of the fixed inventory; refuse missing
+  middle entries, replacements, foreign children or live prior creators.
+  Retain remaining files, then reuse the shared exact-inode retirement
+  primitive for one entry per acknowledged `advance`. Domain-specific checks
+  remain before and after each deletion. Delete owner and lock only after
+  all other evidence; keep the exclusive manifest through final unlock.
+
+- [ ] Implement the focused orchestrator and immutable awaited progress:
+
+  ```js
+  await retireWindowsColdRestoredDeployment({
+    control, pwsh, acceptDataLoss: true,
+    onProgress: async progress => {
+      // step: retirement-prepared | entry-retired | retired
+      // operationId, retiredEntries, totalEntries, original runtime/lease
+      process.stderr.write(`${JSON.stringify(progress)}\n`);
+    },
+  });
+  ```
+
+  Validate acknowledgement, cancellation and callback type before admission.
+  If preparation is needed, publish under cold authority, close it, then open
+  the manifest consumer under fresh admission; do not nest two independent
+  admission leases. Hold consumer authority during progress callbacks.
+  Close all retained resources and aggregate cleanup errors without a
+  success-shaped fallback. Dispatch an existing version-5 cold manifest from
+  completed Windows closeout rather than feeding it to warm version-3 parsing.
+
+- [ ] Add native interruption coverage after the accepted receipt fixture.
+  Interrupt after manifest publication, after an early evidence deletion,
+  and before original lock retirement; finish from a fresh actor.
+  Require unchanged manifest inode/bytes on reentry, only a missing prefix,
+  original runtime and accepted state/receipt/backup retained, no early unlock,
+  and no transient retirement/lock evidence after success.
+  Reject a forged/replaced entry, foreign child, non-prefix disappearance,
+  live previous creator and incomplete manifest publication without deletion.
+  Preserve warm and first-install retirement behavior through their existing
+  native regressions after extracting the shared deletion primitive.
+
+- [ ] Add saved closure entries and actual application retirement actors after
+  the accepted actual receipt chain, reusing its single restored application.
+  Verify real authenticated data and the same Scheduler instance after each
+  interruption and completion; independently check the original receipt and
+  state inode/bytes and backup manifest. Do not add another copy/start.
+  Run native gate and actual crash pair in Actions, inspect completed logs:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=crash
+  ```
+
+  Public recovery routing and the remaining earlier-prefix/startup/reboot
+  cases remain subsequent work; do not equate this accepted completed-runtime
+  closeout branch with the entire deployment feature.
+
 ### Task 5EX: Bind cold restored receipts to actual application acceptance
 
 **Files:** create `scripts/deployment/windows-cold-receipt-recovery.mjs`
@@ -13989,7 +14125,7 @@ application restore dispatcher/parent.
   runtime PID/start identity/Scheduler instance/released lease and restored API.
   New receipt actors have a 15-minute bound for real artifact hashing; do not
   change existing actor bounds or the 115-minute job bound.
-- [ ] Push and run native selector, then actual crash pair:
+- [x] Push and run native selector, then actual crash pair:
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -14022,6 +14158,14 @@ application restore dispatcher/parent.
   scenarios retain 4,800,000 ms; individual actor bounds, the private runner's
   6,300-second whole-test limit and the 115-minute Actions job remain unchanged.
   Re-run the actual crash pair without weakening acceptance or inode checks.
+  Accepted `de8f6e8 / 38331450888`: warm `115081870798` passed at
+  2026-10-13 01:53:17 UTC; copy `115081871025` passed at 02:34:49 UTC.
+  Actual receipt staged/published/final actors took 110,803 / 181,093 /
+  182,849 ms. The single cold copy/start took 1,693,846 ms. All existing
+  completion/state checks and the new original receipt inode, exact bytes,
+  timestamp, transaction, runtime and restored authenticated data checks passed.
+  Both completed logs and watcher were inspected. This completes 5EX, not
+  ordered evidence retirement or public cold restore completion.
 
 ### Task 5EW: Publish restored receipts under retained cold terminal authority
 

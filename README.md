@@ -700,8 +700,12 @@ and readiness from the retained production observers, not caller fingerprints.
 Its awaited staged/published callbacks passed native acceptance at
 `8ab226a / 38323713056`: all 39 focused contracts, five warm receipt tests,
 saved closure, both cold interruption/reentry cases and the warm terminal
-regression passed. Actual application receipt acceptance remains in progress.
-Evidence retirement and public cold restore completion remain unfinished.
+regression passed. Actual application receipt acceptance also passed at
+`de8f6e8 / 38331450888`: staged and published interruptions followed by
+independent recovery preserved the original staged receipt inode, receipt
+bytes/timestamp, terminal state, transaction, released runtime and restored
+authenticated data. Both actual crash jobs passed. Evidence retirement and
+public cold restore completion remain unfinished.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

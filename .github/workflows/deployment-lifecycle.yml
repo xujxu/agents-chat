@@ -200,7 +200,7 @@ jobs:
       - name: Verify native Windows command contracts
         shell: pwsh
         run: |
-          node --test tests/deployment-process-identity.test.mjs tests/deployment-windows-command.test.mjs tests/deployment-windows-command-entry.test.mjs tests/deployment-cold-activation-state.test.mjs tests/deployment-cold-policy-history.test.mjs tests/deployment-cold-runtime-completion.test.mjs
+          node --test tests/deployment-process-identity.test.mjs tests/deployment-windows-command.test.mjs tests/deployment-windows-command-entry.test.mjs tests/deployment-cold-activation-state.test.mjs tests/deployment-cold-policy-history.test.mjs tests/deployment-cold-runtime-completion.test.mjs tests/deployment-cold-retirement.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Native process identity or command admission contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-private-archive.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Native private journal archival contracts failed.' }
@@ -456,6 +456,7 @@ jobs:
           tests/deployment-diagnostics.test.mjs
           tests/deployment-cold-activation-state.test.mjs
           tests/deployment-cold-runtime-completion.test.mjs
+          tests/deployment-cold-retirement.test.mjs
       - name: Run private Windows behavioral contracts
         if: runner.os == 'Windows'
         shell: pwsh
@@ -492,7 +493,8 @@ jobs:
             'tests/deployment-runtime-version.test.mjs',
             'tests/deployment-diagnostics.test.mjs',
             'tests/deployment-cold-activation-state.test.mjs',
-            'tests/deployment-cold-runtime-completion.test.mjs'
+            'tests/deployment-cold-runtime-completion.test.mjs',
+            'tests/deployment-cold-retirement.test.mjs'
           )
       - name: Probe Windows cold retirement stability
         if: runner.os == 'Windows'
