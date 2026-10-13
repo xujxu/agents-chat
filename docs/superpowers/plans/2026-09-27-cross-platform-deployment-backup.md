@@ -13938,6 +13938,13 @@ actors and actual application retirement actors.
   ```
   Causal `4832060c / 38355781008`, job `115158216174`, failed exactly
   at the missing export at 2026-10-13 06:16:43 UTC; 44 other contracts passed.
+  First implementation gate `cfdfe414 / 38356011242` passed the focused
+  contracts and cold chain through receipt publication, then failed at
+  06:41:04 UTC because the native fixture used `project-control` rather than
+  the public entry's required sibling `.project.deployment`. Correct the
+  stopped-proof fixture's initial control path (and its existing variable-based
+  cleanup), not the production scope guard. Add an explicit fixture path
+  assertion before exercising native snapshot mismatch refusals.
 
 - [ ] Share the existing scope and exact physical state/snapshot checks.
   Under `openWindowsColdRetirementAuthority`, prepare the candidate, bind it

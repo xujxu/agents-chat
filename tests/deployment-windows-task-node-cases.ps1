@@ -42,7 +42,9 @@ $arguments.Add((Join-Path $PSScriptRoot $fixture))
 $arguments.Add([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
 $control = $null
 if ($Transactional) {
-    $control = "$Root-control"
+    $control = if ($StoppedProof) {
+        Join-Path (Split-Path -Parent $Root) ".$(Split-Path -Leaf $Root).deployment"
+    } else { "$Root-control" }
     $arguments.Add($control)
     $arguments.Add($Root)
     $arguments.Add($(if ($Restore) { 'restore' } else { 'update' }))
