@@ -753,9 +753,14 @@ replacement, before preparing retirement. It binds the entire verified
 snapshot again under native admission before mutation. Native acceptance
 `29aca8e3 / 38391313938` passed all 46 focused contracts, snapshot-mismatch
 refusals, both cold receipt/retirement chains and the warm retirement regression.
-Actual public recovery from the staged receipt remains pending in
-`38391317840`; its dedicated `cold-receipt` Actions scenario preserves the
-existing default terminal/retirement coverage.
+Actual public recovery from the staged receipt failed in
+`38391317840` at `cold-receipt-closeout`, after all preceding cold actors
+passed. The saved process returned `DEPLOYMENT_WINDOWS_COLD_RECEIPT_RECOVERY_REFUSED`;
+the public wrapper discarded its nested diagnostic locations. The next
+diagnostic gate retains those existing sanitized locations on forwarded
+stderr, without exposing error messages or native output. The dedicated
+`cold-receipt` scenario preserves existing default terminal/retirement coverage;
+this public receipt path is not yet accepted.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

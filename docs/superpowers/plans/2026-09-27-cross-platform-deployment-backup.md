@@ -13981,7 +13981,27 @@ the default crash scenario retains all previously accepted actors.
   staged-inode preservation. Cold retirement passed at 12:02:46 and
   12:25:29; warm retirement at 12:32:50. Completed logs inspected.
   The independent actual staged-receipt public gate `38391317840`, job
-  `115275541873`, remains running; this task is not yet fully accepted.
+  `115275541873`, failed at 13:06:42 UTC after passing every preceding cold
+  actor, including staged receipt publication. The public invocation refused
+  at `cold-receipt-closeout` with `DEPLOYMENT_WINDOWS_COLD_RECEIPT_RECOVERY_REFUSED`;
+  it was not killed and did not reach an aggregate timeout. The wrapper
+  discards the saved process's nested diagnostic locations. Do not speculate
+  about or relax admission guards without those locations.
+
+- [ ] Require saved-entry stderr to retain the existing bounded diagnostic
+  array, which the public wrapper already forwards. First push the protocol
+  assertion and observe its native Actions failure; then compute diagnostics
+  once and emit the identical sanitized array in stdout and stderr:
+
+  ```js
+  const diagnostics = deploymentDiagnostics(failure, [new URL('./', import.meta.url).href]);
+  process.stderr.write(`Saved restore diagnostics: ${JSON.stringify(diagnostics)}\n`);
+  ```
+
+  Existing diagnostic filtering permits only codes and owned module/line
+  locations, never messages, paths or native output. Re-run the focused
+  saved-entry gate and actual `cold-receipt` gate, inspect the precise nested
+  location, fix its cause, and require actual public completion before acceptance.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \

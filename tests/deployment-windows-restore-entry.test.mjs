@@ -47,6 +47,9 @@ test('saved Windows restore entry refuses invalid protocol without changing depl
     assert.equal(output.result.stage, stage, name);
     if (code) assert.equal(output.result.code, code, name);
     assert.equal(output.result.closeoutRequired, false, name);
+    const diagnosticLine = output.stderr.trim().split('\n').find(line => line.startsWith('Saved restore diagnostics: '));
+    assert.ok(diagnosticLine, `${name}: forwarded stderr must retain bounded saved-engine diagnostics`);
+    assert.deepEqual(JSON.parse(diagnosticLine.slice('Saved restore diagnostics: '.length)), output.result.diagnostics, name);
     assert.ok(!JSON.stringify(output).includes('PRIVATE_RESTORE_INPUT'), name);
     assert.deepEqual((await readdir(control)).sort(), before, name);
   }
