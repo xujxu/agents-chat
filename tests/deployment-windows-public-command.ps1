@@ -17,6 +17,9 @@ try {
     Assert ($LASTEXITCODE -eq 0) 'Public restore help failed'
     $result = ($text -join "`n") | ConvertFrom-Json
     Assert ($result.status -ceq 'help' -and $result.message.Contains('-AcceptDataLoss')) 'Restore help omits data-loss acknowledgement'
+    Assert ($result.message.Contains('already released') -and $result.message.Contains('unfinished completion') -and
+        $result.message.Contains('Pre-release, inactive/reboot and legacy cold recovery remain')) `
+        'Restore help must distinguish released recovery from unsupported earlier prefixes'
     $text = & $pwsh -NoProfile -NonInteractive -File $restore -ProjectDir $missing -Json
     Assert ($LASTEXITCODE -eq 1) 'Public restore started without acknowledgement'
     $result = ($text -join "`n") | ConvertFrom-Json

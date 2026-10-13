@@ -36,7 +36,7 @@ no .data/.next/node_modules, no registered task and no deployment evidence.
 Uses the current account, Interactive/AtLogOn by default; optional
 -TaskLogonType Interactive|S4U and -TaskTriggerType AtLogOn|AtStartup
 are first-install-only. Dependencies and verified startup are required.
-Default tunnel first installation, legacy/stopped tasks, restore, -NoWait,
+Default tunnel first installation, legacy/stopped tasks, -NoWait,
 -Verify, -DryRun, -RemoveTask, -UserId and existing-task policy changes
 are not supported yet. There is no legacy deployment fallback.
 The existing task identity, account, triggers and configuration are preserved.
@@ -61,8 +61,10 @@ Git fetch is performed. Requires elevated PowerShell 7.4+ and Node.js 24.
   -Json                 One JSON result; diagnostics stay on stderr
   -Help                 Read-only help without tools or installation access
 
-Live managed tasks only; stopped/interrupted and legacy cold recovery are
-not yet supported. Readiness uses port3010 and a120-second wait.
+Supports live managed restoration and retained recovery for an already released
+cold runtime, including unfinished completion, terminal state and receipt
+publication. Pre-release, inactive/reboot and legacy cold recovery remain
+unsupported. Readiness uses port3010 and a120-second wait.
 The original backup must contain a saved Windows restore process entry.
 Successful restoration includes independent closeout; failed captures and
 all lock/recovery evidence must be retained. Never manually remove a lock.
