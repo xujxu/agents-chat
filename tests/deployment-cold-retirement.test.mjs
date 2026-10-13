@@ -142,6 +142,17 @@ test('saved cold completion closeout requires acknowledgement and rejects unboun
   }), { name: 'AbortError' });
 });
 
+test('saved cold startup requires acknowledgement and rejects unbound scope before claiming a lease', async () => {
+  const { runWindowsColdRestoreCommand } =
+    await import('../scripts/deployment/windows-cold-restore-command.mjs');
+  assert.equal(typeof runWindowsColdRestoreCommand, 'function');
+  await assert.rejects(runWindowsColdRestoreCommand(), /data-loss acknowledgement/);
+  await assert.rejects(runWindowsColdRestoreCommand({ acceptDataLoss: true }), /scope/);
+  await assert.rejects(runWindowsColdRestoreCommand({
+    acceptDataLoss: true, signal: AbortSignal.abort(),
+  }), { name: 'AbortError' });
+});
+
 test('cold retirement record freezes its ordered scope and preserves original disabled policy', {
   skip: process.platform !== 'win32',
 }, async () => {

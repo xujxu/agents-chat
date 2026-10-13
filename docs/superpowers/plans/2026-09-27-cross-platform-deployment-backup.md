@@ -13915,6 +13915,76 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FE: Restore copied/stopped cold deployment through the public supervisor
+
+**Goal:** A single public `restore.ps1` invocation resumes an original interrupted
+copy, starts the archived runtime, then completes Task 5FD after the original
+cold controller exits. Keep original-owner absence strict.
+
+**Files:** add `scripts/deployment/windows-cold-restore-command.mjs`; extend
+`windows-cold-restore-lease.mjs`, `windows-cold-retirement-closeout.mjs`,
+`windows-restore-entry.mjs`, `windows-restore-command.mjs`,
+`windows-command-supervisor.ps1`, `saved-recovery-engine.mjs` and public help.
+Extend `tests/deployment-cold-retirement.test.mjs`, native lease refusal
+coverage, saved dependency closure and public command fixtures. Add actual
+public startup coverage through the existing live restore/application runners
+and `.github/workflows/deployment-lifecycle.yml`.
+
+- [ ] Push a missing-module contract for `runWindowsColdRestoreCommand`,
+  requiring acknowledgement, bound saved scope and pre-abort before admission.
+  Use the focused Windows command selector with `windows_restore_scenario=failed`;
+  inspect the precise missing-module failure before fixed acceptance.
+- [ ] Reuse shared saved cold scope validation. Thread `expectedSnapshot` into
+  `claimWindowsColdRestore` and compare the full admitted snapshot before
+  publishing any recovery ownership. Preserve existing callers without it.
+- [ ] Compose existing original authority operations, with per-stage deadlines
+  and cleanup preserving both operation and cleanup failures:
+
+  ```js
+  const lease = await claimWindowsColdRestore({
+    control, project, backup: path.join(control, 'backup'), node: process.execPath,
+    pwsh, profile: 'agents-chat-auth-638c553', acceptDataLoss: true,
+    expectedSnapshot: snapshot, signal,
+  });
+  await restoreWindowsColdFiles({ control, lease, acceptDataLoss: true, timeoutSeconds, signal });
+  configuration = await lease.inspectRestoredConfiguration();
+  await lease.retireRuntime();
+  const activation = await lease.prepareActivation({ configuration });
+  await activation.start();
+  await activation.completeRuntime({ port: 3010, waitSeconds, signal });
+  ```
+
+  Each non-file stage uses `runStage`; the file helper already bounds each
+  copy/publication stage, so do not place the whole sequence under one stage
+  deadline. Close original lease/configuration before returning an explicit
+  internal `cold-runtime-completed` outcome, original operation/backup/engine
+  binding, `runtimeRelocated: true`, and `closeoutRequired: false`.
+  This is not restored-state acceptance and must never be the public result.
+- [ ] Saved entry routes old restore state with original stopped evidence and
+  no terminal/released-completion marker to the helper. Native proof remains
+  authoritative; unsupported activation/pre-release/reboot evidence must refuse.
+- [ ] Public Node decoder admits the distinct internal pending outcome only
+  with exact invocation bindings. The existing private PowerShell supervisor
+  fully settles/disposes the original captured process, then invokes the same
+  captured restore command exactly once more. Require identical operation,
+  backup and engine binding and a normal `restored` result; do not retry loops,
+  accept another pending outcome, or change independent finalization.
+  The second process takes the accepted Task 5FD route with the first owner
+  now absent. Update captured/saved helper inventories and closure tests.
+- [ ] Extend native lease tests with full-snapshot mismatch refusal before
+  ownership publication and unchanged original state/lock/evidence. Cover the
+  supervisor's pending-result binding/refusal and one-continuation limit.
+- [ ] Add copy-only `cold-start` actual selector: after original copy crash
+  verification, invoke public PowerShell once instead of the private cold-file
+  actor. Require a new original runtime/Scheduler instance, retired old Job,
+  saved source/build/data, exact original backup/engine, accepted state/receipt
+  and complete evidence cleanup. Its actor budget is the existing 45-minute
+  cold-file plus 15-minute completion budgets, not an increased stage timeout.
+  Require exact `restore-cold-start-closeout` PASS; retain existing selectors.
+- [ ] Push fixed code, run the full native command gate and dedicated actual
+  `windows_restore_scenario=cold-start` gate. Accept only after both logs
+  establish the required outcome; preserve pre-release/inactive/reboot gaps.
+
 ### Task 5FD: Finish released cold completion through public saved restore
 
 **Goal:** Continue the existing released runtime's exact completion prefix,
