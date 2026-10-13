@@ -16,6 +16,8 @@ const restoreModes = [
   'restore-cold-policy-crashed', 'restore-cold-enable-crashed', 'restore-cold-completed',
   'restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed',
   'restore-cold-receipt-staged', 'restore-cold-receipt-published', 'restore-cold-receipt-completed',
+  'restore-cold-retirement-prepared', 'restore-cold-retirement-early',
+  'restore-cold-retirement-unlock', 'restore-cold-retirement-completed',
 ];
 assert.ok(['update', 'verify-closed', 'current', ...restoreModes].includes(mode));
 assert.match(targetCommit, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);

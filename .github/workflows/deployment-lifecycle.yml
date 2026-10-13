@@ -283,7 +283,7 @@ jobs:
           $tests = @('tests/deployment-windows-first-install.test.mjs', 'tests/deployment-windows-first-build.test.mjs', 'tests/deployment-windows-first-runtime.test.mjs', 'tests/deployment-windows-first-activation.test.mjs', 'tests/deployment-windows-first-readiness.test.mjs', 'tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
           if ($env:DEPLOYMENT_TEST_RECEIPT_ONLY -eq 'true') {
             if ($env:DEPLOYMENT_TEST_COMMANDS_ONLY -ne 'true') { throw 'Receipt selection requires both Windows command-only flags.' }
-            $pattern = '\((deployment-receipt|deployment-receipt-default-policy|cold-proof|cold-receipt-proof|cold-first-receipt-publication|cold-first-retirement|cold-first-retirement-actor-loss|cold-first-saved-closeout|cold-first-saved-receipt-publication|cold-first-saved-(?:lease-released|permanent-policy-applied|enable-applied))\)$|^saved recovery bundle closes module dependencies'
+            $pattern = '.*\((deployment-receipt|deployment-receipt-default-policy|cold-proof|cold-receipt-proof|cold-first-receipt-publication|cold-first-retirement|cold-first-retirement-actor-loss|cold-first-saved-closeout|cold-first-saved-receipt-publication|cold-first-saved-(?:lease-released|permanent-policy-applied|enable-applied))\)$|^saved recovery bundle closes module dependencies'
             $tests = @('tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
           }
           $coldReceipts = '\((?:cold-receipt-proof|cold-first-[^)]*)\)$'
@@ -292,6 +292,12 @@ jobs:
           } else {
             "^(?!.*$coldReceipts)(?:$pattern)"
           }
+          $requiredName = if ($env:DEPLOYMENT_TEST_FIRST_SHARD -eq 'cold-receipts') {
+            'Windows first-install abrupt actor death preserves the exact original lease boundary (cold-first-retirement-actor-loss)'
+          } else {
+            'Windows first-install completion preserves original-runtime handoff or settles its exact interrupted instance (deployment-receipt)'
+          }
+          if ($requiredName -cnotmatch $pattern) { throw 'First-install selection omits its required retirement or receipt case.' }
           ./tests/deployment-windows-private-tests.ps1 -Tests $tests -NamePattern $pattern -TimeoutSeconds 2400
 
   windows-first-application:

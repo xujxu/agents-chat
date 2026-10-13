@@ -30,6 +30,7 @@ $coldOwner = $null
 $coldStateStage = $null
 $coldTransaction = $null
 $coldReceiptStage = $null
+$coldRetirementManifest = $null
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 try {
@@ -47,7 +48,9 @@ try {
         $modes += @('restore-cold-files', 'restore-cold-policy-crashed', 'restore-cold-enable-crashed',
             'restore-cold-completed', 'restore-cold-observed',
             'restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed',
-            'restore-cold-receipt-staged', 'restore-cold-receipt-published', 'restore-cold-receipt-completed')
+            'restore-cold-receipt-staged', 'restore-cold-receipt-published', 'restore-cold-receipt-completed',
+            'restore-cold-retirement-prepared', 'restore-cold-retirement-early',
+            'restore-cold-retirement-unlock', 'restore-cold-retirement-completed')
     }
     foreach ($mode in $modes) {
         if ($RestoreScenario -eq 'offline' -and $mode -eq 'restore') {
@@ -80,7 +83,7 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine, $ChatId), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed', 'restore-cold-files')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } elseif ($mode -like 'restore-cold-receipt-*') { 900000 } else { 300000 }
+        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed', 'restore-cold-files')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } elseif ($mode -like 'restore-cold-receipt-*' -or $mode -like 'restore-cold-retirement-*') { 900000 } else { 300000 }
         $exited = $actor.WaitForExit($actorTimeout)
         $actor.Kill()
         Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'
@@ -113,7 +116,8 @@ try {
         }
         $completionInterrupted = $mode -in @('restore-cold-files', 'restore-cold-policy-crashed', 'restore-cold-enable-crashed')
         $terminalInterrupted = $mode -in @('restore-cold-state-staged', 'restore-cold-state-published',
-            'restore-cold-receipt-staged', 'restore-cold-receipt-published')
+            'restore-cold-receipt-staged', 'restore-cold-receipt-published',
+            'restore-cold-retirement-prepared', 'restore-cold-retirement-early', 'restore-cold-retirement-unlock')
         $expectedCode = if ($completionInterrupted -or $terminalInterrupted) { 91 } else { 0 }
         Assert ($code -eq $expectedCode) "Live controller $mode returned an unexpected exit code ${code}: $text"
         $result = $text | ConvertFrom-Json
@@ -134,6 +138,10 @@ try {
             restore-cold-receipt-staged { 'cold-restored-receipt-interrupted' }
             restore-cold-receipt-published { 'cold-restored-receipt-interrupted' }
             restore-cold-receipt-completed { 'cold-restored-receipt-recovered' }
+            restore-cold-retirement-prepared { 'cold-retirement-interrupted' }
+            restore-cold-retirement-early { 'cold-retirement-interrupted' }
+            restore-cold-retirement-unlock { 'cold-retirement-interrupted' }
+            restore-cold-retirement-completed { 'cold-retirement-completed' }
         }
         Assert ($result.status -ceq $expected) "Unexpected live controller $mode status"
         $actor.Dispose()
@@ -270,6 +278,45 @@ try {
                     Assert ($coldStateStage -and $identity.Dev -ceq $coldStateStage.Dev -and $identity.Ino -ceq $coldStateStage.Ino) `
                         'Actual terminal publication did not preserve its original staged inode'
                 } finally { $file.Dispose() }
+            }
+        }
+        if ($mode -like 'restore-cold-retirement-*') {
+            $runtime = $result.runtime
+            Assert ($runtime.pid -eq $originalPid -and
+                $runtime.identity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($originalPid) -and
+                $runtime.instanceGuid -ceq ([guid]$originalInstance).ToString('D') -and $result.lease -ceq 'released' -and
+                [Deployment.WindowsRuntimeControl]::Exchange(
+                    [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') `
+                'Actual cold retirement changed its original runtime or Scheduler instance'
+            foreach ($evidence in @(
+                @{ name='state.json'; sha256=$nextHash; identity=$coldStateStage },
+                @{ name='deployment.json'; sha256=$coldReceiptStage.sha256; identity=$coldReceiptStage.identity }
+            )) {
+                $file = [Deployment.WindowsPrivateFile]::Open((Join-Path $control $evidence.name), $evidence.sha256)
+                try {
+                    $identity = $file.CaptureIdentity()
+                    Assert ($identity.Dev -ceq $evidence.identity.Dev -and $identity.Ino -ceq $evidence.identity.Ino) `
+                        'Actual cold retirement changed accepted state or receipt inode'
+                } finally { $file.Dispose() }
+            }
+            $marker = Join-Path $control 'worker-retirement.json'
+            if ($mode -ceq 'restore-cold-retirement-completed') {
+                Assert ($result.boundary -ceq 'complete' -and -not (Test-Path -LiteralPath $marker) -and
+                    -not (Test-Path -LiteralPath (Join-Path $control 'lock'))) 'Actual cold retirement did not finish original unlock'
+            } else {
+                $expectedBoundary = $mode.Substring('restore-cold-retirement-'.Length)
+                Assert ($result.boundary -ceq $expectedBoundary) 'Actual cold retirement skipped its requested interruption'
+                $hash = (Get-FileHash -LiteralPath $marker -Algorithm SHA256).Hash.ToLowerInvariant()
+                $file = [Deployment.WindowsPrivateFile]::Open($marker, $hash)
+                try {
+                    $identity = $file.CaptureIdentity()
+                    if ($coldRetirementManifest) {
+                        Assert ($hash -ceq $coldRetirementManifest.sha256 -and
+                            $identity.Dev -ceq $coldRetirementManifest.identity.Dev -and
+                            $identity.Ino -ceq $coldRetirementManifest.identity.Ino) 'Actual cold retirement replaced its immutable manifest'
+                    } else { $coldRetirementManifest = @{ sha256=$hash; identity=$identity } }
+                } finally { $file.Dispose() }
+                Assert (Test-Path -LiteralPath (Join-Path $control 'lock\owner.json')) 'Actual cold retirement unlocked early'
             }
         }
         if ($mode -in @('restore-cancelled', 'restore-failed', 'restore-crash-verified')) {

@@ -13965,6 +13965,12 @@ cannot be reused unchanged because it requires `sealed`.
   passed, with only the not-yet-implemented orchestration import failing.
   Native publication, consumption, interruption recovery and shared
   warm/first-install deletion regressions remain separate acceptance gates.
+  `d2fcf8fa / 38340106069` implements and exercises the new native path.
+  Its receipt-only first-install shards returned file-level green results
+  without selecting first-install cases: a suffix-only pattern was reanchored
+  at the beginning by the shard wrapper. Those results are **not** retirement
+  acceptance. Prefix the suffix alternative with `.*` and assert each shard
+  matches a required complete test title before rerunning it.
 
 - [ ] Define and test the immutable cold retirement record. Use
   `worker-retirement.json` with `version: 5`, `purpose: 'cold-restore'`.
