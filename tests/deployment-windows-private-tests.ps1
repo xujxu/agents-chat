@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory)][string[]]$Tests,
     [string]$NamePattern,
-    [ValidateRange(1, 7800)][int]$TimeoutSeconds = 1800
+    [ValidateRange(1, 10500)][int]$TimeoutSeconds = 1800
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest

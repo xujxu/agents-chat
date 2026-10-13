@@ -13917,6 +13917,14 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 
 ### Task 5FF: Recover acknowledged interrupted guarded startup before public retry
 
+**Harness correction:** Actual `25b99507 / 38481262248`, job
+`115584152969`, failed at `2026-10-13 23:04:10 UTC` before the application
+fixture started: the scenario's 10500-second allowance exceeded the private
+runner's old 7800-second parameter bound. Raise only that admission bound to
+10500 and extend the existing immediate-failure/diagnostic regression to the
+new boundary. Default timeout, production stage deadlines and other scenario
+budgets are unchanged. Preserve the independent native run `38481259288`.
+
 **Goal:** Reuse the existing dead-runtime policy recovery and journal archival
 authority before Task 5FE's public copy/startup sequence. Never treat a running
 guarded runtime as released, force-kill an unowned process, or bypass original
