@@ -13940,6 +13940,11 @@ update `windows-restore-entry.mjs`, `windows-restore-command.mjs` and
   Causal `c2894049 / 38353227790`, job `115150141472`, failed only at
   the missing module on 2026-10-13 05:48:02 UTC: 43 other contracts passed,
   including native/JavaScript ordered-manifest parity.
+  Implementation `1f3e470b / 38353404850`, job `115150701723`, passed
+  all 44 contracts, five warm receipt tests, saved closure/entry/public
+  invocation and option regressions. Actual `38354204691` is queued behind
+  the still-running direct retirement acceptance `38352965467`; neither is
+  treated as accepted until its completed logs are inspected.
 
 - [ ] Implement read-only native manifest admission using existing Windows
   admission and `openWindowsColdRetirementScope`. Match exact physical
