@@ -166,6 +166,16 @@ test('saved cold startup requires acknowledgement and rejects unbound scope befo
   }
 });
 
+test('saved interrupted startup requires acknowledgement and original scope', async () => {
+  const { recoverWindowsColdStartupPolicy } =
+    await import('../scripts/deployment/windows-cold-startup-recovery.mjs');
+  await assert.rejects(recoverWindowsColdStartupPolicy(), /data-loss acknowledgement/);
+  await assert.rejects(recoverWindowsColdStartupPolicy({ acceptDataLoss: true }), /scope/);
+  await assert.rejects(recoverWindowsColdStartupPolicy({
+    acceptDataLoss: true, signal: AbortSignal.abort(),
+  }), { name: 'AbortError' });
+});
+
 test('cold retirement record freezes its ordered scope and preserves original disabled policy', {
   skip: process.platform !== 'win32',
 }, async () => {
