@@ -721,7 +721,11 @@ closeout supervisor, rather than starting another restore. Its native gate
 passed at `1f3e470b / 38353404850`: all 44 focused contracts, five warm
 receipt tests, saved dependency closure, saved-entry refusals and public
 invocation checks passed. This narrow public path is pending actual
-acceptance; earlier cold prefixes are still refused.
+acceptance. The next extension prepares that same manifest from a physically
+published cold restored state and accepted deployment receipt, using the
+complete original terminal proof and verified saved snapshot. It does not
+delete evidence until the independent supervisor runs; its native and actual
+acceptance are pending. Earlier cold prefixes are still refused.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

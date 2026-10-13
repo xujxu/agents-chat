@@ -1,13 +1,15 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { withWindowsAdmission } from './windows-admission.mjs';
+import { openWindowsColdRetirementAuthority } from './windows-cold-activation-recovery.mjs';
 import { openWindowsColdRetirementScope } from './windows-cold-retirement-scope.mjs';
+import { verifyHttpReadiness } from './http-readiness.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 import { validateState } from './state.mjs';
 
-export async function prepareWindowsColdRetirementCloseout({
+function assertScope({
   control, project, taskName, snapshot, pwsh, acceptDataLoss, signal,
-} = {}) {
+}) {
   signal?.throwIfAborted();
   if (acceptDataLoss !== true) throw new Error('Cold retirement closeout requires explicit data-loss acknowledgement.');
   if (process.platform !== 'win32' || ![control, project, pwsh].every(value => typeof value === 'string'
@@ -21,23 +23,54 @@ export async function prepareWindowsColdRetirementCloseout({
     || typeof snapshot.recoveryEngine !== 'string' || !/^[a-f0-9]{64}$/.test(snapshot.recoveryEngine)) {
     throw new Error('Cold retirement closeout requires the verified saved Windows snapshot scope.');
   }
+}
+
+async function readBoundState(record, { control, project, taskName, snapshot }) {
+  const bytes = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
+  const state = validateState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+  if (record.project !== project || record.lock.operationId !== state.operationId
+    || record.completion.taskName !== taskName || record.completion.port !== 3010
+    || createHash('sha256').update(bytes).digest('hex') !== record.state.sha256
+    || state.project !== project || state.operation !== 'restore' || state.phase !== 'restored'
+    || state.previousPhase !== 'restore-activating' || state.errorCode !== null
+    || state.backupId !== snapshot.id || state.targetCommit !== snapshot.source.commit) {
+    throw new Error('Original cold retirement differs from the verified saved restore snapshot.');
+  }
+  return state;
+}
+
+export async function prepareWindowsColdTerminalCloseout(options = {}) {
+  assertScope(options);
+  const { control, pwsh, signal } = options;
+  let authority;
+  const failures = [];
+  try {
+    authority = await openWindowsColdRetirementAuthority({ control, pwsh, signal, acceptDataLoss: true });
+    const record = await authority.prepareRetirement({ signal });
+    await readBoundState(record, options);
+    await verifyHttpReadiness({ port: record.completion.port, providers: record.completion.providers, signal });
+    await authority.publishRetirement({ signal });
+  } catch (error) { failures.push(error); }
+  try { await authority?.close(); }
+  catch (error) { failures.push(error); }
+  if (failures.length) {
+    throw Object.assign(new Error('Saved cold terminal closeout refused; retain original recovery evidence.', {
+      cause: failures.length === 1 ? failures[0] : new AggregateError(failures, 'Cold terminal preparation and cleanup failed.'),
+    }), { code: 'DEPLOYMENT_WINDOWS_COLD_CLOSEOUT_REFUSED', recoveryAllowed: false });
+  }
+  return prepareWindowsColdRetirementCloseout(options);
+}
+
+export async function prepareWindowsColdRetirementCloseout(options = {}) {
+  assertScope(options);
+  const { control, project, taskName, snapshot, pwsh, signal } = options;
   try {
     return await withWindowsAdmission(control, { pwsh }, async admission => {
       let scope;
       let failure;
       try {
         scope = await openWindowsColdRetirementScope({ control, pwsh, admission, signal });
-        const bytes = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
-        const state = validateState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
-        const { record } = scope;
-        if (record.project !== project || record.lock.operationId !== state.operationId
-          || record.completion.taskName !== taskName || record.completion.port !== 3010
-          || createHash('sha256').update(bytes).digest('hex') !== record.state.sha256
-          || state.project !== project || state.operation !== 'restore' || state.phase !== 'restored'
-          || state.previousPhase !== 'restore-activating' || state.errorCode !== null
-          || state.backupId !== snapshot.id || state.targetCommit !== snapshot.source.commit) {
-          throw new Error('Original cold retirement differs from the verified saved restore snapshot.');
-        }
+        const state = await readBoundState(scope.record, { control, project, taskName, snapshot });
         await scope.check({ signal });
         return Object.freeze({
           status: 'restored', operationId: state.operationId, backupId: snapshot.id,

@@ -3,10 +3,11 @@ import { lstat, readFile, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { retireWindowsColdRestoredDeployment } from '../scripts/deployment/windows-cold-deployment-retirement.mjs';
 import { closeCompletedWindowsDeployment } from '../scripts/deployment/windows-completed-closeout.mjs';
+import { prepareWindowsColdTerminalCloseout } from '../scripts/deployment/windows-cold-retirement-closeout.mjs';
 import { writeWorkerFile } from '../scripts/deployment/worker-files.mjs';
 
 const [control, pwsh, target] = process.argv.slice(2);
-assert.ok(['prepared', 'refusals', 'early', 'unlock', 'complete'].includes(target));
+assert.ok(['admission', 'prepared', 'refusals', 'early', 'unlock', 'complete'].includes(target));
 const preserved = new Map(await Promise.all(['state.json', 'deployment.json', 'backup/manifest.json'].map(async name => {
   const file = path.join(control, name);
   const info = await lstat(file, { bigint: true });
@@ -14,7 +15,36 @@ const preserved = new Map(await Promise.all(['state.json', 'deployment.json', 'b
 })));
 const state = JSON.parse(preserved.get('state.json').bytes);
 const options = { control, pwsh, acceptDataLoss: true };
-if (target === 'refusals') {
+if (target === 'admission') {
+  const snapshot = JSON.parse(preserved.get('backup/manifest.json').bytes);
+  const taskName = snapshot.runtime.task.name;
+  const bound = { ...options, project: state.project, taskName, snapshot };
+  for (const change of [
+    { snapshot: { ...snapshot, id: `${snapshot.id}-foreign` } },
+    { snapshot: { ...snapshot, source: { ...snapshot.source, commit: 'f'.repeat(40) } } },
+    { taskName: `${taskName}-foreign`, snapshot: {
+      ...snapshot, runtime: { ...snapshot.runtime, task: { ...snapshot.runtime.task, name: `${taskName}-foreign` } },
+    } },
+  ]) {
+    await assert.rejects(prepareWindowsColdTerminalCloseout({ ...bound, ...change }), {
+      code: 'DEPLOYMENT_WINDOWS_COLD_CLOSEOUT_REFUSED',
+    });
+    await assert.rejects(lstat(path.join(control, 'worker-retirement.json')), { code: 'ENOENT' });
+    for (const [name, before] of preserved) assert.deepEqual(await readFile(path.join(control, name)), before.bytes);
+  }
+  const result = await prepareWindowsColdTerminalCloseout(bound);
+  assert.deepEqual(result, {
+    status: 'restored', operationId: state.operationId, backupId: snapshot.id,
+    recoveryEngine: snapshot.recoveryEngine, closeoutRequired: true, runtimeRelocated: true,
+  });
+  const record = JSON.parse(await readFile(path.join(control, 'worker-retirement.json')));
+  for (const entry of record.entries) {
+    const info = await lstat(path.join(control, entry.path), { bigint: true });
+    assert.equal(String(info.dev), entry.dev);
+    assert.equal(String(info.ino), entry.ino);
+  }
+  process.stdout.write(`${JSON.stringify({ result: 'snapshot-bound-terminal-closeout-prepared' })}\n`);
+} else if (target === 'refusals') {
   const marker = path.join(control, 'worker-retirement.json');
   const bytes = await readFile(marker);
   const record = JSON.parse(bytes);

@@ -37,6 +37,27 @@ export async function verifyWindowsColdApplicationRetirement({ mode, directory, 
   };
   await unchanged();
   process.stderr.write(`${new Date().toISOString()} Actual cold retirement: ${target}\n`);
+  if (target === 'prepared') {
+    await assert.rejects(lstat(path.join(control, 'worker-retirement.json')), { code: 'ENOENT' });
+    const { runWindowsRestoreCommand } = await captured('windows-restore-command.mjs');
+    const result = await runWindowsRestoreCommand({
+      args: ['--accept-data-loss'], project: state.project, control, taskName: record.taskName,
+      pwsh, node: process.execPath,
+    });
+    assert.deepEqual(result, {
+      status: 'restored', operationId: state.operationId, backupId: backup.id,
+      recoveryEngine: backup.recoveryEngine, closeoutRequired: true, runtimeRelocated: true,
+    });
+    const manifest = JSON.parse(await readFile(path.join(control, 'worker-retirement.json')));
+    assert.deepEqual(manifest.completion.runtime, runtime);
+    for (const entry of manifest.entries) {
+      const info = await lstat(path.join(control, entry.path), { bigint: true });
+      assert.equal(String(info.dev), entry.dev);
+      assert.equal(String(info.ino), entry.ino);
+    }
+    await unchanged();
+    process.stderr.write(`${new Date().toISOString()} Actual saved cold terminal closeout prepared without deletion\n`);
+  }
   if (target !== 'complete') {
     await retireWindowsColdRestoredDeployment({
       control, pwsh, acceptDataLoss: true,

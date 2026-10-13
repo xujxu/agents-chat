@@ -13928,7 +13928,7 @@ remain refused. No new recovery protocol or controller is needed.
 and `windows-restore-entry.mjs`; update restore help, native cold retirement
 actors and actual application retirement actors.
 
-- [ ] Add and run the missing-export contract in Actions before implementation:
+- [x] Add and run the missing-export contract in Actions before implementation:
 
   ```js
   const { prepareWindowsColdTerminalCloseout } =
@@ -13936,6 +13936,8 @@ actors and actual application retirement actors.
   assert.equal(typeof prepareWindowsColdTerminalCloseout, 'function');
   await assert.rejects(prepareWindowsColdTerminalCloseout(), /data-loss acknowledgement/);
   ```
+  Causal `4832060c / 38355781008`, job `115158216174`, failed exactly
+  at the missing export at 2026-10-13 06:16:43 UTC; 44 other contracts passed.
 
 - [ ] Share the existing scope and exact physical state/snapshot checks.
   Under `openWindowsColdRetirementAuthority`, prepare the candidate, bind it
@@ -13952,9 +13954,14 @@ actors and actual application retirement actors.
 - [ ] Native fixture first refuses mismatched backup/source/task without a
   manifest, then prepares matching closeout without deleting entries. Preserve
   existing manifest interruption/refusal actors. Actual copy-crash scenario
-  invokes public restore directly after accepted receipt; warm-crash scenario
-  keeps the existing three retirement interruptions before public closeout.
-  Both preserve runtime, operation, backup and state/receipt inodes.
+  invokes the production public Node restore command, which executes the
+  verified saved entry in a separate process, after accepted receipt. Assert
+  `closeoutRequired:true` with all entries intact, then retain the three
+  existing interruptions and final public PowerShell supervisor closeout.
+  This covers the interrupted command-to-supervisor handoff, not a separate
+  uninterrupted public PowerShell invocation from the terminal boundary.
+  The warm-crash regression remains unchanged. Preserve runtime, operation,
+  backup and state/receipt inodes throughout.
 
 - [ ] Accept only after inspecting native and actual Actions logs:
 

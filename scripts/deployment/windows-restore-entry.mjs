@@ -87,10 +87,19 @@ try {
     retirement = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
       await readWorkerFile(path.join(control, 'worker-retirement.json'), 1048576, { privateMode: true })));
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  if (retirement?.version === 5) {
-    stage = 'cold-retirement-admission';
-    const { prepareWindowsColdRetirementCloseout } = await import('./windows-cold-retirement-closeout.mjs');
-    result = await runStage(stage, signal => prepareWindowsColdRetirementCloseout({
+  let coldTerminal = false;
+  if (!retirement && originalState.operation === 'restore' && originalState.phase === 'restored') {
+    try {
+      await lstat(path.join(control, 'cold-restore-terminal.json'));
+      coldTerminal = true;
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  if (retirement?.version === 5 || coldTerminal) {
+    stage = coldTerminal ? 'cold-terminal-closeout' : 'cold-retirement-admission';
+    const { prepareWindowsColdRetirementCloseout, prepareWindowsColdTerminalCloseout } =
+      await import('./windows-cold-retirement-closeout.mjs');
+    const prepare = coldTerminal ? prepareWindowsColdTerminalCloseout : prepareWindowsColdRetirementCloseout;
+    result = await runStage(stage, signal => prepare({
       control, project: input.project, taskName: input.taskName, snapshot, pwsh: input.pwsh,
       acceptDataLoss: true, signal,
     }), { timeoutMs: Math.min(input.timeoutSeconds * 1000, Number.MAX_SAFE_INTEGER) });

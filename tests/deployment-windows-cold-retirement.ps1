@@ -12,7 +12,7 @@ foreach ($name in @('state.json', 'deployment.json', 'backup/manifest.json')) {
     $originals[$file] = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
 }
 $manifestIdentity = $manifestHash = $null
-foreach ($target in @('prepared', 'refusals', 'early', 'unlock', 'complete')) {
+foreach ($target in @('admission', 'prepared', 'refusals', 'early', 'unlock', 'complete')) {
     $actor = $bridge = $diagnostic = $null
     try {
         $actor = [Deployment.WindowsControllerProcess]::Start((Get-Command node).Source, [string[]]@(
@@ -83,4 +83,4 @@ foreach ($target in @('prepared', 'refusals', 'early', 'unlock', 'complete')) {
         foreach ($process in @($bridge, $actor)) { if ($process) { $process.Dispose() } }
     }
 }
-Write-Output 'PASS: cold retirement resumes three interruption boundaries, refuses foreign/replaced/non-prefix evidence and retains the original released runtime'
+Write-Output 'PASS: cold retirement prepares snapshot-bound terminal closeout, resumes three interruption boundaries, refuses foreign/replaced/non-prefix evidence and retains the original released runtime'

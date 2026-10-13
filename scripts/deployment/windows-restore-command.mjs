@@ -7,7 +7,7 @@ import { journalUncertain } from './evidence-journal.mjs';
 
 export async function runWindowsRestoreCommand({ args, project, control, taskName, pwsh, node }) {
   const options = parseArguments('restore', args);
-  if (options.help) return { status: 'help', message: 'Saved Windows restoration requires --accept-data-loss; prepared cold retirement can finish, but earlier cold recovery is not yet supported.' };
+  if (options.help) return { status: 'help', message: 'Saved Windows restoration requires --accept-data-loss; accepted cold terminal receipts and prepared retirement can finish, but earlier cold recovery is not yet supported.' };
   if (!options.acceptDataLoss) {
     throw Object.assign(new Error('Explicit data-loss acknowledgement is required.'), {
       code: 'DEPLOYMENT_DATA_LOSS_ACKNOWLEDGEMENT_REQUIRED',
