@@ -13941,7 +13941,7 @@ lock ownership. Cold restore admits an **empty** original worker operation
 with `opened` and optional `sealed`; `Get-AgentsChatCompletedWorkerEvidence`
 cannot be reused unchanged because it requires `sealed`.
 
-- [ ] Push the missing-module admission contract and run the native selector.
+- [x] Push the missing-module admission contract and run the native selector.
   Require one missing-module failure and the preceding 39 contracts passing:
 
   ```js
@@ -13952,6 +13952,11 @@ cannot be reused unchanged because it requires `sealed`.
     acceptDataLoss: true, onProgress: 42,
   }), /progress callback/);
   ```
+  Observed `939091c / 38338194841`, job `115102996585`, at
+  2026-10-13 02:43:09 UTC: one expected missing retirement module failure,
+  all preceding 39 contracts passed. Add positive frozen-record/disabled-policy
+  and adversarial scope/order/identity descriptor contracts before committing
+  the record implementation.
 
 - [ ] Define and test the immutable cold retirement record. Use
   `worker-retirement.json` with `version: 5`, `purpose: 'cold-restore'`.
