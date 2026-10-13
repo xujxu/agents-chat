@@ -13986,7 +13986,7 @@ actors and actual application retirement actors.
   not the presence check, must authorize preparation. Keep saved-engine
   verification and independent supervisor deletion unchanged.
 
-- [ ] Native fixture first refuses mismatched backup/source/task without a
+- [x] Native fixture first refuses mismatched backup/source/task without a
   manifest, then prepares matching closeout without deleting entries. Preserve
   existing manifest interruption/refusal actors. Actual copy-crash scenario
   invokes the production public Node restore command, which executes the
@@ -13998,16 +13998,21 @@ actors and actual application retirement actors.
   The warm-crash regression remains unchanged. Preserve runtime, operation,
   backup and state/receipt inodes throughout.
 
-- [ ] Accept only after inspecting native and actual Actions logs:
+- [x] Accept only after inspecting native and actual Actions logs:
 
   Native `38d6d85a / 38360471128`, job `115173232762`, passed all
   45 focused contracts and both cold terminal/retirement cases at
   07:30:28 and 07:51:25 UTC, including mismatched snapshot refusals,
   zero-deletion preparation, three interruption boundaries and unchanged
   released runtime. Existing warm retirement passed at 07:58:38 UTC.
-  Logs inspected. Actual `4d112c41 / 38366334006` is queued behind
-  public gate `38354204691`, with corrected copy-crash budget; not yet
-  accepted.
+  Logs inspected. Corrected actual `186ab283 / 38374428099` passed:
+  copy job `115236903202` at 11:23:53 UTC and warm job `115236903566`
+  at 10:47:37 UTC. The copy case invoked the production command and verified
+  saved entry before manifest deletion, then passed prepared/early/unlock
+  interruption and public PowerShell completion while preserving the
+  original accepted runtime, state/receipt and restored authenticated data.
+  This completes Task 5FA's stated interrupted command-to-supervisor scope.
+  The failed earlier budget-binding gate remains documented above.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \

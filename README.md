@@ -736,14 +736,17 @@ delete evidence until the independent supervisor runs. Native acceptance
 `38d6d85a / 38360471128` passed all 45 focused contracts and both cold
 terminal/retirement cases, including snapshot mismatch refusals and three
 cleanup interruption boundaries; the warm retirement regression also passed.
-Actual saved-entry preparation and public final closeout are running in
-`186ab283 / 38374428099`. The preceding `4d112c41 / 38366334006`
+Actual saved-entry preparation and public final closeout passed in
+`186ab283 / 38374428099`: copy-crash job `115236903202` completed at
+2026-10-13 11:23:53 UTC and warm-crash job `115236903566` at 10:47:37 UTC.
+The saved entry prepared the manifest without deletion, then fresh actors
+resumed all three interruption boundaries and public PowerShell completed
+the original operation. The preceding `4d112c41 / 38366334006`
 copy job failed before application startup because the test wrapper still
 rejected its increased budget; that bound and its regression were corrected.
 The older direct actual run reached early
 retirement but timed out before final unlock; the subsequent public run
-completed that branch. Actual acceptance of the additional saved-entry
-preparation remains pending. Earlier cold prefixes are still refused.
+completed that branch. Earlier cold prefixes are still refused.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
