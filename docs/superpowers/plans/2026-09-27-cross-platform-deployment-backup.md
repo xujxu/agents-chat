@@ -13915,6 +13915,85 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FD: Finish released cold completion through public saved restore
+
+**Goal:** Continue the existing released runtime's exact completion prefix,
+prepare its terminal handoff, and use Task 5FC's state/receipt/retirement chain.
+Do not release a guarded lease from a new peer, restart the task, or admit
+pre-release/inactive/reboot branches.
+
+**Files:** `scripts/deployment/windows-cold-retirement-closeout.mjs`,
+`windows-cold-activation-recovery.mjs`, `windows-restore-entry.mjs`,
+`windows-restore-command.mjs`; `tests/deployment-cold-retirement.test.mjs`,
+`deployment-windows-cold-completion-recovery.{mjs,ps1}`,
+`deployment-windows-cold-application-closeout.mjs`,
+`deployment-windows-live-{application,restore}.mjs`,
+`deployment-windows-live-application.ps1`, `deployment-native-operation.test.mjs`;
+`.github/workflows/deployment-lifecycle.yml` and `README.md`.
+
+- [ ] Push the missing-export contract and record its Actions failure:
+
+  ```js
+  assert.equal(typeof prepareWindowsColdCompletionCloseout, 'function');
+  await assert.rejects(prepareWindowsColdCompletionCloseout(), /data-loss acknowledgement/);
+  await assert.rejects(prepareWindowsColdCompletionCloseout({ acceptDataLoss: true }), /scope/);
+  ```
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true \
+    -f windows_restore_scenario=failed
+  ```
+
+- [ ] Reuse the original finite completion authority, binding the full saved
+  snapshot through `prepareWindowsColdCompletionRecovery` into `openRecovery`
+  before any native mutation. Under shared public scope validation:
+
+  ```js
+  const recovery = await prepareWindowsColdCompletionRecovery({
+    control, pwsh, acceptDataLoss: true, expectedSnapshot: snapshot, signal,
+  });
+  let failure;
+  try {
+    let progress = recovery.observation;
+    while (progress.step !== 'complete') progress = await recovery.advance({ signal });
+    await recovery.prepareTerminal({ signal });
+  } catch (error) { failure = error; throw error; }
+  finally {
+    try { await recovery.close(); }
+    catch (error) {
+      throw new AggregateError(failure ? [failure, error] : [error], 'Cold completion closeout cleanup failed.');
+    }
+  }
+  return prepareWindowsColdStateCloseout(options);
+  ```
+
+  Each original `advance` already verifies the next exact finite boundary.
+  After native handles close, call the existing state helper; no nested
+  admissions or independent substitute publisher.
+- [ ] Route an old restore state without a terminal/retirement marker but with
+  `recovery-lock/completion-release-requested.json` to this helper. This file
+  is only a routing hint: native admission must prove an actually released
+  lease, dead original owners, exact inventory/hash chain and original runtime.
+- [ ] Strengthen all three native completion takeover actors to import their
+  verified saved engine, canonicalize `pwsh`, omit PATH and refuse mutated
+  expected snapshots (id/source/engine/task/inventory), preserving every original
+  file's bytes/dev/ino/mtime before their existing physical-boundary progression.
+- [ ] Add actual `cold-completion` copy-only selector. After the existing
+  `restore-cold-files` releases its lease and dies before acknowledging it,
+  invoke public PowerShell once as `restore-cold-completion-closeout` with a
+  15-minute actor bound. Require the exact new PASS marker in the outer test.
+  Capture the activation state/runtime beforehand; after public cleanup require
+  only the intended restored-state transformation with non-backdated timestamp,
+  matching accepted receipt, unchanged backup/saved engine/authenticated data,
+  original runtime/Scheduler instance/released lease and removed evidence.
+  Keep the prior state/receipt/default fixture tails unchanged.
+- [ ] Run the full native selector above without `windows_restore_scenario`,
+  and the actual selector without `windows_commands_only` using
+  `windows_restore_scenario=cold-completion`. Record native and exact actual
+  public PASS separately; do not claim earlier startup branches accepted.
+
 ### Task 5FC: Publish staged cold terminal state through public saved restore
 
 **Scope:** original prepared terminal marker with physical old restore state,

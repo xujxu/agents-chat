@@ -131,6 +131,17 @@ test('saved cold state closeout requires acknowledgement and rejects unbound sco
   }), { name: 'AbortError' });
 });
 
+test('saved cold completion closeout requires acknowledgement and rejects unbound scope before advancement', async () => {
+  const { prepareWindowsColdCompletionCloseout } =
+    await import('../scripts/deployment/windows-cold-retirement-closeout.mjs');
+  assert.equal(typeof prepareWindowsColdCompletionCloseout, 'function');
+  await assert.rejects(prepareWindowsColdCompletionCloseout(), /data-loss acknowledgement/);
+  await assert.rejects(prepareWindowsColdCompletionCloseout({ acceptDataLoss: true }), /scope/);
+  await assert.rejects(prepareWindowsColdCompletionCloseout({
+    acceptDataLoss: true, signal: AbortSignal.abort(),
+  }), { name: 'AbortError' });
+});
+
 test('cold retirement record freezes its ordered scope and preserves original disabled policy', {
   skip: process.platform !== 'win32',
 }, async () => {
