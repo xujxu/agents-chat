@@ -14009,6 +14009,19 @@ application restore dispatcher/parent.
   00:22:48 UTC. The actual crash pair `38323736543` remains running:
   warm `115057536848`, copy `115057537027`. It was dispatched in its separate
   group after 5EW acceptance, overlapping its build with this callback regression.
+  Actual pair `38323736543` did not complete acceptance: warm
+  `115057536848` passed at 00:43:14 UTC; copy `115057537027` was killed by
+  the existing Node `execFile` 4,800,000 ms outer timeout at 01:14:27 UTC.
+  Copy/start/release, completion recovery, independent observation and all
+  terminal-state actors passed; no new receipt actor result was returned.
+  The test's `killed: true`, `signal: SIGTERM` and exact 80-minute managed
+  invocation identify a harness budget failure, not a receipt assertion.
+  Cleanup then encountered the interrupted runtime's retained configuration.
+  Extend only the longer `copy-crashed` managed invocation to 5,700,000 ms,
+  reserving 15 minutes for its three added actual receipt actors. Other
+  scenarios retain 4,800,000 ms; individual actor bounds, the private runner's
+  6,300-second whole-test limit and the 115-minute Actions job remain unchanged.
+  Re-run the actual crash pair without weakening acceptance or inode checks.
 
 ### Task 5EW: Publish restored receipts under retained cold terminal authority
 

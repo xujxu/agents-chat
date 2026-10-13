@@ -248,12 +248,15 @@ test('actual application source installs and builds inside native ownership', {
   await f.operation.seal();
   if (process.platform === 'win32') {
     if (process.env.DEPLOYMENT_TEST_WINDOWS_LIVE === '1') {
+      const restoreScenario = process.env.DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO ?? 'complete';
+      // The copy-crash chain also rechecks real artifacts in three receipt recovery actors.
+      const liveTimeout = restoreScenario === 'copy-crashed' ? 5700000 : 4800000;
       const live = await execute(f.runtime.pwsh, ['-NoProfile', '-NonInteractive', '-File',
         path.join(repository, 'tests/deployment-windows-managed-application.ps1'),
         '-Project', f.project, '-Control', f.control, '-Node', process.execPath, '-LiveDeployment',
         '-TargetCommit', liveRevision,
-        '-RestoreScenario', process.env.DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO ?? 'complete',
-      ], { timeout: 4800000, maxBuffer: 32768 });
+        '-RestoreScenario', restoreScenario,
+      ], { timeout: liveTimeout, maxBuffer: 32768 });
       console.log(live.stdout.trim());
       return;
     }
