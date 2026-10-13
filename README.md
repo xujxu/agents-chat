@@ -780,13 +780,15 @@ under native admission, publishes the original state atomically, then uses
 the accepted receipt/cleanup path. Its dedicated `cold-state` native
 `38447854547` and actual `38447859126` gates passed at `1e476662`;
 the public invocation preserved the staged state inode and original runtime
-through final receipt/cleanup. The following `cold-completion` extension uses the original
+through final receipt/cleanup. The `cold-completion` extension uses the original
 finite recovery authority to finish an already released runtime's completion
-prefix before preparing that terminal handoff; its gates are also pending.
+prefix before preparing that terminal handoff. Native `e59315db / 38455988433`
+and actual `9fd602ba / 38448823591` passed, including a single public invocation
+after physical lease release but before its durable acknowledgement.
 Pre-release, inactive and reboot prefixes remain unsupported publicly.
 The dedicated `cold-receipt`, `cold-state` and `cold-completion` scenarios
-preserve existing default terminal/retirement coverage. The receipt and staged
-state paths have completed actual public acceptance; completion is pending.
+preserve existing default terminal/retirement coverage. Receipt, staged state
+and released completion have completed actual public acceptance.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

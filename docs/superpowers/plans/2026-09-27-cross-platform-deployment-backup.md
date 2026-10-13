@@ -13942,8 +13942,11 @@ pre-release/inactive/reboot branches.
   Causal `ea55b827 / 38448272357`, job `115498015797`, failed exactly
   at the missing export at 19:34:06 UTC. Implementation `9fd602ba` and
   public-help regression `e59315db` are pushed. Fixed native
-  `38455988433`, job `115498728448`, and actual `38448823591`,
-  job `115500070548`, are running; neither is accepted yet.
+  `38455988433`, job `115498728448`, passed at 20:30:46 UTC:
+  53 focused contracts, saved dependency closure, both cold chains including
+  the strengthened saved-engine completion actors, and state/receipt/
+  retirement plus warm-retirement regressions. Actual `38448823591`,
+  job `115500070548`, passed at 21:20:00 UTC.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -13995,10 +13998,20 @@ pre-release/inactive/reboot branches.
   matching accepted receipt, unchanged backup/saved engine/authenticated data,
   original runtime/Scheduler instance/released lease and removed evidence.
   Keep the prior state/receipt/default fixture tails unchanged.
-- [ ] Run the full native selector above without `windows_restore_scenario`,
+- [x] Run the full native selector above without `windows_restore_scenario`,
   and the actual selector without `windows_commands_only` using
   `windows_restore_scenario=cold-completion`. Record native and exact actual
   public PASS separately; do not claim earlier startup branches accepted.
+  Exact `restore-cold-completion-closeout` PASS inspected, elapsed
+  688,524 ms. Public PowerShell resumed directly after physical lease release
+  without its durable acknowledgement, advanced the original journal,
+  published terminal state and receipt, and completed independent cleanup.
+  The fixture verified the original runtime/Scheduler/released lease,
+  exact state transformation and non-backdated timestamp, backup/saved engine
+  and authenticated data. The preceding source update took 1,323,777 ms and
+  cold file restoration took 2,448,778 ms; all existing bounds were retained.
+  Task 5FD is accepted. Earlier copy/startup and inactive/reboot recovery
+  remain separate unfinished public integration.
 
 ### Task 5FC: Publish staged cold terminal state through public saved restore
 
