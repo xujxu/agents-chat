@@ -718,6 +718,10 @@ public closeout passed at `1f3e470b / 38354204691`: all three interruption
 boundaries, final unlock and public `restore.ps1` completion preserved the
 original runtime, accepted state/receipt and authenticated restored data.
 This accepts the completed-runtime branch, not earlier cold recovery.
+The remaining cold-specific live-creator refusal regression passed at
+`2aaa963b / 38373292736`: a second actor was refused while the original
+manifest creator remained alive, without changing the manifest or retained
+entries; later actors resumed successfully after that creator exited.
 The saved restore entry now routes an existing version-5 cold retirement
 manifest to snapshot-bound native admission and the existing independent
 closeout supervisor, rather than starting another restore. Its native gate
@@ -733,7 +737,10 @@ delete evidence until the independent supervisor runs. Native acceptance
 terminal/retirement cases, including snapshot mismatch refusals and three
 cleanup interruption boundaries; the warm retirement regression also passed.
 Actual saved-entry preparation and public final closeout are running in
-`4d112c41 / 38366334006`. The preceding direct actual run reached early
+`186ab283 / 38374428099`. The preceding `4d112c41 / 38366334006`
+copy job failed before application startup because the test wrapper still
+rejected its increased budget; that bound and its regression were corrected.
+The older direct actual run reached early
 retirement but timed out before final unlock; the subsequent public run
 completed that branch. Actual acceptance of the additional saved-entry
 preparation remains pending. Earlier cold prefixes are still refused.

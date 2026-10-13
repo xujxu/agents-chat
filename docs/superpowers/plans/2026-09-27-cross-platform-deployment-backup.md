@@ -14154,6 +14154,10 @@ cannot be reused unchanged because it requires `sealed`.
   alive while a distinct child requests retirement. Require refusal, identical
   manifest bytes/inode/mtime, all entry inodes and accepted files unchanged.
   Subsequent existing actors must succeed only after this creator exits.
+  That final native coverage passed at `2aaa963b / 38373292736`, job
+  `115215306223`: both cold cases passed at 09:28:02 and 09:49:49 UTC,
+  and warm retirement passed at 09:57:18 UTC. Logs inspected. Together with
+  the actual public gate above, this completes Task 5EY's acceptance.
 
 - [x] Define and test the immutable cold retirement record. Use
   `worker-retirement.json` with `version: 5`, `purpose: 'cold-restore'`.
@@ -14222,7 +14226,7 @@ cannot be reused unchanged because it requires `sealed`.
   success-shaped fallback. Dispatch an existing version-5 cold manifest from
   completed Windows closeout rather than feeding it to warm version-3 parsing.
 
-- [ ] Add native interruption coverage after the accepted receipt fixture.
+- [x] Add native interruption coverage after the accepted receipt fixture.
   Interrupt after manifest publication, after an early evidence deletion,
   and before original lock retirement; finish from a fresh actor.
   Require unchanged manifest inode/bytes on reentry, only a missing prefix,
