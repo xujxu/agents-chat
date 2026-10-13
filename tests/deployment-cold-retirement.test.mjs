@@ -74,6 +74,26 @@ test('saved cold retirement closeout requires acknowledgement and rejects unboun
   await assert.rejects(prepareWindowsColdRetirementCloseout({
     acceptDataLoss: true, signal: controller.signal,
   }), { name: 'AbortError' });
+  if (process.platform === 'win32') {
+    const snapshot = {
+      version: 3, scope: 'project', project: 'C:\\private\\app', id: 'backup-1',
+      runtime: { platform: 'win32', task: { name: 'Cold-Closeout' } },
+      source: { commit: 'a'.repeat(40) }, recoveryEngine: 'b'.repeat(64),
+    };
+    const options = {
+      control: 'C:\\private\\.app.deployment', project: snapshot.project,
+      taskName: 'Cold-Closeout', snapshot, pwsh: 'C:\\tools\\pwsh.exe', acceptDataLoss: true,
+    };
+    for (const changed of [
+      { control: 'C:\\private\\foreign' }, { taskName: 'Foreign-Task' },
+      { snapshot: { ...snapshot, project: 'C:\\other\\app' } },
+      { snapshot: { ...snapshot, recoveryEngine: 'bad' } },
+      { snapshot: { ...snapshot, source: { commit: 'bad' } } },
+      { snapshot: { ...snapshot, runtime: { platform: 'linux' } } },
+    ]) {
+      await assert.rejects(prepareWindowsColdRetirementCloseout({ ...options, ...changed }), /snapshot scope/);
+    }
+  }
 });
 
 test('cold retirement record freezes its ordered scope and preserves original disabled policy', {

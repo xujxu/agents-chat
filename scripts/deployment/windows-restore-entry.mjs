@@ -6,7 +6,7 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { verifyRecoveryEngine } from './saved-recovery-engine.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { deploymentDiagnostics } from './deployment-diagnostics.mjs';
-import { canonicalWorkerDirectory, externalWorkerDirectory } from './worker-files.mjs';
+import { canonicalWorkerDirectory, externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
 import { hasUnsettledWorker } from './worker-errors.mjs';
 
@@ -82,28 +82,42 @@ try {
   operations = await import('./state.mjs');
   originalState = await operations.loadState(control);
   if (!originalState || originalState.project !== input.project) throw new Error('Restore control state is unbound.');
-  const status = await operations.reconcileInterruptedOperation(control);
-  if (!['idle', 'already-current', 'preflight-refused', 'prior-runtime-restored'].includes(status.status)) {
-    throw Object.assign(new Error('Interrupted operation requires recovery before live restoration.'), {
-      code: 'DEPLOYMENT_RECOVERY_REQUIRED',
+  let retirement;
+  try {
+    retirement = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
+      await readWorkerFile(path.join(control, 'worker-retirement.json'), 1048576, { privateMode: true })));
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (retirement?.version === 5) {
+    stage = 'cold-retirement-admission';
+    const { prepareWindowsColdRetirementCloseout } = await import('./windows-cold-retirement-closeout.mjs');
+    result = await runStage(stage, signal => prepareWindowsColdRetirementCloseout({
+      control, project: input.project, taskName: input.taskName, snapshot, pwsh: input.pwsh,
+      acceptDataLoss: true, signal,
+    }), { timeoutMs: Math.min(input.timeoutSeconds * 1000, Number.MAX_SAFE_INTEGER) });
+  } else {
+    const status = await operations.reconcileInterruptedOperation(control);
+    if (!['idle', 'already-current', 'preflight-refused', 'prior-runtime-restored'].includes(status.status)) {
+      throw Object.assign(new Error('Interrupted operation requires recovery before live restoration.'), {
+        code: 'DEPLOYMENT_RECOVERY_REQUIRED',
+      });
+    }
+    stage = 'runtime-admission';
+    const { inspectWindowsManagedTask } = await import('./windows-managed-task.mjs');
+    scope = await inspectWindowsManagedTask({ project: input.project, taskName: input.taskName, pwsh: input.pwsh });
+    stage = 'lock-admission';
+    lock = await operations.acquireLock(control, { project: input.project, operationId: randomUUID(), pwsh: input.pwsh });
+    if (!same(await operations.loadState(control), originalState)) throw new Error('Restore state changed during admission.');
+    stage = 'restore';
+    const { runWindowsLiveRestore } = await import('./windows-restore.mjs');
+    result = await runWindowsLiveRestore({
+      scope, control, lock, backup: input.backup, node: process.execPath, pwsh: input.pwsh,
+      profile: 'agents-chat-auth-638c553', port: input.port, waitSeconds: input.waitSeconds,
+      timeoutSeconds: input.timeoutSeconds, acceptDataLoss: true,
+      onProgress: ({ phase, stage: restoreStage }) => process.stderr.write(
+        `${new Date().toISOString()} Windows restore phase: ${phase}${restoreStage ? ` / ${restoreStage}` : ''}\n`),
     });
+    lock = undefined;
   }
-  stage = 'runtime-admission';
-  const { inspectWindowsManagedTask } = await import('./windows-managed-task.mjs');
-  scope = await inspectWindowsManagedTask({ project: input.project, taskName: input.taskName, pwsh: input.pwsh });
-  stage = 'lock-admission';
-  lock = await operations.acquireLock(control, { project: input.project, operationId: randomUUID(), pwsh: input.pwsh });
-  if (!same(await operations.loadState(control), originalState)) throw new Error('Restore state changed during admission.');
-  stage = 'restore';
-  const { runWindowsLiveRestore } = await import('./windows-restore.mjs');
-  result = await runWindowsLiveRestore({
-    scope, control, lock, backup: input.backup, node: process.execPath, pwsh: input.pwsh,
-    profile: 'agents-chat-auth-638c553', port: input.port, waitSeconds: input.waitSeconds,
-    timeoutSeconds: input.timeoutSeconds, acceptDataLoss: true,
-    onProgress: ({ phase, stage: restoreStage }) => process.stderr.write(
-      `${new Date().toISOString()} Windows restore phase: ${phase}${restoreStage ? ` / ${restoreStage}` : ''}\n`),
-  });
-  lock = undefined;
 } catch (error) {
   errors.push(error);
   if (lock && !hasUnsettledWorker(error)) {

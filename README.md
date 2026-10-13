@@ -715,6 +715,10 @@ the actual first-install retirement, actor-loss and saved-closeout cases;
 the earlier file-level green results did not select these cases and do not
 count as acceptance. Actual application retirement and public cold restore
 completion remain unfinished.
+The saved restore entry now routes an existing version-5 cold retirement
+manifest to snapshot-bound native admission and the existing independent
+closeout supervisor, rather than starting another restore. This narrow public
+path is pending actual acceptance; earlier cold prefixes are still refused.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { interruptWindowsColdApplication } from './deployment-windows-cold-application-recovery.mjs';
 import { verifyWindowsApplicationApi } from './deployment-windows-application-api-helpers.mjs';
+import { invokePublicWindowsRestore } from './deployment-windows-public-restore.mjs';
 
 export async function verifyWindowsColdApplicationRetirement({ mode, directory, control, pwsh, chatId }) {
   const target = {
@@ -66,11 +67,18 @@ export async function verifyWindowsColdApplicationRetirement({ mode, directory, 
     assert.fail('Actual retirement skipped its requested boundary.');
   }
   const saved = await verifyRecoveryEngine({ control, manifestSha256: backup.recoveryEngine });
-  const { closeCompletedWindowsDeployment } = await import(pathToFileURL(path.join(saved.directory, 'windows-completed-closeout.mjs')));
-  const result = await closeCompletedWindowsDeployment({
-    control, project: state.project, operationId: state.operationId, pwsh,
+  const output = await invokePublicWindowsRestore({
+    project: state.project, taskName: record.completion.taskName, pwsh,
   });
-  assert.deepEqual(result, { status: 'completed', operationId: state.operationId, phase: 'restored' });
+  assert.equal(output.code, 0, JSON.stringify(output.result));
+  const result = output.result;
+  assert.equal(result.status, 'restored');
+  assert.equal(result.operationId, state.operationId);
+  assert.equal(result.backupId, backup.id);
+  assert.equal(result.recoveryEngine, backup.recoveryEngine);
+  assert.equal(result.closeoutRequired, false);
+  assert.equal(result.closeoutStatus, 'completed');
+  assert.equal(result.runtimeRelocated, true);
   const names = await readdir(control);
   for (const name of ['task-maintenance', 'recovery-lock', 'worker-engine', 'worker-operation.ndjson',
     'cold-restore-terminal.json', 'lock', 'worker-retirement.json']) assert.equal(names.includes(name), false, name);

@@ -57,6 +57,7 @@ const files = Object.freeze([...new Set([
   'windows-cold-retirement-evidence.ps1', 'windows-cold-retirement-scope.mjs',
   'windows-cold-deployment-retirement.mjs', 'windows-cold-deployment-retirement.ps1',
   'windows-cold-deployment-retirement-controller.ps1',
+  'windows-cold-retirement-closeout.mjs',
   'windows-cold-policy-history.mjs', 'windows-cold-policy-history.ps1',
   'windows-cold-policy-recovery.ps1',
   'windows-cold-policy-archive.mjs', 'windows-cold-policy-archive.ps1',

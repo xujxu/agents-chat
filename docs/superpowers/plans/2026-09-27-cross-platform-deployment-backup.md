@@ -13928,7 +13928,7 @@ update `windows-restore-entry.mjs`, `windows-restore-command.mjs` and
 `saved-recovery-engine.mjs`. Extend
 `tests/deployment-cold-retirement.test.mjs` and the actual retirement fixture.
 
-- [ ] Push the missing-module acknowledgement/pre-abort/scope contract and
+- [x] Push the missing-module acknowledgement/pre-abort/scope contract and
   observe it fail in Actions before implementing the helper:
 
   ```js
@@ -13937,6 +13937,9 @@ update `windows-restore-entry.mjs`, `windows-restore-command.mjs` and
   await assert.rejects(prepareWindowsColdRetirementCloseout(), /data-loss acknowledgement/);
   await assert.rejects(prepareWindowsColdRetirementCloseout({ acceptDataLoss: true }), /scope/);
   ```
+  Causal `c2894049 / 38353227790`, job `115150141472`, failed only at
+  the missing module on 2026-10-13 05:48:02 UTC: 43 other contracts passed,
+  including native/JavaScript ordered-manifest parity.
 
 - [ ] Implement read-only native manifest admission using existing Windows
   admission and `openWindowsColdRetirementScope`. Match exact physical
