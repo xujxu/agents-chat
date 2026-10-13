@@ -772,7 +772,10 @@ interpreter (case-insensitive Windows path comparison) while preserving exact
 guarded/permanent XML comparison. Fixed native `f111d12c / 38427893271`
 passed the casing/refusal contract, both saved-engine canonical-interpreter
 receipt and cold retirement chains, and warm retirement. Fixed actual
-`38427897817` is running; public receipt completion is not yet accepted. The dedicated
+`38427897817` passed uninterrupted public receipt completion, preserving
+the staged receipt inode, original runtime, state/backup and authenticated
+application data through final cleanup. Earlier terminal-state publication
+and completion prefixes are still not publicly integrated. The dedicated
 `cold-receipt` scenario preserves existing default terminal/retirement coverage;
 this public receipt path is not yet accepted.
 The subsequent native restore regression passed all seven jobs at

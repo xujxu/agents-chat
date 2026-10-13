@@ -13965,7 +13965,7 @@ the default crash scenario retains all previously accepted actors.
   return prepareWindowsColdTerminalCloseout(options);
   ```
 
-- [ ] Native receipt fixture exercises wrong expected snapshots before
+- [x] Native receipt fixture exercises wrong expected snapshots before
   publication, retaining original bytes and any staged inode. Actual
   `cold-receipt` stops after the existing receipt-staged interruption, then
   invokes public `restore.ps1` once. Require original operation/backup/engine,
@@ -13973,7 +13973,7 @@ the default crash scenario retains all previously accepted actors.
   original state/backup bytes/inodes, released runtime/Scheduler instance,
   authenticated restored data, and no remaining lock/journal/retirement stage.
 
-- [ ] Inspect native and actual Actions logs before accepting:
+- [x] Inspect native and actual Actions logs before accepting:
 
   Native `29aca8e3 / 38391313938`, job `115275529624`, passed all
   46 focused contracts. Both receipt chains passed at 11:57:19 and
@@ -13988,7 +13988,7 @@ the default crash scenario retains all previously accepted actors.
   discards the saved process's nested diagnostic locations. Do not speculate
   about or relax admission guards without those locations.
 
-- [ ] Require saved-entry stderr to retain the existing bounded diagnostic
+- [x] Require saved-entry stderr to retain the existing bounded diagnostic
   array, which the public wrapper already forwards. First push the protocol
   assertion and observe its native Actions failure; then compute diagnostics
   once and emit the identical sanitized array in stdout and stderr:
@@ -14023,7 +14023,7 @@ the default crash scenario retains all previously accepted actors.
   application failure; the saved-engine path and restricted environment alone
   are insufficient to explain it. Preserve this stronger fixture.
 
-- [ ] Retain bounded native exception type and owned PowerShell line locations
+- [x] Retain bounded native exception type and owned PowerShell line locations
   from the stopped restore bridge, alongside existing Node diagnostics.
   Do not forward native message text. Emit only validated basenames in the
   bridge's own directory, positive line/column numbers and uppercase exception
@@ -14070,9 +14070,15 @@ the default crash scenario retains all previously accepted actors.
   warm retirement at 17:08:06. Completed logs inspected.
   The pre-fix diagnostic actual `cbadf15c / 38423990779` failed at
   17:07:49 with the same native completion-recovery startup location, without
-  timeout. Fixed actual `38427897817`, job `115430532721`, then started;
-  uninterrupted public receipt closeout remains pending, so Task 5FB is
-  not yet fully accepted.
+  timeout. Fixed actual `38427897817`, job `115430532721`, passed
+  at 18:28:16 UTC with the required explicit
+  `PASS: real Windows live deployment restore-cold-receipt-closeout` marker.
+  The uninterrupted public PowerShell invocation retained the original
+  staged receipt bytes/inode/mtime, state and backup identities, saved engine,
+  released runtime/Scheduler instance and authenticated application data,
+  then removed only the completed operation's recovery evidence. Completed
+  log inspected. Task 5FB is accepted; earlier terminal-state publication
+  and completion prefixes remain separate unfinished work.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
