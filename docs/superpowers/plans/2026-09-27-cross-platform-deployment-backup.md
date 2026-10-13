@@ -13915,6 +13915,111 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FF: Recover acknowledged interrupted guarded startup before public retry
+
+**Goal:** Reuse the existing dead-runtime policy recovery and journal archival
+authority before Task 5FE's public copy/startup sequence. Never treat a running
+guarded runtime as released, force-kill an unowned process, or bypass original
+controller/runtime absence checks.
+
+**Files:** add `scripts/deployment/windows-cold-startup-recovery.mjs`; extend
+`windows-cold-activation-recovery.mjs`, `windows-cold-restore-command.mjs`,
+saved recovery inventory and public help. Extend focused cold contract tests,
+`tests/deployment-windows-cold-policy-recovery.mjs` and its native parent.
+Add a guarded-startup interruption branch to the existing actual cold-file
+fixture and a distinct public recovery mode through the live application
+runners and `.github/workflows/deployment-lifecycle.yml`.
+
+**Existing authority:** `prepareWindowsColdPolicyRecovery` admits only an
+acknowledged `running`/`stopped` activation history with absent original lock
+owner, cold owner, activation controller and guarded runtime. Its finite
+advance operation restores the original disabled task without starting it.
+`archive()` preserves the journal's identity and bytes at its bound archival
+name. The existing native archive fixture then closes recovery and successfully
+claims/restores a fresh cold copy in that same process. Reuse this mechanism;
+do not introduce another process launcher or weaken proof to support live peers.
+
+- [ ] After Task 5FE's gates settle, add and push the focused missing-module
+  contract below. Run the existing command-only `failed` selector and inspect
+  its precise missing-module failure before accepting fixed implementation.
+
+  ```js
+  test('saved interrupted startup requires acknowledgement and original scope', async () => {
+    const { recoverWindowsColdStartupPolicy } =
+      await import('../scripts/deployment/windows-cold-startup-recovery.mjs');
+    await assert.rejects(recoverWindowsColdStartupPolicy(), /data-loss acknowledgement/);
+    await assert.rejects(recoverWindowsColdStartupPolicy({ acceptDataLoss: true }), /scope/);
+    await assert.rejects(recoverWindowsColdStartupPolicy({
+      acceptDataLoss: true, signal: AbortSignal.abort(),
+    }), { name: 'AbortError' });
+  });
+  ```
+
+- [ ] Forward optional `expectedSnapshot` through
+  `prepareWindowsColdPolicyRecovery` to its existing `openRecovery` argument;
+  reuse the full-snapshot comparison already performed under native admission
+  before any policy claim. Preserve callers that omit it.
+- [ ] Implement the focused wrapper with shared saved-scope validation and
+  the existing native finite transition protocol:
+
+  ```js
+  assertWindowsSavedColdScope(options);
+  const recovery = await prepareWindowsColdPolicyRecovery({
+    control: options.control, pwsh: options.pwsh, signal: options.signal,
+    acceptDataLoss: true, expectedSnapshot: options.snapshot,
+  });
+  let failure;
+  try {
+    let progress = recovery.observation;
+    while (!progress.claimed || progress.step !== 'restored') {
+      progress = await recovery.advance({ signal: options.signal });
+    }
+    return await recovery.archive({ signal: options.signal });
+  } catch (error) { failure = error; throw error; }
+  finally {
+    try { await recovery.close(); }
+    catch (error) {
+      throw new AggregateError(failure ? [failure, error] : [error],
+        'Cold startup policy recovery cleanup failed.');
+    }
+  }
+  ```
+
+  In `runWindowsColdRestoreCommand`, an original
+  `recovery-lock/activation-running.json` is only a route hint. If present,
+  call this wrapper under a separate `cold-startup-policy-recovery` stage
+  before original cold admission. Catch only `ENOENT` while checking the hint.
+  Native proof rejects live owners, live runtimes, inconsistent history or
+  unsupported staged records. Close recovery before claiming the new lease;
+  retain the existing single supervisor continuation after runtime completion.
+- [ ] Strengthen the native policy fixture with full expected snapshot binding,
+  five mismatch refusals and unchanged original state/lock/manifest/journal
+  identities. Keep its real `requested`, `policy-applied`, `restored`,
+  read-only inspection and archival/reclaim boundaries. Use the saved engine,
+  canonical PowerShell and a no-PATH environment; preserve current boundary
+  assertions instead of substituting mocks.
+- [ ] Add an actual guarded interruption after the restored application passes
+  owned readiness but before `completeRuntime`. Exit the fixture controller
+  through its existing interruption mechanism; independently prove its guarded
+  runtime/Job/listener and Scheduler instance settle, with the acknowledged
+  running prefix retained and no released completion receipt.
+  The subsequent public command must archive the exact old journal, restore
+  and start a distinct runtime, and finish state/receipt/retirement through
+  Task 5FE. Check authenticated restored data, original backup/engine, task
+  security and enabled policy, both retired generations and final released
+  runtime. Preserve archived audit evidence deliberately; do not claim it was
+  deleted with active recovery evidence.
+- [ ] Add a dedicated copy-crashed workflow selector and exact
+  `restore-cold-startup-closeout` PASS guard. Keep inner stage limits unchanged.
+  Account explicitly for this fixture's two cold-copy sequences when defining
+  its overall actor/job budget; do not silently enlarge existing scenarios.
+  Push implementation and require full native plus dedicated actual success.
+  Update help/docs only to the boundary actually accepted.
+
+**Still excluded:** unacknowledged activation-start prefixes, surviving guarded
+owners/runtimes, initially inactive/legacy task adoption and reboot recovery.
+This task does not make those unsupported states look like successful restores.
+
 ### Task 5FE: Restore copied/stopped cold deployment through the public supervisor
 
 **Goal:** A single public `restore.ps1` invocation resumes an original interrupted
