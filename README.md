@@ -785,15 +785,19 @@ finite recovery authority to finish an already released runtime's completion
 prefix before preparing that terminal handoff. Native `e59315db / 38455988433`
 and actual `9fd602ba / 38448823591` passed, including a single public invocation
 after physical lease release but before its durable acknowledgement.
-The next `cold-start` extension restores an interrupted copy with its original
+The `cold-start` extension restores an interrupted copy with its original
 stopped runtime retained, then starts the saved application and settles the
 original controller. The existing supervisor invokes one independent continuation
-before finalization, preserving strict original-owner absence. This new native/
-actual gate is pending. Interrupted guarded startup, inactive/reboot and legacy
+before finalization, preserving strict original-owner absence. Native
+`38471316945` and actual `38471320648` passed at `1d52b08f`; the single public
+invocation retired the old Job, retained its backup/data, and completed the
+new released task's state/receipt/cleanup in 2,411,631 ms.
+Interrupted guarded startup, inactive/reboot and legacy
 recovery remain unsupported publicly.
 The dedicated `cold-receipt`, `cold-state`, `cold-completion` and `cold-start` scenarios
 preserve existing default terminal/retirement coverage. Receipt, staged state
-and released completion have completed actual public acceptance.
+and released completion, plus interrupted-copy startup, have completed actual
+public acceptance.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
@@ -901,7 +905,7 @@ task permissions, principal/mode settings and Scheduler instances. It is
 read-only and explicitly returns no runtime authority: a Scheduler engine PID
 is not proof of ownership of the watchdog or its descendants, and Ready or
 Disabled is not proof that application processes are stopped. Default-tunnel
-first installation and public cold recovery remain pending.
+first installation and the unsupported cold boundaries listed below remain pending.
 
 **Deployment-backup branch: staged public commands.** Run from elevated
 PowerShell **7.4 or newer**, with **Node.js 24** (including its bundled npm)
@@ -947,12 +951,16 @@ These options cannot reconfigure an existing installation or an update.
 Default-tunnel first deployment remains unfinished; do not use the old task
 installer as an automatic recovery fallback.
 
-**Windows restore (running managed task).** The public entry and its saved-engine
+**Windows restore (managed task and supported interrupted recovery).** The public entry and its saved-engine
 invocation passed native contracts at `3497176 / 38187043591` and actual
 egress-denied restoration at `4e1aed1 / 38188828721`, job `114616945668`.
-It currently admits only an existing running managed
-task with settled deployment state, not a stopped/legacy task or an interrupted
-operation. Do not remove a retained lock to bypass that refusal.
+It admits an existing running managed task with settled deployment state.
+Saved interrupted-copy startup and released-completion, terminal-state, receipt
+and retirement recovery also require their exact original retained evidence.
+Public interrupted-copy startup passed native and actual application acceptance
+at `1d52b08f / 38471316945 / 38471320648`. Interrupted guarded startup,
+initially inactive/legacy tasks and reboot recovery remain unsupported.
+Do not remove a retained lock to bypass a recovery refusal.
 
 ```powershell
 # Export post-backup data separately before acknowledging its loss

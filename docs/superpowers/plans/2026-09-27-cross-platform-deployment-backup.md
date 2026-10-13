@@ -14091,9 +14091,20 @@ and `.github/workflows/deployment-lifecycle.yml`.
   (3,500,000 ms inside its 3,600,000 ms actor); all earlier invocation
   and actor budgets remain unchanged.
   Require exact `restore-cold-start-closeout` PASS; retain existing selectors.
-- [ ] Push fixed code, run the full native command gate and dedicated actual
+- [x] Push fixed code, run the full native command gate and dedicated actual
   `windows_restore_scenario=cold-start` gate. Accept only after both logs
   establish the required outcome; preserve pre-release/inactive/reboot gaps.
+  Native `1d52b08f / 38471316945`, job `115550810752`, passed at
+  `2026-10-13 22:33:04 UTC`: 54 focused contracts, the one-continuation and
+  invalid-binding supervisor cases, saved dependency closure, both strengthened
+  cold lease chains and existing warm/cold retirement regressions. Actual
+  `1d52b08f / 38471320648`, job `115550824777`, passed at
+  `2026-10-13 22:49:55 UTC`. The exact `restore-cold-start-closeout` PASS
+  records 2,411,631 ms for one public invocation, original retired Job,
+  distinct released Scheduler/runtime, retained backup/saved engine and
+  authenticated data, exact accepted state/receipt and complete active-evidence
+  cleanup. This accepts the public copied/stopped path, not interrupted guarded
+  startup, inactive/reboot or legacy adoption.
 
 ### Task 5FD: Finish released cold completion through public saved restore
 
