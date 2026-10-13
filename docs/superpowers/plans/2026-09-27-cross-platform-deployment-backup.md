@@ -13966,14 +13966,14 @@ actors and actual application retirement actors.
   the terminal record's port before admission. Other listener fixtures keep
   their ephemeral ports; production's port guard remains unchanged.
 
-- [ ] Share the existing scope and exact physical state/snapshot checks.
+- [x] Share the existing scope and exact physical state/snapshot checks.
   Under `openWindowsColdRetirementAuthority`, prepare the candidate, bind it
   to the verified snapshot, check fresh HTTP readiness, and publish the
   immutable manifest. Close that authority before calling existing read-only
   manifest admission. Return its existing `closeoutRequired:true` result;
   preserve and aggregate preparation/cleanup failures.
 
-- [ ] Saved entry selects this path only without a retirement manifest,
+- [x] Saved entry selects this path only without a retirement manifest,
   with restored state and an existing cold terminal file. Native authority,
   not the presence check, must authorize preparation. Keep saved-engine
   verification and independent supervisor deletion unchanged.
@@ -13991,6 +13991,15 @@ actors and actual application retirement actors.
   backup and state/receipt inodes throughout.
 
 - [ ] Accept only after inspecting native and actual Actions logs:
+
+  Native `38d6d85a / 38360471128`, job `115173232762`, passed all
+  45 focused contracts and both cold terminal/retirement cases at
+  07:30:28 and 07:51:25 UTC, including mismatched snapshot refusals,
+  zero-deletion preparation, three interruption boundaries and unchanged
+  released runtime. Existing warm retirement passed at 07:58:38 UTC.
+  Logs inspected. Actual `4d112c41 / 38366334006` is queued behind
+  public gate `38354204691`, with corrected copy-crash budget; not yet
+  accepted.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \

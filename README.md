@@ -724,8 +724,14 @@ invocation checks passed. This narrow public path is pending actual
 acceptance. The next extension prepares that same manifest from a physically
 published cold restored state and accepted deployment receipt, using the
 complete original terminal proof and verified saved snapshot. It does not
-delete evidence until the independent supervisor runs; its native and actual
-acceptance are pending. Earlier cold prefixes are still refused.
+delete evidence until the independent supervisor runs. Native acceptance
+`38d6d85a / 38360471128` passed all 45 focused contracts and both cold
+terminal/retirement cases, including snapshot mismatch refusals and three
+cleanup interruption boundaries; the warm retirement regression also passed.
+Actual saved-entry preparation and public final closeout are queued in
+`4d112c41 / 38366334006`. The preceding direct actual run reached early
+retirement but timed out before final unlock, so actual acceptance is still
+pending. Earlier cold prefixes are still refused.
 The subsequent native restore regression passed all seven jobs at
 `953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
 file-security evidence, retaining inherited ACE flags; the separate
