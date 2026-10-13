@@ -18,7 +18,8 @@ try {
     $result = ($text -join "`n") | ConvertFrom-Json
     Assert ($result.status -ceq 'help' -and $result.message.Contains('-AcceptDataLoss')) 'Restore help omits data-loss acknowledgement'
     Assert ($result.message.Contains('already released') -and $result.message.Contains('unfinished completion') -and
-        $result.message.Contains('Pre-release, inactive/reboot and legacy cold recovery remain')) `
+        $result.message.Contains('interrupted copies with retained stopped') -and
+        $result.message.Contains('inactive/reboot and legacy recovery remain unsupported')) `
         'Restore help must distinguish released recovery from unsupported earlier prefixes'
     $text = & $pwsh -NoProfile -NonInteractive -File $restore -ProjectDir $missing -Json
     Assert ($LASTEXITCODE -eq 1) 'Public restore started without acknowledgement'

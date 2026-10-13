@@ -151,6 +151,19 @@ test('saved cold startup requires acknowledgement and rejects unbound scope befo
   await assert.rejects(runWindowsColdRestoreCommand({
     acceptDataLoss: true, signal: AbortSignal.abort(),
   }), { name: 'AbortError' });
+  if (process.platform === 'win32') {
+    const project = 'C:\\private\\app';
+    const options = {
+      project, control: 'C:\\private\\.app.deployment', pwsh: 'C:\\tools\\pwsh.exe',
+      taskName: 'Cold-Startup', acceptDataLoss: true,
+      snapshot: { version: 3, scope: 'project', project, id: 'backup-1',
+        source: { commit: 'a'.repeat(40) }, recoveryEngine: 'b'.repeat(64),
+        runtime: { platform: 'win32', task: { name: 'Cold-Startup' } } },
+    };
+    for (const changed of [{ waitSeconds: 0 }, { timeoutSeconds: 0 }, { onProgress: 42 }]) {
+      await assert.rejects(runWindowsColdRestoreCommand({ ...options, ...changed }), /deadlines/);
+    }
+  }
 });
 
 test('cold retirement record freezes its ordered scope and preserves original disabled policy', {

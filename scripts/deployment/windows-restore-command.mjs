@@ -7,7 +7,7 @@ import { journalUncertain } from './evidence-journal.mjs';
 
 export async function runWindowsRestoreCommand({ args, project, control, taskName, pwsh, node }) {
   const options = parseArguments('restore', args);
-  if (options.help) return { status: 'help', message: 'Saved Windows restoration requires --accept-data-loss; an already released cold runtime can finish its completion journal, publish terminal state, recover its receipt and finish retirement, but pre-release or inactive cold recovery is not yet supported.' };
+  if (options.help) return { status: 'help', message: 'Saved Windows restoration requires --accept-data-loss; interrupted copies with retained stopped runtime can restore and start before independent completion. Already released cold runtimes can finish state, receipt and retirement. Interrupted guarded startup or inactive recovery is not yet supported.' };
   if (!options.acceptDataLoss) {
     throw Object.assign(new Error('Explicit data-loss acknowledgement is required.'), {
       code: 'DEPLOYMENT_DATA_LOSS_ACKNOWLEDGEMENT_REQUIRED',
@@ -59,8 +59,8 @@ export async function runWindowsRestoreCommand({ args, project, control, taskNam
       recoveryEngine: result.closeoutRequired ? result.recoveryEngine : null,
     });
   }
-  if (result.status !== 'restored' || result.backupId !== invocation.backupId
-    || result.closeoutRequired !== true || result.runtimeRelocated !== true || !bound) {
+  if (!['restored', 'cold-runtime-completed'].includes(result.status) || result.backupId !== invocation.backupId
+    || result.closeoutRequired !== (result.status === 'restored') || result.runtimeRelocated !== true || !bound) {
     throw new Error('Saved restore did not return matching restored acceptance.');
   }
   return result;

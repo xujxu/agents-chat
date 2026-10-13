@@ -150,7 +150,7 @@ export async function assertWindowsColdRestoreLease(control, lease, options) {
 }
 
 export async function claimWindowsColdRestore({
-  control, project, backup, node, pwsh, profile, acceptDataLoss, signal,
+  control, project, backup, node, pwsh, profile, acceptDataLoss, signal, expectedSnapshot,
 }) {
   if (acceptDataLoss !== true) throw new Error('Cold restore requires explicit data-loss acknowledgement.');
   signal?.throwIfAborted();
@@ -183,6 +183,9 @@ export async function claimWindowsColdRestore({
     const stateBytes = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
     const state = parse(stateBytes);
     const originalSnapshot = admitted.snapshot;
+    if (expectedSnapshot !== undefined && !same(originalSnapshot, expectedSnapshot)) {
+      throw new Error('Cold restore lease differs from the verified saved restore snapshot.');
+    }
     const configurationSha256 = originalSnapshot.runtime.task.configurationSha256;
     const expected = {
       version: 1, project, backup, backupId: originalSnapshot.id,

@@ -27,6 +27,8 @@ function assertScope({
   }
 }
 
+export { assertScope as assertWindowsSavedColdScope };
+
 async function readBoundState(record, { control, project, taskName, snapshot }) {
   const bytes = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
   const state = validateState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));

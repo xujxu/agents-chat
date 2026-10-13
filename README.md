@@ -785,8 +785,13 @@ finite recovery authority to finish an already released runtime's completion
 prefix before preparing that terminal handoff. Native `e59315db / 38455988433`
 and actual `9fd602ba / 38448823591` passed, including a single public invocation
 after physical lease release but before its durable acknowledgement.
-Pre-release, inactive and reboot prefixes remain unsupported publicly.
-The dedicated `cold-receipt`, `cold-state` and `cold-completion` scenarios
+The next `cold-start` extension restores an interrupted copy with its original
+stopped runtime retained, then starts the saved application and settles the
+original controller. The existing supervisor invokes one independent continuation
+before finalization, preserving strict original-owner absence. This new native/
+actual gate is pending. Interrupted guarded startup, inactive/reboot and legacy
+recovery remain unsupported publicly.
+The dedicated `cold-receipt`, `cold-state`, `cold-completion` and `cold-start` scenarios
 preserve existing default terminal/retirement coverage. Receipt, staged state
 and released completion have completed actual public acceptance.
 The subsequent native restore regression passed all seven jobs at

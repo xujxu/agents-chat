@@ -4,14 +4,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-export async function invokePublicWindowsRestore({ project, taskName, pwsh, acknowledge = true }) {
+export async function invokePublicWindowsRestore({ project, taskName, pwsh, acknowledge = true, timeoutMs = 2600000 }) {
   const entry = fileURLToPath(new URL('../scripts/restore.ps1', import.meta.url));
   const pending = promisify(execFile)(pwsh, [
     '-NoProfile', '-NonInteractive', '-File', entry, '-ProjectDir', project,
     '-TaskName', taskName, '-TimeoutSeconds', '1800', '-Json', ...(acknowledge ? ['-AcceptDataLoss'] : []),
   ], {
     env: { ...process.env, PATH: [path.dirname(process.execPath), path.dirname(pwsh)].join(path.delimiter) },
-    timeout: 2600000, maxBuffer: 32768,
+    timeout: timeoutMs, maxBuffer: 32768,
   });
   pending.child.stderr.on('data', bytes => process.stderr.write(bytes));
   let output;

@@ -44,7 +44,9 @@ try {
     $modes = if ($RestoreScenario -in @('complete', 'offline')) { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
         elseif ($RestoreScenario -in @('crashed', 'copy-crashed')) { @('update', 'verify-closed', 'current', "restore-$RestoreScenario", 'restore-crash-verified') }
         else { @('update', 'verify-closed', 'current', "restore-$RestoreScenario") }
-    if ($RestoreScenario -eq 'copy-crashed') {
+    if ($RestoreScenario -eq 'copy-crashed' -and $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'start') {
+        $modes += 'restore-cold-start-closeout'
+    } elseif ($RestoreScenario -eq 'copy-crashed') {
         $modes += 'restore-cold-files'
         if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'completion') {
             $modes += 'restore-cold-completion-closeout'
@@ -75,7 +77,7 @@ try {
         Assert ($before.Count -eq 1) 'Live application must have one original task instance'
         $originalPid = $before.Item(1).EnginePID
         $originalInstance = $before.Item(1).InstanceGuid
-        if ($mode -eq 'restore-cold-files') {
+        if ($mode -in @('restore-cold-files', 'restore-cold-start-closeout')) {
             $coldOwner = [Diagnostics.Process]::GetProcessById([int]$originalPid)
             $null = $coldOwner.Handle
             $coldIdentity = [Deployment.WindowsWorkerJob]::ProcessIdentity($coldOwner.Id)
@@ -96,7 +98,7 @@ try {
                 $mode, $directory, $Project, $control, $TaskName, $pwsh, $git, $npm, $TargetCommit, $recoveryEngine, $ChatId), $directory, $environment)
         $output = $actor.StandardOutput.ReadToEndAsync()
         $diagnostic = $actor.StandardError.ReadToEndAsync()
-        $actorTimeout = if ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed', 'restore-cold-files')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } elseif ($mode -like 'restore-cold-receipt-*' -or $mode -like 'restore-cold-retirement-*' -or $mode -like 'restore-cold-*-closeout') { 900000 } else { 300000 }
+        $actorTimeout = if ($mode -eq 'restore-cold-start-closeout') { 3600000 } elseif ($mode -in @('restore', 'restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed', 'restore-cold-files')) { 2700000 } elseif ($mode -eq 'update') { 1800000 } elseif ($mode -like 'restore-cold-receipt-*' -or $mode -like 'restore-cold-retirement-*' -or $mode -like 'restore-cold-*-closeout') { 900000 } else { 300000 }
         $exited = $actor.WaitForExit($actorTimeout)
         $actor.Kill()
         Assert ($actor.WaitForExit(15000)) 'Live application controller did not settle after Job termination'
@@ -154,6 +156,7 @@ try {
             restore-cold-receipt-closeout { 'cold-receipt-closeout-completed' }
             restore-cold-state-closeout { 'cold-state-closeout-completed' }
             restore-cold-completion-closeout { 'cold-completion-closeout-completed' }
+            restore-cold-start-closeout { 'cold-start-closeout-completed' }
             restore-cold-retirement-prepared { 'cold-retirement-interrupted' }
             restore-cold-retirement-early { 'cold-retirement-interrupted' }
             restore-cold-retirement-unlock { 'cold-retirement-interrupted' }
@@ -164,6 +167,30 @@ try {
         $actor = $null
         $capture.Check()
         $after = $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0)
+        if ($mode -eq 'restore-cold-start-closeout') {
+            Assert ($result.retiredRuntime.pid -eq $originalPid -and $result.retiredRuntime.identity -ceq $coldIdentity) `
+                'Public cold restore changed its original retirement identity'
+            Assert ($coldOwner.WaitForExit(15000) -and $coldOwner.ExitCode -eq 0) 'Public cold restore did not retire its original stopped runtime'
+            [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$result.retiredRuntime.generation, $coldSession)
+            $runtime = $result.runtime
+            Assert ($after.Count -eq 1 -and $after.Item(1).EnginePID -eq $runtime.pid -and
+                ([guid]$after.Item(1).InstanceGuid).ToString('D') -ceq $runtime.instanceGuid -and
+                $runtime.instanceGuid -cne ([guid]$originalInstance).ToString('D') -and
+                [Deployment.WindowsWorkerJob]::ProcessIdentity($runtime.pid) -ceq $runtime.identity -and
+                $result.lease -ceq 'released' -and [Deployment.WindowsRuntimeControl]::Exchange(
+                    [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') `
+                'Public cold restore did not retain its distinct released Scheduler runtime'
+            $coldTask = $scheduler.GetFolder('\').GetTask($TaskName)
+            Assert ($coldTask.Enabled -and [string]$coldTask.Xml -cne $coldDefinition -and
+                [string]$coldTask.GetSecurityDescriptor(7) -ceq $coldSecurity -and $result.boundary -ceq 'complete') `
+                'Public cold restore changed task security or did not complete permanent policy'
+            $coldOwner.Dispose()
+            $coldOwner = $null
+            & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs') restored $ChatId
+            Assert ($LASTEXITCODE -eq 0) 'Public cold restore lost authenticated pre-backup data'
+            Write-Output "PASS: real Windows live deployment restore-cold-start-closeout with original retired Job, new released task and preserved backup/data; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            continue
+        }
         if ($mode -eq 'restore-cold-files') {
             Assert ($result.retired -eq $true -and $result.runtime.pid -eq $originalPid -and
                 $result.runtime.identity -ceq $coldIdentity) 'Cold restoration did not bind original runtime retirement'

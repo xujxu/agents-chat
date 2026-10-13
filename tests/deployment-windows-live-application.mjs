@@ -17,6 +17,7 @@ const restoreModes = [
   'restore-cold-state-staged', 'restore-cold-state-published', 'restore-cold-state-completed',
   'restore-cold-receipt-staged', 'restore-cold-receipt-published', 'restore-cold-receipt-completed',
   'restore-cold-receipt-closeout', 'restore-cold-state-closeout', 'restore-cold-completion-closeout',
+  'restore-cold-start-closeout',
   'restore-cold-retirement-prepared', 'restore-cold-retirement-early',
   'restore-cold-retirement-unlock', 'restore-cold-retirement-completed',
 ];

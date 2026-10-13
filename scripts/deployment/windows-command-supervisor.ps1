@@ -108,6 +108,26 @@ try {
     $outcome = Invoke-OriginalCapturedProcess -Arguments (@($entry, $Operation, $Project, $Control,
         $TaskName, $PowerShell, $Git, $NpmCli) + [string[]]$arguments) -Phase 'command'
     $result = $outcome.Value
+    if ($Operation -ceq 'restore' -and $outcome.Code -eq 0 -and $result.status -ceq 'cold-runtime-completed') {
+        if ($result.closeoutRequired -isnot [bool] -or $result.closeoutRequired -or
+            $result.runtimeRelocated -isnot [bool] -or -not $result.runtimeRelocated -or
+            $result.operationId -isnot [string] -or
+            $result.operationId -cnotmatch '^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$' -or
+            $result.recoveryEngine -isnot [string] -or $result.recoveryEngine -cnotmatch '^[a-f0-9]{64}$' -or
+            $result.backupId -isnot [string] -or $result.backupId -cnotmatch '^[a-zA-Z0-9_.:-]+$') {
+            throw 'Cold runtime continuation requires its original operation and saved backup binding.'
+        }
+        $pending = $result
+        $outcome = Invoke-OriginalCapturedProcess -Arguments (@($entry, $Operation, $Project, $Control,
+            $TaskName, $PowerShell, $Git, $NpmCli) + [string[]]$arguments) -Phase 'cold-continuation'
+        $result = $outcome.Value
+        if ($outcome.Code -ne 0 -or $result.status -cne 'restored' -or
+            $result.operationId -cne $pending.operationId -or $result.backupId -cne $pending.backupId -or
+            $result.recoveryEngine -cne $pending.recoveryEngine -or
+            $result.runtimeRelocated -isnot [bool] -or -not $result.runtimeRelocated) {
+            throw 'Cold restore continuation did not accept its original operation after controller exit.'
+        }
+    }
     $successStatuses = if ($Operation -eq 'restore') { @('restored') } else { @('accepted', 'already-current') }
     if ($result.closeoutRequired -isnot [bool] -or
         ($outcome.Code -eq 0 -and $result.status -cnotin $successStatuses) -or

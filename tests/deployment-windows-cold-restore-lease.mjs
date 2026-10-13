@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
-import { readFile, writeFile } from 'node:fs/promises';
+import { lstat, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
 import { acquireWindowsAdmission } from '../scripts/deployment/windows-admission.mjs';
 import { openWindowsStoppedRestoreProof } from '../scripts/deployment/windows-stopped-restore-proof.mjs';
+import { verifySnapshot } from '../scripts/deployment/snapshot.mjs';
 
 const implementation = new URL('../scripts/deployment/windows-cold-restore-lease.mjs', import.meta.url);
 async function options(control, pwsh) {
@@ -38,6 +39,26 @@ export async function verifyWindowsColdRestoreLease({ control, pwsh }) {
   const originalState = await readFile(stateFile);
   await assert.rejects(assertWindowsColdRestoreLease(undefined, { check: async () => ({ stopped: true, inhibited: true }) }));
   await assert.rejects(claimWindowsColdRestore({ ...supplied, acceptDataLoss: false }));
+  const snapshot = await verifySnapshot(supplied.backup);
+  const names = (await readdir(control)).sort();
+  const originals = await Promise.all([lockFile, stateFile, path.join(supplied.backup, 'manifest.json')].map(async file =>
+    ({ file, bytes: await readFile(file), info: await lstat(file, { bigint: true }) })));
+  for (const changed of [
+    { ...snapshot, id: `${snapshot.id}-foreign` },
+    { ...snapshot, source: { ...snapshot.source, commit: 'f'.repeat(40) } },
+    { ...snapshot, recoveryEngine: 'f'.repeat(64) },
+    { ...snapshot, runtime: { ...snapshot.runtime, task: { ...snapshot.runtime.task, name: 'Foreign-Lease-Task' } } },
+    { ...snapshot, entries: [] },
+  ]) {
+    await assert.rejects(claimWindowsColdRestore({ ...supplied, expectedSnapshot: changed }),
+      /differs from the verified saved restore snapshot/);
+    assert.deepEqual((await readdir(control)).sort(), names);
+    for (const before of originals) {
+      assert.deepEqual(await readFile(before.file), before.bytes);
+      const after = await lstat(before.file, { bigint: true });
+      for (const key of ['dev', 'ino', 'mtimeNs']) assert.equal(after[key], before.info[key]);
+    }
+  }
   let predecessor;
   for (let round = 0; round < 2; round++) {
     const child = fork(fileURLToPath(import.meta.url), ['hold-cold-lease', control, pwsh],
@@ -99,7 +120,7 @@ export async function verifyWindowsColdRestoreLease({ control, pwsh }) {
       }
     }
   }
-  const lease = await claimWindowsColdRestore(supplied);
+  const lease = await claimWindowsColdRestore({ ...supplied, expectedSnapshot: snapshot });
   try {
     await assertWindowsColdRestoreLease(control, lease);
     await assert.rejects(assertWindowsColdRestoreLease(control, { ...lease }));

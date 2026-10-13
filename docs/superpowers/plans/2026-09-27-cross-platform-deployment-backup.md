@@ -13930,14 +13930,16 @@ coverage, saved dependency closure and public command fixtures. Add actual
 public startup coverage through the existing live restore/application runners
 and `.github/workflows/deployment-lifecycle.yml`.
 
-- [ ] Push a missing-module contract for `runWindowsColdRestoreCommand`,
+- [x] Push a missing-module contract for `runWindowsColdRestoreCommand`,
   requiring acknowledgement, bound saved scope and pre-abort before admission.
   Use the focused Windows command selector with `windows_restore_scenario=failed`;
   inspect the precise missing-module failure before fixed acceptance.
-- [ ] Reuse shared saved cold scope validation. Thread `expectedSnapshot` into
+  Causal `35803f7f / 38470392493`, job `115547640823`, failed at
+  21:25:10 UTC with the expected missing `windows-cold-restore-command.mjs`.
+- [x] Reuse shared saved cold scope validation. Thread `expectedSnapshot` into
   `claimWindowsColdRestore` and compare the full admitted snapshot before
   publishing any recovery ownership. Preserve existing callers without it.
-- [ ] Compose existing original authority operations, with per-stage deadlines
+- [x] Compose existing original authority operations, with per-stage deadlines
   and cleanup preserving both operation and cleanup failures:
 
   ```js
@@ -13960,10 +13962,10 @@ and `.github/workflows/deployment-lifecycle.yml`.
   internal `cold-runtime-completed` outcome, original operation/backup/engine
   binding, `runtimeRelocated: true`, and `closeoutRequired: false`.
   This is not restored-state acceptance and must never be the public result.
-- [ ] Saved entry routes old restore state with original stopped evidence and
+- [x] Saved entry routes old restore state with original stopped evidence and
   no terminal/released-completion marker to the helper. Native proof remains
   authoritative; unsupported activation/pre-release/reboot evidence must refuse.
-- [ ] Public Node decoder admits the distinct internal pending outcome only
+- [x] Public Node decoder admits the distinct internal pending outcome only
   with exact invocation bindings. The existing private PowerShell supervisor
   fully settles/disposes the original captured process, then invokes the same
   captured restore command exactly once more. Require identical operation,
@@ -13971,15 +13973,18 @@ and `.github/workflows/deployment-lifecycle.yml`.
   accept another pending outcome, or change independent finalization.
   The second process takes the accepted Task 5FD route with the first owner
   now absent. Update captured/saved helper inventories and closure tests.
-- [ ] Extend native lease tests with full-snapshot mismatch refusal before
+- [x] Extend native lease tests with full-snapshot mismatch refusal before
   ownership publication and unchanged original state/lock/evidence. Cover the
   supervisor's pending-result binding/refusal and one-continuation limit.
-- [ ] Add copy-only `cold-start` actual selector: after original copy crash
+- [x] Add copy-only `cold-start` actual selector: after original copy crash
   verification, invoke public PowerShell once instead of the private cold-file
   actor. Require a new original runtime/Scheduler instance, retired old Job,
   saved source/build/data, exact original backup/engine, accepted state/receipt
   and complete evidence cleanup. Its actor budget is the existing 45-minute
   cold-file plus 15-minute completion budgets, not an increased stage timeout.
+  Public invocation retains the existing 100-second outer actor margin
+  (3,500,000 ms inside its 3,600,000 ms actor); all earlier invocation
+  and actor budgets remain unchanged.
   Require exact `restore-cold-start-closeout` PASS; retain existing selectors.
 - [ ] Push fixed code, run the full native command gate and dedicated actual
   `windows_restore_scenario=cold-start` gate. Accept only after both logs

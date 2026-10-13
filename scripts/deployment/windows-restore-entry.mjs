@@ -89,6 +89,7 @@ try {
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   let coldTerminal = false;
   let coldCompletion = false;
+  let coldInitial = false;
   if (!retirement && originalState.operation === 'restore'
     && ['restoring', 'recovery-required', 'restored'].includes(originalState.phase)) {
     try {
@@ -100,9 +101,26 @@ try {
         await lstat(path.join(control, 'recovery-lock/completion-release-requested.json'));
         coldCompletion = true;
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      if (!coldCompletion) {
+        try {
+          await lstat(path.join(control, 'task-maintenance/task-stop-stopped.json'));
+          coldInitial = true;
+        } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      }
     }
   }
-  if (retirement?.version === 5 || coldTerminal || coldCompletion) {
+  if (coldInitial) {
+    stage = 'cold-restore-admission';
+    const { runWindowsColdRestoreCommand } = await import('./windows-cold-restore-command.mjs');
+    result = await runWindowsColdRestoreCommand({
+      control, project: input.project, taskName: input.taskName, snapshot, pwsh: input.pwsh,
+      waitSeconds: input.waitSeconds, timeoutSeconds: input.timeoutSeconds, acceptDataLoss: true,
+      onProgress: event => {
+        stage = event.stage;
+        process.stderr.write(`${new Date().toISOString()} Windows cold restore phase: ${stage}\n`);
+      },
+    });
+  } else if (retirement?.version === 5 || coldTerminal || coldCompletion) {
     stage = coldCompletion ? 'cold-completion-closeout'
       : coldTerminal ? 'cold-terminal-closeout' : 'cold-retirement-admission';
     const { prepareWindowsColdRetirementCloseout, prepareWindowsColdTerminalCloseout,
