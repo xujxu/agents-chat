@@ -17,6 +17,8 @@ const state = JSON.parse(preserved.get('state.json').bytes);
 const options = { control, pwsh, acceptDataLoss: true };
 if (target === 'admission') {
   assert.equal(control, path.join(path.dirname(state.project), `.${path.basename(state.project)}.deployment`));
+  const terminal = JSON.parse(await readFile(path.join(control, 'cold-restore-terminal.json')));
+  assert.equal(terminal.port, 3010);
   const snapshot = JSON.parse(preserved.get('backup/manifest.json').bytes);
   const taskName = snapshot.runtime.task.name;
   const bound = { ...options, project: state.project, taskName, snapshot };

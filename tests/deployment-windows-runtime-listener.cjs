@@ -38,7 +38,8 @@ module.exports = function startListenerFixture() {
     });
     return;
   }
-  server.listen({ port: 0, host: mode, ipv6Only: false }, () => save(server, 'listener.json'));
+  server.listen({ port: Number(process.env.RUNTIME_LISTENER_PORT ?? 0), host: mode, ipv6Only: false },
+    () => save(server, 'listener.json'));
   let rebinding = false;
   setInterval(() => {
     if (!rebinding && fs.existsSync('listener-rebind')) {

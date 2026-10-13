@@ -62,6 +62,7 @@ try {
     $environment.Add('SystemRoot', $env:SystemRoot)
     $environment.Add('PATH', $env:PATH)
     $environment.Add('RUNTIME_LITERAL', 'literal %n $HOME " space')
+    if ($StoppedProof) { $environment.Add('RUNTIME_LISTENER_PORT', '3010') }
     if ($StoppedProof -or $Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
         $address = switch ($Scenario) { 'listener-v4' { '127.0.0.1' } 'listener-v6' { '::' } default { 'independent' } }
         if ($StoppedProof -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) { $address = '127.0.0.1' }

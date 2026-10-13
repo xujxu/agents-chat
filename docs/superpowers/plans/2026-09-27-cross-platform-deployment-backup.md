@@ -13945,6 +13945,12 @@ actors and actual application retirement actors.
   stopped-proof fixture's initial control path (and its existing variable-based
   cleanup), not the production scope guard. Add an explicit fixture path
   assertion before exercising native snapshot mismatch refusals.
+  Corrected-path gate `c633d446 / 38358404103` then reached native candidate
+  preparation but refused the matching snapshot at 07:02:04 UTC: the fixture
+  listener still selected an ephemeral port, whereas public restore binds
+  port 3010. Configure port 3010 only for the stopped-proof fixture and assert
+  the terminal record's port before admission. Other listener fixtures keep
+  their ephemeral ports; production's port guard remains unchanged.
 
 - [ ] Share the existing scope and exact physical state/snapshot checks.
   Under `openWindowsColdRetirementAuthority`, prepare the candidate, bind it
