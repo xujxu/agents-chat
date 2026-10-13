@@ -14063,6 +14063,16 @@ the default crash scenario retains all previously accepted actors.
   native interpreter; the exact recorded spelling then feeds both guarded
   and permanent reconstruction. Arguments, directories, controller identity,
   policy, security and full historical XML checks remain exact.
+  Fixed native `f111d12c / 38427893271`, job `115402012966`,
+  passed all 51 focused Node contracts and the new guarded/permanent casing
+  contract. Both saved-engine canonical-interpreter receipt chains passed at
+  16:30:17 and 16:54:20 UTC; cold retirement at 16:35:49 and 17:00:17;
+  warm retirement at 17:08:06. Completed logs inspected.
+  The pre-fix diagnostic actual `cbadf15c / 38423990779` failed at
+  17:07:49 with the same native completion-recovery startup location, without
+  timeout. Fixed actual `38427897817`, job `115430532721`, then started;
+  uninterrupted public receipt closeout remains pending, so Task 5FB is
+  not yet fully accepted.
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \

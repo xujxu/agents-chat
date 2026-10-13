@@ -769,8 +769,10 @@ or raw native output. Matching the public interpreter canonicalization in
 reconstruction used the new process's executable spelling rather than the
 recorded spelling. The fix binds the recorded command to the same native
 interpreter (case-insensitive Windows path comparison) while preserving exact
-guarded/permanent XML comparison. Native and actual fixed-path acceptance
-are still required. The dedicated
+guarded/permanent XML comparison. Fixed native `f111d12c / 38427893271`
+passed the casing/refusal contract, both saved-engine canonical-interpreter
+receipt and cold retirement chains, and warm retirement. Fixed actual
+`38427897817` is running; public receipt completion is not yet accepted. The dedicated
 `cold-receipt` scenario preserves existing default terminal/retirement coverage;
 this public receipt path is not yet accepted.
 The subsequent native restore regression passed all seven jobs at
