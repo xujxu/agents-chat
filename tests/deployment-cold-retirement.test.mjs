@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { workerEngineFiles } from '../scripts/deployment/saved-worker-engine.mjs';
 import { windowsColdCompletionPhases } from '../scripts/deployment/windows-cold-runtime-completion.mjs';
 
@@ -113,4 +116,15 @@ test('cold retirement record refuses unsafe scope, identity substitution and reo
     mutate(value);
     assert.throws(() => captureWindowsColdRetirementRecord(value));
   }
+});
+
+test('native cold retirement deletion order matches the JavaScript manifest contract', {
+  skip: process.platform !== 'win32',
+}, async () => {
+  const { windowsColdRetirementPaths } = await import('../scripts/deployment/windows-cold-retirement-record.mjs');
+  const script = fileURLToPath(new URL('./deployment-windows-cold-retirement-order.ps1', import.meta.url));
+  const { stdout } = await promisify(execFile)(process.env.DEPLOYMENT_TEST_PWSH, [
+    '-NoProfile', '-NonInteractive', '-File', script, '-WorkerNamesJson', JSON.stringify(workerEngineFiles),
+  ], { timeout: 30000, maxBuffer: 65536 });
+  assert.deepEqual(JSON.parse(stdout), windowsColdRetirementPaths.map(entry => entry.path));
 });
