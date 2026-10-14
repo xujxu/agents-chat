@@ -142,7 +142,9 @@ function Read-AgentsChatColdActivationRecoveryHistory {
     foreach ($phase in $phases) {
         $file = Open-AgentsChatCompletionFile $proof (Join-Path $Control "recovery-lock/activation-$phase.json") ''
         $record = Read-AgentsChatMaintenanceFields ($file.ReadText()) $schema
-        if ($record.version.GetInt32() -ne 1 -or $record.phase.GetString() -cne $phase -or
+        if ($record.version.GetInt32() -notin @(1, 2) -or
+            ($first -and $record.version.GetInt32() -ne $first.version.GetInt32()) -or
+            $record.phase.GetString() -cne $phase -or
             $record.operationId.GetString() -cne $proof.OperationId -or
             $record.ownerSha256.GetString() -cne $OwnerSha256 -or
             $record.filesReceiptSha256.GetString() -cne $ReceiptSha256 -or

@@ -41,6 +41,22 @@ export function captureWindowsColdLaunch({ history, bytes, originalGeneration })
   return Object.freeze({ record: Object.freeze(record), sha256: digest(bytes) });
 }
 
+export function captureWindowsColdEnableRequest({ history, requestBytes, bytes }) {
+  const request = history?.records?.[0];
+  if (request?.version !== 2 || request.phase !== 'start-requested' || request.runtime !== null
+    || !same(parse(requestBytes, 4194304), request)) {
+    throw new Error('Cold enable intent requires its original version-two start request.');
+  }
+  const expected = {
+    version: 1, phase: 'enable-requested', requestSha256: digest(requestBytes),
+    controllerPid: request.controllerPid, controllerIdentity: request.controllerIdentity,
+    taskName: request.taskName, configurationSha256: request.configurationSha256,
+  };
+  const record = captureWorkerFields(parse(bytes, 65536), Object.keys(expected), 'cold enable intent');
+  if (!same(record, expected)) throw new Error('Cold enable intent differs from its original start request.');
+  return Object.freeze({ record: Object.freeze(record), sha256: digest(bytes) });
+}
+
 export function captureWindowsColdActivationHistory({ intent, intentBytes, records, taskName }) {
   if (!same(parse(intentBytes, 65536), intent) || intent.version !== 1 || intent.phase !== 'activation-intent'
     || typeof taskName !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(taskName)
@@ -54,11 +70,11 @@ export function captureWindowsColdActivationHistory({ intent, intentBytes, recor
     const record = captureWorkerFields(parse(bytes, 4194304), fields, 'cold activation record');
     const previous = captured.at(-1);
     const expected = {
-      version: 1, operationId: intent.operationId, ownerSha256: intent.ownerSha256,
+      version: captured[0]?.version ?? record.version, operationId: intent.operationId, ownerSha256: intent.ownerSha256,
       filesReceiptSha256: intent.filesReceiptSha256, intentSha256, previousSha256, taskName,
       configuration: intent.runtimeBundle.configuration, configurationSha256: intent.runtimeBundle.sha256,
     };
-    if (Object.entries(expected).some(([key, value]) => record[key] !== value)
+    if (![1, 2].includes(record.version) || Object.entries(expected).some(([key, value]) => record[key] !== value)
       || !Number.isSafeInteger(record.controllerPid) || record.controllerPid < 1 || record.controllerPid > 2147483647
       || typeof record.controllerIdentity !== 'string' || record.controllerIdentity.length > 64
       || !new RegExp(`^${record.controllerPid}:[1-9][0-9]*$`).test(record.controllerIdentity)

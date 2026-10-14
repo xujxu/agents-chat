@@ -39,6 +39,7 @@ function Start-AgentsChatColdActivatedRuntime([hashtable]$Context) {
             $Context.StartupStep = 'registered'
         }
         'registered' {
+            Write-AgentsChatColdEnableRequest $Context
             $Context.Stage = 'enable'
             $task = Assert-AgentsChatColdActivationContext $Context
             $task.Enabled = $true

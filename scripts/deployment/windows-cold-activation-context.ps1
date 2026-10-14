@@ -54,6 +54,7 @@ function Open-AgentsChatColdActivationContext {
             Bundle=$runtime.directory.GetString(); TaskName=$proof.TaskName
             Definition=$proof.Definition; SecurityDescriptor=$proof.SecurityDescriptor
             PlannedDefinition=$null; Enabled=$false; StartupStep='initial'; Requested=$false; Runtime=$null
+            StartRequestSha256=$null; EnableIntent=$null
             Owner=$null; Instance=$null; InstanceGuid=$null; Listener=$null; Stopped=$false; Stage='admitted'
             LeaseReleased=$false; CompletionPrepared=$false; CompletionStep=$null
             Identity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
@@ -87,7 +88,7 @@ function Assert-AgentsChatColdActivationContext([hashtable]$Context) {
 function Write-AgentsChatColdActivationReceipt([hashtable]$Context, [string]$Phase) {
     $null = Assert-AgentsChatColdActivationContext $Context
     $record = [ordered]@{
-        version=1; phase=$Phase; operationId=$Context.Proof.OperationId
+        version=2; phase=$Phase; operationId=$Context.Proof.OperationId
         ownerSha256=$Context.OwnerSha256; filesReceiptSha256=$Context.ReceiptSha256
         intentSha256=$Context.IntentSha256; previousSha256=$Context.PreviousSha256
         controllerPid=$PID; controllerIdentity=$Context.Identity; taskName=$Context.TaskName
@@ -101,7 +102,29 @@ function Write-AgentsChatColdActivationReceipt([hashtable]$Context, [string]$Pha
     $Context.Proof.Files.Add($file)
     $Context.Proof.RecoveryFiles['recovery-lock'] = @(@($Context.Proof.RecoveryFiles['recovery-lock']) + $name | Sort-Object)
     $Context.PreviousSha256 = $file.Sha256
-    if ($Phase -ceq 'start-requested') { $Context.Requested = $true }
+    if ($Phase -ceq 'start-requested') {
+        $Context.Requested = $true
+        $Context.StartRequestSha256 = $file.Sha256
+    }
+    $null = Assert-AgentsChatColdActivationContext $Context
+}
+
+function Write-AgentsChatColdEnableRequest([hashtable]$Context) {
+    $task = Assert-AgentsChatColdActivationContext $Context
+    if (-not $Context.Requested -or $Context.StartupStep -cne 'registered' -or
+        $Context.Enabled -or $Context.EnableIntent -or $Context.Runtime -or
+        $Context.StartRequestSha256 -cnotmatch '^[a-f0-9]{64}$' -or $task.GetInstances(0).Count -ne 0) {
+        throw 'Cold enabling requires its original disabled registered start request.'
+    }
+    $Context.Stage = 'enable-intent'
+    $record = [ordered]@{
+        version=1; phase='enable-requested'; requestSha256=$Context.StartRequestSha256
+        controllerPid=$PID; controllerIdentity=$Context.Identity
+        taskName=$Context.TaskName; configurationSha256=$Context.ConfigurationSha256
+    }
+    $Context.EnableIntent = [Deployment.WindowsPrivateFile]::Publish(
+        (Join-Path $Context.Bundle 'enable-requested.json'), ($record | ConvertTo-Json -Compress))
+    $Context.Proof.Files.Add($Context.EnableIntent)
     $null = Assert-AgentsChatColdActivationContext $Context
 }
 

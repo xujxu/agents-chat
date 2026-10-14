@@ -13942,18 +13942,22 @@ native cold activation fixture.
   original controller PID/identity, task name and configuration SHA256.
   Reject legacy requests, altered raw-byte binding, extra fields and malformed
   or oversized records. It contains no invented runtime or Job identity.
-- [ ] Push causal contracts and run the existing focused native command gate
+- [x] Push causal contracts and run the existing focused native command gate
   with `windows_restore_scenario=failed`; inspect the exact failures.
-- [ ] Write new activation receipts as version 2; both native and JS readers
+  Causal `e91426d2 / 38582982140`, job `115917461136`, failed at
+  `2026-10-14 14:43:28 UTC`: only the two new version-two tests failed at the
+  original version-one history admission; the existing 58 contracts passed.
+  Original job log inspected.
+- [x] Write new activation receipts as version 2; both native and JS readers
   accept homogeneous versions 1 or 2. Preserve journal filenames, ordering,
   existing launch recovery and terminal retirement inventories.
-- [ ] Before `task.Enabled = true`, publish and retain
+- [x] Before `task.Enabled = true`, publish and retain
   `<original-runtime-bundle>/enable-requested.json` using `WindowsPrivateFile`.
   Bind it to the retained original start-request digest. Keep it outside the
   recovery journal so terminal cleanup cannot erase it or change the existing
   deletion protocol. Each cold copy already uses a unique runtime bundle.
   The write-ahead record is not an enable-success acknowledgement.
-- [ ] Native callbacks at `requested` and `registered` require the intent
+- [x] Native callbacks at `requested` and `registered` require the intent
   absent; `enabled` and later require its exact original immutable record and
   prove writes are denied while retained. Keep all seven startup callbacks,
   cancellation checks and original state/lock equality assertions.

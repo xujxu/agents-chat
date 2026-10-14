@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
-import { lstat, readFile, readdir } from 'node:fs/promises';
+import { lstat, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { claimWindowsColdRestore } from '../scripts/deployment/windows-cold-restore-lease.mjs';
 import { restoreWindowsColdFiles } from '../scripts/deployment/windows-cold-restore-files.mjs';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
 import { verifyWindowsColdReadiness, waitWindowsColdListener } from './deployment-windows-cold-readiness.mjs';
 import { windowsColdStartupSteps } from '../scripts/deployment/windows-cold-activation.mjs';
-import { captureWindowsColdActivationHistory, captureWindowsColdLaunch } from '../scripts/deployment/windows-cold-activation-history.mjs';
+import { captureWindowsColdActivationHistory, captureWindowsColdEnableRequest,
+  captureWindowsColdLaunch } from '../scripts/deployment/windows-cold-activation-history.mjs';
 
 const [control, pwsh, mode] = process.argv.slice(2);
 assert.ok(mode === undefined || ['crash', 'observed-crash', 'started-crash'].includes(mode), 'Unknown cold activation fixture mode.');
@@ -35,6 +36,7 @@ try {
   await assert.rejects(activation.start({ onProgress: 42 }), /progress callback/);
   const steps = [];
   let observed;
+  let enableIntent;
   running = await activation.start({ onProgress: async progress => {
     assert.equal(progress.step, windowsColdStartupSteps[steps.length]);
     assert.ok(Object.isFrozen(progress));
@@ -43,10 +45,25 @@ try {
     assert.deepEqual(await readFile(path.join(control, 'lock/owner.json')), lockBytes);
     const requestedBytes = await readFile(path.join(control, 'recovery-lock/activation-start-requested.json'));
     const requested = JSON.parse(requestedBytes);
+    assert.equal(requested.version, 2);
     assert.equal(requested.phase, 'start-requested');
     assert.equal(requested.runtime, null);
     if (progress.step !== 'running') {
       await assert.rejects(lstat(path.join(control, 'recovery-lock/activation-running.json')), { code: 'ENOENT' });
+    }
+    const enablePath = path.join(path.dirname(requested.configuration), 'enable-requested.json');
+    if (['requested', 'registered'].includes(progress.step)) {
+      await assert.rejects(lstat(enablePath), { code: 'ENOENT' });
+    } else {
+      const intentBytes = await readFile(path.join(control, 'recovery-lock/activation-intent.json'));
+      const history = captureWindowsColdActivationHistory({
+        intent: JSON.parse(intentBytes), intentBytes, records: [requestedBytes], taskName: requested.taskName,
+      });
+      const bytes = await readFile(enablePath);
+      const captured = captureWindowsColdEnableRequest({ history, requestBytes: requestedBytes, bytes });
+      if (enableIntent) assert.deepEqual(captured, enableIntent);
+      else enableIntent = captured;
+      await assert.rejects(writeFile(enablePath, bytes));
     }
     if (mode === 'started-crash' && progress.step === 'started') {
       assert.equal(progress.observation, null);
