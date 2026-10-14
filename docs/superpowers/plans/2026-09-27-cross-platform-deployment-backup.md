@@ -14042,6 +14042,24 @@ deployment workflow. No original journal schema or synthetic runtime identity.
   Implementation `5fa661e6` is running in `38544479831`: earlier-prefix job
   `115787034058`, unchanged regression job `115787034572`. Do not replace or
   restart these gates when adding separate actual-application fixture coverage.
+  Earlier-prefix job `115787034058` failed at `2026-10-14 09:55 UTC`.
+  The retained log reaches original-runtime retirement, then reports only
+  outer fixture cleanup failing because a cold configuration file is still
+  held. It does not establish the primary earlier-startup failure.
+  Preserve the still-running original regression job and actual application
+  gate. Retain the known original bridge/runtime handles before the new task
+  assertion, print the original exception before outer cleanup can mask it,
+  and wait for retained guarded actors after controller cleanup. Add bounded
+  task-shape diagnostics without printing task XML or environment values.
+  A fixture-only retry uses the new focused selector without repeating or
+  cancelling the full regression:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true \
+    -f windows_cold_started_only=true
+  ```
 
 ### Task 5FJ: Route public recovery of an original unacknowledged application launch
 

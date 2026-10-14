@@ -23,18 +23,6 @@ try {
     $frame = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync($actor.StandardOutput, 131072)
     if (-not $frame.Wait(600000)) { throw 'Cold crash actor did not publish its admitted running runtime.' }
     $running = $frame.GetAwaiter().GetResult() | ConvertFrom-Json
-    if ($StartupStep -ceq 'started') {
-        if ($running.status -cne 'guarded-launch') { throw 'Earlier crash fixture fabricated a running observation.' }
-        $scheduler = New-Object -ComObject 'Schedule.Service'
-        $scheduler.Connect()
-        $task = $scheduler.GetFolder('\').GetTask($running.taskName)
-        if (-not $task.Enabled -or $task.GetInstances(0).Count -ne 1 -or
-            [string]$task.GetSecurityDescriptor(7) -cne $running.securityDescriptor -or
-            -not (Test-AgentsChatColdRecoveryDefinition $running.definition ([string]$task.Xml) -Unacknowledged -Enabled)) {
-            throw 'Earlier startup did not retain its exact enabled guarded task and instance.'
-        }
-        $running.definition = [string]$task.Xml
-    }
     $bridge = [Diagnostics.Process]::GetProcessById($running.controllerPid)
     $runtime = [Diagnostics.Process]::GetProcessById($running.runtime.pid)
     $null = $bridge.Handle
@@ -42,6 +30,23 @@ try {
     if ([Deployment.WindowsWorkerJob]::ProcessIdentity($bridge.Id) -cne $running.controllerIdentity -or
         [Deployment.WindowsWorkerJob]::ProcessIdentity($runtime.Id) -cne $running.runtime.identity) {
         throw 'Cold crash fixture lost its original bridge or runtime identity.'
+    }
+    if ($StartupStep -ceq 'started') {
+        if ($running.status -cne 'guarded-launch') { throw 'Earlier crash fixture fabricated a running observation.' }
+        $scheduler = New-Object -ComObject 'Schedule.Service'
+        $scheduler.Connect()
+        $task = $scheduler.GetFolder('\').GetTask($running.taskName)
+        $instances = $task.GetInstances(0).Count
+        $securityMatches = [string]$task.GetSecurityDescriptor(7) -ceq $running.securityDescriptor
+        $policyMatches = Test-AgentsChatColdRecoveryDefinition $running.definition ([string]$task.Xml) -Unacknowledged -Enabled
+        $xml = [xml][string]$task.Xml
+        $namespaces = [Xml.XmlNamespaceManager]::new($xml.NameTable)
+        $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+        $enabledNodes = $xml.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces).Count
+        if (-not $task.Enabled -or $instances -ne 1 -or -not $securityMatches -or -not $policyMatches) {
+            throw "Earlier guarded task differs: enabled=$($task.Enabled); instances=$instances; security=$securityMatches; policy=$policyMatches; enabledElements=$enabledNodes."
+        }
+        $running.definition = [string]$task.Xml
     }
     $state = Get-Content -LiteralPath (Join-Path $Control 'state.json') -Raw | ConvertFrom-Json
     $endpoint = Get-Content -LiteralPath (Join-Path $state.project 'listener.json') -Raw | ConvertFrom-Json
@@ -86,11 +91,19 @@ try {
         throw 'Crashed cold application left its listener port open.'
     }
     Write-Output ($running | ConvertTo-Json -Depth 6 -Compress)
+} catch {
+    [Console]::Error.WriteLine($_.Exception.ToString())
+    throw
 } finally {
     foreach ($process in @($bridge, $actor)) {
         if ($process -and -not $process.HasExited) {
             $process.Kill()
             if (-not $process.WaitForExit(15000)) { throw 'Cold crash fixture controller cleanup failed.' }
+        }
+    }
+    foreach ($process in @($runtime, $listener)) {
+        if ($process -and -not $process.HasExited -and -not $process.WaitForExit(60000)) {
+            throw 'Cold crash fixture guarded runtime or listener did not settle after controller cleanup.'
         }
     }
     if ($diagnostic) {

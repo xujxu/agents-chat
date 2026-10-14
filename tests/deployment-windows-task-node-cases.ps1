@@ -316,6 +316,9 @@ try {
             -Control $control -TaskName $TaskName -Ready $Ready -Owner $Owner -ColdActivationCrash:$ColdActivationCrash `
             -ColdStartupCrash:$ColdStartupCrash -ColdStartupStep $ColdStartupStep
     }
+} catch {
+    [Console]::Error.WriteLine($_.Exception.ToString())
+    throw
 } finally {
     if ($controller) {
         try {
