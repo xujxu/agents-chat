@@ -13948,6 +13948,9 @@ fixtures, `deployment-native-operation.test.mjs`, and the existing workflow.
 - [ ] After native preparation acceptance, push and run both actual selectors
   with application/live flags and without command-only. Inspect exact original
   logs; keep native and actual acceptance distinct.
+  Actual fixtures `c1273ee2`: requested `38601393495`, job `115981271496`,
+  running; registered `38602160464` pending in the same actual concurrency
+  group after its own native gate passed. Neither actual path is accepted yet.
 
 ### Task 5FN: Recover interrupted preparation before the original enable attempt
 
@@ -14006,6 +14009,14 @@ fixtures, and the focused workflow selector. No new recovery journal phase.
   Repeat with `registered`; rerun focused pure contracts. Keep older full
   regressions, and require a later actual public application gate before
   claiming public preparation recovery accepted.
+  Targeted native `7d84bfea`: requested `38598302976`, job `115970644930`,
+  passed (final retirement marker `2026-10-14 16:48:00 UTC`); registered
+  `38598304250`, job `115970656474`, passed at `16:53:25 UTC`.
+  Both original logs inspected: never-enabled preparation and rejection of
+  enable/launch/readiness evidence, null-runtime read-only admission, repeated
+  policy takeover, exact archival/fresh copy and terminal state/receipt/
+  retirement passed. Full original-path regression `38598304291` still runs;
+  do not mark this task's complete regression gate accepted yet.
 
 ### Task 5FM: Record a versioned write-ahead boundary before cold task enabling
 
