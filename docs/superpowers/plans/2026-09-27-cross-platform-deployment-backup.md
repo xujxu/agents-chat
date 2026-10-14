@@ -13984,6 +13984,9 @@ application API fixture through `deployment-windows-application-api-helpers.mjs`
   bounds, not larger production stage timeouts. Inspect both exact launch-death
   and public launch-closeout PASS markers. Record acceptance only after both
   the full native gate and this actual application gate pass.
+  Implementation `e37975d5` is pushed; actual run `38515034448` dispatched.
+  Full native run `38515034659` independently covers the same implementation.
+  Neither gate is accepted yet.
 
 ### Task 5FI: Recover an unacknowledged guarded launch without fabricating runtime history
 
@@ -14015,8 +14018,12 @@ acknowledged running and graceful stopped chains remain covered unchanged.
   configuration, distinct canonical nonzero generation, bounded PID/session,
   exact Job name and original raw-byte digest. Reject acknowledged/stopped
   histories, extra fields, altered binding and malformed/oversized bytes.
-- [ ] Push causal tests, dispatch the existing command-only `failed` selector
+- [x] Push causal tests, dispatch the existing command-only `failed` selector
   and inspect failure for the missing launch capture export. No local test.
+  Causal `36ad96c3 / 38511364856`, job `115691222585`, failed at
+  `2026-10-14 05:06:41 UTC` with exactly
+  `TypeError: captureWindowsColdLaunch is not a function`; 56 other contracts
+  passed. The original job log was inspected.
 - [x] Capture exactly one private `launch-*.json` in the original cold bundle.
   Bind native and JS observations to its exact fields and digest, without
   constructing Scheduler instance, launcher or readiness fields:
@@ -14070,6 +14077,8 @@ acknowledged running and graceful stopped chains remain covered unchanged.
   Inspect all three cold chains and existing saved closure/warm regressions.
   Public routing and real application interruption are a subsequent gate;
   do not report them accepted based on these native fixtures.
+  Implementation `3510c23a` is included in `e37975d5 / 38515034659`,
+  dispatched after the original finite-startup gate and causal proof completed.
 
 ### Task 5FH: Advance original cold startup through explicit bounded stages
 
@@ -14130,10 +14139,15 @@ interruption tests without timing races or production-only test hooks.
   to equal it. Await `onProgress({ step, observation })`, freeze exposed
   records, and honor cancellation after each callback. Validate callbacks
   before any startup authority transfer in both Node layers.
-- [ ] Run the full native saved cold chain, retaining graceful close, controller
+- [x] Run the full native saved cold chain, retaining graceful close, controller
   crash, policy archival/reclaim, completion and retirement regressions.
   This state-machine refactor does not itself admit earlier public recovery.
   Add that recovery only with the original launch/owner/Job absence proof.
+  Full native `30615d43 / 38510551063`, job `115677812946`, passed at
+  `2026-10-14 05:06:15 UTC`. Inspected all 56 focused contracts, both guarded
+  launch-before-workload tests, saved dependency closure, the actual ordered
+  startup callbacks in both cold chains, stopped/running policy archival and
+  fresh-copy recovery, terminal/receipt/retirement and warm restore regressions.
 
 ### Task 5FG: Persist guarded runtime launch identity before admitting workload
 
