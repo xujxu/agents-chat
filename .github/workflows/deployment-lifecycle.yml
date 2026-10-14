@@ -217,8 +217,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Private Windows test runner diagnostics failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-process-lifetime.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Windows fixture process lifetime observation failed.' }
-          ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-owner-exit
-          ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-release
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-owner-exit
+          if ($LASTEXITCODE -ne 0) { throw 'Guarded launch journal owner-death contract failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-release
+          if ($LASTEXITCODE -ne 0) { throw 'Guarded launch journal release contract failed.' }
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-receipt.test.mjs')
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs', 'tests/deployment-windows-restore-entry.test.mjs', 'tests/deployment-windows-restore-invocation.test.mjs') -NamePattern '^(saved recovery bundle closes module dependencies|saved Windows restore entry|public Windows restore invocation)'
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-project-policy.test.mjs')

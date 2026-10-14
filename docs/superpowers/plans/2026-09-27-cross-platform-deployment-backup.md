@@ -13993,6 +13993,13 @@ command step in `.github/workflows/deployment-lifecycle.yml`.
 - [ ] Run the full native saved cold chain, whose first step repeats the
   focused contracts. Require both exact new launch PASS markers and existing
   guarded death/release contracts before accepting this prerequisite.
+  First fixed run `df74b5c8 / 38503935179`, job `115656986159`, reached both
+  launch/death/release PASS markers, then failed at `2026-10-14 03:04:46 UTC`:
+  the newly in-process host fixtures had loaded a different C# assembly input
+  set before the private runner's `Add-Type`. Run these two fixtures in
+  separate PowerShell processes with explicit exit-code checks, matching
+  surrounding native fixture isolation. Production code is unchanged by this
+  harness correction; the full saved chain still needs a green run.
 - [ ] Continue earlier-prefix recovery using original native proof and finite
   policy archival, including real interruption before running acknowledgement.
   Old helper bundles without sufficient launch evidence remain refused rather
