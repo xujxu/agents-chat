@@ -214,6 +214,50 @@ test('Windows cold preparation requires version-two never-enabled evidence witho
   }));
 });
 
+test('Windows cold unlaunched enable attempt requires its immutable original intent and absent launch', async () => {
+  const { captureWindowsColdActivationHistory, captureWindowsColdUnlaunched } =
+    await import('../scripts/deployment/windows-cold-activation-history.mjs');
+  const fixture = coldHistoryFixture();
+  const records = fixture.encode([{ version: 2, phase: 'start-requested', runtime: null }]);
+  const history = captureWindowsColdActivationHistory({ ...fixture, records });
+  const record = {
+    version: 1, phase: 'enable-requested', requestSha256: history.sha256,
+    controllerPid: history.controllerPid, controllerIdentity: history.controllerIdentity,
+    taskName: fixture.taskName, configurationSha256: fixture.intent.runtimeBundle.sha256,
+  };
+  const enableBytes = Buffer.from(`${JSON.stringify(record)}\n`);
+  const entries = ['configuration.json', 'enable-requested.json'];
+  const input = { history, requestBytes: records[0], enableBytes, entries };
+  const captured = captureWindowsColdUnlaunched(input);
+  assert.deepEqual(captured, { enableSha256: createHash('sha256').update(enableBytes).digest('hex') });
+  assert.ok(Object.isFrozen(captured));
+  for (const entries of [[], null, ['ENABLE-REQUESTED.JSON'],
+    ['enable-requested.json', 'enable-requested.json'],
+    [...input.entries, 'launch-33-1234.json'], [...input.entries, 'RUNTIME-33-1234.JSON']]) {
+    assert.throws(() => captureWindowsColdUnlaunched({ ...input, entries }));
+  }
+  for (const changed of [{ requestSha256: '0'.repeat(64) }, { controllerIdentity: '22:5678' },
+    { phase: 'enabled' }, { configurationSha256: '0'.repeat(64) }, { unknown: true }]) {
+    assert.throws(() => captureWindowsColdUnlaunched({
+      ...input, enableBytes: Buffer.from(JSON.stringify({ ...record, ...changed })),
+    }));
+  }
+  for (const enableBytes of [null, Buffer.alloc(0), Buffer.alloc(65537), Buffer.from('{')]) {
+    assert.throws(() => captureWindowsColdUnlaunched({ ...input, enableBytes }));
+  }
+  const changedBytes = Buffer.concat([records[0], Buffer.from('\n')]);
+  assert.throws(() => captureWindowsColdUnlaunched({
+    ...input, requestBytes: changedBytes,
+    enableBytes: Buffer.from(JSON.stringify({
+      ...record, requestSha256: createHash('sha256').update(changedBytes).digest('hex'),
+    })),
+  }));
+  const legacy = fixture.encode([{ phase: 'start-requested', runtime: null }]);
+  assert.throws(() => captureWindowsColdUnlaunched({
+    ...input, history: captureWindowsColdActivationHistory({ ...fixture, records: legacy }), requestBytes: legacy[0],
+  }));
+});
+
 test('Windows cold enable intent binds the original version-two request without runtime invention', async () => {
   const { captureWindowsColdActivationHistory, captureWindowsColdEnableRequest } =
     await import('../scripts/deployment/windows-cold-activation-history.mjs');

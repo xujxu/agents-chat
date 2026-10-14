@@ -122,6 +122,32 @@ test('never-enabled cold policy takeover binds only its original preparation his
   assert.throws(() => captureWindowsColdPolicyHistory({ binding, records }));
 });
 
+test('unlaunched cold policy recovery binds the original enable intent without other runtime evidence', async () => {
+  const { captureWindowsColdPolicyHistory } = await import('../scripts/deployment/windows-cold-policy-history.mjs');
+  const { binding, encode } = fixture();
+  binding.enableSha256 = 'f'.repeat(64);
+  const entries = [
+    { kind: 'claim', step: 'initial' }, { kind: 'request', step: 'requested' },
+    { kind: 'claim', step: 'requested', ...owner(200) },
+    { kind: 'restored', step: 'restored', ...owner(200) },
+  ];
+  const records = encode(entries);
+  const captured = captureWindowsColdPolicyHistory({ binding, records });
+  assert.equal(captured.step, 'restored');
+  assert.ok(captured.records.every(record => record.enableSha256 === binding.enableSha256));
+  for (const enableSha256 of ['', null, '0'.repeat(64)]) {
+    assert.throws(() => captureWindowsColdPolicyHistory({ binding: { ...binding, enableSha256 }, records }));
+    assert.throws(() => captureWindowsColdPolicyHistory({
+      binding, records: encode([entries[0], { ...entries[1], enableSha256 }]),
+    }));
+  }
+  for (const extra of [{ launchSha256: 'a'.repeat(64) }, { preparationSha256: binding.historySha256 }]) {
+    assert.throws(() => captureWindowsColdPolicyHistory({ binding: { ...binding, ...extra }, records: [] }));
+  }
+  delete binding.enableSha256;
+  assert.throws(() => captureWindowsColdPolicyHistory({ binding, records }));
+});
+
 test('unacknowledged cold policy takeover retains the exact original launch digest', async () => {
   const { captureWindowsColdPolicyHistory } = await import('../scripts/deployment/windows-cold-policy-history.mjs');
   const { binding, encode } = fixture();

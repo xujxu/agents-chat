@@ -13915,6 +13915,59 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FP: Recover a version-two enable attempt before any launch
+
+**Goal:** Distinguish a genuine original enable intent from never-enabled
+preparation. Admit neither arbitrary missing launch evidence nor a fabricated
+runtime identity. The retained original host checks its original controller
+lease before and after publishing its immutable launch record, before
+`WindowsRuntimeDomain.Start` (`WindowsRuntimeHost.cs:165-181`). A dead original
+controller cannot admit a later queued guarded workload.
+
+**Files:** extend existing cold history/recovery and policy history modules,
+their native counterparts, native startup/crash/absence/policy fixtures and
+the existing focused workflow choice. Keep original journal phases and
+retirement inventory unchanged.
+
+- [ ] Add causal pure contracts:
+
+  ```js
+  captureWindowsColdUnlaunched({ history, requestBytes, enableBytes, entries });
+  // frozen { enableSha256 }, not a running acknowledgement or authority
+  ```
+
+  Require the sole original version-two request and its raw digest; require
+  the exact `enable-requested.json` with all seven original bindings and
+  absence of launch/readiness entries. Reject absent/foreign/malformed enable
+  intent, legacy history and changed raw bytes. Policy history binds exactly
+  one of `launchSha256`, `preparationSha256` or `enableSha256`, never a mixture.
+- [ ] Push causal tests and dispatch application/live/commands with scenario
+  `failed`; inspect original failure evidence before accepting implementation.
+- [ ] Native observer independently opens/retains the exact original enable
+  intent and configuration/helpers, checks no launch/readiness twice, proves
+  all original owners absent, original Job empty and zero task instances.
+  Require exact guarded task/security (disabled or enabled with no automation).
+  Read-only inspection does not disable it. Restore original disabled policy
+  only after the existing claimed write-ahead policy request; retain intent
+  throughout takeover and archival.
+- [ ] Extend native `enabled` interruption with runtime null and the original
+  enable record; do not create runtime/Job identities or readiness. After the
+  original bridge dies, explicitly demand-start its still-enabled guarded task
+  and require it to fail without launch/readiness/workload, then exercise the
+  same read-only, repeated takeover, archive, fresh-copy and terminal chain.
+- [ ] Extend the focused workflow startup choice with `enabled`; keep the
+  `started` default and distinct concurrency suffix. Dispatch:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true \
+    -f windows_cold_started_only=true -f windows_cold_startup_step=enabled
+  ```
+
+  Run full original native regression concurrently in its independent group.
+  Public actual application acceptance remains a separate subsequent gate.
+
 ### Task 5FO: Accept actual public recovery of never-enabled preparation
 
 **Files:** extend `tests/deployment-windows-cold-application-files.mjs`,
