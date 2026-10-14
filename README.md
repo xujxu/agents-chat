@@ -970,7 +970,8 @@ startup, live guarded peers, initially inactive/legacy tasks and reboot recovery
 remain unsupported.
 The unacknowledged-startup recovery proof is being extended to use the original
 immutable guarded-launch record without synthesizing a running receipt.
-That work is not yet accepted or routed through the public restore command.
+Its public routing and separate actual-application interruption scenario are
+implemented but still awaiting native and actual acceptance.
 Do not remove a retained lock to bypass a recovery refusal.
 
 ```powershell

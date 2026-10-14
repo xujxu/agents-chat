@@ -19,6 +19,7 @@ const restoreModes = [
   'restore-cold-receipt-closeout', 'restore-cold-state-closeout', 'restore-cold-completion-closeout',
   'restore-cold-start-closeout',
   'restore-cold-startup-crashed', 'restore-cold-startup-closeout',
+  'restore-cold-launch-crashed', 'restore-cold-launch-closeout',
   'restore-cold-retirement-prepared', 'restore-cold-retirement-early',
   'restore-cold-retirement-unlock', 'restore-cold-retirement-completed',
 ];

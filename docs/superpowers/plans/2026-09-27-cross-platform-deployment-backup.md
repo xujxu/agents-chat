@@ -13915,6 +13915,76 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FJ: Route public recovery of an original unacknowledged application launch
+
+**Goal:** Reuse Task 5FI's native authority through the existing saved public
+restore chain. Accept only after its native gate and a separate actual Windows
+application run; keep the acknowledged-startup scenario independently available.
+
+**Files:** modify `scripts/deployment/windows-cold-restore-command.mjs`;
+extend `tests/deployment-windows-cold-application-files.mjs`,
+`deployment-windows-cold-application-start.mjs`, `deployment-windows-live-restore.mjs`,
+`deployment-windows-live-application.mjs`, `deployment-windows-live-application.ps1`,
+`deployment-native-operation.test.mjs` and `.github/workflows/deployment-lifecycle.yml`.
+Add `tests/deployment-windows-cold-launch-listener.ps1` and reuse the existing
+application API fixture through `deployment-windows-application-api-helpers.mjs`.
+
+- [x] Add explicit `restore-cold-launch-crashed` / `restore-cold-launch-closeout`
+  fixture modes and a `cold-launch` workflow selector. At the existing native
+  `observed` callback, independently verify actual authenticated restored data,
+  require the running acknowledgement absent, retain original configuration
+  checks and interrupt the real controller:
+
+  ```js
+  const readiness = await verifyWindowsColdLaunchApi({
+    pwsh, runtime: progress.observation.runtime, chatId,
+  });
+  await configuration.checkFiles();
+  await assert.rejects(lstat(path.join(control, 'recovery-lock/activation-running.json')),
+    { code: 'ENOENT' });
+  await interruptWindowsColdApplication({
+    status: 'cold-launch-interrupted', retired: true, runtime: proof.runtime,
+    activation: progress.observation, readiness,
+  });
+  ```
+
+  This callback does not call the busy startup bridge. A fresh test-only
+  PowerShell observer uses the existing `WindowsRuntimeListener.Retain` and
+  retains the exact native owner/listener while the existing Node API fixture
+  verifies authenticated restored data. Retry only native not-ready and HTTP
+  503, within the existing 120-second listener/readiness bounds; fail other
+  errors. It writes no startup journal and cannot acknowledge running.
+- [x] Parent fixture requires the real original host to retire, the interrupted
+  guarded host and both Jobs to disappear, no task instance/listener to survive,
+  exact disabled task/security and the original request/launch files to remain.
+  The old acknowledged mode retains its owned readiness/running-receipt checks.
+- [x] Public closeout fixture reads the unique original launch instead of a
+  nonexistent running receipt. Retain the launch bytes, inode and mtime through
+  recovery; compare its actual identity with the interrupted host. Do not
+  synthesize `instanceGuid`. Require exact journal archival and original backup,
+  engine, API data, accepted state/receipt, active-evidence cleanup and a third
+  distinct released runtime with native-owned port 3010.
+- [x] Change only the public routing hint:
+
+  ```js
+  await lstat(path.join(control, 'recovery-lock/activation-start-requested.json'));
+  ```
+
+  The hint still grants no authority; original saved-snapshot native admission
+  decides whether this prefix is recoverable before policy or files mutate.
+- [ ] Push and dispatch the independent actual gate after the native causal run:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=cold-launch
+  ```
+
+  Use the already accepted startup scenario's 165/175/185-minute outer test
+  bounds, not larger production stage timeouts. Inspect both exact launch-death
+  and public launch-closeout PASS markers. Record acceptance only after both
+  the full native gate and this actual application gate pass.
+
 ### Task 5FI: Recover an unacknowledged guarded launch without fabricating runtime history
 
 **Goal:** Admit the exact `start-requested` prefix after the original guarded

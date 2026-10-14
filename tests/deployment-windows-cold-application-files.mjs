@@ -3,11 +3,11 @@ import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-evidence.mjs';
-import { verifyWindowsApplicationApi } from './deployment-windows-application-api-helpers.mjs';
+import { verifyWindowsApplicationApi, verifyWindowsColdLaunchApi } from './deployment-windows-application-api-helpers.mjs';
 import { interruptWindowsColdApplication } from './deployment-windows-cold-application-recovery.mjs';
 
 export async function verifyWindowsColdApplicationFiles({
-  directory, project, control, backup, snapshot, pwsh, chatId, interruptStartup = false,
+  directory, project, control, backup, snapshot, pwsh, chatId, interruptStartup = false, interruptLaunch = false,
 }) {
   const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
   const { claimWindowsColdRestore } = await captured('windows-cold-restore-lease.mjs');
@@ -78,7 +78,35 @@ export async function verifyWindowsColdApplicationFiles({
     await configuration.checkFiles();
     process.stderr.write(`${new Date().toISOString()} Actual cold restoration: starting guarded archived application\n`);
     const activation = await lease.prepareActivation({ configuration });
-    const running = await activation.start();
+    const running = await activation.start({
+      async onProgress(progress) {
+        if (!interruptLaunch || progress.step !== 'observed') return;
+        const readiness = await verifyWindowsColdLaunchApi({ pwsh, runtime: progress.observation.runtime, chatId });
+        await configuration.checkFiles();
+        await assert.rejects(lstat(path.join(control, 'recovery-lock/activation-running.json')), { code: 'ENOENT' });
+        const requested = JSON.parse(await readFile(path.join(control, 'recovery-lock/activation-start-requested.json')));
+        assert.equal(requested.runtime, null);
+        assert.equal(requested.controllerPid, progress.observation.controllerPid);
+        const launch = JSON.parse(await readFile(path.join(path.dirname(progress.observation.configuration),
+          `launch-${progress.observation.runtime.identity.replace(':', '-')}.json`)));
+        const runtime = progress.observation.runtime;
+        assert.deepEqual(launch, {
+          version: 1, generation: runtime.generation, pid: runtime.pid, identity: runtime.identity,
+          configurationSha256: runtime.configurationSha256, sessionId: runtime.sessionId,
+          job: `Local\\agents-deploy-${runtime.generation}`,
+          controllerPid: progress.observation.controllerPid, controllerIdentity: progress.observation.controllerIdentity,
+        });
+        for (const [name, bytes] of [['state.json', state], ['lock/owner.json', lock], ['deployment.json', receipt]]) {
+          assert.deepEqual(await readFile(path.join(control, name)), bytes);
+        }
+        await interruptWindowsColdApplication({
+          status: 'cold-launch-interrupted', retired: true, runtime: proof.runtime,
+          activation: progress.observation, readiness,
+        });
+        assert.fail('Actual unacknowledged launch interruption unexpectedly returned.');
+      },
+    });
+    assert.equal(interruptLaunch, false, 'Actual cold startup skipped its unacknowledged launch boundary.');
     const readiness = await activation.waitReady({ port: 3010 });
     assert.equal(readiness.generation, running.runtime.generation);
     await verifyWindowsApplicationApi('restored', chatId);

@@ -26,7 +26,7 @@ export async function runWindowsColdRestoreCommand(options = {}) {
   try {
     let interruptedStartup = false;
     try {
-      await lstat(path.join(control, 'recovery-lock/activation-running.json'));
+      await lstat(path.join(control, 'recovery-lock/activation-start-requested.json'));
       interruptedStartup = true;
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
     if (interruptedStartup) {
