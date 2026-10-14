@@ -62,6 +62,7 @@ try {
     $environment.Add('SystemRoot', $env:SystemRoot)
     $environment.Add('PATH', $env:PATH)
     $environment.Add('RUNTIME_LITERAL', 'literal %n $HOME " space')
+    if ($Scenario.StartsWith('guarded-')) { $environment.Add('RUNTIME_GUARDED_LAUNCH', $root) }
     if ($StoppedProof) { $environment.Add('RUNTIME_LISTENER_PORT', '3010') }
     if ($StoppedProof -or $Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
         $address = switch ($Scenario) { 'listener-v4' { '127.0.0.1' } 'listener-v6' { '::' } default { 'independent' } }
@@ -87,6 +88,19 @@ try {
     }
     @'
 const fs = require('node:fs');
+if (process.argv[2] !== 'child' && process.env.RUNTIME_GUARDED_LAUNCH) {
+  const path = require('node:path');
+  const root = process.env.RUNTIME_GUARDED_LAUNCH;
+  const records = fs.readdirSync(root).filter(name => /^launch-[0-9]+-[0-9]+\.json$/.test(name));
+  if (records.length !== 1) throw new Error('Guarded workload requires its durable launch identity before execution.');
+  const bytes = fs.readFileSync(path.join(root, records[0]));
+  const record = JSON.parse(bytes);
+  if (record.version !== 1 || record.configurationSha256 !== require('node:crypto').createHash('sha256')
+    .update(fs.readFileSync(path.join(root, 'configuration.json'))).digest('hex')) {
+    throw new Error('Guarded workload launch record differs from its original configuration.');
+  }
+  fs.writeFileSync('launch-observed.json', bytes);
+}
 if (process.argv[2] === 'child') {
   fs.writeFileSync('writer-pid', String(process.pid));
   fs.writeFileSync('writes', 'x');
@@ -170,6 +184,10 @@ if (process.argv[2] === 'child') {
     $ownerIdentity = [Deployment.WindowsWorkerJob]::ProcessIdentity($owner.Id)
     $readyFile = Join-Path $root "runtime-$($ownerIdentity.Replace(':', '-')).json"
     while (-not (Test-Path -LiteralPath $readyFile) -or -not (Test-Path -LiteralPath (Join-Path $project 'writes'))) {
+        if ($Scenario.StartsWith('guarded-') -and (Test-Path -LiteralPath $readyFile)) {
+            Assert (Test-Path -LiteralPath (Join-Path $root "launch-$($ownerIdentity.Replace(':', '-')).json")) `
+                'Guarded runtime admitted its workload without a durable launch identity'
+        }
         Assert (-not $owner.HasExited -and [DateTime]::UtcNow -lt $deadline) 'Installed runtime failed before readiness'
         Start-Sleep -Milliseconds 100
     }
@@ -179,6 +197,29 @@ if (process.argv[2] === 'child') {
     finally { $retained.Dispose() }
     Assert ($ready.version -eq 1 -and $ready.pid -eq $owner.Id -and $ready.identity -ceq $ownerIdentity -and
         $ready.configurationSha256 -ceq $digest -and $ready.sessionId -eq 0) 'Managed readiness lost configuration or original task-owner identity'
+    if ($Scenario.StartsWith('guarded-')) {
+        $launchFile = Join-Path $root "launch-$($ownerIdentity.Replace(':', '-')).json"
+        $launchText = [IO.File]::ReadAllText($launchFile)
+        $launch = $launchText | ConvertFrom-Json
+        $expectedFields = @('version', 'generation', 'pid', 'identity', 'configurationSha256',
+            'sessionId', 'job', 'controllerPid', 'controllerIdentity') | Sort-Object
+        Assert ((@($launch.PSObject.Properties.Name | Sort-Object) -join ',') -ceq ($expectedFields -join ',')) `
+            'Guarded launch record has an incomplete or foreign schema'
+        Assert ($launch.version -eq 1 -and $launch.pid -eq $owner.Id -and $launch.identity -ceq $ownerIdentity -and
+            $launch.generation -ceq $ready.generation -and $launch.configurationSha256 -ceq $digest -and
+            $launch.sessionId -eq $owner.SessionId -and $launch.job -ceq $ready.job -and
+            $launch.controllerPid -eq $hello.pid -and $launch.controllerIdentity -ceq $hello.identity) `
+            'Guarded launch intent differs from the original native controller, runtime, Job or configuration'
+        Assert ([IO.File]::ReadAllText((Join-Path $project 'launch-observed.json')) -ceq $launchText) `
+            'Actual workload did not observe the original complete launch record before its first write'
+        $refused = $false
+        try { [IO.File]::WriteAllText($launchFile, $launchText) }
+        catch { $refused = ($_.Exception.GetBaseException().HResult -band 0xffff) -eq 32 }
+        Assert $refused 'Guarded host released its write-ahead launch record'
+    } else {
+        Assert (@(Get-ChildItem -LiteralPath $root -Filter 'launch-*.json').Count -eq 0) `
+            'Unguarded startup published a guarded controller record'
+    }
     if ($Scenario -cin @('transaction-activate-complete-disabled', 'transaction-activate-complete-proof-disabled',
         'transaction-activate-complete-retirement-disabled', 'transaction-activate-complete-recovery-disabled')) {
         $task.Enabled = $false
@@ -260,6 +301,8 @@ if (process.argv[2] === 'child') {
             $reply = [Deployment.WindowsRuntimeControl]::Exchange([guid]$ready.generation, $ready.pid, $ready.identity, 'retire', 15000)
             Assert ($reply -ceq 'retired' -and $owner.WaitForExit(15000) -and $owner.ExitCode -eq 0) 'Released runtime failed ordinary retirement'
         }
+        Assert ([IO.File]::ReadAllText($launchFile) -ceq $launchText) 'Runtime retirement changed its launch history'
+        Write-Output "PASS: $Scenario preserves immutable launch identity published before actual workload admission"
         Write-Output "PASS: $Scenario binds actual release peer and preserves original runtime Job ownership across controller exit"
         return
     }

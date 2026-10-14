@@ -13915,6 +13915,86 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FG: Persist guarded runtime launch identity before admitting workload
+
+**Goal:** Close the evidence gap between Scheduler demand-start and its running
+acknowledgement. The existing requested record has `runtime: null`; dropping
+runtime/Job absence checks is not a recovery solution. Publish an immutable
+write-ahead launch record from the actual host before its Job starts target
+code. Subsequent earlier-prefix recovery must bind this evidence under native
+admission; this prerequisite alone does not admit new public restore states.
+
+**Files:** modify `scripts/deployment/WindowsRuntimeHost.cs`,
+`tests/deployment-windows-runtime-host.ps1` and the existing focused Windows
+command step in `.github/workflows/deployment-lifecycle.yml`.
+
+- [ ] Add the real guarded workload contract first. Before creating its first
+  marker or spawning its detached writer, the workload requires exactly one
+  `launch-PID-STARTTICKS.json` in its private runtime bundle, verifies the
+  configuration digest, and copies the observed exact bytes to
+  `launch-observed.json`. Parent checks the exact nine-field record against
+  actual Scheduler owner, readiness generation/session/Job and original
+  controller. Writes to the retained record must fail; exact bytes must
+  survive guarded owner death and ordinary released runtime retirement.
+  Unguarded hosts must not publish a guarded launch record.
+- [ ] Push the tests and run the focused Windows command selector:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true \
+    -f windows_restore_scenario=failed
+  ```
+
+  Require its causal missing-launch-record failure in the actual guarded
+  workload, not a unrelated parse/build failure. Then add the host publisher:
+
+  ```csharp
+  void PublishLaunch(string directory, Guid generation,
+      int controllerPid, string controllerIdentity)
+  {
+      int pid = Environment.ProcessId;
+      string identity = WindowsWorkerJob.ProcessIdentity(pid);
+      int session;
+      using (Process process = Process.GetCurrentProcess()) session = process.SessionId;
+      string text = JsonSerializer.Serialize(new {
+          version = 1, generation = generation.ToString("D"), pid, identity,
+          configurationSha256, sessionId = session,
+          job = @"Local\agents-deploy-" + generation.ToString("D"),
+          controllerPid, controllerIdentity
+      });
+      retained.Add(WindowsPrivateFile.Publish(
+          Path.Combine(directory, "launch-" + identity.Replace(':', '-') + ".json"), text));
+  }
+  ```
+
+- [ ] After validated original lease creation and generation selection, before
+  `WindowsRuntimeDomain.Start`, run only for guarded hosts:
+
+  ```csharp
+  if (host.lease != null)
+  {
+      stage = "launch-intent";
+      host.Check();
+      host.PublishLaunch(helpers, generation, controllerPid, controllerIdentity);
+      host.Check();
+  }
+  stage = "command";
+  ```
+
+  Keep create-only publication, original file handles and disposal/error
+  semantics. Failure to publish or retain the record must prevent workload
+  admission. Never reconstruct missing evidence or manufacture a new Job to
+  prove old Job absence. No secret command arguments or environment enter this
+  record. Existing readiness schema and unguarded runtime behavior stay intact.
+- [ ] Repeat the focused native gate, require both exact new launch PASS
+  markers and existing guarded death/release contracts, then run the full
+  saved cold chain before accepting this prerequisite.
+- [ ] Continue earlier-prefix recovery using original native proof and finite
+  policy archival, including real interruption before running acknowledgement.
+  Old helper bundles without sufficient launch evidence remain refused rather
+  than inferred safe. Do not claim public earlier-startup recovery at this step.
+
 ### Task 5FF: Recover acknowledged interrupted guarded startup before public retry
 
 **Harness correction:** Actual `25b99507 / 38481262248`, job
