@@ -14005,6 +14005,9 @@ application API fixture through `deployment-windows-application-api-helpers.mjs`
   inherited process cwd for its API child; script paths remain absolute.
   This is a fixture-only correction; preserve the independently running full
   native policy gate `38523236422`.
+  Fixture correction `e38a45ba` is under actual acceptance in `38531710666`,
+  job `115744891848`. Native recovery is now accepted as recorded in Task 5FI;
+  this public actual-application gate remains pending.
 
 ### Task 5FI: Recover an unacknowledged guarded launch without fabricating runtime history
 
@@ -14084,7 +14087,7 @@ acknowledged running and graceful stopped chains remain covered unchanged.
   original request/launch bytes. Independently inspect and lock the launch
   proof, then reuse repeated policy crashes, exact archive, fresh copy,
   completion and retirement acceptance. Keep both previous native modes.
-- [ ] Push implementation and dispatch full native command gate:
+- [x] Push implementation and dispatch full native command gate:
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -14113,6 +14116,15 @@ acknowledged running and graceful stopped chains remain covered unchanged.
   `e4dd2176 / 38522881587`, job `115716406061`, failed at
   `06:33:44 UTC` for missing `Test-AgentsChatColdRecoveryDefinition`, after the
   fixture established that only XML whitespace differed.
+  Corrected full native gate `0d3e3ee3 / 38523236422`, job `115717551366`,
+  passed at `2026-10-14 08:07:33 UTC`. Inspected the original job log:
+  formatting-only admission and changed-policy refusals passed, as did the
+  original stopped/running chains and the separate start-requested chain.
+  The latter independently proved old/new runtime absence, repeated policy
+  takeover, exact original journal archival, fresh copy, released runtime,
+  terminal state, receipt and retirement. Saved dependency closure and warm
+  restore regressions also passed. This accepts the native unacknowledged
+  launch recovery, not the separate public actual-application gate in Task 5FJ.
 
 ### Task 5FH: Advance original cold startup through explicit bounded stages
 
