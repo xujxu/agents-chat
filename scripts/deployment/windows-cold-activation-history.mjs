@@ -53,6 +53,20 @@ export function captureWindowsColdPreparation({ history, entries }) {
   return Object.freeze({ preparationSha256: history.sha256 });
 }
 
+export function captureWindowsColdUnlaunched({ history, requestBytes, enableBytes, entries }) {
+  if (!Array.isArray(entries) || entries.filter(name => name === 'enable-requested.json').length !== 1) {
+    throw new Error('Unlaunched cold startup requires its original enable intent.');
+  }
+  const preparation = captureWindowsColdPreparation({
+    history, entries: entries.filter(name => name !== 'enable-requested.json'),
+  });
+  const enabled = captureWindowsColdEnableRequest({ history, requestBytes, bytes: enableBytes });
+  if (digest(requestBytes) !== preparation.preparationSha256) {
+    throw new Error('Unlaunched cold startup changed its original request bytes.');
+  }
+  return Object.freeze({ enableSha256: enabled.sha256 });
+}
+
 export function captureWindowsColdEnableRequest({ history, requestBytes, bytes }) {
   const request = history?.records?.[0];
   if (request?.version !== 2 || request.phase !== 'start-requested' || request.runtime !== null

@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)][string]$Control, [switch]$BeforeRunning,
-    [ValidateSet('observed', 'started', 'requested', 'registered')][string]$StartupStep = 'observed'
+    [ValidateSet('observed', 'started', 'requested', 'registered', 'enabled')][string]$StartupStep = 'observed'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -25,8 +25,10 @@ try {
     $running = $frame.GetAwaiter().GetResult() | ConvertFrom-Json
     $bridge = [Diagnostics.Process]::GetProcessById($running.controllerPid)
     $null = $bridge.Handle
-    if ($StartupStep -cin @('requested', 'registered')) {
-        if ($running.status -cne 'guarded-preparation' -or $running.step -cne $StartupStep -or
+    if ($StartupStep -cin @('requested', 'registered', 'enabled')) {
+        $unlaunched = $StartupStep -ceq 'enabled'
+        $expectedStatus = if ($unlaunched) { 'guarded-unlaunched' } else { 'guarded-preparation' }
+        if ($running.status -cne $expectedStatus -or $running.step -cne $StartupStep -or
             $null -ne $running.runtime -or
             [Deployment.WindowsWorkerJob]::ProcessIdentity($bridge.Id) -cne $running.controllerIdentity) {
             throw 'Preparation crash lost its original bridge or invented a runtime.'
@@ -39,28 +41,50 @@ try {
             (Get-Content -LiteralPath (Join-Path $Control 'task-maintenance/task-stop-stopped.json') -Raw |
                 ConvertFrom-Json).definition
         } else { $running.definition }
-        if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
-            -not (Test-AgentsChatColdRecoveryDefinition $expected ([string]$task.Xml) -Unacknowledged) -or
+        if ([bool]$task.Enabled -ne $unlaunched -or $task.GetInstances(0).Count -ne 0 -or
+            -not (Test-AgentsChatColdRecoveryDefinition $expected ([string]$task.Xml) -Unacknowledged -Enabled:$unlaunched) -or
             [string]$task.GetSecurityDescriptor(7) -cne $running.securityDescriptor) {
             throw 'Preparation crash changed its original disabled task policy or security.'
         }
         $running.definition = [string]$task.Xml
         $requestFile = Join-Path $Control 'recovery-lock/activation-start-requested.json'
         $requestHash = (Get-FileHash -LiteralPath $requestFile -Algorithm SHA256).Hash
+        $enableFile = Join-Path ([IO.Path]::GetDirectoryName($running.configuration)) 'enable-requested.json'
+        if ($unlaunched -and
+            (Get-FileHash -LiteralPath $enableFile -Algorithm SHA256).Hash.ToLowerInvariant() -cne $running.enableSha256) {
+            throw 'Unlaunched interruption changed its original enable intent.'
+        }
         $bridge.Kill()
         if (-not $bridge.WaitForExit(15000)) { throw 'Original preparation bridge survived interruption.' }
         $actor.Kill()
         if (-not $actor.WaitForExit(15000)) { throw 'Original preparation actor survived interruption.' }
+        if ($unlaunched) {
+            $late = $folder.GetTask($running.taskName).Run($null)
+            if (-not $late) { throw 'Late guarded demand-start did not return its real task instance.' }
+            $deadline = [Diagnostics.Stopwatch]::StartNew()
+            while ($folder.GetTask($running.taskName).GetInstances(0).Count -ne 0) {
+                if ($deadline.ElapsedMilliseconds -ge 60000) { throw 'Late guarded host survived its absent original controller.' }
+                Start-Sleep -Milliseconds 100
+            }
+            if ($folder.GetTask($running.taskName).LastTaskResult -ne 1 -or
+                (Get-FileHash -LiteralPath $enableFile -Algorithm SHA256).Hash.ToLowerInvariant() -cne $running.enableSha256) {
+                throw 'Late guarded demand-start did not fail with its original enable intent retained.'
+            }
+        }
         $entries = @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($running.configuration)) -Force |
-            Where-Object { $_.Name -imatch '^(enable-requested|(launch|runtime)-.*)\.json$' })
+            Where-Object { $_.Name -imatch '^(launch|runtime)-.*\.json$' -or
+                (-not $unlaunched -and $_.Name -ieq 'enable-requested.json') })
         $task = $folder.GetTask($running.taskName)
-        if ($entries.Count -ne 0 -or $task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
+        if ($entries.Count -ne 0 -or [bool]$task.Enabled -ne $unlaunched -or $task.GetInstances(0).Count -ne 0 -or
             [string]$task.Xml -cne $running.definition -or
             [string]$task.GetSecurityDescriptor(7) -cne $running.securityDescriptor -or
             (Get-FileHash -LiteralPath $requestFile -Algorithm SHA256).Hash -cne $requestHash -or
             (Test-Path -LiteralPath (Join-Path $Control 'recovery-lock/activation-running.json')) -or
             (Test-Path -LiteralPath (Join-Path $Control 'recovery-lock/activation-stopped.json'))) {
             throw 'Preparation interruption changed original evidence or attempted enabling.'
+        }
+        if ($unlaunched) {
+            [Console]::Error.WriteLine('PASS: late guarded demand-start refuses its dead original controller before publishing launch or starting a workload')
         }
         Write-Output ($running | ConvertTo-Json -Depth 6 -Compress)
         return

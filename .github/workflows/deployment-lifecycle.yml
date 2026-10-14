@@ -60,7 +60,7 @@ on:
       windows_cold_startup_step:
         description: Earlier-startup native interruption boundary
         type: choice
-        options: [started, requested, registered]
+        options: [started, requested, registered, enabled]
         default: started
       windows_first_application_only:
         description: With both Windows command flags, run only the actual first-application core

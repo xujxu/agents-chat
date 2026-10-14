@@ -23,7 +23,7 @@ param(
     [switch]$StoppedProof,
     [switch]$ColdActivationCrash,
     [switch]$ColdStartupCrash,
-    [ValidateSet('observed', 'started', 'requested', 'registered')][string]$ColdStartupStep = 'observed'
+    [ValidateSet('observed', 'started', 'requested', 'registered', 'enabled')][string]$ColdStartupStep = 'observed'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest

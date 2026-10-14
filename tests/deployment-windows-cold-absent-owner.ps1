@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory)][Diagnostics.Process]$Owner,
     [switch]$ColdActivationCrash,
     [switch]$ColdStartupCrash,
-    [ValidateSet('observed', 'started', 'requested', 'registered')][string]$ColdStartupStep = 'observed'
+    [ValidateSet('observed', 'started', 'requested', 'registered', 'enabled')][string]$ColdStartupStep = 'observed'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -60,12 +60,15 @@ if ($ColdActivationCrash -or $ColdStartupCrash) {
     if ($LASTEXITCODE -ne 0) { throw 'Cold recovery did not start and settle its own guarded replacement.' }
 }
 $activated = ($output -join "`n") | ConvertFrom-Json
-$enabledPrefix = $ColdStartupCrash -and $ColdStartupStep -ceq 'started'
+$enabledPrefix = $ColdStartupCrash -and $ColdStartupStep -cin @('started', 'enabled')
 $preparedPrefix = $ColdStartupCrash -and $ColdStartupStep -cin @('requested', 'registered')
-$expectedStatus = if ($preparedPrefix) { 'guarded-preparation' } elseif ($enabledPrefix) { 'guarded-launch' } else { 'guarded-running' }
+$unlaunchedPrefix = $ColdStartupCrash -and $ColdStartupStep -ceq 'enabled'
+$withoutRuntime = $preparedPrefix -or $unlaunchedPrefix
+$expectedStatus = if ($unlaunchedPrefix) { 'guarded-unlaunched' } elseif ($preparedPrefix) { 'guarded-preparation' }
+    elseif ($enabledPrefix) { 'guarded-launch' } else { 'guarded-running' }
 if ($activated.status -cne $expectedStatus -or $activated.taskName -cne $TaskName -or
-    ($preparedPrefix -and $null -ne $activated.runtime) -or
-    (-not $preparedPrefix -and $activated.runtime.generation -ceq $Ready.generation)) {
+    ($withoutRuntime -and $null -ne $activated.runtime) -or
+    (-not $withoutRuntime -and $activated.runtime.generation -ceq $Ready.generation)) {
     throw 'Cold activation reported a foreign or reused runtime.'
 }
 $task = $folder.GetTask($TaskName)
@@ -75,9 +78,13 @@ if ([bool]$task.Enabled -ne $enabledPrefix -or $task.GetInstances(0).Count -ne 0
     (-not $preparedPrefix -and $task.Definition.Triggers.Count -ne 0)) {
     throw 'Interrupted cold activation did not preserve its exact guarded policy.'
 }
-if ($preparedPrefix) {
+if ($withoutRuntime) {
     [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$Ready.generation, $sessionId)
-    Write-Output 'PASS: cold preparation interruption retains the disabled original or guarded task without an enable attempt or fabricated runtime'
+    if ($unlaunchedPrefix) {
+        Write-Output 'PASS: unlaunched cold interruption retains its original enable intent and exact enabled guarded policy without a fabricated runtime'
+    } else {
+        Write-Output 'PASS: cold preparation interruption retains the disabled original or guarded task without an enable attempt or fabricated runtime'
+    }
 } else {
     [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)
     Write-Output 'PASS: cold activation starts a distinct leased runtime and settles its original new Job without terminal state or automatic task triggers'
@@ -85,7 +92,7 @@ if ($preparedPrefix) {
 $phase = if ($ColdStartupCrash) { 'start-requested' } elseif ($ColdActivationCrash) { 'running' } else { 'stopped' }
 & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-activation-recovery.mjs') `
     $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) $phase `
-    $(if ($preparedPrefix) { 'prepared' } else { 'runtime' })
+    $(if ($preparedPrefix) { 'prepared' } elseif ($unlaunchedPrefix) { 'unlaunched' } else { 'runtime' })
 if ($LASTEXITCODE -ne 0) { throw 'Independent cold activation inspection did not retain its original inactive history.' }
 $task = $folder.GetTask($TaskName)
 if ([bool]$task.Enabled -ne $enabledPrefix -or $task.GetInstances(0).Count -ne 0 -or
@@ -93,17 +100,17 @@ if ([bool]$task.Enabled -ne $enabledPrefix -or $task.GetInstances(0).Count -ne 0
     [string]$task.GetSecurityDescriptor(7) -cne $activated.securityDescriptor) {
     throw 'Read-only cold activation inspection changed task policy or started a runtime.'
 }
-if ($preparedPrefix) {
+if ($withoutRuntime) {
     [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$Ready.generation, $sessionId)
 } else {
     [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)
 }
-if ($enabledPrefix) {
+if ($enabledPrefix -and -not $unlaunchedPrefix) {
     Write-Output 'PASS: pre-inhibition controller death and read-only recovery preserve the exact enabled guarded task with both original Jobs absent'
 }
 & (Join-Path $PSScriptRoot 'deployment-windows-cold-policy-recovery.ps1') -Control $Control -TaskName $TaskName `
-    -Preparation:$preparedPrefix
-if ($preparedPrefix) {
+    -Preparation:$preparedPrefix -Unlaunched:$unlaunchedPrefix
+if ($withoutRuntime) {
     [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$Ready.generation, $sessionId)
 } else {
     [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)

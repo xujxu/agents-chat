@@ -8,6 +8,8 @@ function Get-AgentsChatColdPolicyBinding([hashtable]$Context) {
     }
     if ($Context.ColdPreparationSha256) {
         $binding['preparationSha256'] = $Context.ColdPreparationSha256
+    } elseif ($Context.ColdEnableSha256) {
+        $binding['enableSha256'] = $Context.ColdEnableSha256
     } elseif (-not $Context.Runtime) { $binding['launchSha256'] = $Context.ColdLaunchSha256 }
     return $binding
 }

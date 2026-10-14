@@ -9,7 +9,8 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const ownerOf = record => Object.fromEntries(ownerFields.map(key => [key, record[key]]));
 
 export function captureWindowsColdPolicyHistory({ binding, records }) {
-  const evidenceFields = ['launchSha256', 'preparationSha256'].filter(key => binding && Object.hasOwn(binding, key));
+  const evidenceFields = ['launchSha256', 'preparationSha256', 'enableSha256']
+    .filter(key => binding && Object.hasOwn(binding, key));
   const bindingFields = [...bindings, ...evidenceFields];
   const fields = ['version', ...bindingFields, 'sequence', 'previousSha256', ...ownerFields, 'kind', 'step'];
   const expected = captureWorkerFields(binding, bindingFields, 'cold policy binding');

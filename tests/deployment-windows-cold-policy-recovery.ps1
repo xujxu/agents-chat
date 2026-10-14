@@ -1,10 +1,12 @@
 param(
     [Parameter(Mandatory)][string]$Control,
     [Parameter(Mandatory)][string]$TaskName,
-    [switch]$Preparation
+    [switch]$Preparation,
+    [switch]$Unlaunched
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($Preparation -and $Unlaunched) { throw 'Preparation and enable-intent evidence are mutually exclusive.' }
 $journal = Join-Path $Control 'recovery-lock'
 $originals = @{}
 foreach ($name in @('state.json', 'lock/owner.json', 'backup/manifest.json')) {
@@ -16,11 +18,15 @@ foreach ($file in @(Get-ChildItem -LiteralPath $journal -File)) {
 if (-not (Test-Path -LiteralPath (Join-Path $journal 'activation-running.json'))) {
     $intent = Get-Content -LiteralPath (Join-Path $journal 'activation-intent.json') -Raw | ConvertFrom-Json
     $launches = @(Get-ChildItem -LiteralPath $intent.runtimeBundle.directory -Filter 'launch-*.json' -File)
-    if ($Preparation) {
+    if ($Preparation -or $Unlaunched) {
         $request = Get-Content -LiteralPath (Join-Path $journal 'activation-start-requested.json') -Raw | ConvertFrom-Json
+        $enableFile = Join-Path $intent.runtimeBundle.directory 'enable-requested.json'
         if ($request.version -ne 2 -or $launches.Count -ne 0 -or
-            (Test-Path -LiteralPath (Join-Path $intent.runtimeBundle.directory 'enable-requested.json'))) {
-            throw 'Preparation policy fixture lacks its never-enabled original request.'
+            [bool](Test-Path -LiteralPath $enableFile) -ne [bool]$Unlaunched) {
+            throw 'Unlaunched policy fixture lacks its original preparation or enable evidence.'
+        }
+        if ($Unlaunched) {
+            $originals[$enableFile] = (Get-FileHash -LiteralPath $enableFile -Algorithm SHA256).Hash
         }
     } else {
         if ($launches.Count -ne 1) { throw 'Unacknowledged policy fixture lost its unique original launch.' }
@@ -117,9 +123,10 @@ foreach ($target in @('requested', 'policy-applied', 'restored', 'inspect', 'arc
             }
         }
         $task = $scheduler.GetFolder('\').GetTask($TaskName)
-        if ($Preparation -and @(Get-ChildItem -LiteralPath $intent.runtimeBundle.directory -Force |
-            Where-Object { $_.Name -imatch '^(enable-requested|(launch|runtime)-.*)\.json$' }).Count -ne 0) {
-            throw 'Preparation policy takeover manufactured enable or runtime evidence.'
+        if (($Preparation -or $Unlaunched) -and @(Get-ChildItem -LiteralPath $intent.runtimeBundle.directory -Force |
+            Where-Object { $_.Name -imatch '^(launch|runtime)-.*\.json$' -or
+                ($Preparation -and $_.Name -ieq 'enable-requested.json') }).Count -ne 0) {
+            throw 'Unlaunched policy takeover manufactured enable or runtime evidence.'
         }
         $expectedEnabled = $target -ceq 'requested' -and $sourceEnabled
         if ([bool]$task.Enabled -ne $expectedEnabled -or $task.GetInstances(0).Count -ne 0 -or

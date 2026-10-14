@@ -17,12 +17,32 @@ function Assert-AgentsChatColdLaunchInventory([hashtable]$Context) {
     }
 }
 
-function Assert-AgentsChatColdPreparationInventory([hashtable]$Context) {
-    $entries = @(Get-ChildItem -LiteralPath $Context.ColdRuntime.directory.GetString() -Force |
-        Where-Object { $_.Name -imatch '^(enable-requested|(launch|runtime)-.*)\.json$' })
-    if ($entries.Count -ne 0) {
-        throw 'Cold preparation contains enable, launch or readiness evidence.'
+function Assert-AgentsChatColdUnlaunchedInventory([hashtable]$Context) {
+    $entries = @(Get-ChildItem -LiteralPath $Context.ColdRuntime.directory.GetString() -Force)
+    $runtime = @($entries | Where-Object { $_.Name -imatch '^(launch|runtime)-.*\.json$' })
+    $enable = @($entries | Where-Object { $_.Name -ieq 'enable-requested.json' })
+    if ($runtime.Count -ne 0 -or
+        ($Context.ColdEnableSha256 -and ($enable.Count -ne 1 -or $enable[0].Name -cne 'enable-requested.json')) -or
+        (-not $Context.ColdEnableSha256 -and $enable.Count -ne 0)) {
+        throw 'Cold startup contains unexpected enable, launch or readiness evidence.'
     }
+}
+
+function Open-AgentsChatColdEnableProof([hashtable]$Context, [string]$File) {
+    $held = Open-AgentsChatCompletionFile $Context $File ''
+    if ($held.ByteLength -gt 65536) { throw 'Original cold enable intent exceeds its byte budget.' }
+    $record = Read-AgentsChatMaintenanceFields ($held.ReadText()) @(
+        'version', 'phase', 'requestSha256', 'controllerPid', 'controllerIdentity',
+        'taskName', 'configurationSha256')
+    if ($record.version.GetInt32() -ne 1 -or $record.phase.GetString() -cne 'enable-requested' -or
+        $record.requestSha256.GetString() -cne $Context.ColdHistorySha256 -or
+        $record.controllerPid.GetInt32() -ne $Context.ActivationBridgePid -or
+        $record.controllerIdentity.GetString() -cne $Context.ActivationBridgeIdentity -or
+        $record.taskName.GetString() -cne $Context.TaskName -or
+        $record.configurationSha256.GetString() -cne $Context.ColdRuntime.sha256.GetString()) {
+        throw 'Original cold enable intent differs from its exact version-two request.'
+    }
+    $Context.ColdEnableSha256 = $held.Sha256
 }
 
 function Open-AgentsChatColdStartupProof([hashtable]$Context, [int]$Version) {
@@ -31,8 +51,14 @@ function Open-AgentsChatColdStartupProof([hashtable]$Context, [int]$Version) {
         $Context.ColdRuntime.sha256.GetString()
     $entries = @(Get-ChildItem -LiteralPath $bundle -Force | Where-Object { $_.Name -like 'launch-*.json' })
     if ($entries.Count -eq 0 -and $Version -eq 2) {
-        Assert-AgentsChatColdPreparationInventory $Context
-        $Context.ColdPreparationSha256 = $Context.ColdHistorySha256
+        $enable = @(Get-ChildItem -LiteralPath $bundle -Force | Where-Object { $_.Name -ieq 'enable-requested.json' })
+        if ($enable.Count -ne 0) {
+            if ($enable.Count -ne 1 -or $enable[0].PSIsContainer -or $enable[0].Name -cne 'enable-requested.json') {
+                throw 'Unlaunched cold startup lacks its exact original enable intent file.'
+            }
+            Open-AgentsChatColdEnableProof $Context $enable[0].FullName
+        } else { $Context.ColdPreparationSha256 = $Context.ColdHistorySha256 }
+        Assert-AgentsChatColdUnlaunchedInventory $Context
         return
     }
     if ($entries.Count -ne 1 -or $entries[0].PSIsContainer -or $entries[0].Length -gt 65536) {
@@ -80,8 +106,8 @@ function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
             Assert-AgentsChatCompletionProcessAbsent $Context.ColdControllerPid $Context.ColdControllerIdentity
             Assert-AgentsChatCompletionProcessAbsent $Context.ActivationBridgePid $Context.ActivationBridgeIdentity
             $inactive = $Context.Runtime
-            if ($Context.ColdPreparationSha256) {
-                Assert-AgentsChatColdPreparationInventory $Context
+            if ($Context.ColdPreparationSha256 -or $Context.ColdEnableSha256) {
+                Assert-AgentsChatColdUnlaunchedInventory $Context
             } elseif (-not $inactive) {
                 Assert-AgentsChatColdLaunchInventory $Context
                 $inactive = $Context.ColdLaunch
@@ -115,6 +141,8 @@ function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
         }
         if ($Context.ColdPreparationSha256) {
             $observation['preparationSha256'] = $Context.ColdPreparationSha256
+        } elseif ($Context.ColdEnableSha256) {
+            $observation['enableSha256'] = $Context.ColdEnableSha256
         } elseif (-not $Context.Runtime) {
             $observation['launch'] = $Context.ColdLaunch
             $observation['launchSha256'] = $Context.ColdLaunchSha256
@@ -137,6 +165,7 @@ function Read-AgentsChatColdActivationRecoveryHistory {
         [string]$IntentSha256, [string]$HistorySha256)
     $Control = $Proof.Control
     $proof.ColdPreparationSha256 = $null
+    $proof.ColdEnableSha256 = $null
     if (-not $proof.AbsentOwner -or
         ($proof.RecoveryNames -join ',') -cne 'recovery-lock') {
         throw 'Cold activation observation requires an absent original owner and no staged recovery.'

@@ -11,7 +11,8 @@ import { readWorkerFile } from './worker-files.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { captureActivatedRuntime } from './windows-task-controller.mjs';
-import { captureWindowsColdLaunch, captureWindowsColdPreparation } from './windows-cold-activation-history.mjs';
+import { captureWindowsColdLaunch, captureWindowsColdPreparation,
+  captureWindowsColdUnlaunched } from './windows-cold-activation-history.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { captureWindowsColdPolicyHistory } from './windows-cold-policy-history.mjs';
 import { captureWindowsColdArchiveFiles, verifyWindowsColdArchiveFiles } from './windows-cold-policy-archive.mjs';
@@ -152,7 +153,15 @@ async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyR
       const directory = guard.intent.record.runtimeBundle.directory;
       const entries = await readdir(directory);
       const names = entries.filter(name => /^launch-.*\.json$/i.test(name));
-      if (names.length === 0) return { preparation: captureWindowsColdPreparation({ history, entries }), launch: null };
+      if (names.length === 0) {
+        if (entries.includes('enable-requested.json')) {
+          const requestBytes = await readWorkerFile(path.join(control, 'recovery-lock/activation-start-requested.json'),
+            4194304, { privateMode: true });
+          const enableBytes = await readWorkerFile(path.join(directory, 'enable-requested.json'), 65536, { privateMode: true });
+          return { unlaunched: captureWindowsColdUnlaunched({ history, requestBytes, enableBytes, entries }), launch: null };
+        }
+        return { preparation: captureWindowsColdPreparation({ history, entries }), launch: null };
+      }
       if (names.length !== 1) throw new Error('Cold recovery requires exactly one original launch record.');
       const captured = captureWindowsColdLaunch({
         history, originalGeneration: original.generation,
@@ -166,6 +175,7 @@ async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyR
     const startup = unacknowledged ? await readStartup() : null;
     const launch = startup?.launch;
     const preparation = startup?.preparation;
+    const unlaunched = startup?.unlaunched;
     const inactiveRuntime = history.runtime ?? launch?.record;
     const deadOwners = async () => {
       for (const owner of [lock, guard.record.owner,
@@ -189,6 +199,7 @@ async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyR
       intentSha256: digest(guard.intent.bytes), historySha256: history.sha256, runtime: history.runtime,
       ...(launch ? { launch: launch.record, launchSha256: launch.sha256 } : {}),
       ...preparation,
+      ...unlaunched,
     };
     let completion;
     let initialCompletionPrefix;
@@ -271,6 +282,7 @@ async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyR
         securityDescriptor: history.records.at(-1).securityDescriptor,
         ...(launch ? { launchSha256: launch.sha256 } : {}),
         ...preparation,
+        ...unlaunched,
       };
       initialPolicy = captureWindowsColdPolicyHistory({ binding: policyBinding, records: guard.policyRecords });
     }

@@ -13929,7 +13929,7 @@ their native counterparts, native startup/crash/absence/policy fixtures and
 the existing focused workflow choice. Keep original journal phases and
 retirement inventory unchanged.
 
-- [ ] Add causal pure contracts:
+- [x] Add causal pure contracts:
 
   ```js
   captureWindowsColdUnlaunched({ history, requestBytes, enableBytes, entries });
@@ -13941,16 +13941,20 @@ retirement inventory unchanged.
   absence of launch/readiness entries. Reject absent/foreign/malformed enable
   intent, legacy history and changed raw bytes. Policy history binds exactly
   one of `launchSha256`, `preparationSha256` or `enableSha256`, never a mixture.
-- [ ] Push causal tests and dispatch application/live/commands with scenario
+- [x] Push causal tests and dispatch application/live/commands with scenario
   `failed`; inspect original failure evidence before accepting implementation.
-- [ ] Native observer independently opens/retains the exact original enable
+  Causal `1070eb00 / 38640300506`, job `116113803014`, failed at
+  `2026-10-14 21:27:59 UTC`: 62 prior contracts passed; only the two new
+  contracts failed (missing unlaunched capture and unsupported enable-intent
+  policy binding). Original job log inspected.
+- [x] Native observer independently opens/retains the exact original enable
   intent and configuration/helpers, checks no launch/readiness twice, proves
   all original owners absent, original Job empty and zero task instances.
   Require exact guarded task/security (disabled or enabled with no automation).
   Read-only inspection does not disable it. Restore original disabled policy
   only after the existing claimed write-ahead policy request; retain intent
   throughout takeover and archival.
-- [ ] Extend native `enabled` interruption with runtime null and the original
+- [x] Extend native `enabled` interruption with runtime null and the original
   enable record; do not create runtime/Job identities or readiness. After the
   original bridge dies, explicitly demand-start its still-enabled guarded task
   and require it to fail without launch/readiness/workload, then exercise the
