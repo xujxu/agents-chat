@@ -13915,6 +13915,53 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FM: Record a versioned write-ahead boundary before cold task enabling
+
+**Goal:** Prepare recovery of a genuinely never-enabled startup without
+inferring it from a missing running/launch record. Version-two activation
+receipts promise that an immutable enable intent is published before any
+enable attempt. Version-one history remains readable but never gains that
+negative-evidence meaning. This task establishes the boundary, not the
+subsequent missing-launch recovery authority.
+
+**Files:** extend `windows-cold-activation-history.mjs`,
+`windows-cold-activation-context.ps1`, `windows-cold-activation-runtime.ps1`
+and `windows-cold-activation-recovery-proof.ps1` under `scripts/deployment/`;
+extend `tests/deployment-cold-activation-state.test.mjs` and the existing
+native cold activation fixture.
+
+- [x] Add version-two homogeneous journal and enable-intent binding tests.
+  Keep the existing three phases; reject unknown versions and mixed versions.
+  New intent capture requires the exact original start-request bytes:
+
+  ```js
+  captureWindowsColdEnableRequest({ history, requestBytes, bytes });
+  ```
+
+  Its seven fields are version 1, phase `enable-requested`, `requestSha256`,
+  original controller PID/identity, task name and configuration SHA256.
+  Reject legacy requests, altered raw-byte binding, extra fields and malformed
+  or oversized records. It contains no invented runtime or Job identity.
+- [ ] Push causal contracts and run the existing focused native command gate
+  with `windows_restore_scenario=failed`; inspect the exact failures.
+- [ ] Write new activation receipts as version 2; both native and JS readers
+  accept homogeneous versions 1 or 2. Preserve journal filenames, ordering,
+  existing launch recovery and terminal retirement inventories.
+- [ ] Before `task.Enabled = true`, publish and retain
+  `<original-runtime-bundle>/enable-requested.json` using `WindowsPrivateFile`.
+  Bind it to the retained original start-request digest. Keep it outside the
+  recovery journal so terminal cleanup cannot erase it or change the existing
+  deletion protocol. Each cold copy already uses a unique runtime bundle.
+  The write-ahead record is not an enable-success acknowledgement.
+- [ ] Native callbacks at `requested` and `registered` require the intent
+  absent; `enabled` and later require its exact original immutable record and
+  prove writes are denied while retained. Keep all seven startup callbacks,
+  cancellation checks and original state/lock equality assertions.
+- [ ] Run focused contracts and full native cold regressions in Actions,
+  preserving version-one pure fixture coverage. Do not report no-launch
+  recovery supported until independent original-task/owner/Job absence,
+  policy archival and actual public recovery gates are implemented and pass.
+
 ### Task 5FL: Accept public application recovery before original task inhibition
 
 **Goal:** Exercise Task 5FK through the existing saved public entry, interrupting

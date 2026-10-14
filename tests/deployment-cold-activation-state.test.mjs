@@ -167,6 +167,65 @@ test('Windows cold startup has a finite ordered boundary before running acknowle
   assert.ok(Object.isFrozen(windowsColdStartupSteps));
 });
 
+test('Windows cold version-two history preserves original phases and refuses protocol mixing', async () => {
+  const { captureWindowsColdActivationHistory } = await import('../scripts/deployment/windows-cold-activation-history.mjs');
+  const fixture = coldHistoryFixture();
+  const requested = { version: 2, phase: 'start-requested', runtime: null };
+  const running = { version: 2, phase: 'running', runtime: fixture.runtime };
+  const stopped = { version: 2, phase: 'stopped', runtime: fixture.runtime };
+  for (const entries of [[requested], [requested, running], [requested, running, stopped]]) {
+    const history = captureWindowsColdActivationHistory({ ...fixture, records: fixture.encode(entries) });
+    assert.equal(history.records[0].version, 2);
+    assert.equal(history.phase, entries.at(-1).phase);
+    assert.deepEqual(history.runtime, entries.at(-1).runtime);
+  }
+  for (const entries of [
+    [{ ...requested, version: 3 }],
+    [requested, { ...running, version: 1 }],
+    [{ ...requested, version: 1 }, running],
+    [requested, running, { ...stopped, version: 1 }],
+  ]) {
+    assert.throws(() => captureWindowsColdActivationHistory({ ...fixture, records: fixture.encode(entries) }));
+  }
+});
+
+test('Windows cold enable intent binds the original version-two request without runtime invention', async () => {
+  const { captureWindowsColdActivationHistory, captureWindowsColdEnableRequest } =
+    await import('../scripts/deployment/windows-cold-activation-history.mjs');
+  const fixture = coldHistoryFixture();
+  const records = fixture.encode([{ version: 2, phase: 'start-requested', runtime: null }]);
+  const history = captureWindowsColdActivationHistory({ ...fixture, records });
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  const record = {
+    version: 1, phase: 'enable-requested', requestSha256: digest(records[0]),
+    controllerPid: history.controllerPid, controllerIdentity: history.controllerIdentity,
+    taskName: fixture.taskName, configurationSha256: fixture.intent.runtimeBundle.sha256,
+  };
+  const bytes = Buffer.from(`${JSON.stringify(record)}\n`);
+  const capture = bytes => captureWindowsColdEnableRequest({ history, requestBytes: records[0], bytes });
+  const captured = capture(bytes);
+  assert.deepEqual(captured, { record, sha256: digest(bytes) });
+  assert.ok(Object.isFrozen(captured) && Object.isFrozen(captured.record));
+  assert.equal(captured.record.runtime, undefined);
+  assert.equal(captured.record.generation, undefined);
+  for (const changed of [
+    { version: 2 }, { phase: 'enabled' }, { requestSha256: '0'.repeat(64) },
+    { controllerPid: 23 }, { controllerIdentity: '22:5678' }, { taskName: 'foreign' },
+    { configurationSha256: '0'.repeat(64) }, { runtime: null }, { unknown: true },
+  ]) assert.throws(() => capture(Buffer.from(JSON.stringify({ ...record, ...changed }))));
+  const legacyRecords = fixture.encode([{ phase: 'start-requested', runtime: null }]);
+  assert.throws(() => captureWindowsColdEnableRequest({
+    history: captureWindowsColdActivationHistory({ ...fixture, records: legacyRecords }),
+    requestBytes: legacyRecords[0], bytes,
+  }));
+  assert.throws(() => captureWindowsColdEnableRequest({
+    history, requestBytes: Buffer.concat([records[0], Buffer.from('\n')]), bytes,
+  }));
+  for (const invalid of [Buffer.alloc(0), Buffer.alloc(65537), Buffer.from('{'), bytes.toString()]) {
+    assert.throws(() => capture(invalid));
+  }
+});
+
 test('Windows cold unacknowledged launch binds real host evidence without inventing a running receipt', async () => {
   const { captureWindowsColdActivationHistory, captureWindowsColdLaunch } =
     await import('../scripts/deployment/windows-cold-activation-history.mjs');
