@@ -5,12 +5,12 @@ import { promisify } from 'node:util';
 import { loginDeploymentFixture } from './deployment-http-fixture.mjs';
 import { verifyHttpReadiness, waitReadiness } from '../scripts/deployment/http-readiness.mjs';
 
-export async function verifyWindowsColdLaunchApi({ pwsh, runtime, chatId }) {
+export async function verifyWindowsColdLaunchApi({ pwsh, runtime, chatId, directory }) {
   const script = fileURLToPath(new URL('./deployment-windows-cold-launch-listener.ps1', import.meta.url));
   const { stdout } = await promisify(execFile)(pwsh, ['-NoProfile', '-NonInteractive', '-File', script,
     '-Generation', runtime.generation, '-OwnerPid', String(runtime.pid), '-OwnerIdentity', runtime.identity,
     '-LauncherPid', String(runtime.launcherPid), '-Node', process.execPath, '-ChatId', chatId],
-  { timeout: 270000, maxBuffer: 16384 });
+  { cwd: directory, timeout: 270000, maxBuffer: 16384 });
   const readiness = JSON.parse(stdout);
   assert.deepEqual(readiness, { status: 'ready', generation: runtime.generation, port: 3010 });
   return readiness;

@@ -34,7 +34,7 @@ try {
     }
     $api = [Deployment.WindowsControllerProcess]::Start($Node, [string[]]@(
         (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs'), 'restored', $ChatId, 'wait-ready'),
-        $PSScriptRoot, $environment)
+        [Environment]::CurrentDirectory, $environment)
     $output = $api.StandardOutput.ReadToEndAsync()
     $diagnostic = $api.StandardError.ReadToEndAsync()
     if (-not $api.WaitForExit(135000)) { throw 'Original unacknowledged application API verification exceeded its deadline.' }

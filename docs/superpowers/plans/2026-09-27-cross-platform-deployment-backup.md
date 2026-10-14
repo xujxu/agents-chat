@@ -13937,7 +13937,7 @@ application API fixture through `deployment-windows-application-api-helpers.mjs`
 
   ```js
   const readiness = await verifyWindowsColdLaunchApi({
-    pwsh, runtime: progress.observation.runtime, chatId,
+    pwsh, runtime: progress.observation.runtime, chatId, directory,
   });
   await configuration.checkFiles();
   await assert.rejects(lstat(path.join(control, 'recovery-lock/activation-running.json')),
@@ -13996,6 +13996,15 @@ application API fixture through `deployment-windows-application-api-helpers.mjs`
   `WindowsControllerProcess` abstraction, bounded async stream capture,
   explicit process `ExitCode` and exact API PASS output. Keep listener proof
   held through verification and dispose it even when child cleanup fails.
+  Replacement actual `0d3e3ee3 / 38523236204`, job `115717549509`, failed at
+  `2026-10-14 07:53:48 UTC` at owned API child creation:
+  `Private configuration permissions are unsupported.` The helper incorrectly
+  used the public test checkout (`$PSScriptRoot`) as a private controller cwd.
+  Keep the controller's directory admission intact. Explicitly launch the
+  observer in the already captured private controller directory and use that
+  inherited process cwd for its API child; script paths remain absolute.
+  This is a fixture-only correction; preserve the independently running full
+  native policy gate `38523236422`.
 
 ### Task 5FI: Recover an unacknowledged guarded launch without fabricating runtime history
 

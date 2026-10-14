@@ -81,7 +81,7 @@ export async function verifyWindowsColdApplicationFiles({
     const running = await activation.start({
       async onProgress(progress) {
         if (!interruptLaunch || progress.step !== 'observed') return;
-        const readiness = await verifyWindowsColdLaunchApi({ pwsh, runtime: progress.observation.runtime, chatId });
+        const readiness = await verifyWindowsColdLaunchApi({ pwsh, runtime: progress.observation.runtime, chatId, directory });
         await configuration.checkFiles();
         await assert.rejects(lstat(path.join(control, 'recovery-lock/activation-running.json')), { code: 'ENOENT' });
         const requested = JSON.parse(await readFile(path.join(control, 'recovery-lock/activation-start-requested.json')));
