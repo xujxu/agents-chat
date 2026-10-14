@@ -12,6 +12,12 @@ foreach ($name in @('state.json', 'lock/owner.json', 'backup/manifest.json')) {
 foreach ($file in @(Get-ChildItem -LiteralPath $journal -File)) {
     $originals[$file.FullName] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
 }
+if (-not (Test-Path -LiteralPath (Join-Path $journal 'activation-running.json'))) {
+    $intent = Get-Content -LiteralPath (Join-Path $journal 'activation-intent.json') -Raw | ConvertFrom-Json
+    $launches = @(Get-ChildItem -LiteralPath $intent.runtimeBundle.directory -Filter 'launch-*.json' -File)
+    if ($launches.Count -ne 1) { throw 'Unacknowledged policy fixture lost its unique original launch.' }
+    $originals[$launches[0].FullName] = (Get-FileHash -LiteralPath $launches[0].FullName -Algorithm SHA256).Hash
+}
 $originalTask = Get-Content -LiteralPath (Join-Path $Control 'task-maintenance/task-stop-stopped.json') -Raw | ConvertFrom-Json
 $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
 $environment.Add('SystemRoot', $env:SystemRoot)

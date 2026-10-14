@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][string]$TaskName,
     [Parameter(Mandatory)]$Ready,
     [Parameter(Mandatory)][Diagnostics.Process]$Owner,
-    [switch]$ColdActivationCrash
+    [switch]$ColdActivationCrash,
+    [switch]$ColdStartupCrash
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -49,8 +50,9 @@ if ($folder.GetTask($TaskName).Enabled -or $folder.GetTask($TaskName).GetInstanc
     throw 'Cold absence admission started or enabled the original task.'
 }
 Write-Output 'PASS: cold recovery admits an absent original host with no Scheduler instance and unchanged task inhibition'
-if ($ColdActivationCrash) {
-    $output = & (Join-Path $PSScriptRoot 'deployment-windows-cold-activation-crash.ps1') -Control $Control
+if ($ColdActivationCrash -or $ColdStartupCrash) {
+    $output = & (Join-Path $PSScriptRoot 'deployment-windows-cold-activation-crash.ps1') -Control $Control `
+        -BeforeRunning:$ColdStartupCrash
 } else {
     $output = & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-activation.mjs') `
         $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
@@ -70,7 +72,7 @@ if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
 }
 [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)
 Write-Output 'PASS: cold activation starts a distinct leased runtime and settles its original new Job without terminal state or automatic task triggers'
-$phase = if ($ColdActivationCrash) { 'running' } else { 'stopped' }
+$phase = if ($ColdStartupCrash) { 'start-requested' } elseif ($ColdActivationCrash) { 'running' } else { 'stopped' }
 & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-activation-recovery.mjs') `
     $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) $phase
 if ($LASTEXITCODE -ne 0) { throw 'Independent cold activation inspection did not retain its original inactive history.' }

@@ -39,8 +39,7 @@ function Assert-AgentsChatCompletionControllers([hashtable]$Context) {
     Assert-AgentsChatCompletionProcessAbsent $admission.ownerPid.GetInt32() $admission.ownerIdentity.GetString()
 }
 
-function Open-AgentsChatCompletionBundle([hashtable]$Context, [string]$Configuration, [string]$Sha256, [hashtable]$Runtime,
-    [switch]$RetainSession) {
+function Open-AgentsChatCompletionConfiguration([hashtable]$Context, [string]$Configuration, [string]$Sha256) {
     $bundle = [IO.Path]::GetDirectoryName($Configuration)
     $hostFiles = [Deployment.WindowsRuntimeHost]::Open($Configuration, $Sha256, $bundle)
     $Context.Files.Add($hostFiles)
@@ -51,6 +50,12 @@ function Open-AgentsChatCompletionBundle([hashtable]$Context, [string]$Configura
             throw 'Completed runtime command differs from the locked project.'
         }
     } finally { $document.Dispose() }
+}
+
+function Open-AgentsChatCompletionBundle([hashtable]$Context, [string]$Configuration, [string]$Sha256, [hashtable]$Runtime,
+    [switch]$RetainSession) {
+    Open-AgentsChatCompletionConfiguration $Context $Configuration $Sha256
+    $bundle = [IO.Path]::GetDirectoryName($Configuration)
     $readyPath = Join-Path $bundle "runtime-$($Runtime.identity.Replace(':', '-')).json"
     $ready = Open-AgentsChatCompletionFile $Context $readyPath $Runtime.readySha256
     $fields = Read-AgentsChatMaintenanceFields ($ready.ReadText()) @(

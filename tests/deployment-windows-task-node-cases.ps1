@@ -21,7 +21,8 @@ param(
     [switch]$Transactional,
     [switch]$Restore,
     [switch]$StoppedProof,
-    [switch]$ColdActivationCrash
+    [switch]$ColdActivationCrash,
+    [switch]$ColdStartupCrash
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -311,7 +312,8 @@ try {
     Write-Output "PASS: private production Node controller $Action preserves native inhibition, original task owner and durable stopped evidence"
     if ($StoppedProof) {
         & (Join-Path $PSScriptRoot 'deployment-windows-cold-absent-owner.ps1') `
-            -Control $control -TaskName $TaskName -Ready $Ready -Owner $Owner -ColdActivationCrash:$ColdActivationCrash
+            -Control $control -TaskName $TaskName -Ready $Ready -Owner $Owner -ColdActivationCrash:$ColdActivationCrash `
+            -ColdStartupCrash:$ColdStartupCrash
     }
 } finally {
     if ($controller) {

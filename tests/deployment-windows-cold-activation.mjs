@@ -4,11 +4,11 @@ import path from 'node:path';
 import { claimWindowsColdRestore } from '../scripts/deployment/windows-cold-restore-lease.mjs';
 import { restoreWindowsColdFiles } from '../scripts/deployment/windows-cold-restore-files.mjs';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
-import { verifyWindowsColdReadiness } from './deployment-windows-cold-readiness.mjs';
+import { verifyWindowsColdReadiness, waitWindowsColdListener } from './deployment-windows-cold-readiness.mjs';
 import { windowsColdStartupSteps } from '../scripts/deployment/windows-cold-activation.mjs';
 
 const [control, pwsh, mode] = process.argv.slice(2);
-assert.ok(mode === undefined || mode === 'crash', 'Unknown cold activation fixture mode.');
+assert.ok(mode === undefined || ['crash', 'observed-crash'].includes(mode), 'Unknown cold activation fixture mode.');
 const stateBytes = await readFile(path.join(control, 'state.json'));
 const state = JSON.parse(stateBytes);
 const lockBytes = await readFile(path.join(control, 'lock/owner.json'));
@@ -61,6 +61,11 @@ try {
       assert.equal(await processIdentity(runtime.pid), runtime.identity);
       assert.equal(requested.controllerPid, observed.controllerPid);
       assert.equal(requested.controllerIdentity, observed.controllerIdentity);
+      if (mode === 'observed-crash') {
+        await waitWindowsColdListener({ project: state.project, originalListener });
+        console.log(JSON.stringify(observed));
+        await new Promise(() => { setInterval(() => {}, 1000); });
+      }
     } else if (progress.step === 'running') {
       assert.deepEqual(progress.observation, observed);
     } else {

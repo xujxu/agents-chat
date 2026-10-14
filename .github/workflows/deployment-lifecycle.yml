@@ -234,6 +234,11 @@ jobs:
           ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdActivationCrash
           ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-restore
           ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-restore
+      - name: Verify unacknowledged cold launch recovery and original journal archival
+        if: ${{ matrix.scenario == 'complete' }}
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdStartupCrash
       - name: Verify public task-option refusals in Windows PowerShell
         if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         shell: powershell

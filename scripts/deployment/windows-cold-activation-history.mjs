@@ -16,6 +16,31 @@ const fields = [
   'configuration', 'configurationSha256', 'runtime',
 ];
 
+export function captureWindowsColdLaunch({ history, bytes, originalGeneration }) {
+  if (history?.phase !== 'start-requested' || history.runtime !== null || history.records?.length !== 1) {
+    throw new Error('Cold launch proof requires an unacknowledged original start request.');
+  }
+  const record = captureWorkerFields(parse(bytes, 65536), [
+    'version', 'generation', 'pid', 'identity', 'configurationSha256', 'sessionId', 'job',
+    'controllerPid', 'controllerIdentity',
+  ], 'cold launch record');
+  if (record.version !== 1 || !Number.isSafeInteger(record.pid) || record.pid < 1 || record.pid > 2147483647
+    || typeof record.identity !== 'string' || record.identity.length > 64
+    || !new RegExp(`^${record.pid}:[1-9][0-9]*$`).test(record.identity)
+    || typeof record.generation !== 'string'
+    || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(record.generation)
+    || record.generation === '00000000-0000-0000-0000-000000000000'
+    || record.generation === originalGeneration
+    || !Number.isSafeInteger(record.sessionId) || record.sessionId < 0 || record.sessionId > 2147483647
+    || record.configurationSha256 !== history.records[0].configurationSha256
+    || record.job !== `Local\\agents-deploy-${record.generation}`
+    || record.controllerPid !== history.controllerPid || record.controllerIdentity !== history.controllerIdentity
+    || record.pid === record.controllerPid) {
+    throw new Error('Cold launch differs from its original controller, configuration or new runtime identity.');
+  }
+  return Object.freeze({ record: Object.freeze(record), sha256: digest(bytes) });
+}
+
 export function captureWindowsColdActivationHistory({ intent, intentBytes, records, taskName }) {
   if (!same(parse(intentBytes, 65536), intent) || intent.version !== 1 || intent.phase !== 'activation-intent'
     || typeof taskName !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(taskName)

@@ -8,6 +8,50 @@ function Retain-AgentsChatColdRecoveryTaskFile([hashtable]$Context) {
     $Context.Files.Add($Context.TaskFile)
 }
 
+function Assert-AgentsChatColdLaunchInventory([hashtable]$Context) {
+    $entries = @(Get-ChildItem -LiteralPath $Context.ColdRuntime.directory.GetString() -Force |
+        Where-Object { $_.Name -like 'launch-*.json' })
+    if ($entries.Count -ne 1 -or $entries[0].PSIsContainer -or
+        $entries[0].Name -cne "launch-$($Context.ColdLaunch.identity.Replace(':', '-')).json") {
+        throw 'Cold recovery requires exactly its original private launch record.'
+    }
+}
+
+function Open-AgentsChatColdLaunchProof([hashtable]$Context) {
+    $bundle = $Context.ColdRuntime.directory.GetString()
+    Open-AgentsChatCompletionConfiguration $Context $Context.ColdRuntime.configuration.GetString() `
+        $Context.ColdRuntime.sha256.GetString()
+    $entries = @(Get-ChildItem -LiteralPath $bundle -Force | Where-Object { $_.Name -like 'launch-*.json' })
+    if ($entries.Count -ne 1 -or $entries[0].PSIsContainer -or $entries[0].Length -gt 65536) {
+        throw 'Cold recovery requires exactly one bounded original launch record.'
+    }
+    $file = Open-AgentsChatCompletionFile $Context $entries[0].FullName ''
+    $fields = Read-AgentsChatMaintenanceFields ($file.ReadText()) @(
+        'version', 'generation', 'pid', 'identity', 'configurationSha256', 'sessionId', 'job',
+        'controllerPid', 'controllerIdentity')
+    $launch = @{
+        version=$fields.version.GetInt32(); generation=$fields.generation.GetString()
+        pid=$fields.pid.GetInt32(); identity=$fields.identity.GetString()
+        configurationSha256=$fields.configurationSha256.GetString(); sessionId=$fields.sessionId.GetInt32()
+        job=$fields.job.GetString(); controllerPid=$fields.controllerPid.GetInt32()
+        controllerIdentity=$fields.controllerIdentity.GetString()
+    }
+    Assert-AgentsChatCompletionProcessIdentity $launch.pid $launch.identity
+    if ($launch.version -ne 1 -or $launch.generation -cnotmatch '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$' -or
+        [guid]$launch.generation -eq [guid]::Empty -or
+        $launch.generation -ceq $Context.Admission.generation.GetString() -or $launch.sessionId -lt 0 -or
+        $launch.configurationSha256 -cne $Context.ColdRuntime.sha256.GetString() -or
+        $launch.job -cne "Local\agents-deploy-$($launch.generation)" -or
+        $launch.controllerPid -ne $Context.ActivationBridgePid -or
+        $launch.controllerIdentity -cne $Context.ActivationBridgeIdentity -or
+        $launch.pid -eq $launch.controllerPid) {
+        throw 'Original cold launch controller, configuration or new runtime identity differs.'
+    }
+    $Context.ColdLaunch = $launch
+    $Context.ColdLaunchSha256 = $file.Sha256
+    Assert-AgentsChatColdLaunchInventory $Context
+}
+
 function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
     if ($Context.Closed -or $Context.Poisoned -or $Context.Busy) {
         throw 'Cold activation observation is unavailable.'
@@ -22,12 +66,17 @@ function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
             Assert-AgentsChatCompletionProcessAbsent $original.ownerPid.GetInt32() $original.ownerIdentity.GetString()
             Assert-AgentsChatCompletionProcessAbsent $Context.ColdControllerPid $Context.ColdControllerIdentity
             Assert-AgentsChatCompletionProcessAbsent $Context.ActivationBridgePid $Context.ActivationBridgeIdentity
-            Assert-AgentsChatCompletionProcessAbsent $Context.Runtime.pid $Context.Runtime.identity
+            $inactive = $Context.Runtime
+            if (-not $inactive) {
+                Assert-AgentsChatColdLaunchInventory $Context
+                $inactive = $Context.ColdLaunch
+            }
+            Assert-AgentsChatCompletionProcessAbsent $inactive.pid $inactive.identity
             if ($Context.PolicyRecovery) { Assert-AgentsChatColdPolicyOwnersAbsent $Context }
             [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
                 [guid]$original.generation.GetString(), $Context.RuntimeSessionId)
             [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
-                [guid]$Context.Runtime.generation, $Context.Runtime.sessionId)
+                [guid]$inactive.generation, $inactive.sessionId)
             $task = $Context.Folder.GetTask($Context.TaskName)
             if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
                 [string]$task.Xml -cne $Context.CurrentDefinition -or
@@ -46,6 +95,10 @@ function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
             ownerSha256=$Context.ColdOwnerSha256; filesReceiptSha256=$Context.ColdReceiptSha256
             intentSha256=$Context.ColdIntentSha256; historySha256=$Context.ColdHistorySha256
             runtime=$Context.Runtime
+        }
+        if (-not $Context.Runtime) {
+            $observation['launch'] = $Context.ColdLaunch
+            $observation['launchSha256'] = $Context.ColdLaunchSha256
         }
         if ($Context.PolicyRecovery) {
             $observation['step'] = $Context.PolicyStep
@@ -77,9 +130,13 @@ function Read-AgentsChatColdActivationRecoveryHistory {
         'previousSha256', 'controllerPid', 'controllerIdentity', 'taskName', 'definition',
         'securityDescriptor', 'configuration', 'configurationSha256', 'runtime')
     $previous = $IntentSha256
-    $first = $running = $null
-    $phases = @('start-requested', 'running')
+    $first = $running = $runtime = $null
+    $phases = @('start-requested')
+    if ($proof.RecoveryFiles['recovery-lock'] -ccontains 'activation-running.json') {
+        $phases += 'running'
+    }
     if ($proof.RecoveryFiles['recovery-lock'] -ccontains 'activation-stopped.json') {
+        if ($phases.Count -ne 2) { throw 'Stopped cold history requires its acknowledged runtime.' }
         $phases += 'stopped'
     }
     foreach ($phase in $phases) {
@@ -145,8 +202,12 @@ function Read-AgentsChatColdActivationRecoveryHistory {
     $proof.ColdHistorySha256 = $HistorySha256
     $proof.ColdHistoryPhase = $phase
     $proof.ColdRunningRecord = $running
-    Open-AgentsChatCompletionBundle $proof $proof.ColdRuntime.configuration.GetString() `
-        $proof.ColdRuntime.sha256.GetString() $runtime
+    if ($runtime) {
+        Open-AgentsChatCompletionBundle $proof $proof.ColdRuntime.configuration.GetString() `
+            $proof.ColdRuntime.sha256.GetString() $runtime
+    } else {
+        Open-AgentsChatColdLaunchProof $proof
+    }
 }
 
 function Open-AgentsChatColdActivationRecoveryProof {

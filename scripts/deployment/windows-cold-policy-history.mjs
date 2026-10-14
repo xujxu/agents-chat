@@ -5,16 +5,18 @@ import { captureWorkerFields } from './worker-identity.mjs';
 const digests = ['ownerSha256', 'filesReceiptSha256', 'intentSha256', 'historySha256', 'stateSha256'];
 const bindings = ['operationId', 'taskName', ...digests, 'sourceDefinition', 'targetDefinition', 'securityDescriptor'];
 const ownerFields = ['controllerPid', 'controllerIdentity', 'bridgePid', 'bridgeIdentity'];
-const fields = ['version', ...bindings, 'sequence', 'previousSha256', ...ownerFields, 'kind', 'step'];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const ownerOf = record => Object.fromEntries(ownerFields.map(key => [key, record[key]]));
 
 export function captureWindowsColdPolicyHistory({ binding, records }) {
-  const expected = captureWorkerFields(binding, bindings, 'cold policy binding');
+  const launchFields = binding && Object.hasOwn(binding, 'launchSha256') ? ['launchSha256'] : [];
+  const bindingFields = [...bindings, ...launchFields];
+  const fields = ['version', ...bindingFields, 'sequence', 'previousSha256', ...ownerFields, 'kind', 'step'];
+  const expected = captureWorkerFields(binding, bindingFields, 'cold policy binding');
   if (typeof expected.operationId !== 'string'
     || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(expected.operationId)
     || typeof expected.taskName !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(expected.taskName)
-    || digests.some(key => typeof expected[key] !== 'string' || !/^[a-f0-9]{64}$/.test(expected[key]))
+    || [...digests, ...launchFields].some(key => typeof expected[key] !== 'string' || !/^[a-f0-9]{64}$/.test(expected[key]))
     || ['sourceDefinition', 'targetDefinition', 'securityDescriptor'].some(key =>
       typeof expected[key] !== 'string' || !expected[key].length
       || expected[key].length > (key === 'securityDescriptor' ? 65536 : 262144) || expected[key].includes('\0'))) {
@@ -40,7 +42,7 @@ export function captureWindowsColdPolicyHistory({ binding, records }) {
     const record = captureWorkerFields(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)),
       fields, 'cold policy recovery record');
     if (record.version !== 1 || record.sequence !== captured.length + 1
-      || record.previousSha256 !== previousSha256 || bindings.some(key => record[key] !== expected[key])) {
+      || record.previousSha256 !== previousSha256 || bindingFields.some(key => record[key] !== expected[key])) {
       throw new Error('Cold policy record differs from its original policy, evidence or byte chain.');
     }
     for (const [pid, identity] of [[record.controllerPid, record.controllerIdentity], [record.bridgePid, record.bridgeIdentity]]) {

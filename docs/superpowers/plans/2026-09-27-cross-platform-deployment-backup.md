@@ -13926,6 +13926,7 @@ No absent-launch, enabled-task, legacy-helper or reboot acceptance is implied.
 **Files:** extend `scripts/deployment/windows-cold-activation-history.mjs`,
 `windows-cold-activation-recovery.mjs`, `windows-cold-activation-recovery-proof.ps1`,
 `windows-stopped-restore-recovery.ps1` and the existing completion bundle helper;
+retain the launch digest in both `windows-cold-policy-history` implementations;
 extend the cold activation/state/recovery/crash fixtures and their existing
 runtime-host/task-node plumbing. Add a separate native workflow step so the
 acknowledged running and graceful stopped chains remain covered unchanged.
@@ -13946,7 +13947,7 @@ acknowledged running and graceful stopped chains remain covered unchanged.
   histories, extra fields, altered binding and malformed/oversized bytes.
 - [ ] Push causal tests, dispatch the existing command-only `failed` selector
   and inspect failure for the missing launch capture export. No local test.
-- [ ] Capture exactly one private `launch-*.json` in the original cold bundle.
+- [x] Capture exactly one private `launch-*.json` in the original cold bundle.
   Bind native and JS observations to its exact fields and digest, without
   constructing Scheduler instance, launcher or readiness fields:
 
@@ -13962,25 +13963,27 @@ acknowledged running and graceful stopped chains remain covered unchanged.
   Require original lock owner, cold owner, activation bridge, launch host and
   both original/replacement Jobs absent. Keep exact disabled task/security
   checks, original snapshot admission and all existing policy journal checks.
-- [ ] Permit only a single start-requested journal when running is absent.
+  Every unacknowledged policy record also binds `launchSha256`, so resumed
+  takeover cannot substitute different launch bytes after a controller crash.
+  Existing acknowledged policy schemas remain unchanged.
+- [x] Permit only a single start-requested journal when running is absent.
   Preserve existing acknowledged inventory requirements, especially completion
   history. The observer may inspect the launch prefix without mutation;
   policy mutation still requires original explicit data-loss admission.
-- [ ] Extend the actual native fixture with an `observed-crash` mode. At the
-  existing callback, verify the original workload's readiness, send the real
+- [x] Extend the actual native fixture with an `observed-crash` mode. At the
+  existing callback, wait for the workload's new listener file, send the real
   observation to the parent and wait without requesting the running step:
 
   ```js
   if (mode === 'observed-crash' && progress.step === 'observed') {
-    await verifyWindowsColdReadiness({
-      activation, project: state.project, originalListener,
-      runtime: progress.observation.runtime, providers: lease.providers,
-    });
+    await waitWindowsColdListener({ project: state.project, originalListener });
     console.log(JSON.stringify(progress.observation));
     await new Promise(() => { setInterval(() => {}, 1000); });
   }
   ```
 
+  Reuse the bounded listener-file wait from the existing readiness fixture;
+  do not recursively invoke activation methods inside its busy startup callback.
   Parent kills the retained original bridge, proves its Job/listener settle,
   confirms the running acknowledgement never existed and preserves the
   original request/launch bytes. Independently inspect and lock the launch

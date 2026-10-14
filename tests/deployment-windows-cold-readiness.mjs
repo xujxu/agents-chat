@@ -3,8 +3,7 @@ import { lstat, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as pause } from 'node:timers/promises';
 
-export async function verifyWindowsColdReadiness({ activation, project, originalListener, runtime, providers }) {
-  assert.equal(typeof activation.waitReady, 'function', 'Cold startup requires owned listener and admitted HTTP readiness.');
+export async function waitWindowsColdListener({ project, originalListener }) {
   let listener;
   const deadline = Date.now() + 15000;
   const file = path.join(project, 'listener.json');
@@ -20,6 +19,12 @@ export async function verifyWindowsColdReadiness({ activation, project, original
     await pause(100);
   } while (true);
   assert.ok(Number.isSafeInteger(listener.port) && listener.port > 0);
+  return listener;
+}
+
+export async function verifyWindowsColdReadiness({ activation, project, originalListener, runtime, providers }) {
+  assert.equal(typeof activation.waitReady, 'function', 'Cold startup requires owned listener and admitted HTTP readiness.');
+  const listener = await waitWindowsColdListener({ project, originalListener });
   await assert.rejects(activation.waitReady({ port: 0 }), /port/);
   const controller = new AbortController();
   controller.abort();

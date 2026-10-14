@@ -968,6 +968,9 @@ journal is archived, and a distinct released runtime completes restoration
 with the original backup and data preserved. Unacknowledged
 startup, live guarded peers, initially inactive/legacy tasks and reboot recovery
 remain unsupported.
+The unacknowledged-startup recovery proof is being extended to use the original
+immutable guarded-launch record without synthesizing a running receipt.
+That work is not yet accepted or routed through the public restore command.
 Do not remove a retained lock to bypass a recovery refusal.
 
 ```powershell

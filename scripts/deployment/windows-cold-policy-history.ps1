@@ -1,11 +1,13 @@
 function Get-AgentsChatColdPolicyBinding([hashtable]$Context) {
-    return [ordered]@{
+    $binding = [ordered]@{
         operationId=$Context.OperationId; taskName=$Context.TaskName
         ownerSha256=$Context.ColdOwnerSha256; filesReceiptSha256=$Context.ColdReceiptSha256
         intentSha256=$Context.ColdIntentSha256; historySha256=$Context.ColdHistorySha256
         stateSha256=$Context.StateSha256; sourceDefinition=$Context.ColdDefinition
         targetDefinition=$Context.Definition; securityDescriptor=$Context.SecurityDescriptor
     }
+    if (-not $Context.Runtime) { $binding['launchSha256'] = $Context.ColdLaunchSha256 }
+    return $binding
 }
 
 function Assert-AgentsChatColdPolicyOwnersAbsent([hashtable]$Context) {

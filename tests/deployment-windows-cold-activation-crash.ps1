@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Control)
+param([Parameter(Mandatory)][string]$Control, [switch]$BeforeRunning)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $actor = $bridge = $runtime = $listener = $diagnostic = $null
@@ -8,9 +8,10 @@ $environment.Add('PATH', $env:PATH)
 $environment.Add('TEMP', $Control)
 $environment.Add('TMP', $Control)
 try {
+    $mode = if ($BeforeRunning) { 'observed-crash' } else { 'crash' }
     $actor = [Deployment.WindowsControllerProcess]::Start((Get-Command node).Source, [string[]]@(
         (Join-Path $PSScriptRoot 'deployment-windows-cold-activation.mjs'), $Control,
-        [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, 'crash'), $Control, $environment)
+        [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $mode), $Control, $environment)
     $diagnostic = $actor.StandardError.ReadToEndAsync()
     $frame = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync($actor.StandardOutput, 131072)
     if (-not $frame.Wait(600000)) { throw 'Cold crash actor did not publish its admitted running runtime.' }
@@ -27,8 +28,15 @@ try {
     $endpoint = Get-Content -LiteralPath (Join-Path $state.project 'listener.json') -Raw | ConvertFrom-Json
     $listener = [Diagnostics.Process]::GetProcessById($endpoint.pid)
     $null = $listener.Handle
-    $runningFile = Join-Path $Control 'recovery-lock/activation-running.json'
+    $receiptName = if ($BeforeRunning) { 'start-requested' } else { 'running' }
+    $runningFile = Join-Path $Control "recovery-lock/activation-$receiptName.json"
     $runningHash = (Get-FileHash -LiteralPath $runningFile -Algorithm SHA256).Hash
+    $launchFile = Join-Path ([IO.Path]::GetDirectoryName($running.configuration)) `
+        "launch-$($running.runtime.identity.Replace(':', '-')).json"
+    $launchHash = (Get-FileHash -LiteralPath $launchFile -Algorithm SHA256).Hash
+    if ($BeforeRunning -and (Test-Path -LiteralPath (Join-Path $Control 'recovery-lock/activation-running.json'))) {
+        throw 'Pre-acknowledgement cold fixture already contains a running receipt.'
+    }
     $bridge.Kill()
     if (-not $bridge.WaitForExit(15000)) { throw 'Original cold activation bridge survived forced termination.' }
     $actor.Kill()
@@ -40,7 +48,11 @@ try {
         throw 'Cold crash fixture unexpectedly published a normal stopped acknowledgement.'
     }
     if ((Get-FileHash -LiteralPath $runningFile -Algorithm SHA256).Hash -cne $runningHash) {
-        throw 'Cold crash fixture changed its admitted running receipt.'
+        throw 'Cold crash fixture changed its original activation prefix.'
+    }
+    if ((Get-FileHash -LiteralPath $launchFile -Algorithm SHA256).Hash -cne $launchHash -or
+        ($BeforeRunning -and (Test-Path -LiteralPath (Join-Path $Control 'recovery-lock/activation-running.json')))) {
+        throw 'Cold crash changed its original launch proof or manufactured a running receipt.'
     }
     [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
         [guid]$running.runtime.generation, $running.runtime.sessionId)
