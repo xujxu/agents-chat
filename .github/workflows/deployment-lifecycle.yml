@@ -172,7 +172,7 @@ jobs:
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds'
 
   windows-cold-started-recovery:
-    if: ${{ (!inputs.windows_application_only && !inputs.windows_restore_only) || (inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_restore_scenario == 'complete') }}
+    if: ${{ (!inputs.windows_application_only && !inputs.windows_restore_only) || (inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && (inputs.windows_restore_scenario == 'complete' || inputs.windows_cold_started_only)) }}
     name: Native Windows pre-inhibition recovery
     runs-on: windows-2022
     timeout-minutes: 60
@@ -183,7 +183,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Verify original enabled task policy definitions
+        shell: pwsh
+        run: ./tests/deployment-windows-cold-policy-definition.ps1
       - name: Verify original enabled guarded launch recovery and archival
+        if: ${{ inputs.windows_restore_scenario != 'failed' }}
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdStartupCrash -ColdStartupStep started
 

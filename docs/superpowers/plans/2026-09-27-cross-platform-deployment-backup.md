@@ -13986,9 +13986,9 @@ deployment workflow. No original journal schema or synthetic runtime identity.
   Test-AgentsChatColdRecoveryDefinition $compact $enabled -Unacknowledged -Enabled
   ```
 
-  Require this combination to admit exactly one explicit `Enabled=true`
-  in the actual guarded source. Reject enabled acknowledged policy, disabled
-  actual policy when enabled was observed, extra/missing Enabled nodes,
+  Require this combination to admit `Enabled=true` or Scheduler's native
+  omitted true default in the actual guarded source. Reject enabled
+  acknowledged policy, disabled actual policy when enabled was observed, extra Enabled nodes,
   changed controller/configuration and restored triggers.
 - [x] Push and run the existing focused command gate in Actions; inspect the
   missing enabled-policy support failure:
@@ -14060,6 +14060,15 @@ deployment workflow. No original journal schema or synthetic runtime identity.
     -f windows_live_only=true -f windows_commands_only=true \
     -f windows_cold_started_only=true
   ```
+  Diagnostic retry `58946406 / 38547026502`, job `115795509023`, failed at
+  `2026-10-14 10:13:26 UTC` with the original error now preserved:
+  `enabled=True; instances=1; security=True; policy=False; enabledElements=0`.
+  Scheduler omits its default-true Enabled element; the original startup's
+  `Confirm-AgentsChatTaskInhibition` already permits that native representation.
+  Add the omitted-default regression first. Permit only that one omission
+  when native task.Enabled was independently observed true and launch history
+  is unacknowledged. Do not normalize other policy nodes or relax default
+  disabled/acknowledged comparisons.
 
 ### Task 5FJ: Route public recovery of an original unacknowledged application launch
 

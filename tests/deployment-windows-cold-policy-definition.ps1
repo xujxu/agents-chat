@@ -58,21 +58,26 @@ foreach ($changed in @(
 }
 Write-Output 'PASS: unacknowledged cold recovery admits only original XML formatting while acknowledged policy remains byte-exact'
 $enabled = $formatted.Replace('<Enabled>false</Enabled>', '<Enabled>true</Enabled>')
+$implicitEnabled = $enabled.Replace('<Enabled>true</Enabled>', '')
 if (-not (Test-AgentsChatColdRecoveryDefinition $compact $enabled -Unacknowledged -Enabled) -or
+    -not (Test-AgentsChatColdRecoveryDefinition $compact $implicitEnabled -Unacknowledged -Enabled) -or
     (Test-AgentsChatColdRecoveryDefinition $compact $enabled -Enabled) -or
+    (Test-AgentsChatColdRecoveryDefinition $compact $implicitEnabled -Unacknowledged) -or
     (Test-AgentsChatColdRecoveryDefinition $compact $formatted -Unacknowledged -Enabled)) {
-    throw 'Pre-inhibition recovery must distinguish the exact enabled guarded source from disabled and acknowledged policy.'
+    throw 'Pre-inhibition recovery must admit the native omitted enabled default only for an observed enabled unacknowledged source.'
 }
 foreach ($changed in @(
     $enabled.Replace($identity, "$PID`:999"),
     $enabled.Replace($policy.ConfigurationSha256, ('b' * 64)),
     $enabled.Replace('<Triggers />', '<Triggers><BootTrigger /></Triggers>'),
     $enabled.Replace('<Enabled>true</Enabled>', '<Enabled>true</Enabled><Enabled>true</Enabled>'),
-    $enabled.Replace('<Enabled>true</Enabled>', '')
+    $enabled.Replace('<Enabled>true</Enabled>', '<Enabled>TRUE</Enabled>'),
+    $implicitEnabled.Replace($identity, "$PID`:999"),
+    $implicitEnabled.Replace('<Triggers />', '<Triggers><BootTrigger /></Triggers>')
 )) {
     if ($changed -ceq $enabled -or
         (Test-AgentsChatColdRecoveryDefinition $compact $changed -Unacknowledged -Enabled)) {
         throw 'Pre-inhibition recovery admitted unrelated policy or an ambiguous enabled setting.'
     }
 }
-Write-Output 'PASS: pre-inhibition recovery admits only the exact enabled unacknowledged guarded source'
+Write-Output 'PASS: pre-inhibition recovery admits only the exact enabled unacknowledged guarded source and native omitted default'
