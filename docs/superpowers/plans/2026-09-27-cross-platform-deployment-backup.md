@@ -14069,6 +14069,12 @@ deployment workflow. No original journal schema or synthetic runtime identity.
   when native task.Enabled was independently observed true and launch history
   is unacknowledged. Do not normalize other policy nodes or relax default
   disabled/acknowledged comparisons.
+  Focused causal `b8b80734 / 38548338806`, job `115799872360`, failed at
+  `2026-10-14 10:16:16 UTC` with that exact new omitted-default assertion;
+  preceding formatting and acknowledged byte-exact regressions passed.
+  The correction removes only the recorded false Enabled element when
+  actual enabled XML omits its default-true element; otherwise it requires
+  exactly one explicit true element. All remaining XML stays exact.
 
 ### Task 5FJ: Route public recovery of an original unacknowledged application launch
 

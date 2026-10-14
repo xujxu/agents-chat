@@ -155,8 +155,13 @@ function Test-AgentsChatColdRecoveryDefinition([string]$Recorded, [string]$Actua
         $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
         $nodes = $planned.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
         if ($nodes.Count -ne 1 -or $nodes[0].InnerText -cne 'false') { return $false }
-        $nodes[0].InnerText = 'true'
-        return $planned.OuterXml -ceq ([xml]$Actual).OuterXml
+        $current = [xml]$Actual
+        $enabledNodes = $current.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
+        if ($enabledNodes.Count -gt 1 -or
+            ($enabledNodes.Count -eq 1 -and $enabledNodes[0].InnerText -cne 'true')) { return $false }
+        if ($enabledNodes.Count -eq 0) { $null = $nodes[0].ParentNode.RemoveChild($nodes[0]) }
+        else { $nodes[0].InnerText = 'true' }
+        return $planned.OuterXml -ceq $current.OuterXml
     }
     if ($Unacknowledged) {
         return ([xml]$Recorded).OuterXml -ceq ([xml]$Actual).OuterXml
