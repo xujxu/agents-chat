@@ -13915,6 +13915,67 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FH: Advance original cold startup through explicit bounded stages
+
+**Goal:** Keep the existing `start()` result and callers, while exposing the
+real pre-running-acknowledgement boundary through the same native finite-step
+pattern already used for runtime completion. This enables deterministic
+interruption tests without timing races or production-only test hooks.
+
+**Files:** modify `windows-cold-activation-context.ps1`,
+`windows-cold-activation-runtime.ps1`, `windows-cold-activation.mjs`,
+`windows-cold-restore-lease.mjs` under `scripts/deployment/`; extend
+`tests/deployment-cold-activation-state.test.mjs` and
+`tests/deployment-windows-cold-activation.mjs`.
+
+- [ ] Add the immutable contract and actual native callback assertions first:
+
+  ```js
+  assert.deepEqual(windowsColdStartupSteps,
+    ['requested', 'registered', 'enabled', 'started', 'inhibited', 'observed', 'running']);
+  assert.ok(Object.isFrozen(windowsColdStartupSteps));
+  ```
+
+  Native fixture rejects an invalid callback before start, observes all seven
+  stages in order, preserves root state/lock, verifies no running record exists
+  before the last stage, and binds the observed native runtime to its immutable
+  launch record before publication. Final result must equal that observation.
+- [ ] Push and run the focused command-only `failed` selector; inspect its
+  missing ordered startup contract before accepting fixed behavior.
+- [ ] Split original task preparation into request and registration functions.
+  Replace the single attempted flag with `StartupStep='initial'`. Each native
+  `start` request advances one step under original context checks:
+  requested publishes original intent; registered applies exact guarded policy;
+  enabled changes only its enabled bit; started creates/retains its Scheduler
+  instance; inhibited disables it; observed validates original readiness and
+  runtime/Job; running publishes its original running receipt.
+  Preserve existing 15-second instance and 30-second readiness deadlines.
+- [ ] Native intermediate replies have this exact shape:
+
+  ```powershell
+  return @{
+      status='cold-startup-progress'; step=$Context.StartupStep
+      observation=$(if ($Context.StartupStep -ceq 'observed') {
+          Assert-AgentsChatColdActivatedRuntime $Context
+      } else { $null })
+  }
+  ```
+
+  The running reply remains the existing original runtime result. Repeated
+  startup after that final stage is refused. Existing failure settlement stays
+  responsible for only its original instance/runtime.
+- [ ] The Node bridge loops over the immutable seven-step list and validates
+  exact reply shape, order, native bridge identity and original admission.
+  Before the final reply, only `observed` may contain a runtime observation;
+  validate it using the existing runtime capture and require the final result
+  to equal it. Await `onProgress({ step, observation })`, freeze exposed
+  records, and honor cancellation after each callback. Validate callbacks
+  before any startup authority transfer in both Node layers.
+- [ ] Run the full native saved cold chain, retaining graceful close, controller
+  crash, policy archival/reclaim, completion and retirement regressions.
+  This state-machine refactor does not itself admit earlier public recovery.
+  Add that recovery only with the original launch/owner/Job absence proof.
+
 ### Task 5FG: Persist guarded runtime launch identity before admitting workload
 
 **Goal:** Close the evidence gap between Scheduler demand-start and its running
@@ -13990,7 +14051,7 @@ command step in `.github/workflows/deployment-lifecycle.yml`.
   admission. Never reconstruct missing evidence or manufacture a new Job to
   prove old Job absence. No secret command arguments or environment enter this
   record. Existing readiness schema and unguarded runtime behavior stay intact.
-- [ ] Run the full native saved cold chain, whose first step repeats the
+- [x] Run the full native saved cold chain, whose first step repeats the
   focused contracts. Require both exact new launch PASS markers and existing
   guarded death/release contracts before accepting this prerequisite.
   First fixed run `df74b5c8 / 38503935179`, job `115656986159`, reached both
@@ -14000,6 +14061,11 @@ command step in `.github/workflows/deployment-lifecycle.yml`.
   separate PowerShell processes with explicit exit-code checks, matching
   surrounding native fixture isolation. Production code is unchanged by this
   harness correction; the full saved chain still needs a green run.
+  Fixed `757b7fe5 / 38504505891`, job `115658787604`, passed at
+  `2026-10-14 04:11:34 UTC`. Inspected both exact launch-before-workload
+  markers, 55 contracts, saved dependency closure, both cold policy archival/
+  reclaim and retirement chains, and warm restore regressions. This accepts
+  the launch-evidence prerequisite, not new public earlier-prefix recovery.
 - [ ] Continue earlier-prefix recovery using original native proof and finite
   policy archival, including real interruption before running acknowledgement.
   Old helper bundles without sufficient launch evidence remain refused rather

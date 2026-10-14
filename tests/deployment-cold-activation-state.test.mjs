@@ -160,6 +160,13 @@ const coldHistoryFixture = () => {
   return { intent, intentBytes, runtime, taskName: common.taskName, encode };
 };
 
+test('Windows cold startup has a finite ordered boundary before running acknowledgement', async () => {
+  const { windowsColdStartupSteps } = await import('../scripts/deployment/windows-cold-activation.mjs');
+  assert.deepEqual(windowsColdStartupSteps,
+    ['requested', 'registered', 'enabled', 'started', 'inhibited', 'observed', 'running']);
+  assert.ok(Object.isFrozen(windowsColdStartupSteps));
+});
+
 test('Windows cold journal captures exact requested, running and stopped prefixes without mutation authority', async () => {
   const { captureWindowsColdActivationHistory } = await import('../scripts/deployment/windows-cold-activation-history.mjs');
   const fixture = coldHistoryFixture();

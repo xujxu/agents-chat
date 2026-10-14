@@ -5,6 +5,7 @@ import { claimWindowsColdRestore } from '../scripts/deployment/windows-cold-rest
 import { restoreWindowsColdFiles } from '../scripts/deployment/windows-cold-restore-files.mjs';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
 import { verifyWindowsColdReadiness } from './deployment-windows-cold-readiness.mjs';
+import { windowsColdStartupSteps } from '../scripts/deployment/windows-cold-activation.mjs';
 
 const [control, pwsh, mode] = process.argv.slice(2);
 assert.ok(mode === undefined || mode === 'crash', 'Unknown cold activation fixture mode.');
@@ -30,7 +31,44 @@ try {
   controller.abort();
   await assert.rejects(activation.start({ signal: controller.signal }), { name: 'AbortError' });
   await activation.check();
-  running = await activation.start();
+  await assert.rejects(activation.start({ onProgress: 42 }), /progress callback/);
+  const steps = [];
+  let observed;
+  running = await activation.start({ onProgress: async progress => {
+    assert.equal(progress.step, windowsColdStartupSteps[steps.length]);
+    assert.ok(Object.isFrozen(progress));
+    steps.push(progress.step);
+    assert.deepEqual(await readFile(path.join(control, 'state.json')), stateBytes);
+    assert.deepEqual(await readFile(path.join(control, 'lock/owner.json')), lockBytes);
+    const requested = JSON.parse(await readFile(path.join(control, 'recovery-lock/activation-start-requested.json')));
+    assert.equal(requested.phase, 'start-requested');
+    assert.equal(requested.runtime, null);
+    if (progress.step !== 'running') {
+      await assert.rejects(lstat(path.join(control, 'recovery-lock/activation-running.json')), { code: 'ENOENT' });
+    }
+    if (progress.step === 'observed') {
+      observed = progress.observation;
+      assert.ok(Object.isFrozen(observed) && Object.isFrozen(observed.runtime));
+      const runtime = observed.runtime;
+      const launch = JSON.parse(await readFile(path.join(path.dirname(observed.configuration),
+        `launch-${runtime.identity.replace(':', '-')}.json`)));
+      assert.deepEqual(launch, {
+        version: 1, generation: runtime.generation, pid: runtime.pid, identity: runtime.identity,
+        configurationSha256: runtime.configurationSha256, sessionId: runtime.sessionId,
+        job: `Local\\agents-deploy-${runtime.generation}`,
+        controllerPid: observed.controllerPid, controllerIdentity: observed.controllerIdentity,
+      });
+      assert.equal(await processIdentity(runtime.pid), runtime.identity);
+      assert.equal(requested.controllerPid, observed.controllerPid);
+      assert.equal(requested.controllerIdentity, observed.controllerIdentity);
+    } else if (progress.step === 'running') {
+      assert.deepEqual(progress.observation, observed);
+    } else {
+      assert.equal(progress.observation, null);
+    }
+  } });
+  assert.deepEqual(steps, windowsColdStartupSteps);
+  assert.deepEqual(running, observed);
   assert.equal(running.status, 'guarded-running');
   assert.notEqual(running.runtime.generation, original.generation);
   assert.notEqual(running.runtime.identity, original.ownerIdentity);
