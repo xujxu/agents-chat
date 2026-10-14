@@ -13915,6 +13915,73 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FK: Recover the original guarded launch before task inhibition
+
+**Goal:** Continue the approved interrupted-startup scope at the earlier
+`started` callback, before the controller disables the guarded task. Require
+the same original unique launch record, absent controllers/host, empty old/new
+Jobs, no Scheduler instances, no triggers/restart and exact security. Read-only
+inspection must leave the enabled task unchanged; only the existing durable
+policy claim/request may restore its original disabled policy.
+
+**Files:** extend `windows-cold-activation-context.ps1`,
+`windows-cold-activation-recovery-proof.ps1`, `windows-cold-policy-history.ps1`
+and `windows-cold-policy-recovery.ps1` under `scripts/deployment/`;
+extend the existing cold policy definition, activation/crash, absent-owner and
+policy-recovery fixtures, their runtime-host/task-node plumbing and the
+deployment workflow. No original journal schema or synthetic runtime identity.
+
+- [x] Add the focused failing policy contract:
+
+  ```powershell
+  Test-AgentsChatColdRecoveryDefinition $compact $enabled -Unacknowledged -Enabled
+  ```
+
+  Require this combination to admit exactly one explicit `Enabled=true`
+  in the actual guarded source. Reject enabled acknowledged policy, disabled
+  actual policy when enabled was observed, extra/missing Enabled nodes,
+  changed controller/configuration and restored triggers.
+- [ ] Push and run the existing focused command gate in Actions; inspect the
+  missing enabled-policy support failure:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true \
+    -f windows_restore_scenario=failed
+  ```
+- [ ] Extend only unacknowledged native admission with an explicit observed
+  enabled bit and retain the actual XML/security bytes:
+
+  ```powershell
+  $proof.CurrentEnabled = [bool]$task.Enabled
+  Test-AgentsChatColdRecoveryDefinition $proof.ColdDefinition ([string]$task.Xml) `
+      -Unacknowledged -Enabled:$proof.CurrentEnabled
+  ```
+
+  Acknowledged source admission still requires disabled, byte-exact policy.
+  Every retained proof checks `task.Enabled` against `CurrentEnabled`.
+  Policy history may recognize the enabled guarded source only with original
+  launch evidence; its original disabled target is unchanged. After the
+  existing write-ahead request applies the original policy:
+
+  ```powershell
+  $Context.CurrentEnabled = $false
+  ```
+
+  Pin disabled actual XML as before; do not add a separate unjournaled
+  inhibition operation or infer missing launch/Job identities.
+- [ ] Interrupt the real native controller at `started`, independently retain
+  its original launch and workload listener, and prove no running receipt or
+  normal stopped receipt was written. Require the task remains enabled through
+  read-only observation and the first durable policy request. Reuse existing
+  repeated takeover/archive/fresh-copy/state/receipt/retirement checks.
+  Keep the existing observed-before-running chain and acknowledged chains.
+- [ ] Run targeted earlier-prefix native acceptance and the unchanged full
+  native regression gate in Actions. Record exact runs and original log
+  evidence. Actual public application interruption at this earlier boundary
+  remains a separate acceptance gate, not implied by native fixtures.
+
 ### Task 5FJ: Route public recovery of an original unacknowledged application launch
 
 **Goal:** Reuse Task 5FI's native authority through the existing saved public
