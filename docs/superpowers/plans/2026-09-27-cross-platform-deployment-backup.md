@@ -13963,6 +13963,16 @@ the existing cold application files/start, live restore/application fixtures,
   Keep the existing startup scenario's 165/175/185-minute test bounds.
   Require both the pre-inhibition death and public enabled-closeout PASS
   markers, plus Task 5FK's full native run, before reporting acceptance.
+  Original actual `ec423ccc / 38544965263`, job `115788642966`, failed at
+  `2026-10-14 11:15:22 UTC`. Inspected its original job log: update/current,
+  interrupted-copy retention, independent earlier-startup listener/API
+  verification and original Jobs/listener settlement reached the parent
+  task-policy assertion. That combined assertion failed before public
+  recovery; its log does not isolate which predicate failed. This commit
+  predates the native omitted-default correction in Task 5FK.
+  Corrected actual `805fe11a / 38548504407` has left the queue and is running
+  as job `115822764902`. Preserve that existing run rather than dispatching
+  a duplicate. Actual acceptance remains pending.
 
 ### Task 5FK: Recover the original guarded launch before task inhibition
 
