@@ -13915,6 +13915,60 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FN: Recover interrupted preparation before the original enable attempt
+
+**Goal:** Recover both `requested` (original disabled policy) and `registered`
+(guarded disabled policy) using the version-two write-ahead guarantee. Do not
+infer this from arbitrary missing launch evidence or grant legacy histories
+new authority. Keep runtime null; no new host, generation or Job is invented.
+
+**Files:** extend the existing cold activation history/recovery and policy
+history modules, their native counterparts, native crash/absence/policy
+fixtures, and the focused workflow selector. No new recovery journal phase.
+
+- [ ] Add causal pure contracts for the exact preparation candidate:
+
+  ```js
+  captureWindowsColdPreparation({ history, entries });
+  // { preparationSha256: history.sha256 }, frozen; no mutation authority
+  ```
+
+  Require one version-two `start-requested`, null runtime, and absence of
+  enable intent, launch and runtime-readiness names, case-insensitively.
+  Refuse legacy/running prefixes and malformed inventories. Policy records
+  bind `preparationSha256` equal to their original history digest, mutually
+  exclusive with `launchSha256`. Preserve all existing policy record fields.
+- [ ] Commit/push causal contracts; dispatch application/live/commands with
+  `windows_restore_scenario=failed` and inspect the original failure log.
+- [ ] Native recovery independently retains original configuration/helpers,
+  checks the same negative inventory twice per observation, proves all
+  original controllers/host absent and original Job empty, and requires no
+  Scheduler instances. Admit only exact disabled original or guarded policy
+  with unchanged security. Read-only observation must not mutate policy.
+- [ ] Reuse existing claim/request/restored policy journal and exact archive.
+  A requested original policy can be acknowledged as already applied; an
+  initial original policy still requires durable claim/request. Recheck
+  preparation absence throughout takeover, including before journal archival.
+- [ ] Extend existing native fixtures to interrupt at `requested` and
+  `registered`, without waiting for or inventing a runtime/listener. Preserve
+  original request bytes and actual disabled task policy across actor death.
+  Exercise marker/readiness refusal, read-only observation, repeated
+  takeover, exact archive/fresh copy and final runtime/state/receipt/retirement.
+- [ ] Add `windows_cold_startup_step` choice (`started`, `requested`,
+  `registered`) to the existing focused job, with separate concurrency
+  suffixes. Run both preparation prefixes in Actions using:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true \
+    -f windows_cold_started_only=true -f windows_cold_startup_step=requested
+  ```
+
+  Repeat with `registered`; rerun focused pure contracts. Keep older full
+  regressions, and require a later actual public application gate before
+  claiming public preparation recovery accepted.
+
 ### Task 5FM: Record a versioned write-ahead boundary before cold task enabling
 
 **Goal:** Prepare recovery of a genuinely never-enabled startup without
@@ -13961,10 +14015,16 @@ native cold activation fixture.
   absent; `enabled` and later require its exact original immutable record and
   prove writes are denied while retained. Keep all seven startup callbacks,
   cancellation checks and original state/lock equality assertions.
-- [ ] Run focused contracts and full native cold regressions in Actions,
+- [x] Run focused contracts and full native cold regressions in Actions,
   preserving version-one pure fixture coverage. Do not report no-launch
   recovery supported until independent original-task/owner/Job absence,
   policy archival and actual public recovery gates are implemented and pass.
+  Accepted `ff9636ba / 38583316297`: full native job `115918625885` passed at
+  `2026-10-14 16:15:49 UTC`; earlier-startup job `115918627369` passed at
+  `15:09:50 UTC`. Original logs inspected: 60/60 focused contracts, original
+  stopped/running/unacknowledged chains, enabled pre-inhibition chain, saved
+  dependency closure, warm regressions, archival and terminal retirement.
+  This is native foundation acceptance, not final dual-platform acceptance.
 
 ### Task 5FL: Accept public application recovery before original task inhibition
 

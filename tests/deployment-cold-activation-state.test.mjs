@@ -189,6 +189,31 @@ test('Windows cold version-two history preserves original phases and refuses pro
   }
 });
 
+test('Windows cold preparation requires version-two never-enabled evidence without inventing a runtime', async () => {
+  const { captureWindowsColdActivationHistory, captureWindowsColdPreparation } =
+    await import('../scripts/deployment/windows-cold-activation-history.mjs');
+  const fixture = coldHistoryFixture();
+  const requested = { version: 2, phase: 'start-requested', runtime: null };
+  const history = captureWindowsColdActivationHistory({ ...fixture, records: fixture.encode([requested]) });
+  const entries = ['configuration.json', 'WindowsRuntimeHost.cs'];
+  const captured = captureWindowsColdPreparation({ history, entries });
+  assert.deepEqual(captured, { preparationSha256: history.sha256 });
+  assert.ok(Object.isFrozen(captured));
+  for (const name of ['enable-requested.json', 'ENABLE-REQUESTED.JSON',
+    'launch-33-1234.json', 'LAUNCH-foreign.JSON', 'runtime-33-1234.json']) {
+    assert.throws(() => captureWindowsColdPreparation({ history, entries: [...entries, name] }));
+  }
+  for (const entries of [null, 'configuration.json', [null], ['a/b'], ['a\\b'], ['a\0b']]) {
+    assert.throws(() => captureWindowsColdPreparation({ history, entries }));
+  }
+  for (const records of [
+    fixture.encode([{ ...requested, version: 1 }]),
+    fixture.encode([requested, { version: 2, phase: 'running', runtime: fixture.runtime }]),
+  ]) assert.throws(() => captureWindowsColdPreparation({
+    history: captureWindowsColdActivationHistory({ ...fixture, records }), entries,
+  }));
+});
+
 test('Windows cold enable intent binds the original version-two request without runtime invention', async () => {
   const { captureWindowsColdActivationHistory, captureWindowsColdEnableRequest } =
     await import('../scripts/deployment/windows-cold-activation-history.mjs');
