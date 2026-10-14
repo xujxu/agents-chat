@@ -979,9 +979,19 @@ task with no automatic triggers or restart policy. Read-only inspection does
 not disable it; a durable recovery request precedes restoring the original
 disabled policy. Existing-path regressions passed in job `115787034572`
 of `5fa661e6 / 38544479831`, whose separate earlier-prefix failure was
-subsequently corrected. Missing launch evidence, still-earlier startup
-interruption, live guarded peers, initially inactive/legacy tasks and reboot
-recovery remain unsupported.
+subsequently corrected. Version-two never-enabled preparation now has native
+acceptance at `7d84bfea / 38598302976 / 38598304250 / 38598304291`.
+Public recovery before guarded task registration passed at
+`c1273ee2 / 38601393495`: it requires the original version-two request, no
+enable intent, launch or readiness evidence, absent original owners and an
+empty original Job, and the exact disabled task policy/security. It retains
+a null runtime rather than inventing a host or running receipt, then uses
+the durable policy journal and original archive before a fresh cold copy.
+The registered-but-never-enabled variant has passed native acceptance; its
+actual public application gate is still pending. Other missing-launch cases,
+including legacy requests or an enable attempt without launch evidence, live
+guarded peers, initially inactive/legacy tasks and reboot recovery remain
+unsupported.
 Do not remove a retained lock to bypass a recovery refusal.
 
 ```powershell

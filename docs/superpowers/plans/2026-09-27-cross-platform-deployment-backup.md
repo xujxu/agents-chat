@@ -13949,8 +13949,14 @@ fixtures, `deployment-native-operation.test.mjs`, and the existing workflow.
   with application/live flags and without command-only. Inspect exact original
   logs; keep native and actual acceptance distinct.
   Actual fixtures `c1273ee2`: requested `38601393495`, job `115981271496`,
-  running; registered `38602160464` pending in the same actual concurrency
-  group after its own native gate passed. Neither actual path is accepted yet.
+  passed at `2026-10-14 19:08:45 UTC`. Original log inspected: 62/62 contracts,
+  update/current/data, actual requested preparation controller death with
+  disabled original policy and no invented runtime, and the exact
+  `restore-cold-requested-closeout` marker passed. Public archive/request
+  binding, backup/engine/data, accepted state/receipt cleanup and distinct
+  released runtime assertions passed. Registered `38602160464`, job
+  `116048791799`, is now running in the same actual concurrency group.
+  Only the requested public boundary is accepted; this task remains open.
 
 ### Task 5FN: Recover interrupted preparation before the original enable attempt
 
