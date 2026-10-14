@@ -14075,6 +14075,18 @@ deployment workflow. No original journal schema or synthetic runtime identity.
   The correction removes only the recorded false Enabled element when
   actual enabled XML omits its default-true element; otherwise it requires
   exactly one explicit true element. All remaining XML stays exact.
+  Corrected targeted native `805fe11a / 38548499794`, job `115800409804`,
+  passed at `2026-10-14 10:41:34 UTC`. Inspected the original job log:
+  explicit/omitted enabled policy contracts and disabled/acknowledged
+  regressions passed. The earlier controller death and independent read-only
+  proof preserved the exact enabled task while proving both Jobs absent;
+  repeated policy takeover, exact archival, fresh copy, released runtime,
+  terminal state, receipt and retirement also passed. The original-path
+  regression job `115787034572` in `38544479831` is still running; the earlier
+  failed job in that workflow is not erased by this targeted success.
+  Corrected actual `805fe11a / 38548504407` is queued behind the original
+  actual run. Neither full Task 5FK regression closure nor Task 5FL public
+  actual acceptance is claimed yet.
 
 ### Task 5FJ: Route public recovery of an original unacknowledged application launch
 
