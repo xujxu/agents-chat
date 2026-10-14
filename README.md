@@ -971,13 +971,17 @@ recovery at `e38a45ba / 38531710666`. It requires the original immutable
 guarded-launch record, the exact disabled task and absent original owners/Jobs;
 it does not synthesize a running receipt. The actual application scenario
 interrupts after native runtime observation but before running acknowledgement.
-Earlier startup interruption, missing launch evidence, live guarded peers,
-initially inactive/legacy tasks and reboot recovery remain unsupported.
-Recovery of an original launch before task inhibition passed its targeted
-native chain at `805fe11a / 38548499794`. Existing-path regressions passed
-in job `115787034572` of `5fa661e6 / 38544479831` (that workflow remains
-failed because its earlier-prefix job exposed the subsequently fixed native
-default). Separate actual-application acceptance is still pending.
+Recovery before task inhibition also passed its targeted native chain at
+`805fe11a / 38548499794` and actual public recovery at
+`d29ead38 / 38566074828`. This earlier boundary requires the same original
+launch evidence and absent owners/Jobs, but admits the exact enabled guarded
+task with no automatic triggers or restart policy. Read-only inspection does
+not disable it; a durable recovery request precedes restoring the original
+disabled policy. Existing-path regressions passed in job `115787034572`
+of `5fa661e6 / 38544479831`, whose separate earlier-prefix failure was
+subsequently corrected. Missing launch evidence, still-earlier startup
+interruption, live guarded peers, initially inactive/legacy tasks and reboot
+recovery remain unsupported.
 Do not remove a retained lock to bypass a recovery refusal.
 
 ```powershell

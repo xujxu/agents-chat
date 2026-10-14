@@ -13952,7 +13952,7 @@ the existing cold application files/start, live restore/application fixtures,
   acknowledgement, and exact enabled guarded policy/security. Public closeout
   reuses original launch metadata/journal archive, backup/engine/data,
   accepted state/receipt, cleanup and distinct final released-runtime checks.
-- [ ] Push and dispatch the separate actual gate:
+- [x] Push and dispatch the separate actual gate:
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -13987,6 +13987,16 @@ the existing cold application files/start, live restore/application fixtures,
   synthesize an interrupted instance GUID or relax the older modes' checks.
   This correction changes only the actual fixture; native acceptance remains
   unchanged. Rerun only `cold-enabled` actual acceptance.
+  Corrected actual `d29ead38 / 38566074828`, job `115858974020`, passed at
+  `2026-10-14 14:37:00 UTC`. Original job log inspected: 58/58 contracts,
+  native explicit/omitted enabled policy checks, saved closure, actual update
+  and already-current/data behavior passed. Both required pre-inhibition
+  launch-death and `restore-cold-enabled-closeout` PASS markers are present.
+  The public saved restore completed exact original journal archival, retained
+  launch metadata and backup/engine/data, accepted state/receipt cleanup and
+  distinct final released runtime checks. This closes Task 5FL together with
+  Task 5FK's native evidence; missing-launch and earlier preparation prefixes
+  remain outside this acceptance.
 
 ### Task 5FK: Recover the original guarded launch before task inhibition
 
