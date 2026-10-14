@@ -974,8 +974,10 @@ interrupts after native runtime observation but before running acknowledgement.
 Earlier startup interruption, missing launch evidence, live guarded peers,
 initially inactive/legacy tasks and reboot recovery remain unsupported.
 Recovery of an original launch before task inhibition passed its targeted
-native chain at `805fe11a / 38548499794`; existing-path regressions and
-separate actual-application acceptance are still pending.
+native chain at `805fe11a / 38548499794`. Existing-path regressions passed
+in job `115787034572` of `5fa661e6 / 38544479831` (that workflow remains
+failed because its earlier-prefix job exposed the subsequently fixed native
+default). Separate actual-application acceptance is still pending.
 Do not remove a retained lock to bypass a recovery refusal.
 
 ```powershell

@@ -14035,7 +14035,7 @@ deployment workflow. No original journal schema or synthetic runtime identity.
   killing the retained original bridge. A separate 60-minute Actions job runs
   this full cold chain alongside the existing full native gate; no production
   timeout or existing regression-job deadline is increased.
-- [ ] Run targeted earlier-prefix native acceptance and the unchanged full
+- [x] Run targeted earlier-prefix native acceptance and the unchanged full
   native regression gate in Actions. Record exact runs and original log
   evidence. Actual public application interruption at this earlier boundary
   remains a separate acceptance gate, not implied by native fixtures.
@@ -14087,6 +14087,16 @@ deployment workflow. No original journal schema or synthetic runtime identity.
   Corrected actual `805fe11a / 38548504407` is queued behind the original
   actual run. Neither full Task 5FK regression closure nor Task 5FL public
   actual acceptance is claimed yet.
+  Original-path regression job `115787034572` subsequently passed at
+  `2026-10-14 10:57:05 UTC`. Inspected its original log: 58/58 contracts,
+  saved dependency closure, stopped/running/start-requested cold chains,
+  repeated policy takeover/archive/fresh-copy/retirement and warm restore
+  regressions all passed. The containing `5fa661e6 / 38544479831` workflow
+  remains failed because the separate earlier-prefix job failed before
+  `805fe11a` corrected the native omitted default. Together with that
+  correction's targeted native chain and policy contracts, this closes
+  Task 5FK's native gates. It is not a full same-commit dual-platform gate
+  and does not accept Task 5FL's actual public application scenario.
 
 ### Task 5FJ: Route public recovery of an original unacknowledged application launch
 
