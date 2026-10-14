@@ -962,7 +962,10 @@ Saved interrupted-copy startup and released-completion, terminal-state, receipt
 and retirement recovery also require their exact original retained evidence.
 Public interrupted-copy startup passed native and actual application acceptance
 at `1d52b08f / 38471316945 / 38471320648`. Acknowledged guarded startup recovery
-is implemented but still awaiting native/actual acceptance. Unacknowledged
+passed native acceptance at `25b99507 / 38481259288` and actual public recovery
+at `e7d56609 / 38490500463`: both old runtime Jobs settle, the exact original
+journal is archived, and a distinct released runtime completes restoration
+with the original backup and data preserved. Unacknowledged
 startup, live guarded peers, initially inactive/legacy tasks and reboot recovery
 remain unsupported.
 Do not remove a retained lock to bypass a recovery refusal.

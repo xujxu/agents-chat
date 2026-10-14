@@ -14038,15 +14038,23 @@ do not introduce another process launcher or weaken proof to support live peers.
   `cold-startup` fixture adds the extra 45-minute copy to the prior overall
   limits: managed application 165, private harness 175 and job 185 minutes.
   Other scenarios and per-stage deadlines are unchanged.
-- [ ] Push implementation and require full native plus dedicated actual success.
+- [x] Push implementation and require full native plus dedicated actual success.
   Update help/docs only to the boundary actually accepted.
   Native `25b99507 / 38481259288`, job `115584141225`, passed at
   `2026-10-14 00:04:30 UTC`: 55 focused contracts, saved dependency closure,
   both stopped/running cold policy recovery and exact archival/reclaim chains,
   completion/state/receipt/cold retirement and warm retirement regressions.
-  The full job log was inspected. Actual harness correction `c966612f` is
-  running separately in `38482402993`, job `115587858092`; native success is
-  not actual public startup acceptance.
+  Actual `e7d56609 / 38490500463`, job `115614297993`, passed at
+  `2026-10-14 02:49:23 UTC`. Both required markers were inspected:
+  guarded controller death/old Jobs settled (2,214,664 ms), then public
+  `restore-cold-startup-closeout` (3,457,387 ms). Exact original journal
+  directory/file identities, bytes and mtimes are preserved in its archive;
+  final runtime is distinct and released, with backup/engine/data retained,
+  accepted state/receipt and active recovery evidence retired.
+  Focused fixture correction `e7d56609 / 38490497836`, job `115614290712`,
+  passed at `00:36:19 UTC`, including the lifetime regression, harness
+  boundary regression, 55 contracts and saved dependency closure.
+  Full job logs were inspected; no production deadline was raised.
 
 **Still excluded:** unacknowledged activation-start prefixes, surviving guarded
 owners/runtimes, initially inactive/legacy task adoption and reboot recovery.
