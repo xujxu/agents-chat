@@ -965,13 +965,14 @@ at `1d52b08f / 38471316945 / 38471320648`. Acknowledged guarded startup recovery
 passed native acceptance at `25b99507 / 38481259288` and actual public recovery
 at `e7d56609 / 38490500463`: both old runtime Jobs settle, the exact original
 journal is archived, and a distinct released runtime completes restoration
-with the original backup and data preserved. Unacknowledged
-startup, live guarded peers, initially inactive/legacy tasks and reboot recovery
-remain unsupported.
-The unacknowledged-startup recovery proof uses the original immutable
-guarded-launch record without synthesizing a running receipt. Its native
-recovery passed at `0d3e3ee3 / 38523236422`; the public routing and separate
-actual-application interruption scenario remain pending actual acceptance.
+with the original backup and data preserved. Unacknowledged startup recovery
+also passed native acceptance at `0d3e3ee3 / 38523236422` and actual public
+recovery at `e38a45ba / 38531710666`. It requires the original immutable
+guarded-launch record, the exact disabled task and absent original owners/Jobs;
+it does not synthesize a running receipt. The actual application scenario
+interrupts after native runtime observation but before running acknowledgement.
+Earlier startup interruption, missing launch evidence, live guarded peers,
+initially inactive/legacy tasks and reboot recovery remain unsupported.
 Do not remove a retained lock to bypass a recovery refusal.
 
 ```powershell

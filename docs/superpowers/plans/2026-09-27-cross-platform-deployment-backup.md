@@ -13972,7 +13972,7 @@ application API fixture through `deployment-windows-application-api-helpers.mjs`
 
   The hint still grants no authority; original saved-snapshot native admission
   decides whether this prefix is recoverable before policy or files mutate.
-- [ ] Push and dispatch the independent actual gate after the native causal run:
+- [x] Push and dispatch the independent actual gate after the native causal run:
 
   ```bash
   gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -14007,7 +14007,22 @@ application API fixture through `deployment-windows-application-api-helpers.mjs`
   native policy gate `38523236422`.
   Fixture correction `e38a45ba` is under actual acceptance in `38531710666`,
   job `115744891848`. Native recovery is now accepted as recorded in Task 5FI;
-  this public actual-application gate remains pending.
+  actual gate subsequently passed at `2026-10-14 09:35:45 UTC`.
+  Inspected the original job log: all 58 focused contracts, original
+  launch-before-workload regressions and saved closure passed. The actual
+  application upgraded, verified restored API data and already-current
+  behavior, retained an interrupted copy, then passed both exact markers:
+
+  ```text
+  PASS: real Windows unacknowledged launch controller death settles both original Jobs without a running receipt
+  PASS: real Windows live deployment restore-cold-launch-closeout with original retired Job, new released task and preserved backup/data
+  ```
+
+  The original journal and immutable launch metadata, original backup/engine,
+  authenticated restored data, distinct final released runtime and accepted
+  state/receipt cleanup assertions all completed. This accepts Task 5FJ at the
+  native `observed` boundary before running acknowledgement; it does not
+  establish absent-launch, earlier enabled-task or reboot recovery.
 
 ### Task 5FI: Recover an unacknowledged guarded launch without fabricating runtime history
 
