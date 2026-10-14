@@ -14029,6 +14029,13 @@ do not introduce another process launcher or weaken proof to support live peers.
   Other scenarios and per-stage deadlines are unchanged.
 - [ ] Push implementation and require full native plus dedicated actual success.
   Update help/docs only to the boundary actually accepted.
+  Native `25b99507 / 38481259288`, job `115584141225`, passed at
+  `2026-10-14 00:04:30 UTC`: 55 focused contracts, saved dependency closure,
+  both stopped/running cold policy recovery and exact archival/reclaim chains,
+  completion/state/receipt/cold retirement and warm retirement regressions.
+  The full job log was inspected. Actual harness correction `c966612f` is
+  running separately in `38482402993`, job `115587858092`; native success is
+  not actual public startup acceptance.
 
 **Still excluded:** unacknowledged activation-start prefixes, surviving guarded
 owners/runtimes, initially inactive/legacy task adoption and reboot recovery.
