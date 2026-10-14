@@ -13915,6 +13915,55 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FL: Accept public application recovery before original task inhibition
+
+**Goal:** Exercise Task 5FK through the existing saved public entry, interrupting
+at `started` rather than `observed`. Reuse the accepted actual application/API,
+archive, state/receipt and final released-runtime assertions without claiming
+that an enabled task is already inhibited or a launch is a running receipt.
+
+**Files:** add `tests/deployment-windows-cold-started-observation.mjs`; extend
+the existing cold application files/start, live restore/application fixtures,
+`deployment-native-operation.test.mjs` and the deployment workflow.
+
+- [x] Add a bounded test-only observer for original launch/readiness files.
+  Reuse `captureWindowsColdActivationHistory`, `captureWindowsColdLaunch` and
+  `readWorkerFile`; wait at most 120 seconds for absent launch/readiness only,
+  reject malformed/replaced binding and verify original live controller/host.
+  Return the actual eight-field readiness record, not invented Scheduler
+  instance or launcher identities.
+- [x] At the earlier callback, keep its original observation null and call the
+  independent native listener/API helper with captured readiness:
+
+  ```js
+  const observation = await observeWindowsColdStartedLaunch({
+    control, originalGeneration: proof.runtime.generation,
+  });
+  const readiness = await verifyWindowsColdLaunchApi({
+    pwsh, runtime: observation.runtime, chatId, directory,
+  });
+  ```
+
+  Retain original configuration and root evidence, then exit without advancing
+  the busy startup bridge. Emit `guarded-launch` with explicitly named
+  `plannedDefinition`, not a forged running observation or registered XML.
+- [x] Add `restore-cold-enabled-crashed` / `restore-cold-enabled-closeout` modes.
+  Parent requires both old/new Jobs and the listener absent, no running
+  acknowledgement, and exact enabled guarded policy/security. Public closeout
+  reuses original launch metadata/journal archive, backup/engine/data,
+  accepted state/receipt, cleanup and distinct final released-runtime checks.
+- [ ] Push and dispatch the separate actual gate:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_restore_scenario=cold-enabled
+  ```
+
+  Keep the existing startup scenario's 165/175/185-minute test bounds.
+  Require both the pre-inhibition death and public enabled-closeout PASS
+  markers, plus Task 5FK's full native run, before reporting acceptance.
+
 ### Task 5FK: Recover the original guarded launch before task inhibition
 
 **Goal:** Continue the approved interrupted-startup scope at the earlier
@@ -13990,6 +14039,9 @@ deployment workflow. No original journal schema or synthetic runtime identity.
   native regression gate in Actions. Record exact runs and original log
   evidence. Actual public application interruption at this earlier boundary
   remains a separate acceptance gate, not implied by native fixtures.
+  Implementation `5fa661e6` is running in `38544479831`: earlier-prefix job
+  `115787034058`, unchanged regression job `115787034572`. Do not replace or
+  restart these gates when adding separate actual-application fixture coverage.
 
 ### Task 5FJ: Route public recovery of an original unacknowledged application launch
 

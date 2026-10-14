@@ -16,6 +16,7 @@ $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $helpers = Join-Path $repository 'scripts/deployment'
 . (Join-Path $PSScriptRoot 'deployment-windows-restore-egress.ps1')
 . (Join-Path $PSScriptRoot 'deployment-windows-process-lifetime-helper.ps1')
+. (Join-Path $helpers 'windows-cold-activation-context.ps1')
 Add-Type -Path @('WindowsWorkerJob.cs', 'WindowsPrivateFile.cs', 'WindowsControllerToken.cs',
     'WindowsControllerProcess.cs', 'WindowsControllerCapture.cs', 'WindowsRuntimeDomain.cs',
     'WindowsRuntimePipe.cs', 'WindowsRuntimeControl.cs' | ForEach-Object { Join-Path $helpers $_ })
@@ -42,8 +43,8 @@ try {
     $environment.Add('TEMP', $Root)
     $environment.Add('TMP', $Root)
     $recoveryEngine = ''
-    $startupCrashModes = @('restore-cold-startup-crashed', 'restore-cold-launch-crashed')
-    $startupCloseoutModes = @('restore-cold-startup-closeout', 'restore-cold-launch-closeout')
+    $startupCrashModes = @('restore-cold-startup-crashed', 'restore-cold-launch-crashed', 'restore-cold-enabled-crashed')
+    $startupCloseoutModes = @('restore-cold-startup-closeout', 'restore-cold-launch-closeout', 'restore-cold-enabled-closeout')
     $coldCloseoutModes = @('restore-cold-start-closeout') + $startupCloseoutModes
     $modes = if ($RestoreScenario -in @('complete', 'offline')) { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
         elseif ($RestoreScenario -in @('crashed', 'copy-crashed')) { @('update', 'verify-closed', 'current', "restore-$RestoreScenario", 'restore-crash-verified') }
@@ -54,6 +55,8 @@ try {
         $modes += @('restore-cold-startup-crashed', 'restore-cold-startup-closeout')
     } elseif ($RestoreScenario -eq 'copy-crashed' -and $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'launch') {
         $modes += @('restore-cold-launch-crashed', 'restore-cold-launch-closeout')
+    } elseif ($RestoreScenario -eq 'copy-crashed' -and $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'enabled') {
+        $modes += @('restore-cold-enabled-crashed', 'restore-cold-enabled-closeout')
     } elseif ($RestoreScenario -eq 'copy-crashed') {
         $modes += 'restore-cold-files'
         if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'completion') {
@@ -175,6 +178,8 @@ try {
             restore-cold-startup-closeout { 'cold-startup-closeout-completed' }
             restore-cold-launch-crashed { 'cold-launch-interrupted' }
             restore-cold-launch-closeout { 'cold-launch-closeout-completed' }
+            restore-cold-enabled-crashed { 'cold-enabled-interrupted' }
+            restore-cold-enabled-closeout { 'cold-enabled-closeout-completed' }
             restore-cold-retirement-prepared { 'cold-retirement-interrupted' }
             restore-cold-retirement-early { 'cold-retirement-interrupted' }
             restore-cold-retirement-unlock { 'cold-retirement-interrupted' }
@@ -220,11 +225,13 @@ try {
             continue
         }
         if ($mode -in $startupCrashModes) {
-            $unacknowledged = $mode -eq 'restore-cold-launch-crashed'
+            $beforeInhibition = $mode -eq 'restore-cold-enabled-crashed'
+            $unacknowledged = $mode -in @('restore-cold-launch-crashed', 'restore-cold-enabled-crashed')
             Assert ($result.retired -eq $true -and $result.runtime.pid -eq $originalPid -and
                 $result.runtime.identity -ceq $coldIdentity -and $coldOwner.WaitForExit(15000) -and
                 $coldOwner.ExitCode -eq 0) 'Guarded startup did not retire its original stopped runtime'
-            Assert ($result.activation.status -ceq 'guarded-running' -and
+            $expectedStatus = if ($beforeInhibition) { 'guarded-launch' } else { 'guarded-running' }
+            Assert ($result.activation.status -ceq $expectedStatus -and
                 $result.activation.runtime.generation -cne $result.runtime.generation) 'Interrupted guarded application reused its original runtime'
             Assert ($result.readiness.status -ceq 'ready' -and $result.readiness.port -eq 3010 -and
                 $result.readiness.generation -ceq $result.activation.runtime.generation) `
@@ -241,16 +248,22 @@ try {
             Assert (@(Get-NetTCPConnection -State Listen | Where-Object LocalPort -EQ 3010).Count -eq 0) `
                 'Interrupted guarded application left an active listener'
             $task = $scheduler.GetFolder('\').GetTask($TaskName)
-            Assert (-not $task.Enabled -and [string]$task.GetSecurityDescriptor(7) -ceq $coldSecurity -and
-                [string]$task.Xml -ceq $result.activation.definition -and
+            $definitionMatches = if ($beforeInhibition) {
+                Test-AgentsChatColdRecoveryDefinition $result.activation.plannedDefinition ([string]$task.Xml) `
+                    -Unacknowledged -Enabled
+            } else { [string]$task.Xml -ceq $result.activation.definition }
+            Assert ([bool]$task.Enabled -eq $beforeInhibition -and
+                [string]$task.GetSecurityDescriptor(7) -ceq $coldSecurity -and $definitionMatches -and
                 (Test-Path -LiteralPath (Join-Path $control 'recovery-lock/activation-start-requested.json')) -and
                 (Test-Path -LiteralPath (Join-Path $control 'recovery-lock/activation-running.json')) -eq (-not $unacknowledged) -and
                 -not (Test-Path -LiteralPath (Join-Path $control 'recovery-lock/completion-release-requested.json'))) `
-                'Guarded interruption lost inhibition, original security or its unreleased boundary'
+                'Guarded interruption changed its exact startup policy, original security or unreleased boundary'
             $coldOwner.Dispose()
             $coldOwner = $null
             $guardedStartup = $result
-            if ($unacknowledged) {
+            if ($beforeInhibition) {
+                Write-Output "PASS: real Windows pre-inhibition launch controller death settles both original Jobs and preserves enabled guarded policy; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            } elseif ($unacknowledged) {
                 Write-Output "PASS: real Windows unacknowledged launch controller death settles both original Jobs without a running receipt; elapsedMs=$($elapsed.ElapsedMilliseconds)"
             } else {
                 Write-Output "PASS: real Windows guarded startup controller death settles both original Jobs and retains its unreleased history; elapsedMs=$($elapsed.ElapsedMilliseconds)"

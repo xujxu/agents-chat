@@ -250,7 +250,7 @@ test('actual application source installs and builds inside native ownership', {
     if (process.env.DEPLOYMENT_TEST_WINDOWS_LIVE === '1') {
       const restoreScenario = process.env.DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO ?? 'complete';
       // Receipt recovery plus interrupted retirement/public closeout exceed 95 minutes on hosted Windows.
-      const liveTimeout = ['startup', 'launch'].includes(process.env.DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY) ? 9900000
+      const liveTimeout = ['startup', 'launch', 'enabled'].includes(process.env.DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY) ? 9900000
         : restoreScenario === 'copy-crashed' ? 7200000 : 4800000;
       const live = await execute(f.runtime.pwsh, ['-NoProfile', '-NonInteractive', '-File',
         path.join(repository, 'tests/deployment-windows-managed-application.ps1'),
@@ -283,6 +283,11 @@ test('actual application source installs and builds inside native ownership', {
         assert.equal(restoreScenario, 'copy-crashed');
         assert.match(live.stdout, /PASS: real Windows unacknowledged launch controller death settles both original Jobs /);
         assert.match(live.stdout, /PASS: real Windows live deployment restore-cold-launch-closeout /);
+      }
+      if (process.env.DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY === 'enabled') {
+        assert.equal(restoreScenario, 'copy-crashed');
+        assert.match(live.stdout, /PASS: real Windows pre-inhibition launch controller death settles both original Jobs /);
+        assert.match(live.stdout, /PASS: real Windows live deployment restore-cold-enabled-closeout /);
       }
       console.log(live.stdout.trim());
       return;

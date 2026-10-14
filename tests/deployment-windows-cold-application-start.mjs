@@ -8,8 +8,10 @@ import { verifyWindowsApplicationApi } from './deployment-windows-application-ap
 
 export async function verifyWindowsColdPublicStartup({
   directory, project, control, taskName, pwsh, chatId, interruptedStartup = false, unacknowledgedStartup = false,
+  beforeInhibition = false,
 }) {
   assert.ok(!unacknowledgedStartup || interruptedStartup);
+  assert.ok(!beforeInhibition || unacknowledgedStartup);
   const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
   const { verifyRecoveryEngine } = await captured('saved-recovery-engine.mjs');
   const { inspectWindowsManagedTask } = await captured('windows-managed-task.mjs');
@@ -141,7 +143,8 @@ export async function verifyWindowsColdPublicStartup({
     await scope.listener({ port: 3010 });
     await scope.check();
     return {
-      ...result, status: unacknowledgedStartup ? 'cold-launch-closeout-completed'
+      ...result, status: beforeInhibition ? 'cold-enabled-closeout-completed'
+        : unacknowledgedStartup ? 'cold-launch-closeout-completed'
         : interruptedStartup ? 'cold-startup-closeout-completed' : 'cold-start-closeout-completed',
       boundary: 'complete', runtime, lease, retiredRuntime: proof.runtime,
       ...(interruptedStartup ? { interruptedRuntime } : {}),

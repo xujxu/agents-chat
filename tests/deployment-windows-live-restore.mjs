@@ -6,12 +6,14 @@ import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-
 import { invokePublicWindowsRestore } from './deployment-windows-public-restore.mjs';
 
 export async function verifyWindowsLiveRestore({ mode, directory, project, control, taskName, pwsh, chatId }) {
-  if (['restore-cold-start-closeout', 'restore-cold-startup-closeout', 'restore-cold-launch-closeout'].includes(mode)) {
+  if (['restore-cold-start-closeout', 'restore-cold-startup-closeout', 'restore-cold-launch-closeout',
+    'restore-cold-enabled-closeout'].includes(mode)) {
     const { verifyWindowsColdPublicStartup } = await import('./deployment-windows-cold-application-start.mjs');
     return verifyWindowsColdPublicStartup({
       directory, project, control, taskName, pwsh, chatId,
       interruptedStartup: mode !== 'restore-cold-start-closeout',
-      unacknowledgedStartup: mode === 'restore-cold-launch-closeout',
+      unacknowledgedStartup: ['restore-cold-launch-closeout', 'restore-cold-enabled-closeout'].includes(mode),
+      beforeInhibition: mode === 'restore-cold-enabled-closeout',
     });
   }
   if (['restore-cold-completion-closeout', 'restore-cold-state-closeout', 'restore-cold-receipt-closeout'].includes(mode)) {
@@ -67,12 +69,14 @@ export async function verifyWindowsLiveRestore({ mode, directory, project, contr
     const { verifyWindowsCrashedRestore } = await import('./deployment-windows-crashed-restore.mjs');
     return verifyWindowsCrashedRestore({ project, control, backup, snapshot, recovery });
   }
-  if (['restore-cold-files', 'restore-cold-startup-crashed', 'restore-cold-launch-crashed'].includes(mode)) {
+  if (['restore-cold-files', 'restore-cold-startup-crashed', 'restore-cold-launch-crashed',
+    'restore-cold-enabled-crashed'].includes(mode)) {
     const { verifyWindowsColdApplicationFiles } = await import('./deployment-windows-cold-application-files.mjs');
     return verifyWindowsColdApplicationFiles({
       directory, project, control, backup, snapshot, pwsh, chatId,
       interruptStartup: mode === 'restore-cold-startup-crashed',
-      interruptLaunch: mode === 'restore-cold-launch-crashed',
+      interruptLaunch: ['restore-cold-launch-crashed', 'restore-cold-enabled-crashed'].includes(mode),
+      interruptBeforeInhibition: mode === 'restore-cold-enabled-crashed',
     });
   }
   if (['restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed'].includes(mode)) {

@@ -5,10 +5,13 @@ import { pathToFileURL } from 'node:url';
 import { assertWindowsRestoredProjectBytes } from './deployment-windows-restore-evidence.mjs';
 import { verifyWindowsApplicationApi, verifyWindowsColdLaunchApi } from './deployment-windows-application-api-helpers.mjs';
 import { interruptWindowsColdApplication } from './deployment-windows-cold-application-recovery.mjs';
+import { observeWindowsColdStartedLaunch } from './deployment-windows-cold-started-observation.mjs';
 
 export async function verifyWindowsColdApplicationFiles({
-  directory, project, control, backup, snapshot, pwsh, chatId, interruptStartup = false, interruptLaunch = false,
+  directory, project, control, backup, snapshot, pwsh, chatId,
+  interruptStartup = false, interruptLaunch = false, interruptBeforeInhibition = false,
 }) {
+  assert.ok(!interruptBeforeInhibition || interruptLaunch);
   const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
   const { claimWindowsColdRestore } = await captured('windows-cold-restore-lease.mjs');
   const { restoreWindowsColdFiles } = await captured('windows-cold-restore-files.mjs');
@@ -80,28 +83,33 @@ export async function verifyWindowsColdApplicationFiles({
     const activation = await lease.prepareActivation({ configuration });
     const running = await activation.start({
       async onProgress(progress) {
-        if (!interruptLaunch || progress.step !== 'observed') return;
-        const readiness = await verifyWindowsColdLaunchApi({ pwsh, runtime: progress.observation.runtime, chatId, directory });
+        const boundary = interruptBeforeInhibition ? 'started' : 'observed';
+        if (!interruptLaunch || progress.step !== boundary) return;
+        if (interruptBeforeInhibition) assert.equal(progress.observation, null);
+        const observation = interruptBeforeInhibition
+          ? await observeWindowsColdStartedLaunch({ control, originalGeneration: proof.runtime.generation })
+          : progress.observation;
+        const readiness = await verifyWindowsColdLaunchApi({ pwsh, runtime: observation.runtime, chatId, directory });
         await configuration.checkFiles();
         await assert.rejects(lstat(path.join(control, 'recovery-lock/activation-running.json')), { code: 'ENOENT' });
         const requested = JSON.parse(await readFile(path.join(control, 'recovery-lock/activation-start-requested.json')));
         assert.equal(requested.runtime, null);
-        assert.equal(requested.controllerPid, progress.observation.controllerPid);
-        const launch = JSON.parse(await readFile(path.join(path.dirname(progress.observation.configuration),
-          `launch-${progress.observation.runtime.identity.replace(':', '-')}.json`)));
-        const runtime = progress.observation.runtime;
+        assert.equal(requested.controllerPid, observation.controllerPid);
+        const launch = JSON.parse(await readFile(path.join(path.dirname(observation.configuration),
+          `launch-${observation.runtime.identity.replace(':', '-')}.json`)));
+        const runtime = observation.runtime;
         assert.deepEqual(launch, {
           version: 1, generation: runtime.generation, pid: runtime.pid, identity: runtime.identity,
           configurationSha256: runtime.configurationSha256, sessionId: runtime.sessionId,
           job: `Local\\agents-deploy-${runtime.generation}`,
-          controllerPid: progress.observation.controllerPid, controllerIdentity: progress.observation.controllerIdentity,
+          controllerPid: observation.controllerPid, controllerIdentity: observation.controllerIdentity,
         });
         for (const [name, bytes] of [['state.json', state], ['lock/owner.json', lock], ['deployment.json', receipt]]) {
           assert.deepEqual(await readFile(path.join(control, name)), bytes);
         }
         await interruptWindowsColdApplication({
-          status: 'cold-launch-interrupted', retired: true, runtime: proof.runtime,
-          activation: progress.observation, readiness,
+          status: interruptBeforeInhibition ? 'cold-enabled-interrupted' : 'cold-launch-interrupted',
+          retired: true, runtime: proof.runtime, activation: observation, readiness,
         });
         assert.fail('Actual unacknowledged launch interruption unexpectedly returned.');
       },

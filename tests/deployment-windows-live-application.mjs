@@ -20,6 +20,7 @@ const restoreModes = [
   'restore-cold-start-closeout',
   'restore-cold-startup-crashed', 'restore-cold-startup-closeout',
   'restore-cold-launch-crashed', 'restore-cold-launch-closeout',
+  'restore-cold-enabled-crashed', 'restore-cold-enabled-closeout',
   'restore-cold-retirement-prepared', 'restore-cold-retirement-early',
   'restore-cold-retirement-unlock', 'restore-cold-retirement-completed',
 ];
