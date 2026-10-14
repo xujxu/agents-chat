@@ -13930,6 +13930,17 @@ authority before Task 5FE's public copy/startup sequence. Never treat a running
 guarded runtime as released, force-kill an unowned process, or bypass original
 controller/runtime absence checks.
 
+**Actual fixture correction:** `c966612f / 38482402993`, job `115587858092`,
+failed at `2026-10-14 00:27:49 UTC` after original cold copy and guarded
+startup: the new parent absence poll called the live-only C# `ProcessIdentity`
+API after PID 2336 had already exited. Its `ArgumentException` aborted the
+fixture before public recovery. Use a focused test-only lifetime observer at
+both new absence checks. Missing/exited or a different start-time identity is
+absent; access and unexpected errors still propagate. Add a short native
+regression covering live, foreign, exited-retained and reaped processes before
+repeating the actual selector. Production recovery/proofs and deadlines do not
+change; the completed full native production acceptance remains valid.
+
 **Files:** add `scripts/deployment/windows-cold-startup-recovery.mjs`; extend
 `windows-cold-activation-recovery.mjs`, `windows-cold-restore-command.mjs`,
 saved recovery inventory and public help. Extend focused cold contract tests,

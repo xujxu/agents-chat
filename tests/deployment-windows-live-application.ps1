@@ -15,6 +15,7 @@ function Assert([bool]$Condition, [string]$Message) {
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $helpers = Join-Path $repository 'scripts/deployment'
 . (Join-Path $PSScriptRoot 'deployment-windows-restore-egress.ps1')
+. (Join-Path $PSScriptRoot 'deployment-windows-process-lifetime-helper.ps1')
 Add-Type -Path @('WindowsWorkerJob.cs', 'WindowsPrivateFile.cs', 'WindowsControllerToken.cs',
     'WindowsControllerProcess.cs', 'WindowsControllerCapture.cs', 'WindowsRuntimeDomain.cs',
     'WindowsRuntimePipe.cs', 'WindowsRuntimeControl.cs' | ForEach-Object { Join-Path $helpers $_ })
@@ -188,7 +189,7 @@ try {
                 Assert ($result.interruptedRuntime.generation -ceq $guardedStartup.activation.runtime.generation -and
                     $result.interruptedRuntime.pid -eq $guardedStartup.activation.runtime.pid -and
                     $result.interruptedRuntime.identity -ceq $guardedStartup.activation.runtime.identity -and
-                    [Deployment.WindowsWorkerJob]::ProcessIdentity($result.interruptedRuntime.pid) -cne $result.interruptedRuntime.identity) `
+                    -not (Test-WindowsFixtureProcessIdentity $result.interruptedRuntime.pid $result.interruptedRuntime.identity)) `
                     'Public cold startup changed or revived its interrupted guarded generation'
                 [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
                     [guid]$result.interruptedRuntime.generation, $result.interruptedRuntime.sessionId)
@@ -221,7 +222,7 @@ try {
                 $result.activation.runtime.generation -cne $result.runtime.generation) 'Interrupted guarded application lacks owned readiness'
             $runtime = $result.activation.runtime
             $settlement = [Diagnostics.Stopwatch]::StartNew()
-            while ([Deployment.WindowsWorkerJob]::ProcessIdentity($runtime.pid) -ceq $runtime.identity -or
+            while ((Test-WindowsFixtureProcessIdentity $runtime.pid $runtime.identity) -or
                 $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0).Count -ne 0) {
                 Assert ($settlement.ElapsedMilliseconds -lt 60000) 'Interrupted guarded runtime or Scheduler instance did not settle'
                 Start-Sleep -Milliseconds 100
