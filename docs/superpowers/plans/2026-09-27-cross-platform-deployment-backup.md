@@ -13995,7 +13995,7 @@ fixtures, and the focused workflow selector. No new recovery journal phase.
   original request bytes and actual disabled task policy across actor death.
   Exercise marker/readiness refusal, read-only observation, repeated
   takeover, exact archive/fresh copy and final runtime/state/receipt/retirement.
-- [ ] Add `windows_cold_startup_step` choice (`started`, `requested`,
+- [x] Add `windows_cold_startup_step` choice (`started`, `requested`,
   `registered`) to the existing focused job, with separate concurrency
   suffixes. Run both preparation prefixes in Actions using:
 
@@ -14015,8 +14015,14 @@ fixtures, and the focused workflow selector. No new recovery journal phase.
   Both original logs inspected: never-enabled preparation and rejection of
   enable/launch/readiness evidence, null-runtime read-only admission, repeated
   policy takeover, exact archival/fresh copy and terminal state/receipt/
-  retirement passed. Full original-path regression `38598304291` still runs;
-  do not mark this task's complete regression gate accepted yet.
+  retirement passed. Full original-path regression `7d84bfea / 38598304291`
+  passed: job `115970649729` at `2026-10-14 17:54:41 UTC` and the
+  pre-inhibition regression job `115970650134` at `16:52:16 UTC`.
+  Both original logs inspected: 62/62 focused contracts, saved dependency
+  closure, original stopped/running/unacknowledged and pre-inhibition chains,
+  repeated policy archival, warm completion/retirement regressions and final
+  released-runtime preservation. This closes Task 5FN's native gate; the
+  separate public actual application gates in Task 5FO remain pending.
 
 ### Task 5FM: Record a versioned write-ahead boundary before cold task enabling
 
