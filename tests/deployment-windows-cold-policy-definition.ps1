@@ -34,3 +34,26 @@ foreach ($permanent in @($false, $true)) {
     }
 }
 Write-Output 'PASS: cold policy reconstruction preserves recorded executable casing only, with exact guarded and permanent policy'
+$compact = Get-AgentsChatColdActivationDefinition $policy $PID $identity
+$formatted = $compact.Replace('><', ">`r`n  <")
+if ($compact -ceq $formatted -or ([xml]$compact).OuterXml -cne ([xml]$formatted).OuterXml) {
+    throw 'Cold pre-registration fixture did not isolate XML formatting.'
+}
+if (-not (Test-AgentsChatColdRecoveryDefinition $compact $formatted -Unacknowledged) -or
+    (Test-AgentsChatColdRecoveryDefinition $compact $formatted) -or
+    -not (Test-AgentsChatColdRecoveryDefinition $formatted $formatted)) {
+    throw 'Cold recovery must admit only pre-registration XML formatting and retain exact acknowledged policy.'
+}
+foreach ($changed in @(
+    $formatted.Replace('<Enabled>false</Enabled>', '<Enabled>true</Enabled>'),
+    $formatted.Replace($identity, "$PID`:999"),
+    $formatted.Replace($policy.ConfigurationSha256, ('b' * 64)),
+    $formatted.Replace($policy.Bundle, 'C:\foreign\bundle'),
+    $formatted.Replace('<Triggers />', '<Triggers><BootTrigger /></Triggers>')
+)) {
+    if ($changed -ceq $formatted -or
+        (Test-AgentsChatColdRecoveryDefinition $compact $changed -Unacknowledged)) {
+        throw 'Cold recovery admitted changed task policy instead of formatting-only normalization.'
+    }
+}
+Write-Output 'PASS: unacknowledged cold recovery admits only original XML formatting while acknowledged policy remains byte-exact'
