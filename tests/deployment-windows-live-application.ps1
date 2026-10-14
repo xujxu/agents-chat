@@ -43,8 +43,10 @@ try {
     $environment.Add('TEMP', $Root)
     $environment.Add('TMP', $Root)
     $recoveryEngine = ''
-    $startupCrashModes = @('restore-cold-startup-crashed', 'restore-cold-launch-crashed', 'restore-cold-enabled-crashed')
-    $startupCloseoutModes = @('restore-cold-startup-closeout', 'restore-cold-launch-closeout', 'restore-cold-enabled-closeout')
+    $preparedCrashModes = @('restore-cold-requested-crashed', 'restore-cold-registered-crashed')
+    $preparedCloseoutModes = @('restore-cold-requested-closeout', 'restore-cold-registered-closeout')
+    $startupCrashModes = @('restore-cold-startup-crashed', 'restore-cold-launch-crashed', 'restore-cold-enabled-crashed') + $preparedCrashModes
+    $startupCloseoutModes = @('restore-cold-startup-closeout', 'restore-cold-launch-closeout', 'restore-cold-enabled-closeout') + $preparedCloseoutModes
     $coldCloseoutModes = @('restore-cold-start-closeout') + $startupCloseoutModes
     $modes = if ($RestoreScenario -in @('complete', 'offline')) { @('update', 'verify-closed', 'current', 'restore', 'restore-closed') }
         elseif ($RestoreScenario -in @('crashed', 'copy-crashed')) { @('update', 'verify-closed', 'current', "restore-$RestoreScenario", 'restore-crash-verified') }
@@ -57,6 +59,9 @@ try {
         $modes += @('restore-cold-launch-crashed', 'restore-cold-launch-closeout')
     } elseif ($RestoreScenario -eq 'copy-crashed' -and $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'enabled') {
         $modes += @('restore-cold-enabled-crashed', 'restore-cold-enabled-closeout')
+    } elseif ($RestoreScenario -eq 'copy-crashed' -and $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -in @('requested', 'registered')) {
+        $prefix = "restore-cold-$($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY)"
+        $modes += @("$prefix-crashed", "$prefix-closeout")
     } elseif ($RestoreScenario -eq 'copy-crashed') {
         $modes += 'restore-cold-files'
         if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'completion') {
@@ -88,7 +93,7 @@ try {
         if ($mode -in $startupCloseoutModes) {
             Assert ($before.Count -eq 0) 'Interrupted guarded startup must have no remaining task instance'
             $originalPid = $guardedStartup.runtime.pid
-            $originalInstance = if ($mode -eq 'restore-cold-enabled-closeout') {
+            $originalInstance = if ($mode -in (@('restore-cold-enabled-closeout') + $preparedCloseoutModes)) {
                 $guardedStartup.runtime.instanceGuid
             } else { $guardedStartup.activation.runtime.instanceGuid }
         } else {
@@ -182,6 +187,10 @@ try {
             restore-cold-launch-closeout { 'cold-launch-closeout-completed' }
             restore-cold-enabled-crashed { 'cold-enabled-interrupted' }
             restore-cold-enabled-closeout { 'cold-enabled-closeout-completed' }
+            restore-cold-requested-crashed { 'cold-requested-interrupted' }
+            restore-cold-requested-closeout { 'cold-requested-closeout-completed' }
+            restore-cold-registered-crashed { 'cold-registered-interrupted' }
+            restore-cold-registered-closeout { 'cold-registered-closeout-completed' }
             restore-cold-retirement-prepared { 'cold-retirement-interrupted' }
             restore-cold-retirement-early { 'cold-retirement-interrupted' }
             restore-cold-retirement-unlock { 'cold-retirement-interrupted' }
@@ -199,6 +208,10 @@ try {
                 Assert ($coldOwner.WaitForExit(15000) -and $coldOwner.ExitCode -eq 0) 'Public cold restore did not retire its original stopped runtime'
                 $coldOwner.Dispose()
                 $coldOwner = $null
+            } elseif ($mode -in $preparedCloseoutModes) {
+                Assert ($result.preparationSha256 -ceq $guardedStartup.activation.preparationSha256 -and
+                    $null -eq $result.PSObject.Properties['interruptedRuntime']) `
+                    'Public preparation recovery changed its original request or invented an interrupted runtime'
             } else {
                 Assert ($result.interruptedRuntime.generation -ceq $guardedStartup.activation.runtime.generation -and
                     $result.interruptedRuntime.pid -eq $guardedStartup.activation.runtime.pid -and
@@ -224,6 +237,51 @@ try {
             & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs') restored $ChatId
             Assert ($LASTEXITCODE -eq 0) 'Public cold restore lost authenticated pre-backup data'
             Write-Output "PASS: real Windows live deployment $mode with original retired Job, new released task and preserved backup/data; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            continue
+        }
+        if ($mode -in $preparedCrashModes) {
+            $step = if ($mode -eq 'restore-cold-requested-crashed') { 'requested' } else { 'registered' }
+            Assert ($result.retired -eq $true -and $result.runtime.pid -eq $originalPid -and
+                $result.runtime.identity -ceq $coldIdentity -and $coldOwner.WaitForExit(15000) -and
+                $coldOwner.ExitCode -eq 0) 'Preparation did not retire its genuine original stopped runtime'
+            Assert ($result.activation.status -ceq 'guarded-preparation' -and
+                $result.activation.step -ceq $step -and $null -eq $result.activation.runtime -and
+                $null -eq $result.readiness -and $result.activation.taskName -ceq $TaskName) `
+                'Interrupted preparation fabricated runtime readiness or changed its boundary'
+            $settlement = [Diagnostics.Stopwatch]::StartNew()
+            while ((Test-WindowsFixtureProcessIdentity $result.activation.controllerPid $result.activation.controllerIdentity) -or
+                $scheduler.GetFolder('\').GetTask($TaskName).GetInstances(0).Count -ne 0) {
+                Assert ($settlement.ElapsedMilliseconds -lt 60000) 'Preparation bridge or Scheduler instance did not settle'
+                Start-Sleep -Milliseconds 100
+            }
+            [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$result.runtime.generation, $coldSession)
+            Assert (@(Get-NetTCPConnection -State Listen | Where-Object LocalPort -EQ 3010).Count -eq 0) `
+                'Never-enabled preparation left an application listener'
+            $task = $scheduler.GetFolder('\').GetTask($TaskName)
+            $expectedDefinition = if ($step -ceq 'requested') { $coldDefinition } else { $result.activation.plannedDefinition }
+            Assert (-not $task.Enabled -and
+                [string]$task.GetSecurityDescriptor(7) -ceq $coldSecurity -and
+                (Test-AgentsChatColdRecoveryDefinition $expectedDefinition ([string]$task.Xml) -Unacknowledged)) `
+                'Interrupted preparation changed its exact original or guarded disabled task'
+            $requestFile = Join-Path $control 'recovery-lock/activation-start-requested.json'
+            $request = Get-Content -LiteralPath $requestFile -Raw | ConvertFrom-Json
+            Assert ($request.version -eq 2 -and $null -eq $request.runtime -and
+                $request.controllerPid -eq $result.activation.controllerPid -and
+                $request.controllerIdentity -ceq $result.activation.controllerIdentity -and
+                $request.configuration -ceq $result.activation.configuration -and
+                (Get-FileHash -LiteralPath $requestFile -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $result.activation.preparationSha256) `
+                'Preparation interruption lost its versioned original request'
+            $entries = @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($request.configuration)) -Force |
+                Where-Object { $_.Name -imatch '^(enable-requested|(launch|runtime)-.*)\.json$' })
+            Assert ($entries.Count -eq 0 -and
+                -not (Test-Path -LiteralPath (Join-Path $control 'recovery-lock/activation-running.json')) -and
+                -not (Test-Path -LiteralPath (Join-Path $control 'recovery-lock/activation-stopped.json')) -and
+                -not (Test-Path -LiteralPath (Join-Path $control 'recovery-lock/completion-release-requested.json'))) `
+                'Never-enabled preparation contains later startup evidence'
+            $coldOwner.Dispose()
+            $coldOwner = $null
+            $guardedStartup = $result
+            Write-Output "PASS: real Windows $step preparation controller death preserves disabled policy without enable, launch or runtime invention; elapsedMs=$($elapsed.ElapsedMilliseconds)"
             continue
         }
         if ($mode -in $startupCrashModes) {

@@ -7,13 +7,16 @@ import { invokePublicWindowsRestore } from './deployment-windows-public-restore.
 
 export async function verifyWindowsLiveRestore({ mode, directory, project, control, taskName, pwsh, chatId }) {
   if (['restore-cold-start-closeout', 'restore-cold-startup-closeout', 'restore-cold-launch-closeout',
-    'restore-cold-enabled-closeout'].includes(mode)) {
+    'restore-cold-enabled-closeout', 'restore-cold-requested-closeout', 'restore-cold-registered-closeout'].includes(mode)) {
     const { verifyWindowsColdPublicStartup } = await import('./deployment-windows-cold-application-start.mjs');
     return verifyWindowsColdPublicStartup({
       directory, project, control, taskName, pwsh, chatId,
       interruptedStartup: mode !== 'restore-cold-start-closeout',
-      unacknowledgedStartup: ['restore-cold-launch-closeout', 'restore-cold-enabled-closeout'].includes(mode),
+      unacknowledgedStartup: ['restore-cold-launch-closeout', 'restore-cold-enabled-closeout',
+        'restore-cold-requested-closeout', 'restore-cold-registered-closeout'].includes(mode),
       beforeInhibition: mode === 'restore-cold-enabled-closeout',
+      preparationStep: mode === 'restore-cold-requested-closeout' ? 'requested'
+        : mode === 'restore-cold-registered-closeout' ? 'registered' : null,
     });
   }
   if (['restore-cold-completion-closeout', 'restore-cold-state-closeout', 'restore-cold-receipt-closeout'].includes(mode)) {
@@ -70,13 +73,15 @@ export async function verifyWindowsLiveRestore({ mode, directory, project, contr
     return verifyWindowsCrashedRestore({ project, control, backup, snapshot, recovery });
   }
   if (['restore-cold-files', 'restore-cold-startup-crashed', 'restore-cold-launch-crashed',
-    'restore-cold-enabled-crashed'].includes(mode)) {
+    'restore-cold-enabled-crashed', 'restore-cold-requested-crashed', 'restore-cold-registered-crashed'].includes(mode)) {
     const { verifyWindowsColdApplicationFiles } = await import('./deployment-windows-cold-application-files.mjs');
     return verifyWindowsColdApplicationFiles({
       directory, project, control, backup, snapshot, pwsh, chatId,
       interruptStartup: mode === 'restore-cold-startup-crashed',
       interruptLaunch: ['restore-cold-launch-crashed', 'restore-cold-enabled-crashed'].includes(mode),
       interruptBeforeInhibition: mode === 'restore-cold-enabled-crashed',
+      preparationStep: mode === 'restore-cold-requested-crashed' ? 'requested'
+        : mode === 'restore-cold-registered-crashed' ? 'registered' : null,
     });
   }
   if (['restore-cancelled', 'restore-failed', 'restore-crashed', 'restore-copy-crashed'].includes(mode)) {

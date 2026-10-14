@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,9 +10,12 @@ import { verifyWindowsApplicationApi } from './deployment-windows-application-ap
 export async function verifyWindowsColdPublicStartup({
   directory, project, control, taskName, pwsh, chatId, interruptedStartup = false, unacknowledgedStartup = false,
   beforeInhibition = false,
+  preparationStep = null,
 }) {
   assert.ok(!unacknowledgedStartup || interruptedStartup);
   assert.ok(!beforeInhibition || unacknowledgedStartup);
+  assert.ok(preparationStep === null || ['requested', 'registered'].includes(preparationStep));
+  assert.ok(!preparationStep || unacknowledgedStartup && !beforeInhibition);
   const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
   const { verifyRecoveryEngine } = await captured('saved-recovery-engine.mjs');
   const { inspectWindowsManagedTask } = await captured('windows-managed-task.mjs');
@@ -28,28 +32,38 @@ export async function verifyWindowsColdPublicStartup({
   let journalIdentity;
   let journalFiles;
   let launchFile;
+  let preparation;
   const priorArchives = (await readdir(control)).filter(name => name.startsWith('cold-policy-')).sort();
   if (interruptedStartup) {
     assert.notEqual(await processIdentity(proof.runtime.pid), proof.runtime.identity);
     const journal = path.join(control, 'recovery-lock');
     if (unacknowledgedStartup) {
       await assert.rejects(lstat(path.join(journal, 'activation-running.json')), { code: 'ENOENT' });
-      const requested = JSON.parse(await readFile(path.join(journal, 'activation-start-requested.json')));
+      const requestBytes = await readFile(path.join(journal, 'activation-start-requested.json'));
+      const requested = JSON.parse(requestBytes);
       assert.equal(requested.runtime, null);
       const bundle = path.dirname(requested.configuration);
       const launchNames = (await readdir(bundle)).filter(name => /^launch-.*\.json$/i.test(name));
-      assert.equal(launchNames.length, 1);
-      const file = path.join(bundle, launchNames[0]);
-      launchFile = { file, bytes: await readFile(file), info: await lstat(file, { bigint: true }) };
-      interruptedRuntime = JSON.parse(launchFile.bytes);
-      assert.equal(interruptedRuntime.controllerPid, requested.controllerPid);
-      assert.equal(interruptedRuntime.controllerIdentity, requested.controllerIdentity);
-      assert.equal(interruptedRuntime.configurationSha256, requested.configurationSha256);
-      assert.equal(interruptedRuntime.instanceGuid, undefined);
+      assert.equal(launchNames.length, preparationStep ? 0 : 1);
+      if (preparationStep) {
+        assert.equal(requested.version, 2);
+        assert.notEqual(await processIdentity(requested.controllerPid), requested.controllerIdentity);
+        assert.equal((await readdir(bundle)).some(name =>
+          /^(?:enable-requested|(?:launch|runtime)-.*)\.json$/i.test(name)), false);
+        preparation = { bundle, sha256: createHash('sha256').update(requestBytes).digest('hex') };
+      } else {
+        const file = path.join(bundle, launchNames[0]);
+        launchFile = { file, bytes: await readFile(file), info: await lstat(file, { bigint: true }) };
+        interruptedRuntime = JSON.parse(launchFile.bytes);
+        assert.equal(interruptedRuntime.controllerPid, requested.controllerPid);
+        assert.equal(interruptedRuntime.controllerIdentity, requested.controllerIdentity);
+        assert.equal(interruptedRuntime.configurationSha256, requested.configurationSha256);
+        assert.equal(interruptedRuntime.instanceGuid, undefined);
+      }
     } else {
       interruptedRuntime = JSON.parse(await readFile(path.join(journal, 'activation-running.json'))).runtime;
     }
-    assert.notEqual(await processIdentity(interruptedRuntime.pid), interruptedRuntime.identity);
+    if (interruptedRuntime) assert.notEqual(await processIdentity(interruptedRuntime.pid), interruptedRuntime.identity);
     journalIdentity = await lstat(journal, { bigint: true });
     journalFiles = await Promise.all((await readdir(journal)).map(async name => ({
       name, bytes: await readFile(path.join(journal, name)), info: await lstat(path.join(journal, name), { bigint: true }),
@@ -114,6 +128,17 @@ export async function verifyWindowsColdPublicStartup({
       for (const key of ['dev', 'ino', 'mtimeNs']) assert.equal(info[key], file.info[key]);
     }
     assert.deepEqual(names.filter(name => name.startsWith('cold-policy-') && !archives.includes(name)).sort(), priorArchives);
+    if (preparation) {
+      assert.equal(archivedNames.includes('activation-running.json'), false);
+      assert.equal(archivedNames.includes('activation-stopped.json'), false);
+      assert.equal((await readdir(preparation.bundle)).some(name =>
+        /^(?:enable-requested|(?:launch|runtime)-.*)\.json$/i.test(name)), false);
+      for (const name of archivedNames.filter(name => /^policy-[0-9]{6}\.json$/.test(name))) {
+        const record = JSON.parse(await readFile(path.join(archive, name)));
+        assert.equal(record.preparationSha256, preparation.sha256);
+        assert.equal(record.launchSha256, undefined);
+      }
+    }
     if (launchFile) {
       assert.equal(archivedNames.includes('activation-running.json'), false);
       assert.deepEqual(await readFile(launchFile.file), launchFile.bytes);
@@ -134,7 +159,7 @@ export async function verifyWindowsColdPublicStartup({
     assert.equal(securityDescriptor, snapshot.runtime.task.securityDescriptor);
     assert.notEqual(runtime.generation, proof.runtime.generation);
     assert.notEqual(runtime.instanceGuid, proof.runtime.instanceGuid);
-    if (interruptedStartup) {
+    if (interruptedRuntime) {
       assert.notEqual(runtime.generation, interruptedRuntime.generation);
       if (!unacknowledgedStartup) assert.notEqual(runtime.instanceGuid, interruptedRuntime.instanceGuid);
       assert.notEqual(await processIdentity(interruptedRuntime.pid), interruptedRuntime.identity);
@@ -143,11 +168,13 @@ export async function verifyWindowsColdPublicStartup({
     await scope.listener({ port: 3010 });
     await scope.check();
     return {
-      ...result, status: beforeInhibition ? 'cold-enabled-closeout-completed'
+      ...result, status: preparationStep ? `cold-${preparationStep}-closeout-completed`
+        : beforeInhibition ? 'cold-enabled-closeout-completed'
         : unacknowledgedStartup ? 'cold-launch-closeout-completed'
         : interruptedStartup ? 'cold-startup-closeout-completed' : 'cold-start-closeout-completed',
       boundary: 'complete', runtime, lease, retiredRuntime: proof.runtime,
-      ...(interruptedStartup ? { interruptedRuntime } : {}),
+      ...(interruptedRuntime ? { interruptedRuntime } : {}),
+      ...(preparation ? { preparationSha256: preparation.sha256 } : {}),
     };
   } finally { await scope.close(); }
 }

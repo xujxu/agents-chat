@@ -13915,6 +13915,40 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FO: Accept actual public recovery of never-enabled preparation
+
+**Files:** extend `tests/deployment-windows-cold-application-files.mjs`,
+`deployment-windows-cold-application-start.mjs`, live restore/application
+fixtures, `deployment-native-operation.test.mjs`, and the existing workflow.
+
+- [x] Add `cold-requested` and `cold-registered` actual scenario selectors.
+  Use paired `restore-cold-<step>-crashed` / `restore-cold-<step>-closeout`
+  fixture modes, preserving existing update/current/data and interrupted-copy
+  setup. Use existing 165/175/185-minute actual invocation/runner/job budgets.
+- [x] At the corresponding startup callback, require original version-two
+  request, null runtime/observation, absent enable/launch/readiness and unchanged
+  state/lock/receipt. Exit the actual controller using the existing interruption
+  helper, without recursively calling the busy bridge or fabricating readiness:
+
+  ```js
+  await interruptWindowsColdApplication({
+    status: `cold-${preparationStep}-interrupted`, retired: true,
+    runtime: proof.runtime, activation: observation, readiness: null,
+  });
+  ```
+
+- [x] Parent verifies original runtime/Job retired, original activation bridge
+  absent, disabled exact original (`requested`) or guarded (`registered`)
+  policy, no Scheduler instances/listener and no later activation receipts.
+- [x] Public closeout preserves the original journal inode/bytes/mtime in its
+  archive and keeps the original runtime bundle never-enabled. Bind archive
+  policy records to the original request digest. Verify accepted state/receipt,
+  cleanup, snapshot/engine/data preservation, real authenticated API and a
+  distinct released final runtime. Compare only genuine retired identities.
+- [ ] After native preparation acceptance, push and run both actual selectors
+  with application/live flags and without command-only. Inspect exact original
+  logs; keep native and actual acceptance distinct.
+
 ### Task 5FN: Recover interrupted preparation before the original enable attempt
 
 **Goal:** Recover both `requested` (original disabled policy) and `registered`
