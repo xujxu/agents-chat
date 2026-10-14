@@ -20,7 +20,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     [switch]$StoppedProof,
     [switch]$ColdActivationCrash,
     [switch]$ColdStartupCrash,
-    [ValidateSet('observed', 'started')][string]$ColdStartupStep = 'observed',
+    [ValidateSet('observed', 'started', 'requested', 'registered')][string]$ColdStartupStep = 'observed',
     [AllowEmptyString()][ValidateSet('', 'copying', 'backup-ready', 'source-selected')]
     [string]$PriorRuntimeRecovery = '')
 $ErrorActionPreference = 'Stop'

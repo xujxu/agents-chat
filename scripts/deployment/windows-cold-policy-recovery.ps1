@@ -15,6 +15,11 @@ function Advance-AgentsChatColdPolicyRecovery([hashtable]$Context) {
                 }
                 'requested' {
                     $task = $Context.Folder.GetTask($Context.TaskName)
+                    if ($Context.ColdPreparationSha256 -and
+                        ([xml]$task.Xml).OuterXml -ceq ([xml]$Context.Definition).OuterXml) {
+                        $Context.PolicyStep = 'policy-applied'
+                        break
+                    }
                     $principal = $task.Definition.Principal
                     $Context.TaskFile.Check()
                     $Context.TaskFile.Dispose()

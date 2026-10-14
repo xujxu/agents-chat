@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { lstat, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { inspectWindowsColdActivationRecovery } from '../scripts/deployment/windows-cold-activation-recovery.mjs';
 
-const [control, pwsh, phase = 'stopped'] = process.argv.slice(2);
+const [control, pwsh, phase = 'stopped', mode = 'runtime'] = process.argv.slice(2);
 assert.ok(['start-requested', 'running', 'stopped'].includes(phase));
+assert.ok(['runtime', 'prepared'].includes(mode));
+const prepared = mode === 'prepared';
+if (prepared) assert.equal(phase, 'start-requested');
 const directory = path.join(control, 'recovery-lock');
 const names = (await readdir(directory)).sort();
 const files = [
@@ -26,11 +29,22 @@ if (phase === 'start-requested') {
   assert.ok(!names.includes('activation-running.json') && !names.includes('activation-stopped.json'));
   const bundle = path.dirname(stopped.configuration);
   const launchNames = (await readdir(bundle)).filter(name => name.startsWith('launch-'));
-  assert.equal(launchNames.length, 1);
-  const file = path.join(bundle, launchNames[0]);
-  const bytes = await readFile(file);
-  launch = { file, bytes };
-  originals.push(launch);
+  assert.equal(launchNames.length, prepared ? 0 : 1);
+  if (prepared) {
+    assert.equal(stopped.version, 2);
+    for (const name of ['enable-requested.json', 'runtime-33-1234.json', 'launch-33-1234.json']) {
+      const file = path.join(bundle, name);
+      await assert.rejects(lstat(file), { code: 'ENOENT' });
+      await writeFile(file, '{}', { flag: 'wx' });
+      try { await assert.rejects(inspectWindowsColdActivationRecovery({ control, pwsh })); }
+      finally { await unlink(file); }
+    }
+  } else {
+    const file = path.join(bundle, launchNames[0]);
+    const bytes = await readFile(file);
+    launch = { file, bytes };
+    originals.push(launch);
+  }
 }
 const proof = await inspectWindowsColdActivationRecovery({ control, pwsh });
 try {
@@ -42,6 +56,11 @@ try {
   assert.equal(proof.observation.taskName, stopped.taskName);
   assert.equal(proof.observation.historySha256, createHash('sha256').update(stoppedBytes).digest('hex'));
   assert.deepEqual(proof.observation.runtime, stopped.runtime);
+  if (prepared) {
+    assert.equal(proof.observation.preparationSha256, proof.observation.historySha256);
+    assert.equal(proof.observation.launch, undefined);
+    assert.equal(proof.observation.launchSha256, undefined);
+  }
   if (launch) {
     assert.deepEqual(proof.observation.launch, JSON.parse(launch.bytes));
     assert.ok(Object.isFrozen(proof.observation.launch));
@@ -57,4 +76,6 @@ try {
 await assert.rejects(proof.check(), /closed/);
 assert.deepEqual((await readdir(directory)).sort(), names);
 for (const original of originals) assert.deepEqual(await readFile(original.file), original.bytes);
-console.log(`PASS: independent cold activation inspection retains ${phase} history and proves old/new runtime absence without mutation authority`);
+console.log(prepared
+  ? 'PASS: independent never-enabled preparation inspection refuses enable/launch/readiness evidence and retains null runtime without mutation authority'
+  : `PASS: independent cold activation inspection retains ${phase} history and proves old/new runtime absence without mutation authority`);

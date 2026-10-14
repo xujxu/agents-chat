@@ -11,7 +11,7 @@ import { readWorkerFile } from './worker-files.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { processIdentity } from './process-identity.mjs';
 import { captureActivatedRuntime } from './windows-task-controller.mjs';
-import { captureWindowsColdLaunch } from './windows-cold-activation-history.mjs';
+import { captureWindowsColdLaunch, captureWindowsColdPreparation } from './windows-cold-activation-history.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { captureWindowsColdPolicyHistory } from './windows-cold-policy-history.mjs';
 import { captureWindowsColdArchiveFiles, verifyWindowsColdArchiveFiles } from './windows-cold-policy-archive.mjs';
@@ -148,9 +148,11 @@ async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyR
       || history.records[1]?.phase !== 'running' || !history.runtime)) {
       throw new Error('Cold activation observation requires its original launch or acknowledged runtime prefix without staged ownership.');
     }
-    const readLaunch = async () => {
+    const readStartup = async () => {
       const directory = guard.intent.record.runtimeBundle.directory;
-      const names = (await readdir(directory)).filter(name => /^launch-.*\.json$/i.test(name));
+      const entries = await readdir(directory);
+      const names = entries.filter(name => /^launch-.*\.json$/i.test(name));
+      if (names.length === 0) return { preparation: captureWindowsColdPreparation({ history, entries }), launch: null };
       if (names.length !== 1) throw new Error('Cold recovery requires exactly one original launch record.');
       const captured = captureWindowsColdLaunch({
         history, originalGeneration: original.generation,
@@ -159,14 +161,16 @@ async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyR
       if (names[0] !== `launch-${captured.record.identity.replace(':', '-')}.json`) {
         throw new Error('Original cold launch filename differs from its host identity.');
       }
-      return captured;
+      return { preparation: null, launch: captured };
     };
-    const launch = unacknowledged ? await readLaunch() : null;
+    const startup = unacknowledged ? await readStartup() : null;
+    const launch = startup?.launch;
+    const preparation = startup?.preparation;
     const inactiveRuntime = history.runtime ?? launch?.record;
     const deadOwners = async () => {
       for (const owner of [lock, guard.record.owner,
         { pid: history.controllerPid, processIdentity: history.controllerIdentity },
-        ...(!completedRuntime ? [{ pid: inactiveRuntime.pid, processIdentity: inactiveRuntime.identity }] : [])]) {
+        ...(!completedRuntime && inactiveRuntime ? [{ pid: inactiveRuntime.pid, processIdentity: inactiveRuntime.identity }] : [])]) {
         if (await processIdentity(owner.pid) === owner.processIdentity) {
           throw new Error('Original cold activation owner, bridge or runtime is still alive.');
         }
@@ -184,6 +188,7 @@ async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyR
       ownerSha256: digest(guard.bytes), filesReceiptSha256: digest(guard.receipt.bytes),
       intentSha256: digest(guard.intent.bytes), historySha256: history.sha256, runtime: history.runtime,
       ...(launch ? { launch: launch.record, launchSha256: launch.sha256 } : {}),
+      ...preparation,
     };
     let completion;
     let initialCompletionPrefix;
@@ -265,6 +270,7 @@ async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyR
         sourceDefinition: history.records.at(-1).definition, targetDefinition: stopped.definition,
         securityDescriptor: history.records.at(-1).securityDescriptor,
         ...(launch ? { launchSha256: launch.sha256 } : {}),
+        ...preparation,
       };
       initialPolicy = captureWindowsColdPolicyHistory({ binding: policyBinding, records: guard.policyRecords });
     }
@@ -291,10 +297,10 @@ async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyR
       const observation = captureWorkerFields(value, [...Object.keys(expectedObservation),
         ...(policyRecovery ? ['step', 'claimed', 'policySequence', 'policySha256'] : []),
         ...(completionRecovery ? ['phase', 'step', 'completionSha256'] : [])], 'cold activation observation');
-      const runtime = launch ? null : Object.freeze(captureActivatedRuntime(observation.runtime));
+      const runtime = unacknowledged ? null : Object.freeze(captureActivatedRuntime(observation.runtime));
       const base = Object.fromEntries(Object.keys(expectedObservation).map(key => [key, observation[key]]));
       if (!same(base, expectedObservation)) throw new Error('Original cold activation observation differs.');
-      if (launch && !same(await readLaunch(), launch)) throw new Error('Original cold launch proof changed.');
+      if (startup && !same(await readStartup(), startup)) throw new Error('Original cold startup evidence changed.');
       if (completionRecovery) {
         if (!completionSteps.includes(observation.step) || completionPhase(observation.step) !== observation.phase) {
           throw new Error('Unsupported cold completion recovery boundary.');
@@ -356,6 +362,9 @@ async function openRecovery({ control, pwsh, signal, expectedSnapshot }, policyR
       try {
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
         if (method !== 'close') await deadOwners();
+        if (method !== 'close' && startup && !same(await readStartup(), startup)) {
+          throw new Error('Original cold startup evidence changed before recovery.');
+        }
         const terminalBefore = stateMethod ? await inspectWindowsColdTerminalState(control, terminalSource) : null;
         const archivedFiles = method === 'archive' ? await captureWindowsColdArchiveFiles({
           control, identity: guard.identity, signal: requestSignal,

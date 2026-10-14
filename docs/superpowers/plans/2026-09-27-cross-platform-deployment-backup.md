@@ -13926,7 +13926,7 @@ new authority. Keep runtime null; no new host, generation or Job is invented.
 history modules, their native counterparts, native crash/absence/policy
 fixtures, and the focused workflow selector. No new recovery journal phase.
 
-- [ ] Add causal pure contracts for the exact preparation candidate:
+- [x] Add causal pure contracts for the exact preparation candidate:
 
   ```js
   captureWindowsColdPreparation({ history, entries });
@@ -13938,18 +13938,22 @@ fixtures, and the focused workflow selector. No new recovery journal phase.
   Refuse legacy/running prefixes and malformed inventories. Policy records
   bind `preparationSha256` equal to their original history digest, mutually
   exclusive with `launchSha256`. Preserve all existing policy record fields.
-- [ ] Commit/push causal contracts; dispatch application/live/commands with
+- [x] Commit/push causal contracts; dispatch application/live/commands with
   `windows_restore_scenario=failed` and inspect the original failure log.
-- [ ] Native recovery independently retains original configuration/helpers,
+  Causal `837e0ba8 / 38597657510`, job `115968426251`, failed at
+  `2026-10-14 16:24:33 UTC`: 60 existing contracts passed; only the two new
+  contracts failed (missing preparation capture and unsupported preparation
+  policy binding). Original job log inspected.
+- [x] Native recovery independently retains original configuration/helpers,
   checks the same negative inventory twice per observation, proves all
   original controllers/host absent and original Job empty, and requires no
   Scheduler instances. Admit only exact disabled original or guarded policy
   with unchanged security. Read-only observation must not mutate policy.
-- [ ] Reuse existing claim/request/restored policy journal and exact archive.
+- [x] Reuse existing claim/request/restored policy journal and exact archive.
   A requested original policy can be acknowledged as already applied; an
   initial original policy still requires durable claim/request. Recheck
   preparation absence throughout takeover, including before journal archival.
-- [ ] Extend existing native fixtures to interrupt at `requested` and
+- [x] Extend existing native fixtures to interrupt at `requested` and
   `registered`, without waiting for or inventing a runtime/listener. Preserve
   original request bytes and actual disabled task policy across actor death.
   Exercise marker/readiness refusal, read-only observation, repeated

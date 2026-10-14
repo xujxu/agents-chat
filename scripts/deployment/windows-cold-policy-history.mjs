@@ -9,14 +9,16 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const ownerOf = record => Object.fromEntries(ownerFields.map(key => [key, record[key]]));
 
 export function captureWindowsColdPolicyHistory({ binding, records }) {
-  const launchFields = binding && Object.hasOwn(binding, 'launchSha256') ? ['launchSha256'] : [];
-  const bindingFields = [...bindings, ...launchFields];
+  const evidenceFields = ['launchSha256', 'preparationSha256'].filter(key => binding && Object.hasOwn(binding, key));
+  const bindingFields = [...bindings, ...evidenceFields];
   const fields = ['version', ...bindingFields, 'sequence', 'previousSha256', ...ownerFields, 'kind', 'step'];
   const expected = captureWorkerFields(binding, bindingFields, 'cold policy binding');
-  if (typeof expected.operationId !== 'string'
+  if (evidenceFields.length > 1
+    || evidenceFields.includes('preparationSha256') && expected.preparationSha256 !== expected.historySha256
+    || typeof expected.operationId !== 'string'
     || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(expected.operationId)
     || typeof expected.taskName !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(expected.taskName)
-    || [...digests, ...launchFields].some(key => typeof expected[key] !== 'string' || !/^[a-f0-9]{64}$/.test(expected[key]))
+    || [...digests, ...evidenceFields].some(key => typeof expected[key] !== 'string' || !/^[a-f0-9]{64}$/.test(expected[key]))
     || ['sourceDefinition', 'targetDefinition', 'securityDescriptor'].some(key =>
       typeof expected[key] !== 'string' || !expected[key].length
       || expected[key].length > (key === 'securityDescriptor' ? 65536 : 262144) || expected[key].includes('\0'))) {

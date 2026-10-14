@@ -17,11 +17,24 @@ function Assert-AgentsChatColdLaunchInventory([hashtable]$Context) {
     }
 }
 
-function Open-AgentsChatColdLaunchProof([hashtable]$Context) {
+function Assert-AgentsChatColdPreparationInventory([hashtable]$Context) {
+    $entries = @(Get-ChildItem -LiteralPath $Context.ColdRuntime.directory.GetString() -Force |
+        Where-Object { $_.Name -imatch '^(enable-requested|(launch|runtime)-.*)\.json$' })
+    if ($entries.Count -ne 0) {
+        throw 'Cold preparation contains enable, launch or readiness evidence.'
+    }
+}
+
+function Open-AgentsChatColdStartupProof([hashtable]$Context, [int]$Version) {
     $bundle = $Context.ColdRuntime.directory.GetString()
     Open-AgentsChatCompletionConfiguration $Context $Context.ColdRuntime.configuration.GetString() `
         $Context.ColdRuntime.sha256.GetString()
     $entries = @(Get-ChildItem -LiteralPath $bundle -Force | Where-Object { $_.Name -like 'launch-*.json' })
+    if ($entries.Count -eq 0 -and $Version -eq 2) {
+        Assert-AgentsChatColdPreparationInventory $Context
+        $Context.ColdPreparationSha256 = $Context.ColdHistorySha256
+        return
+    }
     if ($entries.Count -ne 1 -or $entries[0].PSIsContainer -or $entries[0].Length -gt 65536) {
         throw 'Cold recovery requires exactly one bounded original launch record.'
     }
@@ -67,20 +80,24 @@ function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
             Assert-AgentsChatCompletionProcessAbsent $Context.ColdControllerPid $Context.ColdControllerIdentity
             Assert-AgentsChatCompletionProcessAbsent $Context.ActivationBridgePid $Context.ActivationBridgeIdentity
             $inactive = $Context.Runtime
-            if (-not $inactive) {
+            if ($Context.ColdPreparationSha256) {
+                Assert-AgentsChatColdPreparationInventory $Context
+            } elseif (-not $inactive) {
                 Assert-AgentsChatColdLaunchInventory $Context
                 $inactive = $Context.ColdLaunch
             }
-            Assert-AgentsChatCompletionProcessAbsent $inactive.pid $inactive.identity
+            if ($inactive) { Assert-AgentsChatCompletionProcessAbsent $inactive.pid $inactive.identity }
             if ($Context.PolicyRecovery) { Assert-AgentsChatColdPolicyOwnersAbsent $Context }
             [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
                 [guid]$original.generation.GetString(), $Context.RuntimeSessionId)
-            [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
-                [guid]$inactive.generation, $inactive.sessionId)
+            if ($inactive) {
+                [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
+                    [guid]$inactive.generation, $inactive.sessionId)
+            }
             $task = $Context.Folder.GetTask($Context.TaskName)
             if ([bool]$task.Enabled -ne $Context.CurrentEnabled -or $task.GetInstances(0).Count -ne 0 -or
                 [string]$task.Xml -cne $Context.CurrentDefinition -or
-                (-not $Context.PolicyRecovery -and $task.Definition.Triggers.Count -ne 0) -or
+                (-not $Context.PolicyRecovery -and -not $Context.ColdPreparationSha256 -and $task.Definition.Triggers.Count -ne 0) -or
                 [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor) {
                 throw 'Inactive cold activation task policy, security or instance changed.'
             }
@@ -96,7 +113,9 @@ function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
             intentSha256=$Context.ColdIntentSha256; historySha256=$Context.ColdHistorySha256
             runtime=$Context.Runtime
         }
-        if (-not $Context.Runtime) {
+        if ($Context.ColdPreparationSha256) {
+            $observation['preparationSha256'] = $Context.ColdPreparationSha256
+        } elseif (-not $Context.Runtime) {
             $observation['launch'] = $Context.ColdLaunch
             $observation['launchSha256'] = $Context.ColdLaunchSha256
         }
@@ -117,6 +136,7 @@ function Read-AgentsChatColdActivationRecoveryHistory {
     param([hashtable]$Proof, [string]$OwnerSha256, [string]$ReceiptSha256,
         [string]$IntentSha256, [string]$HistorySha256)
     $Control = $Proof.Control
+    $proof.ColdPreparationSha256 = $null
     if (-not $proof.AbsentOwner -or
         ($proof.RecoveryNames -join ',') -cne 'recovery-lock') {
         throw 'Cold activation observation requires an absent original owner and no staged recovery.'
@@ -199,16 +219,6 @@ function Read-AgentsChatColdActivationRecoveryHistory {
     $proof.ColdDefinition = $record.definition.GetString()
     $proof.CurrentDefinition = $proof.ColdDefinition
     $proof.CurrentEnabled = $false
-    if (-not $runtime -and -not $proof.PolicyRecovery) {
-        $task = $proof.Folder.GetTask($proof.TaskName)
-        $actual = [string]$task.Xml
-        $proof.CurrentEnabled = [bool]$task.Enabled
-        if (-not (Test-AgentsChatColdRecoveryDefinition $proof.ColdDefinition $actual `
-            -Unacknowledged -Enabled:$proof.CurrentEnabled)) {
-            throw 'Unacknowledged cold task differs from its original planned policy.'
-        }
-        $proof.CurrentDefinition = $actual
-    }
     $proof.ColdOwnerSha256 = $OwnerSha256
     $proof.ColdReceiptSha256 = $ReceiptSha256
     $proof.ColdIntentSha256 = $IntentSha256
@@ -219,7 +229,20 @@ function Read-AgentsChatColdActivationRecoveryHistory {
         Open-AgentsChatCompletionBundle $proof $proof.ColdRuntime.configuration.GetString() `
             $proof.ColdRuntime.sha256.GetString() $runtime
     } else {
-        Open-AgentsChatColdLaunchProof $proof
+        Open-AgentsChatColdStartupProof $proof $first.version.GetInt32()
+    }
+    if (-not $runtime -and -not $proof.PolicyRecovery) {
+        $task = $proof.Folder.GetTask($proof.TaskName)
+        $actual = [string]$task.Xml
+        $proof.CurrentEnabled = [bool]$task.Enabled
+        $originalPreparation = $proof.ColdPreparationSha256 -and -not $proof.CurrentEnabled -and
+            ([xml]$actual).OuterXml -ceq ([xml]$proof.Definition).OuterXml
+        if (($proof.ColdPreparationSha256 -and $proof.CurrentEnabled) -or
+            (-not $originalPreparation -and -not (Test-AgentsChatColdRecoveryDefinition `
+                $proof.ColdDefinition $actual -Unacknowledged -Enabled:$proof.CurrentEnabled))) {
+            throw 'Unacknowledged cold task differs from its original planned or never-enabled policy.'
+        }
+        $proof.CurrentDefinition = $actual
     }
 }
 

@@ -41,6 +41,18 @@ export function captureWindowsColdLaunch({ history, bytes, originalGeneration })
   return Object.freeze({ record: Object.freeze(record), sha256: digest(bytes) });
 }
 
+export function captureWindowsColdPreparation({ history, entries }) {
+  if (history?.phase !== 'start-requested' || history.runtime !== null
+    || history.records?.length !== 1 || history.records[0].version !== 2
+    || typeof history.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(history.sha256)
+    || !Array.isArray(entries) || entries.some(name => typeof name !== 'string'
+      || !name.length || /[\\/\0]/.test(name)
+      || /^(?:enable-requested|(?:launch|runtime)-.*)\.json$/i.test(name))) {
+    throw new Error('Cold preparation requires its version-two request without any enable, launch or readiness evidence.');
+  }
+  return Object.freeze({ preparationSha256: history.sha256 });
+}
+
 export function captureWindowsColdEnableRequest({ history, requestBytes, bytes }) {
   const request = history?.records?.[0];
   if (request?.version !== 2 || request.phase !== 'start-requested' || request.runtime !== null

@@ -10,7 +10,8 @@ import { captureWindowsColdActivationHistory, captureWindowsColdEnableRequest,
   captureWindowsColdLaunch } from '../scripts/deployment/windows-cold-activation-history.mjs';
 
 const [control, pwsh, mode] = process.argv.slice(2);
-assert.ok(mode === undefined || ['crash', 'observed-crash', 'started-crash'].includes(mode), 'Unknown cold activation fixture mode.');
+assert.ok(mode === undefined || ['crash', 'observed-crash', 'started-crash', 'requested-crash', 'registered-crash'].includes(mode),
+  'Unknown cold activation fixture mode.');
 const stateBytes = await readFile(path.join(control, 'state.json'));
 const state = JSON.parse(stateBytes);
 const lockBytes = await readFile(path.join(control, 'lock/owner.json'));
@@ -64,6 +65,19 @@ try {
       if (enableIntent) assert.deepEqual(captured, enableIntent);
       else enableIntent = captured;
       await assert.rejects(writeFile(enablePath, bytes));
+    }
+    if (['requested', 'registered'].includes(progress.step) && mode === `${progress.step}-crash`) {
+      assert.equal(progress.observation, null);
+      const entries = await readdir(path.dirname(requested.configuration));
+      assert.equal(entries.some(name => /^(launch|runtime)-.*\.json$/i.test(name)), false);
+      assert.deepEqual(steps, windowsColdStartupSteps.slice(0, windowsColdStartupSteps.indexOf(progress.step) + 1));
+      console.log(JSON.stringify({
+        status: 'guarded-preparation', step: progress.step, taskName: requested.taskName, runtime: null,
+        controllerPid: requested.controllerPid, controllerIdentity: requested.controllerIdentity,
+        configuration: requested.configuration, definition: requested.definition,
+        securityDescriptor: requested.securityDescriptor,
+      }));
+      await new Promise(() => { setInterval(() => {}, 1000); });
     }
     if (mode === 'started-crash' && progress.step === 'started') {
       assert.equal(progress.observation, null);

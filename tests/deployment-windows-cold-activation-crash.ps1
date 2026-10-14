@@ -1,12 +1,12 @@
 param(
     [Parameter(Mandatory)][string]$Control, [switch]$BeforeRunning,
-    [ValidateSet('observed', 'started')][string]$StartupStep = 'observed'
+    [ValidateSet('observed', 'started', 'requested', 'registered')][string]$StartupStep = 'observed'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot '../scripts/deployment/windows-cold-activation-context.ps1')
-if ($StartupStep -ceq 'started' -and -not $BeforeRunning) {
-    throw 'The started boundary requires pre-acknowledgement interruption.'
+if ($StartupStep -cne 'observed' -and -not $BeforeRunning) {
+    throw 'An earlier startup boundary requires pre-acknowledgement interruption.'
 }
 $actor = $bridge = $runtime = $listener = $diagnostic = $null
 $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -24,8 +24,48 @@ try {
     if (-not $frame.Wait(600000)) { throw 'Cold crash actor did not publish its admitted running runtime.' }
     $running = $frame.GetAwaiter().GetResult() | ConvertFrom-Json
     $bridge = [Diagnostics.Process]::GetProcessById($running.controllerPid)
-    $runtime = [Diagnostics.Process]::GetProcessById($running.runtime.pid)
     $null = $bridge.Handle
+    if ($StartupStep -cin @('requested', 'registered')) {
+        if ($running.status -cne 'guarded-preparation' -or $running.step -cne $StartupStep -or
+            $null -ne $running.runtime -or
+            [Deployment.WindowsWorkerJob]::ProcessIdentity($bridge.Id) -cne $running.controllerIdentity) {
+            throw 'Preparation crash lost its original bridge or invented a runtime.'
+        }
+        $scheduler = New-Object -ComObject 'Schedule.Service'
+        $scheduler.Connect()
+        $folder = $scheduler.GetFolder('\')
+        $task = $folder.GetTask($running.taskName)
+        $expected = if ($StartupStep -ceq 'requested') {
+            (Get-Content -LiteralPath (Join-Path $Control 'task-maintenance/task-stop-stopped.json') -Raw |
+                ConvertFrom-Json).definition
+        } else { $running.definition }
+        if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
+            -not (Test-AgentsChatColdRecoveryDefinition $expected ([string]$task.Xml) -Unacknowledged) -or
+            [string]$task.GetSecurityDescriptor(7) -cne $running.securityDescriptor) {
+            throw 'Preparation crash changed its original disabled task policy or security.'
+        }
+        $running.definition = [string]$task.Xml
+        $requestFile = Join-Path $Control 'recovery-lock/activation-start-requested.json'
+        $requestHash = (Get-FileHash -LiteralPath $requestFile -Algorithm SHA256).Hash
+        $bridge.Kill()
+        if (-not $bridge.WaitForExit(15000)) { throw 'Original preparation bridge survived interruption.' }
+        $actor.Kill()
+        if (-not $actor.WaitForExit(15000)) { throw 'Original preparation actor survived interruption.' }
+        $entries = @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($running.configuration)) -Force |
+            Where-Object { $_.Name -imatch '^(enable-requested|(launch|runtime)-.*)\.json$' })
+        $task = $folder.GetTask($running.taskName)
+        if ($entries.Count -ne 0 -or $task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
+            [string]$task.Xml -cne $running.definition -or
+            [string]$task.GetSecurityDescriptor(7) -cne $running.securityDescriptor -or
+            (Get-FileHash -LiteralPath $requestFile -Algorithm SHA256).Hash -cne $requestHash -or
+            (Test-Path -LiteralPath (Join-Path $Control 'recovery-lock/activation-running.json')) -or
+            (Test-Path -LiteralPath (Join-Path $Control 'recovery-lock/activation-stopped.json'))) {
+            throw 'Preparation interruption changed original evidence or attempted enabling.'
+        }
+        Write-Output ($running | ConvertTo-Json -Depth 6 -Compress)
+        return
+    }
+    $runtime = [Diagnostics.Process]::GetProcessById($running.runtime.pid)
     $null = $runtime.Handle
     if ([Deployment.WindowsWorkerJob]::ProcessIdentity($bridge.Id) -cne $running.controllerIdentity -or
         [Deployment.WindowsWorkerJob]::ProcessIdentity($runtime.Id) -cne $running.runtime.identity) {

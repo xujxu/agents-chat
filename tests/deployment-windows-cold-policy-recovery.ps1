@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$Control,
-    [Parameter(Mandatory)][string]$TaskName
+    [Parameter(Mandatory)][string]$TaskName,
+    [switch]$Preparation
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -15,8 +16,16 @@ foreach ($file in @(Get-ChildItem -LiteralPath $journal -File)) {
 if (-not (Test-Path -LiteralPath (Join-Path $journal 'activation-running.json'))) {
     $intent = Get-Content -LiteralPath (Join-Path $journal 'activation-intent.json') -Raw | ConvertFrom-Json
     $launches = @(Get-ChildItem -LiteralPath $intent.runtimeBundle.directory -Filter 'launch-*.json' -File)
-    if ($launches.Count -ne 1) { throw 'Unacknowledged policy fixture lost its unique original launch.' }
-    $originals[$launches[0].FullName] = (Get-FileHash -LiteralPath $launches[0].FullName -Algorithm SHA256).Hash
+    if ($Preparation) {
+        $request = Get-Content -LiteralPath (Join-Path $journal 'activation-start-requested.json') -Raw | ConvertFrom-Json
+        if ($request.version -ne 2 -or $launches.Count -ne 0 -or
+            (Test-Path -LiteralPath (Join-Path $intent.runtimeBundle.directory 'enable-requested.json'))) {
+            throw 'Preparation policy fixture lacks its never-enabled original request.'
+        }
+    } else {
+        if ($launches.Count -ne 1) { throw 'Unacknowledged policy fixture lost its unique original launch.' }
+        $originals[$launches[0].FullName] = (Get-FileHash -LiteralPath $launches[0].FullName -Algorithm SHA256).Hash
+    }
 }
 $originalTask = Get-Content -LiteralPath (Join-Path $Control 'task-maintenance/task-stop-stopped.json') -Raw | ConvertFrom-Json
 $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -108,6 +117,10 @@ foreach ($target in @('requested', 'policy-applied', 'restored', 'inspect', 'arc
             }
         }
         $task = $scheduler.GetFolder('\').GetTask($TaskName)
+        if ($Preparation -and @(Get-ChildItem -LiteralPath $intent.runtimeBundle.directory -Force |
+            Where-Object { $_.Name -imatch '^(enable-requested|(launch|runtime)-.*)\.json$' }).Count -ne 0) {
+            throw 'Preparation policy takeover manufactured enable or runtime evidence.'
+        }
         $expectedEnabled = $target -ceq 'requested' -and $sourceEnabled
         if ([bool]$task.Enabled -ne $expectedEnabled -or $task.GetInstances(0).Count -ne 0 -or
             [string]$task.GetSecurityDescriptor(7) -cne $originalTask.securityDescriptor) {

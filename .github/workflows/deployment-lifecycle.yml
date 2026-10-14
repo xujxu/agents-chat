@@ -57,6 +57,11 @@ on:
         description: With Windows application/live/command flags, run only earlier-startup native recovery
         type: boolean
         default: false
+      windows_cold_startup_step:
+        description: Earlier-startup native interruption boundary
+        type: choice
+        options: [started, requested, registered]
+        default: started
       windows_first_application_only:
         description: With both Windows command flags, run only the actual first-application core
         type: boolean
@@ -70,7 +75,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_live_only && '-windows-live' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && '-commands' || '' }}${{ inputs.windows_cold_started_only && '-cold-started' || '' }}
+  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_live_only && '-windows-live' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && '-commands' || '' }}${{ inputs.windows_cold_started_only && format('-cold-{0}', inputs.windows_cold_startup_step || 'started') || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -173,7 +178,7 @@ jobs:
 
   windows-cold-started-recovery:
     if: ${{ (!inputs.windows_application_only && !inputs.windows_restore_only) || (inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && (inputs.windows_restore_scenario == 'complete' || inputs.windows_cold_started_only)) }}
-    name: Native Windows pre-inhibition recovery
+    name: Native Windows earlier-startup recovery (${{ inputs.windows_cold_startup_step || 'started' }})
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
@@ -186,10 +191,12 @@ jobs:
       - name: Verify original enabled task policy definitions
         shell: pwsh
         run: ./tests/deployment-windows-cold-policy-definition.ps1
-      - name: Verify original enabled guarded launch recovery and archival
+      - name: Verify original startup recovery and archival
         if: ${{ inputs.windows_restore_scenario != 'failed' }}
         shell: pwsh
-        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdStartupCrash -ColdStartupStep started
+        env:
+          COLD_STARTUP_STEP: ${{ inputs.windows_cold_startup_step || 'started' }}
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdStartupCrash -ColdStartupStep $env:COLD_STARTUP_STEP
 
   windows-live-deployment:
     if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_cold_started_only) }}

@@ -6,7 +6,9 @@ function Get-AgentsChatColdPolicyBinding([hashtable]$Context) {
         stateSha256=$Context.StateSha256; sourceDefinition=$Context.ColdDefinition
         targetDefinition=$Context.Definition; securityDescriptor=$Context.SecurityDescriptor
     }
-    if (-not $Context.Runtime) { $binding['launchSha256'] = $Context.ColdLaunchSha256 }
+    if ($Context.ColdPreparationSha256) {
+        $binding['preparationSha256'] = $Context.ColdPreparationSha256
+    } elseif (-not $Context.Runtime) { $binding['launchSha256'] = $Context.ColdLaunchSha256 }
     return $binding
 }
 
@@ -93,8 +95,9 @@ function Read-AgentsChatColdPolicyHistory([hashtable]$Context, [string]$Expected
     $original = ([xml]$definition).OuterXml -ceq ([xml]$Context.Definition).OuterXml
     $guarded = Test-AgentsChatColdRecoveryDefinition $Context.ColdDefinition $definition `
         -Unacknowledged:($null -eq $Context.Runtime) -Enabled:([bool]$task.Enabled)
-    if (($task.Enabled -and -not $guarded) -or (-not $original -and -not $guarded) -or
-        ($Context.PolicyDurableStep -ceq 'initial' -and -not $guarded) -or
+    if (($Context.ColdPreparationSha256 -and $task.Enabled) -or
+        ($task.Enabled -and -not $guarded) -or (-not $original -and -not $guarded) -or
+        ($Context.PolicyDurableStep -ceq 'initial' -and -not $guarded -and -not ($Context.ColdPreparationSha256 -and $original)) -or
         ($Context.PolicyDurableStep -ceq 'restored' -and -not $original)) {
         throw 'Cold policy recovery lacks its exact guarded source or requested disabled target policy.'
     }

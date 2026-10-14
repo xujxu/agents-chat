@@ -67,7 +67,14 @@ try {
   const file = path.join(control, 'recovery-lock', `policy-${String(progress.policySequence).padStart(6, '0')}.json`);
   const bytes = await readFile(file);
   assert.equal(createHash('sha256').update(bytes).digest('hex'), progress.policySha256);
-  if (progress.runtime === null) {
+  if (progress.preparationSha256) {
+    assert.equal(progress.runtime, null);
+    assert.equal(progress.launch, undefined);
+    assert.equal(progress.launchSha256, undefined);
+    assert.equal(progress.preparationSha256, progress.historySha256);
+    assert.equal(JSON.parse(bytes).preparationSha256, progress.historySha256);
+    assert.equal(JSON.parse(bytes).launchSha256, undefined);
+  } else if (progress.runtime === null) {
     assert.equal(JSON.parse(bytes).launchSha256, progress.launchSha256);
     assert.equal(progress.launch.controllerPid,
       JSON.parse(originals.get('recovery-lock/activation-start-requested.json').bytes).controllerPid);
