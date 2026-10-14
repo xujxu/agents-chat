@@ -196,6 +196,13 @@ function Read-AgentsChatColdActivationRecoveryHistory {
     $proof.ColdPowerShell = $policy.PowerShell
     $proof.ColdDefinition = $record.definition.GetString()
     $proof.CurrentDefinition = $proof.ColdDefinition
+    if (-not $runtime -and -not $proof.PolicyRecovery) {
+        $actual = [string]$proof.Folder.GetTask($proof.TaskName).Xml
+        if (-not (Test-AgentsChatColdRecoveryDefinition $proof.ColdDefinition $actual -Unacknowledged)) {
+            throw 'Unacknowledged cold task differs from its original planned policy.'
+        }
+        $proof.CurrentDefinition = $actual
+    }
     $proof.ColdOwnerSha256 = $OwnerSha256
     $proof.ColdReceiptSha256 = $ReceiptSha256
     $proof.ColdIntentSha256 = $IntentSha256

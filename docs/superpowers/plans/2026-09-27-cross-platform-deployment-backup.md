@@ -13987,6 +13987,15 @@ application API fixture through `deployment-windows-application-api-helpers.mjs`
   Implementation `e37975d5` is pushed; actual run `38515034448` dispatched.
   Full native run `38515034659` independently covers the same implementation.
   Neither gate is accepted yet.
+  Actual `38515034448`, job `115691808124`, failed at
+  `2026-10-14 06:33:30 UTC` inside the new test-only launch listener helper:
+  `$LASTEXITCODE` was unset after its suppressed native API invocation.
+  Upgrade/current, interrupted copy and guarded startup reached this helper;
+  the intended controller interruption and public recovery had not completed.
+  Replace reliance on that automatic variable with the existing owned
+  `WindowsControllerProcess` abstraction, bounded async stream capture,
+  explicit process `ExitCode` and exact API PASS output. Keep listener proof
+  held through verification and dispose it even when child cleanup fails.
 
 ### Task 5FI: Recover an unacknowledged guarded launch without fabricating runtime history
 
@@ -14079,6 +14088,22 @@ acknowledged running and graceful stopped chains remain covered unchanged.
   do not report them accepted based on these native fixtures.
   Implementation `3510c23a` is included in `e37975d5 / 38515034659`,
   dispatched after the original finite-startup gate and causal proof completed.
+  Native `38515034659`, job `115691807585`, failed at
+  `2026-10-14 06:29:46 UTC` in the new unacknowledged observer's task-policy
+  check. All 58 contracts, saved closure, both old cold chains and warm restore
+  regressions passed first. The new fixture reached real guarded-host death
+  and proved its Job settled before observation failed.
+  Root cause: start-requested retains the compact *planned* XML, unlike running
+  receipts which retain Scheduler's formatted registered XML. Keep original
+  journal bytes and policy bindings unchanged. For unacknowledged admission
+  only, compare both XML documents' exact `OuterXml`, then retain actual
+  Scheduler bytes for all subsequent checks. Apply the same distinction when
+  recognizing a policy recovery's guarded source; acknowledged checks remain
+  byte-exact. Do not ignore changed elements, attributes, action or security.
+  Added focused formatting-only/changed-policy refusal regression first;
+  `e4dd2176 / 38522881587`, job `115716406061`, failed at
+  `06:33:44 UTC` for missing `Test-AgentsChatColdRecoveryDefinition`, after the
+  fixture established that only XML whitespace differed.
 
 ### Task 5FH: Advance original cold startup through explicit bounded stages
 

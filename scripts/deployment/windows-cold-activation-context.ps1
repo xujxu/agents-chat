@@ -146,6 +146,13 @@ function Get-AgentsChatColdActivationDefinition([hashtable]$Context, [int]$Contr
     return $requested.OuterXml
 }
 
+function Test-AgentsChatColdRecoveryDefinition([string]$Recorded, [string]$Actual, [switch]$Unacknowledged) {
+    if ($Unacknowledged) {
+        return ([xml]$Recorded).OuterXml -ceq ([xml]$Actual).OuterXml
+    }
+    return $Recorded -ceq $Actual
+}
+
 function Request-AgentsChatColdActivationTask([hashtable]$Context) {
     $Context.Stage = 'task-preparation'
     $task = Assert-AgentsChatColdActivationContext $Context

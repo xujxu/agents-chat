@@ -91,7 +91,8 @@ function Read-AgentsChatColdPolicyHistory([hashtable]$Context, [string]$Expected
     $task = $Context.Folder.GetTask($Context.TaskName)
     $definition = [string]$task.Xml
     $original = ([xml]$definition).OuterXml -ceq ([xml]$Context.Definition).OuterXml
-    $guarded = $definition -ceq $Context.ColdDefinition
+    $guarded = Test-AgentsChatColdRecoveryDefinition $Context.ColdDefinition $definition `
+        -Unacknowledged:($null -eq $Context.Runtime)
     if ($task.Enabled -or (-not $original -and -not $guarded) -or
         ($Context.PolicyDurableStep -ceq 'initial' -and -not $guarded) -or
         ($Context.PolicyDurableStep -ceq 'restored' -and -not $original)) {

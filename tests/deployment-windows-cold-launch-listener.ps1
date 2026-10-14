@@ -14,6 +14,7 @@ Add-Type -Path @('WindowsWorkerJob.cs', 'WindowsPrivateFile.cs', 'WindowsControl
     'WindowsRuntimePipe.cs', 'WindowsRuntimeControl.cs', 'WindowsRuntimeListener.cs' |
     ForEach-Object { Join-Path $helpers $_ })
 $listener = $null
+$api = $null
 $deadline = [Diagnostics.Stopwatch]::StartNew()
 try {
     while (-not $listener) {
@@ -27,10 +28,34 @@ try {
         }
     }
     $listener.Check()
-    $null = & $Node (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs') restored $ChatId wait-ready
-    if ($LASTEXITCODE -ne 0) { throw 'Original unacknowledged application did not preserve authenticated data.' }
+    $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in @('SystemRoot', 'TEMP', 'TMP')) {
+        $environment.Add($name, [Environment]::GetEnvironmentVariable($name))
+    }
+    $api = [Deployment.WindowsControllerProcess]::Start($Node, [string[]]@(
+        (Join-Path $PSScriptRoot 'deployment-windows-application-api.mjs'), 'restored', $ChatId, 'wait-ready'),
+        $PSScriptRoot, $environment)
+    $output = $api.StandardOutput.ReadToEndAsync()
+    $diagnostic = $api.StandardError.ReadToEndAsync()
+    if (-not $api.WaitForExit(135000)) { throw 'Original unacknowledged application API verification exceeded its deadline.' }
+    if (-not $output.Wait(15000) -or -not $diagnostic.Wait(15000)) { throw 'Cold launch API streams did not settle.' }
+    $errorText = $diagnostic.GetAwaiter().GetResult()
+    if ($errorText) { [Console]::Error.Write($errorText) }
+    if ($api.ExitCode -ne 0 -or
+        $output.GetAwaiter().GetResult().Trim() -cne 'PASS: managed Windows application API restored') {
+        throw 'Original unacknowledged application did not preserve authenticated data.'
+    }
     $listener.Check()
     Write-Output (@{ status='ready'; generation=$Generation.ToString('D'); port=3010 } | ConvertTo-Json -Compress)
 } finally {
-    if ($listener) { $listener.Dispose() }
+    try {
+        if ($api) {
+            try {
+                if (-not $api.HasExited) {
+                    $api.Kill()
+                    if (-not $api.WaitForExit(15000)) { throw 'Cold launch API process cleanup failed.' }
+                }
+            } finally { $api.Dispose() }
+        }
+    } finally { if ($listener) { $listener.Dispose() } }
 }
