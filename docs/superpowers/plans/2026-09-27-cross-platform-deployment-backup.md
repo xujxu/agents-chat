@@ -13945,7 +13945,7 @@ fixtures, `deployment-native-operation.test.mjs`, and the existing workflow.
   policy records to the original request digest. Verify accepted state/receipt,
   cleanup, snapshot/engine/data preservation, real authenticated API and a
   distinct released final runtime. Compare only genuine retired identities.
-- [ ] After native preparation acceptance, push and run both actual selectors
+- [x] After native preparation acceptance, push and run both actual selectors
   with application/live flags and without command-only. Inspect exact original
   logs; keep native and actual acceptance distinct.
   Actual fixtures `c1273ee2`: requested `38601393495`, job `115981271496`,
@@ -13955,8 +13955,11 @@ fixtures, `deployment-native-operation.test.mjs`, and the existing workflow.
   `restore-cold-requested-closeout` marker passed. Public archive/request
   binding, backup/engine/data, accepted state/receipt cleanup and distinct
   released runtime assertions passed. Registered `38602160464`, job
-  `116048791799`, is now running in the same actual concurrency group.
-  Only the requested public boundary is accepted; this task remains open.
+  `116048791799`, passed at `2026-10-14 21:22:45 UTC`. Original log inspected:
+  62/62 contracts, actual update/current/data, the registered preparation
+  controller-death marker and `restore-cold-registered-closeout` both passed.
+  This closes both actual public preparation boundaries, not other
+  missing-launch histories, inactive/legacy adoption or reboot recovery.
 
 ### Task 5FN: Recover interrupted preparation before the original enable attempt
 

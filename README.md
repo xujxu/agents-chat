@@ -987,8 +987,10 @@ enable intent, launch or readiness evidence, absent original owners and an
 empty original Job, and the exact disabled task policy/security. It retains
 a null runtime rather than inventing a host or running receipt, then uses
 the durable policy journal and original archive before a fresh cold copy.
-The registered-but-never-enabled variant has passed native acceptance; its
-actual public application gate is still pending. Other missing-launch cases,
+The registered-but-never-enabled variant also passed actual public application
+recovery at `c1273ee2 / 38602160464`, preserving the same original evidence,
+archive, backup and data before a distinct released final runtime.
+Other missing-launch cases,
 including legacy requests or an enable attempt without launch evidence, live
 guarded peers, initially inactive/legacy tasks and reboot recovery remain
 unsupported.
