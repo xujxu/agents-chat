@@ -22,7 +22,8 @@ param(
     [switch]$Restore,
     [switch]$StoppedProof,
     [switch]$ColdActivationCrash,
-    [switch]$ColdStartupCrash
+    [switch]$ColdStartupCrash,
+    [ValidateSet('observed', 'started')][string]$ColdStartupStep = 'observed'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -313,7 +314,7 @@ try {
     if ($StoppedProof) {
         & (Join-Path $PSScriptRoot 'deployment-windows-cold-absent-owner.ps1') `
             -Control $control -TaskName $TaskName -Ready $Ready -Owner $Owner -ColdActivationCrash:$ColdActivationCrash `
-            -ColdStartupCrash:$ColdStartupCrash
+            -ColdStartupCrash:$ColdStartupCrash -ColdStartupStep $ColdStartupStep
     }
 } finally {
     if ($controller) {

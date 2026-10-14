@@ -146,7 +146,18 @@ function Get-AgentsChatColdActivationDefinition([hashtable]$Context, [int]$Contr
     return $requested.OuterXml
 }
 
-function Test-AgentsChatColdRecoveryDefinition([string]$Recorded, [string]$Actual, [switch]$Unacknowledged) {
+function Test-AgentsChatColdRecoveryDefinition([string]$Recorded, [string]$Actual,
+    [switch]$Unacknowledged, [switch]$Enabled) {
+    if ($Enabled) {
+        if (-not $Unacknowledged) { return $false }
+        $planned = [xml]$Recorded
+        $namespaces = [Xml.XmlNamespaceManager]::new($planned.NameTable)
+        $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+        $nodes = $planned.SelectNodes('/t:Task/t:Settings/t:Enabled', $namespaces)
+        if ($nodes.Count -ne 1 -or $nodes[0].InnerText -cne 'false') { return $false }
+        $nodes[0].InnerText = 'true'
+        return $planned.OuterXml -ceq ([xml]$Actual).OuterXml
+    }
     if ($Unacknowledged) {
         return ([xml]$Recorded).OuterXml -ceq ([xml]$Actual).OuterXml
     }

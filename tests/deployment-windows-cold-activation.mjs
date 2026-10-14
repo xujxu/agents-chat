@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { claimWindowsColdRestore } from '../scripts/deployment/windows-cold-restore-lease.mjs';
 import { restoreWindowsColdFiles } from '../scripts/deployment/windows-cold-restore-files.mjs';
 import { processIdentity } from '../scripts/deployment/process-identity.mjs';
 import { verifyWindowsColdReadiness, waitWindowsColdListener } from './deployment-windows-cold-readiness.mjs';
 import { windowsColdStartupSteps } from '../scripts/deployment/windows-cold-activation.mjs';
+import { captureWindowsColdActivationHistory, captureWindowsColdLaunch } from '../scripts/deployment/windows-cold-activation-history.mjs';
 
 const [control, pwsh, mode] = process.argv.slice(2);
-assert.ok(mode === undefined || ['crash', 'observed-crash'].includes(mode), 'Unknown cold activation fixture mode.');
+assert.ok(mode === undefined || ['crash', 'observed-crash', 'started-crash'].includes(mode), 'Unknown cold activation fixture mode.');
 const stateBytes = await readFile(path.join(control, 'state.json'));
 const state = JSON.parse(stateBytes);
 const lockBytes = await readFile(path.join(control, 'lock/owner.json'));
@@ -40,11 +41,37 @@ try {
     steps.push(progress.step);
     assert.deepEqual(await readFile(path.join(control, 'state.json')), stateBytes);
     assert.deepEqual(await readFile(path.join(control, 'lock/owner.json')), lockBytes);
-    const requested = JSON.parse(await readFile(path.join(control, 'recovery-lock/activation-start-requested.json')));
+    const requestedBytes = await readFile(path.join(control, 'recovery-lock/activation-start-requested.json'));
+    const requested = JSON.parse(requestedBytes);
     assert.equal(requested.phase, 'start-requested');
     assert.equal(requested.runtime, null);
     if (progress.step !== 'running') {
       await assert.rejects(lstat(path.join(control, 'recovery-lock/activation-running.json')), { code: 'ENOENT' });
+    }
+    if (mode === 'started-crash' && progress.step === 'started') {
+      assert.equal(progress.observation, null);
+      await waitWindowsColdListener({ project: state.project, originalListener });
+      const intentBytes = await readFile(path.join(control, 'recovery-lock/activation-intent.json'));
+      const history = captureWindowsColdActivationHistory({
+        intent: JSON.parse(intentBytes), intentBytes, records: [requestedBytes], taskName: requested.taskName,
+      });
+      const bundle = path.dirname(requested.configuration);
+      const names = (await readdir(bundle)).filter(name => /^launch-.*\.json$/i.test(name));
+      assert.equal(names.length, 1);
+      const { record: launch } = captureWindowsColdLaunch({
+        history, bytes: await readFile(path.join(bundle, names[0])), originalGeneration: original.generation,
+      });
+      assert.equal(names[0], `launch-${launch.identity.replace(':', '-')}.json`);
+      assert.equal(await processIdentity(launch.pid), launch.identity);
+      assert.equal(await processIdentity(launch.controllerPid), launch.controllerIdentity);
+      assert.deepEqual(steps, ['requested', 'registered', 'enabled', 'started']);
+      console.log(JSON.stringify({
+        status: 'guarded-launch', taskName: requested.taskName, runtime: launch,
+        controllerPid: requested.controllerPid, controllerIdentity: requested.controllerIdentity,
+        configuration: requested.configuration, definition: requested.definition,
+        securityDescriptor: requested.securityDescriptor,
+      }));
+      await new Promise(() => { setInterval(() => {}, 1000); });
     }
     if (progress.step === 'observed') {
       observed = progress.observation;

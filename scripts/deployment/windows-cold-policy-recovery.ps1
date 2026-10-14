@@ -29,6 +29,7 @@ function Advance-AgentsChatColdPolicyRecovery([hashtable]$Context) {
                         throw 'Recovered cold task differs from its exact original disabled policy or security.'
                     }
                     $Context.CurrentDefinition = [string]$task.Xml
+                    $Context.CurrentEnabled = $false
                     Retain-AgentsChatColdRecoveryTaskFile $Context
                     $Context.PolicyStep = 'policy-applied'
                 }

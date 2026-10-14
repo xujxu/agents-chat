@@ -13941,7 +13941,7 @@ deployment workflow. No original journal schema or synthetic runtime identity.
   in the actual guarded source. Reject enabled acknowledged policy, disabled
   actual policy when enabled was observed, extra/missing Enabled nodes,
   changed controller/configuration and restored triggers.
-- [ ] Push and run the existing focused command gate in Actions; inspect the
+- [x] Push and run the existing focused command gate in Actions; inspect the
   missing enabled-policy support failure:
 
   ```bash
@@ -13950,7 +13950,10 @@ deployment workflow. No original journal schema or synthetic runtime identity.
     -f windows_live_only=true -f windows_commands_only=true \
     -f windows_restore_scenario=failed
   ```
-- [ ] Extend only unacknowledged native admission with an explicit observed
+  Causal `68fe5327 / 38544098496`, job `115785757077`, failed at
+  `2026-10-14 09:41:07 UTC` with the exact new pre-inhibition policy assertion;
+  all 58 existing contracts passed. Original job log inspected.
+- [x] Extend only unacknowledged native admission with an explicit observed
   enabled bit and retain the actual XML/security bytes:
 
   ```powershell
@@ -13971,12 +13974,18 @@ deployment workflow. No original journal schema or synthetic runtime identity.
 
   Pin disabled actual XML as before; do not add a separate unjournaled
   inhibition operation or infer missing launch/Job identities.
-- [ ] Interrupt the real native controller at `started`, independently retain
+- [x] Interrupt the real native controller at `started`, independently retain
   its original launch and workload listener, and prove no running receipt or
   normal stopped receipt was written. Require the task remains enabled through
   read-only observation and the first durable policy request. Reuse existing
   repeated takeover/archive/fresh-copy/state/receipt/retirement checks.
   Keep the existing observed-before-running chain and acknowledged chains.
+  `-ColdStartupStep started` selects this earlier fixture. It sends the exact
+  original launch record as `guarded-launch`, not a fabricated running
+  observation. The parent checks actual enabled Scheduler XML/security before
+  killing the retained original bridge. A separate 60-minute Actions job runs
+  this full cold chain alongside the existing full native gate; no production
+  timeout or existing regression-job deadline is increased.
 - [ ] Run targeted earlier-prefix native acceptance and the unchanged full
   native regression gate in Actions. Record exact runs and original log
   evidence. Actual public application interruption at this earlier boundary

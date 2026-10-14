@@ -1,6 +1,13 @@
-param([Parameter(Mandatory)][string]$Control, [switch]$BeforeRunning)
+param(
+    [Parameter(Mandatory)][string]$Control, [switch]$BeforeRunning,
+    [ValidateSet('observed', 'started')][string]$StartupStep = 'observed'
+)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot '../scripts/deployment/windows-cold-activation-context.ps1')
+if ($StartupStep -ceq 'started' -and -not $BeforeRunning) {
+    throw 'The started boundary requires pre-acknowledgement interruption.'
+}
 $actor = $bridge = $runtime = $listener = $diagnostic = $null
 $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
 $environment.Add('SystemRoot', $env:SystemRoot)
@@ -8,7 +15,7 @@ $environment.Add('PATH', $env:PATH)
 $environment.Add('TEMP', $Control)
 $environment.Add('TMP', $Control)
 try {
-    $mode = if ($BeforeRunning) { 'observed-crash' } else { 'crash' }
+    $mode = if ($BeforeRunning) { "$StartupStep-crash" } else { 'crash' }
     $actor = [Deployment.WindowsControllerProcess]::Start((Get-Command node).Source, [string[]]@(
         (Join-Path $PSScriptRoot 'deployment-windows-cold-activation.mjs'), $Control,
         [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $mode), $Control, $environment)
@@ -16,6 +23,18 @@ try {
     $frame = [Deployment.WindowsWorkerLauncher]::ReadFrameAsync($actor.StandardOutput, 131072)
     if (-not $frame.Wait(600000)) { throw 'Cold crash actor did not publish its admitted running runtime.' }
     $running = $frame.GetAwaiter().GetResult() | ConvertFrom-Json
+    if ($StartupStep -ceq 'started') {
+        if ($running.status -cne 'guarded-launch') { throw 'Earlier crash fixture fabricated a running observation.' }
+        $scheduler = New-Object -ComObject 'Schedule.Service'
+        $scheduler.Connect()
+        $task = $scheduler.GetFolder('\').GetTask($running.taskName)
+        if (-not $task.Enabled -or $task.GetInstances(0).Count -ne 1 -or
+            [string]$task.GetSecurityDescriptor(7) -cne $running.securityDescriptor -or
+            -not (Test-AgentsChatColdRecoveryDefinition $running.definition ([string]$task.Xml) -Unacknowledged -Enabled)) {
+            throw 'Earlier startup did not retain its exact enabled guarded task and instance.'
+        }
+        $running.definition = [string]$task.Xml
+    }
     $bridge = [Diagnostics.Process]::GetProcessById($running.controllerPid)
     $runtime = [Diagnostics.Process]::GetProcessById($running.runtime.pid)
     $null = $bridge.Handle

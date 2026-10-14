@@ -92,13 +92,14 @@ function Read-AgentsChatColdPolicyHistory([hashtable]$Context, [string]$Expected
     $definition = [string]$task.Xml
     $original = ([xml]$definition).OuterXml -ceq ([xml]$Context.Definition).OuterXml
     $guarded = Test-AgentsChatColdRecoveryDefinition $Context.ColdDefinition $definition `
-        -Unacknowledged:($null -eq $Context.Runtime)
-    if ($task.Enabled -or (-not $original -and -not $guarded) -or
+        -Unacknowledged:($null -eq $Context.Runtime) -Enabled:([bool]$task.Enabled)
+    if (($task.Enabled -and -not $guarded) -or (-not $original -and -not $guarded) -or
         ($Context.PolicyDurableStep -ceq 'initial' -and -not $guarded) -or
         ($Context.PolicyDurableStep -ceq 'restored' -and -not $original)) {
-        throw 'Cold policy recovery lacks its exact disabled source or requested target policy.'
+        throw 'Cold policy recovery lacks its exact guarded source or requested disabled target policy.'
     }
     $Context.CurrentDefinition = $definition
+    $Context.CurrentEnabled = [bool]$task.Enabled
     $Context.PolicyStep = if ($Context.PolicyDurableStep -ceq 'requested' -and $original) {
         'policy-applied'
     } else { $Context.PolicyDurableStep }

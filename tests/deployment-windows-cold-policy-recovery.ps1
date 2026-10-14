@@ -25,6 +25,9 @@ $environment.Add('TEMP', $Control)
 $environment.Add('TMP', $Control)
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
+$sourceTask = $scheduler.GetFolder('\').GetTask($TaskName)
+$sourceEnabled = [bool]$sourceTask.Enabled
+$sourceDefinition = [string]$sourceTask.Xml
 $appliedIdentity = $null
 $sequence = 0
 foreach ($target in @('requested', 'policy-applied', 'restored', 'inspect', 'archive')) {
@@ -105,9 +108,13 @@ foreach ($target in @('requested', 'policy-applied', 'restored', 'inspect', 'arc
             }
         }
         $task = $scheduler.GetFolder('\').GetTask($TaskName)
-        if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
+        $expectedEnabled = $target -ceq 'requested' -and $sourceEnabled
+        if ([bool]$task.Enabled -ne $expectedEnabled -or $task.GetInstances(0).Count -ne 0 -or
             [string]$task.GetSecurityDescriptor(7) -cne $originalTask.securityDescriptor) {
-            throw 'Cold policy recovery enabled a task, started an instance or changed security.'
+            throw 'Cold policy recovery changed enabled state before its write-ahead request, started an instance or changed security.'
+        }
+        if ($target -ceq 'requested' -and [string]$task.Xml -cne $sourceDefinition) {
+            throw 'Cold policy request mutated its original guarded source before policy application.'
         }
         if ($target -cne 'requested') {
             if (([xml]$task.Xml).OuterXml -cne ([xml]$originalTask.definition).OuterXml) {

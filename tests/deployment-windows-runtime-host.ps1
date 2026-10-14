@@ -20,6 +20,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     [switch]$StoppedProof,
     [switch]$ColdActivationCrash,
     [switch]$ColdStartupCrash,
+    [ValidateSet('observed', 'started')][string]$ColdStartupStep = 'observed',
     [AllowEmptyString()][ValidateSet('', 'copying', 'backup-ready', 'source-selected')]
     [string]$PriorRuntimeRecovery = '')
 $ErrorActionPreference = 'Stop'
@@ -336,7 +337,7 @@ if (process.argv[2] === 'child') {
             -Action $transactionAction -Transactional -Restore:$restoreTransaction -CrashStep $CrashStep `
             -DiscoverManagedTask:$DiscoverManagedTask -DiscoveredAdmission:$DiscoveredAdmission -OwnedSourceBuild:$OwnedSourceBuild `
             -CompletedCloseout:$CompletedCloseout -PriorRuntimeRecovery $PriorRuntimeRecovery -StoppedProof:$StoppedProof `
-            -ColdActivationCrash:$ColdActivationCrash -ColdStartupCrash:$ColdStartupCrash
+            -ColdActivationCrash:$ColdActivationCrash -ColdStartupCrash:$ColdStartupCrash -ColdStartupStep $ColdStartupStep
         if ($StoppedProof) { return }
         if ($transactionAction -in @('retire', 'replace', 'replace-refused', 'replace-variable', 'replace-argument',
             'activate', 'activate-exit', 'activate-state-change', 'activate-readiness', 'activate-complete', 'activate-complete-changed-state',

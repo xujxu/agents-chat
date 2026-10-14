@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory)]$Ready,
     [Parameter(Mandatory)][Diagnostics.Process]$Owner,
     [switch]$ColdActivationCrash,
-    [switch]$ColdStartupCrash
+    [switch]$ColdStartupCrash,
+    [ValidateSet('observed', 'started')][string]$ColdStartupStep = 'observed'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -52,23 +53,25 @@ if ($folder.GetTask($TaskName).Enabled -or $folder.GetTask($TaskName).GetInstanc
 Write-Output 'PASS: cold recovery admits an absent original host with no Scheduler instance and unchanged task inhibition'
 if ($ColdActivationCrash -or $ColdStartupCrash) {
     $output = & (Join-Path $PSScriptRoot 'deployment-windows-cold-activation-crash.ps1') -Control $Control `
-        -BeforeRunning:$ColdStartupCrash
+        -BeforeRunning:$ColdStartupCrash -StartupStep $ColdStartupStep
 } else {
     $output = & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-cold-activation.mjs') `
         $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
     if ($LASTEXITCODE -ne 0) { throw 'Cold recovery did not start and settle its own guarded replacement.' }
 }
 $activated = ($output -join "`n") | ConvertFrom-Json
-if ($activated.status -cne 'guarded-running' -or $activated.taskName -cne $TaskName -or
+$enabledPrefix = $ColdStartupCrash -and $ColdStartupStep -ceq 'started'
+$expectedStatus = if ($enabledPrefix) { 'guarded-launch' } else { 'guarded-running' }
+if ($activated.status -cne $expectedStatus -or $activated.taskName -cne $TaskName -or
     $activated.runtime.generation -ceq $Ready.generation) {
     throw 'Cold activation reported a foreign or reused runtime.'
 }
 $task = $folder.GetTask($TaskName)
-if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
+if ([bool]$task.Enabled -ne $enabledPrefix -or $task.GetInstances(0).Count -ne 0 -or
     [string]$task.Xml -cne $activated.definition -or
     [string]$task.GetSecurityDescriptor(7) -cne $activated.securityDescriptor -or
     $task.Definition.Triggers.Count -ne 0) {
-    throw 'Closed cold activation did not preserve its inhibited guarded policy.'
+    throw 'Interrupted cold activation did not preserve its exact guarded policy.'
 }
 [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)
 Write-Output 'PASS: cold activation starts a distinct leased runtime and settles its original new Job without terminal state or automatic task triggers'
@@ -77,12 +80,15 @@ $phase = if ($ColdStartupCrash) { 'start-requested' } elseif ($ColdActivationCra
     $Control ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) $phase
 if ($LASTEXITCODE -ne 0) { throw 'Independent cold activation inspection did not retain its original inactive history.' }
 $task = $folder.GetTask($TaskName)
-if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
+if ([bool]$task.Enabled -ne $enabledPrefix -or $task.GetInstances(0).Count -ne 0 -or
     [string]$task.Xml -cne $activated.definition -or
     [string]$task.GetSecurityDescriptor(7) -cne $activated.securityDescriptor) {
     throw 'Read-only cold activation inspection changed task policy or started a runtime.'
 }
 [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)
+if ($enabledPrefix) {
+    Write-Output 'PASS: pre-inhibition controller death and read-only recovery preserve the exact enabled guarded task with both original Jobs absent'
+}
 & (Join-Path $PSScriptRoot 'deployment-windows-cold-policy-recovery.ps1') -Control $Control -TaskName $TaskName
 [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$activated.runtime.generation, $activated.runtime.sessionId)
 & (Join-Path $PSScriptRoot 'deployment-windows-cold-runtime-completion.ps1') -Control $Control -TaskName $TaskName `

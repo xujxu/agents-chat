@@ -78,7 +78,7 @@ function Assert-AgentsChatColdActivationRecoveryProof([hashtable]$Context) {
             [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
                 [guid]$inactive.generation, $inactive.sessionId)
             $task = $Context.Folder.GetTask($Context.TaskName)
-            if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
+            if ([bool]$task.Enabled -ne $Context.CurrentEnabled -or $task.GetInstances(0).Count -ne 0 -or
                 [string]$task.Xml -cne $Context.CurrentDefinition -or
                 (-not $Context.PolicyRecovery -and $task.Definition.Triggers.Count -ne 0) -or
                 [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor) {
@@ -196,9 +196,13 @@ function Read-AgentsChatColdActivationRecoveryHistory {
     $proof.ColdPowerShell = $policy.PowerShell
     $proof.ColdDefinition = $record.definition.GetString()
     $proof.CurrentDefinition = $proof.ColdDefinition
+    $proof.CurrentEnabled = $false
     if (-not $runtime -and -not $proof.PolicyRecovery) {
-        $actual = [string]$proof.Folder.GetTask($proof.TaskName).Xml
-        if (-not (Test-AgentsChatColdRecoveryDefinition $proof.ColdDefinition $actual -Unacknowledged)) {
+        $task = $proof.Folder.GetTask($proof.TaskName)
+        $actual = [string]$task.Xml
+        $proof.CurrentEnabled = [bool]$task.Enabled
+        if (-not (Test-AgentsChatColdRecoveryDefinition $proof.ColdDefinition $actual `
+            -Unacknowledged -Enabled:$proof.CurrentEnabled)) {
             throw 'Unacknowledged cold task differs from its original planned policy.'
         }
         $proof.CurrentDefinition = $actual

@@ -973,6 +973,8 @@ it does not synthesize a running receipt. The actual application scenario
 interrupts after native runtime observation but before running acknowledgement.
 Earlier startup interruption, missing launch evidence, live guarded peers,
 initially inactive/legacy tasks and reboot recovery remain unsupported.
+Recovery of an original launch before task inhibition is implemented but
+awaits separate native and actual-application acceptance.
 Do not remove a retained lock to bypass a recovery refusal.
 
 ```powershell
