@@ -88,7 +88,9 @@ try {
         if ($mode -in $startupCloseoutModes) {
             Assert ($before.Count -eq 0) 'Interrupted guarded startup must have no remaining task instance'
             $originalPid = $guardedStartup.runtime.pid
-            $originalInstance = $guardedStartup.activation.runtime.instanceGuid
+            $originalInstance = if ($mode -eq 'restore-cold-enabled-closeout') {
+                $guardedStartup.runtime.instanceGuid
+            } else { $guardedStartup.activation.runtime.instanceGuid }
         } else {
             Assert ($before.Count -eq 1) 'Live application must have one original task instance'
             $originalPid = $before.Item(1).EnginePID

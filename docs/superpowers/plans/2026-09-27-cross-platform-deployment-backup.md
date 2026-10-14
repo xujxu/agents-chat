@@ -13973,6 +13973,20 @@ the existing cold application files/start, live restore/application fixtures,
   Corrected actual `805fe11a / 38548504407` has left the queue and is running
   as job `115822764902`. Preserve that existing run rather than dispatching
   a duplicate. Actual acceptance remains pending.
+  Corrected actual `38548504407`, job `115822764902`, subsequently failed at
+  `2026-10-14 12:42:28 UTC`. Its original log confirms the exact
+  pre-inhibition launch-death PASS marker: actual API verification, both
+  original Jobs absent and exact enabled guarded task all passed. The next
+  closeout iteration failed before invoking public restore because its
+  fixture tried to read `instanceGuid` from the earlier eight-field readiness
+  record, where that Scheduler observation deliberately does not exist.
+  For this earlier mode only, compare the final Scheduler instance with the
+  genuinely recorded retired original runtime instance. Keep final runtime
+  generation/host comparisons against both old and interrupted runtimes,
+  native instance binding and all archive/data/receipt checks. Do not
+  synthesize an interrupted instance GUID or relax the older modes' checks.
+  This correction changes only the actual fixture; native acceptance remains
+  unchanged. Rerun only `cold-enabled` actual acceptance.
 
 ### Task 5FK: Recover the original guarded launch before task inhibition
 
