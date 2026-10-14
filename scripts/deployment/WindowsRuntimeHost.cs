@@ -62,6 +62,21 @@ namespace Deployment
             string file = Path.Combine(directory, "runtime-" + identity.Replace(':', '-') + ".json");
             retained.Add(WindowsPrivateFile.Publish(file, text));
         }
+        void PublishLaunch(string directory, Guid generation, int controllerPid, string controllerIdentity)
+        {
+            int pid = Environment.ProcessId;
+            string identity = WindowsWorkerJob.ProcessIdentity(pid);
+            int session;
+            using (Process process = Process.GetCurrentProcess()) session = process.SessionId;
+            string text = JsonSerializer.Serialize(new {
+                version = 1, generation = generation.ToString("D"), pid, identity,
+                configurationSha256, sessionId = session,
+                job = @"Local\agents-deploy-" + generation.ToString("D"),
+                controllerPid, controllerIdentity
+            });
+            retained.Add(WindowsPrivateFile.Publish(
+                Path.Combine(directory, "launch-" + identity.Replace(':', '-') + ".json"), text));
+        }
         static WindowsRuntimeHost Load(string configuration, string sha256, string helpers, ref string stage,
             Dictionary<string, string> archive = null)
         {
@@ -153,8 +168,15 @@ namespace Deployment
                         host.lease = WindowsRuntimeLease.Start(controllerPid, controllerIdentity);
                         host.Check();
                     }
-                    stage = "command";
                     Guid generation = Guid.NewGuid();
+                    if (host.lease != null)
+                    {
+                        stage = "launch-intent";
+                        host.Check();
+                        host.PublishLaunch(helpers, generation, controllerPid, controllerIdentity);
+                        host.Check();
+                    }
+                    stage = "command";
                     host.domain = WindowsRuntimeDomain.Start(generation, pwsh, helpers,
                         host.commandFile, host.commandArguments, host.commandDirectory, host.commandEnvironment);
                     stage = "publication";
