@@ -167,6 +167,59 @@ test('Windows cold startup has a finite ordered boundary before running acknowle
   assert.ok(Object.isFrozen(windowsColdStartupSteps));
 });
 
+test('Windows cold unacknowledged launch binds real host evidence without inventing a running receipt', async () => {
+  const { captureWindowsColdActivationHistory, captureWindowsColdLaunch } =
+    await import('../scripts/deployment/windows-cold-activation-history.mjs');
+  const fixture = coldHistoryFixture();
+  const history = captureWindowsColdActivationHistory({
+    ...fixture, records: fixture.encode([{ phase: 'start-requested', runtime: null }]),
+  });
+  const { generation, pid, identity, configurationSha256, sessionId } = fixture.runtime;
+  const launch = {
+    version: 1, generation, pid, identity, configurationSha256, sessionId,
+    job: `Local\\agents-deploy-${generation}`,
+    controllerPid: history.controllerPid, controllerIdentity: history.controllerIdentity,
+  };
+  const bytes = Buffer.from(`${JSON.stringify(launch)}\n`);
+  const captured = captureWindowsColdLaunch({ history, bytes, originalGeneration: fixture.intent.state.runtimeIdentity });
+  assert.deepEqual(captured, { record: launch, sha256: createHash('sha256').update(bytes).digest('hex') });
+  assert.ok(Object.isFrozen(captured) && Object.isFrozen(captured.record));
+  assert.equal(history.runtime, null);
+  assert.equal(captured.record.instanceGuid, undefined);
+  assert.equal(captured.record.launcherPid, undefined);
+  assert.equal(captured.record.readySha256, undefined);
+  for (const changed of [
+    { version: 2 }, { pid: 0 }, { pid: 2147483648 }, { identity: '33:0' }, { identity: '34:1234' },
+    { generation: '00000000-0000-0000-0000-000000000000' },
+    { generation: generation.toUpperCase() },
+    { generation: fixture.intent.state.runtimeIdentity, job: `Local\\agents-deploy-${fixture.intent.state.runtimeIdentity}` },
+    { configurationSha256: '0'.repeat(64) }, { sessionId: -1 }, { sessionId: 1.5 }, { sessionId: 2147483648 },
+    { job: `Global\\agents-deploy-${generation}` },
+    { controllerPid: 23, controllerIdentity: '23:1234' }, { controllerIdentity: '22:5678' },
+    { pid: history.controllerPid, identity: history.controllerIdentity },
+    { instanceGuid: fixture.runtime.instanceGuid },
+  ]) {
+    assert.throws(() => captureWindowsColdLaunch({
+      history, bytes: Buffer.from(JSON.stringify({ ...launch, ...changed })),
+      originalGeneration: fixture.intent.state.runtimeIdentity,
+    }));
+  }
+  for (const entries of [
+    [{ phase: 'start-requested', runtime: null }, { phase: 'running', runtime: fixture.runtime }],
+    [{ phase: 'start-requested', runtime: null }, { phase: 'stopped', runtime: null }],
+  ]) {
+    assert.throws(() => captureWindowsColdLaunch({
+      history: captureWindowsColdActivationHistory({ ...fixture, records: fixture.encode(entries) }),
+      bytes, originalGeneration: fixture.intent.state.runtimeIdentity,
+    }));
+  }
+  for (const invalid of [Buffer.alloc(0), Buffer.alloc(65537), Buffer.from('{'), bytes.toString()]) {
+    assert.throws(() => captureWindowsColdLaunch({
+      history, bytes: invalid, originalGeneration: fixture.intent.state.runtimeIdentity,
+    }));
+  }
+});
+
 test('Windows cold journal captures exact requested, running and stopped prefixes without mutation authority', async () => {
   const { captureWindowsColdActivationHistory } = await import('../scripts/deployment/windows-cold-activation-history.mjs');
   const fixture = coldHistoryFixture();

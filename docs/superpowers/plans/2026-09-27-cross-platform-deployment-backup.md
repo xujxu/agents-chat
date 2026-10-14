@@ -13915,6 +13915,89 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FI: Recover an unacknowledged guarded launch without fabricating runtime history
+
+**Goal:** Admit the exact `start-requested` prefix after the original guarded
+host has launched and its task is disabled, while preserving `runtime:null`.
+Use its original write-ahead launch identity to prove both old/new Jobs empty;
+reuse the existing policy recovery, crash takeover and archival implementation.
+No absent-launch, enabled-task, legacy-helper or reboot acceptance is implied.
+
+**Files:** extend `scripts/deployment/windows-cold-activation-history.mjs`,
+`windows-cold-activation-recovery.mjs`, `windows-cold-activation-recovery-proof.ps1`,
+`windows-stopped-restore-recovery.ps1` and the existing completion bundle helper;
+extend the cold activation/state/recovery/crash fixtures and their existing
+runtime-host/task-node plumbing. Add a separate native workflow step so the
+acknowledged running and graceful stopped chains remain covered unchanged.
+
+- [x] Add the pure failing launch-binding contract first:
+
+  ```js
+  const captured = captureWindowsColdLaunch({ history, bytes, originalGeneration });
+  assert.equal(history.runtime, null);
+  assert.equal(captured.record.instanceGuid, undefined);
+  assert.equal(captured.record.launcherPid, undefined);
+  assert.equal(captured.record.readySha256, undefined);
+  ```
+
+  Require exactly the nine original launch fields, original controller and
+  configuration, distinct canonical nonzero generation, bounded PID/session,
+  exact Job name and original raw-byte digest. Reject acknowledged/stopped
+  histories, extra fields, altered binding and malformed/oversized bytes.
+- [ ] Push causal tests, dispatch the existing command-only `failed` selector
+  and inspect failure for the missing launch capture export. No local test.
+- [ ] Capture exactly one private `launch-*.json` in the original cold bundle.
+  Bind native and JS observations to its exact fields and digest, without
+  constructing Scheduler instance, launcher or readiness fields:
+
+  ```js
+  const expectedObservation = {
+    ...originalObservation, runtime: null,
+    launch: captured.record, launchSha256: captured.sha256,
+  };
+  ```
+
+  Retain original helper/configuration verification and source-file handles.
+  Recheck the unique launch inventory and retained bytes on every native proof.
+  Require original lock owner, cold owner, activation bridge, launch host and
+  both original/replacement Jobs absent. Keep exact disabled task/security
+  checks, original snapshot admission and all existing policy journal checks.
+- [ ] Permit only a single start-requested journal when running is absent.
+  Preserve existing acknowledged inventory requirements, especially completion
+  history. The observer may inspect the launch prefix without mutation;
+  policy mutation still requires original explicit data-loss admission.
+- [ ] Extend the actual native fixture with an `observed-crash` mode. At the
+  existing callback, verify the original workload's readiness, send the real
+  observation to the parent and wait without requesting the running step:
+
+  ```js
+  if (mode === 'observed-crash' && progress.step === 'observed') {
+    await verifyWindowsColdReadiness({
+      activation, project: state.project, originalListener,
+      runtime: progress.observation.runtime, providers: lease.providers,
+    });
+    console.log(JSON.stringify(progress.observation));
+    await new Promise(() => { setInterval(() => {}, 1000); });
+  }
+  ```
+
+  Parent kills the retained original bridge, proves its Job/listener settle,
+  confirms the running acknowledgement never existed and preserves the
+  original request/launch bytes. Independently inspect and lock the launch
+  proof, then reuse repeated policy crashes, exact archive, fresh copy,
+  completion and retirement acceptance. Keep both previous native modes.
+- [ ] Push implementation and dispatch full native command gate:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true
+  ```
+
+  Inspect all three cold chains and existing saved closure/warm regressions.
+  Public routing and real application interruption are a subsequent gate;
+  do not report them accepted based on these native fixtures.
+
 ### Task 5FH: Advance original cold startup through explicit bounded stages
 
 **Goal:** Keep the existing `start()` result and callers, while exposing the
