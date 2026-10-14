@@ -53,7 +53,7 @@ function Open-AgentsChatColdActivationContext {
             Configuration=$runtime.configuration.GetString(); ConfigurationSha256=$runtime.sha256.GetString()
             Bundle=$runtime.directory.GetString(); TaskName=$proof.TaskName
             Definition=$proof.Definition; SecurityDescriptor=$proof.SecurityDescriptor
-            PlannedDefinition=$null; Enabled=$false; Attempted=$false; Requested=$false; Runtime=$null
+            PlannedDefinition=$null; Enabled=$false; StartupStep='initial'; Requested=$false; Runtime=$null
             Owner=$null; Instance=$null; InstanceGuid=$null; Listener=$null; Stopped=$false; Stage='admitted'
             LeaseReleased=$false; CompletionPrepared=$false; CompletionStep=$null
             Identity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
@@ -146,7 +146,7 @@ function Get-AgentsChatColdActivationDefinition([hashtable]$Context, [int]$Contr
     return $requested.OuterXml
 }
 
-function Prepare-AgentsChatColdActivationTask([hashtable]$Context) {
+function Request-AgentsChatColdActivationTask([hashtable]$Context) {
     $Context.Stage = 'task-preparation'
     $task = Assert-AgentsChatColdActivationContext $Context
     $definition = $task.Definition
@@ -156,7 +156,11 @@ function Prepare-AgentsChatColdActivationTask([hashtable]$Context) {
     }
     $Context.PlannedDefinition = Get-AgentsChatColdActivationDefinition $Context $PID $Context.Identity
     Write-AgentsChatColdActivationReceipt $Context 'start-requested'
+}
+
+function Register-AgentsChatColdActivationTask([hashtable]$Context) {
     $task = Assert-AgentsChatColdActivationContext $Context
+    $definition = $task.Definition
     if ($task.GetInstances(0).Count -ne 0) { throw 'Original task started before cold registration.' }
     $Context.Stage = 'task-registration'
     $null = $Context.Proof.Folder.RegisterTask($Context.TaskName, $Context.PlannedDefinition, (4 -bor 16 -bor 32),

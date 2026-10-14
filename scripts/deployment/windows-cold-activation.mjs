@@ -18,6 +18,9 @@ const script = fileURLToPath(new URL('./windows-cold-activation.ps1', import.met
 const refused = cause => Object.assign(new Error('Cold guarded startup refused; preserve activation evidence.', { cause }), {
   code: 'DEPLOYMENT_WINDOWS_COLD_ACTIVATION_REFUSED', recoveryAllowed: false,
 });
+export const windowsColdStartupSteps = Object.freeze([
+  'requested', 'registered', 'enabled', 'started', 'inhibited', 'observed', 'running',
+]);
 
 export async function openWindowsColdActivation({
   control, pwsh, admission, ownerSha256, receiptSha256, intentSha256, taskName, runtimeBundle, originalGeneration, signal,
@@ -98,6 +101,9 @@ export async function openWindowsColdActivation({
       requestSignal?.throwIfAborted();
       if (closed || busy) throw new Error('Cold guarded startup is closed or busy.');
       if (method === 'start' && running) throw new Error('Cold guarded runtime is already started.');
+      if (method === 'start' && onProgress !== undefined && typeof onProgress !== 'function') {
+        throw new TypeError('Cold startup progress callback must be a function.');
+      }
       if (method === 'listener' && (!running || !Number.isSafeInteger(options.port) || options.port < 1 || options.port > 65535)) {
         throw new Error('Cold listener requires a started runtime and valid port.');
       }
@@ -145,7 +151,27 @@ export async function openWindowsColdActivation({
           }
           return completed;
         }
-        const value = await exchange(method, requestSignal, options);
+        let value;
+        let startupObservation;
+        if (method === 'start') {
+          for (const step of windowsColdStartupSteps) {
+            value = await exchange(method, requestSignal, options);
+            if (step === 'running') break;
+            const progress = captureWorkerFields(value,
+              ['status', 'step', 'observation'], 'cold startup progress');
+            if (progress.status !== 'cold-startup-progress' || progress.step !== step
+              || (step === 'observed' ? progress.observation === null : progress.observation !== null)) {
+              throw new Error('Cold startup skipped its original finite transition.');
+            }
+            const observation = progress.observation === null ? null : capture(progress.observation);
+            if (observation) startupObservation = observation;
+            await assertWindowsAdmission(control, admission, { signal: requestSignal });
+            await onProgress?.(Object.freeze({ step, observation }));
+            requestSignal?.throwIfAborted();
+          }
+        } else {
+          value = await exchange(method, requestSignal, options);
+        }
         if (method === 'close') {
           if (value !== 'close') throw new Error('Cold startup close acknowledgement differs.');
           const result = await bridge.waitForExit();
@@ -163,9 +189,16 @@ export async function openWindowsColdActivation({
         const current = capture(value);
         const expected = completed ? { ...running, status: 'released-running', definition: completed.definition } : running;
         if (running && !same(current, expected)) throw new Error('Original cold runtime changed outside acknowledged completion.');
-        if (method === 'start') await checkHistory('running', current);
+        if (method === 'start') {
+          if (!same(current, startupObservation)) throw new Error('Cold runtime changed before its running acknowledgement.');
+          await checkHistory('running', current);
+        }
         running ??= current;
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
+        if (method === 'start') {
+          await onProgress?.(Object.freeze({ step: 'running', observation: current }));
+          requestSignal?.throwIfAborted();
+        }
         return current;
       } catch (cause) {
         closed = true;
@@ -173,7 +206,7 @@ export async function openWindowsColdActivation({
       } finally { busy = false; }
     };
     return Object.freeze({
-      start: ({ signal } = {}) => request('start', signal),
+      start: ({ signal, onProgress } = {}) => request('start', signal, {}, onProgress),
       check: ({ signal } = {}) => request('check', signal),
       listener: ({ port, signal }) => request('listener', signal, { port }),
       completeRuntime: ({ port, providers, signal, onProgress }) => request('complete', signal, { port, providers }, onProgress),

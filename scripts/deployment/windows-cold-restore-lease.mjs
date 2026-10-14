@@ -435,8 +435,11 @@ export async function claimWindowsColdRestore({
                 port, providers: configuration.providers, waitSeconds, signal: readySignal,
               });
             },
-            async start({ signal: startSignal = signal } = {}) {
+            async start({ signal: startSignal = signal, onProgress } = {}) {
               startSignal?.throwIfAborted();
+              if (onProgress !== undefined && typeof onProgress !== 'function') {
+                throw new TypeError('Cold startup progress callback must be a function.');
+              }
               if (startAttempted) throw new Error('Cold guarded runtime is already started or startup was attempted.');
               await checkIntent({ signal: startSignal });
               startAttempted = true;
@@ -451,7 +454,7 @@ export async function claimWindowsColdRestore({
                   originalGeneration: state.runtimeIdentity, signal: startSignal,
                 });
                 await configuration.checkFiles({ signal: startSignal });
-                const running = await active.start({ signal: startSignal });
+                const running = await active.start({ signal: startSignal, onProgress });
                 publishing = false;
                 await checkIntent({ signal: startSignal });
                 return running;
