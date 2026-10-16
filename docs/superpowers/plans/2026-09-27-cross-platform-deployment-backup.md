@@ -14129,6 +14129,14 @@ forged transaction before destination creation, copy the stopped project, verify
 the manifest and its task/security/recovery/source bindings, and recheck the
 original inactive transaction. This fixture is not public application deployment.
 
+Snapshot integration causal gate `83be2933 / 38883332277` passed 69 contracts
+and failed only at the missing inactive snapshot export. Implementation
+`78915528 / 38884207197`, job `116917919844`, passed: original logs include
+the real stopped snapshot creation/verification and copying-stage consumer
+markers, plus all prior focused contracts. Public inactive deployment is still
+not enabled; rotation, owned source/build stages and native replacement/
+activation must consume this separate stopped transaction before integration.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
