@@ -35,7 +35,40 @@ async function malformedRequest(frame) {
   } catch (error) { throw await abandon(error); }
 }
 
-if (mode === 'inactive') {
+if (mode === 'inactive-retire' || mode === 'inactive-retire-resume') {
+  const { readFile, readdir } = await import('node:fs/promises');
+  const path = await import('node:path');
+  const { openWindowsInactiveTaskRetirement, openWindowsTaskRetirement,
+    retireNextWindowsTaskFile, beginWindowsDeploymentRetirement } =
+    await import('../scripts/deployment/windows-task-completion-proof.mjs');
+  assert.equal(typeof openWindowsInactiveTaskRetirement, 'function',
+    'Inactive retirement requires independent version-two reopening');
+  const prefix = mode === 'inactive-retire' ? 0 : 3;
+  const end = mode === 'inactive-retire' ? 3 : 13;
+  const state = await readFile(path.join(control, 'state.json'));
+  const lock = await readFile(path.join(control, 'lock', 'owner.json'));
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    await assert.rejects(openWindowsTaskRetirement({ control, pwsh, admission }),
+      /Completed-task proof unavailable/);
+    const scope = await openWindowsInactiveTaskRetirement({ control, pwsh, admission });
+    try {
+      assert.equal(scope.observation.retiredFiles, prefix);
+      assert.equal(scope.observation.checkpoint.intent.intent.version, 2);
+      await assert.rejects(beginWindowsDeploymentRetirement(control, scope, admission),
+        /Inactive deployment retirement is not available/);
+      for (let index = prefix; index < end; index++) {
+        const next = await retireNextWindowsTaskFile(control, scope, admission);
+        assert.equal(next.retiredFiles, index + 1);
+        assert.deepEqual(await scope.check(), next);
+        assert.equal((await readdir(path.join(control, 'task-maintenance'))).length, 13 - index - 1);
+      }
+      if (end === 13) await assert.rejects(retireNextWindowsTaskFile(control, scope, admission), /exhausted/);
+    } finally { await scope.close(); }
+  });
+  assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+  assert.deepEqual(await readFile(path.join(control, 'lock', 'owner.json')), lock);
+  console.log(`PASS: independent inactive retirement advances exact receipt prefix ${prefix} to ${end} without changing accepted state or lock`);
+} else if (mode === 'inactive') {
   const { openWindowsInactiveTaskCompletionProof, prepareWindowsTaskRetirement,
     prepareWindowsInactiveTaskRetirement, prepareWindowsInactiveTaskRetirementCheckpoint } =
     await import('../scripts/deployment/windows-task-completion-proof.mjs');

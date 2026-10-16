@@ -134,6 +134,20 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             } finally { $observer.Dispose() }
             $finalDefinition = (Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-replacement-complete.json') -Raw |
                 ConvertFrom-Json).definition
+            foreach ($retirementMode in @('inactive-retire', 'inactive-retire-resume')) {
+                $retirement = [Deployment.WindowsControllerProcess]::Start($node,
+                    @((Join-Path $PSScriptRoot 'deployment-windows-completion-session.mjs'), $control,
+                        [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $retirementMode), $control, $environment)
+                try {
+                    $retirementOutput = $retirement.StandardOutput.ReadToEndAsync()
+                    $retirementDiagnostic = $retirement.StandardError.ReadToEndAsync()
+                    Assert ($retirement.WaitForExit(180000)) 'Independent inactive receipt retirement timed out'
+                    Write-Output $retirementOutput.GetAwaiter().GetResult()
+                    $errors = $retirementDiagnostic.GetAwaiter().GetResult()
+                    if ($errors) { [Console]::Error.WriteLine($errors) }
+                    Assert ($retirement.ExitCode -eq 0) 'Independent inactive receipt retirement failed'
+                } finally { $retirement.Dispose() }
+            }
             $task = $folder.GetTask($TaskName)
             Assert ($state.phase -ceq 'accepted' -and [string]$task.Xml -ceq $finalDefinition -and
                 -not $task.Enabled -and $task.GetInstances(0).Count -eq 1 -and

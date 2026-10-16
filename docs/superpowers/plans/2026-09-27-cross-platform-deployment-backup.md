@@ -14371,6 +14371,18 @@ owner identity, distinct new runtime and disabled permanent policy. Require
 native same-authority idempotency and parser refusal of missing or mismatched
 prior-runtime evidence. This checkpoint alone grants no deletion or unlock.
 
+Checkpoint `72ca862c / 38966763922` passed after fixing the misplaced
+PowerShell conditional in `962d5e79`. Next reopen explicit v2 retirement from a
+new Node/native controller after checkpoint creators exit. Keep active v1
+reopening strict. Retain the old configuration/readiness and prove its owner
+absent and Job empty before/after every deletion; retain exact new released
+runtime/listener/policy as in the existing retirement scope. Reuse native
+identity-bound ordered-prefix deletion, with thirteen inactive paths only.
+The native fixture captures its final policy before retirement, starts one
+actor to delete three receipts, then another to reopen at prefix three and
+finish all thirteen. State and original lock must remain byte-identical;
+deployment retirement/unlock stays refused pending separate archival support.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
