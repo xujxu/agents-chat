@@ -13,6 +13,13 @@ const records = [
 ];
 const files = ['admission.json', 'transaction.json', ...records.map(name => `task-${name}.json`)]
   .map(name => `task-maintenance\\${name}`);
+const inactiveFiles = ['admission.json', 'inactive-activation-prepared.json',
+  'inactive-replacement-requested.json', 'inactive-replacement-complete.json',
+  'inactive-start-requested.json', 'inactive-start-running.json',
+  'inactive-complete-prepared.json', 'inactive-complete-policy-requested.json',
+  'inactive-complete-policy-staged.json', 'inactive-complete-release-requested.json',
+  'inactive-complete-released.json', 'inactive-complete-policy-restore-requested.json',
+  'inactive-complete-complete.json'].map(name => `task-maintenance\\${name}`);
 const canonical = value => typeof value === 'string' && value.length <= 4096
   && /^[A-Za-z]:\\/.test(value) && !/[\0\r\n]/.test(value)
   && !value.slice(3).includes(':') && path.win32.resolve(value) === value;
@@ -68,10 +75,11 @@ export function captureWindowsTaskRetirement(value) {
   processPair(lock.pid, lock.processIdentity);
   const lockFile = descriptor(intent.lockFile, 'lock\\owner.json');
   const state = descriptor(intent.state, 'state.json');
-  if (result.status !== 'prepared' || intent.version !== 1
+  const expectedFiles = intent.version === 2 ? inactiveFiles : files;
+  if (result.status !== 'prepared' || ![1, 2].includes(intent.version)
     || !canonical(intent.control) || !canonical(intent.project) || intent.project !== lock.project
     || completion.operationId !== lock.operationId || completion.stateSha256 !== state.sha256
-    || !Array.isArray(intent.files) || intent.files.length !== files.length) {
+    || !Array.isArray(intent.files) || intent.files.length !== expectedFiles.length) {
     throw new Error('Invalid native retirement intent scope.');
   }
   const control = intent.control.toLowerCase();
@@ -80,7 +88,7 @@ export function captureWindowsTaskRetirement(value) {
     || project.startsWith(`${control.replace(/\\$/, '')}\\`)) {
     throw new Error('Retirement control must be external to its project.');
   }
-  const capturedFiles = Object.freeze(intent.files.map((entry, index) => descriptor(entry, files[index])));
+  const capturedFiles = Object.freeze(intent.files.map((entry, index) => descriptor(entry, expectedFiles[index])));
   if (capturedFiles.at(-1).sha256 !== completion.completionSha256) {
     throw new Error('Retirement completion receipt differs.');
   }

@@ -60,6 +60,17 @@ if (mode === 'inactive') {
       assert.equal(retired.intent.files[0].path, 'task-maintenance\\admission.json');
       assert.equal(retired.intent.files.at(-1).path, 'task-maintenance\\inactive-complete-complete.json');
       assert.deepEqual(retired.intent.completion, proof.observation);
+      const { captureWindowsTaskRetirement } = await import('../scripts/deployment/windows-task-retirement-record.mjs');
+      for (const change of [
+        value => { value.intent.version = 1; },
+        value => { value.intent.files.pop(); },
+        value => { value.intent.files[1].path = 'task-maintenance\\transaction.json'; },
+        value => { value.intent.files.reverse(); },
+      ]) {
+        const changed = structuredClone(retired);
+        change(changed);
+        assert.throws(() => captureWindowsTaskRetirement(changed));
+      }
       assert.deepEqual(await prepareWindowsInactiveTaskRetirement(control, proof, admission), retired);
       await assert.rejects(prepareWindowsInactiveTaskRetirement(control, { ...proof }, admission),
         /Original retained inactive completed-task proof/);

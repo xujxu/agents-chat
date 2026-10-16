@@ -27,11 +27,17 @@ function Get-AgentsChatRetirementCompletion($Observation) {
     }
 }
 
+function Assert-AgentsChatRetirementCompletionProof([hashtable]$Context, [switch]$Inactive) {
+    if ($Inactive) { return Assert-AgentsChatInactiveCompletionProof $Context }
+    return Assert-AgentsChatTaskCompletionProof $Context
+}
+
 function Publish-AgentsChatRetirementRecord {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
         [Parameter(Mandatory)][Collections.Specialized.OrderedDictionary]$Candidate,
-        [Parameter(Mandatory)][ValidateSet('task-retirement.json', 'task-retirement-checkpoint.json')][string]$Name
+        [Parameter(Mandatory)][ValidateSet('task-retirement.json', 'task-retirement-checkpoint.json')][string]$Name,
+        [switch]$Inactive
     )
     $current = $Candidate.creator
     Assert-AgentsChatCompletionProcessIdentity $current.pid $current.processIdentity
@@ -41,7 +47,7 @@ function Publish-AgentsChatRetirementRecord {
     }
     $text = $Candidate | ConvertTo-Json -Depth 12 -Compress
     $marker = Join-Path $Context.Control $Name
-    $null = Assert-AgentsChatTaskCompletionProof -Context $Context
+    $null = Assert-AgentsChatRetirementCompletionProof $Context -Inactive:$Inactive
     if ([Deployment.WindowsWorkerJob]::ProcessIdentity($current.pid) -cne $current.processIdentity) {
         throw 'Original retirement controller changed before publication.'
     }
@@ -78,7 +84,7 @@ function Publish-AgentsChatRetirementRecord {
         path=$Name; dev=$identity.Dev; ino=$identity.Ino
         bytes=$retained.ByteLength; sha256=$retained.Sha256
     }
-    $null = Assert-AgentsChatTaskCompletionProof -Context $Context
+    $null = Assert-AgentsChatRetirementCompletionProof $Context -Inactive:$Inactive
     if ([Deployment.WindowsWorkerJob]::ProcessIdentity($current.pid) -cne $current.processIdentity) {
         throw 'Original retirement controller changed after publication.'
     }
@@ -90,7 +96,8 @@ function Prepare-AgentsChatTaskRetirement {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
         [Parameter(Mandatory)][int]$ControllerPid,
-        [Parameter(Mandatory)][string]$ControllerIdentity
+        [Parameter(Mandatory)][string]$ControllerIdentity,
+        [switch]$Inactive
     )
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
@@ -98,7 +105,7 @@ function Prepare-AgentsChatTaskRetirement {
     if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
         throw 'Original retirement controller changed.'
     }
-    $completion = Get-AgentsChatRetirementCompletion (Assert-AgentsChatTaskCompletionProof -Context $Context)
+    $completion = Get-AgentsChatRetirementCompletion (Assert-AgentsChatRetirementCompletionProof $Context -Inactive:$Inactive)
     $lockPath = Join-Path $Context.Control 'lock\owner.json'
     $lockFile = Open-AgentsChatCompletionFile $Context $lockPath ''
     $lockNames = @('version', 'token', 'project', 'operationId', 'pid', 'processIdentity', 'createdAt')
@@ -108,10 +115,13 @@ function Prepare-AgentsChatTaskRetirement {
         $lock[$name] = if ($name -cin @('version', 'pid')) { $lockFields[$name].GetInt32() }
             else { $lockFields[$name].GetString() }
     }
-    $paths = @('task-maintenance\admission.json', 'task-maintenance\transaction.json')
-    $paths += @($Context.RecordNames | ForEach-Object { "task-maintenance\task-$_.json" })
+    $paths = if ($Inactive) { @($Context.Inventory | ForEach-Object { "task-maintenance\$_" }) }
+        else {
+            @('task-maintenance\admission.json', 'task-maintenance\transaction.json') +
+                @($Context.RecordNames | ForEach-Object { "task-maintenance\task-$_.json" })
+        }
     $candidate = [ordered]@{
-        version=1; control=$Context.Control; project=$Context.Project; lock=$lock
+        version=$(if ($Inactive) { 2 } else { 1 }); control=$Context.Control; project=$Context.Project; lock=$lock
         lockFile=(Get-AgentsChatRetirementFile $Context 'lock\owner.json')
         state=(Get-AgentsChatRetirementFile $Context 'state.json')
         controlIdentity=(Get-AgentsChatRetirementDirectory $Context $Context.Control)
@@ -127,6 +137,7 @@ function Prepare-AgentsChatTaskRetirement {
     if ($candidate.lock.operationId -cne $completion.operationId -or
         $candidate.lock.project -cne $candidate.project -or $candidate.state.sha256 -cne $completion.stateSha256 -or
         $candidate.files[-1].sha256 -cne $completion.completionSha256) { throw 'Original retirement scope differs.' }
-    $published = Publish-AgentsChatRetirementRecord -Context $Context -Candidate $candidate -Name 'task-retirement.json'
+    $published = Publish-AgentsChatRetirementRecord -Context $Context -Candidate $candidate `
+        -Name 'task-retirement.json' -Inactive:$Inactive
     return [ordered]@{ status='prepared'; descriptor=$published.descriptor; intent=$published.record }
 }

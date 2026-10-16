@@ -17,6 +17,7 @@ export { openWindowsTaskCompletionRecovery } from './windows-task-completion-rec
 
 const script = fileURLToPath(new URL('./windows-task-completion-controller.ps1', import.meta.url));
 const proofs = new WeakMap();
+const inactiveProofs = new WeakMap();
 const retirements = new WeakMap();
 const deployments = new WeakMap();
 function refused(cause) {
@@ -40,6 +41,14 @@ export async function assertWindowsTaskCompletionProof(control, proof, admission
 
 export async function prepareWindowsTaskRetirement(control, proof, admission, { signal } = {}) {
   return bindingFor(control, proof, admission).prepare(signal);
+}
+
+export async function prepareWindowsInactiveTaskRetirement(control, proof, admission, { signal } = {}) {
+  const binding = inactiveProofs.get(proof);
+  if (!binding || binding.control !== control || binding.admission !== admission) {
+    throw new Error('Original retained inactive completed-task proof does not match admission.');
+  }
+  return binding.prepare(signal);
 }
 
 export async function prepareWindowsTaskRetirementCheckpoint(control, proof, admission, { signal } = {}) {
@@ -212,10 +221,13 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mo
         } else if (method === 'prepare-retirement-checkpoint') {
           result = captureWindowsTaskRetirementCheckpoint(reply.value);
           prepared = result.intent;
-        } else if (method === 'prepare-retirement') {
+        } else if (method === 'prepare-retirement' || method === 'prepare-inactive-retirement') {
           result = prepared = captureWindowsTaskRetirement(reply.value);
         }
         if (prepared && prepared.intent.control !== control) throw new Error('Retirement intent control differs.');
+        if (prepared && prepared.intent.version !== (inactive ? 2 : 1)) {
+          throw new Error('Retirement intent does not match original active or inactive authority.');
+        }
         const observed = prepared ? prepared.intent.completion : captureWindowsTaskCompletionProof(reply.value);
         if (!isDeepStrictEqual(observed, observation)) throw new Error('Original completed-task proof observation changed.');
         await assertWindowsAdmission(control, admission, { signal: requestSignal });
@@ -289,7 +301,13 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mo
     if (mode === 'deployment') return deploymentContext();
     if (mode === 'task') return retirementContext();
     const proof = contextFor('proof');
-    if (inactive) return proof;
+    if (inactive) {
+      inactiveProofs.set(proof, { control, admission, prepare: requestSignal => {
+        requireMode('proof');
+        return request('prepare-inactive-retirement', requestSignal);
+      } });
+      return proof;
+    }
     const fullRequest = (method, requestSignal) => {
       requireMode('proof');
       return request(method, requestSignal);

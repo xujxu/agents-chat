@@ -60,7 +60,7 @@ try {
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
         if ($id -ne $sequence + 1 -or $method -cnotin @(
-            'check', 'close', 'prepare-retirement', 'prepare-retirement-checkpoint', 'begin-retirement', 'retire-next',
+            'check', 'close', 'prepare-retirement', 'prepare-inactive-retirement', 'prepare-retirement-checkpoint', 'begin-retirement', 'retire-next',
             'retain-workers', 'begin-deployment-retirement', 'retire-deployment-next')) {
             throw 'Invalid completed-task proof request.'
         }
@@ -70,7 +70,10 @@ try {
             throw 'Original completed-task proof controller changed.'
         }
         $stage = $method
-        if ($Inactive -and $method -cnotin @('check', 'close')) { throw 'Inactive proof is read-only.' }
+        if (($Inactive -and $method -cnotin @('check', 'close', 'prepare-inactive-retirement')) -or
+            (-not $Inactive -and $method -ceq 'prepare-inactive-retirement')) {
+            throw 'Request does not match original inactive completion authority.'
+        }
         if (($scope -and $method -cnotin @('check', 'close', 'retire-next', 'retain-workers', 'begin-deployment-retirement')) -or
             ($deployment -and $method -cnotin @('check', 'close', 'retire-deployment-next')) -or
             ($proof -and $method -cin @('retire-next', 'retain-workers', 'begin-deployment-retirement', 'retire-deployment-next'))) {
@@ -106,6 +109,9 @@ try {
             $value = Assert-AgentsChatTaskRetirement $scope
         } elseif ($method -ceq 'retire-next') {
             $value = Remove-AgentsChatNextRetirementFile $scope
+        } elseif ($method -ceq 'prepare-inactive-retirement') {
+            $value = Prepare-AgentsChatTaskRetirement -Context $proof `
+                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive
         } elseif ($method -ceq 'prepare-retirement') {
             $value = Prepare-AgentsChatTaskRetirement -Context $proof `
                 -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
