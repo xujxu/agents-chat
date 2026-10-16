@@ -14327,6 +14327,27 @@ Include both new files in `saved-worker-engine.mjs`.
   record actual results before retirement integration. This step grants no
   mutation or lock-release authority and does not enable public routing.
 
+Independent inactive native proof acceptance: `bfb52dbd / 38945597215`
+passed the exact journal/state/runtime/listener observation, repeat checks,
+missing/foreign evidence, broken chain and task policy drift refusals. The
+accepted runtime survives original controller exit. Added recovery helpers
+crossed the old 32 KiB manifest budget; the same commit gives recovery manifests
+a shared 64 KiB read/write bound while retaining the 256-entry and content
+budgets, with explicit boundary coverage. Shared regression `38945601904`
+remains pending. Causal `38943997516` failed after completion but cleanup masked
+its original assertion, so its expected missing-function diagnostic is not
+claimed as confirmed.
+
+Next, connect this read-only proof to the existing owned Node/native transport
+before granting any retirement authority. `openWindowsInactiveTaskCompletionProof`
+uses an explicit native inactive mode, shares the generic immutable wire shape,
+and refuses active retirement methods. Extend `deployment-windows-completion-session.mjs`
+with an inactive mode and invoke it after original-controller exit. Require
+foreign admission refusal, original active-mode refusal, repeated proof checks
+and closed-scope refusal in the focused Actions gate. Only after that boundary
+is accepted introduce explicit version-two inactive retirement inventory and
+checkpoint semantics; do not reinterpret the original running v1 inventory.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and

@@ -35,7 +35,34 @@ async function malformedRequest(frame) {
   } catch (error) { throw await abandon(error); }
 }
 
-if (mode === 'hold') {
+if (mode === 'inactive') {
+  const { openWindowsInactiveTaskCompletionProof, prepareWindowsTaskRetirement } =
+    await import('../scripts/deployment/windows-task-completion-proof.mjs');
+  assert.equal(typeof openWindowsInactiveTaskCompletionProof, 'function',
+    'Independent inactive proof requires its owned Node/native transport');
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    await assert.rejects(openWindowsInactiveTaskCompletionProof({
+      control, pwsh, admission: Object.freeze({ check: async () => {} }),
+    }), /Original retained Windows admission/);
+    const proof = await openWindowsInactiveTaskCompletionProof({ control, pwsh, admission });
+    try {
+      assert.equal(proof.observation.status, 'observed');
+      assert.equal(proof.observation.mutationAuthority, false);
+      assert.equal(proof.observation.lease, 'released');
+      assert.ok(Object.isFrozen(proof) && Object.isFrozen(proof.observation));
+      assert.deepEqual(await proof.check(), proof.observation);
+      await assert.rejects(prepareWindowsTaskRetirement(control, proof, admission),
+        /Original retained completed-task proof/);
+      await assert.rejects(openWindowsTaskCompletionProof({ control, pwsh, admission }),
+        /Completed-task proof unavailable/);
+      assert.deepEqual(await proof.check(), proof.observation);
+    } finally { await proof.close(); }
+    await assert.rejects(proof.check(), /Completed-task proof unavailable/);
+    await proof.close();
+    await admission.check();
+  });
+  console.log('PASS: independent inactive proof uses owned Node/native transport and refuses active retirement authority');
+} else if (mode === 'hold') {
   await withWindowsAdmission(control, { pwsh }, async admission => {
     const proof = await openWindowsTaskCompletionProof({ control, pwsh, admission });
     try {

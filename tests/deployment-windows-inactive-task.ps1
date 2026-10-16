@@ -120,6 +120,18 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             try { $null = Assert-AgentsChatInactiveCompletionProof $proof }
             finally { Close-AgentsChatTaskCompletionProof $proof }
             Write-Output 'PASS: independent inactive completion retains exact journal, accepted state, released runtime and listener; missing/foreign evidence, broken chains and policy drift are refused'
+            $observer = [Deployment.WindowsControllerProcess]::Start($node,
+                @((Join-Path $PSScriptRoot 'deployment-windows-completion-session.mjs'), $control,
+                    [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, 'inactive'), $control, $environment)
+            try {
+                $observerOutput = $observer.StandardOutput.ReadToEndAsync()
+                $observerDiagnostic = $observer.StandardError.ReadToEndAsync()
+                Assert ($observer.WaitForExit(180000)) 'Independent inactive proof Node transport timed out'
+                Write-Output $observerOutput.GetAwaiter().GetResult()
+                $errors = $observerDiagnostic.GetAwaiter().GetResult()
+                if ($errors) { [Console]::Error.WriteLine($errors) }
+                Assert ($observer.ExitCode -eq 0) 'Independent inactive proof Node transport failed'
+            } finally { $observer.Dispose() }
             $finalDefinition = (Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-replacement-complete.json') -Raw |
                 ConvertFrom-Json).definition
             $task = $folder.GetTask($TaskName)
