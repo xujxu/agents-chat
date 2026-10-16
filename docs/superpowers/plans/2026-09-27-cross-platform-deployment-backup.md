@@ -14027,10 +14027,12 @@ transaction ownership follow only after the pure binding gate.
   Require stopped preflight, matching project/operation/start time/retired
   generation and null previous phase/error; reject restore, running state,
   foreign lock and later phases. The immutable result has no live owner fields.
-- [ ] Run the existing focused command-contract Actions gate with application,
+- [x] Run the existing focused command-contract Actions gate with application,
   live, commands flags and `windows_restore_scenario=failed`. Require only two
   new missing-module failures and 67 prior passes.
-- [ ] Implement the builder using `captureLockOwner`, `validateState` and
+  Confirmed `775dff91 / 38864020874`, job `116852593205`: 67 prior passes,
+  exactly two new missing-module failures.
+- [x] Implement the builder using `captureLockOwner`, `validateState` and
   `captureWindowsInactiveTaskObservation`; produce version2/kind-inactive,
   original operation/controller/task/policy/configuration and retired identity.
   Do not call a native method or write any file from the builder.
