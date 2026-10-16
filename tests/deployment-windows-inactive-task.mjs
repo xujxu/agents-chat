@@ -63,8 +63,41 @@ try {
     assert.deepEqual(await readFile(path.join(control, 'state.json')), stateBytes);
     assert.deepEqual(await readFile(path.join(control, 'lock', 'owner.json')), lockBytes);
     assert.deepEqual(await admissionScope.check(), admissionScope.observation);
-    await assert.rejects(captureWindowsInactiveTaskAdmission(options),
-      { code: 'DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED' });
+    const duplicateScope = await inspectWindowsInactiveTask({ taskName, project, pwsh });
+    try {
+      await assert.rejects(captureWindowsInactiveTaskAdmission({ ...options, scope: duplicateScope }),
+        { code: 'DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED' });
+    } finally { await duplicateScope.close(); }
+    const { beginWindowsInactiveTaskTransaction, assertWindowsInactiveTaskSnapshotStage } =
+      await import(pathToFileURL(path.join(source, 'windows-inactive-task-transaction.mjs')).href);
+    const transactionOptions = { scope: admissionScope, control, lock, ...published };
+    await assert.rejects(beginWindowsInactiveTaskTransaction(transactionOptions),
+      /stopped-phase transaction/);
+    const sourceCommit = 'a'.repeat(40);
+    const stoppedState = {
+      ...state, phase: 'stopped', previousPhase: 'preflight', sourceCommit, targetCommit: 'b'.repeat(40),
+    };
+    await writeState(control, stoppedState);
+    await assert.rejects(beginWindowsInactiveTaskTransaction({ ...transactionOptions, scope: { ...admissionScope } }));
+    const transaction = await beginWindowsInactiveTaskTransaction(transactionOptions);
+    try {
+      const snapshotOptions = { context: transaction, control, lock, sourceCommit };
+      await assert.rejects(assertWindowsInactiveTaskSnapshotStage(snapshotOptions), /copying/);
+      await writeState(control, { ...stoppedState, phase: 'copying', previousPhase: 'stopped' });
+      const metadata = await assertWindowsInactiveTaskSnapshotStage(snapshotOptions);
+      assert.equal(metadata.project, project);
+      assert.equal(metadata.sourceCommit, sourceCommit);
+      assert.equal(metadata.task.name, taskName);
+      assert.equal(Object.hasOwn(metadata.task, 'instanceGuid'), false);
+      await assert.rejects(assertWindowsInactiveTaskSnapshotStage({
+        ...snapshotOptions, context: { ...transaction },
+      }));
+      await assert.rejects(assertWindowsInactiveTaskSnapshotStage({
+        ...snapshotOptions, sourceCommit: 'c'.repeat(40),
+      }));
+      await transaction.check();
+    } finally { await transaction.close(); }
+    await assert.rejects(transaction.check(), /closed/);
     assert.deepEqual(await readFile(published.admission), bytes);
   });
 } finally {

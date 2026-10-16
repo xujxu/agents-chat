@@ -14075,6 +14075,39 @@ token and changed-to-running state refusals. All must occur before publication
 and leave the genuine inactive observation usable. Restore fixture state bytes,
 then require the same successful create-only admission and retained-lock proof.
 
+### Task 5FS: Consume stopped admission for the copying-stage transaction
+
+Keep the original native inactive scope alive across publication and copying;
+do not invent a live owner or reuse the running transaction registry. Retain the
+published admission bytes, actual lock and original preflight state in that
+scope. A separate transaction consumes only this retained publication after
+the same operation enters stopped/preflight with `priorRuntime: stopped`.
+
+**Files:** add `scripts/deployment/windows-inactive-task-transaction.mjs`;
+extend `windows-managed-task.mjs` with retained inactive-publication checks,
+the saved worker inventory, and the real inactive-task Node fixture.
+
+- [x] Extend the real fixture with:
+
+  ```js
+  beginWindowsInactiveTaskTransaction({ scope, control, lock, admission, sha256 });
+  assertWindowsInactiveTaskSnapshotStage({ context, control, lock, sourceCommit });
+  ```
+
+  Refuse preflight before stopped and copied scope objects; after a legitimate
+  stopped-to-copying state transition return snapshot task metadata without an
+  instance GUID. Refuse a wrong source commit, forged transaction and closed
+  transaction. Keep duplicate publication refusal in an independent observer
+  so it does not poison the legitimate retained scope.
+- [ ] Dispatch the focused Actions command gate, require the missing consumer
+  module to fail after the 69 contracts and original publication checks.
+- [ ] Implement a separate WeakMap transaction, native recheck plus exact
+  lock/admission/state-byte rechecks around each observed state. Permit only
+  stopped -> copying -> rotating -> backup-ready for this initial copy-side
+  consumer. Do not enable source mutation or activation yet.
+- [ ] Repeat Actions and require the actual copying-stage proof and all prior
+  contracts. Public deployment remains gated until the full pipeline is wired.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
