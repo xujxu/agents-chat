@@ -66,9 +66,9 @@ try {
     $environment.Add('RUNTIME_LITERAL', 'literal %n $HOME " space')
     if ($Scenario.StartsWith('guarded-')) { $environment.Add('RUNTIME_GUARDED_LAUNCH', $root) }
     if ($StoppedProof) { $environment.Add('RUNTIME_LISTENER_PORT', '3010') }
-    if ($StoppedProof -or $Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
+    if ($StoppedProof -or $Scenario -ceq 'task-inhibition' -or $Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
         $address = switch ($Scenario) { 'listener-v4' { '127.0.0.1' } 'listener-v6' { '::' } default { 'independent' } }
-        if ($StoppedProof -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) { $address = '127.0.0.1' }
+        if ($StoppedProof -or $Scenario -ceq 'task-inhibition' -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) { $address = '127.0.0.1' }
         $environment.Add('RUNTIME_LISTENER_ADDRESS', $address)
     }
     $bundle = New-AgentsChatRuntimeBundle -Source $source -Directory $root -File $node `
@@ -85,7 +85,7 @@ try {
         try { $retained.Check() }
         finally { $retained.Dispose() }
     }
-    if ($StoppedProof -or $Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
+    if ($StoppedProof -or $Scenario -ceq 'task-inhibition' -or $Scenario.StartsWith('listener-') -or $Scenario -ceq 'transaction-activate-readiness' -or $Scenario.StartsWith('transaction-activate-complete')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'deployment-windows-runtime-listener.cjs') -Destination (Join-Path $project 'listener-fixture.cjs')
     }
     @'

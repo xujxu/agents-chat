@@ -252,6 +252,7 @@ try {
         await import(pathToFileURL(path.join(source, 'windows-inactive-task-transaction.mjs')).href);
       assert.equal(typeof startWindowsInactiveTask, 'function', 'Missing native inactive guarded startup');
       await assert.rejects(startWindowsInactiveTask({ ...replacementOptions, context: { ...transaction } }));
+      const previousListener = JSON.parse(await readFile(path.join(project, 'listener.json'), 'utf8'));
       const active = await startWindowsInactiveTask(replacementOptions);
       assert.equal(active.status, 'guarded-running');
       assert.equal(active.taskName, taskName);
@@ -263,6 +264,27 @@ try {
       await transaction.check();
       await assert.rejects(startWindowsInactiveTask(replacementOptions));
       console.log('PASS: native inactive guarded startup binds a distinct actual Scheduler owner, readiness and owned Job without inventing a prior instance');
+      assert.equal(typeof transaction.listener, 'function', 'Missing inactive owned listener authority');
+      await assert.rejects(transaction.listener({ port: 0 }));
+      let listener;
+      const listenerDeadline = Date.now() + 30000;
+      do {
+        listener = JSON.parse(await readFile(path.join(project, 'listener.json'), 'utf8'));
+        if (listener.pid !== previousListener.pid) break;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } while (Date.now() < listenerDeadline);
+      assert.notEqual(listener.pid, previousListener.pid);
+      await writeFile(path.join(project, 'health-mode'), 'ready');
+      const { waitWindowsReadiness } = await import(pathToFileURL(path.join(source, 'windows-readiness.mjs')).href);
+      const ready = await waitWindowsReadiness({
+        context: transaction, port: listener.port, providers: ['admin-login'], waitSeconds: 30,
+      });
+      assert.equal(ready.status, 'ready');
+      assert.equal(ready.generation, active.runtime.generation);
+      const owned = await transaction.listener({ port: listener.port });
+      assert.equal(owned.pid, listener.pid);
+      assert.equal(owned.generation, active.runtime.generation);
+      console.log('PASS: inactive startup readiness verifies HTTP providers only through its retained original Job listener');
     } finally { await transaction.close(); }
     if (activatedRuntime) {
       const { processIdentity } = await import(pathToFileURL(path.join(source, 'process-identity.mjs')).href);
