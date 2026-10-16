@@ -5,7 +5,9 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 import { assertWindowsTaskSnapshotStage } from './windows-task-transaction.mjs';
-import { assertWindowsInactiveTaskSnapshotStage } from './windows-inactive-task-transaction.mjs';
+import {
+  assertWindowsInactiveTaskSnapshotStage, retainWindowsInactiveTaskSnapshot,
+} from './windows-inactive-task-transaction.mjs';
 import { inspectGitMetadata } from './git-metadata.mjs';
 import { inspectSnapshotScope } from './snapshot-scope.mjs';
 import { relativeSnapshotPath } from './snapshot-files.mjs';
@@ -17,8 +19,10 @@ export function createWindowsTaskSnapshot(options) {
   return createBoundWindowsTaskSnapshot(options, assertWindowsTaskSnapshotStage);
 }
 
-export function createWindowsInactiveTaskSnapshot(options) {
-  return createBoundWindowsTaskSnapshot(options, assertWindowsInactiveTaskSnapshotStage);
+export async function createWindowsInactiveTaskSnapshot(options) {
+  const snapshot = await createBoundWindowsTaskSnapshot(options, assertWindowsInactiveTaskSnapshotStage);
+  await retainWindowsInactiveTaskSnapshot({ ...options, sourceCommit: snapshot.source.commit, snapshot });
+  return snapshot;
 }
 
 async function createBoundWindowsTaskSnapshot({

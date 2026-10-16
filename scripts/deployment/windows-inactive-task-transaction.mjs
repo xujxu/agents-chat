@@ -3,6 +3,8 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { captureLockOwner, validateState } from './state.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 import { assertWindowsInactiveTaskAdmissionBinding } from './windows-managed-task.mjs';
+import { verifySnapshot } from './snapshot.mjs';
+import { rotateSnapshot } from './snapshot-rotation.mjs';
 
 const transactions = new WeakMap();
 const consumers = new WeakSet();
@@ -49,6 +51,7 @@ export async function beginWindowsInactiveTaskTransaction(options) {
     let closed = false;
     let busy = false;
     let failure;
+    const retained = { ...originalOptions, observation: initial.observation, snapshot: null, rotating: false, rotated: false };
     const context = Object.freeze({
       async check({ signal: requestSignal } = {}) {
         if (closed) throw new Error('Inactive task transaction is closed.');
@@ -60,8 +63,18 @@ export async function beginWindowsInactiveTaskTransaction(options) {
           if (state.sourceCommit !== current.sourceCommit || state.targetCommit !== current.targetCommit
             || (state.phase === current.phase ? !same(state, current)
               : state.phase !== next[current.phase] || state.previousPhase !== current.phase)
-            || state.phase !== 'backup-ready' && state.backupId !== current.backupId) {
+            || (['rotating', 'backup-ready'].includes(state.phase)
+              ? !retained.snapshot || state.backupId !== retained.snapshot.id
+              : state.backupId !== current.backupId)) {
             throw new Error('Inactive transaction phase or source binding changed.');
+          }
+          if (state.phase === 'backup-ready' && (!retained.rotated
+            || !same(await verifySnapshot(path.join(control, 'backup'), { signal: requestSignal }), retained.snapshot))) {
+            throw new Error('Inactive transaction backup differs from its verified rotation.');
+          }
+          if (state.phase === 'backup-ready'
+            && !same((await readState({ ...originalOptions, signal: requestSignal })).state, state)) {
+            throw new Error('Inactive transaction state changed during backup verification.');
           }
           current = state;
           return state;
@@ -69,13 +82,54 @@ export async function beginWindowsInactiveTaskTransaction(options) {
         finally { busy = false; }
       },
       async close() {
-        if (busy) throw new Error('Cannot close a busy inactive task transaction.');
+        if (busy || retained.rotating) throw new Error('Cannot close a busy inactive task transaction.');
         if (!closed) { closed = true; await scope.close(); }
       },
     });
-    transactions.set(context, { ...originalOptions, observation: initial.observation });
+    transactions.set(context, retained);
     return context;
   } catch (error) { consumers.delete(scope); throw error; }
+}
+
+export async function retainWindowsInactiveTaskSnapshot({
+  context, control, lock, sourceCommit, destination, snapshot, signal,
+}) {
+  const binding = await assertWindowsInactiveTaskSnapshotStage({ context, control, lock, sourceCommit, signal });
+  const retained = transactions.get(context);
+  if (retained.snapshot || destination !== path.join(control, 'staging')
+    || snapshot?.project !== binding.project || snapshot.source?.commit !== sourceCommit
+    || !same(snapshot.runtime, { platform: 'win32', state: 'stopped', task: binding.task })
+    || !same(await verifySnapshot(destination, { signal }), snapshot)) {
+    throw new Error('Inactive snapshot must match its original verified staging and task binding.');
+  }
+  await context.check({ signal });
+  retained.snapshot = JSON.parse(JSON.stringify(snapshot));
+}
+
+export async function rotateWindowsInactiveTaskSnapshot({ context, control, lock: supplied, signal }) {
+  const retained = transactions.get(context);
+  const lock = captureLockOwner(supplied);
+  if (!retained || retained.control !== control || !same(retained.lock, lock) || !retained.snapshot
+    || retained.rotating || retained.rotated) {
+    throw new Error('Rotation requires the original inactive snapshot transaction.');
+  }
+  retained.rotating = true;
+  try {
+    const state = await context.check({ signal });
+    if (state.phase !== 'rotating' || state.previousPhase !== 'copying') {
+      throw new Error('Inactive snapshot rotation requires its rotating phase.');
+    }
+    if (!same(await verifySnapshot(path.join(control, 'staging'), { signal }), retained.snapshot)) {
+      throw new Error('Inactive staging changed before rotation.');
+    }
+    await context.check({ signal });
+    await rotateSnapshot(control, { project: lock.project });
+    if (!same(await verifySnapshot(path.join(control, 'backup'), { signal }), retained.snapshot)) {
+      throw new Error('Inactive backup changed during rotation.');
+    }
+    await context.check({ signal });
+    retained.rotated = true;
+  } finally { retained.rotating = false; }
 }
 
 export async function assertWindowsInactiveTaskSnapshotStage({ context, control, lock: supplied, sourceCommit, signal }) {
