@@ -31,11 +31,26 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
     finally { Close-AgentsChatTaskCompletionProof $scope }
     $control = "$Project-inactive-control"
     [Deployment.WindowsPrivateFile]::CreateDirectory($control).Dispose()
+    $controller = $null
     try {
-        & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-inactive-task.mjs') `
-            $Source $TaskName $Project ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) $control
-        Assert ($LASTEXITCODE -eq 0) 'Inactive task Node bridge failed'
-    } finally { Remove-Item -LiteralPath $control -Recurse -Force }
+        $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $environment.Add('SystemRoot', $env:SystemRoot)
+        $environment.Add('TEMP', $control)
+        $environment.Add('TMP', $control)
+        $controller = [Deployment.WindowsControllerProcess]::Start((Get-Command node).Source,
+            @((Join-Path $PSScriptRoot 'deployment-windows-inactive-task.mjs'), $Source, $TaskName, $Project,
+                [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $control), $control, $environment)
+        $output = $controller.StandardOutput.ReadToEndAsync()
+        $diagnostic = $controller.StandardError.ReadToEndAsync()
+        Assert ($controller.WaitForExit(300000)) 'Inactive task Node bridge timed out'
+        Write-Output $output.GetAwaiter().GetResult()
+        $errors = $diagnostic.GetAwaiter().GetResult()
+        if ($errors) { [Console]::Error.WriteLine($errors) }
+        Assert ($controller.ExitCode -eq 0) 'Inactive task Node bridge failed'
+    } finally {
+        if ($controller) { $controller.Dispose() }
+        Remove-Item -LiteralPath $control -Recurse -Force
+    }
     $task = $folder.GetTask($TaskName)
     Assert ([string]$task.Xml -ceq $definition -and [string]$task.GetSecurityDescriptor(7) -ceq $security -and
         $task.GetInstances(0).Count -eq 0 -and -not $task.Enabled) 'Inactive observation changed task policy or started work'
