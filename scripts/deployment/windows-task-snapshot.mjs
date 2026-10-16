@@ -5,6 +5,7 @@ import { isDeepStrictEqual as same } from 'node:util';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 import { assertWindowsTaskSnapshotStage } from './windows-task-transaction.mjs';
+import { assertWindowsInactiveTaskSnapshotStage } from './windows-inactive-task-transaction.mjs';
 import { inspectGitMetadata } from './git-metadata.mjs';
 import { inspectSnapshotScope } from './snapshot-scope.mjs';
 import { relativeSnapshotPath } from './snapshot-files.mjs';
@@ -12,9 +13,17 @@ import { createSnapshot } from './snapshot.mjs';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
-export async function createWindowsTaskSnapshot({
+export function createWindowsTaskSnapshot(options) {
+  return createBoundWindowsTaskSnapshot(options, assertWindowsTaskSnapshotStage);
+}
+
+export function createWindowsInactiveTaskSnapshot(options) {
+  return createBoundWindowsTaskSnapshot(options, assertWindowsInactiveTaskSnapshotStage);
+}
+
+async function createBoundWindowsTaskSnapshot({
   context, control, lock, configuration, destination, id, source: suppliedSource, recoveryEngine, pwsh, signal, onProgress,
-}) {
+}, assertSnapshotStage) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || typeof configuration?.checkFiles !== 'function'
     || !Array.isArray(configuration.files) || typeof pwsh !== 'string' || !path.isAbsolute(pwsh)
@@ -25,7 +34,7 @@ export async function createWindowsTaskSnapshot({
   const source = Object.freeze(captureWorkerFields(suppliedSource, ['commit', 'provenance'], 'snapshot source'));
   if (!['observed', 'verified'].includes(source.provenance)) throw new Error('Invalid task snapshot source provenance.');
   const authority = { context, control, lock, sourceCommit: source.commit, signal };
-  const binding = await assertWindowsTaskSnapshotStage(authority);
+  const binding = await assertSnapshotStage(authority);
   const project = binding.project;
   const bytes = await readWorkerFile(binding.task.configuration, 1024 * 1024, { privateMode: true });
   if (digest(bytes) !== binding.task.configurationSha256) throw new Error('Original task snapshot configuration changed.');
@@ -48,7 +57,7 @@ export async function createWindowsTaskSnapshot({
   }
   const checkRuntime = async () => {
     signal?.throwIfAborted();
-    if (!same(await assertWindowsTaskSnapshotStage(authority), binding)) throw new Error('Original task snapshot binding changed.');
+    if (!same(await assertSnapshotStage(authority), binding)) throw new Error('Original task snapshot binding changed.');
     await configuration.checkFiles({ signal });
     for (const file of files) {
       signal?.throwIfAborted();
@@ -56,7 +65,7 @@ export async function createWindowsTaskSnapshot({
         throw new Error('Original task snapshot runtime bundle changed.');
       }
     }
-    if (!same(await assertWindowsTaskSnapshotStage(authority), binding)) {
+    if (!same(await assertSnapshotStage(authority), binding)) {
       throw new Error('Original task snapshot authority changed after configuration observation.');
     }
   };
