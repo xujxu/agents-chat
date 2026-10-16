@@ -14199,7 +14199,13 @@ the original stopped preflight state, task generation, lock and controller accou
 Publish the original configuration/helpers into a create-only operation directory;
 reject copied scopes, foreign locks, abort and duplicate publication. Preserve
 the original state/configuration and disabled task. This does not replace or
-activate the task. Causal fixture `2d3913b6 / 38913367797` is pending acceptance.
+activate the task. Causal fixture `2d3913b6 / 38913367797` failed at the missing
+inactive publisher. Implementation `e33df9ee / 38914182323` passed 69 contracts,
+saved-engine inactive publication, configuration preservation and owned build.
+Native replacement/activation must use stopped admission without fabricating an
+original owner exit code or Scheduler instance: the existing running retirement
+and activation routines explicitly require those original live objects and are
+not valid inactive-task consumers.
 
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
