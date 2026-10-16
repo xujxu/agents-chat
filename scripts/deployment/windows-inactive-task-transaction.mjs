@@ -2,7 +2,9 @@ import path from 'node:path';
 import { isDeepStrictEqual as same } from 'node:util';
 import { captureLockOwner, validateState } from './state.mjs';
 import { readWorkerFile } from './worker-files.mjs';
-import { assertWindowsInactiveTaskAdmissionBinding } from './windows-managed-task.mjs';
+import {
+  assertWindowsInactiveTaskAdmissionBinding, captureWindowsInactiveTaskActivationPreparation,
+} from './windows-managed-task.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { rotateSnapshot } from './snapshot-rotation.mjs';
 
@@ -11,6 +13,7 @@ const consumers = new WeakSet();
 const next = {
   stopped: 'copying', copying: 'rotating', rotating: 'backup-ready',
   'backup-ready': 'source-selected', 'source-selected': 'dependencies', dependencies: 'building',
+  building: 'configuring', configuring: 'activating',
 };
 const commit = value => typeof value === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
 
@@ -85,7 +88,7 @@ export async function beginWindowsInactiveTaskTransaction(options) {
         finally { busy = false; }
       },
       async close() {
-        if (busy || retained.rotating) throw new Error('Cannot close a busy inactive task transaction.');
+        if (busy || retained.rotating || retained.preparing) throw new Error('Cannot close a busy inactive task transaction.');
         if (!closed) { closed = true; await scope.close(); }
       },
     });
@@ -173,4 +176,33 @@ export async function assertWindowsInactiveTaskSourceStage({
   if (!same(await context.check({ signal }), state)) {
     throw new Error('Inactive source-stage state changed during backup verification.');
   }
+}
+
+export async function prepareWindowsInactiveTaskActivation({ context, control, lock: supplied, bundle, signal }) {
+  const retained = transactions.get(context);
+  const lock = captureLockOwner(supplied);
+  if (!retained || retained.control !== control || !same(retained.lock, lock) || !retained.rotated
+    || retained.preparing || retained.preparationAttempted
+    || !same(bundle, {
+      directory: path.join(control, `runtime-${lock.operationId}`),
+      configuration: path.join(control, `runtime-${lock.operationId}`, 'configuration.json'),
+      sha256: retained.observation.configurationSha256,
+    })) {
+    throw new Error('Activation preparation requires the original inactive transaction and distinct operation bundle.');
+  }
+  retained.preparing = true;
+  try {
+    const state = await context.check({ signal });
+    if (state.phase !== 'activating' || state.previousPhase !== 'configuring') {
+      throw new Error('Inactive activation preparation requires its activating phase.');
+    }
+    if (!same(await verifySnapshot(path.join(control, 'backup'), { signal }), retained.snapshot)
+      || !same(await context.check({ signal }), state)) {
+      throw new Error('Inactive activation backup or state changed.');
+    }
+    retained.preparationAttempted = true;
+    const prepared = await captureWindowsInactiveTaskActivationPreparation({ ...retained, state, signal });
+    await context.check({ signal });
+    return prepared;
+  } finally { retained.preparing = false; }
 }

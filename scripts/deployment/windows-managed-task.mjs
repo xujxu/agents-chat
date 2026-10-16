@@ -93,6 +93,9 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
           return;
         }
         if (method === 'listener') return captureTaskListener(reply.value, observation.runtime, payload.port);
+        if (method === 'prepare-inactive-activation') {
+          return Object.freeze(captureWorkerFields(reply.value, ['file', 'sha256'], 'inactive activation preparation'));
+        }
         if (method === 'capture-admission') {
           const result = captureWorkerFields(reply.value, ['admission', 'sha256'], 'managed task admission');
           if (result.admission !== path.join(payload.control, 'task-maintenance', 'admission.json')
@@ -217,4 +220,37 @@ export async function assertWindowsInactiveTaskAdmissionBinding({
   await assertLockOwner(control, lock);
   signal?.throwIfAborted();
   return Object.freeze({ observation: retained.observation, state: publication.state });
+}
+
+export async function captureWindowsInactiveTaskActivationPreparation(options) {
+  const { scope, control, signal, state } = options;
+  const { observation } = await assertWindowsInactiveTaskAdmissionBinding(options);
+  const retained = inactiveScopes.get(scope);
+  const statePath = path.join(control, 'state.json');
+  const bytes = await readWorkerFile(statePath, 65536, { privateMode: true });
+  if (!isDeepStrictEqual(validateState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))), state)) {
+    throw refused(new Error('Inactive activation state changed before native preparation.'));
+  }
+  const stateSha256 = createHash('sha256').update(bytes).digest('hex');
+  const result = await retained.request('prepare-inactive-activation', signal, { stateSha256 });
+  if (result.file !== path.join(control, 'task-maintenance', 'inactive-activation-prepared.json')
+    || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
+    throw refused(new Error('Inactive activation preparation acknowledgement differs.'));
+  }
+  const record = await readWorkerFile(result.file, 4194304, { privateMode: true });
+  const expected = {
+    version: 1, kind: 'inactive', phase: 'activation-prepared', operationId: state.operationId,
+    admissionSha256: options.sha256, stateSha256,
+    sourceCommit: state.sourceCommit, targetCommit: state.targetCommit, backupId: state.backupId,
+    taskName: observation.taskName, definition: observation.definition, securityDescriptor: observation.securityDescriptor,
+    configuration: path.join(control, `runtime-${state.operationId}`, 'configuration.json'),
+    configurationSha256: observation.configurationSha256,
+  };
+  if (createHash('sha256').update(record).digest('hex') !== result.sha256
+    || !isDeepStrictEqual(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(record)), expected)
+    || !(await readWorkerFile(statePath, 65536, { privateMode: true })).equals(bytes)) {
+    throw refused(new Error('Native inactive preparation differs from its original admission and state.'));
+  }
+  await assertWindowsInactiveTaskAdmissionBinding(options);
+  return result;
 }

@@ -83,6 +83,10 @@ function New-AgentsChatManagedTaskAdmission {
             (Test-Path -LiteralPath (Join-Path $Control 'recovery-lock'))) { throw 'Admission ownership changed.' }
         if ($Inactive) {
             $Context.AdmissionControl = $Control
+            $Context.AdmissionState = $state
+            $Context.AdmissionSha256 = $published.Sha256
+            $Context.AdmissionControllerPid = $ControllerPid
+            $Context.AdmissionControllerIdentity = $ControllerIdentity
             foreach ($file in $files) {
                 if (-not [object]::ReferenceEquals($file, $stateFile)) { $Context.Files.Add($file) }
             }
