@@ -61,6 +61,7 @@ try {
         $method = $request.method.GetString()
         if ($id -ne $sequence + 1 -or $method -cnotin @(
             'check', 'close', 'prepare-retirement', 'prepare-inactive-retirement', 'prepare-retirement-checkpoint', 'begin-retirement', 'retire-next',
+            'prepare-inactive-retirement-checkpoint',
             'retain-workers', 'begin-deployment-retirement', 'retire-deployment-next')) {
             throw 'Invalid completed-task proof request.'
         }
@@ -70,8 +71,8 @@ try {
             throw 'Original completed-task proof controller changed.'
         }
         $stage = $method
-        if (($Inactive -and $method -cnotin @('check', 'close', 'prepare-inactive-retirement')) -or
-            (-not $Inactive -and $method -ceq 'prepare-inactive-retirement')) {
+        if (($Inactive -and $method -cnotin @('check', 'close', 'prepare-inactive-retirement', 'prepare-inactive-retirement-checkpoint')) -or
+            (-not $Inactive -and $method -cin @('prepare-inactive-retirement', 'prepare-inactive-retirement-checkpoint'))) {
             throw 'Request does not match original inactive completion authority.'
         }
         if (($scope -and $method -cnotin @('check', 'close', 'retire-next', 'retain-workers', 'begin-deployment-retirement')) -or
@@ -109,6 +110,9 @@ try {
             $value = Assert-AgentsChatTaskRetirement $scope
         } elseif ($method -ceq 'retire-next') {
             $value = Remove-AgentsChatNextRetirementFile $scope
+        } elseif ($method -ceq 'prepare-inactive-retirement-checkpoint') {
+            $value = Prepare-AgentsChatTaskRetirementCheckpoint -Context $proof `
+                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive
         } elseif ($method -ceq 'prepare-inactive-retirement') {
             $value = Prepare-AgentsChatTaskRetirement -Context $proof `
                 -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive

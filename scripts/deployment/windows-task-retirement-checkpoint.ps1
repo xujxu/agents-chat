@@ -8,14 +8,15 @@ function Prepare-AgentsChatTaskRetirementCheckpoint {
     param(
         [Parameter(Mandatory)][hashtable]$Context,
         [Parameter(Mandatory)][int]$ControllerPid,
-        [Parameter(Mandatory)][string]$ControllerIdentity
+        [Parameter(Mandatory)][string]$ControllerIdentity,
+        [switch]$Inactive
     )
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
     $prepared = Prepare-AgentsChatTaskRetirement -Context $Context `
-        -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
+        -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive:$Inactive
     $candidate = [ordered]@{
-        version=1; intent=$prepared.descriptor; configuration=$Context.Configuration
+        version=$(if ($Inactive) { 2 } else { 1 }); intent=$prepared.descriptor; configuration=$Context.Configuration
         definitionSha256=(Get-AgentsChatRetirementTextHash $Context.NativeDefinition)
         securityDescriptorSha256=(Get-AgentsChatRetirementTextHash $Context.SecurityDescriptor)
         enabled=$Context.Enabled
@@ -27,17 +28,25 @@ function Prepare-AgentsChatTaskRetirementCheckpoint {
             pairedRecords=$Context.Completed.listenerPairedRecords.GetBoolean()
         }
         retiredBridge=[ordered]@{ pid=$Context.BridgePid; processIdentity=$Context.BridgeIdentity }
-        retiredOwner=[ordered]@{
+        retiredOwner=$(if ($Inactive) { [ordered]@{
+            pid=$Context.RetiredRuntime.pid; processIdentity=$Context.RetiredRuntime.identity
+        } } else { [ordered]@{
             pid=$Context.Admission.ownerPid.GetInt32()
             processIdentity=$Context.Admission.ownerIdentity.GetString()
-        }
+        } })
         creator=[ordered]@{
             pid=$ControllerPid; processIdentity=$ControllerIdentity
             bridgePid=$PID; bridgeIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
         }
+        if ($Inactive) {
+            $candidate['priorRuntime'] = [ordered]@{
+                configuration=$Context.Admission.configuration.GetString()
+                runtime=$Context.RetiredRuntime
+            }
+        }
     }
     $published = Publish-AgentsChatRetirementRecord -Context $Context -Candidate $candidate `
-        -Name 'task-retirement-checkpoint.json'
+        -Name 'task-retirement-checkpoint.json' -Inactive:$Inactive
     return [ordered]@{
         status='prepared'; descriptor=$published.descriptor; intent=$prepared; checkpoint=$published.record
     }

@@ -9,7 +9,7 @@ const fields = [
 const canonical = value => typeof value === 'string' && value.length <= 4096
   && path.isAbsolute(value) && path.resolve(value) === value && !/[\0\r\n]/.test(value);
 
-function captureRetiredRuntime(value) {
+export function captureWindowsRetiredRuntime(value) {
   const runtime = captureWorkerFields(value, [
     'pid', 'identity', 'generation', 'sessionId', 'configurationSha256', 'launcherPid', 'readySha256',
   ], 'retired runtime');
@@ -45,7 +45,7 @@ function capture(value, project, taskName, inactive) {
     throw new Error('Invalid managed task observation.');
   }
   const key = inactive ? 'retiredRuntime' : 'runtime';
-  const runtime = inactive ? captureRetiredRuntime(record[key]) : captureActivatedRuntime(record[key]);
+  const runtime = inactive ? captureWindowsRetiredRuntime(record[key]) : captureActivatedRuntime(record[key]);
   if (runtime.configurationSha256 !== record.configurationSha256) {
     throw new Error('Managed runtime configuration differs.');
   }

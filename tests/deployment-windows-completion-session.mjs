@@ -88,6 +88,19 @@ if (mode === 'inactive') {
       assert.equal(Object.hasOwn(prior.runtime, 'instanceGuid'), false);
       assert.ok(Number.isInteger(prior.runtime.sessionId) && prior.runtime.sessionId >= 0);
       assert.deepEqual(await prepareWindowsInactiveTaskRetirementCheckpoint(control, proof, admission), checkpoint);
+      const { captureWindowsTaskRetirementCheckpoint } =
+        await import('../scripts/deployment/windows-task-retirement-checkpoint.mjs');
+      for (const change of [
+        value => { delete value.checkpoint.priorRuntime; },
+        value => { value.checkpoint.version = 1; },
+        value => { value.checkpoint.priorRuntime.runtime.sessionId = -1; },
+        value => { value.checkpoint.priorRuntime.runtime.identity = proof.observation.runtime.identity; },
+        value => { value.checkpoint.priorRuntime.configuration = value.checkpoint.configuration; },
+      ]) {
+        const changed = structuredClone(checkpoint);
+        change(changed);
+        assert.throws(() => captureWindowsTaskRetirementCheckpoint(changed));
+      }
       assert.deepEqual(await proof.check(), proof.observation);
       await assert.rejects(prepareWindowsTaskRetirement(control, proof, admission),
         /Original retained completed-task proof/);
@@ -99,7 +112,7 @@ if (mode === 'inactive') {
     await proof.close();
     await admission.check();
   });
-  console.log('PASS: independent inactive proof uses owned Node/native transport and prepares only its exact version-two thirteen-file retirement intent');
+  console.log('PASS: independent inactive proof prepares exact version-two retirement intent and checkpoint with original retired runtime evidence');
 } else if (mode === 'hold') {
   await withWindowsAdmission(control, { pwsh }, async admission => {
     const proof = await openWindowsTaskCompletionProof({ control, pwsh, admission });

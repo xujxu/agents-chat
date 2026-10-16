@@ -44,11 +44,19 @@ export async function prepareWindowsTaskRetirement(control, proof, admission, { 
 }
 
 export async function prepareWindowsInactiveTaskRetirement(control, proof, admission, { signal } = {}) {
+  return inactiveBindingFor(control, proof, admission).prepare(signal);
+}
+
+export async function prepareWindowsInactiveTaskRetirementCheckpoint(control, proof, admission, { signal } = {}) {
+  return inactiveBindingFor(control, proof, admission).prepareCheckpoint(signal);
+}
+
+function inactiveBindingFor(control, proof, admission) {
   const binding = inactiveProofs.get(proof);
   if (!binding || binding.control !== control || binding.admission !== admission) {
     throw new Error('Original retained inactive completed-task proof does not match admission.');
   }
-  return binding.prepare(signal);
+  return binding;
 }
 
 export async function prepareWindowsTaskRetirementCheckpoint(control, proof, admission, { signal } = {}) {
@@ -218,7 +226,7 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mo
           } else if (result.retiredFiles !== 0) {
             throw new Error('Full-proof transfer cannot begin after missing receipts.');
           }
-        } else if (method === 'prepare-retirement-checkpoint') {
+        } else if (method === 'prepare-retirement-checkpoint' || method === 'prepare-inactive-retirement-checkpoint') {
           result = captureWindowsTaskRetirementCheckpoint(reply.value);
           prepared = result.intent;
         } else if (method === 'prepare-retirement' || method === 'prepare-inactive-retirement') {
@@ -302,10 +310,14 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mo
     if (mode === 'task') return retirementContext();
     const proof = contextFor('proof');
     if (inactive) {
-      inactiveProofs.set(proof, { control, admission, prepare: requestSignal => {
+      const prepare = (method, requestSignal) => {
         requireMode('proof');
-        return request('prepare-inactive-retirement', requestSignal);
-      } });
+        return request(method, requestSignal);
+      };
+      inactiveProofs.set(proof, { control, admission,
+        prepare: requestSignal => prepare('prepare-inactive-retirement', requestSignal),
+        prepareCheckpoint: requestSignal => prepare('prepare-inactive-retirement-checkpoint', requestSignal),
+      });
       return proof;
     }
     const fullRequest = (method, requestSignal) => {
