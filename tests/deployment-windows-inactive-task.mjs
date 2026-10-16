@@ -37,6 +37,13 @@ try {
     startedAt: lock.createdAt, updatedAt: lock.createdAt, errorCode: null,
   };
   await writeState(control, state);
+  const { saveRecoveryEngine } =
+    await import(pathToFileURL(path.join(source, 'saved-recovery-engine.mjs')).href);
+  const recovery = await saveRecoveryEngine({ control, source });
+  const { verifyWindowsRuntimePublication } = await import('./deployment-windows-runtime-publication.mjs');
+  await verifyWindowsRuntimePublication({
+    project, control, lock, pwsh, taskName, node: process.execPath, inactive: true,
+  });
   const stateBytes = await readFile(path.join(control, 'state.json'));
   const lockBytes = await readFile(path.join(control, 'lock', 'owner.json'));
   await withWindowsAdmission(control, { pwsh }, async admission => {
@@ -103,10 +110,7 @@ try {
       const { createWindowsInactiveTaskSnapshot } =
         await import(pathToFileURL(path.join(source, 'windows-task-snapshot.mjs')).href);
       assert.equal(typeof createWindowsInactiveTaskSnapshot, 'function', 'Missing inactive task snapshot integration');
-      const { saveRecoveryEngine } =
-        await import(pathToFileURL(path.join(source, 'saved-recovery-engine.mjs')).href);
       const { verifySnapshot } = await import(pathToFileURL(path.join(source, 'snapshot.mjs')).href);
-      const recovery = await saveRecoveryEngine({ control, source });
       const { prepareWindowsConfigurationFixture } = await import('./deployment-windows-configuration.mjs');
       const configuration = await prepareWindowsConfigurationFixture({ scope: admissionScope, pwsh, inactive: true });
       const destination = path.join(control, 'staging');

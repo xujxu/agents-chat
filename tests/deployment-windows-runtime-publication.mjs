@@ -4,12 +4,15 @@ import { access, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export async function verifyWindowsRuntimePublication({ control, project, taskName, lock, node, pwsh }) {
+export async function verifyWindowsRuntimePublication({ control, project, taskName, lock, node, pwsh, inactive = false }) {
   const entry = path.join(control, 'recovery-engine', 'windows-runtime-publication.mjs');
   await assert.doesNotReject(access(entry), 'Missing saved original runtime bundle publisher');
-  const { prepareWindowsRuntimeBundle } = await import(pathToFileURL(entry).href);
-  const { inspectWindowsManagedTask } = await import(pathToFileURL(path.join(control, 'recovery-engine', 'windows-managed-task.mjs')).href);
-  const scope = await inspectWindowsManagedTask({ taskName, project, pwsh });
+  const publication = await import(pathToFileURL(entry).href);
+  const prepareWindowsRuntimeBundle = inactive ? publication.prepareWindowsInactiveRuntimeBundle : publication.prepareWindowsRuntimeBundle;
+  assert.equal(typeof prepareWindowsRuntimeBundle, 'function', 'Missing runtime publication for selected task state');
+  const discovery = await import(pathToFileURL(path.join(control, 'recovery-engine', 'windows-managed-task.mjs')).href);
+  const inspect = inactive ? discovery.inspectWindowsInactiveTask : discovery.inspectWindowsManagedTask;
+  const scope = await inspect({ taskName, project, pwsh });
   const directory = path.join(control, `runtime-${lock.operationId}`);
   const stateFile = path.join(control, 'state.json');
   const state = await readFile(stateFile);
@@ -33,6 +36,6 @@ export async function verifyWindowsRuntimePublication({ control, project, taskNa
     assert.deepEqual(await readFile(scope.observation.configuration), bytes);
     assert.deepEqual(await readFile(stateFile), state);
     assert.deepEqual(await scope.check(), scope.observation);
-    console.error('PASS: private runtime publication preserves exact configuration and helpers, refuses foreign authority and never overwrites an existing bundle or changes the running task');
+    console.error(`PASS: private runtime publication preserves exact configuration and helpers, refuses foreign authority and never overwrites an existing bundle or changes the ${inactive ? 'inactive' : 'running'} task`);
   } finally { await scope.close(); }
 }
