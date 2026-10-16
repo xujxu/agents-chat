@@ -178,5 +178,37 @@ async function captureTaskAdmission({ scope, control, lock: suppliedLock, admiss
     }
   }
   await assertWindowsAdmission(root, admission, { signal });
+  if (inactive) {
+    retained.publication = Object.freeze({
+      control: root, lock, state: Object.freeze({ ...state }), ...result,
+      record: expected,
+    });
+  }
   return result;
+}
+
+export async function assertWindowsInactiveTaskAdmissionBinding({
+  scope, control, lock: supplied, admission, sha256, signal,
+}) {
+  signal?.throwIfAborted();
+  const retained = inactiveScopes.get(scope);
+  const publication = retained?.publication;
+  const lock = captureLockOwner(supplied);
+  if (!publication || publication.control !== control || !isDeepStrictEqual(publication.lock, lock)
+    || publication.admission !== admission || publication.sha256 !== sha256) {
+    throw refused(new Error('Original retained inactive admission is required.'));
+  }
+  await assertLockOwner(control, lock);
+  const bytes = await readWorkerFile(admission, 4194304, { privateMode: true });
+  if (createHash('sha256').update(bytes).digest('hex') !== sha256
+    || !isDeepStrictEqual(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), publication.record)) {
+    throw refused(new Error('Original inactive admission changed.'));
+  }
+  await retained.request('check', signal);
+  if (!(await readWorkerFile(admission, 4194304, { privateMode: true })).equals(bytes)) {
+    throw refused(new Error('Inactive admission changed during native verification.'));
+  }
+  await assertLockOwner(control, lock);
+  signal?.throwIfAborted();
+  return Object.freeze({ observation: retained.observation, state: publication.state });
 }

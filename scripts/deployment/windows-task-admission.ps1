@@ -81,6 +81,14 @@ function New-AgentsChatManagedTaskAdmission {
         foreach ($file in $files) { $file.Check() }
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity -or
             (Test-Path -LiteralPath (Join-Path $Control 'recovery-lock'))) { throw 'Admission ownership changed.' }
+        if ($Inactive) {
+            $Context.AdmissionControl = $Control
+            foreach ($file in $files) {
+                if (-not [object]::ReferenceEquals($file, $stateFile)) { $Context.Files.Add($file) }
+            }
+            $files.Clear()
+            $files.Add($stateFile)
+        }
         return [pscustomobject]@{ admission=$path; sha256=$published.Sha256 }
     } catch {
         $failure = $_.Exception

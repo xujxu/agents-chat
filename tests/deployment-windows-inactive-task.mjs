@@ -98,6 +98,7 @@ try {
       await transaction.check();
     } finally { await transaction.close(); }
     await assert.rejects(transaction.check(), /closed/);
+    console.log('PASS: inactive transaction consumes original stopped admission and grants only matching copying-stage snapshot metadata');
     assert.deepEqual(await readFile(published.admission), bytes);
   });
 } finally {

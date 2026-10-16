@@ -6,6 +6,10 @@ function Assert-AgentsChatInactiveTask([hashtable]$Context) {
     $Context.Busy = $true
     try {
         foreach ($file in $Context.Files) { $file.Check() }
+        if ($Context.ContainsKey('AdmissionControl') -and
+            (Test-Path -LiteralPath (Join-Path $Context.AdmissionControl 'recovery-lock'))) {
+            throw 'Inactive task admission has conflicting recovery authority.'
+        }
         $task = $Context.Folder.GetTask($Context.TaskName)
         if ($task.Enabled -or [string]$task.Xml -cne $Context.NativeDefinition -or
             [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor -or

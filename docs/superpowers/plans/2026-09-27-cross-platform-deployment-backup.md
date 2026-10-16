@@ -14101,10 +14101,15 @@ the saved worker inventory, and the real inactive-task Node fixture.
   so it does not poison the legitimate retained scope.
 - [ ] Dispatch the focused Actions command gate, require the missing consumer
   module to fail after the 69 contracts and original publication checks.
+  Confirmed `33761044 / 38881549333`: 69 contracts pass, real fixture reaches
+  the new consumer import and fails with its missing module.
 - [ ] Implement a separate WeakMap transaction, native recheck plus exact
   lock/admission/state-byte rechecks around each observed state. Permit only
   stopped -> copying -> rotating -> backup-ready for this initial copy-side
   consumer. Do not enable source mutation or activation yet.
+  Native publication transfers original control/lock/admission handles into
+  the retained inactive scope; it releases only the mutable state handle.
+  Subsequent native checks also reject a conflicting recovery lock.
 - [ ] Repeat Actions and require the actual copying-stage proof and all prior
   contracts. Public deployment remains gated until the full pipeline is wired.
 
