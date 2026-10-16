@@ -4,7 +4,7 @@ import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 import { requireNoServiceMaintenance, validateState } from './state.mjs';
-import { inspectWindowsWorkerScope } from './windows-worker-scope.mjs';
+import { inspectWindowsWorkerScope, inspectWindowsInactiveWorkerScope } from './windows-worker-scope.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
 import { inspectWindowsSnapshotRuntime } from './windows-snapshot-runtime.mjs';
@@ -25,10 +25,15 @@ export function prepareWindowsRestoreRuntimeBundle(options) {
   return prepareRuntimeBundle(options, true);
 }
 
-async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, pwsh, signal, backup, snapshot }, restore) {
+export function prepareWindowsInactiveRuntimeBundle(options) {
+  return prepareRuntimeBundle(options, false, true);
+}
+
+async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, pwsh, signal, backup, snapshot }, restore, inactive = false) {
   signal?.throwIfAborted();
   try {
-    const { root, lock, observation, check } = await inspectWindowsWorkerScope({
+    const inspect = inactive ? inspectWindowsInactiveWorkerScope : inspectWindowsWorkerScope;
+    const { root, lock, observation, check } = await inspect({
       scope, control, lock: suppliedLock, node, pwsh, signal,
     });
     if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(lock.operationId)) {
@@ -41,8 +46,10 @@ async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, 
       || (restore ? state.operation !== 'restore' || state.phase !== 'restore-preflight'
         : !['deploy', 'update'].includes(state.operation) || state.phase !== 'preflight')
       || state.previousPhase !== null
-      || state.priorRuntime !== 'running' || state.runtimeIdentity !== observation.runtime.generation || state.errorCode !== null) {
-      throw new Error('Runtime publication requires the original running preflight state.');
+      || state.priorRuntime !== (inactive ? 'stopped' : 'running')
+      || state.runtimeIdentity !== (inactive ? observation.retiredRuntime : observation.runtime).generation
+      || state.errorCode !== null) {
+      throw new Error('Runtime publication requires the original task preflight state.');
     }
     const archived = restore ? await inspectWindowsSnapshotRuntime({
       backup, snapshot, project: lock.project, taskName: observation.taskName, signal,

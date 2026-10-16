@@ -14173,12 +14173,33 @@ Git/npm fixture, not a claim of full application deployment.
   rejected early/forged selection, source selection, npm dependencies and build.
   Require `built.sourceCommit === targetCommit` and build ID `new-source`.
   Causal `32a28930 / 38900548826` fails at the missing named inactive wrapper.
-- [ ] Add named inactive worker/source wrappers over private shared internals.
+- [x] Add named inactive worker/source wrappers over private shared internals.
   The inactive scope registry supplies read authority, the retained inactive
   transaction supplies mutation authority, and worker session/account come from
   the actual controller, never a fabricated active runtime.
-- [ ] Run the focused Windows Actions gate, then the existing active/cold
+  Accepted `b13f503e / 38901254562`: 69 contracts and actual owned Git selection,
+  npm dependencies/build with the admitted target and build ID `new-source`.
+- [x] Run the focused Windows Actions gate, then the existing active/cold
   regression because shared source-build fixture and worker internals changed.
+  Focused gate and both full regression `38902447550` jobs succeeded.
+
+Configuration follow-through reuses `prepareWindowsConfigurationFixture` with
+an explicit inactive selector. It exercises original file handles, ACL drift,
+higher-priority configuration refusal and unchanged private values, then supplies
+the retained files to snapshot capture and the admitted environment to npm.
+`inspectWindowsInactiveConfiguration` uses the existing runtime reader after
+checking the genuine inactive scope; no synthetic running runtime is introduced.
+The causal gate `feae7a0f / 38902516299` failed at the missing inactive
+configuration inspector. Implementation `f97ed521 / 38912427453` succeeded:
+69 contracts, configuration checks, stopped snapshot and owned source/build.
+
+Runtime publication follow-through reuses the saved-engine publication fixture
+with a named inactive inspector and publisher. Before stopped admission, require
+the original stopped preflight state, task generation, lock and controller account.
+Publish the original configuration/helpers into a create-only operation directory;
+reject copied scopes, foreign locks, abort and duplicate publication. Preserve
+the original state/configuration and disabled task. This does not replace or
+activate the task. Causal fixture `2d3913b6 / 38913367797` is pending acceptance.
 
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
