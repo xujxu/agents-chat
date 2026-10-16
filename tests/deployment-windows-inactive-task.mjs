@@ -289,12 +289,42 @@ try {
       if (completionMode === 'complete') {
         assert.equal(typeof transaction.prepareCompletion, 'function', 'Missing inactive native completion preparation');
         assert.equal(typeof transaction.complete, 'function', 'Missing inactive native completion');
+        assert.equal(typeof transaction.advanceCompletion, 'function', 'Missing inactive native completion step API');
         await assert.rejects(transaction.prepareCompletion({ port: listener.port, providers: [] }));
         await assert.rejects(transaction.complete({ stateSha256: '0'.repeat(64) }));
         const { completeWindowsTaskActivation } =
           await import(pathToFileURL(path.join(source, 'windows-task-completion.mjs')).href);
         const result = await completeWindowsTaskActivation({
-          context: transaction, port: listener.port, providers: ['admin-login'], waitSeconds: 30,
+          context: {
+            ...transaction,
+            async complete(options) {
+              const expected = new Set(['inactive-complete-prepared.json']);
+              for (const [step, durable] of [
+                ['policy-requested', 'policy-requested'],
+                ['policy-applied', 'policy-requested'],
+                ['policy-staged', 'policy-staged'],
+                ['release-requested', 'release-requested'],
+                ['lease-released', 'release-requested'],
+                ['released', 'released'],
+                ['policy-restore-requested', 'policy-restore-requested'],
+                ['permanent-policy-applied', 'policy-restore-requested'],
+                ['complete', 'complete'],
+              ]) {
+                assert.equal(await transaction.advanceCompletion(options), step);
+                expected.add(`inactive-complete-${durable}.json`);
+                assert.deepEqual((await readdir(path.join(control, 'task-maintenance')))
+                  .filter(name => name.startsWith('inactive-complete-')).sort(), [...expected].sort());
+                await transaction.check();
+                if (step === 'policy-requested') {
+                  for (const method of ['complete', 'advanceCompletion']) {
+                    await assert.rejects(transaction[method]({ stateSha256: '0'.repeat(64) }));
+                  }
+                }
+              }
+              assert.equal(await transaction.advanceCompletion(options), 'complete');
+              return transaction.complete(options);
+            },
+          }, port: listener.port, providers: ['admin-login'], waitSeconds: 30,
           async recordAcceptance() {
             await writeState(control, {
               ...rotating, phase: 'accepted', previousPhase: 'activating', updatedAt: new Date().toISOString(),

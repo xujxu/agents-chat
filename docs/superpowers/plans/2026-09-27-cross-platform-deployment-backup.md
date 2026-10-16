@@ -14414,6 +14414,32 @@ require its exit. A third actor must reopen solely from the retained manifest
 and live runtime, finish commit and preserve the original state/backup hashes.
 The ordinary active deployment reopen API must refuse the inactive checkpoint.
 
+Closeout interruption acceptance: `141ad6e6 / 38974475645` passed actual
+actor death at prefixes 1 and 115, exact bridge exit and fresh-controller
+final commit after the lock disappeared. Shared regression `38975894082`
+remains running; public stopped deployment acceptance is still outstanding.
+
+#### Inactive completion phase boundaries
+
+- [ ] Extend the genuine inactive fixture to require
+  `transaction.advanceCompletion({ stateSha256 })`, following the active
+  completion step API. Check every actual native acknowledgement and exact
+  durable receipt inventory; reject replacement accepted-state digests.
+  After the ninth step, repeated advance returns `complete` and the ordinary
+  `transaction.complete` returns its verified final receipt without replay.
+- [ ] Push this causal fixture and run the focused `failed` commands gate.
+  Require the missing inactive native completion step API assertion before
+  implementing the interface.
+- [ ] Extract one-step advancement from the original-authority completion
+  binding, retaining its step index, original digest and failed/in-flight
+  refusal. Keep ordinary complete as the drain-to-completion consumer.
+  Expose the same bounded operation on the inactive transaction only after
+  original accepted-state verification.
+- [ ] Use acknowledged `lease-released` and later boundaries for genuine
+  actor-death tests of a separate inactive prefix recovery path. This step
+  API alone does not implement recovery. Preserve strict full-history proof
+  and distinguish pre-release runtime loss from released-runtime recovery.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
