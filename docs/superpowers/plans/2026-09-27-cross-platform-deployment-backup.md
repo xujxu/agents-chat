@@ -14300,6 +14300,33 @@ stopping/retiring it for fixture cleanup. This is a small native application
 fixture, not public deploy/update acceptance; retirement, recovery and public
 composition remain pending.
 
+#### Independent inactive completion proof
+
+Continue the approved plan inline, without reopening design or research.
+Create `windows-inactive-completion-records.ps1` for the exact thirteen-file
+inactive history and `windows-inactive-completion-proof.ps1` for retained native
+read-only observation. Reuse the existing completion runtime/listener checks
+with an explicit retired-runtime input, never fabricated active admission.
+Include both new files in `saved-worker-engine.mjs`.
+
+- [ ] Add the native fixture assertion after the original Node controller exits:
+  `Open-AgentsChatInactiveCompletionProof $control`, then two identical
+  `Assert-AgentsChatInactiveCompletionProof $proof` results with
+  `mutationAuthority=$false`, original operation/runtime and released lease.
+  Enable the task externally and require the retained proof to refuse; restore
+  disabled policy, close and require a fresh proof to open successfully.
+- [ ] Push the causal fixture and run the focused inactive Actions gate:
+  `gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat --ref feat/deployment-backup -f windows_application_only=true -f windows_live_only=true -f windows_commands_only=true -f windows_restore_scenario=failed`.
+  Require the failure to identify the absent independent proof.
+- [ ] Validate the exact inactive admission, activation, replacement, startup
+  and completion chain; accepted state and original lock; old retired owner
+  absence and empty Job; native controller absence; permanent disabled policy,
+  released new runtime and retained original listener. Pin every evidence file
+  and refuse foreign inventory, changed chains, state or native identities.
+- [ ] Run the same focused Actions gate and original native startup regression;
+  record actual results before retirement integration. This step grants no
+  mutation or lock-release authority and does not enable public routing.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and

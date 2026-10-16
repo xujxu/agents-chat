@@ -60,6 +60,29 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             ConvertFrom-Json
         $finalDefinition = $running.definition
         if ($Complete) {
+            Assert ([bool](Get-Command Open-AgentsChatInactiveCompletionProof -ErrorAction SilentlyContinue)) `
+                'Independent inactive completion proof is unavailable'
+            $proof = Open-AgentsChatInactiveCompletionProof $control
+            try {
+                $observed = Assert-AgentsChatInactiveCompletionProof $proof
+                Assert ($observed.status -ceq 'observed' -and -not $observed.mutationAuthority -and
+                    $observed.operationId -ceq $state.operationId -and
+                    $observed.runtime.identity -ceq $running.runtime.identity -and
+                    $observed.lease -ceq 'released') 'Independent inactive proof changed completion identity'
+                $again = Assert-AgentsChatInactiveCompletionProof $proof
+                Assert (($observed | ConvertTo-Json -Depth 8 -Compress) -ceq
+                    ($again | ConvertTo-Json -Depth 8 -Compress)) 'Independent inactive completion changed on recheck'
+                $folder.GetTask($TaskName).Enabled = $true
+                $refused = $false
+                try { $null = Assert-AgentsChatInactiveCompletionProof $proof } catch { $refused = $true }
+                Assert $refused 'Independent inactive completion accepted task policy drift'
+            } finally {
+                $folder.GetTask($TaskName).Enabled = $false
+                Close-AgentsChatTaskCompletionProof $proof
+            }
+            $proof = Open-AgentsChatInactiveCompletionProof $control
+            try { $null = Assert-AgentsChatInactiveCompletionProof $proof }
+            finally { Close-AgentsChatTaskCompletionProof $proof }
             $finalDefinition = (Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-replacement-complete.json') -Raw |
                 ConvertFrom-Json).definition
             $task = $folder.GetTask($TaskName)
