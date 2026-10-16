@@ -14137,6 +14137,18 @@ markers, plus all prior focused contracts. Public inactive deployment is still
 not enabled; rotation, owned source/build stages and native replacement/
 activation must consume this separate stopped transaction before integration.
 
+Full original snapshot/cold regression `4bf1c48d / 38885211700` passed both
+jobs `116921188406` and `116921188653`; original logs saved.
+
+Next connect staged rotation using `rotateWindowsInactiveTaskSnapshot`.
+The accepted snapshot is created in `control/staging` and bound to the original
+inactive transaction after verification. The real fixture must refuse rotation
+before rotating state and forged contexts; publish the snapshot ID at the
+copying-to-rotating edge, rotate through the existing snapshot rotation helper,
+verify the exact retained backup, and accept matching backup-ready state.
+Do not postpone recording the backup ID until backup-ready: the existing
+deployment pipeline records it when entering rotating.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and

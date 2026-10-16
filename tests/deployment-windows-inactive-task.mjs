@@ -102,14 +102,14 @@ try {
         await import(pathToFileURL(path.join(source, 'saved-recovery-engine.mjs')).href);
       const { verifySnapshot } = await import(pathToFileURL(path.join(source, 'snapshot.mjs')).href);
       const recovery = await saveRecoveryEngine({ control, source });
-      const destination = path.join(control, 'backup');
+      const destination = path.join(control, 'staging');
       const copyOptions = {
         context: transaction, control, lock, pwsh, destination, id: 'inactive-task-snapshot',
         source: { commit: sourceCommit, provenance: 'observed' }, recoveryEngine: recovery.manifestSha256,
         configuration: { files: [], checkFiles: () => admissionScope.check() },
       };
       await assert.rejects(createWindowsInactiveTaskSnapshot({ ...copyOptions, context: { ...transaction } }));
-      assert.ok(!(await readdir(control)).includes('backup'));
+      assert.ok(!(await readdir(control)).includes('staging'));
       const manifest = await createWindowsInactiveTaskSnapshot(copyOptions);
       assert.deepEqual(await verifySnapshot(destination), manifest);
       assert.deepEqual(manifest.runtime, { platform: 'win32', state: 'stopped', task: metadata.task });
@@ -118,6 +118,20 @@ try {
       assert.ok(manifest.windowsSecurity);
       console.log('PASS: inactive task transaction creates and verifies a real stopped snapshot with original task policy and saved recovery engine');
       await transaction.check();
+      const { rotateWindowsInactiveTaskSnapshot } =
+        await import(pathToFileURL(path.join(source, 'windows-inactive-task-transaction.mjs')).href);
+      assert.equal(typeof rotateWindowsInactiveTaskSnapshot, 'function', 'Missing inactive snapshot rotation');
+      await assert.rejects(rotateWindowsInactiveTaskSnapshot({ context: transaction, control, lock }), /rotating/);
+      const rotating = { ...stoppedState, phase: 'rotating', previousPhase: 'copying', backupId: manifest.id };
+      await writeState(control, rotating);
+      await transaction.check();
+      await assert.rejects(rotateWindowsInactiveTaskSnapshot({ context: { ...transaction }, control, lock }));
+      await rotateWindowsInactiveTaskSnapshot({ context: transaction, control, lock });
+      assert.deepEqual(await verifySnapshot(path.join(control, 'backup')), manifest);
+      assert.ok(!(await readdir(control)).includes('staging'));
+      await writeState(control, { ...rotating, phase: 'backup-ready', previousPhase: 'rotating' });
+      await transaction.check();
+      console.log('PASS: inactive transaction rotates only its verified staged snapshot and retains the matching backup-ready binding');
     } finally { await transaction.close(); }
     await assert.rejects(transaction.check(), /closed/);
     console.log('PASS: inactive transaction consumes original stopped admission and grants only matching copying-stage snapshot metadata');
