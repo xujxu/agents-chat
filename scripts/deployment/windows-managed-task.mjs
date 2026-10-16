@@ -410,30 +410,54 @@ export async function prepareWindowsInactiveCompletionBinding(options) {
   return result;
 }
 
-export async function completeWindowsInactiveCompletionBinding(options) {
+export const completeWindowsInactiveCompletionBinding = options => runInactiveCompletion(options, true);
+export const advanceWindowsInactiveCompletionBinding = options => runInactiveCompletion(options, false);
+
+async function runInactiveCompletion(options, drain) {
   const { scope, control, stateSha256, signal } = options;
   const retained = inactiveScopes.get(scope);
   if (!retained?.completionRecord || typeof stateSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(stateSha256)) {
     throw refused(new Error('Inactive completion requires its original preparation and accepted state hash.'));
   }
-  for (const step of ['policy-requested', 'policy-applied', 'policy-staged', 'release-requested',
-    'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete']) {
+  if (retained.completionBusy || retained.completionFailure) {
+    throw refused(retained.completionFailure ?? new Error('Inactive completion is already active.'));
+  }
+  if (retained.completionStateSha256 && retained.completionStateSha256 !== stateSha256) {
+    throw refused(new Error('Inactive completion requires its original completion digest.'));
+  }
+  retained.completionBusy = true;
+  try {
     await assertWindowsInactiveTaskAdmissionBinding(options);
-    if (await retained.request('complete-inactive', signal, { stateSha256 }) !== step) {
-      throw refused(new Error('Inactive completion acknowledged an unexpected native phase.'));
+    retained.completionStateSha256 = stateSha256;
+    const steps = ['policy-requested', 'policy-applied', 'policy-staged', 'release-requested',
+      'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete'];
+    retained.completionIndex ??= 0;
+    do {
+      if (retained.completionIndex === steps.length) break;
+      await assertWindowsInactiveTaskAdmissionBinding(options);
+      if (await retained.request('complete-inactive', signal, { stateSha256 }) !== steps[retained.completionIndex]) {
+        throw refused(new Error('Inactive completion acknowledged an unexpected native phase.'));
+      }
+      await assertWindowsInactiveTaskAdmissionBinding(options);
+      retained.completionIndex++;
+    } while (drain);
+    if (retained.completionIndex < steps.length) {
+      return steps[retained.completionIndex - 1];
+    }
+    const file = path.join(control, 'task-maintenance', 'inactive-complete-complete.json');
+    const bytes = await readWorkerFile(file, 4194304, { privateMode: true });
+    const previous = await readWorkerFile(
+      path.join(control, 'task-maintenance', 'inactive-complete-policy-restore-requested.json'), 4194304, { privateMode: true });
+    if (!isDeepStrictEqual(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), {
+      ...retained.completionRecord, phase: 'complete', stateSha256,
+      previousSha256: createHash('sha256').update(previous).digest('hex'),
+    })) {
+      throw refused(new Error('Inactive completion receipt differs from its original accepted runtime.'));
     }
     await assertWindowsInactiveTaskAdmissionBinding(options);
-  }
-  const file = path.join(control, 'task-maintenance', 'inactive-complete-complete.json');
-  const bytes = await readWorkerFile(file, 4194304, { privateMode: true });
-  const previous = await readWorkerFile(
-    path.join(control, 'task-maintenance', 'inactive-complete-policy-restore-requested.json'), 4194304, { privateMode: true });
-  if (!isDeepStrictEqual(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), {
-    ...retained.completionRecord, phase: 'complete', stateSha256,
-    previousSha256: createHash('sha256').update(previous).digest('hex'),
-  })) {
-    throw refused(new Error('Inactive completion receipt differs from its original accepted runtime.'));
-  }
-  await assertWindowsInactiveTaskAdmissionBinding(options);
-  return Object.freeze({ file, sha256: createHash('sha256').update(bytes).digest('hex') });
+    return drain ? Object.freeze({ file, sha256: createHash('sha256').update(bytes).digest('hex') }) : 'complete';
+  } catch (error) {
+    retained.completionFailure = error;
+    throw error;
+  } finally { retained.completionBusy = false; }
 }

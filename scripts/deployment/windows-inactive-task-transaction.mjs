@@ -8,6 +8,7 @@ import {
   replaceWindowsInactiveTaskBinding, startWindowsInactiveTaskBinding,
   inspectWindowsInactiveTaskListener,
   prepareWindowsInactiveCompletionBinding, completeWindowsInactiveCompletionBinding,
+  advanceWindowsInactiveCompletionBinding,
 } from './windows-managed-task.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { rotateSnapshot } from './snapshot-rotation.mjs';
@@ -63,6 +64,29 @@ export async function beginWindowsInactiveTaskTransaction(options) {
     let busy = false;
     let failure;
     const retained = { ...originalOptions, observation: initial.observation, snapshot: null, rotating: false, rotated: false };
+    async function completionRequest({ stateSha256, signal: requestSignal } = {}, advance = false) {
+      if (!retained.completionPrepared || retained.completing
+        || typeof stateSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(stateSha256)) {
+        throw new Error('Inactive completion requires original preparation and an explicit accepted state hash.');
+      }
+      if (retained.completionStateSha256 && retained.completionStateSha256 !== stateSha256) {
+        throw new Error('Inactive completion requires its original completion digest.');
+      }
+      retained.completing = true;
+      try {
+        const state = await context.check({ signal: requestSignal });
+        const bytes = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
+        if (state.phase !== 'accepted' || createHash('sha256').update(bytes).digest('hex') !== stateSha256
+          || !same(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), state)) {
+          throw new Error('Inactive completion differs from original accepted state.');
+        }
+        retained.completionStateSha256 = stateSha256;
+        const complete = advance ? advanceWindowsInactiveCompletionBinding : completeWindowsInactiveCompletionBinding;
+        const result = await complete({ ...retained, stateSha256, signal: requestSignal });
+        await context.check({ signal: requestSignal });
+        return result;
+      } finally { retained.completing = false; }
+    }
     const context = Object.freeze({
       async check({ signal: requestSignal } = {}) {
         if (closed) throw new Error('Inactive task transaction is closed.');
@@ -116,25 +140,8 @@ export async function beginWindowsInactiveTaskTransaction(options) {
           retained.completionPrepared = true;
         } finally { retained.completing = false; }
       },
-      async complete({ stateSha256, signal: requestSignal } = {}) {
-        if (!retained.completionPrepared || retained.completing || retained.completionAttempted
-          || typeof stateSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(stateSha256)) {
-          throw new Error('Inactive completion requires original preparation and an explicit accepted state hash.');
-        }
-        retained.completing = true;
-        try {
-          const state = await context.check({ signal: requestSignal });
-          const bytes = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
-          if (state.phase !== 'accepted' || createHash('sha256').update(bytes).digest('hex') !== stateSha256
-            || !same(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), state)) {
-            throw new Error('Inactive completion differs from original accepted state.');
-          }
-          retained.completionAttempted = true;
-          const result = await completeWindowsInactiveCompletionBinding({ ...retained, stateSha256, signal: requestSignal });
-          await context.check({ signal: requestSignal });
-          return result;
-        } finally { retained.completing = false; }
-      },
+      complete: options => completionRequest(options),
+      advanceCompletion: options => completionRequest(options, true),
       async close() {
         if (busy || retained.rotating || retained.preparing || retained.replacing || retained.starting || retained.completing) {
           throw new Error('Cannot close a busy inactive task transaction.');

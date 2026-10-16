@@ -14421,6 +14421,14 @@ remains running; public stopped deployment acceptance is still outstanding.
 
 #### Inactive completion phase boundaries
 
+Shared regression `38975894082` passed. Causal `d259f38d / 38976370993`
+failed with `Missing inactive native completion step API` (original Actions
+log inspected). The implementation retains one original digest and phase
+cursor, refuses overlapping or failed native advancement, and verifies the
+final receipt even for repeated terminal queries. The transaction shares its
+accepted-state verification between single-step and drain consumers.
+Implementation acceptance remains pending; prefix recovery is not implemented.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
