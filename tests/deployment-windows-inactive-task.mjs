@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 
-const [source, taskName, project, pwsh, control, gitFile, npmFile] = process.argv.slice(2);
+const [source, taskName, project, pwsh, control, gitFile, npmFile, completionMode] = process.argv.slice(2);
 const { inspectWindowsInactiveTask, assertWindowsManagedTaskScope, captureWindowsInactiveTaskAdmission } =
   await import(pathToFileURL(path.join(source, 'windows-managed-task.mjs')).href);
 const scope = await inspectWindowsInactiveTask({ taskName, project, pwsh });
@@ -93,6 +93,7 @@ try {
     await assert.rejects(beginWindowsInactiveTaskTransaction({ ...transactionOptions, scope: { ...admissionScope } }));
     const transaction = await beginWindowsInactiveTaskTransaction(transactionOptions);
     let activatedRuntime;
+    let completed = false;
     try {
       const snapshotOptions = { context: transaction, control, lock, sourceCommit };
       await assert.rejects(assertWindowsInactiveTaskSnapshotStage(snapshotOptions), /copying/);
@@ -285,15 +286,40 @@ try {
       assert.equal(owned.pid, listener.pid);
       assert.equal(owned.generation, active.runtime.generation);
       console.log('PASS: inactive startup readiness verifies HTTP providers only through its retained original Job listener');
+      if (completionMode === 'complete') {
+        assert.equal(typeof transaction.prepareCompletion, 'function', 'Missing inactive native completion preparation');
+        assert.equal(typeof transaction.complete, 'function', 'Missing inactive native completion');
+        await assert.rejects(transaction.prepareCompletion({ port: listener.port, providers: [] }));
+        await assert.rejects(transaction.complete({ stateSha256: '0'.repeat(64) }));
+        const { completeWindowsTaskActivation } =
+          await import(pathToFileURL(path.join(source, 'windows-task-completion.mjs')).href);
+        const result = await completeWindowsTaskActivation({
+          context: transaction, port: listener.port, providers: ['admin-login'], waitSeconds: 30,
+          async recordAcceptance() {
+            await writeState(control, {
+              ...rotating, phase: 'accepted', previousPhase: 'activating', updatedAt: new Date().toISOString(),
+            });
+            return createHash('sha256').update(await readFile(path.join(control, 'state.json'))).digest('hex');
+          },
+        });
+        assert.equal(result.status, 'completed');
+        assert.equal((await transaction.check()).phase, 'accepted');
+        completed = true;
+        console.log('PASS: inactive completion binds accepted terminal state, permanent policy and original guarded lease release');
+      }
     } finally { await transaction.close(); }
     if (activatedRuntime) {
       const { processIdentity } = await import(pathToFileURL(path.join(source, 'process-identity.mjs')).href);
-      const deadline = Date.now() + 30000;
-      while (await processIdentity(activatedRuntime.pid) === activatedRuntime.identity && Date.now() < deadline) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+      if (completed) {
+        assert.equal(await processIdentity(activatedRuntime.pid), activatedRuntime.identity);
+      } else {
+        const deadline = Date.now() + 30000;
+        while (await processIdentity(activatedRuntime.pid) === activatedRuntime.identity && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        assert.notEqual(await processIdentity(activatedRuntime.pid), activatedRuntime.identity);
+        console.log('PASS: inactive startup guard settles its actual runtime after the original native controller closes');
       }
-      assert.notEqual(await processIdentity(activatedRuntime.pid), activatedRuntime.identity);
-      console.log('PASS: inactive startup guard settles its actual runtime after the original native controller closes');
     }
     await assert.rejects(transaction.check(), /closed/);
     console.log('PASS: inactive transaction consumes original stopped admission and grants only matching copying-stage snapshot metadata');

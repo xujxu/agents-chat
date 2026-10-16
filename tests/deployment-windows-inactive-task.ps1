@@ -1,4 +1,5 @@
-function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string]$Project, [string]$ReadyFile) {
+function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string]$Project, [string]$ReadyFile,
+    [switch]$Complete) {
     . (Join-Path $Source 'windows-inactive-task.ps1')
     $scheduler = New-Object -ComObject 'Schedule.Service'
     $scheduler.Connect()
@@ -44,7 +45,8 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         $npmCli = Join-Path (Split-Path $node) 'node_modules/npm/bin/npm-cli.js'
         $controller = [Deployment.WindowsControllerProcess]::Start((Get-Command node).Source,
             @((Join-Path $PSScriptRoot 'deployment-windows-inactive-task.mjs'), $Source, $TaskName, $Project,
-                [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $control, $git, $npmCli), $control, $environment)
+                [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $control, $git, $npmCli,
+                $(if ($Complete) { 'complete' } else { 'guarded' })), $control, $environment)
         $output = $controller.StandardOutput.ReadToEndAsync()
         $diagnostic = $controller.StandardError.ReadToEndAsync()
         Assert ($controller.WaitForExit(600000)) 'Inactive task Node bridge timed out'
@@ -56,12 +58,36 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         $expectedBundle = Join-Path $control "runtime-$($state.operationId)"
         $running = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-start-running.json') -Raw |
             ConvertFrom-Json
+        $finalDefinition = $running.definition
+        if ($Complete) {
+            $finalDefinition = (Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-replacement-complete.json') -Raw |
+                ConvertFrom-Json).definition
+            $task = $folder.GetTask($TaskName)
+            Assert ($state.phase -ceq 'accepted' -and [string]$task.Xml -ceq $finalDefinition -and
+                -not $task.Enabled -and $task.GetInstances(0).Count -eq 1 -and
+                [string]$task.GetSecurityDescriptor(7) -ceq $security) 'Inactive completion did not retain permanent disabled running policy'
+            $runtime = $running.runtime
+            $releasedOwner = [Diagnostics.Process]::GetProcessById($runtime.pid)
+            try {
+                $null = $releasedOwner.Handle
+                Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($runtime.pid) -ceq $runtime.identity) 'Released runtime owner changed'
+                Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
+                    $runtime.pid, $runtime.identity, 'lease', 15000) -ceq 'released') 'Inactive completion did not release its actual lease'
+                $settled = [Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
+                    $runtime.pid, $runtime.identity, 'stop', 15000) | ConvertFrom-Json
+                Assert ($settled.quiescent -and $settled.members.Count -eq 0) 'Released inactive runtime did not settle its Job'
+                Assert ([Deployment.WindowsRuntimeControl]::Exchange([guid]$runtime.generation,
+                    $runtime.pid, $runtime.identity, 'retire', 15000) -ceq 'retired') 'Released inactive owner did not retire'
+                Assert ($releasedOwner.WaitForExit(15000) -and $releasedOwner.ExitCode -eq 0) 'Released inactive owner did not exit cleanly'
+            } finally { $releasedOwner.Dispose() }
+            Write-Output 'PASS: inactive completion leaves the accepted runtime alive after controller exit with released lease and original permanent disabled policy'
+        }
     } finally {
         if ($controller) { $controller.Dispose() }
         Remove-Item -LiteralPath $control -Recurse -Force
     }
     $task = $folder.GetTask($TaskName)
-    Assert ([string]$task.Xml -ceq $running.definition -and
+    Assert ([string]$task.Xml -ceq $finalDefinition -and
         $running.configuration -ceq (Join-Path $expectedBundle 'configuration.json') -and
         [string]$task.GetSecurityDescriptor(7) -ceq $security -and
         $task.GetInstances(0).Count -eq 0 -and -not $task.Enabled) 'Inactive startup guard did not settle with its exact disabled policy'
