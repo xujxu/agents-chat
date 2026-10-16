@@ -52,14 +52,24 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         $errors = $diagnostic.GetAwaiter().GetResult()
         if ($errors) { [Console]::Error.WriteLine($errors) }
         Assert ($controller.ExitCode -eq 0) 'Inactive task Node bridge failed'
+        $state = Get-Content -LiteralPath (Join-Path $control 'state.json') -Raw | ConvertFrom-Json
+        $expectedBundle = Join-Path $control "runtime-$($state.operationId)"
     } finally {
         if ($controller) { $controller.Dispose() }
         Remove-Item -LiteralPath $control -Recurse -Force
     }
     $task = $folder.GetTask($TaskName)
-    Assert ([string]$task.Xml -ceq $definition -and [string]$task.GetSecurityDescriptor(7) -ceq $security -and
-        $task.GetInstances(0).Count -eq 0 -and -not $task.Enabled) 'Inactive observation changed task policy or started work'
+    . (Join-Path $Source 'windows-task-replacement.ps1')
+    Confirm-AgentsChatTaskReplacementPolicy $definition ([string]$task.Xml) @{}
+    $expectedConfiguration = Join-Path $expectedBundle 'configuration.json'
+    $expectedHost = Join-Path $expectedBundle 'windows-runtime-host.ps1'
+    $digest = (Get-Content -LiteralPath $ReadyFile -Raw | ConvertFrom-Json).configurationSha256
+    $action = $task.Definition.Actions.Item(1)
+    Assert ([string]$action.WorkingDirectory -ceq $expectedBundle -and
+        [string]$action.Arguments -ceq "-NoProfile -NonInteractive -File `"$expectedHost`" -Configuration `"$expectedConfiguration`" -Sha256 $digest" -and
+        [string]$task.GetSecurityDescriptor(7) -ceq $security -and
+        $task.GetInstances(0).Count -eq 0 -and -not $task.Enabled) 'Inactive replacement changed unrelated task policy or started work'
     Assert ((Get-Item -LiteralPath $ReadyFile).LastWriteTimeUtc.Ticks -eq $mtime -and
         (Get-FileHash -LiteralPath $ReadyFile -Algorithm SHA256).Hash -ceq $hash) 'Inactive observation changed original readiness'
-    Write-Output 'PASS: native inactive task observation retains disabled policy and retired readiness, rejects changed policy and invents no runtime'
+    Write-Output 'PASS: native inactive task replacement retains disabled policy and retired readiness, changes only its admitted runtime action and invents no runtime'
 }

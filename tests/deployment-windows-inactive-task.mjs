@@ -227,6 +227,26 @@ try {
       assert.deepEqual(await admissionScope.check(), admissionScope.observation);
       assert.deepEqual(await readFile(preparation.file), preparationBytes);
       console.log('PASS: native inactive activation preparation retains exact stopped admission, activating state and distinct runtime bundle without starting or replacing the task');
+      const { replaceWindowsInactiveTask } =
+        await import(pathToFileURL(path.join(source, 'windows-inactive-task-transaction.mjs')).href);
+      assert.equal(typeof replaceWindowsInactiveTask, 'function', 'Missing native inactive task replacement');
+      const replacementOptions = { context: transaction, control, lock };
+      await assert.rejects(replaceWindowsInactiveTask({ ...replacementOptions, context: { ...transaction } }));
+      const replacement = await replaceWindowsInactiveTask(replacementOptions);
+      assert.equal(replacement.replaced, true);
+      assert.equal(replacement.inhibited, true);
+      assert.notEqual(replacement.definition, admissionScope.observation.definition);
+      const replacementBytes = await readFile(replacement.file);
+      assert.equal(createHash('sha256').update(replacementBytes).digest('hex'), replacement.sha256);
+      const replaced = JSON.parse(replacementBytes);
+      assert.equal(replaced.phase, 'replacement-complete');
+      assert.equal(replaced.preparationSha256, preparation.sha256);
+      assert.equal(replaced.configuration, bundle.configuration);
+      assert.equal(replaced.definition, replacement.definition);
+      await assert.rejects(replaceWindowsInactiveTask(replacementOptions));
+      await transaction.check();
+      assert.deepEqual(await verifySnapshot(path.join(control, 'backup')), manifest);
+      console.log('PASS: native inactive replacement changes only the literal runtime action, preserves disabled policy and security, and retains original preparation evidence');
     } finally { await transaction.close(); }
     await assert.rejects(transaction.check(), /closed/);
     console.log('PASS: inactive transaction consumes original stopped admission and grants only matching copying-stage snapshot metadata');
