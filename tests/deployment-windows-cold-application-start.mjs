@@ -14,7 +14,8 @@ export async function verifyWindowsColdPublicStartup({
 }) {
   assert.ok(!unacknowledgedStartup || interruptedStartup);
   assert.ok(!beforeInhibition || unacknowledgedStartup);
-  assert.ok(preparationStep === null || ['requested', 'registered'].includes(preparationStep));
+  assert.ok(preparationStep === null || ['requested', 'registered', 'unlaunched'].includes(preparationStep));
+  const unlaunched = preparationStep === 'unlaunched';
   assert.ok(!preparationStep || unacknowledgedStartup && !beforeInhibition);
   const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
   const { verifyRecoveryEngine } = await captured('saved-recovery-engine.mjs');
@@ -33,6 +34,7 @@ export async function verifyWindowsColdPublicStartup({
   let journalFiles;
   let launchFile;
   let preparation;
+  let enableFile;
   const priorArchives = (await readdir(control)).filter(name => name.startsWith('cold-policy-')).sort();
   if (interruptedStartup) {
     assert.notEqual(await processIdentity(proof.runtime.pid), proof.runtime.identity);
@@ -49,8 +51,21 @@ export async function verifyWindowsColdPublicStartup({
         assert.equal(requested.version, 2);
         assert.notEqual(await processIdentity(requested.controllerPid), requested.controllerIdentity);
         assert.equal((await readdir(bundle)).some(name =>
-          /^(?:enable-requested|(?:launch|runtime)-.*)\.json$/i.test(name)), false);
+          /^(?:launch|runtime)-.*\.json$/i.test(name) || !unlaunched && /^enable-requested\.json$/i.test(name)), false);
         preparation = { bundle, sha256: createHash('sha256').update(requestBytes).digest('hex') };
+        if (unlaunched) {
+          const file = path.join(bundle, 'enable-requested.json');
+          enableFile = { file, bytes: await readFile(file), info: await lstat(file, { bigint: true }) };
+          const { captureWindowsColdActivationHistory, captureWindowsColdUnlaunched } =
+            await captured('windows-cold-activation-history.mjs');
+          const intentBytes = await readFile(path.join(journal, 'activation-intent.json'));
+          const history = captureWindowsColdActivationHistory({
+            intent: JSON.parse(intentBytes), intentBytes, records: [requestBytes], taskName,
+          });
+          preparation.enableSha256 = captureWindowsColdUnlaunched({
+            history, requestBytes, enableBytes: enableFile.bytes, entries: await readdir(bundle),
+          }).enableSha256;
+        }
       } else {
         const file = path.join(bundle, launchNames[0]);
         launchFile = { file, bytes: await readFile(file), info: await lstat(file, { bigint: true }) };
@@ -132,11 +147,18 @@ export async function verifyWindowsColdPublicStartup({
       assert.equal(archivedNames.includes('activation-running.json'), false);
       assert.equal(archivedNames.includes('activation-stopped.json'), false);
       assert.equal((await readdir(preparation.bundle)).some(name =>
-        /^(?:enable-requested|(?:launch|runtime)-.*)\.json$/i.test(name)), false);
+        /^(?:launch|runtime)-.*\.json$/i.test(name) || !unlaunched && /^enable-requested\.json$/i.test(name)), false);
       for (const name of archivedNames.filter(name => /^policy-[0-9]{6}\.json$/.test(name))) {
         const record = JSON.parse(await readFile(path.join(archive, name)));
-        assert.equal(record.preparationSha256, preparation.sha256);
+        assert.equal(record[unlaunched ? 'enableSha256' : 'preparationSha256'],
+          unlaunched ? preparation.enableSha256 : preparation.sha256);
+        assert.equal(record[unlaunched ? 'preparationSha256' : 'enableSha256'], undefined);
         assert.equal(record.launchSha256, undefined);
+      }
+      if (enableFile) {
+        assert.deepEqual(await readFile(enableFile.file), enableFile.bytes);
+        const info = await lstat(enableFile.file, { bigint: true });
+        for (const key of ['dev', 'ino', 'mtimeNs']) assert.equal(info[key], enableFile.info[key]);
       }
     }
     if (launchFile) {
@@ -174,7 +196,8 @@ export async function verifyWindowsColdPublicStartup({
         : interruptedStartup ? 'cold-startup-closeout-completed' : 'cold-start-closeout-completed',
       boundary: 'complete', runtime, lease, retiredRuntime: proof.runtime,
       ...(interruptedRuntime ? { interruptedRuntime } : {}),
-      ...(preparation ? { preparationSha256: preparation.sha256 } : {}),
+      ...(preparation ? unlaunched ? { enableSha256: preparation.enableSha256 }
+        : { preparationSha256: preparation.sha256 } : {}),
     };
   } finally { await scope.close(); }
 }

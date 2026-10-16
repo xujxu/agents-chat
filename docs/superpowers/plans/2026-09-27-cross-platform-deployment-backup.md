@@ -13917,6 +13917,22 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
 
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
+Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
+full regression `38640953351` (jobs `116116010590`, `116116010847`) passed.
+Original logs inspected after session recovery: 64/64 contracts, late guarded
+demand-start refusal, retained enable intent, null runtime, policy archival,
+fresh copy and terminal retirement, plus original-path regressions.
+
+Public acceptance follow-through uses `cold-unlaunched` (distinct from
+`cold-enabled`, which interrupts an already-launched host). The actual
+application fixture interrupts at `enabled`, checks the exact original
+enable intent and no launch/readiness, and reuses public restore/archive/
+backup/data/receipt/final-runtime assertions. The original enable file must
+retain its bytes, inode and mtime across closeout; archived policy records
+must bind its digest, not a fabricated launch or preparation digest.
+Dispatch with application/live flags and `windows_restore_scenario=cold-unlaunched`.
+Public acceptance remains pending until that Actions run succeeds.
+
 **Goal:** Distinguish a genuine original enable intent from never-enabled
 preparation. Admit neither arbitrary missing launch evidence nor a fabricated
 runtime identity. The retained original host checks its original controller

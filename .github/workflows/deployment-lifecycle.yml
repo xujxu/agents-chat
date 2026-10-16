@@ -47,7 +47,7 @@ on:
       windows_restore_scenario:
         description: With the paired Windows live selector, choose the actual saved restore scenario
         type: choice
-        options: [complete, cancelled, failed, crash, cold-receipt, cold-state, cold-completion, cold-start, cold-startup, cold-launch, cold-enabled, cold-requested, cold-registered, offline]
+        options: [complete, cancelled, failed, crash, cold-receipt, cold-state, cold-completion, cold-start, cold-startup, cold-launch, cold-enabled, cold-requested, cold-registered, cold-unlaunched, offline]
         default: complete
       windows_receipt_only:
         description: With both Windows command flags, select first-receipt integration and saved dependency tests
@@ -202,11 +202,11 @@ jobs:
     if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_cold_started_only) }}
     name: ${{ matrix.scenario == 'cancelled' && 'Actual Windows restore cancellation' || matrix.scenario == 'failed' && 'Actual Windows restore failure' || matrix.scenario == 'crashed' && 'Actual Windows restore crash' || matrix.scenario == 'copy-crashed' && 'Actual Windows file-copy restore crash' || matrix.scenario == 'offline' && 'Actual Windows restore egress denial' || 'Actual Windows live deployment' }}
     runs-on: windows-2022
-    timeout-minutes: ${{ contains(fromJSON('["cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered"]'), inputs.windows_restore_scenario) && 185 || matrix.scenario == 'copy-crashed' && 140 || 115 }}
+    timeout-minutes: ${{ contains(fromJSON('["cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered","cold-unlaunched"]'), inputs.windows_restore_scenario) && 185 || matrix.scenario == 'copy-crashed' && 140 || 115 }}
     strategy:
       fail-fast: false
       matrix:
-        scenario: ${{ fromJSON(inputs.windows_restore_scenario == 'cancelled' && '["cancelled"]' || inputs.windows_restore_scenario == 'failed' && '["failed"]' || inputs.windows_restore_scenario == 'crash' && '["crashed","copy-crashed"]' || contains(fromJSON('["cold-receipt","cold-state","cold-completion","cold-start","cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered"]'), inputs.windows_restore_scenario) && '["copy-crashed"]' || inputs.windows_restore_scenario == 'offline' && '["offline"]' || inputs.windows_application_only && '["complete"]' || '["complete","cancelled","failed","crashed","copy-crashed","offline"]') }}
+        scenario: ${{ fromJSON(inputs.windows_restore_scenario == 'cancelled' && '["cancelled"]' || inputs.windows_restore_scenario == 'failed' && '["failed"]' || inputs.windows_restore_scenario == 'crash' && '["crashed","copy-crashed"]' || contains(fromJSON('["cold-receipt","cold-state","cold-completion","cold-start","cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered","cold-unlaunched"]'), inputs.windows_restore_scenario) && '["copy-crashed"]' || inputs.windows_restore_scenario == 'offline' && '["offline"]' || inputs.windows_application_only && '["complete"]' || '["complete","cancelled","failed","crashed","copy-crashed","offline"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -293,11 +293,11 @@ jobs:
           $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
           $env:DEPLOYMENT_TEST_WINDOWS_LIVE = '1'
           $env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO = '${{ matrix.scenario }}'
-          $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY = '${{ inputs.windows_restore_scenario == 'cold-requested' && 'requested' || inputs.windows_restore_scenario == 'cold-registered' && 'registered' || inputs.windows_restore_scenario == 'cold-enabled' && 'enabled' || inputs.windows_restore_scenario == 'cold-launch' && 'launch' || inputs.windows_restore_scenario == 'cold-startup' && 'startup' || inputs.windows_restore_scenario == 'cold-start' && 'start' || inputs.windows_restore_scenario == 'cold-completion' && 'completion' || inputs.windows_restore_scenario == 'cold-state' && 'state' || inputs.windows_restore_scenario == 'cold-receipt' && 'receipt' || 'terminal' }}'
+          $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY = '${{ inputs.windows_restore_scenario == 'cold-unlaunched' && 'unlaunched' || inputs.windows_restore_scenario == 'cold-requested' && 'requested' || inputs.windows_restore_scenario == 'cold-registered' && 'registered' || inputs.windows_restore_scenario == 'cold-enabled' && 'enabled' || inputs.windows_restore_scenario == 'cold-launch' && 'launch' || inputs.windows_restore_scenario == 'cold-startup' && 'startup' || inputs.windows_restore_scenario == 'cold-start' && 'start' || inputs.windows_restore_scenario == 'cold-completion' && 'completion' || inputs.windows_restore_scenario == 'cold-state' && 'state' || inputs.windows_restore_scenario == 'cold-receipt' && 'receipt' || 'terminal' }}'
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
-          $timeoutSeconds = if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -in @('startup', 'launch', 'enabled', 'requested', 'registered')) { 10500 } elseif ($env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO -eq 'copy-crashed') { 7800 } else { 6300 }
+          $timeoutSeconds = if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -in @('startup', 'launch', 'enabled', 'requested', 'registered', 'unlaunched')) { 10500 } elseif ($env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO -eq 'copy-crashed') { 7800 } else { 6300 }
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds' -TimeoutSeconds $timeoutSeconds
 
   windows-first-native:

@@ -13,7 +13,8 @@ export async function verifyWindowsColdApplicationFiles({
   preparationStep = null,
 }) {
   assert.ok(!interruptBeforeInhibition || interruptLaunch);
-  assert.ok(preparationStep === null || ['requested', 'registered'].includes(preparationStep));
+  assert.ok(preparationStep === null || ['requested', 'registered', 'unlaunched'].includes(preparationStep));
+  const unlaunched = preparationStep === 'unlaunched';
   assert.ok(!preparationStep || !interruptStartup && !interruptLaunch);
   const captured = name => import(pathToFileURL(path.join(directory, 'scripts/deployment', name)));
   const { claimWindowsColdRestore } = await captured('windows-cold-restore-lease.mjs');
@@ -86,9 +87,9 @@ export async function verifyWindowsColdApplicationFiles({
     const activation = await lease.prepareActivation({ configuration });
     const running = await activation.start({
       async onProgress(progress) {
-        if (preparationStep && progress.step === preparationStep) {
+        if (preparationStep && progress.step === (unlaunched ? 'enabled' : preparationStep)) {
           assert.equal(progress.observation, null);
-          const { captureWindowsColdActivationHistory, captureWindowsColdPreparation } =
+          const { captureWindowsColdActivationHistory, captureWindowsColdPreparation, captureWindowsColdUnlaunched } =
             await captured('windows-cold-activation-history.mjs');
           const requestBytes = await readFile(path.join(control, 'recovery-lock/activation-start-requested.json'));
           const requested = JSON.parse(requestBytes);
@@ -96,9 +97,11 @@ export async function verifyWindowsColdApplicationFiles({
           const history = captureWindowsColdActivationHistory({
             intent: JSON.parse(intentBytes), intentBytes, records: [requestBytes], taskName: requested.taskName,
           });
-          const preparation = captureWindowsColdPreparation({
-            history, entries: await readdir(path.dirname(requested.configuration)),
-          });
+          const entries = await readdir(path.dirname(requested.configuration));
+          const preparation = unlaunched ? captureWindowsColdUnlaunched({
+            history, entries, requestBytes,
+            enableBytes: await readFile(path.join(path.dirname(requested.configuration), 'enable-requested.json')),
+          }) : captureWindowsColdPreparation({ history, entries });
           await configuration.checkFiles();
           for (const phase of ['running', 'stopped']) {
             await assert.rejects(lstat(path.join(control, `recovery-lock/activation-${phase}.json`)), { code: 'ENOENT' });
@@ -107,7 +110,8 @@ export async function verifyWindowsColdApplicationFiles({
             assert.deepEqual(await readFile(path.join(control, name)), bytes);
           }
           const observation = {
-            status: 'guarded-preparation', step: preparationStep, taskName: requested.taskName, runtime: null,
+            status: unlaunched ? 'guarded-unlaunched' : 'guarded-preparation',
+            step: preparationStep, taskName: requested.taskName, runtime: null,
             controllerPid: requested.controllerPid, controllerIdentity: requested.controllerIdentity,
             configuration: requested.configuration, plannedDefinition: requested.definition,
             securityDescriptor: requested.securityDescriptor, ...preparation,

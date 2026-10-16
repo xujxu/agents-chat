@@ -43,8 +43,8 @@ try {
     $environment.Add('TEMP', $Root)
     $environment.Add('TMP', $Root)
     $recoveryEngine = ''
-    $preparedCrashModes = @('restore-cold-requested-crashed', 'restore-cold-registered-crashed')
-    $preparedCloseoutModes = @('restore-cold-requested-closeout', 'restore-cold-registered-closeout')
+    $preparedCrashModes = @('restore-cold-requested-crashed', 'restore-cold-registered-crashed', 'restore-cold-unlaunched-crashed')
+    $preparedCloseoutModes = @('restore-cold-requested-closeout', 'restore-cold-registered-closeout', 'restore-cold-unlaunched-closeout')
     $startupCrashModes = @('restore-cold-startup-crashed', 'restore-cold-launch-crashed', 'restore-cold-enabled-crashed') + $preparedCrashModes
     $startupCloseoutModes = @('restore-cold-startup-closeout', 'restore-cold-launch-closeout', 'restore-cold-enabled-closeout') + $preparedCloseoutModes
     $coldCloseoutModes = @('restore-cold-start-closeout') + $startupCloseoutModes
@@ -59,7 +59,7 @@ try {
         $modes += @('restore-cold-launch-crashed', 'restore-cold-launch-closeout')
     } elseif ($RestoreScenario -eq 'copy-crashed' -and $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -eq 'enabled') {
         $modes += @('restore-cold-enabled-crashed', 'restore-cold-enabled-closeout')
-    } elseif ($RestoreScenario -eq 'copy-crashed' -and $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -in @('requested', 'registered')) {
+    } elseif ($RestoreScenario -eq 'copy-crashed' -and $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -in @('requested', 'registered', 'unlaunched')) {
         $prefix = "restore-cold-$($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY)"
         $modes += @("$prefix-crashed", "$prefix-closeout")
     } elseif ($RestoreScenario -eq 'copy-crashed') {
@@ -191,6 +191,8 @@ try {
             restore-cold-requested-closeout { 'cold-requested-closeout-completed' }
             restore-cold-registered-crashed { 'cold-registered-interrupted' }
             restore-cold-registered-closeout { 'cold-registered-closeout-completed' }
+            restore-cold-unlaunched-crashed { 'cold-unlaunched-interrupted' }
+            restore-cold-unlaunched-closeout { 'cold-unlaunched-closeout-completed' }
             restore-cold-retirement-prepared { 'cold-retirement-interrupted' }
             restore-cold-retirement-early { 'cold-retirement-interrupted' }
             restore-cold-retirement-unlock { 'cold-retirement-interrupted' }
@@ -209,7 +211,8 @@ try {
                 $coldOwner.Dispose()
                 $coldOwner = $null
             } elseif ($mode -in $preparedCloseoutModes) {
-                Assert ($result.preparationSha256 -ceq $guardedStartup.activation.preparationSha256 -and
+                $binding = if ($mode -eq 'restore-cold-unlaunched-closeout') { 'enableSha256' } else { 'preparationSha256' }
+                Assert ($result.$binding -ceq $guardedStartup.activation.$binding -and
                     $null -eq $result.PSObject.Properties['interruptedRuntime']) `
                     'Public preparation recovery changed its original request or invented an interrupted runtime'
             } else {
@@ -240,11 +243,13 @@ try {
             continue
         }
         if ($mode -in $preparedCrashModes) {
-            $step = if ($mode -eq 'restore-cold-requested-crashed') { 'requested' } else { 'registered' }
+            $unlaunched = $mode -eq 'restore-cold-unlaunched-crashed'
+            $step = if ($unlaunched) { 'unlaunched' } elseif ($mode -eq 'restore-cold-requested-crashed') { 'requested' } else { 'registered' }
+            $activationStatus = if ($unlaunched) { 'guarded-unlaunched' } else { 'guarded-preparation' }
             Assert ($result.retired -eq $true -and $result.runtime.pid -eq $originalPid -and
                 $result.runtime.identity -ceq $coldIdentity -and $coldOwner.WaitForExit(15000) -and
                 $coldOwner.ExitCode -eq 0) 'Preparation did not retire its genuine original stopped runtime'
-            Assert ($result.activation.status -ceq 'guarded-preparation' -and
+            Assert ($result.activation.status -ceq $activationStatus -and
                 $result.activation.step -ceq $step -and $null -eq $result.activation.runtime -and
                 $null -eq $result.readiness -and $result.activation.taskName -ceq $TaskName) `
                 'Interrupted preparation fabricated runtime readiness or changed its boundary'
@@ -259,20 +264,35 @@ try {
                 'Never-enabled preparation left an application listener'
             $task = $scheduler.GetFolder('\').GetTask($TaskName)
             $expectedDefinition = if ($step -ceq 'requested') { $coldDefinition } else { $result.activation.plannedDefinition }
-            Assert (-not $task.Enabled -and
+            Assert ([bool]$task.Enabled -eq $unlaunched -and
                 [string]$task.GetSecurityDescriptor(7) -ceq $coldSecurity -and
-                (Test-AgentsChatColdRecoveryDefinition $expectedDefinition ([string]$task.Xml) -Unacknowledged)) `
+                (Test-AgentsChatColdRecoveryDefinition $expectedDefinition ([string]$task.Xml) -Unacknowledged -Enabled:$unlaunched)) `
                 'Interrupted preparation changed its exact original or guarded disabled task'
             $requestFile = Join-Path $control 'recovery-lock/activation-start-requested.json'
             $request = Get-Content -LiteralPath $requestFile -Raw | ConvertFrom-Json
             Assert ($request.version -eq 2 -and $null -eq $request.runtime -and
                 $request.controllerPid -eq $result.activation.controllerPid -and
                 $request.controllerIdentity -ceq $result.activation.controllerIdentity -and
-                $request.configuration -ceq $result.activation.configuration -and
-                (Get-FileHash -LiteralPath $requestFile -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $result.activation.preparationSha256) `
+                $request.configuration -ceq $result.activation.configuration) `
                 'Preparation interruption lost its versioned original request'
+            $requestSha256 = (Get-FileHash -LiteralPath $requestFile -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($unlaunched) {
+                $enableFile = Join-Path ([IO.Path]::GetDirectoryName($request.configuration)) 'enable-requested.json'
+                $enable = Get-Content -LiteralPath $enableFile -Raw | ConvertFrom-Json
+                Assert ($enable.version -eq 1 -and $enable.phase -ceq 'enable-requested' -and
+                    $enable.requestSha256 -ceq $requestSha256 -and
+                    $enable.controllerPid -eq $request.controllerPid -and
+                    $enable.controllerIdentity -ceq $request.controllerIdentity -and
+                    $enable.taskName -ceq $TaskName -and
+                    $enable.configurationSha256 -ceq $request.configurationSha256 -and
+                    (Get-FileHash -LiteralPath $enableFile -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $result.activation.enableSha256) `
+                    'Unlaunched application lost its original enable intent'
+            } else {
+                Assert ($requestSha256 -ceq $result.activation.preparationSha256) 'Preparation request bytes changed'
+            }
             $entries = @(Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($request.configuration)) -Force |
-                Where-Object { $_.Name -imatch '^(enable-requested|(launch|runtime)-.*)\.json$' })
+                Where-Object { $_.Name -imatch '^(launch|runtime)-.*\.json$' -or
+                    (-not $unlaunched -and $_.Name -ieq 'enable-requested.json') })
             Assert ($entries.Count -eq 0 -and
                 -not (Test-Path -LiteralPath (Join-Path $control 'recovery-lock/activation-running.json')) -and
                 -not (Test-Path -LiteralPath (Join-Path $control 'recovery-lock/activation-stopped.json')) -and
@@ -281,7 +301,11 @@ try {
             $coldOwner.Dispose()
             $coldOwner = $null
             $guardedStartup = $result
-            Write-Output "PASS: real Windows $step preparation controller death preserves disabled policy without enable, launch or runtime invention; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            if ($unlaunched) {
+                Write-Output "PASS: real Windows unlaunched controller death preserves original enable intent and enabled guarded policy without runtime invention; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            } else {
+                Write-Output "PASS: real Windows $step preparation controller death preserves disabled policy without enable, launch or runtime invention; elapsedMs=$($elapsed.ElapsedMilliseconds)"
+            }
             continue
         }
         if ($mode -in $startupCrashModes) {
