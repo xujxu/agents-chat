@@ -14360,6 +14360,17 @@ completion binding, idempotent same-authority preparation, and forged/foreign
 proof refusal. Checkpoint, deletion and unlock remain unavailable until their
 own original-history and interrupted-prefix gates pass.
 
+Intent acceptance: `f68620c3 / 38950545683` passed; original active/cold
+regression `38952648316` is running. Next add the distinct
+`prepareWindowsInactiveTaskRetirementCheckpoint` API and native request. Its
+version-two checkpoint includes the original configuration path and actual
+retired runtime (generation, session, readiness hash, no invented instance).
+Reuse the existing retired-runtime parser and native create-only checkpoint
+publisher. Bind the checkpoint version to the intent version, original retired
+owner identity, distinct new runtime and disabled permanent policy. Require
+native same-authority idempotency and parser refusal of missing or mismatched
+prior-runtime evidence. This checkpoint alone grants no deletion or unlock.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and

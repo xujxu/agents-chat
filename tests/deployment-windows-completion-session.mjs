@@ -37,7 +37,7 @@ async function malformedRequest(frame) {
 
 if (mode === 'inactive') {
   const { openWindowsInactiveTaskCompletionProof, prepareWindowsTaskRetirement,
-    prepareWindowsInactiveTaskRetirement } =
+    prepareWindowsInactiveTaskRetirement, prepareWindowsInactiveTaskRetirementCheckpoint } =
     await import('../scripts/deployment/windows-task-completion-proof.mjs');
   assert.equal(typeof openWindowsInactiveTaskCompletionProof, 'function',
     'Independent inactive proof requires its owned Node/native transport');
@@ -76,6 +76,18 @@ if (mode === 'inactive') {
         /Original retained inactive completed-task proof/);
       await assert.rejects(prepareWindowsInactiveTaskRetirement(`${control}-foreign`, proof, admission),
         /Original retained inactive completed-task proof/);
+      assert.equal(typeof prepareWindowsInactiveTaskRetirementCheckpoint, 'function',
+        'Inactive retirement checkpoint requires retained original retired runtime evidence');
+      const checkpoint = await prepareWindowsInactiveTaskRetirementCheckpoint(control, proof, admission);
+      assert.equal(checkpoint.checkpoint.version, 2);
+      assert.deepEqual(checkpoint.intent, retired);
+      assert.equal(checkpoint.checkpoint.enabled, false);
+      const prior = checkpoint.checkpoint.priorRuntime;
+      assert.equal(prior.runtime.identity, checkpoint.checkpoint.retiredOwner.processIdentity);
+      assert.notEqual(prior.runtime.generation, proof.observation.runtime.generation);
+      assert.equal(Object.hasOwn(prior.runtime, 'instanceGuid'), false);
+      assert.ok(Number.isInteger(prior.runtime.sessionId) && prior.runtime.sessionId >= 0);
+      assert.deepEqual(await prepareWindowsInactiveTaskRetirementCheckpoint(control, proof, admission), checkpoint);
       assert.deepEqual(await proof.check(), proof.observation);
       await assert.rejects(prepareWindowsTaskRetirement(control, proof, admission),
         /Original retained completed-task proof/);
