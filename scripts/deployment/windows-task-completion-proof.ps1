@@ -190,6 +190,11 @@ function Initialize-AgentsChatCompletionRuntime([hashtable]$Context, [hashtable]
         generation=$admission.generation.GetString(); readySha256=$admission.readySha256.GetString()
     }
     Open-AgentsChatCompletionBundle $context $context.Configuration $context.ConfigurationSha256 $runtime
+    Initialize-AgentsChatCompletionLiveRuntime $context $completed
+}
+
+function Initialize-AgentsChatCompletionLiveRuntime([hashtable]$Context, [hashtable]$Completed) {
+    $runtime = $Context.Runtime
     $context.Stage = 'runtime-owner'
     $context.Owner = [Diagnostics.Process]::GetProcessById($runtime.pid)
     $null = $context.Owner.Handle

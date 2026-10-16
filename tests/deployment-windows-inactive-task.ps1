@@ -62,6 +62,42 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         if ($Complete) {
             Assert ([bool](Get-Command Open-AgentsChatInactiveCompletionProof -ErrorAction SilentlyContinue)) `
                 'Independent inactive completion proof is unavailable'
+            $receipt = Join-Path $control 'task-maintenance/inactive-complete-complete.json'
+            $heldReceipt = Join-Path $control 'inactive-complete-held.json'
+            Move-Item -LiteralPath $receipt -Destination $heldReceipt
+            try {
+                $refused = $false
+                try {
+                    $unexpected = Open-AgentsChatInactiveCompletionProof $control
+                    Close-AgentsChatTaskCompletionProof $unexpected
+                } catch { $refused = $true }
+                Assert $refused 'Independent inactive completion accepted a missing receipt'
+            } finally { Move-Item -LiteralPath $heldReceipt -Destination $receipt }
+            $foreign = Join-Path $control 'task-maintenance/foreign.json'
+            [Deployment.WindowsPrivateFile]::Publish($foreign, '{}').Dispose()
+            try {
+                $refused = $false
+                try {
+                    $unexpected = Open-AgentsChatInactiveCompletionProof $control
+                    Close-AgentsChatTaskCompletionProof $unexpected
+                } catch { $refused = $true }
+                Assert $refused 'Independent inactive completion accepted foreign evidence'
+            } finally { Remove-Item -LiteralPath $foreign }
+            Move-Item -LiteralPath $receipt -Destination $heldReceipt
+            try {
+                $changed = Get-Content -LiteralPath $heldReceipt -Raw | ConvertFrom-Json
+                $changed.previousSha256 = '0' * 64
+                [Deployment.WindowsPrivateFile]::Publish($receipt, ($changed | ConvertTo-Json -Depth 8 -Compress)).Dispose()
+                $refused = $false
+                try {
+                    $unexpected = Open-AgentsChatInactiveCompletionProof $control
+                    Close-AgentsChatTaskCompletionProof $unexpected
+                } catch { $refused = $true }
+                Assert $refused 'Independent inactive completion accepted a broken hash chain'
+            } finally {
+                if (Test-Path -LiteralPath $receipt) { Remove-Item -LiteralPath $receipt }
+                Move-Item -LiteralPath $heldReceipt -Destination $receipt
+            }
             $proof = Open-AgentsChatInactiveCompletionProof $control
             try {
                 $observed = Assert-AgentsChatInactiveCompletionProof $proof
@@ -83,6 +119,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             $proof = Open-AgentsChatInactiveCompletionProof $control
             try { $null = Assert-AgentsChatInactiveCompletionProof $proof }
             finally { Close-AgentsChatTaskCompletionProof $proof }
+            Write-Output 'PASS: independent inactive completion retains exact journal, accepted state, released runtime and listener; missing/foreign evidence, broken chains and policy drift are refused'
             $finalDefinition = (Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-replacement-complete.json') -Raw |
                 ConvertFrom-Json).definition
             $task = $folder.GetTask($TaskName)
