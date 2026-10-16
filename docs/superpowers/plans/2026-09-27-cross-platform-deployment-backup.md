@@ -14056,6 +14056,17 @@ native output to the pure record, preserve lock/state bytes and reject duplicate
 publication without replacing the first record. No public command or snapshot
 copy is enabled by this step.
 
+Native publication accepted at `3fa4812e / 38866889251`, job `116861673713`:
+69 contracts pass and the real private-controller fixture confirms create-only
+publication, forged-scope refusal, unchanged state/lock and mandatory lock
+retention while maintenance evidence exists. Original logs saved.
+The preceding fixture failures were corrected without loosening production:
+`38865655780` used an ordinary Node token rather than the existing private
+controller; `38866350789` wrongly attempted to unlock retained maintenance.
+`4e58bc96` uses `WindowsControllerProcess`, and `3fa4812e` asserts the required
+unlock refusal instead. A stopped transaction consuming version2 admission
+is still required before public inactive deployment can be enabled.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
