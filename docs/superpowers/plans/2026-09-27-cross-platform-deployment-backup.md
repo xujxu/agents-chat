@@ -13931,7 +13931,10 @@ backup/data/receipt/final-runtime assertions. The original enable file must
 retain its bytes, inode and mtime across closeout; archived policy records
 must bind its digest, not a fabricated launch or preparation digest.
 Dispatch with application/live flags and `windows_restore_scenario=cold-unlaunched`.
-Public acceptance remains pending until that Actions run succeeds.
+Public acceptance passed at `d6cd777f / 38838082330`, job `116771602811`,
+on 2026-10-16 at 04:17 UTC. Original logs confirm 64/64 focused contracts
+and both exact real unlaunched interruption/public closeout markers, including
+the restored application API, preserved backup/data and distinct released task.
 
 **Goal:** Distinguish a genuine original enable intent from never-enabled
 preparation. Admit neither arbitrary missing launch evidence nor a fabricated
@@ -13975,7 +13978,7 @@ retirement inventory unchanged.
   original bridge dies, explicitly demand-start its still-enabled guarded task
   and require it to fail without launch/readiness/workload, then exercise the
   same read-only, repeated takeover, archive, fresh-copy and terminal chain.
-- [ ] Extend the focused workflow startup choice with `enabled`; keep the
+- [x] Extend the focused workflow startup choice with `enabled`; keep the
   `started` default and distinct concurrency suffix. Dispatch:
 
   ```bash

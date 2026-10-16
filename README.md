@@ -990,8 +990,13 @@ the durable policy journal and original archive before a fresh cold copy.
 The registered-but-never-enabled variant also passed actual public application
 recovery at `c1273ee2 / 38602160464`, preserving the same original evidence,
 archive, backup and data before a distinct released final runtime.
-Other missing-launch cases,
-including legacy requests or an enable attempt without launch evidence, live
+Version-two enable attempts without launch evidence also passed actual public
+recovery at `d6cd777f / 38838082330`. Recovery requires the exact original
+enable intent, absent original owners, an empty original Job and the exact
+guarded task/security with no instances. It preserves null runtime evidence,
+the original enable file and its archived policy digest before a distinct
+released final runtime; read-only inspection does not disable the task.
+Other missing-launch cases, including legacy requests, live
 guarded peers, initially inactive/legacy tasks and reboot recovery remain
 unsupported.
 Do not remove a retained lock to bypass a recovery refusal.
