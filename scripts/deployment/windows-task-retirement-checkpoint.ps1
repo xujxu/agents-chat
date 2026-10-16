@@ -38,11 +38,11 @@ function Prepare-AgentsChatTaskRetirementCheckpoint {
             pid=$ControllerPid; processIdentity=$ControllerIdentity
             bridgePid=$PID; bridgeIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
         }
-        if ($Inactive) {
-            $candidate['priorRuntime'] = [ordered]@{
-                configuration=$Context.Admission.configuration.GetString()
-                runtime=$Context.RetiredRuntime
-            }
+    }
+    if ($Inactive) {
+        $candidate['priorRuntime'] = [ordered]@{
+            configuration=$Context.Admission.configuration.GetString()
+            runtime=$Context.RetiredRuntime
         }
     }
     $published = Publish-AgentsChatRetirementRecord -Context $Context -Candidate $candidate `
