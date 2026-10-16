@@ -14393,6 +14393,18 @@ fresh resuming actor. Verify ten remaining receipts after death and unchanged
 state/lock digests across the whole interrupted sequence. Do not infer abrupt
 recovery from the earlier graceful-controller-exit test.
 
+Abrupt receipt cleanup `94302297 / 38970842991` passed: the owned actor was
+killed at prefix three, its exact native bridge exited, and a fresh actor
+finished all thirteen without changing state/lock or stopping the runtime.
+Next expose distinct inactive deployment closeout APIs over the existing
+retained worker evidence and version-three cleanup manifest containing the
+version-two task checkpoint. Propagate explicit inactive mode into native
+deployment reopening, preserving old bundle/empty-Job checks throughout
+ordered helper/journal/lock retirement. Active APIs must still reject inactive
+authority. Require actual sealed worker evidence, exact cleanup inventory,
+state/backup/runtime-bundle preservation and live released runtime after unlock.
+Add interrupted closeout reentry before enabling public deployment routing.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and

@@ -175,6 +175,18 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq $stateHash -and
                 (Get-FileHash -LiteralPath (Join-Path $control 'lock/owner.json') -Algorithm SHA256).Hash -ceq $lockHash) `
                 'Interrupted inactive retirement changed accepted state or original lock'
+            $closeout = [Deployment.WindowsControllerProcess]::Start($node,
+                @((Join-Path $PSScriptRoot 'deployment-windows-completion-session.mjs'), $control,
+                    [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, 'inactive-deployment'), $control, $environment)
+            try {
+                $closeoutOutput = $closeout.StandardOutput.ReadToEndAsync()
+                $closeoutDiagnostic = $closeout.StandardError.ReadToEndAsync()
+                Assert ($closeout.WaitForExit(600000)) 'Inactive deployment closeout timed out'
+                Write-Output $closeoutOutput.GetAwaiter().GetResult()
+                $errors = $closeoutDiagnostic.GetAwaiter().GetResult()
+                if ($errors) { [Console]::Error.WriteLine($errors) }
+                Assert ($closeout.ExitCode -eq 0) 'Inactive deployment closeout failed'
+            } finally { $closeout.Dispose() }
             $task = $folder.GetTask($TaskName)
             Assert ($state.phase -ceq 'accepted' -and [string]$task.Xml -ceq $finalDefinition -and
                 -not $task.Enabled -and $task.GetInstances(0).Count -eq 1 -and
