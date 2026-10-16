@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
-import { captureActivatedRuntime, captureTaskListener } from './windows-task-controller.mjs';
+import { captureTaskListener } from './windows-task-controller.mjs';
+import { captureWindowsManagedTaskObservation as capture } from './windows-managed-task-observation.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { assertLockOwner, captureLockOwner, validateState } from './state.mjs';
 import { externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
@@ -20,27 +21,6 @@ function refused(cause) {
     code: 'DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED', runtimeAuthority: false,
   });
 }
-function capture(value, project, taskName) {
-  const record = captureWorkerFields(value, [
-    'status', 'runtimeAuthority', 'project', 'taskName', 'definition', 'securityDescriptor',
-    'principalSid', 'enabled', 'configuration', 'configurationSha256', 'runtime', 'lease',
-  ], 'managed task observation');
-  if (record.status !== 'managed-task-observed' || record.runtimeAuthority !== false
-    || record.project !== project || record.taskName !== taskName
-    || typeof record.definition !== 'string' || !record.definition || record.definition.length > 262144
-    || record.definition.includes('\0')
-    || typeof record.securityDescriptor !== 'string' || !record.securityDescriptor
-    || record.securityDescriptor.length > 65536 || /[\0\r\n]/.test(record.securityDescriptor)
-    || typeof record.principalSid !== 'string' || !/^S-1-[0-9]+(?:-[0-9]+)+$/.test(record.principalSid)
-    || typeof record.enabled !== 'boolean' || !canonical(record.configuration)
-    || path.basename(record.configuration) !== 'configuration.json'
-    || typeof record.configurationSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.configurationSha256)
-    || !['unguarded', 'released'].includes(record.lease)) throw new Error('Invalid managed task observation.');
-  const runtime = captureActivatedRuntime(record.runtime);
-  if (runtime.configurationSha256 !== record.configurationSha256) throw new Error('Managed runtime configuration differs.');
-  return Object.freeze({ ...record, runtime });
-}
-
 export async function inspectWindowsManagedTask({ taskName, project, pwsh, signal }) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || !task(taskName) || !canonical(project) || !canonical(pwsh)) {

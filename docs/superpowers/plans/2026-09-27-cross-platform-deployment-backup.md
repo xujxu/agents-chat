@@ -13952,9 +13952,9 @@ legacy actions, reboot recovery and mutation authority are not implied.
     -f windows_restore_scenario=failed
   ```
 
-  Require exactly the three new missing-module failures and all 64 prior tests
-  passing before implementing the parser.
-- [ ] Extract the existing running observation capture unchanged; inactive
+  Causal `fddf2e04 / 38855386667`, job `116825563440`: original logs confirm
+  exactly three missing-module failures and all 64 prior tests passing.
+- [x] Extract the existing running observation capture unchanged; inactive
   capture checks exact common fields, disabled policy, null runtime and the
   existing `captureActivatedRuntime` validator for the retired record. Require
   the retired configuration digest to equal the installed digest. Freeze both
