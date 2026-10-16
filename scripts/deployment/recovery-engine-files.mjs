@@ -5,6 +5,7 @@ import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 
 export const recoveryDigest = bytes => createHash('sha256').update(bytes).digest('hex');
+export const recoveryManifestMaximumBytes = 65536;
 
 export async function locateRecoveryEngine({ control, manifestSha256 }) {
   const { root } = await canonicalWorkerDirectory(control, { privateMode: true });
@@ -17,7 +18,7 @@ export async function locateRecoveryEngine({ control, manifestSha256 }) {
   try { await lstat(generated); return generated; }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   await canonicalWorkerDirectory(legacy, { privateMode: true });
-  const bytes = await readWorkerFile(path.join(legacy, 'manifest.json'), 32768, { privateMode: true });
+  const bytes = await readWorkerFile(path.join(legacy, 'manifest.json'), recoveryManifestMaximumBytes, { privateMode: true });
   if (recoveryDigest(bytes) !== manifestSha256) throw new Error('Recovery engine digest does not match the backup or invocation.');
   return legacy;
 }
@@ -25,7 +26,7 @@ export async function locateRecoveryEngine({ control, manifestSha256 }) {
 export async function readRecoveryEngineManifest({ directory, manifestSha256 }) {
   await canonicalWorkerDirectory(directory, { privateMode: true });
   const file = path.join(directory, 'manifest.json');
-  const bytes = await readWorkerFile(file, 32768, { privateMode: true });
+  const bytes = await readWorkerFile(file, recoveryManifestMaximumBytes, { privateMode: true });
   const digest = recoveryDigest(bytes);
   if (manifestSha256 !== undefined && digest !== manifestSha256) throw new Error('Recovery engine digest changed.');
   const manifest = captureWorkerFields(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)),
@@ -62,7 +63,7 @@ export async function inspectRecoveryEngineFiles({ directory, manifestSha256, si
     }
   }
   if (JSON.stringify((await readdir(engine.root)).sort()) !== JSON.stringify([...manifest.files.map(entry => entry.name), 'manifest.json'].sort())
-    || !(await readWorkerFile(path.join(directory, 'manifest.json'), 32768, { privateMode: true })).equals(bytes)) {
+    || !(await readWorkerFile(path.join(directory, 'manifest.json'), recoveryManifestMaximumBytes, { privateMode: true })).equals(bytes)) {
     throw new Error('Saved recovery engine inventory or manifest changed.');
   }
   const current = await canonicalWorkerDirectory(engine.root, { privateMode: true });

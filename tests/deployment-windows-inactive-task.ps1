@@ -142,6 +142,9 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             } finally { $releasedOwner.Dispose() }
             Write-Output 'PASS: inactive completion leaves the accepted runtime alive after controller exit with released lease and original permanent disabled policy'
         }
+    } catch {
+        [Console]::Error.WriteLine($_.Exception.ToString())
+        throw
     } finally {
         if ($controller) { $controller.Dispose() }
         Remove-Item -LiteralPath $control -Recurse -Force

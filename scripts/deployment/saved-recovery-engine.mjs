@@ -3,7 +3,7 @@ import path from 'node:path';
 import { canonicalWorkerDirectory, readWorkerFile, syncWorkerDirectory, writeWorkerFile } from './worker-files.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { workerEngineFiles } from './saved-worker-engine.mjs';
-import { recoveryDigest as digest, inspectRecoveryEngineFiles, locateRecoveryEngine } from './recovery-engine-files.mjs';
+import { recoveryDigest as digest, recoveryManifestMaximumBytes, inspectRecoveryEngineFiles, locateRecoveryEngine } from './recovery-engine-files.mjs';
 
 const files = Object.freeze([...new Set([
   'saved-recovery-engine.mjs', 'retirement-recovery-entry.mjs', 'retirement-recovery.mjs',
@@ -121,6 +121,9 @@ export async function saveRecoveryEngine({ source, control, allowVersionChange =
     entries.push({ name, bytes: bytes.length, sha256: digest(bytes) });
   }
   const manifest = Buffer.from(`${JSON.stringify({ version: 1, files: entries })}\n`);
+  if (manifest.length > recoveryManifestMaximumBytes || entries.length > 256) {
+    throw new Error('Saved recovery manifest exceeds its supported budget.');
+  }
   const manifestSha256 = digest(manifest);
   let exists = true;
   try { await lstat(directory); }

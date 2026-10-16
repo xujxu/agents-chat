@@ -11,9 +11,31 @@ import { temporaryDeployment, acquireLock, releaseLock, recoverRetirement,
   retirementRecoveryInvocation, admissionFiles } from './deployment-fixture.mjs';
 import { reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
 import { saveRecoveryEngine, verifyRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
+import { readRecoveryEngineManifest, locateRecoveryEngine, recoveryDigest,
+  recoveryManifestMaximumBytes } from '../scripts/deployment/recovery-engine-files.mjs';
 
 const sourceTree = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
 const execute = promisify(execFile);
+
+test('recovery manifest admits bounded inventories beyond 32KiB and rejects bytes beyond 64KiB', async t => {
+  const root = await temporaryDeployment(t);
+  const directory = path.join(root, 'recovery-engine');
+  await mkdir(directory, { mode: 0o700 });
+  const manifest = {
+    version: 1,
+    files: ['linux-restore-entry.mjs', 'saved-recovery-engine.mjs',
+      ...Array.from({ length: 254 }, (_, index) => `${index}-${'helper-'.repeat(10)}.mjs`)]
+      .map(name => ({ name, bytes: 1, sha256: 'a'.repeat(64) })),
+  };
+  const bytes = Buffer.from(JSON.stringify(manifest));
+  assert.ok(bytes.length > 32768 && bytes.length <= recoveryManifestMaximumBytes);
+  const file = path.join(directory, 'manifest.json');
+  await writeFile(file, bytes, { mode: 0o600 });
+  assert.deepEqual((await readRecoveryEngineManifest({ directory })).manifest, manifest);
+  assert.equal(await locateRecoveryEngine({ control: root, manifestSha256: recoveryDigest(bytes) }), directory);
+  await writeFile(file, Buffer.alloc(recoveryManifestMaximumBytes + 1, 32));
+  await assert.rejects(readRecoveryEngineManifest({ directory }), /Invalid worker file/);
+});
 
 test('changed recovery controllers publish an immutable generation without replacing the legacy engine', async t => {
   const root = await temporaryDeployment(t);
