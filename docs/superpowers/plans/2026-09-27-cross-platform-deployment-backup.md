@@ -14207,6 +14207,22 @@ original owner exit code or Scheduler instance: the existing running retirement
 and activation routines explicitly require those original live objects and are
 not valid inactive-task consumers.
 
+Shared configuration/publication regression `dd28b9d5 / 38915455073` passed
+both native earlier-startup and original live-path jobs.
+
+The next native handoff begins with immutable activation preparation, before
+any Scheduler mutation. Extend stopped transaction phases through configuring
+and activating. `prepareWindowsInactiveTaskActivation({ context, control, lock,
+bundle })` must require the retained transaction and verified backup, then ask
+the original native observer to retain the exact activating state and distinct
+operation runtime bundle. Native validation binds original preflight operation,
+lock/controller, admission and retired generation. Publish create-only
+`task-maintenance/inactive-activation-prepared.json` with admission/state hashes
+and the original task policy plus replacement configuration. This is preparation,
+not task replacement or activation; no old owner exit code or instance is invented.
+The real fixture rejects early phase, forged context, original bundle and
+duplicate preparation, then proves the original disabled task is unchanged.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and

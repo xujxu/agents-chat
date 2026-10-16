@@ -41,7 +41,7 @@ try {
     await import(pathToFileURL(path.join(source, 'saved-recovery-engine.mjs')).href);
   const recovery = await saveRecoveryEngine({ control, source });
   const { verifyWindowsRuntimePublication } = await import('./deployment-windows-runtime-publication.mjs');
-  await verifyWindowsRuntimePublication({
+  const bundle = await verifyWindowsRuntimePublication({
     project, control, lock, pwsh, taskName, node: process.execPath, inactive: true,
   });
   const stateBytes = await readFile(path.join(control, 'state.json'));
@@ -196,6 +196,37 @@ try {
       console.log('PASS: inactive transaction runs owned Git selection, npm dependencies and build for its exact admitted target');
       assert.deepEqual(await verifySnapshot(path.join(control, 'backup')), manifest);
       console.log('PASS: inactive source stages require original transaction, exact target and the retained verified backup');
+      const { prepareWindowsInactiveTaskActivation } =
+        await import(pathToFileURL(path.join(source, 'windows-inactive-task-transaction.mjs')).href);
+      assert.equal(typeof prepareWindowsInactiveTaskActivation, 'function', 'Missing native inactive activation preparation');
+      const preparationOptions = { context: transaction, control, lock, bundle };
+      await assert.rejects(prepareWindowsInactiveTaskActivation(preparationOptions), /activating/);
+      await writeState(control, { ...rotating, phase: 'configuring', previousPhase: 'building' });
+      await transaction.check();
+      await writeState(control, { ...rotating, phase: 'activating', previousPhase: 'configuring' });
+      await transaction.check();
+      await assert.rejects(prepareWindowsInactiveTaskActivation({
+        ...preparationOptions, context: { ...transaction },
+      }));
+      await assert.rejects(prepareWindowsInactiveTaskActivation({
+        ...preparationOptions, bundle: { ...bundle, configuration: admissionScope.observation.configuration },
+      }));
+      const preparation = await prepareWindowsInactiveTaskActivation(preparationOptions);
+      const preparationBytes = await readFile(preparation.file);
+      assert.equal(createHash('sha256').update(preparationBytes).digest('hex'), preparation.sha256);
+      const intent = JSON.parse(preparationBytes);
+      assert.equal(intent.kind, 'inactive');
+      assert.equal(intent.phase, 'activation-prepared');
+      assert.equal(intent.admissionSha256, published.sha256);
+      assert.equal(intent.stateSha256,
+        createHash('sha256').update(await readFile(path.join(control, 'state.json'))).digest('hex'));
+      assert.equal(intent.configuration, bundle.configuration);
+      assert.equal(intent.configurationSha256, bundle.sha256);
+      assert.equal(Object.hasOwn(intent, 'instanceGuid'), false);
+      await assert.rejects(prepareWindowsInactiveTaskActivation(preparationOptions));
+      assert.deepEqual(await admissionScope.check(), admissionScope.observation);
+      assert.deepEqual(await readFile(preparation.file), preparationBytes);
+      console.log('PASS: native inactive activation preparation retains exact stopped admission, activating state and distinct runtime bundle without starting or replacing the task');
     } finally { await transaction.close(); }
     await assert.rejects(transaction.check(), /closed/);
     console.log('PASS: inactive transaction consumes original stopped admission and grants only matching copying-stage snapshot metadata');

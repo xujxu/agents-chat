@@ -37,5 +37,6 @@ export async function verifyWindowsRuntimePublication({ control, project, taskNa
     assert.deepEqual(await readFile(stateFile), state);
     assert.deepEqual(await scope.check(), scope.observation);
     console.error(`PASS: private runtime publication preserves exact configuration and helpers, refuses foreign authority and never overwrites an existing bundle or changes the ${inactive ? 'inactive' : 'running'} task`);
+    return bundle;
   } finally { await scope.close(); }
 }
