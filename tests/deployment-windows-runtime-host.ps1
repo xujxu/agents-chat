@@ -419,6 +419,8 @@ if (process.argv[2] === 'child') {
             }
             Assert ($code -ceq '80041326') "Disabled native task did not refuse explicit restart with SCHED_E_TASK_DISABLED: $code"
             Assert (-not $task.Enabled -and $task.GetInstances(0).Count -eq 0) 'Disabled task restarted after original owner retirement'
+            . (Join-Path $PSScriptRoot 'deployment-windows-inactive-task.ps1')
+            Test-AgentsChatInactiveTask -Source $source -TaskName $taskName -Project $project -ReadyFile $readyFile
             Write-Output 'PASS: native inhibition preserves original owner settlement and refuses restart after retirement'
         }
     }

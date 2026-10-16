@@ -1,4 +1,5 @@
 . (Join-Path $PSScriptRoot 'windows-task-completion-proof.ps1')
+. (Join-Path $PSScriptRoot 'windows-managed-task-definition.ps1')
 
 function Assert-AgentsChatManagedTask([hashtable]$Context) {
     if ($Context.Closed -or $Context.Poisoned -or $Context.Busy) { throw 'Managed task observation is unavailable.' }
@@ -81,35 +82,10 @@ function Open-AgentsChatManagedTask([string]$TaskName, [string]$Project) {
         Closed=$false; Poisoned=$false; Busy=$false; Owner=$null; Instance=$null; Folder=$null; Listener=$null; Stage='input'
     }
     try {
-        if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7 -or
-            $TaskName -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$') { throw 'Unsupported managed task discovery.' }
-        $context.Files.Add([Deployment.WindowsPrivateFile]::OpenSourceDirectory($Project))
-        $context.Stage = 'task-action'
-        $scheduler = New-Object -ComObject 'Schedule.Service'
-        $scheduler.Connect()
-        $context.Folder = $scheduler.GetFolder('\')
-        $task = $context.Folder.GetTask($TaskName)
-        if ($task.Path -cne "\$TaskName" -or $task.Definition.Actions.Count -ne 1) { throw 'Ambiguous managed task action.' }
-        $action = $task.Definition.Actions.Item(1)
-        $arguments = [string]$action.Arguments
-        if ([int]$action.Type -ne 0 -or -not [IO.Path]::IsPathRooted([string]$action.Path) -or
-            ([string]$action.Path + $arguments + [string]$action.WorkingDirectory) -match '%|\$\(|[\x00\r\n]' -or
-            $arguments -cnotmatch '^(-NoProfile -NonInteractive -File "([^"]+)" -Configuration "([^"]+)" -Sha256 ([a-f0-9]{64}))$') {
-            throw 'Task is not a literal installed managed runtime.'
-        }
-        $hostFile = $Matches[2]
-        $configuration = $Matches[3]
-        $sha256 = $Matches[4]
+        $task = Open-AgentsChatManagedTaskDefinition $context
+        $configuration = $context.Configuration
+        $sha256 = $context.ConfigurationSha256
         $bundle = [IO.Path]::GetDirectoryName($configuration)
-        if ([IO.Path]::GetFileName($configuration) -cne 'configuration.json' -or
-            $hostFile -cne (Join-Path $bundle 'windows-runtime-host.ps1') -or
-            [string]$action.WorkingDirectory -cne $bundle) { throw 'Managed task does not use one installed bundle.' }
-        $context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory($bundle))
-        $context.NativeDefinition = [string]$task.Xml
-        $context.SecurityDescriptor = [string]$task.GetSecurityDescriptor(7)
-        $context.Enabled = [bool]$task.Enabled
-        $context.Configuration = $configuration
-        $context.ConfigurationSha256 = $sha256
         $context.Stage = 'task-instance'
         $instances = $task.GetInstances(0)
         if ($instances.Count -ne 1) { throw 'Managed task requires one running original instance.' }

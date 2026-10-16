@@ -13956,13 +13956,24 @@ legacy actions, reboot recovery and mutation authority are not implied.
   exactly three missing-module failures and all 64 prior tests passing.
 - [x] Extract the existing running observation capture unchanged; inactive
   capture checks exact common fields, disabled policy, null runtime and the
-  existing `captureActivatedRuntime` validator for the retired record. Require
+  retained readiness identity for the retired record. Readiness does not contain
+  a Scheduler instance GUID: do not invent one after the task exits. Require
   the retired configuration digest to equal the installed digest. Freeze both
   records and reject extra fields.
 - [ ] Repeat the same Actions gate, require 67 passing contracts and existing
   public routing/native checks. Only then extend native observation and its
   actual retired-task fixture; public stopped deployment remains unsupported
   until its independent native proof and transactional integration pass.
+
+Native follow-through uses `windows-inactive-task.ps1` and the existing real
+`task-inhibition` fixture. The original host is genuinely stopped and retired;
+retain the unique original readiness file, prove its host absent and Job empty,
+and recheck disabled XML/security and zero instances. Refuse ambiguous readiness
+or guarded launch inventory. Mutating enabled policy after opening must poison
+the scope. The fixture restores its own policy, reopens observation and confirms
+unchanged readiness bytes/mtime. Shared literal-action parsing moves unchanged
+to `windows-managed-task-definition.ps1`; both added dependencies must be included
+in `saved-worker-engine.mjs`. This is observation only, not copying authority.
 
 ### Task 5FP: Recover a version-two enable attempt before any launch
 

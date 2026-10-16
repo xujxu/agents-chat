@@ -8,7 +8,6 @@ const configurationSha256 = 'a'.repeat(64);
 const retiredRuntime = {
   pid: 1234, identity: '1234:638900000000000000',
   generation: '11111111-1111-4111-8111-111111111111',
-  instanceGuid: '22222222-2222-4222-8222-222222222222',
   sessionId: 1, configurationSha256, launcherPid: 1235, readySha256: 'b'.repeat(64),
 };
 const observation = () => ({
@@ -28,6 +27,7 @@ test('inactive Windows observation preserves a retired identity without inventin
   assert.deepEqual(value, input);
   assert.equal(value.runtime, null);
   assert.equal(value.runtimeAuthority, false);
+  assert.equal(Object.hasOwn(value.retiredRuntime, 'instanceGuid'), false);
   assert.ok(Object.isFrozen(value));
   assert.ok(Object.isFrozen(value.retiredRuntime));
   input.retiredRuntime.pid = 9999;
