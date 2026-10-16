@@ -4,7 +4,7 @@ import { captureLockOwner, validateState } from './state.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 import {
   assertWindowsInactiveTaskAdmissionBinding, captureWindowsInactiveTaskActivationPreparation,
-  replaceWindowsInactiveTaskBinding,
+  replaceWindowsInactiveTaskBinding, startWindowsInactiveTaskBinding,
 } from './windows-managed-task.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { rotateSnapshot } from './snapshot-rotation.mjs';
@@ -89,7 +89,7 @@ export async function beginWindowsInactiveTaskTransaction(options) {
         finally { busy = false; }
       },
       async close() {
-        if (busy || retained.rotating || retained.preparing || retained.replacing) {
+        if (busy || retained.rotating || retained.preparing || retained.replacing || retained.starting) {
           throw new Error('Cannot close a busy inactive task transaction.');
         }
         if (!closed) { closed = true; await scope.close(); }
@@ -229,6 +229,29 @@ export async function replaceWindowsInactiveTask({ context, control, lock: suppl
     retained.replacementAttempted = true;
     const result = await replaceWindowsInactiveTaskBinding({ ...retained, signal });
     await context.check({ signal });
+    retained.replaced = result;
     return result;
   } finally { retained.replacing = false; }
+}
+
+export async function startWindowsInactiveTask({ context, control, lock: supplied, signal }) {
+  const retained = transactions.get(context);
+  const lock = captureLockOwner(supplied);
+  if (!retained || retained.control !== control || !same(retained.lock, lock)
+    || !retained.replaced || retained.starting || retained.startupAttempted) {
+    throw new Error('Inactive startup requires its original replaced transaction.');
+  }
+  retained.starting = true;
+  try {
+    const state = await context.check({ signal });
+    if (state.phase !== 'activating'
+      || !same(await verifySnapshot(path.join(control, 'backup'), { signal }), retained.snapshot)
+      || !same(await context.check({ signal }), state)) {
+      throw new Error('Inactive startup state or backup changed.');
+    }
+    retained.startupAttempted = true;
+    const result = await startWindowsInactiveTaskBinding({ ...retained, signal });
+    await context.check({ signal });
+    return result;
+  } finally { retained.starting = false; }
 }

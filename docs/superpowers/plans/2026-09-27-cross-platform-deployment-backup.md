@@ -14239,6 +14239,22 @@ bound throughout. This does not enable or start the task.
 Real causal fixture `1fa6505c / 38931576759` fails at the missing replacement
 interface after native preparation. It also independently checks Scheduler policy
 and the exact replacement action from PowerShell after the Node controller exits.
+Replacement accepted at `0320546e / 38932534234`: 69 contracts and both Node
+receipt checks and independent native Scheduler policy/action assertions.
+
+Guarded startup follows through `startWindowsInactiveTask({ context, control,
+lock })`. Native startup retains the original inactive transaction rather than
+constructing a cold-restore proof. Reuse the existing pure guarded task policy
+builder; retain requested -> registered -> enabled -> started -> inhibited ->
+observed -> running sequencing. Publish the enable intent before enabling; bind
+the actual returned Scheduler instance and newly observed owner/readiness/Job.
+The old runtime remains proved absent without an invented prior instance GUID.
+The Node bridge checks every acknowledged phase and the final running receipt,
+and native checks continue to reject task policy, owner or Job drift.
+The real fixture closes the native controller and requires the new guarded host
+to exit, then independently checks the disabled Scheduler definition and zero
+instances. This is not completion or permanent lease release.
+Startup causal `6421ebef / 38933976406` failed at the missing startup interface.
 
 ### Task 5FP: Recover a version-two enable attempt before any launch
 

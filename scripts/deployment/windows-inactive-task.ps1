@@ -66,13 +66,17 @@ function Assert-AgentsChatInactiveTask([hashtable]$Context) {
             (Test-Path -LiteralPath (Join-Path $Context.AdmissionControl 'recovery-lock'))) {
             throw 'Inactive task admission has conflicting recovery authority.'
         }
-        $task = $Context.Folder.GetTask($Context.TaskName)
-        $expectedDefinition = if ($Context.ContainsKey('ReplacementDefinition')) {
-            $Context.ReplacementDefinition
-        } else { $Context.NativeDefinition }
-        if ($task.Enabled -or [string]$task.Xml -cne $expectedDefinition -or
-            [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor -or
-            $task.GetInstances(0).Count -ne 0) { throw 'Original inactive task policy or instances changed.' }
+        if ($Context.ContainsKey('Startup')) {
+            Assert-AgentsChatInactiveStartup $Context
+        } else {
+            $task = $Context.Folder.GetTask($Context.TaskName)
+            $expectedDefinition = if ($Context.ContainsKey('ReplacementDefinition')) {
+                $Context.ReplacementDefinition
+            } else { $Context.NativeDefinition }
+            if ($task.Enabled -or [string]$task.Xml -cne $expectedDefinition -or
+                [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor -or
+                $task.GetInstances(0).Count -ne 0) { throw 'Original inactive task policy or instances changed.' }
+        }
         $bundle = [IO.Path]::GetDirectoryName($Context.Configuration)
         $entries = @(Get-ChildItem -LiteralPath $bundle -Force | Where-Object Name -Match '^(runtime|launch)-.*\.json$')
         if ($entries.Count -ne 1 -or $entries[0].Name -cne $Context.ReadyName -or $entries[0].PSIsContainer) {

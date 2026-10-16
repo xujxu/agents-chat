@@ -50,6 +50,7 @@ function Publish-AgentsChatInactiveTaskReplacement([hashtable]$Context) {
     $null = Assert-AgentsChatInactiveTask $Context
     $receipt = Write-AgentsChatInactiveReplacementReceipt $Context 'replacement-complete' `
         $Context.ReplacementDefinition $requested.sha256
+    $Context.ReplacementSha256 = $receipt.sha256
     $null = Assert-AgentsChatInactiveTask $Context
     return [pscustomobject]@{
         replaced=$true; inhibited=$true; definition=$Context.ReplacementDefinition

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
-import { captureTaskListener } from './windows-task-controller.mjs';
+import { captureTaskListener, captureActivatedRuntime } from './windows-task-controller.mjs';
 import {
   captureWindowsManagedTaskObservation, captureWindowsInactiveTaskObservation,
 } from './windows-managed-task-observation.mjs';
@@ -79,7 +79,9 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
         if (child.exitCode !== null || child.signalCode !== null) throw new Error('Original managed task observer exited.');
         const id = ++sequence;
         await wire.send({ id, method, ...payload });
-        const reply = captureWorkerFields(await wire.receive({ signal: requestSignal, timeoutMs: 30000 }),
+        const reply = captureWorkerFields(await wire.receive({
+          signal: requestSignal, timeoutMs: method === 'start-inactive' ? 60000 : 30000,
+        }),
           ['id', 'type', 'value', 'processIdentity'], 'managed task reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== identity.processIdentity) {
           throw new Error('Unexpected managed task observation acknowledgement.');
@@ -99,6 +101,9 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
         if (method === 'replace-inactive') {
           return Object.freeze(captureWorkerFields(reply.value,
             ['replaced', 'inhibited', 'definition', 'file', 'sha256'], 'inactive replacement'));
+        }
+        if (method === 'start-inactive') {
+          return captureWorkerFields(reply.value, ['status', 'step', 'taskName', 'runtime', 'definition'], 'inactive startup');
         }
         if (method === 'capture-admission') {
           const result = captureWorkerFields(reply.value, ['admission', 'sha256'], 'managed task admission');
@@ -289,5 +294,59 @@ export async function replaceWindowsInactiveTaskBinding(options) {
     throw refused(new Error('Native inactive replacement differs from its retained preparation.'));
   }
   await assertWindowsInactiveTaskAdmissionBinding(options);
+  retained.replacement = result;
   return result;
+}
+
+export async function startWindowsInactiveTaskBinding(options) {
+  const { scope, control, signal } = options;
+  const { observation, state } = await assertWindowsInactiveTaskAdmissionBinding(options);
+  const retained = inactiveScopes.get(scope);
+  if (!retained.replacement || retained.startupAttempted) {
+    throw refused(new Error('Inactive startup requires one original completed replacement.'));
+  }
+  retained.startupAttempted = true;
+  let runtime;
+  let result;
+  for (const step of ['requested', 'registered', 'enabled', 'started', 'inhibited', 'observed', 'running']) {
+    await assertWindowsInactiveTaskAdmissionBinding(options);
+    result = await retained.request('start-inactive', signal);
+    if (result.step !== step || result.taskName !== observation.taskName
+      || result.status !== (step === 'running' ? 'guarded-running' : 'inactive-startup-progress')
+      || typeof result.definition !== 'string' || !result.definition || result.definition.length > 262144) {
+      throw refused(new Error('Inactive startup acknowledged an unexpected native phase.'));
+    }
+    if (['observed', 'running'].includes(step)) {
+      const captured = captureActivatedRuntime(result.runtime);
+      if (captured.identity === observation.retiredRuntime.identity
+        || captured.generation === observation.retiredRuntime.generation
+        || captured.configurationSha256 !== observation.configurationSha256
+        || runtime && !isDeepStrictEqual(captured, runtime)) {
+        throw refused(new Error('Inactive startup runtime differs from its admitted new instance.'));
+      }
+      runtime = Object.freeze(captured);
+    } else if (result.runtime !== null) {
+      throw refused(new Error('Inactive startup invented readiness before original observation.'));
+    }
+    await assertWindowsInactiveTaskAdmissionBinding(options);
+  }
+  const requested = await readWorkerFile(
+    path.join(control, 'task-maintenance', 'inactive-start-requested.json'), 4194304, { privateMode: true });
+  const running = await readWorkerFile(
+    path.join(control, 'task-maintenance', 'inactive-start-running.json'), 4194304, { privateMode: true });
+  const expected = {
+    version: 1, kind: 'inactive', phase: 'running', operationId: state.operationId,
+    preparationSha256: retained.activationPreparation.sha256,
+    previousSha256: createHash('sha256').update(requested).digest('hex'),
+    stateSha256: retained.activationPreparation.stateSha256,
+    controllerPid: scope.identity.pid, controllerIdentity: scope.identity.processIdentity,
+    taskName: observation.taskName, definition: result.definition, securityDescriptor: observation.securityDescriptor,
+    configuration: path.join(control, `runtime-${state.operationId}`, 'configuration.json'),
+    configurationSha256: observation.configurationSha256, runtime,
+  };
+  if (!isDeepStrictEqual(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(running)), expected)) {
+    throw refused(new Error('Native inactive startup receipt differs from its original guarded runtime.'));
+  }
+  await assertWindowsInactiveTaskAdmissionBinding(options);
+  return Object.freeze({ status: result.status, taskName: result.taskName, runtime });
 }
