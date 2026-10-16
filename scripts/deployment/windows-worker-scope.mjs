@@ -3,11 +3,19 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { assertLockOwner, captureLockOwner } from './state.mjs';
 import { externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
-import { assertWindowsManagedTaskScope } from './windows-managed-task.mjs';
+import { assertWindowsManagedTaskScope, assertWindowsInactiveTaskScope } from './windows-managed-task.mjs';
 
-export async function inspectWindowsWorkerScope({
+export async function inspectWindowsWorkerScope(options) {
+  return inspectWorkerScope(options, assertWindowsManagedTaskScope);
+}
+
+export async function inspectWindowsInactiveWorkerScope(options) {
+  return inspectWorkerScope(options, assertWindowsInactiveTaskScope);
+}
+
+async function inspectWorkerScope({
   scope, control, lock: suppliedLock, node, pwsh, tools = [], signal,
-}) {
+}, assertScope) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || typeof pwsh !== 'string' || !path.isAbsolute(pwsh)
     || path.resolve(pwsh) !== pwsh || /[\0\r\n]/.test(pwsh) || !Array.isArray(tools)) {
@@ -16,7 +24,7 @@ export async function inspectWindowsWorkerScope({
   const lock = captureLockOwner(suppliedLock);
   const { root } = await externalWorkerDirectory(control, lock.project);
   await assertLockOwner(root, lock);
-  const observation = await assertWindowsManagedTaskScope(scope, { signal });
+  const observation = await assertScope(scope, { signal });
   if (observation.project !== lock.project) throw new Error('Worker task and locked project differ.');
   if (scope.identity.accountSid !== observation.principalSid) {
     throw new Error('Workers require the installed task account; cross-account execution is unsupported.');
@@ -42,7 +50,7 @@ export async function inspectWindowsWorkerScope({
   const check = async ({ signal: checkSignal = signal } = {}) => {
     checkSignal?.throwIfAborted();
     await assertLockOwner(root, lock);
-    await assertWindowsManagedTaskScope(scope, { signal: checkSignal });
+    await assertScope(scope, { signal: checkSignal });
   };
   await check();
   return Object.freeze({

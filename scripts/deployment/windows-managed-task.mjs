@@ -133,6 +133,12 @@ export async function assertWindowsManagedTaskScope(scope, { signal } = {}) {
   return retained.request('check', signal);
 }
 
+export async function assertWindowsInactiveTaskScope(scope, { signal } = {}) {
+  const retained = inactiveScopes.get(scope);
+  if (!retained) throw refused(new Error('Original retained inactive task scope is required.'));
+  return retained.request('check', signal);
+}
+
 export async function captureWindowsManagedTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }) {
   return captureTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }, false);
 }

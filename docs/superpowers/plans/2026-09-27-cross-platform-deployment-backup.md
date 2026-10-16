@@ -14161,6 +14161,25 @@ transaction and the same verified backup; reject early stages, forged contexts
 and the old source commit. These checks authorize the owned-worker stage
 integration next; the fixture does not yet perform a real application build.
 
+Source-stage authority passed at `4001fb41 / 38899499945`: 69 contracts and
+the real inactive task snapshot, rotation and exact source-stage assertions.
+The initial implementation had a nested export; the accepted fix places it at
+module scope. Actual owned-worker integration follows using the existing small
+Git/npm fixture, not a claim of full application deployment.
+
+- [x] Reuse `createWindowsSourceRepository` from the existing source-build
+  fixture to create genuine old/target commits before inactive snapshot capture.
+- [x] Add actual `prepareWindowsInactiveSourceBuild` calls, owned inspect/resolve,
+  rejected early/forged selection, source selection, npm dependencies and build.
+  Require `built.sourceCommit === targetCommit` and build ID `new-source`.
+  Causal `32a28930 / 38900548826` fails at the missing named inactive wrapper.
+- [ ] Add named inactive worker/source wrappers over private shared internals.
+  The inactive scope registry supplies read authority, the retained inactive
+  transaction supplies mutation authority, and worker session/account come from
+  the actual controller, never a fabricated active runtime.
+- [ ] Run the focused Windows Actions gate, then the existing active/cold
+  regression because shared source-build fixture and worker internals changed.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
