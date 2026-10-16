@@ -13975,6 +13975,20 @@ unchanged readiness bytes/mtime. Shared literal-action parsing moves unchanged
 to `windows-managed-task-definition.ps1`; both added dependencies must be included
 in `saved-worker-engine.mjs`. This is observation only, not copying authority.
 
+Accepted native foundation: `0e902259 / 38855812103`, job `116827400040`.
+Original logs confirm 67/67 contracts, real inactive-task proof, changed-policy
+refusal, saved-engine closure and public routing. The earlier parser-only run
+`fca7ee9c / 38855572419` exposed the missing saved-engine dependency; this was
+fixed by the explicit dependency inventory in `0e902259`.
+
+Next bridge gate reuses the existing owner-watched native transport with an
+explicit `-Inactive` mode permitting only `check`/`close`. Node exposes
+`inspectWindowsInactiveTask`, without a listener method or active admission
+registration. The real fixture calls the bridge after retirement and verifies
+that active scope assertion refuses it, repeated checks remain stable, and
+closed observation cannot be reused. Before retirement the same disabled task
+must be rejected because its original instance is still alive.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and

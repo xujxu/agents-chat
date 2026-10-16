@@ -5,7 +5,9 @@ import { isDeepStrictEqual } from 'node:util';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { captureTaskListener } from './windows-task-controller.mjs';
-import { captureWindowsManagedTaskObservation as capture } from './windows-managed-task-observation.mjs';
+import {
+  captureWindowsManagedTaskObservation, captureWindowsInactiveTaskObservation,
+} from './windows-managed-task-observation.mjs';
 import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { assertLockOwner, captureLockOwner, validateState } from './state.mjs';
 import { externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
@@ -22,6 +24,15 @@ function refused(cause) {
   });
 }
 export async function inspectWindowsManagedTask({ taskName, project, pwsh, signal }) {
+  return inspectTask({ taskName, project, pwsh, signal }, false);
+}
+
+export async function inspectWindowsInactiveTask({ taskName, project, pwsh, signal }) {
+  return inspectTask({ taskName, project, pwsh, signal }, true);
+}
+
+async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
+  const capture = inactive ? captureWindowsInactiveTaskObservation : captureWindowsManagedTaskObservation;
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || !task(taskName) || !canonical(project) || !canonical(pwsh)) {
     throw refused(new Error('Canonical Windows project/PowerShell paths and an explicit task name are required.'));
@@ -32,7 +43,8 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
   const { child, wire, waitForExit, abandon } = windowsControllerTransport({
     pwsh, refused, label: 'Native managed task observer',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-TaskName', taskName, '-Project', project,
-      '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
+      '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
+      ...(inactive ? ['-Inactive'] : [])],
   });
   let closed = false;
   let busy = false;
@@ -100,10 +112,12 @@ export async function inspectWindowsManagedTask({ taskName, project, pwsh, signa
     const scope = Object.freeze({
       identity, observation,
       check: ({ signal: requestSignal } = {}) => request('check', requestSignal),
-      listener: ({ port, signal: requestSignal } = {}) => request('listener', requestSignal, { port }),
+      ...(!inactive ? {
+        listener: ({ port, signal: requestSignal } = {}) => request('listener', requestSignal, { port }),
+      } : {}),
       close: async () => { if (!closed) await request('close'); },
     });
-    scopes.set(scope, { observation, request });
+    if (!inactive) scopes.set(scope, { observation, request });
     return scope;
   } catch (cause) {
     closed = true;

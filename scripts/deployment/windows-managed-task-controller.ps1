@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][string]$TaskName,
     [Parameter(Mandatory)][string]$Project,
     [Parameter(Mandatory)][int]$ControllerPid,
-    [Parameter(Mandatory)][string]$ControllerIdentity
+    [Parameter(Mandatory)][string]$ControllerIdentity,
+    [switch]$Inactive
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -17,17 +18,20 @@ try {
         (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-managed-task.ps1')
+    . (Join-Path $PSScriptRoot 'windows-inactive-task.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-admission.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'managed-task-open'
-    $scope = Open-AgentsChatManagedTask $TaskName $Project
+    $scope = if ($Inactive) { Open-AgentsChatInactiveTask $TaskName $Project }
+        else { Open-AgentsChatManagedTask $TaskName $Project }
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; project=$Project; taskName=$TaskName
         accountSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
         sessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId
-        controllerIdentity=$ControllerIdentity; value=(Assert-AgentsChatManagedTask $scope)
+        controllerIdentity=$ControllerIdentity
+        value=$(if ($Inactive) { Assert-AgentsChatInactiveTask $scope } else { Assert-AgentsChatManagedTask $scope })
     } | ConvertTo-Json -Depth 8 -Compress))
     [Console]::Out.Flush()
     $sequence = 0
@@ -45,6 +49,7 @@ try {
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
         if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'capture-admission', 'listener')) { throw 'Invalid managed task observation request.' }
+        if ($Inactive -and $method -cnotin @('check', 'close')) { throw 'Inactive observation grants no mutation or listener authority.' }
         $sequence = $id
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
             throw 'Original managed task observer changed.'
@@ -60,7 +65,9 @@ try {
             $value = New-AgentsChatManagedTaskAdmission -Context $scope -Control $request.control.GetString() `
                 -LockSha256 $request.lockSha256.GetString() -StateSha256 $request.stateSha256.GetString() `
                 -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
-        } else { $value = Assert-AgentsChatManagedTask $scope }
+        } else {
+            $value = if ($Inactive) { Assert-AgentsChatInactiveTask $scope } else { Assert-AgentsChatManagedTask $scope }
+        }
         [Console]::Out.WriteLine((@{ id=$id; type='reply'; processIdentity=$identity; value=$value } |
             ConvertTo-Json -Depth 8 -Compress))
         [Console]::Out.Flush()

@@ -376,6 +376,13 @@ if (process.argv[2] === 'child') {
         $inhibited = Get-AgentsChatTaskOwnerBinding -TaskName $taskName -OwnerPid $owner.Id -OwnerIdentity $ownerIdentity `
             -Definition ([string]$task.Xml) -SecurityDescriptor $descriptor
         Assert (-not $inhibited.enabled -and $inhibited.instanceGuid -ceq $binding.instanceGuid) 'Inhibition lost original owner binding'
+        . (Join-Path $source 'windows-inactive-task.ps1')
+        $refused = $false
+        try {
+            $inactive = Open-AgentsChatInactiveTask $taskName $project
+            Close-AgentsChatTaskCompletionProof $inactive
+        } catch { $refused = $true }
+        Assert $refused 'Inactive observation accepted a disabled task with a live original instance'
     }
     if ($Scenario -eq 'configuration-change') {
         $changed = Get-Acl -LiteralPath $configFile
