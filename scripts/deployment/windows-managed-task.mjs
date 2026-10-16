@@ -95,6 +95,7 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
           return;
         }
         if (method === 'listener') return captureTaskListener(reply.value, observation.runtime, payload.port);
+        if (method === 'inactive-listener') return reply.value;
         if (method === 'prepare-inactive-activation') {
           return Object.freeze(captureWorkerFields(reply.value, ['file', 'sha256'], 'inactive activation preparation'));
         }
@@ -348,5 +349,21 @@ export async function startWindowsInactiveTaskBinding(options) {
     throw refused(new Error('Native inactive startup receipt differs from its original guarded runtime.'));
   }
   await assertWindowsInactiveTaskAdmissionBinding(options);
+  retained.activeRuntime = runtime;
   return Object.freeze({ status: result.status, taskName: result.taskName, runtime });
+}
+
+export async function inspectWindowsInactiveTaskListener(options) {
+  const { scope, port, signal } = options;
+  const retained = inactiveScopes.get(scope);
+  if (!retained?.activeRuntime || !Number.isSafeInteger(port) || port < 1 || port > 65535
+    || retained.listenerPort !== undefined && retained.listenerPort !== port) {
+    throw refused(new Error('Inactive readiness requires its original activated runtime and listener port.'));
+  }
+  await assertWindowsInactiveTaskAdmissionBinding(options);
+  const result = captureTaskListener(
+    await retained.request('inactive-listener', signal, { port }), retained.activeRuntime, port);
+  if (result.status === 'retained') retained.listenerPort = port;
+  await assertWindowsInactiveTaskAdmissionBinding(options);
+  return Object.freeze(result);
 }

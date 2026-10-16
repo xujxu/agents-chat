@@ -1,5 +1,34 @@
 . (Join-Path $PSScriptRoot 'windows-guarded-task-policy.ps1')
 
+function Open-AgentsChatInactiveTaskListener([hashtable]$Context, [int]$Port) {
+    $null = Assert-AgentsChatInactiveTask $Context
+    if ($Port -lt 1 -or $Port -gt 65535 -or -not $Context.ContainsKey('Startup') -or
+        $Context.Startup.Phase -cne 'running') { throw 'Inactive readiness requires an original running task and valid port.' }
+    $runtime = $Context.Startup.Runtime
+    if ($Context.ContainsKey('InactiveListener')) {
+        $listener = $Context.InactiveListener
+        if ($listener.Port -ne $Port) { throw 'Original inactive listener port differs.' }
+        $listener.Check()
+    } else {
+        try {
+            $listener = [Deployment.WindowsRuntimeListener]::Retain(
+                [guid]$runtime.generation, $runtime.pid, $runtime.identity, $runtime.launcherPid, $Port)
+        } catch {
+            if ($_.Exception.GetBaseException() -isnot [Deployment.WindowsRuntimeListenerNotReadyException]) { throw }
+            $null = Assert-AgentsChatInactiveTask $Context
+            return @{ status='not-ready' }
+        }
+        $Context.Files.Add($listener)
+        $Context.InactiveListener = $listener
+    }
+    $null = Assert-AgentsChatInactiveTask $Context
+    return [ordered]@{
+        status='retained'; generation=$runtime.generation; port=$Port
+        pid=$listener.ListenerPid; identity=$listener.ListenerIdentity
+        address=$listener.Address; createdAt=$listener.CreatedAt; pairedRecords=$listener.PairedRecords
+    }
+}
+
 function Assert-AgentsChatInactiveStartup([hashtable]$Context) {
     $startup = $Context.Startup
     $task = $Context.Folder.GetTask($Context.TaskName)

@@ -47,13 +47,13 @@ try {
         $fields = @('id', 'method')
         if ($method -ceq 'capture-admission') { $fields += @('control', 'lockSha256', 'stateSha256') }
         if ($method -ceq 'prepare-inactive-activation') { $fields += 'stateSha256' }
-        if ($method -ceq 'listener') { $fields += 'port' }
+        if ($method -cin @('listener', 'inactive-listener')) { $fields += 'port' }
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'capture-admission', 'listener', 'prepare-inactive-activation', 'replace-inactive', 'start-inactive')) { throw 'Invalid managed task observation request.' }
-        if ($Inactive -and $method -cnotin @('check', 'close', 'capture-admission', 'prepare-inactive-activation', 'replace-inactive', 'start-inactive')) { throw 'Inactive observation grants no listener authority.' }
-        if (-not $Inactive -and $method -cin @('prepare-inactive-activation', 'replace-inactive', 'start-inactive')) { throw 'Inactive mutation requires an inactive observer.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'capture-admission', 'listener', 'prepare-inactive-activation', 'replace-inactive', 'start-inactive', 'inactive-listener')) { throw 'Invalid managed task observation request.' }
+        if ($Inactive -and $method -cnotin @('check', 'close', 'capture-admission', 'prepare-inactive-activation', 'replace-inactive', 'start-inactive', 'inactive-listener')) { throw 'Inactive observation grants no original runtime listener authority.' }
+        if (-not $Inactive -and $method -cin @('prepare-inactive-activation', 'replace-inactive', 'start-inactive', 'inactive-listener')) { throw 'Inactive operation requires an inactive observer.' }
         $sequence = $id
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
             throw 'Original managed task observer changed.'
@@ -69,6 +69,8 @@ try {
             $value = Publish-AgentsChatInactiveTaskReplacement $scope
         } elseif ($method -ceq 'start-inactive') {
             $value = Start-AgentsChatInactiveTask $scope
+        } elseif ($method -ceq 'inactive-listener') {
+            $value = Open-AgentsChatInactiveTaskListener $scope $request.port.GetInt32()
         } elseif ($method -ceq 'listener') {
             $value = Open-AgentsChatManagedTaskListener -Context $scope -Port $request.port.GetInt32()
         } elseif ($method -ceq 'capture-admission') {

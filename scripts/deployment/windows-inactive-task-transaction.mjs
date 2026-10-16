@@ -5,6 +5,7 @@ import { readWorkerFile } from './worker-files.mjs';
 import {
   assertWindowsInactiveTaskAdmissionBinding, captureWindowsInactiveTaskActivationPreparation,
   replaceWindowsInactiveTaskBinding, startWindowsInactiveTaskBinding,
+  inspectWindowsInactiveTaskListener,
 } from './windows-managed-task.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { rotateSnapshot } from './snapshot-rotation.mjs';
@@ -87,6 +88,13 @@ export async function beginWindowsInactiveTaskTransaction(options) {
           return state;
         } catch (error) { failure = error; throw error; }
         finally { busy = false; }
+      },
+      async listener({ port, signal: requestSignal } = {}) {
+        await context.check({ signal: requestSignal });
+        if (!retained.active) throw new Error('Inactive listener requires completed guarded startup.');
+        const result = await inspectWindowsInactiveTaskListener({ ...retained, port, signal: requestSignal });
+        await context.check({ signal: requestSignal });
+        return result;
       },
       async close() {
         if (busy || retained.rotating || retained.preparing || retained.replacing || retained.starting) {
@@ -252,6 +260,7 @@ export async function startWindowsInactiveTask({ context, control, lock: supplie
     retained.startupAttempted = true;
     const result = await startWindowsInactiveTaskBinding({ ...retained, signal });
     await context.check({ signal });
+    retained.active = result;
     return result;
   } finally { retained.starting = false; }
 }

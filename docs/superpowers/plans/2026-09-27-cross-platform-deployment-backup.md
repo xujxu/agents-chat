@@ -14259,6 +14259,19 @@ Implementation `6c1d2d3c / 38934754493` succeeded: 69 contracts, actual guarded
 Scheduler owner/readiness/Job, controller-close host exit and disabled empty
 Scheduler instance inventory. Follow-through adds an independent native assertion
 that the new runtime's entire named Job is empty, not just its host process.
+Whole-Job follow-through `ed3c0716 / 38936295987` succeeded; original native
+startup regression `0320546e / 38933754241` also succeeded.
+
+Readiness uses the existing `waitWindowsReadiness` HTTP/provider checks through
+the retained inactive transaction's listener method, available only after genuine
+guarded startup. The native listener must belong to that runtime's Job and retain
+its original PID/creation identity, address and port; a listening port alone never
+authorizes completion. Reuse `WindowsRuntimeListener.Retain`, the existing listener
+wire parser and its typed not-ready response. Preserve the original observer's
+lack of listener authority before activation.
+The task-inhibition fixture now has a loopback HTTP descendant both before and
+after replacement, and requires the new listener owner rather than old metadata.
+Causal `7f14cafb / 38936509588` fails at missing transaction listener authority.
 
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
