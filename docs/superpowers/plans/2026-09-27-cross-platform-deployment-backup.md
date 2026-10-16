@@ -14222,6 +14222,23 @@ and the original task policy plus replacement configuration. This is preparation
 not task replacement or activation; no old owner exit code or instance is invented.
 The real fixture rejects early phase, forged context, original bundle and
 duplicate preparation, then proves the original disabled task is unchanged.
+Preparation accepted at `aebab114 / 38928801482`: 69 contracts and exact native
+preparation marker. Native handles retain the activating state and candidate
+bundle until original controller close.
+
+Replacement follows through `replaceWindowsInactiveTask({ context, control,
+lock })`. Recheck the retained backup and phase before requesting the original
+native observer. Publish requested/completed replacement records chained to the
+preparation; use the same literal action builder and unrelated-policy comparison
+as running-task replacement. Register with update-only, disabled and no-principal-
+ACE flags, then require no instances, unchanged security and exact resulting XML.
+The scope keeps its immutable original observation but checks the newly registered
+definition only after its own native replacement succeeds; arbitrary external
+policy drift still poisons it. The original retired readiness and empty Job stay
+bound throughout. This does not enable or start the task.
+Real causal fixture `1fa6505c / 38931576759` fails at the missing replacement
+interface after native preparation. It also independently checks Scheduler policy
+and the exact replacement action from PowerShell after the Node controller exits.
 
 ### Task 5FP: Recover a version-two enable attempt before any launch
 

@@ -96,6 +96,10 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
         if (method === 'prepare-inactive-activation') {
           return Object.freeze(captureWorkerFields(reply.value, ['file', 'sha256'], 'inactive activation preparation'));
         }
+        if (method === 'replace-inactive') {
+          return Object.freeze(captureWorkerFields(reply.value,
+            ['replaced', 'inhibited', 'definition', 'file', 'sha256'], 'inactive replacement'));
+        }
         if (method === 'capture-admission') {
           const result = captureWorkerFields(reply.value, ['admission', 'sha256'], 'managed task admission');
           if (result.admission !== path.join(payload.control, 'task-maintenance', 'admission.json')
@@ -250,6 +254,39 @@ export async function captureWindowsInactiveTaskActivationPreparation(options) {
     || !isDeepStrictEqual(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(record)), expected)
     || !(await readWorkerFile(statePath, 65536, { privateMode: true })).equals(bytes)) {
     throw refused(new Error('Native inactive preparation differs from its original admission and state.'));
+  }
+  await assertWindowsInactiveTaskAdmissionBinding(options);
+  retained.activationPreparation = Object.freeze({ ...result, stateSha256 });
+  return result;
+}
+
+export async function replaceWindowsInactiveTaskBinding(options) {
+  const { scope, control, signal } = options;
+  const { observation, state } = await assertWindowsInactiveTaskAdmissionBinding(options);
+  const retained = inactiveScopes.get(scope);
+  const prepared = retained.activationPreparation;
+  if (!prepared) throw refused(new Error('Inactive replacement requires original native preparation.'));
+  const result = await retained.request('replace-inactive', signal);
+  if (result.replaced !== true || result.inhibited !== true
+    || typeof result.definition !== 'string' || !result.definition || result.definition.length > 262144
+    || result.file !== path.join(control, 'task-maintenance', 'inactive-replacement-complete.json')
+    || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
+    throw refused(new Error('Inactive replacement acknowledgement differs.'));
+  }
+  const bytes = await readWorkerFile(result.file, 4194304, { privateMode: true });
+  const requested = await readWorkerFile(
+    path.join(control, 'task-maintenance', 'inactive-replacement-requested.json'), 4194304, { privateMode: true });
+  const expected = {
+    version: 1, kind: 'inactive', phase: 'replacement-complete', operationId: state.operationId,
+    preparationSha256: prepared.sha256, previousSha256: createHash('sha256').update(requested).digest('hex'),
+    stateSha256: prepared.stateSha256, taskName: observation.taskName, originalDefinition: observation.definition,
+    definition: result.definition, securityDescriptor: observation.securityDescriptor,
+    configuration: path.join(control, `runtime-${state.operationId}`, 'configuration.json'),
+    configurationSha256: observation.configurationSha256,
+  };
+  if (createHash('sha256').update(bytes).digest('hex') !== result.sha256
+    || !isDeepStrictEqual(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), expected)) {
+    throw refused(new Error('Native inactive replacement differs from its retained preparation.'));
   }
   await assertWindowsInactiveTaskAdmissionBinding(options);
   return result;

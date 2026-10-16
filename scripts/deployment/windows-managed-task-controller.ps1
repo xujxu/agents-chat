@@ -19,6 +19,7 @@ try {
         (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-managed-task.ps1')
     . (Join-Path $PSScriptRoot 'windows-inactive-task.ps1')
+    . (Join-Path $PSScriptRoot 'windows-inactive-task-replacement.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-admission.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
@@ -49,9 +50,9 @@ try {
         $request = Read-AgentsChatMaintenanceFields $text $fields
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'capture-admission', 'listener', 'prepare-inactive-activation')) { throw 'Invalid managed task observation request.' }
-        if ($Inactive -and $method -cnotin @('check', 'close', 'capture-admission', 'prepare-inactive-activation')) { throw 'Inactive observation grants no listener authority.' }
-        if (-not $Inactive -and $method -ceq 'prepare-inactive-activation') { throw 'Inactive preparation requires an inactive observer.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'capture-admission', 'listener', 'prepare-inactive-activation', 'replace-inactive')) { throw 'Invalid managed task observation request.' }
+        if ($Inactive -and $method -cnotin @('check', 'close', 'capture-admission', 'prepare-inactive-activation', 'replace-inactive')) { throw 'Inactive observation grants no listener authority.' }
+        if (-not $Inactive -and $method -cin @('prepare-inactive-activation', 'replace-inactive')) { throw 'Inactive mutation requires an inactive observer.' }
         $sequence = $id
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
             throw 'Original managed task observer changed.'
@@ -63,6 +64,8 @@ try {
             $value = 'close'
         } elseif ($method -ceq 'prepare-inactive-activation') {
             $value = New-AgentsChatInactiveActivationPreparation $scope $request.stateSha256.GetString()
+        } elseif ($method -ceq 'replace-inactive') {
+            $value = Publish-AgentsChatInactiveTaskReplacement $scope
         } elseif ($method -ceq 'listener') {
             $value = Open-AgentsChatManagedTaskListener -Context $scope -Port $request.port.GetInt32()
         } elseif ($method -ceq 'capture-admission') {

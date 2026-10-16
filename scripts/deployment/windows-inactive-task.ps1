@@ -48,6 +48,7 @@ function New-AgentsChatInactiveActivationPreparation([hashtable]$Context, [strin
         $Context.Files.Add($stateFile)
         $stateFile = $null
         $Context.ActivationPreparation = $record
+        $Context.ActivationPreparationSha256 = $receipt.Sha256
         $null = Assert-AgentsChatInactiveTask $Context
         return [pscustomobject]@{ file=$file; sha256=$receipt.Sha256 }
     } finally {
@@ -66,7 +67,10 @@ function Assert-AgentsChatInactiveTask([hashtable]$Context) {
             throw 'Inactive task admission has conflicting recovery authority.'
         }
         $task = $Context.Folder.GetTask($Context.TaskName)
-        if ($task.Enabled -or [string]$task.Xml -cne $Context.NativeDefinition -or
+        $expectedDefinition = if ($Context.ContainsKey('ReplacementDefinition')) {
+            $Context.ReplacementDefinition
+        } else { $Context.NativeDefinition }
+        if ($task.Enabled -or [string]$task.Xml -cne $expectedDefinition -or
             [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor -or
             $task.GetInstances(0).Count -ne 0) { throw 'Original inactive task policy or instances changed.' }
         $bundle = [IO.Path]::GetDirectoryName($Context.Configuration)

@@ -43,6 +43,35 @@ function Confirm-AgentsChatTaskReplacementPolicy([string]$Before, [string]$After
     }
 }
 
+function New-AgentsChatTaskReplacementDefinition([string]$Definition, [string]$Configuration,
+    [string]$Sha256, [hashtable]$Context) {
+    $Context.Stage = 'replacement-executable'
+    $process = [Diagnostics.Process]::GetCurrentProcess()
+    try { $powershell = $process.MainModule.FileName }
+    finally { $process.Dispose() }
+    if ($powershell -match '%|\$\(') { throw 'PowerShell path is not literal for Task Scheduler.' }
+    $bundle = [IO.Path]::GetDirectoryName($Configuration)
+    $hostFile = Join-Path $bundle 'windows-runtime-host.ps1'
+    $Context.Stage = 'replacement-definition-xml'
+    $requested = [xml]$Definition
+    $namespaces = [Xml.XmlNamespaceManager]::new($requested.NameTable)
+    $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+    $values = [ordered]@{
+        Command=$powershell
+        Arguments="-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$Configuration`" -Sha256 $Sha256"
+        WorkingDirectory=$bundle
+    }
+    foreach ($name in $values.Keys) {
+        $nodes = $requested.SelectNodes("/t:Task/t:Actions/t:Exec/t:$name", $namespaces)
+        if ($nodes.Count -ne 1) { throw 'Replacement requires one complete literal action.' }
+        $nodes[0].InnerText = $values[$name]
+    }
+    $requestedDefinition = $requested.OuterXml
+    if ($requestedDefinition.Length -gt 262144) { throw 'Replacement definition exceeds admission limits.' }
+    Confirm-AgentsChatTaskReplacementPolicy $Definition $requestedDefinition $Context
+    return $requestedDefinition
+}
+
 function Write-AgentsChatTaskReplacementReceipt([hashtable]$Context, [string]$Phase) {
     $Context.Stage = 'replacement-receipt'
     $record = [ordered]@{
@@ -100,29 +129,7 @@ function Publish-AgentsChatTaskReplacement {
         $definition = $task.Definition
         if ($definition.Actions.Count -ne 1 -or [int]$definition.Actions.Item(1).Type -ne 0 -or
             [int]$definition.Principal.LogonType -notin @(2, 3)) { throw 'Unsupported replacement task policy.' }
-        $Context.Stage = 'replacement-executable'
-        $process = [Diagnostics.Process]::GetCurrentProcess()
-        try { $powershell = $process.MainModule.FileName }
-        finally { $process.Dispose() }
-        if ($powershell -match '%|\$\(') { throw 'PowerShell path is not literal for Task Scheduler.' }
-        $hostFile = Join-Path $bundle 'windows-runtime-host.ps1'
-        $Context.Stage = 'replacement-definition-xml'
-        $requested = [xml]$Context.Definition
-        $namespaces = [Xml.XmlNamespaceManager]::new($requested.NameTable)
-        $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
-        $values = [ordered]@{
-            Command=$powershell
-            Arguments="-NoProfile -NonInteractive -File `"$hostFile`" -Configuration `"$Configuration`" -Sha256 $Sha256"
-            WorkingDirectory=$bundle
-        }
-        foreach ($name in $values.Keys) {
-            $nodes = $requested.SelectNodes("/t:Task/t:Actions/t:Exec/t:$name", $namespaces)
-            if ($nodes.Count -ne 1) { throw 'Replacement requires one complete literal action.' }
-            $nodes[0].InnerText = $values[$name]
-        }
-        $requestedDefinition = $requested.OuterXml
-        if ($requestedDefinition.Length -gt 262144) { throw 'Replacement definition exceeds admission limits.' }
-        Confirm-AgentsChatTaskReplacementPolicy $Context.Definition $requestedDefinition $Context
+        $requestedDefinition = New-AgentsChatTaskReplacementDefinition $Context.Definition $Configuration $Sha256 $Context
         $Context.ReplacementConfiguration = $Configuration
         $Context.ReplacementConfigurationSha256 = $Sha256
         $Context.ReplacementDefinition = $requestedDefinition

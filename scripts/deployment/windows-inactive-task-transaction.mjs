@@ -4,6 +4,7 @@ import { captureLockOwner, validateState } from './state.mjs';
 import { readWorkerFile } from './worker-files.mjs';
 import {
   assertWindowsInactiveTaskAdmissionBinding, captureWindowsInactiveTaskActivationPreparation,
+  replaceWindowsInactiveTaskBinding,
 } from './windows-managed-task.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { rotateSnapshot } from './snapshot-rotation.mjs';
@@ -88,7 +89,9 @@ export async function beginWindowsInactiveTaskTransaction(options) {
         finally { busy = false; }
       },
       async close() {
-        if (busy || retained.rotating || retained.preparing) throw new Error('Cannot close a busy inactive task transaction.');
+        if (busy || retained.rotating || retained.preparing || retained.replacing) {
+          throw new Error('Cannot close a busy inactive task transaction.');
+        }
         if (!closed) { closed = true; await scope.close(); }
       },
     });
@@ -203,6 +206,29 @@ export async function prepareWindowsInactiveTaskActivation({ context, control, l
     retained.preparationAttempted = true;
     const prepared = await captureWindowsInactiveTaskActivationPreparation({ ...retained, state, signal });
     await context.check({ signal });
+    retained.prepared = prepared;
     return prepared;
   } finally { retained.preparing = false; }
+}
+
+export async function replaceWindowsInactiveTask({ context, control, lock: supplied, signal }) {
+  const retained = transactions.get(context);
+  const lock = captureLockOwner(supplied);
+  if (!retained || retained.control !== control || !same(retained.lock, lock)
+    || !retained.prepared || retained.replacing || retained.replacementAttempted) {
+    throw new Error('Inactive replacement requires its original prepared transaction.');
+  }
+  retained.replacing = true;
+  try {
+    const state = await context.check({ signal });
+    if (state.phase !== 'activating'
+      || !same(await verifySnapshot(path.join(control, 'backup'), { signal }), retained.snapshot)
+      || !same(await context.check({ signal }), state)) {
+      throw new Error('Inactive replacement state or backup changed.');
+    }
+    retained.replacementAttempted = true;
+    const result = await replaceWindowsInactiveTaskBinding({ ...retained, signal });
+    await context.check({ signal });
+    return result;
+  } finally { retained.replacing = false; }
 }
