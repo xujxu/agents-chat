@@ -5,8 +5,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-export async function prepareWindowsConfigurationFixture({ scope, pwsh }) {
-  const { inspectWindowsConfiguration } = await import('../scripts/deployment/windows-configuration.mjs');
+export async function prepareWindowsConfigurationFixture({ scope, pwsh, inactive = false }) {
+  const module = await import('../scripts/deployment/windows-configuration.mjs');
+  const inspectWindowsConfiguration = inactive ? module.inspectWindowsInactiveConfiguration : module.inspectWindowsConfiguration;
+  assert.equal(typeof inspectWindowsConfiguration, 'function', 'Missing configuration inspection for selected task state');
   const project = scope.observation.project;
   const file = path.join(project, '.env.local');
   const higherPriority = path.join(project, '.env.production.local');

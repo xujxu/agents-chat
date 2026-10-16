@@ -107,11 +107,13 @@ try {
         await import(pathToFileURL(path.join(source, 'saved-recovery-engine.mjs')).href);
       const { verifySnapshot } = await import(pathToFileURL(path.join(source, 'snapshot.mjs')).href);
       const recovery = await saveRecoveryEngine({ control, source });
+      const { prepareWindowsConfigurationFixture } = await import('./deployment-windows-configuration.mjs');
+      const configuration = await prepareWindowsConfigurationFixture({ scope: admissionScope, pwsh, inactive: true });
       const destination = path.join(control, 'staging');
       const copyOptions = {
         context: transaction, control, lock, pwsh, destination, id: 'inactive-task-snapshot',
         source: { commit: sourceCommit, provenance: 'observed' }, recoveryEngine: recovery.manifestSha256,
-        configuration: { files: [], checkFiles: () => admissionScope.check() },
+        configuration,
       };
       await assert.rejects(createWindowsInactiveTaskSnapshot({ ...copyOptions, context: { ...transaction } }));
       assert.ok(!(await readdir(control)).includes('staging'));
@@ -172,16 +174,20 @@ try {
           assert.equal((await stages.select({ target, stopped: transaction })).commit, targetCommit);
         } else {
           await assert.rejects(stages.npm({ stage, commit: sourceCommit, stopped: transaction }));
-          const built = await stages.npm({ stage, commit: targetCommit, stopped: transaction });
+          const built = await stages.npm({
+            stage, commit: targetCommit, stopped: transaction, environment: configuration.buildEnvironment(tools.environment),
+          });
           if (stage === 'build') {
             assert.equal(built.sourceCommit, targetCommit);
             assert.equal(built.artifacts.identity.buildId, 'new-source');
             await built.artifacts.check();
           }
         }
+        await configuration.checkFiles();
         previousPhase = phase;
       }
       await operation.seal();
+      await configuration.close();
       assert.equal(await readFile(path.join(project, 'source-marker.txt'), 'utf8'), 'new-source\n');
       console.log('PASS: inactive transaction runs owned Git selection, npm dependencies and build for its exact admitted target');
       assert.deepEqual(await verifySnapshot(path.join(control, 'backup')), manifest);
