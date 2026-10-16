@@ -14272,6 +14272,26 @@ lack of listener authority before activation.
 The task-inhibition fixture now has a loopback HTTP descendant both before and
 after replacement, and requires the new listener owner rather than old metadata.
 Causal `7f14cafb / 38936509588` fails at missing transaction listener authority.
+Readiness `86c21867 / 38938117611` succeeded with 69 contracts and original
+Job-owned HTTP provider checks. Shared guarded-policy regression
+`ed3c0716 / 38936342010` also succeeded.
+
+Completion reuses `completeWindowsTaskActivation` with the inactive transaction's
+`prepareCompletion` and `complete` methods. Native preparation retains listener,
+providers, original activating state and staged/permanent definitions in a
+create-only receipt, then deliberately releases only the mutable state handle.
+The accepted state must differ solely in phase, previous phase and monotonic
+updated time; native completion pins its explicit digest before any release.
+Stage the permanent action with automation still suppressed, record release
+intent, authenticate the original runtime's lease release, then restore the
+original permanent disabled policy. Keep all receipts/lock until separate
+retirement; completion does not imply public finalization or recovery support.
+The focused gate keeps the controller-close guard case and adds a separate
+`-InactiveCompletion` fixture. Its released runtime must remain alive after Node
+and native controller exit; independent PowerShell checks accepted state,
+permanent policy, released lease and actual owner before explicit test cleanup
+stops/retires the exact runtime and verifies its entire Job is empty.
+Causal `81fbfd4e / 38939537244` fails at missing native completion preparation.
 
 ### Task 5FP: Recover a version-two enable attempt before any launch
 

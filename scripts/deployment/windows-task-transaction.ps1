@@ -9,7 +9,7 @@ function Get-AgentsChatPriorRuntimePreviousPhase([string]$Phase) {
 }
 
 function ConvertFrom-AgentsChatTaskTransactionState([hashtable]$Transaction, [string]$Text,
-    [switch]$InactivePreflight, [switch]$InactiveActivation) {
+    [switch]$InactivePreflight, [switch]$InactiveActivation, [switch]$InactiveCompletion) {
     $fields = Read-AgentsChatMaintenanceFields $Text @(
         'version', 'operationId', 'project', 'operation', 'phase', 'previousPhase', 'sourceCommit',
         'targetCommit', 'backupId', 'priorRuntime', 'runtimeIdentity', 'startedAt', 'updatedAt', 'errorCode')
@@ -22,7 +22,12 @@ function ConvertFrom-AgentsChatTaskTransactionState([hashtable]$Transaction, [st
             $null -ne (Get-AgentsChatPriorRuntimePreviousPhase $state.previousPhase) -and
             $state.errorCode -cmatch '^[a-zA-Z0-9_.:-]+$'
     } else { $null -eq $state.errorCode }
-    $priorRuntime = if ($InactivePreflight -or $InactiveActivation) { 'stopped' } else { 'running' }
+    $priorRuntime = if ($InactivePreflight -or $InactiveActivation -or $InactiveCompletion) { 'stopped' } else { 'running' }
+    if ($InactiveCompletion -and ($InactivePreflight -or $InactiveActivation -or $state.phase -cne 'accepted' -or
+        $state.previousPhase -cne 'activating' -or $state.operation -cnotin @('deploy', 'update') -or
+        -not $state.sourceCommit -or -not $state.targetCommit -or -not $state.backupId)) {
+        throw 'Inactive completion requires original accepted state.'
+    }
     if ($InactiveActivation -and ($InactivePreflight -or $state.phase -cne 'activating' -or
         $state.previousPhase -cne 'configuring' -or $state.operation -cnotin @('deploy', 'update') -or
         -not $state.sourceCommit -or -not $state.targetCommit -or -not $state.backupId)) {

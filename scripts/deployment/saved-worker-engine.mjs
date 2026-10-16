@@ -35,6 +35,7 @@ export const workerEngineFiles = Object.freeze([
   'windows-inactive-task-transaction.mjs',
   'windows-inactive-task-replacement.ps1',
   'windows-guarded-task-policy.ps1', 'windows-inactive-task-startup.ps1',
+  'windows-inactive-task-completion.ps1',
   'windows-task-admission.ps1',
   'windows-task-completion-record.mjs', 'windows-task-retirement-record.mjs', 'windows-task-retirement-intent.ps1',
   'windows-task-retirement-checkpoint.mjs', 'windows-task-retirement-checkpoint.ps1',

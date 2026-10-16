@@ -51,12 +51,13 @@ function Assert-AgentsChatInactiveStartup([hashtable]$Context) {
     } elseif ($task.GetInstances(0).Count -ne 0) { throw 'Inactive task started before guarded demand-start.' }
     if ($startup.Runtime) {
         $runtime = $startup.Runtime
+        $lease = if ($startup.LeaseReleased) { 'released' } else { 'guarded' }
         $domain = [Deployment.WindowsRuntimeControl]::Exchange(
             [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'observe', 15000) | ConvertFrom-Json
         if ($domain.quiescent -or $domain.phase -cnotin @('admitted', 'root-exited') -or
             $domain.members -notcontains $runtime.launcherPid -or $domain.applicationHealthy -or
             [Deployment.WindowsRuntimeControl]::Exchange(
-                [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -cne 'guarded') {
+                [guid]$runtime.generation, $runtime.pid, $runtime.identity, 'lease', 15000) -cne $lease) {
             throw 'Inactive startup lost its original guarded runtime Job.'
         }
     }
@@ -92,6 +93,7 @@ function Start-AgentsChatInactiveTask([hashtable]$Context) {
             Phase='initial'; Definition=$Context.ReplacementDefinition; PlannedDefinition=$null; Enabled=$false
             Instance=$null; InstanceGuid=$null; OwnerIdentity=$null; Runtime=$null; RequestSha256=$null
             Identity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            LeaseReleased=$false
             PreviousSha256=$Context.ReplacementSha256
         }
     }

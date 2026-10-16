@@ -46,6 +46,8 @@ function New-AgentsChatInactiveActivationPreparation([hashtable]$Context, [strin
         $Context.Files.Add($candidate)
         $candidate = $null
         $Context.Files.Add($stateFile)
+        $Context.ActivationStateFile = $stateFile
+        $Context.ActivatingState = $state
         $stateFile = $null
         $Context.ActivationPreparation = $record
         $Context.ActivationPreparationSha256 = $receipt.Sha256

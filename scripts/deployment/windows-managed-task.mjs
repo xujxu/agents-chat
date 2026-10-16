@@ -96,7 +96,7 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
         }
         if (method === 'listener') return captureTaskListener(reply.value, observation.runtime, payload.port);
         if (method === 'inactive-listener') return reply.value;
-        if (method === 'prepare-inactive-activation') {
+        if (method === 'prepare-inactive-activation' || method === 'prepare-inactive-completion') {
           return Object.freeze(captureWorkerFields(reply.value, ['file', 'sha256'], 'inactive activation preparation'));
         }
         if (method === 'replace-inactive') {
@@ -106,6 +106,7 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
         if (method === 'start-inactive') {
           return captureWorkerFields(reply.value, ['status', 'step', 'taskName', 'runtime', 'definition'], 'inactive startup');
         }
+        if (method === 'complete-inactive') return reply.value;
         if (method === 'capture-admission') {
           const result = captureWorkerFields(reply.value, ['admission', 'sha256'], 'managed task admission');
           if (result.admission !== path.join(payload.control, 'task-maintenance', 'admission.json')
@@ -363,7 +364,76 @@ export async function inspectWindowsInactiveTaskListener(options) {
   await assertWindowsInactiveTaskAdmissionBinding(options);
   const result = captureTaskListener(
     await retained.request('inactive-listener', signal, { port }), retained.activeRuntime, port);
-  if (result.status === 'retained') retained.listenerPort = port;
+  if (result.status === 'retained') {
+    retained.listenerPort = port;
+    retained.listener = result;
+  }
   await assertWindowsInactiveTaskAdmissionBinding(options);
   return Object.freeze(result);
+}
+
+export async function prepareWindowsInactiveCompletionBinding(options) {
+  const { scope, control, port, providers, state, signal } = options;
+  const { observation } = await assertWindowsInactiveTaskAdmissionBinding(options);
+  const retained = inactiveScopes.get(scope);
+  if (!retained.activeRuntime || retained.listenerPort !== port || retained.completionRecord) {
+    throw refused(new Error('Inactive completion requires its original active listener.'));
+  }
+  const result = await retained.request('prepare-inactive-completion', signal, { port, providers });
+  if (result.file !== path.join(control, 'task-maintenance', 'inactive-complete-prepared.json')
+    || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
+    throw refused(new Error('Inactive completion preparation acknowledgement differs.'));
+  }
+  const bytes = await readWorkerFile(result.file, 4194304, { privateMode: true });
+  const record = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  const running = await readWorkerFile(
+    path.join(control, 'task-maintenance', 'inactive-start-running.json'), 4194304, { privateMode: true });
+  const listener = retained.listener;
+  const expected = {
+    version: 1, kind: 'inactive', phase: 'prepared', operationId: state.operationId,
+    preparationSha256: retained.activationPreparation.sha256,
+    previousSha256: createHash('sha256').update(running).digest('hex'),
+    activatingStateSha256: retained.activationPreparation.stateSha256, activatingState: state,
+    stateSha256: null, runtime: retained.activeRuntime,
+    taskName: observation.taskName, definition: retained.replacement.definition,
+    stagedDefinition: record.stagedDefinition, enabled: false, securityDescriptor: observation.securityDescriptor,
+    port, providers, listenerPid: listener.pid, listenerIdentity: listener.identity,
+    listenerCreatedAt: listener.createdAt, listenerAddress: listener.address, listenerPairedRecords: listener.pairedRecords,
+  };
+  if (typeof record.stagedDefinition !== 'string' || !record.stagedDefinition
+    || record.stagedDefinition.length > 262144 || record.stagedDefinition.includes('\0')
+    || createHash('sha256').update(bytes).digest('hex') !== result.sha256 || !isDeepStrictEqual(record, expected)) {
+    throw refused(new Error('Inactive completion preparation differs from its original readiness and activation.'));
+  }
+  await assertWindowsInactiveTaskAdmissionBinding(options);
+  retained.completionRecord = expected;
+  return result;
+}
+
+export async function completeWindowsInactiveCompletionBinding(options) {
+  const { scope, control, stateSha256, signal } = options;
+  const retained = inactiveScopes.get(scope);
+  if (!retained?.completionRecord || typeof stateSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(stateSha256)) {
+    throw refused(new Error('Inactive completion requires its original preparation and accepted state hash.'));
+  }
+  for (const step of ['policy-requested', 'policy-applied', 'policy-staged', 'release-requested',
+    'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete']) {
+    await assertWindowsInactiveTaskAdmissionBinding(options);
+    if (await retained.request('complete-inactive', signal, { stateSha256 }) !== step) {
+      throw refused(new Error('Inactive completion acknowledged an unexpected native phase.'));
+    }
+    await assertWindowsInactiveTaskAdmissionBinding(options);
+  }
+  const file = path.join(control, 'task-maintenance', 'inactive-complete-complete.json');
+  const bytes = await readWorkerFile(file, 4194304, { privateMode: true });
+  const previous = await readWorkerFile(
+    path.join(control, 'task-maintenance', 'inactive-complete-policy-restore-requested.json'), 4194304, { privateMode: true });
+  if (!isDeepStrictEqual(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), {
+    ...retained.completionRecord, phase: 'complete', stateSha256,
+    previousSha256: createHash('sha256').update(previous).digest('hex'),
+  })) {
+    throw refused(new Error('Inactive completion receipt differs from its original accepted runtime.'));
+  }
+  await assertWindowsInactiveTaskAdmissionBinding(options);
+  return Object.freeze({ file, sha256: createHash('sha256').update(bytes).digest('hex') });
 }

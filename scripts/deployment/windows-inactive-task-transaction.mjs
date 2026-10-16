@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { isDeepStrictEqual as same } from 'node:util';
 import { captureLockOwner, validateState } from './state.mjs';
 import { readWorkerFile } from './worker-files.mjs';
@@ -6,16 +7,18 @@ import {
   assertWindowsInactiveTaskAdmissionBinding, captureWindowsInactiveTaskActivationPreparation,
   replaceWindowsInactiveTaskBinding, startWindowsInactiveTaskBinding,
   inspectWindowsInactiveTaskListener,
+  prepareWindowsInactiveCompletionBinding, completeWindowsInactiveCompletionBinding,
 } from './windows-managed-task.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { rotateSnapshot } from './snapshot-rotation.mjs';
+import { validateReadinessProviders } from './http-readiness.mjs';
 
 const transactions = new WeakMap();
 const consumers = new WeakSet();
 const next = {
   stopped: 'copying', copying: 'rotating', rotating: 'backup-ready',
   'backup-ready': 'source-selected', 'source-selected': 'dependencies', dependencies: 'building',
-  building: 'configuring', configuring: 'activating',
+  building: 'configuring', configuring: 'activating', activating: 'accepted',
 };
 const commit = value => typeof value === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
 
@@ -69,6 +72,7 @@ export async function beginWindowsInactiveTaskTransaction(options) {
         try {
           const { state } = await readState({ ...originalOptions, signal: requestSignal });
           if (state.sourceCommit !== current.sourceCommit || state.targetCommit !== current.targetCommit
+            || state.phase === 'accepted' && !retained.completionPrepared
             || (state.phase === current.phase ? !same(state, current)
               : state.phase !== next[current.phase] || state.previousPhase !== current.phase)
             || (['rotating', 'backup-ready'].includes(state.phase)
@@ -96,8 +100,43 @@ export async function beginWindowsInactiveTaskTransaction(options) {
         await context.check({ signal: requestSignal });
         return result;
       },
+      async prepareCompletion({ port, providers, signal: requestSignal } = {}) {
+        validateReadinessProviders(providers);
+        if (!retained.active || retained.completing || retained.completionPrepared) {
+          throw new Error('Inactive completion requires one original guarded runtime preparation.');
+        }
+        retained.completing = true;
+        try {
+          const state = await context.check({ signal: requestSignal });
+          if (state.phase !== 'activating') throw new Error('Inactive completion requires original activating state.');
+          await prepareWindowsInactiveCompletionBinding({
+            ...retained, port, providers: [...providers], state, signal: requestSignal,
+          });
+          await context.check({ signal: requestSignal });
+          retained.completionPrepared = true;
+        } finally { retained.completing = false; }
+      },
+      async complete({ stateSha256, signal: requestSignal } = {}) {
+        if (!retained.completionPrepared || retained.completing || retained.completionAttempted
+          || typeof stateSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(stateSha256)) {
+          throw new Error('Inactive completion requires original preparation and an explicit accepted state hash.');
+        }
+        retained.completing = true;
+        try {
+          const state = await context.check({ signal: requestSignal });
+          const bytes = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
+          if (state.phase !== 'accepted' || createHash('sha256').update(bytes).digest('hex') !== stateSha256
+            || !same(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), state)) {
+            throw new Error('Inactive completion differs from original accepted state.');
+          }
+          retained.completionAttempted = true;
+          const result = await completeWindowsInactiveCompletionBinding({ ...retained, stateSha256, signal: requestSignal });
+          await context.check({ signal: requestSignal });
+          return result;
+        } finally { retained.completing = false; }
+      },
       async close() {
-        if (busy || retained.rotating || retained.preparing || retained.replacing || retained.starting) {
+        if (busy || retained.rotating || retained.preparing || retained.replacing || retained.starting || retained.completing) {
           throw new Error('Cannot close a busy inactive task transaction.');
         }
         if (!closed) { closed = true; await scope.close(); }
