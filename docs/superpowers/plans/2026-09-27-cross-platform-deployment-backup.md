@@ -14067,6 +14067,14 @@ controller; `38866350789` wrongly attempted to unlock retained maintenance.
 unlock refusal instead. A stopped transaction consuming version2 admission
 is still required before public inactive deployment can be enabled.
 
+Original running admission/startup recovery regression `700a1921 / 38867917812`,
+job `116864918717`, passed through terminal retirement at 07:52 UTC. Its original
+logs are retained. Before consuming inactive admission in a stopped transaction,
+extend the actual private-controller fixture with forged mutex, foreign lock
+token and changed-to-running state refusals. All must occur before publication
+and leave the genuine inactive observation usable. Restore fixture state bytes,
+then require the same successful create-only admission and retained-lock proof.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 
 const [source, taskName, project, pwsh, control] = process.argv.slice(2);
@@ -43,6 +43,16 @@ try {
     const options = { scope: admissionScope, control, lock, admission };
     await assert.rejects(captureWindowsInactiveTaskAdmission({ ...options, scope: { ...admissionScope } }),
       { code: 'DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED' });
+    await assert.rejects(captureWindowsInactiveTaskAdmission({ ...options, admission: { ...admission } }));
+    await assert.rejects(captureWindowsInactiveTaskAdmission({
+      ...options, lock: { ...lock, token: randomUUID() },
+    }));
+    try {
+      await writeFile(path.join(control, 'state.json'), JSON.stringify({ ...state, priorRuntime: 'running' }));
+      await assert.rejects(captureWindowsInactiveTaskAdmission(options), /original locked stopped preflight/);
+      assert.ok(!(await readdir(control)).includes('task-maintenance'));
+    } finally { await writeFile(path.join(control, 'state.json'), stateBytes); }
+    assert.deepEqual(await admissionScope.check(), admissionScope.observation);
     assert.ok(!(await readdir(control)).includes('task-maintenance'));
     const published = await captureWindowsInactiveTaskAdmission(options);
     const bytes = await readFile(published.admission);
