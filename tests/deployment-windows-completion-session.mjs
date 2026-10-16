@@ -36,7 +36,7 @@ async function malformedRequest(frame) {
 }
 
 if (mode === 'inactive-retire' || mode === 'inactive-retire-resume') {
-  const { readFile, readdir } = await import('node:fs/promises');
+  const { readFile, readdir, rename } = await import('node:fs/promises');
   const path = await import('node:path');
   const { openWindowsInactiveTaskRetirement, openWindowsTaskRetirement,
     retireNextWindowsTaskFile, beginWindowsDeploymentRetirement } =
@@ -50,6 +50,15 @@ if (mode === 'inactive-retire' || mode === 'inactive-retire-resume') {
   await withWindowsAdmission(control, { pwsh }, async admission => {
     await assert.rejects(openWindowsTaskRetirement({ control, pwsh, admission }),
       /Completed-task proof unavailable/);
+    if (prefix === 0) {
+      const receipt = path.join(control, 'task-maintenance', 'inactive-start-running.json');
+      const held = path.join(control, 'inactive-start-running-held.json');
+      await rename(receipt, held);
+      try {
+        await assert.rejects(openWindowsInactiveTaskRetirement({ control, pwsh, admission }),
+          error => /Non-prefix retirement inventory/.test(error.diagnostic ?? ''));
+      } finally { await rename(held, receipt); }
+    }
     const scope = await openWindowsInactiveTaskRetirement({ control, pwsh, admission });
     try {
       assert.equal(scope.observation.retiredFiles, prefix);
@@ -62,7 +71,8 @@ if (mode === 'inactive-retire' || mode === 'inactive-retire-resume') {
         assert.deepEqual(await scope.check(), next);
         assert.equal((await readdir(path.join(control, 'task-maintenance'))).length, 13 - index - 1);
       }
-      if (end === 13) await assert.rejects(retireNextWindowsTaskFile(control, scope, admission), /exhausted/);
+      if (end === 13) await assert.rejects(retireNextWindowsTaskFile(control, scope, admission),
+        error => /exhausted/.test(error.cause?.message ?? ''));
     } finally { await scope.close(); }
   });
   assert.deepEqual(await readFile(path.join(control, 'state.json')), state);

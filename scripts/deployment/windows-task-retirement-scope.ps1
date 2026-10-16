@@ -3,6 +3,10 @@
 function Open-AgentsChatRetirementRuntime([hashtable]$Context) {
     $Context.Stage = 'retirement-runtime-bundle'
     $runtime = $Context.Runtime
+    if ($Context.ContainsKey('RetiredRuntime')) {
+        Open-AgentsChatCompletionBundle $Context $Context.PriorConfiguration `
+            $Context.RetiredRuntime.configurationSha256 $Context.RetiredRuntime
+    }
     Open-AgentsChatCompletionBundle $Context $Context.Checkpoint.configuration $runtime.configurationSha256 $runtime
     $Context.Stage = 'retirement-runtime-owner'
     $Context.Owner = [Diagnostics.Process]::GetProcessById($runtime.pid)
@@ -54,6 +58,16 @@ function Assert-AgentsChatRetirementControllers([hashtable]$Context) {
     foreach ($name in @('retiredBridge', 'retiredOwner')) {
         Assert-AgentsChatCompletionProcessAbsent $Context.Checkpoint[$name].pid $Context.Checkpoint[$name].processIdentity
     }
+    if ($Context.ContainsKey('RetiredRuntime')) {
+        $old = $Context.RetiredRuntime
+        [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$old.generation, $old.sessionId)
+        $bundle = [IO.Path]::GetDirectoryName($Context.PriorConfiguration)
+        $entries = @(Get-ChildItem -LiteralPath $bundle -Force | Where-Object Name -Match '^(runtime|launch)-.*\.json$')
+        if ($entries.Count -ne 1 -or $entries[0].PSIsContainer -or
+            $entries[0].Name -cne "runtime-$($old.identity.Replace(':', '-')).json") {
+            throw 'Original inactive runtime history changed during retirement.'
+        }
+    }
 }
 
 function Assert-AgentsChatTaskRetirement([hashtable]$Context) {
@@ -81,14 +95,15 @@ function Open-AgentsChatTaskRetirement {
     param(
         [Parameter(Mandatory)][string]$Control,
         [Parameter(Mandatory)][int]$ControllerPid,
-        [Parameter(Mandatory)][string]$ControllerIdentity
+        [Parameter(Mandatory)][string]$ControllerIdentity,
+        [switch]$Inactive
     )
     $context = @{
         Control=$Control; Directory=(Join-Path $Control 'task-maintenance')
         ControllerPid=$ControllerPid; ControllerIdentity=$ControllerIdentity
         Files=[Collections.Generic.List[IDisposable]]::new()
         Closed=$false; Poisoned=$false; Busy=$false; Owner=$null; Instance=$null; Folder=$null
-        Stage='retirement-directories'; Prefix=0
+        Stage='retirement-directories'; Prefix=0; Inactive=[bool]$Inactive
     }
     try {
         $context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory($Control))

@@ -29,7 +29,7 @@ try {
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'proof-open'
     if ($Retirement -and $DeploymentRetirement) { throw 'Ambiguous retirement mode.' }
-    if ($Inactive -and ($Retirement -or $DeploymentRetirement)) { throw 'Inactive proof grants no retirement authority.' }
+    if ($Inactive -and $DeploymentRetirement) { throw 'Inactive deployment retirement is not available.' }
     if ($DeploymentRetirement) {
         $stage = 'deployment-retirement-open'
         $deployment = Open-AgentsChatDeploymentRetirement -Control $Control `
@@ -38,7 +38,7 @@ try {
     } elseif ($Retirement) {
         $stage = 'retirement-open'
         $scope = Open-AgentsChatTaskRetirement -Control $Control `
-            -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
+            -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive:$Inactive
         $observed = Assert-AgentsChatTaskRetirement $scope
     } elseif ($Inactive) {
         $proof = Open-AgentsChatInactiveCompletionProof -Control $Control
@@ -71,7 +71,9 @@ try {
             throw 'Original completed-task proof controller changed.'
         }
         $stage = $method
-        if (($Inactive -and $method -cnotin @('check', 'close', 'prepare-inactive-retirement', 'prepare-inactive-retirement-checkpoint')) -or
+        $inactiveMethods = if ($scope) { @('check', 'close', 'retire-next') }
+            else { @('check', 'close', 'prepare-inactive-retirement', 'prepare-inactive-retirement-checkpoint') }
+        if (($Inactive -and $method -cnotin $inactiveMethods) -or
             (-not $Inactive -and $method -cin @('prepare-inactive-retirement', 'prepare-inactive-retirement-checkpoint'))) {
             throw 'Request does not match original inactive completion authority.'
         }

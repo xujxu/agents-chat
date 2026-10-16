@@ -87,6 +87,10 @@ export async function openWindowsTaskRetirement(options) {
   return openWindowsTaskAuthority(options, 'task');
 }
 
+export async function openWindowsInactiveTaskRetirement(options) {
+  return openWindowsTaskAuthority(options, 'task', true);
+}
+
 export async function openWindowsDeploymentRetirement(options) {
   return openWindowsTaskAuthority(options, 'deployment');
 }
@@ -295,6 +299,7 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mo
         return request('retire-next', requestSignal);
       }, async beginDeployment(requestSignal) {
         requireMode('task');
+        if (inactive) throw new Error('Inactive deployment retirement is not available.');
         transferring = true;
         try {
           const retained = await request('retain-workers', requestSignal);

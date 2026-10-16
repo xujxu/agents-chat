@@ -1,3 +1,9 @@
+function Get-AgentsChatInactiveCompletionRecordNames {
+    return @('replacement-requested', 'replacement-complete', 'start-requested', 'start-running',
+        'complete-prepared', 'complete-policy-requested', 'complete-policy-staged', 'complete-release-requested',
+        'complete-released', 'complete-policy-restore-requested', 'complete-complete')
+}
+
 function Read-AgentsChatInactiveCompletionRecords([hashtable]$Context) {
     $Context.Stage = 'inactive-admission'
     $file = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Directory 'admission.json') ''
@@ -17,20 +23,9 @@ function Read-AgentsChatInactiveCompletionRecords([hashtable]$Context) {
         $admission.definition.GetString().Length -gt 262144 -or
         [string]::IsNullOrEmpty($Context.SecurityDescriptor) -or $Context.SecurityDescriptor.Length -gt 65536 -or
         $Context.SecurityDescriptor -match '[\x00\r\n]') { throw 'Unsupported inactive completion task.' }
-    $retired = Read-AgentsChatMaintenanceFields $admission.retiredRuntime.GetRawText() @(
-        'pid', 'identity', 'generation', 'sessionId', 'configurationSha256', 'launcherPid', 'readySha256')
-    $Context.RetiredRuntime = @{}
-    foreach ($name in $retired.Keys) {
-        $Context.RetiredRuntime[$name] = if ($name -cin @('pid', 'sessionId', 'launcherPid')) {
-            $retired[$name].GetInt32()
-        } else { $retired[$name].GetString() }
-    }
+    $Context.RetiredRuntime = ConvertFrom-AgentsChatRetiredRuntime $admission.retiredRuntime.GetRawText()
     $old = $Context.RetiredRuntime
-    Assert-AgentsChatCompletionGuid $old.generation
-    Assert-AgentsChatCompletionProcessIdentity $old.pid $old.identity
-    if ($old.sessionId -lt 0 -or $old.launcherPid -lt 1 -or $old.readySha256 -cnotmatch '^[a-f0-9]{64}$' -or
-        $old.configurationSha256 -cnotmatch '^[a-f0-9]{64}$' -or
-        $old.configurationSha256 -cne $admission.configurationSha256.GetString()) { throw 'Invalid retired runtime.' }
+    if ($old.configurationSha256 -cne $admission.configurationSha256.GetString()) { throw 'Invalid retired runtime.' }
 
     $Context.Stage = 'inactive-preparation'
     $preparedFile = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Directory 'inactive-activation-prepared.json') ''
@@ -52,9 +47,7 @@ function Read-AgentsChatInactiveCompletionRecords([hashtable]$Context) {
             'enabled', 'port', 'providers', 'listenerPid', 'listenerIdentity', 'listenerCreatedAt',
             'listenerAddress', 'listenerPairedRecords')
     }
-    $names = @('replacement-requested', 'replacement-complete', 'start-requested', 'start-running',
-        'complete-prepared', 'complete-policy-requested', 'complete-policy-staged', 'complete-release-requested',
-        'complete-released', 'complete-policy-restore-requested', 'complete-complete')
+    $names = @(Get-AgentsChatInactiveCompletionRecordNames)
     $Context.Inventory = @('admission.json', 'inactive-activation-prepared.json') +
         @($names | ForEach-Object { "inactive-$_.json" })
     $previous = $preparedFile.Sha256

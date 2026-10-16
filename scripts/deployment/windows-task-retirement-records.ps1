@@ -121,15 +121,19 @@ function Initialize-AgentsChatRetirementRecords([hashtable]$Context, $Prepared) 
     Assert-AgentsChatRetirementDescriptor $Prepared.intent.descriptor 'task-retirement.json'
     $checkpoint = $Prepared.checkpoint
     $intent = $Prepared.intent.intent
-    Assert-AgentsChatRetirementFields $checkpoint @('version', 'intent', 'configuration',
+    $inactive = $Context.ContainsKey('Inactive') -and $Context.Inactive
+    $version = if ($inactive) { 2 } else { 1 }
+    $checkpointFields = @('version', 'intent', 'configuration',
         'definitionSha256', 'securityDescriptorSha256', 'enabled', 'listener', 'retiredBridge', 'retiredOwner', 'creator')
+    if ($inactive) { $checkpointFields += 'priorRuntime' }
+    Assert-AgentsChatRetirementFields $checkpoint $checkpointFields
     Assert-AgentsChatRetirementDescriptor $checkpoint.intent 'task-retirement.json'
     foreach ($name in $checkpoint.intent.Keys) {
         if ($checkpoint.intent[$name] -cne $Prepared.intent.descriptor[$name]) {
             throw 'Prepared checkpoint intent descriptor differs.'
         }
     }
-    if ($checkpoint.version -isnot [int] -or $checkpoint.version -ne 1 -or
+    if ($checkpoint.version -isnot [int] -or $checkpoint.version -ne $version -or
         $checkpoint.enabled -isnot [bool]) { throw 'Unsupported retirement checkpoint.' }
     foreach ($name in @('definitionSha256', 'securityDescriptorSha256')) {
         if ($checkpoint[$name] -isnot [string] -or $checkpoint[$name] -cnotmatch '^[a-f0-9]{64}$') {
@@ -140,7 +144,7 @@ function Initialize-AgentsChatRetirementRecords([hashtable]$Context, $Prepared) 
     $Context.Stage = 'intent'
     Assert-AgentsChatRetirementFields $intent @('version', 'control', 'project', 'lock', 'lockFile', 'state',
         'controlIdentity', 'lockIdentity', 'maintenanceIdentity', 'completion', 'files', 'creator')
-    if ($intent.version -isnot [int] -or $intent.version -ne 1 -or $intent.control -cne $Context.Control -or
+    if ($intent.version -isnot [int] -or $intent.version -ne $version -or $intent.control -cne $Context.Control -or
         $intent.project -isnot [string] -or $intent.project -cnotmatch '^[A-Za-z]:\\' -or
         $intent.project.Length -gt 4096 -or $intent.project -match '[\x00\r\n]' -or
         [IO.Path]::GetFullPath($intent.project) -cne $intent.project -or
@@ -187,8 +191,13 @@ function Initialize-AgentsChatRetirementRecords([hashtable]$Context, $Prepared) 
         if ($checkpoint[$name].pid -isnot [int]) { throw 'Invalid retired process.' }
         Assert-AgentsChatCompletionProcessAbsent $checkpoint[$name].pid $checkpoint[$name].processIdentity
     }
-    $paths = @('task-maintenance\admission.json', 'task-maintenance\transaction.json')
-    $paths += @(Get-AgentsChatCompletionRecordNames | ForEach-Object { "task-maintenance\task-$_.json" })
+    $paths = if ($inactive) {
+        @('task-maintenance\admission.json', 'task-maintenance\inactive-activation-prepared.json') +
+            @(Get-AgentsChatInactiveCompletionRecordNames | ForEach-Object { "task-maintenance\inactive-$_.json" })
+    } else {
+        @('task-maintenance\admission.json', 'task-maintenance\transaction.json') +
+            @(Get-AgentsChatCompletionRecordNames | ForEach-Object { "task-maintenance\task-$_.json" })
+    }
     if ($intent.files -isnot [array] -or $intent.files.Count -ne $paths.Count) { throw 'Invalid retirement receipt list.' }
     for ($index = 0; $index -lt $paths.Count; $index++) {
         Assert-AgentsChatRetirementDescriptor $intent.files[$index] $paths[$index]
@@ -209,6 +218,24 @@ function Initialize-AgentsChatRetirementRecords([hashtable]$Context, $Prepared) 
         [IO.Path]::GetFullPath($checkpoint.configuration) -cne $checkpoint.configuration -or
         [IO.Path]::GetFileName($checkpoint.configuration) -cne 'configuration.json') {
         throw 'Invalid original retirement configuration path.'
+    }
+    if ($inactive) {
+        $prior = $checkpoint.priorRuntime
+        Assert-AgentsChatRetirementFields $prior @('configuration', 'runtime')
+        $old = ConvertFrom-AgentsChatRetiredRuntime ($prior.runtime | ConvertTo-Json -Compress)
+        if ($checkpoint.enabled -or $prior.configuration -isnot [string] -or
+            $prior.configuration -cnotmatch '^[A-Za-z]:\\' -or
+            $prior.configuration.Length -gt 4096 -or $prior.configuration -match '[\x00\r\n]' -or
+            $prior.configuration.Substring(3).Contains(':') -or
+            [IO.Path]::GetFullPath($prior.configuration) -cne $prior.configuration -or
+            [IO.Path]::GetFileName($prior.configuration) -cne 'configuration.json' -or
+            [string]::Equals($prior.configuration, $checkpoint.configuration, [StringComparison]::OrdinalIgnoreCase) -or
+            $old.pid -ne $checkpoint.retiredOwner.pid -or $old.identity -cne $checkpoint.retiredOwner.processIdentity -or
+            $old.generation -ceq $Context.Runtime.generation -or $old.identity -ceq $Context.Runtime.identity) {
+            throw 'Inactive retirement lost its original retired runtime.'
+        }
+        $Context.RetiredRuntime = $old
+        $Context.PriorConfiguration = $prior.configuration
     }
     $Context.Project = $intent.project
     $Context.TaskName = $completion.taskName

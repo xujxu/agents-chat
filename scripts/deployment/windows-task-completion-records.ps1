@@ -61,6 +61,23 @@ function ConvertFrom-AgentsChatCompletionRuntime([string]$Text) {
     return $runtime
 }
 
+function ConvertFrom-AgentsChatRetiredRuntime([string]$Text) {
+    $fields = Read-AgentsChatMaintenanceFields $Text @(
+        'pid', 'identity', 'generation', 'sessionId', 'configurationSha256', 'launcherPid', 'readySha256')
+    $runtime = @{}
+    foreach ($name in $fields.Keys) {
+        $runtime[$name] = if ($name -cin @('pid', 'sessionId', 'launcherPid')) {
+            $fields[$name].GetInt32()
+        } else { $fields[$name].GetString() }
+    }
+    Assert-AgentsChatCompletionGuid $runtime.generation
+    Assert-AgentsChatCompletionProcessIdentity $runtime.pid $runtime.identity
+    if ($runtime.sessionId -lt 0 -or $runtime.launcherPid -lt 1 -or
+        $runtime.readySha256 -cnotmatch '^[a-f0-9]{64}$' -or
+        $runtime.configurationSha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Invalid retired runtime.' }
+    return $runtime
+}
+
 function Read-AgentsChatTaskCompletionRecords([hashtable]$Context) {
     Read-AgentsChatTaskCompletionHistory $Context @(Get-AgentsChatCompletionRecordNames)
     $Context.Completed = $Context.CompletionRecord
