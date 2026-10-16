@@ -14038,6 +14038,24 @@ transaction ownership follow only after the pure binding gate.
   Do not call a native method or write any file from the builder.
 - [ ] Repeat the gate and require 69 contracts and existing native bridge proof.
 
+Binding acceptance: `e24f5512 / 38864191953`, job `116853135068`, passed
+69 contracts and the original native observer/Node bridge; original logs saved.
+
+Native publication reuses the original admission owner/state/file retention and
+create-only `task-maintenance/admission.json` publisher, with an explicit inactive
+mode. Running callers keep version1 and their original state checks. The inactive
+mode validates only stopped preflight, never a later transaction state, and
+publishes version2/kind-inactive without live-owner or instance fields. The Node
+bridge independently compares the published bytes/digest with its pure builder,
+under the original Windows admission mutex. Separate WeakMaps prevent forged
+scopes or passing inactive observation into the running path.
+
+The real stopped-task fixture must acquire an actual Node operation lock,
+publish stopped preflight, reject a copied scope before publication, compare
+native output to the pure record, preserve lock/state bytes and reject duplicate
+publication without replacing the first record. No public command or snapshot
+copy is enabled by this step.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and

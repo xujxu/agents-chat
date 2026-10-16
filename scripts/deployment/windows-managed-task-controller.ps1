@@ -49,7 +49,7 @@ try {
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
         if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'close', 'capture-admission', 'listener')) { throw 'Invalid managed task observation request.' }
-        if ($Inactive -and $method -cnotin @('check', 'close')) { throw 'Inactive observation grants no mutation or listener authority.' }
+        if ($Inactive -and $method -cnotin @('check', 'close', 'capture-admission')) { throw 'Inactive observation grants no listener authority.' }
         $sequence = $id
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
             throw 'Original managed task observer changed.'
@@ -64,7 +64,7 @@ try {
         } elseif ($method -ceq 'capture-admission') {
             $value = New-AgentsChatManagedTaskAdmission -Context $scope -Control $request.control.GetString() `
                 -LockSha256 $request.lockSha256.GetString() -StateSha256 $request.stateSha256.GetString() `
-                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
+                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive:$Inactive
         } else {
             $value = if ($Inactive) { Assert-AgentsChatInactiveTask $scope } else { Assert-AgentsChatManagedTask $scope }
         }

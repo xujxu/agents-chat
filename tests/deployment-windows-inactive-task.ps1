@@ -29,9 +29,13 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
     $scope = Open-AgentsChatInactiveTask $TaskName $Project
     try { $null = Assert-AgentsChatInactiveTask $scope }
     finally { Close-AgentsChatTaskCompletionProof $scope }
-    & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-inactive-task.mjs') `
-        $Source $TaskName $Project ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
-    Assert ($LASTEXITCODE -eq 0) 'Inactive task Node bridge failed'
+    $control = "$Project-inactive-control"
+    [Deployment.WindowsPrivateFile]::CreateDirectory($control).Dispose()
+    try {
+        & (Get-Command node).Source (Join-Path $PSScriptRoot 'deployment-windows-inactive-task.mjs') `
+            $Source $TaskName $Project ([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) $control
+        Assert ($LASTEXITCODE -eq 0) 'Inactive task Node bridge failed'
+    } finally { Remove-Item -LiteralPath $control -Recurse -Force }
     $task = $folder.GetTask($TaskName)
     Assert ([string]$task.Xml -ceq $definition -and [string]$task.GetSecurityDescriptor(7) -ceq $security -and
         $task.GetInstances(0).Count -eq 0 -and -not $task.Enabled) 'Inactive observation changed task policy or started work'

@@ -12,9 +12,11 @@ import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { assertLockOwner, captureLockOwner, validateState } from './state.mjs';
 import { externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
 import { assertWindowsAdmission } from './windows-admission.mjs';
+import { createWindowsInactiveTaskAdmissionRecord } from './windows-inactive-task-admission.mjs';
 
 const script = fileURLToPath(new URL('./windows-managed-task-controller.ps1', import.meta.url));
 const scopes = new WeakMap();
+const inactiveScopes = new WeakMap();
 const canonical = value => typeof value === 'string' && value.length <= 4096
   && path.isAbsolute(value) && path.resolve(value) === value && !/[\0\r\n]/.test(value);
 const task = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(value);
@@ -117,7 +119,7 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
       } : {}),
       close: async () => { if (!closed) await request('close'); },
     });
-    if (!inactive) scopes.set(scope, { observation, request });
+    (inactive ? inactiveScopes : scopes).set(scope, { observation, request });
     return scope;
   } catch (cause) {
     closed = true;
@@ -132,8 +134,16 @@ export async function assertWindowsManagedTaskScope(scope, { signal } = {}) {
 }
 
 export async function captureWindowsManagedTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }) {
+  return captureTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }, false);
+}
+
+export async function captureWindowsInactiveTaskAdmission({ scope, control, lock, admission, signal }) {
+  return captureTaskAdmission({ scope, control, lock, admission, signal }, true);
+}
+
+async function captureTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }, inactive) {
   signal?.throwIfAborted();
-  const retained = scopes.get(scope);
+  const retained = (inactive ? inactiveScopes : scopes).get(scope);
   if (!retained) throw refused(new Error('Original retained managed task scope is required.'));
   const lock = captureLockOwner(suppliedLock);
   const { root } = await externalWorkerDirectory(control, lock.project);
@@ -145,7 +155,10 @@ export async function captureWindowsManagedTaskAdmission({ scope, control, lock:
   if (!isDeepStrictEqual(capturedLock, lock)) throw refused(new Error('Original admission lock changed.'));
   const stateBytes = await readWorkerFile(path.join(root, 'state.json'), 65536, { privateMode: true });
   const state = validateState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(stateBytes)));
-  if (state.project !== lock.project || state.operationId !== lock.operationId || state.startedAt !== lock.createdAt
+  let expected;
+  if (inactive) {
+    expected = createWindowsInactiveTaskAdmissionRecord({ observation: retained.observation, lock, state });
+  } else if (state.project !== lock.project || state.operationId !== lock.operationId || state.startedAt !== lock.createdAt
     || state.priorRuntime !== 'running' || state.runtimeIdentity !== retained.observation.runtime.generation
     || state.errorCode !== null || state.previousPhase !== null
     || state.phase !== (state.operation === 'restore' ? 'restore-preflight' : 'preflight')) {
@@ -157,6 +170,13 @@ export async function captureWindowsManagedTaskAdmission({ scope, control, lock:
   const result = await retained.request('capture-admission', signal, {
     control: root, lockSha256: digest(lockBytes), stateSha256: digest(stateBytes),
   });
+  if (inactive) {
+    const bytes = await readWorkerFile(result.admission, 4194304, { privateMode: true });
+    if (digest(bytes) !== result.sha256
+      || !isDeepStrictEqual(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), expected)) {
+      throw refused(new Error('Native inactive admission differs from its original stopped binding.'));
+    }
+  }
   await assertWindowsAdmission(root, admission, { signal });
   return result;
 }

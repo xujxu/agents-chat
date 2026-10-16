@@ -1,7 +1,7 @@
 function New-AgentsChatManagedTaskAdmission {
     param(
         [hashtable]$Context, [string]$Control, [string]$LockSha256, [string]$StateSha256,
-        [int]$ControllerPid, [string]$ControllerIdentity
+        [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Inactive
     )
     $files = [Collections.Generic.List[IDisposable]]::new()
     $failure = $null
@@ -42,17 +42,26 @@ function New-AgentsChatManagedTaskAdmission {
         }
         $stateFile = [Deployment.WindowsPrivateFile]::Open($statePath, $StateSha256)
         $files.Add($stateFile)
+        $runtime = if ($Inactive) { $Context.RetiredRuntime } else { $Context.Runtime }
         $state = ConvertFrom-AgentsChatTaskTransactionState @{
-            Project=$project; OperationId=$operationId; Generation=$Context.Runtime.generation
+            Project=$project; OperationId=$operationId; Generation=$runtime.generation
             StartedAt=$fields.createdAt.GetString()
-        } ($stateFile.ReadText())
+        } ($stateFile.ReadText()) -InactivePreflight:$Inactive
         $phase = if ($state.operation -ceq 'restore') { 'restore-preflight' } else { 'preflight' }
         if ($state.phase -cne $phase -or $null -ne $state.previousPhase) {
             throw 'Admission requires original preflight state.'
         }
-        $null = Assert-AgentsChatManagedTask $Context
+        if ($Inactive) { $null = Assert-AgentsChatInactiveTask $Context }
+        else { $null = Assert-AgentsChatManagedTask $Context }
         foreach ($file in $files) { $file.Check() }
-        $record = [ordered]@{
+        $record = if ($Inactive) { [ordered]@{
+            version=2; kind='inactive'; operationId=$operationId
+            controllerPid=$ControllerPid; controllerIdentity=$ControllerIdentity
+            taskName=$Context.TaskName; definition=$Context.NativeDefinition
+            securityDescriptor=$Context.SecurityDescriptor
+            configuration=$Context.Configuration; configurationSha256=$Context.ConfigurationSha256
+            retiredRuntime=[pscustomobject]$runtime
+        } } else { [ordered]@{
             version=1; operationId=$operationId
             controllerPid=$ControllerPid; controllerIdentity=$ControllerIdentity
             taskName=$Context.TaskName; definition=$Context.NativeDefinition
@@ -61,13 +70,14 @@ function New-AgentsChatManagedTaskAdmission {
             readySha256=$Context.Runtime.readySha256; ownerPid=$Context.Runtime.pid
             ownerIdentity=$Context.Runtime.identity; generation=$Context.Runtime.generation
             instanceGuid=$Context.Runtime.instanceGuid
-        }
+        } }
         $directory = Join-Path $Control 'task-maintenance'
         $files.Add([Deployment.WindowsPrivateFile]::CreateDirectory($directory))
         $path = Join-Path $directory 'admission.json'
         $published = [Deployment.WindowsPrivateFile]::Publish($path, ($record | ConvertTo-Json -Depth 8 -Compress))
         $files.Add($published)
-        $null = Assert-AgentsChatManagedTask $Context
+        if ($Inactive) { $null = Assert-AgentsChatInactiveTask $Context }
+        else { $null = Assert-AgentsChatManagedTask $Context }
         foreach ($file in $files) { $file.Check() }
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity -or
             (Test-Path -LiteralPath (Join-Path $Control 'recovery-lock'))) { throw 'Admission ownership changed.' }

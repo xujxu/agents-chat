@@ -8,7 +8,7 @@ function Get-AgentsChatPriorRuntimePreviousPhase([string]$Phase) {
     }
 }
 
-function ConvertFrom-AgentsChatTaskTransactionState([hashtable]$Transaction, [string]$Text) {
+function ConvertFrom-AgentsChatTaskTransactionState([hashtable]$Transaction, [string]$Text, [switch]$InactivePreflight) {
     $fields = Read-AgentsChatMaintenanceFields $Text @(
         'version', 'operationId', 'project', 'operation', 'phase', 'previousPhase', 'sourceCommit',
         'targetCommit', 'backupId', 'priorRuntime', 'runtimeIdentity', 'startedAt', 'updatedAt', 'errorCode')
@@ -21,8 +21,11 @@ function ConvertFrom-AgentsChatTaskTransactionState([hashtable]$Transaction, [st
             $null -ne (Get-AgentsChatPriorRuntimePreviousPhase $state.previousPhase) -and
             $state.errorCode -cmatch '^[a-zA-Z0-9_.:-]+$'
     } else { $null -eq $state.errorCode }
+    $priorRuntime = if ($InactivePreflight) { 'stopped' } else { 'running' }
+    if ($InactivePreflight -and ($state.phase -cne 'preflight' -or $null -ne $state.previousPhase -or
+        $state.operation -cnotin @('deploy', 'update'))) { throw 'Inactive admission requires original stopped preflight.' }
     if ($state.version -ne 1 -or $state.project -cne $Transaction.Project -or
-        $state.operationId -cne $Transaction.OperationId -or $state.priorRuntime -cne 'running' -or
+        $state.operationId -cne $Transaction.OperationId -or $state.priorRuntime -cne $priorRuntime -or
         $state.runtimeIdentity -cne $Transaction.Generation -or $state.startedAt -cne $Transaction.StartedAt -or
         $state.operation -cnotin @('deploy', 'update', 'restore') -or -not $errorValid) {
         throw 'Transaction state identity differs.'
