@@ -35,31 +35,52 @@ async function malformedRequest(frame) {
   } catch (error) { throw await abandon(error); }
 }
 
-if (mode === 'inactive-deployment') {
+if (['inactive-deployment', 'inactive-deployment-crash', 'inactive-deployment-precommit',
+  'inactive-deployment-resume'].includes(mode)) {
   const { readFile, access } = await import('node:fs/promises');
   const path = await import('node:path');
   const { openWindowsInactiveTaskRetirement, beginWindowsInactiveDeploymentRetirement,
+    openWindowsInactiveDeploymentRetirement, openWindowsDeploymentRetirement,
     retireNextWindowsDeploymentEntry } = await import('../scripts/deployment/windows-task-completion-proof.mjs');
   assert.equal(typeof beginWindowsInactiveDeploymentRetirement, 'function',
     'Inactive deployment closeout requires distinct original authority');
   await withWindowsAdmission(control, { pwsh }, async admission => {
-    const task = await openWindowsInactiveTaskRetirement({ control, pwsh, admission });
+    const resuming = mode === 'inactive-deployment-precommit' || mode === 'inactive-deployment-resume';
+    let task;
     let deployment;
     try {
-      assert.equal(task.observation.retiredFiles, 13);
-      const checkpoint = task.observation.checkpoint.checkpoint;
+      if (resuming) {
+        await assert.rejects(openWindowsDeploymentRetirement({ control, pwsh, admission }),
+          /Completed-task proof unavailable/);
+        deployment = await openWindowsInactiveDeploymentRetirement({ control, pwsh, admission });
+      } else {
+        task = await openWindowsInactiveTaskRetirement({ control, pwsh, admission });
+        assert.equal(task.observation.retiredFiles, 13);
+      }
+      const checkpoint = deployment ? deployment.observation.manifest.record.task.checkpoint
+        : task.observation.checkpoint.checkpoint;
       const paths = [path.join(control, 'state.json'), path.join(control, 'backup', 'manifest.json'),
         path.join(control, 'backup', 'complete.json'), checkpoint.configuration, checkpoint.priorRuntime.configuration];
       const before = await Promise.all(paths.map(file => readFile(file)));
-      deployment = await beginWindowsInactiveDeploymentRetirement(control, task, admission);
+      if (!deployment) deployment = await beginWindowsInactiveDeploymentRetirement(control, task, admission);
       let progress = deployment.observation;
       const count = progress.manifest.record.entries.length;
-      for (let index = 0; index <= count; index++) {
+      const start = mode === 'inactive-deployment-precommit' ? 1 : mode === 'inactive-deployment-resume' ? count : 0;
+      const end = mode === 'inactive-deployment-crash' ? 1 : mode === 'inactive-deployment-precommit' ? count : count + 1;
+      assert.equal(progress.retiredEntries, start);
+      for (let index = start; index < end; index++) {
         progress = await retireNextWindowsDeploymentEntry(control, deployment, admission);
         if (index < count) {
           assert.equal(progress.status, 'retiring-deployment');
           assert.equal(progress.retiredEntries, index + 1);
         }
+      }
+      if (mode === 'inactive-deployment-crash' || mode === 'inactive-deployment-precommit') {
+        assert.deepEqual(await Promise.all(paths.map(file => readFile(file))), before);
+        console.log(JSON.stringify({ held: true, retiredEntries: progress.retiredEntries,
+          totalEntries: count, bridge: deployment.identity }));
+        await delay(120000);
+        throw new Error('Parent did not terminate the held inactive deployment actor.');
       }
       assert.equal(progress.status, 'retired');
       assert.deepEqual(await Promise.all(paths.map(file => readFile(file))), before);
@@ -70,7 +91,7 @@ if (mode === 'inactive-deployment') {
       await admission.check();
     } finally {
       if (deployment) await deployment.close();
-      else await task.close();
+      else if (task) await task.close();
     }
   });
   console.log('PASS: inactive deployment retires its exact worker and task evidence, releases the lock, and preserves accepted state, backup and runtime bundles');

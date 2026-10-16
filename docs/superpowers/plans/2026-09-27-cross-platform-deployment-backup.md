@@ -14405,6 +14405,15 @@ authority. Require actual sealed worker evidence, exact cleanup inventory,
 state/backup/runtime-bundle preservation and live released runtime after unlock.
 Add interrupted closeout reentry before enabling public deployment routing.
 
+Closeout `c884be09 / 38972464270` passed native worker/task evidence removal,
+lock release, unchanged accepted state/backup/configuration and released runtime
+survival. Now hold and kill separate owned closeout actors after removing the
+empty task-maintenance directory and after removing all entries including the
+lock but before deleting the cleanup manifest. Pin each exact native bridge and
+require its exit. A third actor must reopen solely from the retained manifest
+and live runtime, finish commit and preserve the original state/backup hashes.
+The ordinary active deployment reopen API must refuse the inactive checkpoint.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and

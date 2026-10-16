@@ -175,18 +175,51 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq $stateHash -and
                 (Get-FileHash -LiteralPath (Join-Path $control 'lock/owner.json') -Algorithm SHA256).Hash -ceq $lockHash) `
                 'Interrupted inactive retirement changed accepted state or original lock'
-            $closeout = [Deployment.WindowsControllerProcess]::Start($node,
-                @((Join-Path $PSScriptRoot 'deployment-windows-completion-session.mjs'), $control,
-                    [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, 'inactive-deployment'), $control, $environment)
-            try {
-                $closeoutOutput = $closeout.StandardOutput.ReadToEndAsync()
-                $closeoutDiagnostic = $closeout.StandardError.ReadToEndAsync()
-                Assert ($closeout.WaitForExit(600000)) 'Inactive deployment closeout timed out'
-                Write-Output $closeoutOutput.GetAwaiter().GetResult()
-                $errors = $closeoutDiagnostic.GetAwaiter().GetResult()
-                if ($errors) { [Console]::Error.WriteLine($errors) }
-                Assert ($closeout.ExitCode -eq 0) 'Inactive deployment closeout failed'
-            } finally { $closeout.Dispose() }
+            $preservedPaths = @((Join-Path $control 'state.json'), (Join-Path $control 'backup/manifest.json'),
+                (Join-Path $control 'backup/complete.json'))
+            $preservedHashes = @($preservedPaths | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash })
+            foreach ($closeoutMode in @('inactive-deployment-crash', 'inactive-deployment-precommit', 'inactive-deployment-resume')) {
+                $closeout = [Deployment.WindowsControllerProcess]::Start($node,
+                    @((Join-Path $PSScriptRoot 'deployment-windows-completion-session.mjs'), $control,
+                        [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $closeoutMode), $control, $environment)
+                try {
+                    $closeoutDiagnostic = $closeout.StandardError.ReadToEndAsync()
+                    if ($closeoutMode -cne 'inactive-deployment-resume') {
+                        $line = $closeout.StandardOutput.ReadLineAsync()
+                        Assert ($line.Wait(600000)) 'Inactive deployment actor did not reach held cleanup boundary'
+                        $held = $line.GetAwaiter().GetResult() | ConvertFrom-Json
+                        $expected = if ($closeoutMode -ceq 'inactive-deployment-crash') { 1 } else { $held.totalEntries }
+                        Assert ($held.held -and $held.retiredEntries -eq $expected) 'Inactive deployment actor held wrong prefix'
+                        $bridge = [Diagnostics.Process]::GetProcessById($held.bridge.pid)
+                        try {
+                            $null = $bridge.Handle
+                            Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($held.bridge.pid) -ceq
+                                $held.bridge.processIdentity) 'Held inactive deployment bridge changed'
+                            $closeout.Kill()
+                            Assert ($closeout.WaitForExit(15000) -and $closeout.ExitCode -ne 0) 'Inactive deployment actor did not terminate abruptly'
+                            Assert ($bridge.WaitForExit(15000)) 'Inactive deployment bridge survived actor death'
+                        } finally { $bridge.Dispose() }
+                        $errors = $closeoutDiagnostic.GetAwaiter().GetResult()
+                        if ($errors) { [Console]::Error.WriteLine($errors) }
+                        Assert (Test-Path -LiteralPath (Join-Path $control 'worker-retirement.json')) `
+                            'Interrupted inactive deployment lost its original cleanup manifest'
+                        Assert ((Test-Path -LiteralPath (Join-Path $control 'lock')) -eq
+                            ($closeoutMode -ceq 'inactive-deployment-crash')) 'Interrupted closeout changed its expected lock boundary'
+                        Write-Output "PASS: inactive deployment actor death preserves exact cleanup prefix $expected and settles its native bridge"
+                        continue
+                    }
+                    $closeoutOutput = $closeout.StandardOutput.ReadToEndAsync()
+                    Assert ($closeout.WaitForExit(600000)) 'Inactive deployment closeout timed out'
+                    Write-Output $closeoutOutput.GetAwaiter().GetResult()
+                    $errors = $closeoutDiagnostic.GetAwaiter().GetResult()
+                    if ($errors) { [Console]::Error.WriteLine($errors) }
+                    Assert ($closeout.ExitCode -eq 0) 'Inactive deployment closeout failed'
+                } finally { $closeout.Dispose() }
+            }
+            for ($index = 0; $index -lt $preservedPaths.Count; $index++) {
+                Assert ((Get-FileHash -LiteralPath $preservedPaths[$index] -Algorithm SHA256).Hash -ceq $preservedHashes[$index]) `
+                    'Interrupted inactive deployment changed accepted state or retained backup'
+            }
             $task = $folder.GetTask($TaskName)
             Assert ($state.phase -ceq 'accepted' -and [string]$task.Xml -ceq $finalDefinition -and
                 -not $task.Enabled -and $task.GetInstances(0).Count -eq 1 -and
