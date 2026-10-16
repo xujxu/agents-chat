@@ -13989,6 +13989,21 @@ that active scope assertion refuses it, repeated checks remain stable, and
 closed observation cannot be reused. Before retirement the same disabled task
 must be rejected because its original instance is still alive.
 
+Bridge acceptance passed: `5dd839e8 / 38856688961`, job `116829633176`;
+original logs contain 67 passing contracts and both native inactive-observation
+and Node-bridge markers. Full original running-task/cold regression
+`38857396232` is pending on the same implementation commit.
+
+Transactional integration must not pass an inactive scope to the running
+maintenance admission. That admission persists a live owner and Scheduler
+instance GUID; neither exists here. A dedicated stopped admission must bind
+the exact retained readiness/configuration and disabled policy under the actual
+operation lock, record `priorRuntime: stopped`, and retain no-copy authority
+until native absence checks and saved recovery closure are established.
+The current observer deliberately does not admit enabled-idle tasks, ambiguous
+historical readiness or guarded launch inventory. Their integration remains
+separate from the accepted disabled, unguarded, single-retired-runtime proof.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
