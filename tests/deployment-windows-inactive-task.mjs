@@ -92,6 +92,7 @@ try {
     await writeState(control, stoppedState);
     await assert.rejects(beginWindowsInactiveTaskTransaction({ ...transactionOptions, scope: { ...admissionScope } }));
     const transaction = await beginWindowsInactiveTaskTransaction(transactionOptions);
+    let activatedRuntime;
     try {
       const snapshotOptions = { context: transaction, control, lock, sourceCommit };
       await assert.rejects(assertWindowsInactiveTaskSnapshotStage(snapshotOptions), /copying/);
@@ -247,7 +248,31 @@ try {
       await transaction.check();
       assert.deepEqual(await verifySnapshot(path.join(control, 'backup')), manifest);
       console.log('PASS: native inactive replacement changes only the literal runtime action, preserves disabled policy and security, and retains original preparation evidence');
+      const { startWindowsInactiveTask } =
+        await import(pathToFileURL(path.join(source, 'windows-inactive-task-transaction.mjs')).href);
+      assert.equal(typeof startWindowsInactiveTask, 'function', 'Missing native inactive guarded startup');
+      await assert.rejects(startWindowsInactiveTask({ ...replacementOptions, context: { ...transaction } }));
+      const active = await startWindowsInactiveTask(replacementOptions);
+      assert.equal(active.status, 'guarded-running');
+      assert.equal(active.taskName, taskName);
+      activatedRuntime = active.runtime;
+      assert.notEqual(active.runtime.identity, admissionScope.observation.retiredRuntime.identity);
+      assert.notEqual(active.runtime.generation, admissionScope.observation.retiredRuntime.generation);
+      assert.match(active.runtime.instanceGuid, /^[a-f0-9-]{36}$/);
+      assert.equal(active.runtime.configurationSha256, bundle.sha256);
+      await transaction.check();
+      await assert.rejects(startWindowsInactiveTask(replacementOptions));
+      console.log('PASS: native inactive guarded startup binds a distinct actual Scheduler owner, readiness and owned Job without inventing a prior instance');
     } finally { await transaction.close(); }
+    if (activatedRuntime) {
+      const { processIdentity } = await import(pathToFileURL(path.join(source, 'process-identity.mjs')).href);
+      const deadline = Date.now() + 30000;
+      while (await processIdentity(activatedRuntime.pid) === activatedRuntime.identity && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      assert.notEqual(await processIdentity(activatedRuntime.pid), activatedRuntime.identity);
+      console.log('PASS: inactive startup guard settles its actual runtime after the original native controller closes');
+    }
     await assert.rejects(transaction.check(), /closed/);
     console.log('PASS: inactive transaction consumes original stopped admission and grants only matching copying-stage snapshot metadata');
     assert.deepEqual(await readFile(published.admission), bytes);
