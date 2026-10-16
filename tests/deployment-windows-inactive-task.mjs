@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 
-const [source, taskName, project, pwsh, control] = process.argv.slice(2);
+const [source, taskName, project, pwsh, control, gitFile, npmFile] = process.argv.slice(2);
 const { inspectWindowsInactiveTask, assertWindowsManagedTaskScope, captureWindowsInactiveTaskAdmission } =
   await import(pathToFileURL(path.join(source, 'windows-managed-task.mjs')).href);
 const scope = await inspectWindowsInactiveTask({ taskName, project, pwsh });
@@ -73,9 +73,14 @@ try {
     const transactionOptions = { scope: admissionScope, control, lock, ...published };
     await assert.rejects(beginWindowsInactiveTaskTransaction(transactionOptions),
       /stopped-phase transaction/);
-    const sourceCommit = 'a'.repeat(40);
+    const tools = {
+      node: process.execPath, git: await realpath(gitFile), npmCli: await realpath(npmFile),
+      environment: Object.fromEntries(['SystemRoot', 'PATH', 'TEMP', 'TMP', 'ComSpec'].map(key => [key, process.env[key]])),
+    };
+    const { createWindowsSourceRepository } = await import('./deployment-windows-source-build.mjs');
+    const { beforeCommit: sourceCommit, targetCommit, git } = await createWindowsSourceRepository({ project, tools });
     const stoppedState = {
-      ...state, phase: 'stopped', previousPhase: 'preflight', sourceCommit, targetCommit: 'b'.repeat(40),
+      ...state, phase: 'stopped', previousPhase: 'preflight', sourceCommit, targetCommit,
     };
     await writeState(control, stoppedState);
     await assert.rejects(beginWindowsInactiveTaskTransaction({ ...transactionOptions, scope: { ...admissionScope } }));
@@ -138,6 +143,21 @@ try {
       const sourceOptions = {
         context: transaction, control, lock, generation: stoppedState.runtimeIdentity, commit: stoppedState.targetCommit,
       };
+      const { prepareWindowsInactiveSourceBuild } =
+        await import(pathToFileURL(path.join(source, 'windows-source-build.mjs')).href);
+      assert.equal(typeof prepareWindowsInactiveSourceBuild, 'function', 'Missing inactive owned source/build integration');
+      const { saveWorkerEngine } = await import(pathToFileURL(path.join(source, 'saved-worker-engine.mjs')).href);
+      const { createWorkerOperation } = await import(pathToFileURL(path.join(source, 'worker-operation.mjs')).href);
+      const saved = await saveWorkerEngine({ source, control, project, operationId: lock.operationId });
+      const operation = await createWorkerOperation({ control, lock, saved });
+      const options = { scope: admissionScope, control, lock, operation, pwsh, ...tools };
+      await assert.rejects(prepareWindowsInactiveSourceBuild({ ...options, scope: { ...admissionScope } }));
+      const stages = await prepareWindowsInactiveSourceBuild(options);
+      assert.equal((await stages.inspect()).commit, sourceCommit);
+      const target = await stages.resolve({ options: { revision: targetCommit } });
+      assert.equal(target.commit, targetCommit);
+      await assert.rejects(stages.select({ target, stopped: transaction }));
+      assert.equal(await git(['rev-parse', 'HEAD']), sourceCommit);
       await assert.rejects(assertWindowsInactiveTaskSourceStage({ ...sourceOptions, stage: 'select' }), /source|stage/i);
       let previousPhase = 'backup-ready';
       for (const [stage, phase] of [['select', 'source-selected'], ['dependencies', 'dependencies'], ['build', 'building']]) {
@@ -147,8 +167,23 @@ try {
           ...sourceOptions, stage, context: { ...transaction },
         }));
         await assert.rejects(assertWindowsInactiveTaskSourceStage({ ...sourceOptions, stage, commit: sourceCommit }));
+        if (stage === 'select') {
+          await assert.rejects(stages.select({ target, stopped: { ...transaction } }));
+          assert.equal((await stages.select({ target, stopped: transaction })).commit, targetCommit);
+        } else {
+          await assert.rejects(stages.npm({ stage, commit: sourceCommit, stopped: transaction }));
+          const built = await stages.npm({ stage, commit: targetCommit, stopped: transaction });
+          if (stage === 'build') {
+            assert.equal(built.sourceCommit, targetCommit);
+            assert.equal(built.artifacts.identity.buildId, 'new-source');
+            await built.artifacts.check();
+          }
+        }
         previousPhase = phase;
       }
+      await operation.seal();
+      assert.equal(await readFile(path.join(project, 'source-marker.txt'), 'utf8'), 'new-source\n');
+      console.log('PASS: inactive transaction runs owned Git selection, npm dependencies and build for its exact admitted target');
       assert.deepEqual(await verifySnapshot(path.join(control, 'backup')), manifest);
       console.log('PASS: inactive source stages require original transaction, exact target and the retained verified backup');
     } finally { await transaction.close(); }

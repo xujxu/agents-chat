@@ -8,8 +8,7 @@ import { saveWorkerEngine } from '../scripts/deployment/saved-worker-engine.mjs'
 import { saveRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
 import { createWorkerOperation } from '../scripts/deployment/worker-operation.mjs';
 
-export async function createWindowsSourceFixture({ project, control, lock, pwsh, tools }) {
-  const { prepareWindowsSourceBuild } = await import('../scripts/deployment/windows-source-build.mjs');
+export async function createWindowsSourceRepository({ project, tools }) {
   const git = async args => {
     const result = await promisify(execFile)(tools.git, ['-C', project, ...args], {
       env: tools.environment, timeout: 30000, maxBuffer: 65536,
@@ -43,6 +42,12 @@ fs.writeFileSync('.next/BUILD_ID', fs.readFileSync('source-marker.txt', 'utf8').
   await git(['commit', '-am', 'new fixture']);
   const targetCommit = await git(['rev-parse', 'HEAD']);
   await git(['switch', '--detach', beforeCommit]);
+  return { git, beforeCommit, targetCommit };
+}
+
+export async function createWindowsSourceFixture({ project, control, lock, pwsh, tools }) {
+  const { prepareWindowsSourceBuild } = await import('../scripts/deployment/windows-source-build.mjs');
+  const { git, beforeCommit, targetCommit } = await createWindowsSourceRepository({ project, tools });
   let workers;
   let stages;
   let target;

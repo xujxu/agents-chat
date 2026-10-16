@@ -37,12 +37,17 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         $environment.Add('SystemRoot', $env:SystemRoot)
         $environment.Add('TEMP', $control)
         $environment.Add('TMP', $control)
+        $environment.Add('PATH', $env:PATH)
+        $environment.Add('ComSpec', $env:ComSpec)
+        $node = (Get-Command node).Source
+        $git = (Get-Command git.exe).Source
+        $npmCli = Join-Path (Split-Path $node) 'node_modules/npm/bin/npm-cli.js'
         $controller = [Deployment.WindowsControllerProcess]::Start((Get-Command node).Source,
             @((Join-Path $PSScriptRoot 'deployment-windows-inactive-task.mjs'), $Source, $TaskName, $Project,
-                [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $control), $control, $environment)
+                [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $control, $git, $npmCli), $control, $environment)
         $output = $controller.StandardOutput.ReadToEndAsync()
         $diagnostic = $controller.StandardError.ReadToEndAsync()
-        Assert ($controller.WaitForExit(300000)) 'Inactive task Node bridge timed out'
+        Assert ($controller.WaitForExit(600000)) 'Inactive task Node bridge timed out'
         Write-Output $output.GetAwaiter().GetResult()
         $errors = $diagnostic.GetAwaiter().GetResult()
         if ($errors) { [Console]::Error.WriteLine($errors) }
