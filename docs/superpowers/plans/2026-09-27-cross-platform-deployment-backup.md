@@ -14348,6 +14348,18 @@ and closed-scope refusal in the focused Actions gate. Only after that boundary
 is accepted introduce explicit version-two inactive retirement inventory and
 checkpoint semantics; do not reinterpret the original running v1 inventory.
 
+The first retirement boundary publishes an immutable intent, without deleting
+receipts or releasing the lock. Add `prepareWindowsInactiveTaskRetirement` with
+its own original-proof registry; retain active API refusal. Use version 2 for
+the exact thirteen inactive paths, preserving version 1's original inventory.
+Share native descriptor capture and create-only publication through an explicit
+inactive switch, with inactive proof checks before/after publication. The native
+controller admits only the explicit `prepare-inactive-retirement` method for
+this mode. The actual Node fixture requires version 2, thirteen paths, exact
+completion binding, idempotent same-authority preparation, and forged/foreign
+proof refusal. Checkpoint, deletion and unlock remain unavailable until their
+own original-history and interrupted-prefix gates pass.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
