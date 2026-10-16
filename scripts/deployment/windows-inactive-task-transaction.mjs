@@ -142,26 +142,6 @@ export async function assertWindowsInactiveTaskSnapshotStage({ context, control,
     throw new Error('Snapshot requires the original inactive copying-stage transaction.');
   }
 
-  export async function assertWindowsInactiveTaskSourceStage({
-    context, control, lock: supplied, generation, stage, commit: target, signal,
-  }) {
-    const retained = transactions.get(context);
-    const lock = captureLockOwner(supplied);
-    const phase = { select: 'source-selected', dependencies: 'dependencies', build: 'building' }[stage];
-    if (!retained || retained.control !== control || !same(retained.lock, lock)
-      || !retained.rotated || !phase || !commit(target)) {
-      throw new Error('Source stage requires the original inactive transaction and verified backup.');
-    }
-    const state = await context.check({ signal });
-    if (state.phase !== phase || state.runtimeIdentity !== generation || state.targetCommit !== target
-      || state.backupId !== retained.snapshot.id
-      || !same(await verifySnapshot(path.join(control, 'backup'), { signal }), retained.snapshot)) {
-      throw new Error('Inactive source stage differs from its exact target, phase or retained backup.');
-    }
-    if (!same(await context.check({ signal }), state)) {
-      throw new Error('Inactive source-stage state changed during backup verification.');
-    }
-  }
   const state = await context.check({ signal });
   if (state.phase !== 'copying' || state.previousPhase !== 'stopped' || state.sourceCommit !== sourceCommit) {
     throw new Error('Snapshot requires the original inactive source in its copying stage.');
@@ -172,4 +152,25 @@ export async function assertWindowsInactiveTaskSnapshotStage({ context, control,
     securityDescriptor: original.securityDescriptor, configuration: original.configuration,
     configurationSha256: original.configurationSha256,
   }) });
+}
+
+export async function assertWindowsInactiveTaskSourceStage({
+  context, control, lock: supplied, generation, stage, commit: target, signal,
+}) {
+  const retained = transactions.get(context);
+  const lock = captureLockOwner(supplied);
+  const phase = { select: 'source-selected', dependencies: 'dependencies', build: 'building' }[stage];
+  if (!retained || retained.control !== control || !same(retained.lock, lock)
+    || !retained.rotated || !phase || !commit(target)) {
+    throw new Error('Source stage requires the original inactive transaction and verified backup.');
+  }
+  const state = await context.check({ signal });
+  if (state.phase !== phase || state.runtimeIdentity !== generation || state.targetCommit !== target
+    || state.backupId !== retained.snapshot.id
+    || !same(await verifySnapshot(path.join(control, 'backup'), { signal }), retained.snapshot)) {
+    throw new Error('Inactive source stage differs from its exact target, phase or retained backup.');
+  }
+  if (!same(await context.check({ signal }), state)) {
+    throw new Error('Inactive source-stage state changed during backup verification.');
+  }
 }
