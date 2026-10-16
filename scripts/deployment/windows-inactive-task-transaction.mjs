@@ -8,7 +8,10 @@ import { rotateSnapshot } from './snapshot-rotation.mjs';
 
 const transactions = new WeakMap();
 const consumers = new WeakSet();
-const next = { stopped: 'copying', copying: 'rotating', rotating: 'backup-ready' };
+const next = {
+  stopped: 'copying', copying: 'rotating', rotating: 'backup-ready',
+  'backup-ready': 'source-selected', 'source-selected': 'dependencies', dependencies: 'building',
+};
 const commit = value => typeof value === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
 
 async function readState(options) {
@@ -137,6 +140,27 @@ export async function assertWindowsInactiveTaskSnapshotStage({ context, control,
   const lock = captureLockOwner(supplied);
   if (!retained || retained.control !== control || !same(retained.lock, lock) || !commit(sourceCommit)) {
     throw new Error('Snapshot requires the original inactive copying-stage transaction.');
+  }
+
+  export async function assertWindowsInactiveTaskSourceStage({
+    context, control, lock: supplied, generation, stage, commit: target, signal,
+  }) {
+    const retained = transactions.get(context);
+    const lock = captureLockOwner(supplied);
+    const phase = { select: 'source-selected', dependencies: 'dependencies', build: 'building' }[stage];
+    if (!retained || retained.control !== control || !same(retained.lock, lock)
+      || !retained.rotated || !phase || !commit(target)) {
+      throw new Error('Source stage requires the original inactive transaction and verified backup.');
+    }
+    const state = await context.check({ signal });
+    if (state.phase !== phase || state.runtimeIdentity !== generation || state.targetCommit !== target
+      || state.backupId !== retained.snapshot.id
+      || !same(await verifySnapshot(path.join(control, 'backup'), { signal }), retained.snapshot)) {
+      throw new Error('Inactive source stage differs from its exact target, phase or retained backup.');
+    }
+    if (!same(await context.check({ signal }), state)) {
+      throw new Error('Inactive source-stage state changed during backup verification.');
+    }
   }
   const state = await context.check({ signal });
   if (state.phase !== 'copying' || state.previousPhase !== 'stopped' || state.sourceCommit !== sourceCommit) {
