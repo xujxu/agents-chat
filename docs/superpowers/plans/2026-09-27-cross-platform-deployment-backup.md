@@ -14149,6 +14149,18 @@ verify the exact retained backup, and accept matching backup-ready state.
 Do not postpone recording the backup ID until backup-ready: the existing
 deployment pipeline records it when entering rotating.
 
+Rotation causal `ffc0a32b / 38896937605` reached the missing rotation export
+after 69 passing contracts. Implementation `2e3f1bf0 / 38897507072`, job
+`116961434084`, passed real staging rotation and backup-ready binding.
+
+Next source-stage contract:
+`assertWindowsInactiveTaskSourceStage({ context, control, lock, generation, stage, commit })`.
+Extend the real fixture through backup-ready -> source-selected -> dependencies
+-> building. Require the exact retained target and retired generation, a genuine
+transaction and the same verified backup; reject early stages, forged contexts
+and the old source commit. These checks authorize the owned-worker stage
+integration next; the fixture does not yet perform a real application build.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and

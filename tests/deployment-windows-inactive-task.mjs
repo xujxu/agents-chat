@@ -132,6 +132,25 @@ try {
       await writeState(control, { ...rotating, phase: 'backup-ready', previousPhase: 'rotating' });
       await transaction.check();
       console.log('PASS: inactive transaction rotates only its verified staged snapshot and retains the matching backup-ready binding');
+      const { assertWindowsInactiveTaskSourceStage } =
+        await import(pathToFileURL(path.join(source, 'windows-inactive-task-transaction.mjs')).href);
+      assert.equal(typeof assertWindowsInactiveTaskSourceStage, 'function', 'Missing inactive source stage authority');
+      const sourceOptions = {
+        context: transaction, control, lock, generation: stoppedState.runtimeIdentity, commit: stoppedState.targetCommit,
+      };
+      await assert.rejects(assertWindowsInactiveTaskSourceStage({ ...sourceOptions, stage: 'select' }), /source|stage/i);
+      let previousPhase = 'backup-ready';
+      for (const [stage, phase] of [['select', 'source-selected'], ['dependencies', 'dependencies'], ['build', 'building']]) {
+        await writeState(control, { ...rotating, phase, previousPhase });
+        await assertWindowsInactiveTaskSourceStage({ ...sourceOptions, stage });
+        await assert.rejects(assertWindowsInactiveTaskSourceStage({
+          ...sourceOptions, stage, context: { ...transaction },
+        }));
+        await assert.rejects(assertWindowsInactiveTaskSourceStage({ ...sourceOptions, stage, commit: sourceCommit }));
+        previousPhase = phase;
+      }
+      assert.deepEqual(await verifySnapshot(path.join(control, 'backup')), manifest);
+      console.log('PASS: inactive source stages require original transaction, exact target and the retained verified backup');
     } finally { await transaction.close(); }
     await assert.rejects(transaction.check(), /closed/);
     console.log('PASS: inactive transaction consumes original stopped admission and grants only matching copying-stage snapshot metadata');
