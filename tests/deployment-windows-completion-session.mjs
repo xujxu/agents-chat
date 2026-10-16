@@ -35,7 +35,7 @@ async function malformedRequest(frame) {
   } catch (error) { throw await abandon(error); }
 }
 
-if (mode === 'inactive-retire' || mode === 'inactive-retire-resume') {
+if (mode === 'inactive-retire' || mode === 'inactive-retire-crash' || mode === 'inactive-retire-resume') {
   const { readFile, readdir, rename } = await import('node:fs/promises');
   const path = await import('node:path');
   const { openWindowsInactiveTaskRetirement, openWindowsTaskRetirement,
@@ -43,8 +43,8 @@ if (mode === 'inactive-retire' || mode === 'inactive-retire-resume') {
     await import('../scripts/deployment/windows-task-completion-proof.mjs');
   assert.equal(typeof openWindowsInactiveTaskRetirement, 'function',
     'Inactive retirement requires independent version-two reopening');
-  const prefix = mode === 'inactive-retire' ? 0 : 3;
-  const end = mode === 'inactive-retire' ? 3 : 13;
+  const prefix = mode === 'inactive-retire-resume' ? 3 : 0;
+  const end = mode === 'inactive-retire-resume' ? 13 : 3;
   const state = await readFile(path.join(control, 'state.json'));
   const lock = await readFile(path.join(control, 'lock', 'owner.json'));
   await withWindowsAdmission(control, { pwsh }, async admission => {
@@ -70,6 +70,13 @@ if (mode === 'inactive-retire' || mode === 'inactive-retire-resume') {
         assert.equal(next.retiredFiles, index + 1);
         assert.deepEqual(await scope.check(), next);
         assert.equal((await readdir(path.join(control, 'task-maintenance'))).length, 13 - index - 1);
+      }
+      if (mode === 'inactive-retire-crash') {
+        assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+        assert.deepEqual(await readFile(path.join(control, 'lock', 'owner.json')), lock);
+        console.log(JSON.stringify({ held: true, retiredFiles: end, bridge: scope.identity }));
+        await delay(120000);
+        throw new Error('Parent did not terminate the held inactive retirement actor.');
       }
       if (end === 13) await assert.rejects(retireNextWindowsTaskFile(control, scope, admission),
         error => /exhausted/.test(error.cause?.message ?? ''));

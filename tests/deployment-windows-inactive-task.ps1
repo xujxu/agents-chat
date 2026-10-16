@@ -134,13 +134,37 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             } finally { $observer.Dispose() }
             $finalDefinition = (Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-replacement-complete.json') -Raw |
                 ConvertFrom-Json).definition
-            foreach ($retirementMode in @('inactive-retire', 'inactive-retire-resume')) {
+            $stateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
+            $lockHash = (Get-FileHash -LiteralPath (Join-Path $control 'lock/owner.json') -Algorithm SHA256).Hash
+            foreach ($retirementMode in @('inactive-retire-crash', 'inactive-retire-resume')) {
                 $retirement = [Deployment.WindowsControllerProcess]::Start($node,
                     @((Join-Path $PSScriptRoot 'deployment-windows-completion-session.mjs'), $control,
                         [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $retirementMode), $control, $environment)
                 try {
-                    $retirementOutput = $retirement.StandardOutput.ReadToEndAsync()
                     $retirementDiagnostic = $retirement.StandardError.ReadToEndAsync()
+                    if ($retirementMode -ceq 'inactive-retire-crash') {
+                        $line = $retirement.StandardOutput.ReadLineAsync()
+                        Assert ($line.Wait(120000)) 'Inactive retirement actor did not reach held prefix'
+                        $held = $line.GetAwaiter().GetResult() | ConvertFrom-Json
+                        Assert ($held.held -and $held.retiredFiles -eq 3) 'Inactive retirement actor reported wrong held prefix'
+                        $bridge = [Diagnostics.Process]::GetProcessById($held.bridge.pid)
+                        try {
+                            $null = $bridge.Handle
+                            Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($held.bridge.pid) -ceq
+                                $held.bridge.processIdentity) 'Held inactive retirement bridge changed'
+                            $retirement.Kill()
+                            Assert ($retirement.WaitForExit(15000) -and $retirement.ExitCode -ne 0) `
+                                'Inactive retirement actor did not terminate abruptly'
+                            Assert ($bridge.WaitForExit(15000)) 'Inactive retirement bridge survived original actor death'
+                        } finally { $bridge.Dispose() }
+                        $errors = $retirementDiagnostic.GetAwaiter().GetResult()
+                        if ($errors) { [Console]::Error.WriteLine($errors) }
+                        Assert (@(Get-ChildItem -LiteralPath (Join-Path $control 'task-maintenance')).Count -eq 10) `
+                            'Abrupt retirement changed its acknowledged receipt prefix'
+                        Write-Output 'PASS: abrupt inactive retirement actor death settles its exact native bridge and preserves prefix three'
+                        continue
+                    }
+                    $retirementOutput = $retirement.StandardOutput.ReadToEndAsync()
                     Assert ($retirement.WaitForExit(180000)) 'Independent inactive receipt retirement timed out'
                     Write-Output $retirementOutput.GetAwaiter().GetResult()
                     $errors = $retirementDiagnostic.GetAwaiter().GetResult()
@@ -148,6 +172,9 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     Assert ($retirement.ExitCode -eq 0) 'Independent inactive receipt retirement failed'
                 } finally { $retirement.Dispose() }
             }
+            Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq $stateHash -and
+                (Get-FileHash -LiteralPath (Join-Path $control 'lock/owner.json') -Algorithm SHA256).Hash -ceq $lockHash) `
+                'Interrupted inactive retirement changed accepted state or original lock'
             $task = $folder.GetTask($TaskName)
             Assert ($state.phase -ceq 'accepted' -and [string]$task.Xml -ceq $finalDefinition -and
                 -not $task.Enabled -and $task.GetInstances(0).Count -eq 1 -and

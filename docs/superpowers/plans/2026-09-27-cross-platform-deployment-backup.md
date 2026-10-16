@@ -14383,6 +14383,16 @@ actor to delete three receipts, then another to reopen at prefix three and
 finish all thirteen. State and original lock must remain byte-identical;
 deployment retirement/unlock stays refused pending separate archival support.
 
+Prefix retirement `543376ca / 38968542190` passed: independent actors retire
+0 to 3 and reopen 3 to 13, retaining identical accepted state and original lock;
+accepted runtime survives both controllers. Extend this to actual abrupt actor
+death at prefix three: the Node fixture emits its exact retained native bridge
+identity and waits without closing; native parent pins that process, kills only
+the owned Node actor, requires both actor and bridge exit, then launches the
+fresh resuming actor. Verify ten remaining receipts after death and unchanged
+state/lock digests across the whole interrupted sequence. Do not infer abrupt
+recovery from the earlier graceful-controller-exit test.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
