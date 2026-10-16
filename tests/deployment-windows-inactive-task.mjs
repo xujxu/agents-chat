@@ -95,6 +95,28 @@ try {
       await assert.rejects(assertWindowsInactiveTaskSnapshotStage({
         ...snapshotOptions, sourceCommit: 'c'.repeat(40),
       }));
+      const { createWindowsInactiveTaskSnapshot } =
+        await import(pathToFileURL(path.join(source, 'windows-task-snapshot.mjs')).href);
+      assert.equal(typeof createWindowsInactiveTaskSnapshot, 'function', 'Missing inactive task snapshot integration');
+      const { saveRecoveryEngine } =
+        await import(pathToFileURL(path.join(source, 'saved-recovery-engine.mjs')).href);
+      const { verifySnapshot } = await import(pathToFileURL(path.join(source, 'snapshot.mjs')).href);
+      const recovery = await saveRecoveryEngine({ control, source });
+      const destination = path.join(control, 'backup');
+      const copyOptions = {
+        context: transaction, control, lock, pwsh, destination, id: 'inactive-task-snapshot',
+        source: { commit: sourceCommit, provenance: 'observed' }, recoveryEngine: recovery.manifestSha256,
+        configuration: { files: [], checkFiles: () => admissionScope.check() },
+      };
+      await assert.rejects(createWindowsInactiveTaskSnapshot({ ...copyOptions, context: { ...transaction } }));
+      assert.ok(!(await readdir(control)).includes('backup'));
+      const manifest = await createWindowsInactiveTaskSnapshot(copyOptions);
+      assert.deepEqual(await verifySnapshot(destination), manifest);
+      assert.deepEqual(manifest.runtime, { platform: 'win32', state: 'stopped', task: metadata.task });
+      assert.equal(manifest.recoveryEngine, recovery.manifestSha256);
+      assert.equal(manifest.source.commit, sourceCommit);
+      assert.ok(manifest.windowsSecurity);
+      console.log('PASS: inactive task transaction creates and verifies a real stopped snapshot with original task policy and saved recovery engine');
       await transaction.check();
     } finally { await transaction.close(); }
     await assert.rejects(transaction.check(), /closed/);

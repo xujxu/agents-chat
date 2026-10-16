@@ -14113,6 +14113,22 @@ the saved worker inventory, and the real inactive-task Node fixture.
 - [ ] Repeat Actions and require the actual copying-stage proof and all prior
   contracts. Public deployment remains gated until the full pipeline is wired.
 
+Accepted consumer: `a520edbf / 38882391758`, job `116911985398`; original
+logs confirm 69 contracts and the real stopped-to-copying metadata proof.
+Next connect this authority to the existing snapshot implementation, without
+duplicating its Git/configuration/security/inventory logic:
+
+```js
+createWindowsInactiveTaskSnapshot(options);
+```
+
+The new named entry selects the inactive stage assertion internally; the existing
+entry keeps the running transaction assertion. Callers cannot supply their own
+assertion. Extend the real fixture to save the actual recovery engine, reject a
+forged transaction before destination creation, copy the stopped project, verify
+the manifest and its task/security/recovery/source bindings, and recheck the
+original inactive transaction. This fixture is not public application deployment.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
