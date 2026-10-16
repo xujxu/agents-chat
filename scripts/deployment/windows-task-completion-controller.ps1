@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][string]$ControllerIdentity,
     [switch]$Retirement,
-    [switch]$DeploymentRetirement
+    [switch]$DeploymentRetirement,
+    [switch]$Inactive
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -18,6 +19,7 @@ try {
         (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-completion-proof.ps1')
+    . (Join-Path $PSScriptRoot 'windows-inactive-completion-proof.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-retirement-intent.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-retirement-checkpoint.ps1')
     . (Join-Path $PSScriptRoot 'windows-task-retirement-scope.ps1')
@@ -27,6 +29,7 @@ try {
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'proof-open'
     if ($Retirement -and $DeploymentRetirement) { throw 'Ambiguous retirement mode.' }
+    if ($Inactive -and ($Retirement -or $DeploymentRetirement)) { throw 'Inactive proof grants no retirement authority.' }
     if ($DeploymentRetirement) {
         $stage = 'deployment-retirement-open'
         $deployment = Open-AgentsChatDeploymentRetirement -Control $Control `
@@ -37,6 +40,9 @@ try {
         $scope = Open-AgentsChatTaskRetirement -Control $Control `
             -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
         $observed = Assert-AgentsChatTaskRetirement $scope
+    } elseif ($Inactive) {
+        $proof = Open-AgentsChatInactiveCompletionProof -Control $Control
+        $observed = Assert-AgentsChatInactiveCompletionProof $proof
     } else {
         $proof = Open-AgentsChatTaskCompletionProof -Control $Control
         $observed = Assert-AgentsChatTaskCompletionProof -Context $proof
@@ -64,6 +70,7 @@ try {
             throw 'Original completed-task proof controller changed.'
         }
         $stage = $method
+        if ($Inactive -and $method -cnotin @('check', 'close')) { throw 'Inactive proof is read-only.' }
         if (($scope -and $method -cnotin @('check', 'close', 'retire-next', 'retain-workers', 'begin-deployment-retirement')) -or
             ($deployment -and $method -cnotin @('check', 'close', 'retire-deployment-next')) -or
             ($proof -and $method -cin @('retire-next', 'retain-workers', 'begin-deployment-retirement', 'retire-deployment-next'))) {
@@ -107,6 +114,7 @@ try {
                 -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
         } elseif ($deployment) { $value = Assert-AgentsChatDeploymentRetirement $deployment }
         elseif ($scope) { $value = Assert-AgentsChatTaskRetirement $scope }
+        elseif ($Inactive) { $value = Assert-AgentsChatInactiveCompletionProof $proof }
         else { $value = Assert-AgentsChatTaskCompletionProof -Context $proof }
         [Console]::Out.WriteLine((@{
             id=$id; type='reply'; value=$value

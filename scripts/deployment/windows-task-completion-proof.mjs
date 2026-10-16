@@ -62,6 +62,10 @@ export async function openWindowsTaskCompletionProof(options) {
   return openWindowsTaskAuthority(options, 'proof');
 }
 
+export async function openWindowsInactiveTaskCompletionProof(options) {
+  return openWindowsTaskAuthority(options, 'proof', true);
+}
+
 export async function openWindowsTaskRetirement(options) {
   return openWindowsTaskAuthority(options, 'task');
 }
@@ -86,7 +90,7 @@ export async function retireNextWindowsDeploymentEntry(control, scope, admission
   return binding.next(signal);
 }
 
-async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mode) {
+async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mode, inactive = false) {
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value =>
     typeof value === 'string' && value.length <= 4096 && path.isAbsolute(value)
@@ -101,6 +105,7 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mo
     pwsh, refused, label: 'Native completed-task proof controller',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
       '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
+      ...(inactive ? ['-Inactive'] : []),
       ...(mode === 'task' ? ['-Retirement'] : mode === 'deployment' ? ['-DeploymentRetirement'] : [])],
   });
   let closed = false;
@@ -284,6 +289,7 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mo
     if (mode === 'deployment') return deploymentContext();
     if (mode === 'task') return retirementContext();
     const proof = contextFor('proof');
+    if (inactive) return proof;
     const fullRequest = (method, requestSignal) => {
       requireMode('proof');
       return request(method, requestSignal);
