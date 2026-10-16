@@ -59,6 +59,7 @@ try {
   });
 } finally {
   await admissionScope.close();
-  await releaseLock(control, lock, { pwsh });
 }
+await assert.rejects(releaseLock(control, lock, { pwsh }), /maintenance evidence requires explicit runtime recovery/);
+assert.deepEqual(JSON.parse(await readFile(path.join(control, 'lock', 'owner.json'))), lock);
 console.log('PASS: native inactive admission binds actual stopped lock and state, rejects forged scope and preserves create-only evidence');
