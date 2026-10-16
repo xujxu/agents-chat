@@ -127,12 +127,12 @@ function Assert-AgentsChatDeploymentRetirement([hashtable]$Context) {
 }
 
 function Open-AgentsChatDeploymentRetirement {
-    param([string]$Control, [int]$ControllerPid, [string]$ControllerIdentity)
+    param([string]$Control, [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Inactive)
     $context = @{
         Control=$Control; ControllerPid=$ControllerPid; ControllerIdentity=$ControllerIdentity
         Files=[Collections.Generic.List[IDisposable]]::new()
         Closed=$false; Poisoned=$false; Busy=$false; Owner=$null; Instance=$null; Folder=$null
-        Stage='deployment-manifest'; Prefix=0; Target=$null
+        Stage='deployment-manifest'; Prefix=0; Target=$null; Inactive=[bool]$Inactive
     }
     try {
         $context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory($Control))

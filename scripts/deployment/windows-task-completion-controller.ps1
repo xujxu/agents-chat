@@ -29,11 +29,10 @@ try {
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'proof-open'
     if ($Retirement -and $DeploymentRetirement) { throw 'Ambiguous retirement mode.' }
-    if ($Inactive -and $DeploymentRetirement) { throw 'Inactive deployment retirement is not available.' }
     if ($DeploymentRetirement) {
         $stage = 'deployment-retirement-open'
         $deployment = Open-AgentsChatDeploymentRetirement -Control $Control `
-            -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
+            -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive:$Inactive
         $observed = Assert-AgentsChatDeploymentRetirement $deployment
     } elseif ($Retirement) {
         $stage = 'retirement-open'
@@ -71,7 +70,8 @@ try {
             throw 'Original completed-task proof controller changed.'
         }
         $stage = $method
-        $inactiveMethods = if ($scope) { @('check', 'close', 'retire-next') }
+        $inactiveMethods = if ($deployment) { @('check', 'close', 'retire-deployment-next') }
+            elseif ($scope) { @('check', 'close', 'retire-next', 'retain-workers', 'begin-deployment-retirement') }
             else { @('check', 'close', 'prepare-inactive-retirement', 'prepare-inactive-retirement-checkpoint') }
         if (($Inactive -and $method -cnotin $inactiveMethods) -or
             (-not $Inactive -and $method -cin @('prepare-inactive-retirement', 'prepare-inactive-retirement-checkpoint'))) {
@@ -93,7 +93,7 @@ try {
         } elseif ($method -ceq 'begin-deployment-retirement') {
             Publish-AgentsChatDeploymentRetirement $scope
             $deployment = Open-AgentsChatDeploymentRetirement -Control $Control `
-                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
+                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive:$Inactive
             $null = Assert-AgentsChatTaskRetirement $scope
             Close-AgentsChatTaskCompletionProof $scope
             $scope = $null

@@ -95,10 +95,26 @@ export async function openWindowsDeploymentRetirement(options) {
   return openWindowsTaskAuthority(options, 'deployment');
 }
 
+export async function openWindowsInactiveDeploymentRetirement(options) {
+  return openWindowsTaskAuthority(options, 'deployment', true);
+}
+
 export async function beginWindowsDeploymentRetirement(control, scope, admission, { signal } = {}) {
+  return beginDeploymentRetirement(control, scope, admission, signal, false);
+}
+
+export async function beginWindowsInactiveDeploymentRetirement(control, scope, admission, { signal } = {}) {
+  return beginDeploymentRetirement(control, scope, admission, signal, true);
+}
+
+function beginDeploymentRetirement(control, scope, admission, signal, inactive) {
   const binding = retirements.get(scope);
   if (!binding || binding.control !== control || binding.admission !== admission) {
     throw new Error('Original retained task retirement authority does not match admission.');
+  }
+  if (binding.inactive !== inactive) {
+    throw new Error(inactive ? 'Original retained inactive task retirement authority is required.'
+      : 'Inactive deployment retirement is not available through active authority.');
   }
   return binding.beginDeployment(signal);
 }
@@ -291,7 +307,7 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mo
     };
     const retirementContext = () => {
       const scope = contextFor('task');
-      retirements.set(scope, { control, admission, async next(requestSignal) {
+      retirements.set(scope, { control, admission, inactive, async next(requestSignal) {
         requireMode('task');
         if (retirementObservation.retiredFiles >= retirementObservation.checkpoint.intent.intent.files.length) {
           throw refused(new Error('Retirement receipt list is exhausted.'));
@@ -299,7 +315,6 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mo
         return request('retire-next', requestSignal);
       }, async beginDeployment(requestSignal) {
         requireMode('task');
-        if (inactive) throw new Error('Inactive deployment retirement is not available.');
         transferring = true;
         try {
           const retained = await request('retain-workers', requestSignal);
