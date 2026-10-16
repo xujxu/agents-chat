@@ -13992,7 +13992,10 @@ must be rejected because its original instance is still alive.
 Bridge acceptance passed: `5dd839e8 / 38856688961`, job `116829633176`;
 original logs contain 67 passing contracts and both native inactive-observation
 and Node-bridge markers. Full original running-task/cold regression
-`38857396232` is pending on the same implementation commit.
+`38857396232` passed on the same implementation commit (jobs `116831845833`
+and `116831845999`). Original logs confirm stopped restoration, unacknowledged
+startup, repeated policy takeover/archive, terminal state/receipt/retirement
+and separate earlier-startup regression.
 
 Transactional integration must not pass an inactive scope to the running
 maintenance admission. That admission persists a live owner and Scheduler
@@ -14003,6 +14006,35 @@ until native absence checks and saved recovery closure are established.
 The current observer deliberately does not admit enabled-idle tasks, ambiguous
 historical readiness or guarded launch inventory. Their integration remains
 separate from the accepted disabled, unguarded, single-retired-runtime proof.
+
+### Task 5FR: Bind an initially stopped task to its own admission record
+
+Do not reinterpret a version-one running admission. A version-two record with
+`kind: inactive` binds the original Node lock owner, operation and exact disabled
+observation, with `retiredRuntime` instead of a live owner/instance GUID.
+The builder is data validation, not native authority or permission to copy.
+
+**Files:** add `scripts/deployment/windows-inactive-task-admission.mjs`; extend
+`tests/deployment-windows-inactive-task.test.mjs`. Native publication and stopped
+transaction ownership follow only after the pure binding gate.
+
+- [x] Add two causal contracts calling:
+
+  ```js
+  createWindowsInactiveTaskAdmissionRecord({ observation, lock, state });
+  ```
+
+  Require stopped preflight, matching project/operation/start time/retired
+  generation and null previous phase/error; reject restore, running state,
+  foreign lock and later phases. The immutable result has no live owner fields.
+- [ ] Run the existing focused command-contract Actions gate with application,
+  live, commands flags and `windows_restore_scenario=failed`. Require only two
+  new missing-module failures and 67 prior passes.
+- [ ] Implement the builder using `captureLockOwner`, `validateState` and
+  `captureWindowsInactiveTaskObservation`; produce version2/kind-inactive,
+  original operation/controller/task/policy/configuration and retired identity.
+  Do not call a native method or write any file from the builder.
+- [ ] Repeat the gate and require 69 contracts and existing native bridge proof.
 
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
