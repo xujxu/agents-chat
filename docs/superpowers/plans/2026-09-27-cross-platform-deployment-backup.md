@@ -13915,6 +13915,55 @@ crash scenarios, not the ordinary receipt publisher or native step algorithm.
   141,007 / 143,299 / 142,104 ms. This closes Task 5CZ's native and actual
   complete-prefix regression gates, not actual earlier-prefix interruption.
 
+### Task 5FQ: Retained observation of an initially disabled managed task
+
+Continue the approved inactive deployment work inline. The existing live observer
+requires exactly one running task instance and its active Job. Do not weaken that
+contract to admit zero instances. Introduce a separate read-only inactive
+observation with `runtime: null`, a strictly captured `retiredRuntime`, and
+`runtimeAuthority: false`. Initial scope requires disabled policy; enabled-idle,
+legacy actions, reboot recovery and mutation authority are not implied.
+
+**Files:**
+- Create `scripts/deployment/windows-managed-task-observation.mjs` for shared
+  strict running/inactive observation capture.
+- Test `tests/deployment-windows-inactive-task.test.mjs`.
+- Modify `scripts/deployment/windows-managed-task.mjs` to reuse running capture
+  without changing its fields or native admission.
+- Extend the existing native managed observer only after pure contracts pass:
+  retain configuration/readiness files, exact task XML/security, absent retired
+  host and empty named Job; recheck zero task instances and disabled policy.
+
+- [x] Write three causal contracts for immutable null-runtime observation,
+  enabled/current/foreign policy refusal, and invalid retired identity refusal.
+  The tests call:
+
+  ```js
+  captureWindowsInactiveTaskObservation(value, project, taskName);
+  ```
+
+  No record or parser grants authority to copy or start a task.
+- [ ] Push and run the existing command-contract gate in Actions:
+
+  ```bash
+  gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+    --ref feat/deployment-backup -f windows_application_only=true \
+    -f windows_live_only=true -f windows_commands_only=true \
+    -f windows_restore_scenario=failed
+  ```
+
+  Require exactly the three new missing-module failures and all 64 prior tests
+  passing before implementing the parser.
+- [ ] Extract the existing running observation capture unchanged; inactive
+  capture checks exact common fields, disabled policy, null runtime and the
+  existing `captureActivatedRuntime` validator for the retired record. Require
+  the retired configuration digest to equal the installed digest. Freeze both
+  records and reject extra fields.
+- [ ] Repeat the same Actions gate, require 67 passing contracts and existing
+  public routing/native checks. Only then extend native observation and its
+  actual retired-task fixture; public stopped deployment remains unsupported
+  until its independent native proof and transactional integration pass.
+
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
 Native acceptance: `04b31e47 / 38640954466` (job `116116012858`) and
