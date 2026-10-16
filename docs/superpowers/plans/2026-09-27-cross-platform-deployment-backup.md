@@ -14255,6 +14255,10 @@ The real fixture closes the native controller and requires the new guarded host
 to exit, then independently checks the disabled Scheduler definition and zero
 instances. This is not completion or permanent lease release.
 Startup causal `6421ebef / 38933976406` failed at the missing startup interface.
+Implementation `6c1d2d3c / 38934754493` succeeded: 69 contracts, actual guarded
+Scheduler owner/readiness/Job, controller-close host exit and disabled empty
+Scheduler instance inventory. Follow-through adds an independent native assertion
+that the new runtime's entire named Job is empty, not just its host process.
 
 ### Task 5FP: Recover a version-two enable attempt before any launch
 

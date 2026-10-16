@@ -65,6 +65,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         $running.configuration -ceq (Join-Path $expectedBundle 'configuration.json') -and
         [string]$task.GetSecurityDescriptor(7) -ceq $security -and
         $task.GetInstances(0).Count -eq 0 -and -not $task.Enabled) 'Inactive startup guard did not settle with its exact disabled policy'
+    [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$running.runtime.generation, $running.runtime.sessionId)
     Assert ((Get-Item -LiteralPath $ReadyFile).LastWriteTimeUtc.Ticks -eq $mtime -and
         (Get-FileHash -LiteralPath $ReadyFile -Algorithm SHA256).Hash -ceq $hash) 'Inactive observation changed original readiness'
     Write-Output 'PASS: native inactive guarded startup preserves original retired readiness and settles its actual new instance with exact disabled policy'
