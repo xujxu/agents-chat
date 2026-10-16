@@ -14292,6 +14292,13 @@ and native controller exit; independent PowerShell checks accepted state,
 permanent policy, released lease and actual owner before explicit test cleanup
 stops/retires the exact runtime and verifies its entire Job is empty.
 Causal `81fbfd4e / 38939537244` fails at missing native completion preparation.
+Completion `e6b08ed9 / 38940569296` succeeded: 69 contracts, the existing
+unaccepted controller-close guard case, accepted terminal binding, permanent
+disabled policy and released runtime surviving controller exit. Independent
+PowerShell observed the released lease and live original owner before explicitly
+stopping/retiring it for fixture cleanup. This is a small native application
+fixture, not public deploy/update acceptance; retirement, recovery and public
+composition remain pending.
 
 ### Task 5FP: Recover a version-two enable attempt before any launch
 
