@@ -66,7 +66,11 @@ runtime. Cold startup settles its original controller before one independent
 continuation. Recovery for an already released cold runtime includes unfinished completion,
 terminal state and receipt publication. Acknowledged guarded startup with absent
 original owners/runtime first restores disabled policy and archives its journal.
-Unacknowledged startup, live guarded peers, inactive/reboot and legacy recovery remain unsupported.
+Unacknowledged startup requires retained original launch evidence, or a version-two
+request proving never-enabled preparation or an exact original enable intent
+without launch/readiness. Recovery requires absent original owners, an empty
+original Job and exact task policy/security; it does not invent a running receipt.
+Live guarded peers, inactive/reboot and legacy recovery remain unsupported.
 Readiness uses port3010 and a120-second wait.
 The original backup must contain a saved Windows restore process entry.
 Successful restoration includes independent closeout; failed captures and

@@ -20,7 +20,10 @@ try {
     Assert ($result.message.Contains('already released') -and $result.message.Contains('unfinished completion') -and
         $result.message.Contains('interrupted copies with retained stopped') -and
         $result.message.Contains('Acknowledged guarded startup with absent') -and
-        $result.message.Contains('Unacknowledged startup, live guarded peers') -and
+        $result.message.Contains('Unacknowledged startup requires retained original launch evidence') -and
+        $result.message.Contains('request proving never-enabled preparation or an exact original enable intent') -and
+        $result.message.Contains('without launch/readiness') -and
+        $result.message.Contains('Live guarded peers') -and
         $result.message.Contains('inactive/reboot and legacy recovery remain unsupported')) `
         'Restore help must distinguish released recovery from unsupported earlier prefixes'
     $text = & $pwsh -NoProfile -NonInteractive -File $restore -ProjectDir $missing -Json
