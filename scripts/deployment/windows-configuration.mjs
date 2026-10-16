@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { assertWindowsManagedTaskScope } from './windows-managed-task.mjs';
+import { assertWindowsManagedTaskScope, assertWindowsInactiveTaskScope } from './windows-managed-task.mjs';
 import { assertWindowsFirstInstallScope } from './windows-first-install.mjs';
 import { openWindowsConfigurationFiles, openWindowsFirstConfigurationFiles } from './windows-configuration-files.mjs';
 import { readWorkerFile } from './worker-files.mjs';
@@ -29,6 +29,14 @@ export async function inspectWindowsConfiguration({ scope, pwsh, profile, signal
   return inspectWindowsRuntimeConfiguration({
     project: observed.project, configuration: observed.configuration, sha256: observed.configurationSha256,
     pwsh, profile, signal, recheck: () => assertWindowsManagedTaskScope(scope, { signal }),
+  });
+}
+
+export async function inspectWindowsInactiveConfiguration({ scope, pwsh, profile, signal }) {
+  const observed = await assertWindowsInactiveTaskScope(scope, { signal });
+  return inspectWindowsRuntimeConfiguration({
+    project: observed.project, configuration: observed.configuration, sha256: observed.configurationSha256,
+    pwsh, profile, signal, recheck: () => assertWindowsInactiveTaskScope(scope, { signal }),
   });
 }
 
