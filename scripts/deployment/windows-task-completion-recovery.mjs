@@ -21,13 +21,13 @@ function refused(cause) {
     code: 'DEPLOYMENT_WINDOWS_COMPLETION_RECOVERY_REFUSED', recoveryAllowed: false,
   });
 }
-function capture(value) {
+function capture(value, progression) {
   const record = captureWorkerFields(value, [
     'status', 'phase', 'step', 'operationId', 'taskName', 'stateSha256',
     'completionSha256', 'runtime', 'port', 'providers', 'lease',
   ], 'completion recovery');
   const { status, phase, step, ...fields } = record;
-  if (!steps.includes(step) || phase !== durablePhase(step)
+  if (!progression.includes(step) || phase !== durablePhase(step)
     || status !== (phase === 'complete' ? 'complete' : 'pending')) {
     throw new Error('Invalid completion recovery progress.');
   }
@@ -36,7 +36,13 @@ function capture(value) {
 }
 function identityFields({ status, phase, step, completionSha256, ...fields }) { return fields; }
 
-export async function openWindowsTaskCompletionRecovery({ control, pwsh, admission, signal }) {
+export const openWindowsTaskCompletionRecovery = options => openCompletionRecovery(options, false);
+export const openWindowsInactiveTaskCompletionRecovery = options => openCompletionRecovery(options, true);
+
+async function openCompletionRecovery({ control, pwsh, admission, signal }, inactive) {
+  const progression = inactive
+    ? ['release-requested', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete']
+    : steps;
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value =>
     typeof value === 'string' && value.length <= 4096 && path.isAbsolute(value)
@@ -50,7 +56,8 @@ export async function openWindowsTaskCompletionRecovery({ control, pwsh, admissi
   const { child, wire, waitForExit, abandon } = windowsControllerTransport({
     pwsh, refused, label: 'Native completion recovery controller',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
-      '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
+      '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
+      ...(inactive ? ['-Inactive'] : [])],
   });
   let closed = false;
   let busy = false;
@@ -64,7 +71,7 @@ export async function openWindowsTaskCompletionRecovery({ control, pwsh, admissi
       || ready.processIdentity !== await processIdentity(child.pid)) {
       throw new Error('Original completion recovery bridge differs.');
     }
-    let observation = capture(ready.value);
+    let observation = capture(ready.value, progression);
     const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity });
     const exchange = async (method, requestSignal) => {
       const id = ++sequence;
@@ -78,12 +85,12 @@ export async function openWindowsTaskCompletionRecovery({ control, pwsh, admissi
         if (reply.value !== 'close') throw new Error('Unexpected completion recovery close acknowledgement.');
         return;
       }
-      const next = capture(reply.value);
+      const next = capture(reply.value, progression);
       if (method === 'check') {
         if (!isDeepStrictEqual(next, observation)) throw new Error('Retained completion recovery evidence changed.');
       } else {
-        const index = steps.indexOf(observation.step);
-        if (next.step !== steps[Math.min(index + 1, steps.length - 1)]
+        const index = progression.indexOf(observation.step);
+        if (next.step !== progression[Math.min(index + 1, progression.length - 1)]
           || !isDeepStrictEqual(identityFields(next), identityFields(observation))
           || (next.phase === observation.phase) !== (next.completionSha256 === observation.completionSha256)) {
           throw new Error('Completion recovery changed original identity or skipped a step.');

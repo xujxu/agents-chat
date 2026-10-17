@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory)][string]$Control,
     [Parameter(Mandatory)][int]$ControllerPid,
-    [Parameter(Mandatory)][string]$ControllerIdentity
+    [Parameter(Mandatory)][string]$ControllerIdentity,
+    [switch]$Inactive
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -16,14 +17,18 @@ try {
         (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-completion-recovery.ps1')
+    if ($Inactive) { . (Join-Path $PSScriptRoot 'windows-inactive-completion-recovery.ps1') }
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'recovery-open'
-    $scope = Open-AgentsChatTaskCompletionRecovery $Control
+    $scope = if ($Inactive) { Open-AgentsChatInactiveCompletionRecovery $Control }
+        else { Open-AgentsChatTaskCompletionRecovery $Control }
+    $observation = if ($Inactive) { Assert-AgentsChatInactiveCompletionRecovery $scope }
+        else { Assert-AgentsChatTaskCompletionRecovery $scope }
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; control=$Control
-        controllerIdentity=$ControllerIdentity; value=(Assert-AgentsChatTaskCompletionRecovery $scope)
+        controllerIdentity=$ControllerIdentity; value=$observation
     } | ConvertTo-Json -Depth 8 -Compress))
     [Console]::Out.Flush()
     $sequence = 0
@@ -43,8 +48,13 @@ try {
             Close-AgentsChatTaskCompletionProof $scope
             $scope = $null
             $value = 'close'
-        } elseif ($method -ceq 'advance') { $value = Advance-AgentsChatTaskCompletionRecovery $scope }
-        else { $value = Assert-AgentsChatTaskCompletionRecovery $scope }
+        } elseif ($method -ceq 'advance') {
+            $value = if ($Inactive) { Advance-AgentsChatInactiveCompletionRecovery $scope }
+                else { Advance-AgentsChatTaskCompletionRecovery $scope }
+        } else {
+            $value = if ($Inactive) { Assert-AgentsChatInactiveCompletionRecovery $scope }
+                else { Assert-AgentsChatTaskCompletionRecovery $scope }
+        }
         [Console]::Out.WriteLine((@{ id=$id; type='reply'; processIdentity=$identity; value=$value } |
             ConvertTo-Json -Depth 8 -Compress))
         [Console]::Out.Flush()

@@ -14498,6 +14498,15 @@ requirements. Reuse the existing owner-watched recovery controller with an
 explicit inactive switch and the inactive five-step progression, leaving the
 active default unchanged.
 
+Causal `311a5257 / 39006659936` failed at the explicit
+`Missing owned inactive completion recovery transport` assertion.
+Implement separate exported active/inactive open functions over the existing
+owned wire transport. Inactive mode passes an explicit native switch and
+validates only its five real steps; active mode retains its original step
+graph and native parser. Both retain admission checks, bridge identity,
+immutable observations, owner-watch cleanup and readiness-before-advance.
+The current gate checks pending observation/ownership without advancement.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
