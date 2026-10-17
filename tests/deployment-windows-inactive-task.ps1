@@ -118,8 +118,19 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     default { $RecoveryStep }
                 }
                 $initialStep = if ($RecoveryStep -ceq 'lease-released') { 'release-requested' } else { $RecoveryStep }
+                if ($RecoveryStep -ceq 'policy-restore-requested') {
+                    $prepared = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-prepared.json') -Raw |
+                        ConvertFrom-Json
+                    $actualPolicy = ([xml][string]$folder.GetTask($TaskName).Xml).OuterXml
+                    if ($actualPolicy -ceq ([xml]$prepared.definition).OuterXml) {
+                        $initialStep = 'permanent-policy-applied'
+                    } else {
+                        Assert ($actualPolicy -ceq ([xml]$prepared.stagedDefinition).OuterXml) `
+                            'Interrupted inactive task has neither staged nor permanent policy'
+                    }
+                }
                 Assert ($observed.phase -ceq $phase -and $observed.step -ceq $initialStep -and $observed.lease -ceq 'released') `
-                    'Inactive recovery did not retain actual released runtime'
+                    "Inactive recovery differs: expected $phase/$initialStep/released, observed $($observed.phase)/$($observed.step)/$($observed.lease)"
                 $steps = @('release-requested', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete')
                 $index = [Array]::IndexOf($steps, $initialStep)
                 Assert ($index -ge 0 -and $index -lt 4) 'Unexpected inactive recovery starting step'

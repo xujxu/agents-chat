@@ -14466,6 +14466,17 @@ policy-restore-requested; recovery must independently recognize the already
 applied permanent policy rather than invent a policy receipt or replay earlier
 steps. Each case retains original process death and full proof/closeout checks.
 
+Expanded run `82e1cfe2 / 38987527682` passed the first two crash boundaries
+but failed the expected-step assertion at `policy-restore-requested`.
+For a task without automation, staged and permanent definitions can already
+be identical: the native resolver correctly prioritizes observed permanent
+policy. The fixture must independently compare actual Scheduler XML against
+the retained prepared definitions to determine the expected next step, rather
+than assuming the last acknowledged request implies a distinct staged policy.
+Keep exact phase/lease checks and reject any third policy; improve the failure
+message to report expected and observed values. Production policy resolution
+is unchanged.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
