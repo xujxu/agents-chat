@@ -4,13 +4,21 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const [source, control, pwsh, mode = 'inspect'] = process.argv.slice(2);
-assert.ok(['inspect', 'advance', 'crash'].includes(mode));
+assert.ok(['inspect', 'advance', 'crash', 'refuse'].includes(mode));
 const load = name => import(pathToFileURL(path.join(source, name)).href);
 const api = await load('windows-task-completion-recovery.mjs');
 const { withWindowsAdmission } = await load('windows-admission.mjs');
 const { processIdentity } = await load('process-identity.mjs');
 assert.equal(typeof api.openWindowsInactiveTaskCompletionRecovery, 'function',
   'Missing owned inactive completion recovery transport');
+if (mode === 'refuse') {
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    await assert.rejects(api.openWindowsInactiveTaskCompletionRecovery({ control, pwsh, admission }),
+      error => error.code === 'DEPLOYMENT_WINDOWS_COMPLETION_RECOVERY_REFUSED'
+        && /inactive-complete-release-requested/.test(error.diagnostic ?? ''));
+  });
+  console.log('PASS: fresh admission cannot overlap the retained original inactive recovery bridge');
+} else {
 const directory = path.join(control, 'task-maintenance');
 const state = await readFile(path.join(control, 'state.json'));
 const originals = await Promise.all((await readdir(directory)).map(async name => {
@@ -67,3 +75,4 @@ for (const original of originals) {
   assert.equal(identity.ino, original.identity.ino);
 }
 console.log(`PASS: owned inactive recovery transport ${mode} preserves original evidence and runtime identity`);
+}

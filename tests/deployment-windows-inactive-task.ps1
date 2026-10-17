@@ -126,6 +126,12 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($identity.pid) -ceq
                                     $identity.processIdentity) 'Inactive recovery helper identity changed'
                             }
+                            $helpers[1].Kill()
+                            Assert ($helpers[1].WaitForExit(15000)) 'Original inactive recovery admission did not exit'
+                            Invoke-InactiveRecoveryActor 'refuse'
+                            Assert (-not $helpers[0].HasExited -and
+                                [Deployment.WindowsWorkerJob]::ProcessIdentity($held.bridge.pid) -ceq
+                                $held.bridge.processIdentity) 'Admission loss terminated or replaced the retained recovery bridge'
                             $actor.Kill()
                             Assert ($actor.WaitForExit(15000) -and $actor.ExitCode -ne 0) `
                                 'Inactive recovery actor did not terminate abruptly'

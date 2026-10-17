@@ -14528,6 +14528,16 @@ prefix (released present, policy-restore-requested absent). A new Node actor
 then reopens and advances the remaining sequence, followed by independent
 native completed proof and existing final cleanup/runtime checks.
 
+Recovery-actor death passed at `1530a0e2 / 39012063218`; original logs confirm
+both original helpers settled and a fresh actor completed the retained prefix.
+Complete the existing ownership contract by first terminating only the pinned
+admission helper while leaving the original recovery actor/native bridge live.
+A separate Node actor obtains fresh admission but must fail opening the
+exclusive original release intent. Require the original native bridge still
+live with the same identity, then kill its original Node actor and continue
+the already accepted fresh-actor resumption. This distinguishes admission
+loss from actual native authority release, as the active recovery fixture does.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
