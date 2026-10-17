@@ -102,6 +102,19 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 Close-AgentsChatTaskCompletionProof $unexpected
             } catch { $refused = $true }
             Assert $refused 'Complete inactive proof accepted an interrupted prefix'
+            $actor = [Deployment.WindowsControllerProcess]::Start($node,
+                @((Join-Path $PSScriptRoot 'deployment-windows-inactive-recovery-session.mjs'),
+                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName),
+                $control, $environment)
+            try {
+                $actorOutput = $actor.StandardOutput.ReadToEndAsync()
+                $actorErrors = $actor.StandardError.ReadToEndAsync()
+                Assert ($actor.WaitForExit(120000)) 'Inactive recovery transport actor timed out'
+                Write-Output $actorOutput.GetAwaiter().GetResult()
+                $errors = $actorErrors.GetAwaiter().GetResult()
+                if ($errors) { [Console]::Error.WriteLine($errors) }
+                Assert ($actor.ExitCode -eq 0) 'Inactive recovery transport actor failed'
+            } finally { $actor.Dispose() }
             $stateBefore = (Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash
             $recovery = Open-AgentsChatInactiveCompletionRecovery $control
             try {

@@ -14487,6 +14487,17 @@ launch recovery finished. Raise only the commands-only complete scenario to
 the existing 185-minute long-recovery budget and rerun; retain all individual
 fixture deadlines and all other scenario budgets.
 
+Shared regression `6e98d578 / 38999378214` passed both selected jobs after the
+budget correction. Next causal gate runs a genuinely separate Node recovery
+actor on each of the four pending prefixes before native advancement. Require
+an explicit inactive recovery transport, real bridge identity, immutable
+observation, active-mode/forged-admission/concurrent refusal, clean bridge
+exit and byte/file-identity preservation. This first transport gate is
+read-only; Node-driven advancement and recovery-actor crash remain subsequent
+requirements. Reuse the existing owner-watched recovery controller with an
+explicit inactive switch and the inactive five-step progression, leaving the
+active default unchanged.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
