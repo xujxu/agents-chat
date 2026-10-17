@@ -108,13 +108,44 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                         $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $Mode),
                     $control, $environment)
                 try {
-                    $actorOutput = $actor.StandardOutput.ReadToEndAsync()
                     $actorErrors = $actor.StandardError.ReadToEndAsync()
-                    Assert ($actor.WaitForExit(120000)) 'Inactive recovery transport actor timed out'
-                    Write-Output $actorOutput.GetAwaiter().GetResult()
+                    if ($Mode -ceq 'crash') {
+                        $line = $actor.StandardOutput.ReadLineAsync()
+                        Assert ($line.Wait(120000)) 'Inactive recovery actor did not reach its held boundary'
+                        $text = $line.GetAwaiter().GetResult()
+                        Assert ($null -ne $text -and $text.StartsWith('INACTIVE_RECOVERY_HELD ')) `
+                            'Inactive recovery actor did not report its real held boundary'
+                        $held = $text.Substring('INACTIVE_RECOVERY_HELD '.Length) | ConvertFrom-Json
+                        Assert ($held.step -ceq 'released') 'Inactive recovery actor held the wrong phase'
+                        $helpers = [Collections.Generic.List[Diagnostics.Process]]::new()
+                        try {
+                            foreach ($identity in @($held.bridge, $held.admission)) {
+                                $helper = [Diagnostics.Process]::GetProcessById($identity.pid)
+                                $helpers.Add($helper)
+                                $null = $helper.Handle
+                                Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($identity.pid) -ceq
+                                    $identity.processIdentity) 'Inactive recovery helper identity changed'
+                            }
+                            $actor.Kill()
+                            Assert ($actor.WaitForExit(15000) -and $actor.ExitCode -ne 0) `
+                                'Inactive recovery actor did not terminate abruptly'
+                            foreach ($helper in $helpers) {
+                                Assert ($helper.WaitForExit(15000)) 'Inactive recovery helper survived actor death'
+                            }
+                        } finally { foreach ($helper in $helpers) { $helper.Dispose() } }
+                        Assert (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-released.json')) `
+                            'Interrupted recovery lost its published receipt'
+                        Assert (-not (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-policy-restore-requested.json'))) `
+                            'Interrupted recovery advanced beyond its held boundary'
+                        Write-Output 'PASS: actual inactive recovery actor death settles both original helpers and retains the acknowledged released prefix'
+                    } else {
+                        $actorOutput = $actor.StandardOutput.ReadToEndAsync()
+                        Assert ($actor.WaitForExit(120000)) 'Inactive recovery transport actor timed out'
+                        Write-Output $actorOutput.GetAwaiter().GetResult()
+                    }
                     $errors = $actorErrors.GetAwaiter().GetResult()
                     if ($errors) { [Console]::Error.WriteLine($errors) }
-                    Assert ($actor.ExitCode -eq 0) 'Inactive recovery transport actor failed'
+                    if ($Mode -cne 'crash') { Assert ($actor.ExitCode -eq 0) 'Inactive recovery transport actor failed' }
                 } finally { $actor.Dispose() }
             }
             Invoke-InactiveRecoveryActor 'inspect'
@@ -152,6 +183,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 Assert ($index -ge 0 -and $index -lt 4) 'Unexpected inactive recovery starting step'
                 if ($RecoveryStep -cin @('lease-released', 'permanent-policy-applied')) {
                     Close-AgentsChatTaskCompletionProof $recovery
+                    if ($RecoveryStep -ceq 'lease-released') { Invoke-InactiveRecoveryActor 'crash' }
                     Invoke-InactiveRecoveryActor 'advance'
                     $recovery = Open-AgentsChatInactiveCompletionRecovery $control
                     $observed = Assert-AgentsChatInactiveCompletionRecovery $recovery

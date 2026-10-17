@@ -14518,6 +14518,16 @@ and clean bridge exit. The native parent independently reopens completed
 history and retains the existing final proof/retirement/closeout assertions.
 Keep native-only advancement on the other two boundaries.
 
+Node-driven advancement passed at `f989fed5 / 39009770875`; original logs
+confirm both full and final-step advancement preserving evidence/runtime.
+Next, interrupt the recovery actor itself after it publishes `released`.
+It reports exact completion-bridge and admission-helper identities while
+remaining inside the original scopes. The native parent pins both helpers,
+kills only the owned Node actor, requires actor/helper exit and exact durable
+prefix (released present, policy-restore-requested absent). A new Node actor
+then reopens and advances the remaining sequence, followed by independent
+native completed proof and existing final cleanup/runtime checks.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
