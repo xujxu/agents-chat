@@ -102,19 +102,22 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 Close-AgentsChatTaskCompletionProof $unexpected
             } catch { $refused = $true }
             Assert $refused 'Complete inactive proof accepted an interrupted prefix'
-            $actor = [Deployment.WindowsControllerProcess]::Start($node,
-                @((Join-Path $PSScriptRoot 'deployment-windows-inactive-recovery-session.mjs'),
-                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName),
-                $control, $environment)
-            try {
-                $actorOutput = $actor.StandardOutput.ReadToEndAsync()
-                $actorErrors = $actor.StandardError.ReadToEndAsync()
-                Assert ($actor.WaitForExit(120000)) 'Inactive recovery transport actor timed out'
-                Write-Output $actorOutput.GetAwaiter().GetResult()
-                $errors = $actorErrors.GetAwaiter().GetResult()
-                if ($errors) { [Console]::Error.WriteLine($errors) }
-                Assert ($actor.ExitCode -eq 0) 'Inactive recovery transport actor failed'
-            } finally { $actor.Dispose() }
+            function Invoke-InactiveRecoveryActor([string]$Mode) {
+                $actor = [Deployment.WindowsControllerProcess]::Start($node,
+                    @((Join-Path $PSScriptRoot 'deployment-windows-inactive-recovery-session.mjs'),
+                        $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $Mode),
+                    $control, $environment)
+                try {
+                    $actorOutput = $actor.StandardOutput.ReadToEndAsync()
+                    $actorErrors = $actor.StandardError.ReadToEndAsync()
+                    Assert ($actor.WaitForExit(120000)) 'Inactive recovery transport actor timed out'
+                    Write-Output $actorOutput.GetAwaiter().GetResult()
+                    $errors = $actorErrors.GetAwaiter().GetResult()
+                    if ($errors) { [Console]::Error.WriteLine($errors) }
+                    Assert ($actor.ExitCode -eq 0) 'Inactive recovery transport actor failed'
+                } finally { $actor.Dispose() }
+            }
+            Invoke-InactiveRecoveryActor 'inspect'
             $stateBefore = (Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash
             $recovery = Open-AgentsChatInactiveCompletionRecovery $control
             try {
@@ -147,7 +150,12 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 $steps = @('release-requested', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete')
                 $index = [Array]::IndexOf($steps, $initialStep)
                 Assert ($index -ge 0 -and $index -lt 4) 'Unexpected inactive recovery starting step'
-                foreach ($step in $steps[($index + 1)..4]) {
+                if ($RecoveryStep -cin @('lease-released', 'permanent-policy-applied')) {
+                    Close-AgentsChatTaskCompletionProof $recovery
+                    Invoke-InactiveRecoveryActor 'advance'
+                    $recovery = Open-AgentsChatInactiveCompletionRecovery $control
+                    $observed = Assert-AgentsChatInactiveCompletionRecovery $recovery
+                } else { foreach ($step in $steps[($index + 1)..4]) {
                     $observed = Advance-AgentsChatInactiveCompletionRecovery $recovery
                     Assert ($observed.step -ceq $step) 'Inactive recovery acknowledged an unexpected phase'
                     if ($step -ceq 'released') {
@@ -155,7 +163,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                         $recovery = Open-AgentsChatInactiveCompletionRecovery $control
                         $observed = Assert-AgentsChatInactiveCompletionRecovery $recovery
                         Assert ($observed.phase -ceq 'released') 'Reopened inactive recovery lost its durable prefix'
-                    }
+                    } }
                 }
                 Assert ($observed.status -ceq 'complete') 'Inactive recovery did not complete'
             } finally { Close-AgentsChatTaskCompletionProof $recovery }

@@ -3,7 +3,8 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const [source, control, pwsh] = process.argv.slice(2);
+const [source, control, pwsh, mode = 'inspect'] = process.argv.slice(2);
+assert.ok(['inspect', 'advance'].includes(mode));
 const load = name => import(pathToFileURL(path.join(source, name)).href);
 const api = await load('windows-task-completion-recovery.mjs');
 const { withWindowsAdmission } = await load('windows-admission.mjs');
@@ -31,6 +32,21 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     assert.deepEqual(await scope.check(), scope.observation);
     await assert.rejects(api.openWindowsInactiveTaskCompletionRecovery(options));
     assert.deepEqual(await scope.check(), scope.observation);
+    if (mode === 'advance') {
+      const initial = scope.observation;
+      const steps = ['release-requested', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete'];
+      const index = steps.indexOf(initial.step);
+      assert.ok(index >= 0 && index < steps.length - 1);
+      for (const step of steps.slice(index + 1)) {
+        const observed = await scope.advance();
+        assert.equal(observed.step, step);
+        assert.deepEqual(observed.runtime, initial.runtime);
+        assert.equal(observed.stateSha256, initial.stateSha256);
+        assert.deepEqual(await scope.check(), observed);
+      }
+      assert.equal(scope.observation.status, 'complete');
+      assert.deepEqual(await scope.advance(), scope.observation);
+    }
   } finally { await scope.close(); }
   assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
   await assert.rejects(scope.check());
@@ -43,4 +59,4 @@ for (const original of originals) {
   assert.equal(identity.dev, original.identity.dev);
   assert.equal(identity.ino, original.identity.ino);
 }
-console.log('PASS: owned inactive recovery transport retains pending authority, rejects substitution and closes without changing evidence');
+console.log(`PASS: owned inactive recovery transport ${mode} preserves original evidence and runtime identity`);

@@ -14507,6 +14507,17 @@ graph and native parser. Both retain admission checks, bridge identity,
 immutable observations, owner-watch cleanup and readiness-before-advance.
 The current gate checks pending observation/ownership without advancement.
 
+Owned pending transport passed on all four genuine prefixes at
+`c4e9b2aa / 39007517379`; original logs inspected. Extend the existing actor
+with explicit advancement mode. After the native parent independently checks
+the initial prefix and releases its scope, a new owned Node actor advances the
+full inactive sequence from release intent, or the final step after permanent
+policy application. Require every acknowledged step, unchanged runtime/state
+identity, terminal idempotence, exact original receipt bytes/file identities
+and clean bridge exit. The native parent independently reopens completed
+history and retains the existing final proof/retirement/closeout assertions.
+Keep native-only advancement on the other two boundaries.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
