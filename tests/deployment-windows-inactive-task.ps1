@@ -1,5 +1,5 @@
 function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string]$Project, [string]$ReadyFile,
-    [switch]$Complete) {
+    [switch]$Complete, [switch]$Recover) {
     . (Join-Path $Source 'windows-inactive-task.ps1')
     $scheduler = New-Object -ComObject 'Schedule.Service'
     $scheduler.Connect()
@@ -46,14 +46,64 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         $controller = [Deployment.WindowsControllerProcess]::Start((Get-Command node).Source,
             @((Join-Path $PSScriptRoot 'deployment-windows-inactive-task.mjs'), $Source, $TaskName, $Project,
                 [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $control, $git, $npmCli,
-                $(if ($Complete) { 'complete' } else { 'guarded' })), $control, $environment)
-        $output = $controller.StandardOutput.ReadToEndAsync()
+                $(if ($Recover) { 'recover' } elseif ($Complete) { 'complete' } else { 'guarded' })), $control, $environment)
         $diagnostic = $controller.StandardError.ReadToEndAsync()
-        Assert ($controller.WaitForExit(600000)) 'Inactive task Node bridge timed out'
-        Write-Output $output.GetAwaiter().GetResult()
+        if ($Recover) {
+            $held = $null
+            $deadline = [DateTime]::UtcNow.AddMinutes(10)
+            while (-not $held) {
+                Assert ([DateTime]::UtcNow -lt $deadline) 'Inactive completion boundary deadline exceeded'
+                $line = $controller.StandardOutput.ReadLineAsync()
+                $remaining = [int][Math]::Max(1, ($deadline - [DateTime]::UtcNow).TotalMilliseconds)
+                Assert ($line.Wait($remaining)) 'Inactive completion boundary timed out'
+                $text = $line.GetAwaiter().GetResult()
+                Assert ($null -ne $text) 'Inactive completion actor exited before boundary'
+                Write-Output $text
+                if ($text.StartsWith('INACTIVE_COMPLETION_HELD ')) {
+                    $held = $text.Substring('INACTIVE_COMPLETION_HELD '.Length) | ConvertFrom-Json
+                }
+            }
+            Assert ($held.step -ceq 'lease-released') 'Inactive actor stopped at an unexpected phase'
+            $bridge = [Diagnostics.Process]::GetProcessById($held.bridge.pid)
+            try {
+                $null = $bridge.Handle
+                Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($held.bridge.pid) -ceq
+                    $held.bridge.identity) 'Inactive completion bridge identity changed'
+                $controller.Kill()
+                Assert ($controller.WaitForExit(15000) -and $controller.ExitCode -ne 0) `
+                    'Inactive completion actor did not die abruptly'
+                Assert ($bridge.WaitForExit(15000)) 'Inactive completion bridge survived actor death'
+            } finally { $bridge.Dispose() }
+            Assert (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-release-requested.json')) `
+                'Inactive completion lost its real release intent'
+            Assert (-not (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-released.json'))) `
+                'Inactive crash fixture completed before interruption'
+        } else {
+            $output = $controller.StandardOutput.ReadToEndAsync()
+            Assert ($controller.WaitForExit(600000)) 'Inactive task Node bridge timed out'
+            Write-Output $output.GetAwaiter().GetResult()
+        }
         $errors = $diagnostic.GetAwaiter().GetResult()
         if ($errors) { [Console]::Error.WriteLine($errors) }
-        Assert ($controller.ExitCode -eq 0) 'Inactive task Node bridge failed'
+        if (-not $Recover) { Assert ($controller.ExitCode -eq 0) 'Inactive task Node bridge failed' }
+        if ($Recover) {
+            Assert ([bool](Get-Command Open-AgentsChatInactiveCompletionRecovery -ErrorAction SilentlyContinue)) `
+                'Missing inactive released-prefix completion recovery'
+            $stateBefore = (Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash
+            $recovery = Open-AgentsChatInactiveCompletionRecovery $control
+            try {
+                $observed = Assert-AgentsChatInactiveCompletionRecovery $recovery
+                Assert ($observed.phase -ceq 'release-requested' -and $observed.lease -ceq 'released') `
+                    'Inactive recovery did not retain actual released runtime'
+                foreach ($step in @('released', 'policy-restore-requested', 'permanent-policy-applied', 'complete')) {
+                    $observed = Advance-AgentsChatInactiveCompletionRecovery $recovery
+                    Assert ($observed.step -ceq $step) 'Inactive recovery acknowledged an unexpected phase'
+                }
+                Assert ($observed.status -ceq 'complete') 'Inactive recovery did not complete'
+            } finally { Close-AgentsChatTaskCompletionProof $recovery }
+            Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash -ceq $stateBefore) `
+                'Inactive recovery changed accepted state'
+        }
         $state = Get-Content -LiteralPath (Join-Path $control 'state.json') -Raw | ConvertFrom-Json
         $expectedBundle = Join-Path $control "runtime-$($state.operationId)"
         $running = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-start-running.json') -Raw |

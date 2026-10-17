@@ -286,7 +286,7 @@ try {
       assert.equal(owned.pid, listener.pid);
       assert.equal(owned.generation, active.runtime.generation);
       console.log('PASS: inactive startup readiness verifies HTTP providers only through its retained original Job listener');
-      if (completionMode === 'complete') {
+      if (['complete', 'recover'].includes(completionMode)) {
         assert.equal(typeof transaction.prepareCompletion, 'function', 'Missing inactive native completion preparation');
         assert.equal(typeof transaction.complete, 'function', 'Missing inactive native completion');
         assert.equal(typeof transaction.advanceCompletion, 'function', 'Missing inactive native completion step API');
@@ -315,6 +315,14 @@ try {
                 assert.deepEqual((await readdir(path.join(control, 'task-maintenance')))
                   .filter(name => name.startsWith('inactive-complete-')).sort(), [...expected].sort());
                 await transaction.check();
+                if (completionMode === 'recover' && step === 'lease-released') {
+                  const running = JSON.parse(await readFile(
+                    path.join(control, 'task-maintenance/inactive-start-running.json'), 'utf8'));
+                  console.log('INACTIVE_COMPLETION_HELD ' + JSON.stringify({
+                    step, bridge: { pid: running.controllerPid, identity: running.controllerIdentity },
+                  }));
+                  await new Promise(() => { setInterval(() => {}, 1000); });
+                }
                 if (step === 'policy-requested') {
                   for (const method of ['complete', 'advanceCompletion']) {
                     await assert.rejects(transaction[method]({ stateSha256: '0'.repeat(64) }));

@@ -14429,6 +14429,20 @@ final receipt even for repeated terminal queries. The transaction shares its
 accepted-state verification between single-step and drain consumers.
 Implementation acceptance remains pending; prefix recovery is not implemented.
 
+Step-interface acceptance subsequently passed at `eba3d9b7 / 38983666565`.
+Original Actions evidence includes the independent completion proof and
+released runtime survival after original controller exit.
+
+The next causal gate adds `-InactiveCompletionRecovery` to the real native
+fixture. Its original Node actor pauses after acknowledged `lease-released`,
+reports the actual bridge identity, and remains alive without closing the
+transaction. The native parent pins that identity, kills the actor, requires
+both actor and bridge exit, and confirms release intent exists without a
+released receipt. It then requires explicit inactive prefix recovery, advances
+the four remaining native steps, and reuses the full proof/retirement/closeout
+assertions. No completed receipt is removed to manufacture the interruption.
+This first gate covers released-runtime recovery only, not pre-release loss.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
