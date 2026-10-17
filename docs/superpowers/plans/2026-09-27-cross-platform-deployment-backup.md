@@ -14477,6 +14477,16 @@ Keep exact phase/lease checks and reject any third policy; improve the failure
 message to report expected and observed values. Production policy resolution
 is unchanged.
 
+All four real crash boundaries passed at `48ae88c8 / 38989423935`.
+Shared regression `38991793807` passed earlier-startup recovery and stopped
+restore evidence, but the combined command job was cancelled at its 115-minute
+job limit. Check-run annotation explicitly reports maximum execution time
+`1h55m0s`; no passing regression result is claimed. Expanded native commands
+plus the stopped-restore step consumed the budget before unacknowledged cold
+launch recovery finished. Raise only the commands-only complete scenario to
+the existing 185-minute long-recovery budget and rerun; retain all individual
+fixture deadlines and all other scenario budgets.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
