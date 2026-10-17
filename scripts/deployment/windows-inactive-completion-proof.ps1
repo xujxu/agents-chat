@@ -26,17 +26,21 @@ function Assert-AgentsChatInactiveCompletionHistory([hashtable]$Context) {
     }
 }
 
+function Assert-AgentsChatInactiveCompletionEvidence([hashtable]$Context) {
+    Assert-AgentsChatInactiveCompletionHistory $Context
+    $Context.Stage = 'inactive-retained-evidence'
+    foreach ($file in $Context.Files) { $file.Check() }
+    Assert-AgentsChatCompletionRuntime $Context
+    foreach ($file in $Context.Files) { $file.Check() }
+    Assert-AgentsChatInactiveCompletionHistory $Context
+    Assert-AgentsChatCompletionFinalRuntime $Context
+}
+
 function Assert-AgentsChatInactiveCompletionProof([hashtable]$Context) {
     if ($Context.Closed -or $Context.Poisoned -or $Context.Busy) { throw 'Inactive completion proof is unavailable.' }
     $Context.Busy = $true
     try {
-        Assert-AgentsChatInactiveCompletionHistory $Context
-        $Context.Stage = 'inactive-retained-evidence'
-        foreach ($file in $Context.Files) { $file.Check() }
-        Assert-AgentsChatCompletionRuntime $Context
-        foreach ($file in $Context.Files) { $file.Check() }
-        Assert-AgentsChatInactiveCompletionHistory $Context
-        Assert-AgentsChatCompletionFinalRuntime $Context
+        Assert-AgentsChatInactiveCompletionEvidence $Context
         return [pscustomobject][ordered]@{
             status='observed'; mutationAuthority=$false; operationId=$Context.OperationId; taskName=$Context.TaskName
             stateSha256=$Context.StateSha256; completionSha256=$Context.CompletionSha256
@@ -49,6 +53,10 @@ function Assert-AgentsChatInactiveCompletionProof([hashtable]$Context) {
 }
 
 function Open-AgentsChatInactiveCompletionProof([string]$Control) {
+    return Open-AgentsChatInactiveCompletionContext $Control
+}
+
+function Open-AgentsChatInactiveCompletionContext([string]$Control, [switch]$ReleasedPrefix) {
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
     $context = @{
@@ -65,8 +73,20 @@ function Open-AgentsChatInactiveCompletionProof([string]$Control) {
         foreach ($directory in @($Control, (Join-Path $Control 'lock'), $context.Directory)) {
             $context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory($directory))
         }
-        Read-AgentsChatInactiveCompletionRecords $context
+        Read-AgentsChatInactiveCompletionRecords $context -ReleasedPrefix:$ReleasedPrefix
         Assert-AgentsChatInactiveCompletionHistory $context
+        if ($ReleasedPrefix) {
+            $original = $context.ReleaseIntentFile
+            $identity = $original.CaptureIdentity()
+            $sha256 = $original.Sha256
+            $bytes = $original.ByteLength
+            $original.Dispose()
+            $null = $context.Files.Remove($original)
+            $context.ReleaseIntentFile = [Deployment.WindowsPrivateFile]::OpenExclusive(
+                (Join-Path $context.Directory 'inactive-complete-release-requested.json'),
+                $sha256, $identity.Dev, $identity.Ino, $bytes)
+            $context.Files.Add($context.ReleaseIntentFile)
+        }
         $completed = $context.Completed
         $runtime = ConvertFrom-AgentsChatCompletionRuntime $completed.runtime.GetRawText()
         if ($runtime.generation -ceq $context.RetiredRuntime.generation -or
@@ -88,7 +108,26 @@ function Open-AgentsChatInactiveCompletionProof([string]$Control) {
             $admission.configurationSha256.GetString() $context.RetiredRuntime
         Open-AgentsChatCompletionBundle $context $context.Configuration $context.ConfigurationSha256 $runtime
         Initialize-AgentsChatCompletionLiveRuntime $context $completed
-        if ($context.NativeEnabled -or
+        if ($ReleasedPrefix) {
+            $context.Step = $context.Phase
+            $actual = ([xml]$context.NativeDefinition).OuterXml
+            $staged = ([xml]$completed.stagedDefinition.GetString()).OuterXml
+            $permanent = ([xml]$context.Definition).OuterXml
+            if ($context.NativeEnabled) { throw 'Inactive recovery task became enabled.' }
+            switch -CaseSensitive ($context.Phase) {
+                { $_ -cin @('release-requested', 'released') } {
+                    if ($actual -cne $staged) { throw 'Inactive release prefix requires staged policy.' }
+                }
+                'policy-restore-requested' {
+                    if ($actual -ceq $permanent) { $context.Step = 'permanent-policy-applied' }
+                    elseif ($actual -cne $staged) { throw 'Inactive pending policy is not recognized.' }
+                }
+                'complete' {
+                    if ($actual -cne $permanent) { throw 'Inactive completed policy differs.' }
+                }
+                default { throw 'Unsupported inactive recovery phase.' }
+            }
+        } elseif ($context.NativeEnabled -or
             ([xml]$context.NativeDefinition).OuterXml -cne ([xml]$context.Definition).OuterXml) {
             throw 'Inactive completion permanent policy changed.'
         }

@@ -14443,6 +14443,19 @@ the four remaining native steps, and reuses the full proof/retirement/closeout
 assertions. No completed receipt is removed to manufacture the interruption.
 This first gate covers released-runtime recovery only, not pre-release loss.
 
+Causal `f7e87646 / 38984913274` reached the genuine held `lease-released`
+boundary, killed the original actor and bridge, and failed with
+`Missing inactive released-prefix completion recovery`. The original Actions
+log was inspected. Implement explicit contiguous-prefix parsing (minimum
+release intent), identity-bound exclusive retention of the original release
+intent, actual released runtime/listener checks and staged/permanent policy
+resolution. Share raw-JSON-preserving receipt publication with active recovery,
+but use only inactive filenames/inventory and never synthesize active history.
+The fixture additionally refuses full proof of incomplete history, refuses
+concurrent recovery and reopens after publishing the real released receipt.
+Implementation/native acceptance is pending; Node recovery transport and
+other interruption boundaries remain separate work.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

@@ -4,7 +4,7 @@ function Get-AgentsChatInactiveCompletionRecordNames {
         'complete-released', 'complete-policy-restore-requested', 'complete-complete')
 }
 
-function Read-AgentsChatInactiveCompletionRecords([hashtable]$Context) {
+function Read-AgentsChatInactiveCompletionRecords([hashtable]$Context, [switch]$ReleasedPrefix) {
     $Context.Stage = 'inactive-admission'
     $file = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Directory 'admission.json') ''
     $admission = Read-AgentsChatMaintenanceFields ($file.ReadText()) @(
@@ -48,6 +48,19 @@ function Read-AgentsChatInactiveCompletionRecords([hashtable]$Context) {
             'listenerAddress', 'listenerPairedRecords')
     }
     $names = @(Get-AgentsChatInactiveCompletionRecordNames)
+    if ($ReleasedPrefix) {
+        $present = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($entry in Get-ChildItem -LiteralPath $Context.Directory -Force) {
+            if ($entry.PSIsContainer -or -not $present.Add($entry.Name)) { throw 'Invalid inactive prefix inventory.' }
+        }
+        if (-not $present.Remove('admission.json') -or -not $present.Remove('inactive-activation-prepared.json')) {
+            throw 'Inactive prefix lacks its original admission or preparation.'
+        }
+        $count = 0
+        while ($count -lt $names.Count -and $present.Remove("inactive-$($names[$count]).json")) { $count++ }
+        if ($present.Count -or $count -lt 8) { throw 'Inactive prefix has gaps or precedes release intent.' }
+        $names = $names[0..($count - 1)]
+    }
     $Context.Inventory = @('admission.json', 'inactive-activation-prepared.json') +
         @($names | ForEach-Object { "inactive-$_.json" })
     $previous = $preparedFile.Sha256
@@ -68,12 +81,15 @@ function Read-AgentsChatInactiveCompletionRecords([hashtable]$Context) {
         }
         $records[$name] = $record
         $previous = $receipt.Sha256
+        if ($name -ceq 'complete-release-requested') { $Context.ReleaseIntentFile = $receipt }
     }
+    $Context.CompletionText = $receipt.ReadText()
     $Context.CompletionSha256 = $previous
     $replacement = $records['replacement-complete']
     $running = $records['start-running']
     $prepared = $records['complete-prepared']
-    $completed = $records['complete-complete']
+    $completed = $records[$names[-1]]
+    $Context.Phase = $completed.phase.GetString()
     $Context.Configuration = $activation.configuration.GetString()
     $Context.ConfigurationSha256 = $activation.configurationSha256.GetString()
     $expectedConfiguration = Join-Path (Join-Path $Context.Control "runtime-$($Context.OperationId)") 'configuration.json'

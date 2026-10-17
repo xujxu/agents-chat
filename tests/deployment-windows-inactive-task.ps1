@@ -89,20 +89,39 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         if ($Recover) {
             Assert ([bool](Get-Command Open-AgentsChatInactiveCompletionRecovery -ErrorAction SilentlyContinue)) `
                 'Missing inactive released-prefix completion recovery'
+            $refused = $false
+            try {
+                $unexpected = Open-AgentsChatInactiveCompletionProof $control
+                Close-AgentsChatTaskCompletionProof $unexpected
+            } catch { $refused = $true }
+            Assert $refused 'Complete inactive proof accepted an interrupted prefix'
             $stateBefore = (Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash
             $recovery = Open-AgentsChatInactiveCompletionRecovery $control
             try {
+                $refused = $false
+                try {
+                    $unexpected = Open-AgentsChatInactiveCompletionRecovery $control
+                    Close-AgentsChatTaskCompletionProof $unexpected
+                } catch { $refused = $true }
+                Assert $refused 'Concurrent inactive completion recovery was admitted'
                 $observed = Assert-AgentsChatInactiveCompletionRecovery $recovery
                 Assert ($observed.phase -ceq 'release-requested' -and $observed.lease -ceq 'released') `
                     'Inactive recovery did not retain actual released runtime'
                 foreach ($step in @('released', 'policy-restore-requested', 'permanent-policy-applied', 'complete')) {
                     $observed = Advance-AgentsChatInactiveCompletionRecovery $recovery
                     Assert ($observed.step -ceq $step) 'Inactive recovery acknowledged an unexpected phase'
+                    if ($step -ceq 'released') {
+                        Close-AgentsChatTaskCompletionProof $recovery
+                        $recovery = Open-AgentsChatInactiveCompletionRecovery $control
+                        $observed = Assert-AgentsChatInactiveCompletionRecovery $recovery
+                        Assert ($observed.phase -ceq 'released') 'Reopened inactive recovery lost its durable prefix'
+                    }
                 }
                 Assert ($observed.status -ceq 'complete') 'Inactive recovery did not complete'
             } finally { Close-AgentsChatTaskCompletionProof $recovery }
             Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash -ceq $stateBefore) `
                 'Inactive recovery changed accepted state'
+            Write-Output 'PASS: inactive released-prefix recovery survives original actor death, refuses concurrent takeover and reopens its real durable prefix'
         }
         $state = Get-Content -LiteralPath (Join-Path $control 'state.json') -Raw | ConvertFrom-Json
         $expectedBundle = Join-Path $control "runtime-$($state.operationId)"

@@ -87,7 +87,7 @@ function Assert-AgentsChatTaskCompletionRecovery([hashtable]$Context) {
     } finally { $Context.Busy = $false }
 }
 
-function Write-AgentsChatRecoveredCompletionReceipt([hashtable]$Context, [string]$Phase) {
+function Write-AgentsChatRecoveredCompletionReceipt([hashtable]$Context, [string]$Phase, [switch]$Inactive) {
     $Context.Stage = 'recovery-receipt'
     $document = [Text.Json.JsonDocument]::Parse($Context.CompletionText)
     try {
@@ -103,10 +103,11 @@ function Write-AgentsChatRecoveredCompletionReceipt([hashtable]$Context, [string
         }
         $text = '{' + ($properties -join ',') + '}'
     } finally { $document.Dispose() }
-    $file = [Deployment.WindowsPrivateFile]::Publish(
-        (Join-Path $Context.Directory "task-complete-$Phase.json"), $text)
+    $name = if ($Inactive) { "inactive-complete-$Phase.json" } else { "task-complete-$Phase.json" }
+    $file = [Deployment.WindowsPrivateFile]::Publish((Join-Path $Context.Directory $name), $text)
     $Context.Files.Add($file)
-    $Context.RecordNames += "complete-$Phase"
+    if ($Inactive) { $Context.Inventory += $name }
+    else { $Context.RecordNames += "complete-$Phase" }
     $Context.CompletionText = $text
     $Context.CompletionSha256 = $file.Sha256
     $Context.Phase = $Phase
