@@ -14456,6 +14456,16 @@ concurrent recovery and reopens after publishing the real released receipt.
 Implementation/native acceptance is pending; Node recovery transport and
 other interruption boundaries remain separate work.
 
+Native released-prefix recovery passed at `26f6fa0c / 38986023365`.
+Original logs confirm actual actor death, concurrent takeover refusal,
+durable-prefix reopening and surviving accepted runtime after final closeout.
+Extend actual interruption coverage to all four released boundaries:
+`lease-released`, `released`, `policy-restore-requested` and
+`permanent-policy-applied`. In the last case the durable receipt still says
+policy-restore-requested; recovery must independently recognize the already
+applied permanent policy rather than invent a policy receipt or replay earlier
+steps. Each case retains original process death and full proof/closeout checks.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

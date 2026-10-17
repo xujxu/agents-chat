@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 
-const [source, taskName, project, pwsh, control, gitFile, npmFile, completionMode] = process.argv.slice(2);
+const [source, taskName, project, pwsh, control, gitFile, npmFile, completionMode, recoveryStep] = process.argv.slice(2);
 const { inspectWindowsInactiveTask, assertWindowsManagedTaskScope, captureWindowsInactiveTaskAdmission } =
   await import(pathToFileURL(path.join(source, 'windows-managed-task.mjs')).href);
 const scope = await inspectWindowsInactiveTask({ taskName, project, pwsh });
@@ -315,7 +315,7 @@ try {
                 assert.deepEqual((await readdir(path.join(control, 'task-maintenance')))
                   .filter(name => name.startsWith('inactive-complete-')).sort(), [...expected].sort());
                 await transaction.check();
-                if (completionMode === 'recover' && step === 'lease-released') {
+                if (completionMode === 'recover' && step === recoveryStep) {
                   const running = JSON.parse(await readFile(
                     path.join(control, 'task-maintenance/inactive-start-running.json'), 'utf8'));
                   console.log('INACTIVE_COMPLETION_HELD ' + JSON.stringify({

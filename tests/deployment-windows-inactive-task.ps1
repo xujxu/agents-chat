@@ -1,5 +1,7 @@
 function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string]$Project, [string]$ReadyFile,
-    [switch]$Complete, [switch]$Recover) {
+    [switch]$Complete, [switch]$Recover,
+    [ValidateSet('lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')]
+    [string]$RecoveryStep = 'lease-released') {
     . (Join-Path $Source 'windows-inactive-task.ps1')
     $scheduler = New-Object -ComObject 'Schedule.Service'
     $scheduler.Connect()
@@ -46,7 +48,8 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         $controller = [Deployment.WindowsControllerProcess]::Start((Get-Command node).Source,
             @((Join-Path $PSScriptRoot 'deployment-windows-inactive-task.mjs'), $Source, $TaskName, $Project,
                 [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, $control, $git, $npmCli,
-                $(if ($Recover) { 'recover' } elseif ($Complete) { 'complete' } else { 'guarded' })), $control, $environment)
+                $(if ($Recover) { 'recover' } elseif ($Complete) { 'complete' } else { 'guarded' }),
+                $RecoveryStep), $control, $environment)
         $diagnostic = $controller.StandardError.ReadToEndAsync()
         if ($Recover) {
             $held = $null
@@ -63,7 +66,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $held = $text.Substring('INACTIVE_COMPLETION_HELD '.Length) | ConvertFrom-Json
                 }
             }
-            Assert ($held.step -ceq 'lease-released') 'Inactive actor stopped at an unexpected phase'
+            Assert ($held.step -ceq $RecoveryStep) 'Inactive actor stopped at an unexpected phase'
             $bridge = [Diagnostics.Process]::GetProcessById($held.bridge.pid)
             try {
                 $null = $bridge.Handle
@@ -76,8 +79,12 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             } finally { $bridge.Dispose() }
             Assert (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-release-requested.json')) `
                 'Inactive completion lost its real release intent'
-            Assert (-not (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-released.json'))) `
+            Assert (-not (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-complete.json'))) `
                 'Inactive crash fixture completed before interruption'
+            if ($RecoveryStep -ceq 'lease-released') {
+                Assert (-not (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-released.json'))) `
+                    'Inactive release acknowledgement was published before interruption'
+            }
         } else {
             $output = $controller.StandardOutput.ReadToEndAsync()
             Assert ($controller.WaitForExit(600000)) 'Inactive task Node bridge timed out'
@@ -105,9 +112,18 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 } catch { $refused = $true }
                 Assert $refused 'Concurrent inactive completion recovery was admitted'
                 $observed = Assert-AgentsChatInactiveCompletionRecovery $recovery
-                Assert ($observed.phase -ceq 'release-requested' -and $observed.lease -ceq 'released') `
+                $phase = switch ($RecoveryStep) {
+                    'lease-released' { 'release-requested' }
+                    'permanent-policy-applied' { 'policy-restore-requested' }
+                    default { $RecoveryStep }
+                }
+                $initialStep = if ($RecoveryStep -ceq 'lease-released') { 'release-requested' } else { $RecoveryStep }
+                Assert ($observed.phase -ceq $phase -and $observed.step -ceq $initialStep -and $observed.lease -ceq 'released') `
                     'Inactive recovery did not retain actual released runtime'
-                foreach ($step in @('released', 'policy-restore-requested', 'permanent-policy-applied', 'complete')) {
+                $steps = @('release-requested', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete')
+                $index = [Array]::IndexOf($steps, $initialStep)
+                Assert ($index -ge 0 -and $index -lt 4) 'Unexpected inactive recovery starting step'
+                foreach ($step in $steps[($index + 1)..4]) {
                     $observed = Advance-AgentsChatInactiveCompletionRecovery $recovery
                     Assert ($observed.step -ceq $step) 'Inactive recovery acknowledged an unexpected phase'
                     if ($step -ceq 'released') {
@@ -121,7 +137,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             } finally { Close-AgentsChatTaskCompletionProof $recovery }
             Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash -ceq $stateBefore) `
                 'Inactive recovery changed accepted state'
-            Write-Output 'PASS: inactive released-prefix recovery survives original actor death, refuses concurrent takeover and reopens its real durable prefix'
+            Write-Output "PASS: inactive released-prefix recovery at $RecoveryStep survives original actor death, refuses concurrent takeover and retains its real durable prefix"
         }
         $state = Get-Content -LiteralPath (Join-Path $control 'state.json') -Raw | ConvertFrom-Json
         $expectedBundle = Join-Path $control "runtime-$($state.operationId)"
