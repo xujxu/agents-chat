@@ -14655,6 +14655,16 @@ Reject copied scope and missing acknowledgement. Intent is not a files-restored
 receipt and must not rewrite accepted state. Native authority must retain and
 validate published intent for later operations and fresh recovery consumers.
 
+Causal `3ff4d84b / 39865431662` failed at missing durable rollback intent.
+The Node request requires explicit acknowledgement and revalidates the original
+snapshot/destinations before and after native publication. The native exclusive
+scope retains the exact manifest and publishes original operation/state/history,
+backup/source and manifest digest as immutable intent. Manifest digest binds
+the full previously checked destination inventory. Reopening an exclusive
+scope validates an existing intent against current retained evidence before
+returning; repeated publication checks the retained original file. Neither
+intent nor acknowledgement is a files-restored or rollback-complete claim.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

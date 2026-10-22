@@ -1,5 +1,45 @@
 . (Join-Path $PSScriptRoot 'windows-inactive-completion-proof.ps1')
 
+function Publish-AgentsChatInactiveRollbackIntent([hashtable]$Context) {
+    $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
+    if (-not $Context.ContainsKey('ExclusiveLostRuntime') -or -not $Context.ExclusiveLostRuntime) {
+        throw 'Rollback intent requires original exclusive lost-runtime authority.'
+    }
+    if ($Context.ContainsKey('RollbackIntent')) {
+        $Context.RollbackIntent.Check()
+        return [pscustomobject]@{ file=(Join-Path $Context.Control 'inactive-rollback-intent.json'); sha256=$Context.RollbackIntent.Sha256 }
+    }
+    $manifest = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'backup/manifest.json') ''
+    $prior = $Context.Completed.activatingState
+    $document = [Text.Json.JsonDocument]::Parse($manifest.ReadText())
+    try {
+        $snapshot = $document.RootElement
+        if ($snapshot.GetProperty('id').GetString() -cne $prior.GetProperty('backupId').GetString() -or
+            $snapshot.GetProperty('project').GetString() -cne $Context.Project -or
+            $snapshot.GetProperty('source').GetProperty('commit').GetString() -cne $prior.GetProperty('sourceCommit').GetString()) {
+            throw 'Rollback manifest differs from original update source.'
+        }
+    } finally { $document.Dispose() }
+    $record = [ordered]@{
+        version=1; phase='rollback-requested'; operationId=$Context.OperationId
+        stateSha256=$Context.StateSha256; completionSha256=$Context.CompletionSha256
+        backupId=$prior.GetProperty('backupId').GetString(); sourceCommit=$prior.GetProperty('sourceCommit').GetString()
+        snapshotSha256=$manifest.Sha256; priorRuntime='stopped'; acceptDataLoss=$true
+    }
+    $text = $record | ConvertTo-Json -Compress
+    $file = Join-Path $Context.Control 'inactive-rollback-intent.json'
+    if (Test-Path -LiteralPath $file) {
+        $intent = Open-AgentsChatCompletionFile $Context $file ''
+        if ($intent.ReadText() -cne $text) { throw 'Original rollback intent differs from retained evidence.' }
+    } else {
+        $intent = [Deployment.WindowsPrivateFile]::Publish($file, $text)
+        $Context.Files.Add($intent)
+    }
+    $Context.RollbackIntent = $intent
+    $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
+    return [pscustomobject]@{ file=$file; sha256=$intent.Sha256 }
+}
+
 function Open-AgentsChatInactiveLostRuntimeAuthority([string]$Control) {
     $context = Open-AgentsChatInactiveLostRuntimeEvidence $Control
     try {
@@ -14,7 +54,11 @@ function Open-AgentsChatInactiveLostRuntimeAuthority([string]$Control) {
             (Join-Path $context.Directory 'inactive-complete-release-requested.json'),
             $sha256, $identity.Dev, $identity.Ino, $bytes)
         $context.Files.Add($context.ReleaseIntentFile)
+        $context.ExclusiveLostRuntime = $true
         $null = Assert-AgentsChatInactiveLostRuntimeEvidence $context
+        if (Test-Path -LiteralPath (Join-Path $Control 'inactive-rollback-intent.json')) {
+            $null = Publish-AgentsChatInactiveRollbackIntent $context
+        }
         return $context
     } catch {
         $failure = $_.Exception

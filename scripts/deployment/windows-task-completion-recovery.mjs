@@ -8,9 +8,19 @@ import { assertWindowsAdmission } from './windows-admission.mjs';
 import { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
 import { verifyHttpReadiness } from './http-readiness.mjs';
 import { captureActivatedRuntime } from './windows-task-controller.mjs';
+import { inspectWindowsInactiveRollbackSnapshot } from './windows-inactive-rollback-snapshot.mjs';
 export { inspectWindowsInactiveRollbackSnapshot } from './windows-inactive-rollback-snapshot.mjs';
 
 const lostScopes = new WeakMap();
+export async function prepareWindowsInactiveRollbackIntent(options) {
+  if (options.acceptDataLoss !== true) throw refused(new Error('Rollback requires explicit data-loss acknowledgement.'));
+  await assertWindowsInactiveLostRuntimeAuthority(options);
+  const binding = await inspectWindowsInactiveRollbackSnapshot(options);
+  await binding.check();
+  const result = await lostScopes.get(options.scope).request('prepare-rollback', options.signal);
+  await binding.check();
+  return result;
+}
 export async function assertWindowsInactiveLostRuntimeAuthority({ control, pwsh, admission, scope, signal }) {
   const retained = lostScopes.get(scope);
   if (!retained || retained.control !== control || retained.pwsh !== pwsh || retained.admission !== admission) {
@@ -116,6 +126,14 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
         if (reply.value !== 'close') throw new Error('Unexpected completion recovery close acknowledgement.');
         return;
       }
+      if (method === 'prepare-rollback') {
+        const result = captureWorkerFields(reply.value, ['file', 'sha256'], 'inactive rollback intent');
+        if (!lost || result.file !== path.join(control, 'inactive-rollback-intent.json')
+          || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
+          throw new Error('Invalid inactive rollback intent acknowledgement.');
+        }
+        return Object.freeze(result);
+      }
       const next = captureObservation(reply.value);
       if (method === 'check') {
         if (!isDeepStrictEqual(next, observation)) throw new Error('Retained completion recovery evidence changed.');
@@ -168,7 +186,7 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       ...(lost ? {} : { advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal) }),
       close: async () => { if (!closed) await request('close'); },
     });
-    if (lost) lostScopes.set(scope, { control, pwsh, admission });
+    if (lost) lostScopes.set(scope, { control, pwsh, admission, request });
     return scope;
   } catch (cause) {
     closed = true;
