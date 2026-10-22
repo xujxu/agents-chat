@@ -14593,6 +14593,15 @@ handoff to the existing native exclusive file primitive, followed by full
 lost-runtime evidence revalidation. Cleanup aggregates failures rather than
 masking them. No state write or restore operation is introduced by this opener.
 
+Exclusive native evidence passed at `0d023a3d / 39812296401`; shared
+regression `39816503548` now reports completed/success. Next causal fixture
+launches an actual Node actor against the genuine lost-runtime history.
+Require a distinct owned authority API, original admission and bridge identity,
+immutable lost-runtime observation, concurrent/substitution refusal and
+clean close. Do not expose released-completion advancement on this scope.
+This transport is needed to bind verified snapshot and owned rollback workers;
+it does not itself restore files or change task policy.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

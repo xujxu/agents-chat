@@ -167,6 +167,19 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             finally { Close-AgentsChatTaskCompletionProof $authority }
             Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash -ceq $stateBefore) `
                 'Exclusive lost-runtime evidence changed accepted state'
+            $lostActor = [Deployment.WindowsControllerProcess]::Start($node,
+                @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName),
+                $control, $environment)
+            try {
+                $output = $lostActor.StandardOutput.ReadToEndAsync()
+                $diagnostic = $lostActor.StandardError.ReadToEndAsync()
+                Assert ($lostActor.WaitForExit(120000)) 'Lost-runtime transport actor timed out'
+                Write-Output $output.GetAwaiter().GetResult()
+                $errors = $diagnostic.GetAwaiter().GetResult()
+                if ($errors) { [Console]::Error.WriteLine($errors) }
+                Assert ($lostActor.ExitCode -eq 0) 'Lost-runtime transport actor failed'
+            } finally { $lostActor.Dispose() }
             $Recover = $false
             $Complete = $false
             Write-Output 'PASS: actual pre-release controller death settles guarded runtime; release intent alone cannot authorize released recovery'
