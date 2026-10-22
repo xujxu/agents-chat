@@ -14644,6 +14644,17 @@ helper verification, derive canonical external destinations from that verified
 inventory, require exact equality with the snapshot external list and retain
 its check in the original authority-bracketed verifier. No file writes added.
 
+Runtime/destination inspection passed at `66b057f9 / 39860536029`.
+Next publish durable rollback intent before touching project files. Require
+the original registered exclusive lost-runtime scope, freshly verified backup
+and explicit data-loss acknowledgement; bind original state/completion hashes,
+backup ID/source commit, stopped origin and authorized destinations. Publish
+create-only `inactive-rollback-intent.json` under control (not in the immutable
+original maintenance prefix); repeat publication must preserve exact bytes.
+Reject copied scope and missing acknowledgement. Intent is not a files-restored
+receipt and must not rewrite accepted state. Native authority must retain and
+validate published intent for later operations and fresh recovery consumers.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

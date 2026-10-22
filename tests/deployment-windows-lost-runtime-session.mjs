@@ -50,6 +50,28 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     assert.ok(binding.runtime.files.some(file => file.name === 'configuration.json'));
     await binding.runtime.check();
     await binding.check();
+    assert.equal(typeof api.prepareWindowsInactiveRollbackIntent, 'function',
+      'Missing durable inactive rollback intent');
+    await assert.rejects(api.prepareWindowsInactiveRollbackIntent({ ...options, scope, acceptDataLoss: false }));
+    await assert.rejects(api.prepareWindowsInactiveRollbackIntent({
+      ...options, scope: { ...scope }, acceptDataLoss: true,
+    }));
+    const intent = await api.prepareWindowsInactiveRollbackIntent({ ...options, scope, acceptDataLoss: true });
+    assert.equal(intent.file, path.join(control, 'inactive-rollback-intent.json'));
+    const intentBytes = await readFile(intent.file);
+    const record = JSON.parse(intentBytes);
+    assert.equal(record.version, 1);
+    assert.equal(record.phase, 'rollback-requested');
+    assert.equal(record.operationId, original.operationId);
+    assert.equal(record.stateSha256, scope.observation.stateSha256);
+    assert.equal(record.completionSha256, scope.observation.completionSha256);
+    assert.equal(record.backupId, binding.snapshot.id);
+    assert.equal(record.sourceCommit, original.sourceCommit);
+    assert.equal(record.priorRuntime, 'stopped');
+    assert.equal(record.acceptDataLoss, true);
+    assert.deepEqual(await api.prepareWindowsInactiveRollbackIntent({ ...options, scope, acceptDataLoss: true }), intent);
+    assert.deepEqual(await readFile(intent.file), intentBytes);
+    assert.deepEqual(await scope.check(), scope.observation);
   } finally { await scope.close(); }
   assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
   await assert.rejects(scope.check());
