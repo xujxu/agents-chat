@@ -14620,6 +14620,15 @@ the target as ordinary restore does cannot pass. The inspection remains
 read-only and grants no file mutation until the owned rollback transaction
 also binds runtime policy and restore destinations.
 
+Causal `00991486 / 39848760671` failed at missing original-update snapshot
+binding. Register actual lost-runtime scopes privately and require exact
+control/interpreter/admission identity before snapshot inspection. Verify the
+retained state digest, accepted update/stopped origin, original admission,
+backup ID/project/source commit and exact original stopped-task metadata.
+Return a detached snapshot copy and a recheck that brackets complete backup
+verification with native authority checks. Saved helper closure includes the
+new snapshot inspector. This is read-only verification, not restore authority.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

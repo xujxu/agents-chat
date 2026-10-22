@@ -8,6 +8,16 @@ import { assertWindowsAdmission } from './windows-admission.mjs';
 import { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
 import { verifyHttpReadiness } from './http-readiness.mjs';
 import { captureActivatedRuntime } from './windows-task-controller.mjs';
+export { inspectWindowsInactiveRollbackSnapshot } from './windows-inactive-rollback-snapshot.mjs';
+
+const lostScopes = new WeakMap();
+export async function assertWindowsInactiveLostRuntimeAuthority({ control, pwsh, admission, scope, signal }) {
+  const retained = lostScopes.get(scope);
+  if (!retained || retained.control !== control || retained.pwsh !== pwsh || retained.admission !== admission) {
+    throw refused(new Error('Original owned lost-runtime scope is required.'));
+  }
+  return scope.check({ signal });
+}
 
 const script = fileURLToPath(new URL('./windows-task-completion-recovery-controller.ps1', import.meta.url));
 const steps = Object.freeze([
@@ -151,13 +161,15 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       } finally { busy = false; }
     };
     await assertWindowsAdmission(control, admission, { signal });
-    return Object.freeze({
+    const scope = Object.freeze({
       identity,
       get observation() { return observation; },
       check: ({ signal: requestSignal } = {}) => request('check', requestSignal),
       ...(lost ? {} : { advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal) }),
       close: async () => { if (!closed) await request('close'); },
     });
+    if (lost) lostScopes.set(scope, { control, pwsh, admission });
+    return scope;
   } catch (cause) {
     closed = true;
     throw await abandon(cause);
