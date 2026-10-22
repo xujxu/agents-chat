@@ -7,6 +7,7 @@ import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { assertWindowsAdmission } from './windows-admission.mjs';
 import { captureWindowsTaskCompletionProof } from './windows-task-completion-record.mjs';
 import { verifyHttpReadiness } from './http-readiness.mjs';
+import { captureActivatedRuntime } from './windows-task-controller.mjs';
 
 const script = fileURLToPath(new URL('./windows-task-completion-recovery-controller.ps1', import.meta.url));
 const steps = Object.freeze([
@@ -36,13 +37,33 @@ function capture(value, progression) {
 }
 function identityFields({ status, phase, step, completionSha256, ...fields }) { return fields; }
 
+function captureLostRuntime(value) {
+  const record = captureWorkerFields(value, [
+    'status', 'mutationAuthority', 'phase', 'operationId', 'taskName', 'priorRuntime',
+    'stateSha256', 'completionSha256', 'runtime',
+  ], 'inactive lost-runtime evidence');
+  if (record.status !== 'inactive-runtime-lost' || record.mutationAuthority !== false
+    || record.phase !== 'release-requested' || record.priorRuntime !== 'stopped'
+    || typeof record.operationId !== 'string'
+    || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(record.operationId)
+    || record.operationId === '00000000-0000-0000-0000-000000000000'
+    || typeof record.taskName !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(record.taskName)
+    || ![record.stateSha256, record.completionSha256].every(hash =>
+      typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash))) {
+    throw new Error('Invalid inactive lost-runtime observation.');
+  }
+  return Object.freeze({ ...record, runtime: captureActivatedRuntime(record.runtime) });
+}
+
 export const openWindowsTaskCompletionRecovery = options => openCompletionRecovery(options, false);
 export const openWindowsInactiveTaskCompletionRecovery = options => openCompletionRecovery(options, true);
+export const openWindowsInactiveLostRuntimeAuthority = options => openCompletionRecovery(options, true, true);
 
-async function openCompletionRecovery({ control, pwsh, admission, signal }, inactive) {
+async function openCompletionRecovery({ control, pwsh, admission, signal }, inactive, lost = false) {
   const progression = inactive
     ? ['release-requested', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete']
     : steps;
+  const captureObservation = value => lost ? captureLostRuntime(value) : capture(value, progression);
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value =>
     typeof value === 'string' && value.length <= 4096 && path.isAbsolute(value)
@@ -57,7 +78,7 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
     pwsh, refused, label: 'Native completion recovery controller',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
       '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
-      ...(inactive ? ['-Inactive'] : [])],
+      ...(inactive ? ['-Inactive'] : []), ...(lost ? ['-LostRuntime'] : [])],
   });
   let closed = false;
   let busy = false;
@@ -71,7 +92,7 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       || ready.processIdentity !== await processIdentity(child.pid)) {
       throw new Error('Original completion recovery bridge differs.');
     }
-    let observation = capture(ready.value, progression);
+    let observation = captureObservation(ready.value);
     const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity });
     const exchange = async (method, requestSignal) => {
       const id = ++sequence;
@@ -85,7 +106,7 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
         if (reply.value !== 'close') throw new Error('Unexpected completion recovery close acknowledgement.');
         return;
       }
-      const next = capture(reply.value, progression);
+      const next = captureObservation(reply.value);
       if (method === 'check') {
         if (!isDeepStrictEqual(next, observation)) throw new Error('Retained completion recovery evidence changed.');
       } else {
@@ -134,7 +155,7 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       identity,
       get observation() { return observation; },
       check: ({ signal: requestSignal } = {}) => request('check', requestSignal),
-      advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal),
+      ...(lost ? {} : { advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal) }),
       close: async () => { if (!closed) await request('close'); },
     });
   } catch (cause) {

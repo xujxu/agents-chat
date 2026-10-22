@@ -14602,6 +14602,14 @@ clean close. Do not expose released-completion advancement on this scope.
 This transport is needed to bind verified snapshot and owned rollback workers;
 it does not itself restore files or change task policy.
 
+Causal `16b028c2 / 39841465837` failed at the missing owned lost-runtime
+transport assertion. Add explicit inactive/lost-runtime mode to the existing
+owner-watched controller and a distinct strict observation parser. The returned
+scope exposes only check/close; native advance requests are independently
+refused. Preserve original admission and bridge identity checks, exclusive
+history retention and bounded transport teardown. No synthetic live lease,
+providers or listener fields are added to lost-runtime observations.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

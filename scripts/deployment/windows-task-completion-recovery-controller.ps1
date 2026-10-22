@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][string]$Control,
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][string]$ControllerIdentity,
-    [switch]$Inactive
+    [switch]$Inactive,
+    [switch]$LostRuntime
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -18,12 +19,18 @@ try {
         (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-completion-recovery.ps1')
     if ($Inactive) { . (Join-Path $PSScriptRoot 'windows-inactive-completion-recovery.ps1') }
+    if ($LostRuntime) {
+        if (-not $Inactive) { throw 'Lost-runtime mode requires explicit inactive history.' }
+        . (Join-Path $PSScriptRoot 'windows-inactive-lost-runtime.ps1')
+    }
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'recovery-open'
-    $scope = if ($Inactive) { Open-AgentsChatInactiveCompletionRecovery $Control }
+    $scope = if ($LostRuntime) { Open-AgentsChatInactiveLostRuntimeAuthority $Control }
+        elseif ($Inactive) { Open-AgentsChatInactiveCompletionRecovery $Control }
         else { Open-AgentsChatTaskCompletionRecovery $Control }
-    $observation = if ($Inactive) { Assert-AgentsChatInactiveCompletionRecovery $scope }
+    $observation = if ($LostRuntime) { Assert-AgentsChatInactiveLostRuntimeEvidence $scope }
+        elseif ($Inactive) { Assert-AgentsChatInactiveCompletionRecovery $scope }
         else { Assert-AgentsChatTaskCompletionRecovery $scope }
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
     [Console]::Out.WriteLine((@{
@@ -39,6 +46,7 @@ try {
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
         if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'advance', 'close')) { throw 'Invalid recovery request.' }
+        if ($LostRuntime -and $method -ceq 'advance') { throw 'Lost-runtime evidence cannot advance live completion.' }
         $sequence = $id
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
             throw 'Original recovery actor changed.'
@@ -52,7 +60,8 @@ try {
             $value = if ($Inactive) { Advance-AgentsChatInactiveCompletionRecovery $scope }
                 else { Advance-AgentsChatTaskCompletionRecovery $scope }
         } else {
-            $value = if ($Inactive) { Assert-AgentsChatInactiveCompletionRecovery $scope }
+            $value = if ($LostRuntime) { Assert-AgentsChatInactiveLostRuntimeEvidence $scope }
+                elseif ($Inactive) { Assert-AgentsChatInactiveCompletionRecovery $scope }
                 else { Assert-AgentsChatTaskCompletionRecovery $scope }
         }
         [Console]::Out.WriteLine((@{ id=$id; type='reply'; processIdentity=$identity; value=$value } |
