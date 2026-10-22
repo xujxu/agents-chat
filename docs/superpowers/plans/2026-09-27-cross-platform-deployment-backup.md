@@ -14555,6 +14555,18 @@ then require exit through the retained process handle. Keep the independent
 empty-Job and recovery-refusal assertions. Do not swallow process lookup errors
 or substitute PID polling for exact original owner exit.
 
+Pre-release boundary passed at `973d14b9 / 39794820225`; original log confirms
+guarded runtime exit, empty Job and refusal of released-runtime recovery.
+Next add explicit read-only lost-runtime evidence for this genuine prefix.
+Reuse the strict inactive history parser, but require the actual new owner
+absent, its Job empty, no Scheduler instances and exact staged disabled policy.
+Retain old/new configuration and readiness evidence and original controller
+absence. Report `inactive-runtime-lost`, `mutationAuthority:false`, actual new
+runtime metadata and `priorRuntime:stopped`; never fabricate active stop history
+or grant mutation through the released-runtime API. Test repeatability and
+policy drift refusal before composing exclusive rollback authority. This
+observer is a prerequisite, not file restoration or rollback completion.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

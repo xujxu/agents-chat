@@ -125,6 +125,27 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 'Unreleased recovery refusal changed original accepted state'
             Assert (-not (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-released.json'))) `
                 'Unreleased recovery refusal fabricated a release receipt'
+            Assert ([bool](Get-Command Open-AgentsChatInactiveLostRuntimeEvidence -ErrorAction SilentlyContinue)) `
+                'Missing inactive lost-runtime evidence observer'
+            $lost = Open-AgentsChatInactiveLostRuntimeEvidence $control
+            try {
+                $observed = Assert-AgentsChatInactiveLostRuntimeEvidence $lost
+                Assert ($observed.status -ceq 'inactive-runtime-lost' -and -not $observed.mutationAuthority -and
+                    $observed.phase -ceq 'release-requested' -and $observed.priorRuntime -ceq 'stopped' -and
+                    $observed.runtime.identity -ceq $runningBefore.runtime.identity -and
+                    $observed.runtime.generation -ceq $runningBefore.runtime.generation) `
+                    'Lost-runtime observation differs from actual original stopped history'
+                $again = Assert-AgentsChatInactiveLostRuntimeEvidence $lost
+                Assert (($observed | ConvertTo-Json -Depth 8 -Compress) -ceq
+                    ($again | ConvertTo-Json -Depth 8 -Compress)) 'Lost-runtime evidence changed on recheck'
+                $folder.GetTask($TaskName).Enabled = $true
+                $refused = $false
+                try { $null = Assert-AgentsChatInactiveLostRuntimeEvidence $lost } catch { $refused = $true }
+                Assert $refused 'Lost-runtime observer accepted changed task policy'
+            } finally {
+                $folder.GetTask($TaskName).Enabled = $false
+                Close-AgentsChatTaskCompletionProof $lost
+            }
             $Recover = $false
             $Complete = $false
             Write-Output 'PASS: actual pre-release controller death settles guarded runtime; release intent alone cannot authorize released recovery'
