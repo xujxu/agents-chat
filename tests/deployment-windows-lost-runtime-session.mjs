@@ -72,6 +72,21 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     assert.deepEqual(await api.prepareWindowsInactiveRollbackIntent({ ...options, scope, acceptDataLoss: true }), intent);
     assert.deepEqual(await readFile(intent.file), intentBytes);
     assert.deepEqual(await scope.check(), scope.observation);
+    assert.equal(typeof api.restoreWindowsInactiveRollbackProject, 'function',
+      'Missing actual inactive rollback project restoration');
+    await assert.rejects(api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: false }));
+    await assert.rejects(api.restoreWindowsInactiveRollbackProject({
+      ...options, scope: { ...scope }, acceptDataLoss: true,
+    }));
+    const restored = await api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: true });
+    assert.equal(restored.status, 'project-restored');
+    assert.equal(restored.sourceCommit, original.sourceCommit);
+    for (const entry of binding.snapshot.entries.filter(entry => entry.kind === 'file')) {
+      assert.deepEqual(await readFile(path.join(original.project, entry.path)),
+        await readFile(path.join(control, 'backup/files', entry.path)), `Rollback did not restore ${entry.path}`);
+    }
+    assert.deepEqual(await readFile(intent.file), intentBytes);
+    assert.deepEqual(await scope.check(), scope.observation);
   } finally { await scope.close(); }
   assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
   await assert.rejects(scope.check());

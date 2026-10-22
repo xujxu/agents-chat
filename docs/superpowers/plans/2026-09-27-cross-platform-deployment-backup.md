@@ -14665,6 +14665,19 @@ scope validates an existing intent against current retained evidence before
 returning; repeated publication checks the retained original file. Neither
 intent nor acknowledgement is a files-restored or rollback-complete claim.
 
+Durable intent passed at `09a832ed / 39867103479`. Next execute actual
+project restoration through the original exclusive lost-runtime scope, after
+fresh backup/runtime/destination verification and retained native intent.
+Require explicit data-loss acknowledgement and refuse copied scopes before
+mutation. Reuse `restoreProjectSnapshot` with checks bound to the original
+native stopped/disabled evidence, never an unconditional stopped callback.
+The fixture compares every restored regular project file against its actual
+backup bytes, retains original accepted state and intent, and independently
+rechecks task/runtime absence. Project restoration alone must report only
+`project-restored`, not final task-policy restoration or overall completion.
+External bundles, original task policy, durable completion and interrupted
+rollback reentry remain mandatory subsequent stages.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
