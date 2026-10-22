@@ -14687,6 +14687,18 @@ state and reports only `project-restored`. Same-scope overlapping restoration
 is refused. The saved worker closure includes the new module. Actions acceptance
 is pending; external restoration and durable finalization remain separate.
 
+Implementation `961ee3ea` is under focused Actions acceptance `39873482076`.
+For the next external-runtime stage, preserve both original and replacement
+bundles retained by `Open-AgentsChatInactiveLostRuntimeEvidence`: do not overwrite
+their configuration/helper files while native evidence owns them. Reuse
+`publishWindowsRuntimeBundle` with the verified archived files and original
+scope checks, then the existing `inspectWindowsRuntimeRelocation` /
+`restoreExternalSnapshot` path rather than granting arbitrary external writes.
+The existing cold-runtime preparer is not directly reusable because it requires
+a cold-restore lease, not this original update's lost-runtime scope. Original
+task policy restoration must consume the verified relocated bundle only after
+file restoration, with durable receipts and interruption reentry still required.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
