@@ -2,6 +2,7 @@
 . (Join-Path $PSScriptRoot 'windows-managed-task-definition.ps1')
 . (Join-Path $PSScriptRoot 'windows-inactive-completion-proof.ps1')
 . (Join-Path $PSScriptRoot 'windows-inactive-completion-recovery.ps1')
+. (Join-Path $PSScriptRoot 'windows-inactive-lost-runtime.ps1')
 
 function New-AgentsChatInactiveActivationPreparation([hashtable]$Context, [string]$StateSha256) {
     $null = Assert-AgentsChatInactiveTask $Context

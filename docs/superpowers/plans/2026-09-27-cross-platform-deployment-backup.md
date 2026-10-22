@@ -14567,6 +14567,15 @@ or grant mutation through the released-runtime API. Test repeatability and
 policy drift refusal before composing exclusive rollback authority. This
 observer is a prerequisite, not file restoration or rollback completion.
 
+Causal `3c4e7318 / 39801967539` failed at the explicit missing lost-runtime
+observer assertion. Add the focused native observer to the saved helper closure.
+It accepts only original unacknowledged release intent with the new owner
+absent, empty Job, zero task instances and exact staged disabled policy; old/new
+bundles and readiness remain retained. Repeated observations verify retained
+files and native absence twice; policy drift poisons the scope. Observation
+grants no mutation and does not claim whether an unacknowledged release briefly
+occurred before owner loss. Native implementation acceptance remains pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
