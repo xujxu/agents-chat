@@ -14629,6 +14629,15 @@ Return a detached snapshot copy and a recheck that brackets complete backup
 verification with native authority checks. Saved helper closure includes the
 new snapshot inspector. This is read-only verification, not restore authority.
 
+Snapshot binding passed at `fa1f96ce / 39850902690`. Next require the
+existing saved Windows runtime inspector to verify archived configuration
+and every declared helper, and derive external destinations exclusively from
+that runtime inventory. Reject any snapshot external destination outside this
+exact set. Expose verified runtime plus frozen authorized paths, and include
+runtime revalidation in the existing authority-bracketed check. The real
+fixture checks original project cwd/task and configuration membership; no
+restoration is authorized merely by matching a snapshot manifest.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

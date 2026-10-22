@@ -41,6 +41,14 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     assert.equal(binding.snapshot.runtime.state, 'stopped');
     assert.equal(binding.snapshot.runtime.task.name, scope.observation.taskName);
     assert.notEqual(original.sourceCommit, original.targetCommit);
+    assert.ok(binding.runtime, 'Missing verified rollback runtime and destination binding');
+    assert.deepEqual(binding.runtime.task, binding.snapshot.runtime.task);
+    assert.equal(binding.runtime.configuration.command.cwd, original.project);
+    assert.deepEqual(binding.authorizedPaths,
+      binding.snapshot.externalFiles.map(file => file.path).sort());
+    assert.ok(Object.isFrozen(binding.authorizedPaths));
+    assert.ok(binding.runtime.files.some(file => file.name === 'configuration.json'));
+    await binding.runtime.check();
     await binding.check();
   } finally { await scope.close(); }
   assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
