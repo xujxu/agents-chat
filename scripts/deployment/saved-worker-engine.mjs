@@ -40,6 +40,7 @@ export const workerEngineFiles = Object.freeze([
   'windows-inactive-completion-recovery.ps1',
   'windows-inactive-lost-runtime.ps1',
   'windows-inactive-rollback-snapshot.mjs',
+  'windows-inactive-rollback-project.mjs',
   'windows-task-admission.ps1',
   'windows-task-completion-record.mjs', 'windows-task-retirement-record.mjs', 'windows-task-retirement-intent.ps1',
   'windows-task-retirement-checkpoint.mjs', 'windows-task-retirement-checkpoint.ps1',

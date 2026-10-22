@@ -14678,6 +14678,15 @@ rechecks task/runtime absence. Project restoration alone must report only
 External bundles, original task policy, durable completion and interrupted
 rollback reentry remain mandatory subsequent stages.
 
+Causal `11b47b05 / 39871483931` reached the missing actual project rollback
+assertion. The focused project restoration module now binds the existing
+restore engine to the registered exclusive lost-runtime scope, freshly verified
+snapshot and retained native rollback intent. Each stopped check revalidates
+native absence and staged disabled policy; the bounded stage preserves original
+state and reports only `project-restored`. Same-scope overlapping restoration
+is refused. The saved worker closure includes the new module. Actions acceptance
+is pending; external restoration and durable finalization remain separate.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
