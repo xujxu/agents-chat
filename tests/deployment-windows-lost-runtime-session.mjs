@@ -28,6 +28,20 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     assert.deepEqual(await scope.check(), scope.observation);
     await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority(options));
     assert.deepEqual(await scope.check(), scope.observation);
+    assert.equal(typeof api.inspectWindowsInactiveRollbackSnapshot, 'function',
+      'Missing original-update rollback snapshot binding');
+    const inspect = extra => api.inspectWindowsInactiveRollbackSnapshot({ ...options, scope, ...extra });
+    await assert.rejects(inspect({ scope: { ...scope } }));
+    const binding = await inspect();
+    const original = JSON.parse(state);
+    assert.equal(binding.mutationAuthority, false);
+    assert.equal(binding.snapshot.id, original.backupId);
+    assert.equal(binding.snapshot.project, original.project);
+    assert.equal(binding.snapshot.source.commit, original.sourceCommit);
+    assert.equal(binding.snapshot.runtime.state, 'stopped');
+    assert.equal(binding.snapshot.runtime.task.name, scope.observation.taskName);
+    assert.notEqual(original.sourceCommit, original.targetCommit);
+    await binding.check();
   } finally { await scope.close(); }
   assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
   await assert.rejects(scope.check());

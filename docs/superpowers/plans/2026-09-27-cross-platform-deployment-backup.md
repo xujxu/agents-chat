@@ -14610,6 +14610,16 @@ refused. Preserve original admission and bridge identity checks, exclusive
 history retention and bounded transport teardown. No synthetic live lease,
 providers or listener fields are added to lost-runtime observations.
 
+Owned lost-runtime transport passed at `44998e80 / 39843080913`; original
+log confirms substitution/concurrent refusal and unchanged state.
+Next bind rollback snapshot inspection to the exact registered lost-runtime
+scope and original update state. Require verified backup ID/project/source
+commit, original stopped task metadata and repeat checks; reject a copied
+scope object. The real fixture has distinct source/target commits, so checking
+the target as ordinary restore does cannot pass. The inspection remains
+read-only and grants no file mutation until the owned rollback transaction
+also binds runtime policy and restore destinations.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
