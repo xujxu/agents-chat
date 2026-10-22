@@ -252,6 +252,8 @@ jobs:
             & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep $step
             if ($LASTEXITCODE -ne 0) { throw "Inactive Windows completion recovery failed at $step." }
           }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep release-requested -ExternalInactiveRuntime
+          if ($LASTEXITCODE -ne 0) { throw 'Inactive Windows external-runtime project rollback failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-private-runner.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Private Windows test runner diagnostics failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-process-lifetime.ps1

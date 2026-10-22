@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -78,12 +78,28 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     await assert.rejects(api.restoreWindowsInactiveRollbackProject({
       ...options, scope: { ...scope }, acceptDataLoss: true,
     }));
-    const restored = await api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: true });
-    assert.equal(restored.status, 'project-restored');
-    assert.equal(restored.sourceCommit, original.sourceCommit);
-    for (const entry of binding.snapshot.entries.filter(entry => entry.kind === 'file')) {
-      assert.deepEqual(await readFile(path.join(original.project, entry.path)),
-        await readFile(path.join(control, 'backup/files', entry.path)), `Rollback did not restore ${entry.path}`);
+    const relative = path.relative(original.project, binding.runtime.task.configuration);
+    if (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
+      const names = (await readdir(original.project, { recursive: true })).sort();
+      const files = await Promise.all((await readdir(original.project, { recursive: true, withFileTypes: true }))
+        .filter(entry => entry.isFile()).map(async entry => {
+          const file = path.join(entry.parentPath, entry.name);
+          return [file, await readFile(file)];
+        }));
+      await assert.rejects(api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: true }),
+        /co-located evidence needs a durable handoff/);
+      assert.deepEqual((await readdir(original.project, { recursive: true })).sort(), names);
+      for (const [file, bytes] of files) {
+        assert.deepEqual(await readFile(file), bytes);
+      }
+    } else {
+      const restored = await api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: true });
+      assert.equal(restored.status, 'project-restored');
+      assert.equal(restored.sourceCommit, original.sourceCommit);
+      for (const entry of binding.snapshot.entries.filter(entry => entry.kind === 'file')) {
+        assert.deepEqual(await readFile(path.join(original.project, entry.path)),
+          await readFile(path.join(control, 'backup/files', entry.path)), `Rollback did not restore ${entry.path}`);
+      }
     }
     assert.deepEqual(await readFile(intent.file), intentBytes);
     assert.deepEqual(await scope.check(), scope.observation);

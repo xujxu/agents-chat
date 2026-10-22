@@ -21,6 +21,10 @@ export async function restoreWindowsInactiveRollbackProject(options) {
     return await runStage('inactive-rollback-project', async stageSignal => {
       const retained = { ...options, signal: stageSignal };
       const binding = await inspectWindowsInactiveRollbackSnapshot(retained);
+      const relative = path.relative(binding.snapshot.project, binding.runtime.task.configuration);
+      if (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
+        throw new Error('Inactive project rollback requires external retained runtime evidence; co-located evidence needs a durable handoff before mutation.');
+      }
       await prepareWindowsInactiveRollbackIntent(retained);
       await binding.check({ signal: stageSignal });
       const checkStopped = async ({ signal: checkSignal = stageSignal } = {}) => {

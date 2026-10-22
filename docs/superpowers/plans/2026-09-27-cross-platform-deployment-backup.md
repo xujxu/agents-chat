@@ -14699,6 +14699,16 @@ a cold-restore lease, not this original update's lost-runtime scope. Original
 task policy restoration must consume the verified relocated bundle only after
 file restoration, with durable receipts and interruption reentry still required.
 
+Run `39873482076` reached actual removal and failed with native sharing violation
+32: this fixture co-locates the original retained runtime bundle inside the
+project. The project API must refuse that layout before any mutation until
+durable evidence handoff exists; releasing retained evidence opportunistically
+would invalidate native recovery checks. Keep the original co-located fixture
+as a no-mutation refusal test and add an external-runtime fixture for actual
+project rollback, rather than silently changing the existing scenario.
+Co-located project restoration remains an explicit implementation gap, not an
+accepted recovery path. Both layouts must retain original state and intent.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

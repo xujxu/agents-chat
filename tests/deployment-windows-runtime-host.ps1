@@ -22,6 +22,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     [switch]$ColdStartupCrash,
     [switch]$InactiveCompletion,
     [switch]$InactiveCompletionRecovery,
+    [switch]$ExternalInactiveRuntime,
     [ValidateSet('release-requested', 'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')]
     [string]$InactiveCompletionRecoveryStep = 'lease-released',
     [ValidateSet('observed', 'started', 'requested', 'registered', 'enabled')][string]$ColdStartupStep = 'observed',
@@ -55,7 +56,8 @@ $taskName = "Agents-Chat-Runtime-Host-Test-$([guid]::NewGuid())"
 $parent = & $node -e "process.stdout.write(require('node:fs').realpathSync.native(process.argv[1]))" ([IO.Path]::GetTempPath())
 Assert ($LASTEXITCODE -eq 0) 'Cannot canonicalize installed host fixture parent'
 $root = Join-Path $parent "$taskName space"
-$project = if ($StoppedProof) { "$root-project" } else { $root }
+$separateProject = $StoppedProof -or $ExternalInactiveRuntime
+$project = if ($separateProject) { "$root-project" } else { $root }
 $registered = $false
 $owner = $null
 $member = $null
@@ -63,7 +65,7 @@ $unexpectedOwner = $null
 $guardController = $null
 $guardDiagnostic = $null
 try {
-    if ($StoppedProof) { [Deployment.WindowsPrivateFile]::CreateDirectory($project).Dispose() }
+    if ($separateProject) { [Deployment.WindowsPrivateFile]::CreateDirectory($project).Dispose() }
     $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
     $environment.Add('SystemRoot', $env:SystemRoot)
     $environment.Add('PATH', $env:PATH)
@@ -463,5 +465,5 @@ if (process.argv[2] === 'child') {
         } finally { $guardController.Dispose() }
     }
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
-    if ($StoppedProof -and (Test-Path -LiteralPath $project)) { Remove-Item -LiteralPath $project -Recurse -Force }
+    if ($separateProject -and (Test-Path -LiteralPath $project)) { Remove-Item -LiteralPath $project -Recurse -Force }
 }
