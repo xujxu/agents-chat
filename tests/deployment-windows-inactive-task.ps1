@@ -67,8 +67,17 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 }
             }
             Assert ($held.step -ceq $RecoveryStep) 'Inactive actor stopped at an unexpected phase'
+            $guardedOwner = $null
             $bridge = [Diagnostics.Process]::GetProcessById($held.bridge.pid)
             try {
+                if ($RecoveryStep -ceq 'release-requested') {
+                    $originalRunning = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-start-running.json') -Raw |
+                        ConvertFrom-Json
+                    $guardedOwner = [Diagnostics.Process]::GetProcessById($originalRunning.runtime.pid)
+                    $null = $guardedOwner.Handle
+                    Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($originalRunning.runtime.pid) -ceq
+                        $originalRunning.runtime.identity) 'Original guarded runtime identity changed before interruption'
+                }
                 $null = $bridge.Handle
                 Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($held.bridge.pid) -ceq
                     $held.bridge.identity) 'Inactive completion bridge identity changed'
@@ -76,7 +85,13 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 Assert ($controller.WaitForExit(15000) -and $controller.ExitCode -ne 0) `
                     'Inactive completion actor did not die abruptly'
                 Assert ($bridge.WaitForExit(15000)) 'Inactive completion bridge survived actor death'
-            } finally { $bridge.Dispose() }
+                if ($guardedOwner) {
+                    Assert ($guardedOwner.WaitForExit(30000)) 'Unreleased inactive runtime survived its original controller'
+                }
+            } finally {
+                if ($guardedOwner) { $guardedOwner.Dispose() }
+                $bridge.Dispose()
+            }
             Assert (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-release-requested.json')) `
                 'Inactive completion lost its real release intent'
             Assert (-not (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-complete.json'))) `
@@ -97,13 +112,6 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         if ($unreleased) {
             $runningBefore = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-start-running.json') -Raw |
                 ConvertFrom-Json
-            $deadline = [DateTime]::UtcNow.AddSeconds(30)
-            while ([Deployment.WindowsWorkerJob]::ProcessIdentity($runningBefore.runtime.pid) -ceq
-                $runningBefore.runtime.identity -and [DateTime]::UtcNow -lt $deadline) {
-                Start-Sleep -Milliseconds 100
-            }
-            Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($runningBefore.runtime.pid) -cne
-                $runningBefore.runtime.identity) 'Unreleased inactive runtime survived its original controller'
             [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
                 [guid]$runningBefore.runtime.generation, $runningBefore.runtime.sessionId)
             $stateBefore = (Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash

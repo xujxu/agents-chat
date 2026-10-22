@@ -14547,6 +14547,14 @@ receipt. Verify retained staged disabled policy and original retired readiness.
 This establishes the real lost-runtime boundary, not successful rollback:
 restoring source/snapshot and the originally stopped task remains unfinished.
 
+Boundary run `7a988fa4 / 39791755817` reached real release intent and original
+controller death, but the fixture called native ProcessIdentity after the
+guarded owner had already exited; that helper throws for an absent PID.
+Pin and identity-check the actual runtime process before killing its controller,
+then require exit through the retained process handle. Keep the independent
+empty-Job and recovery-refusal assertions. Do not swallow process lookup errors
+or substitute PID polling for exact original owner exit.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
