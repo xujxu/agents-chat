@@ -1,5 +1,32 @@
 . (Join-Path $PSScriptRoot 'windows-inactive-completion-proof.ps1')
 
+function Open-AgentsChatInactiveLostRuntimeAuthority([string]$Control) {
+    $context = Open-AgentsChatInactiveLostRuntimeEvidence $Control
+    try {
+        $original = $context.ReleaseIntentFile
+        $identity = $original.CaptureIdentity()
+        $sha256 = $original.Sha256
+        $bytes = $original.ByteLength
+        $original.Check()
+        $original.Dispose()
+        $null = $context.Files.Remove($original)
+        $context.ReleaseIntentFile = [Deployment.WindowsPrivateFile]::OpenExclusive(
+            (Join-Path $context.Directory 'inactive-complete-release-requested.json'),
+            $sha256, $identity.Dev, $identity.Ino, $bytes)
+        $context.Files.Add($context.ReleaseIntentFile)
+        $null = Assert-AgentsChatInactiveLostRuntimeEvidence $context
+        return $context
+    } catch {
+        $failure = $_.Exception
+        try { Close-AgentsChatTaskCompletionProof $context }
+        catch {
+            throw [AggregateException]::new('Lost-runtime authority open and cleanup failed.',
+                [Exception[]]@($failure, $_.Exception))
+        }
+        throw $failure
+    }
+}
+
 function Assert-AgentsChatInactiveLostRuntimeState([hashtable]$Context) {
     Assert-AgentsChatInactiveCompletionHistory $Context
     foreach ($name in @('task-retirement.json', 'task-retirement-checkpoint.json', 'worker-retirement.json')) {

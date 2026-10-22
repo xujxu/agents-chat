@@ -14587,6 +14587,12 @@ Exclusive evidence alone still reports no general mutation authority and must
 not modify state or fabricate a rollback result. Actual restoration remains
 separately gated on verified snapshot and owned workers.
 
+Causal `a2d0489f / 39810036142` failed at the missing exclusive authority
+assertion. Implement exact retained release-intent identity/digest/length
+handoff to the existing native exclusive file primitive, followed by full
+lost-runtime evidence revalidation. Cleanup aggregates failures rather than
+masking them. No state write or restore operation is introduced by this opener.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
