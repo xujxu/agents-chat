@@ -146,6 +146,27 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 $folder.GetTask($TaskName).Enabled = $false
                 Close-AgentsChatTaskCompletionProof $lost
             }
+            Assert ([bool](Get-Command Open-AgentsChatInactiveLostRuntimeAuthority -ErrorAction SilentlyContinue)) `
+                'Missing exclusive inactive lost-runtime authority'
+            $authority = Open-AgentsChatInactiveLostRuntimeAuthority $control
+            try {
+                $observed = Assert-AgentsChatInactiveLostRuntimeEvidence $authority
+                Assert (-not $observed.mutationAuthority) 'Exclusive evidence alone granted unscoped mutation authority'
+                foreach ($open in @('Open-AgentsChatInactiveLostRuntimeEvidence', 'Open-AgentsChatInactiveLostRuntimeAuthority')) {
+                    $refused = $false
+                    try {
+                        $unexpected = & $open $control
+                        Close-AgentsChatTaskCompletionProof $unexpected
+                    } catch { $refused = $true }
+                    Assert $refused 'Concurrent lost-runtime consumer bypassed retained exclusive history'
+                }
+                $null = Assert-AgentsChatInactiveLostRuntimeEvidence $authority
+            } finally { Close-AgentsChatTaskCompletionProof $authority }
+            $authority = Open-AgentsChatInactiveLostRuntimeAuthority $control
+            try { $null = Assert-AgentsChatInactiveLostRuntimeEvidence $authority }
+            finally { Close-AgentsChatTaskCompletionProof $authority }
+            Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash -ceq $stateBefore) `
+                'Exclusive lost-runtime evidence changed accepted state'
             $Recover = $false
             $Complete = $false
             Write-Output 'PASS: actual pre-release controller death settles guarded runtime; release intent alone cannot authorize released recovery'

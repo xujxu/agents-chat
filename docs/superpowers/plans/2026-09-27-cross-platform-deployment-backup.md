@@ -14576,6 +14576,17 @@ files and native absence twice; policy drift poisons the scope. Observation
 grants no mutation and does not claim whether an unacknowledged release briefly
 occurred before owner loss. Native implementation acceptance remains pending.
 
+Read-only lost-runtime evidence passed at `691fd7c9 / 39804331940`,
+including genuine guarded owner death, repeat observation and policy drift
+refusal. Next retain exclusive original release-intent identity before any
+rollback operation can be composed. Add a distinct authority opener that
+reuses the evidence observer, replaces its retained release intent with the
+identity/digest/length-bound exclusive handle, and rechecks all native evidence.
+Reject concurrent evidence/authority opens; allow fresh reopening after close.
+Exclusive evidence alone still reports no general mutation authority and must
+not modify state or fabricate a rollback result. Actual restoration remains
+separately gated on verified snapshot and owned workers.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
