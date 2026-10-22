@@ -5,6 +5,7 @@ import { assertWindowsInactiveLostRuntimeAuthority } from './windows-task-comple
 import { readWorkerFile, canonicalWorkerDirectory } from './worker-files.mjs';
 import { validateState } from './state.mjs';
 import { verifySnapshot } from './snapshot.mjs';
+import { inspectWindowsSnapshotRuntime } from './windows-snapshot-runtime.mjs';
 
 export async function inspectWindowsInactiveRollbackSnapshot(options) {
   const { control, signal } = options;
@@ -37,6 +38,17 @@ export async function inspectWindowsInactiveRollbackSnapshot(options) {
     throw new Error('Inactive rollback backup differs from its original source or stopped task.');
   }
   const retained = structuredClone(snapshot);
+  const runtime = await inspectWindowsSnapshotRuntime({
+    backup, snapshot: retained, project: state.project, taskName: observed.taskName, signal,
+  });
+  const authorizedPaths = Object.freeze([...new Set(runtime.files.map(file =>
+    path.join(path.dirname(runtime.task.configuration), file.name)).filter(file => {
+    const relative = path.relative(state.project, file);
+    return relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+  }))].sort());
+  if (!same(authorizedPaths, (retained.externalFiles ?? []).map(file => file.path).sort())) {
+    throw new Error('Inactive rollback snapshot contains foreign external destinations.');
+  }
   const check = async ({ signal: checkSignal = signal } = {}) => {
     await assertWindowsInactiveLostRuntimeAuthority({ ...options, signal: checkSignal });
     const currentDirectory = await canonicalWorkerDirectory(backup, { privateMode: true });
@@ -47,8 +59,9 @@ export async function inspectWindowsInactiveRollbackSnapshot(options) {
       || !same(await verifySnapshot(backup, { signal: checkSignal }), retained)) {
       throw new Error('Inactive rollback state or verified snapshot changed.');
     }
+    await runtime.check({ signal: checkSignal });
     await assertWindowsInactiveLostRuntimeAuthority({ ...options, signal: checkSignal });
   };
   await check();
-  return Object.freeze({ mutationAuthority: false, snapshot: structuredClone(retained), check });
+  return Object.freeze({ mutationAuthority: false, snapshot: structuredClone(retained), runtime, authorizedPaths, check });
 }

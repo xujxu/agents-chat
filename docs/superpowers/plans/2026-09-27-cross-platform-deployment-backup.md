@@ -14638,6 +14638,12 @@ runtime revalidation in the existing authority-bracketed check. The real
 fixture checks original project cwd/task and configuration membership; no
 restoration is authorized merely by matching a snapshot manifest.
 
+Causal `7b5fc44c / 39858615744` failed at missing verified runtime/destination
+binding. Reuse `inspectWindowsSnapshotRuntime` for archived configuration and
+helper verification, derive canonical external destinations from that verified
+inventory, require exact equality with the snapshot external list and retain
+its check in the original authority-bracketed verifier. No file writes added.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
