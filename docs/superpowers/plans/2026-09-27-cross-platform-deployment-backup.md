@@ -14538,6 +14538,15 @@ live with the same identity, then kill its original Node actor and continue
 the already accepted fresh-actor resumption. This distinguishes admission
 loss from actual native authority release, as the active recovery fixture does.
 
+Shared regression `7d496e9b / 39016335537` passed both Windows jobs.
+Continue pre-release recovery with a genuine `release-requested` interruption:
+the original actor dies before the native release request is performed. Require
+the guarded owner to exit, its Job to empty, and the existing released-runtime
+recovery API to refuse without changing accepted state or creating a released
+receipt. Verify retained staged disabled policy and original retired readiness.
+This establishes the real lost-runtime boundary, not successful rollback:
+restoring source/snapshot and the originally stopped task remains unfinished.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

@@ -1,6 +1,6 @@
 function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string]$Project, [string]$ReadyFile,
     [switch]$Complete, [switch]$Recover,
-    [ValidateSet('lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')]
+    [ValidateSet('release-requested', 'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')]
     [string]$RecoveryStep = 'lease-released') {
     . (Join-Path $Source 'windows-inactive-task.ps1')
     $scheduler = New-Object -ComObject 'Schedule.Service'
@@ -93,6 +93,34 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         $errors = $diagnostic.GetAwaiter().GetResult()
         if ($errors) { [Console]::Error.WriteLine($errors) }
         if (-not $Recover) { Assert ($controller.ExitCode -eq 0) 'Inactive task Node bridge failed' }
+        $unreleased = $Recover -and $RecoveryStep -ceq 'release-requested'
+        if ($unreleased) {
+            $runningBefore = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-start-running.json') -Raw |
+                ConvertFrom-Json
+            $deadline = [DateTime]::UtcNow.AddSeconds(30)
+            while ([Deployment.WindowsWorkerJob]::ProcessIdentity($runningBefore.runtime.pid) -ceq
+                $runningBefore.runtime.identity -and [DateTime]::UtcNow -lt $deadline) {
+                Start-Sleep -Milliseconds 100
+            }
+            Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($runningBefore.runtime.pid) -cne
+                $runningBefore.runtime.identity) 'Unreleased inactive runtime survived its original controller'
+            [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
+                [guid]$runningBefore.runtime.generation, $runningBefore.runtime.sessionId)
+            $stateBefore = (Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash
+            $refused = $false
+            try {
+                $unexpected = Open-AgentsChatInactiveCompletionRecovery $control
+                Close-AgentsChatTaskCompletionProof $unexpected
+            } catch { $refused = $true }
+            Assert $refused 'Release intent without actual release granted live completion recovery'
+            Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash -ceq $stateBefore) `
+                'Unreleased recovery refusal changed original accepted state'
+            Assert (-not (Test-Path -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-released.json'))) `
+                'Unreleased recovery refusal fabricated a release receipt'
+            $Recover = $false
+            $Complete = $false
+            Write-Output 'PASS: actual pre-release controller death settles guarded runtime; release intent alone cannot authorize released recovery'
+        }
         if ($Recover) {
             Assert ([bool](Get-Command Open-AgentsChatInactiveCompletionRecovery -ErrorAction SilentlyContinue)) `
                 'Missing inactive released-prefix completion recovery'
@@ -214,6 +242,13 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         $running = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-start-running.json') -Raw |
             ConvertFrom-Json
         $finalDefinition = $running.definition
+        if ($unreleased) {
+            $prepared = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-prepared.json') -Raw |
+                ConvertFrom-Json
+            $finalDefinition = [string]$folder.GetTask($TaskName).Xml
+            Assert (([xml]$finalDefinition).OuterXml -ceq ([xml]$prepared.stagedDefinition).OuterXml) `
+                'Unreleased inactive interruption changed staged disabled policy'
+        }
         if ($Complete) {
             Assert ([bool](Get-Command Open-AgentsChatInactiveCompletionProof -ErrorAction SilentlyContinue)) `
                 'Independent inactive completion proof is unavailable'

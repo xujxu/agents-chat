@@ -248,7 +248,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Inactive Windows task observation contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletion
           if ($LASTEXITCODE -ne 0) { throw 'Inactive Windows task completion contracts failed.' }
-          foreach ($step in @('lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')) {
+          foreach ($step in @('release-requested', 'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')) {
             & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep $step
             if ($LASTEXITCODE -ne 0) { throw "Inactive Windows completion recovery failed at $step." }
           }

@@ -22,7 +22,7 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     [switch]$ColdStartupCrash,
     [switch]$InactiveCompletion,
     [switch]$InactiveCompletionRecovery,
-    [ValidateSet('lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')]
+    [ValidateSet('release-requested', 'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')]
     [string]$InactiveCompletionRecoveryStep = 'lease-released',
     [ValidateSet('observed', 'started', 'requested', 'registered', 'enabled')][string]$ColdStartupStep = 'observed',
     [AllowEmptyString()][ValidateSet('', 'copying', 'backup-ready', 'source-selected')]
