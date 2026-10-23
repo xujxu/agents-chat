@@ -14999,6 +14999,17 @@ exact cleanup inventory. Preserve the backup, restored runtime bundle, restored
 state and completion receipt; do not release retained evidence opportunistically.
 No stopped rollback retirement record or cleanup has been implemented yet.
 
+The first retirement boundary is a create-only task-history intent, not deletion.
+Require `prepareWindowsInactiveRollbackRetirementIntent` with original registered
+scope and explicit acknowledgement. Bind the published state and completion
+receipt, then enumerate exactly the already admitted task-maintenance inventory
+with each original file's device, inode, byte count and digest. Capture the
+exclusive release-intent descriptor from its existing handle rather than reopening
+it. The fixture independently compares every descriptor with the actual directory
+and requires stable repeated preparation with no inventory change. Retain original
+authority and leave worker history, backup, runtime, state, receipt and lock intact.
+Actual prefix deletion and its independent reentry proof are subsequent work.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

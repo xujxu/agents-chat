@@ -94,6 +94,44 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       });
       assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-complete.json')), receiptBefore);
       assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
+      assert.equal(typeof api.prepareWindowsInactiveRollbackRetirementIntent, 'function',
+        'Missing stopped rollback task-history retirement intent');
+      const retirementOptions = {
+        ...options, scope: reopened, runtimeBundle: record.runtimeBundle, acceptDataLoss: true,
+      };
+      await assert.rejects(api.prepareWindowsInactiveRollbackRetirementIntent({
+        ...retirementOptions, acceptDataLoss: false,
+      }));
+      await assert.rejects(api.prepareWindowsInactiveRollbackRetirementIntent({
+        ...retirementOptions, scope: { ...reopened },
+      }));
+      const history = path.join(control, 'task-maintenance');
+      const names = (await readdir(history)).sort();
+      const entries = [];
+      for (const name of names) {
+        const file = path.join(history, name);
+        const info = await lstat(file, { bigint: true });
+        assert.ok(info.isFile());
+        const bytes = await readFile(file);
+        entries.push({
+          path: path.join('task-maintenance', name), dev: String(info.dev), ino: String(info.ino),
+          bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'),
+        });
+      }
+      const prepared = await api.prepareWindowsInactiveRollbackRetirementIntent(retirementOptions);
+      assert.equal(prepared.file, path.join(control, 'inactive-rollback-retirement.json'));
+      const preparedBytes = await readFile(prepared.file);
+      assert.equal(prepared.sha256, createHash('sha256').update(preparedBytes).digest('hex'));
+      const retirement = JSON.parse(preparedBytes);
+      assert.equal(retirement.phase, 'task-retirement-prepared');
+      assert.equal(retirement.operationId, reopened.observation.operationId);
+      assert.equal(retirement.completionSha256, createHash('sha256').update(receiptBefore).digest('hex'));
+      assert.equal(retirement.stateSha256, createHash('sha256').update(expectedFinalState).digest('hex'));
+      assert.deepEqual(retirement.entries, entries);
+      assert.deepEqual(await api.prepareWindowsInactiveRollbackRetirementIntent(retirementOptions), prepared);
+      assert.deepEqual(await readFile(prepared.file), preparedBytes);
+      assert.deepEqual((await readdir(history)).sort(), names);
+      assert.deepEqual(await reopened.check(), reopened.observation);
     } finally { await reopened.close(); }
     return;
   }
