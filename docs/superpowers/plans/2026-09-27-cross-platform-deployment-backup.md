@@ -14986,6 +14986,19 @@ requires reopening to refuse without overwriting that evidence or changing state
 then restores its test-owned bytes for valid reentry. Actions implementation
 acceptance remains pending; no retirement or lock release is added by this step.
 
+Completion receipt acceptance passed at `f42ebbc1 / 40015594903`, including
+both actual terminal-crash reentries, exact receipt bindings, stable repetition,
+fresh-scope reopening and refusal of a receipt claiming a running outcome.
+Next prepare stopped-specific retirement evidence before deleting any history.
+The running cold-retirement record cannot be reused unchanged: it requires a
+restore/restore-activating state, accepted deployment receipt and live listener
+checkpoint, whereas this path preserves the original update operation and a
+stopped restored task. Reuse identity-bound file/directory descriptors and
+prefix retirement primitives only after defining a stopped-specific record and
+exact cleanup inventory. Preserve the backup, restored runtime bundle, restored
+state and completion receipt; do not release retained evidence opportunistically.
+No stopped rollback retirement record or cleanup has been implemented yet.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
