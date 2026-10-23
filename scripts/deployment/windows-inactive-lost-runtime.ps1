@@ -1,4 +1,5 @@
 . (Join-Path $PSScriptRoot 'windows-inactive-completion-proof.ps1')
+. (Join-Path $PSScriptRoot 'windows-inactive-rollback-task.ps1')
 
 function Publish-AgentsChatInactiveRollbackIntent([hashtable]$Context) {
     $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
@@ -120,8 +121,14 @@ function Assert-AgentsChatInactiveLostRuntimeState([hashtable]$Context) {
     Assert-AgentsChatCompletionProcessAbsent $runtime.pid $runtime.identity
     [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$runtime.generation, $runtime.sessionId)
     $task = $Context.Folder.GetTask($Context.TaskName)
+    $actual = ([xml][string]$task.Xml).OuterXml
+    $policyMatches = $actual -ceq ([xml]$Context.Completed.stagedDefinition.GetString()).OuterXml
+    if ($Context.ContainsKey('RollbackTaskDefinition')) {
+        $restored = $actual -ceq ([xml]$Context.RollbackTaskDefinition).OuterXml
+        $policyMatches = $restored -or (-not $Context.RollbackTaskComplete -and $policyMatches)
+    }
     if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
-        ([xml][string]$task.Xml).OuterXml -cne ([xml]$Context.Completed.stagedDefinition.GetString()).OuterXml -or
+        -not $policyMatches -or
         [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor) {
         throw 'Lost-runtime task differs from its original staged disabled policy.'
     }
@@ -183,6 +190,7 @@ function Open-AgentsChatInactiveLostRuntimeEvidence([string]$Control) {
         $scheduler = New-Object -ComObject 'Schedule.Service'
         $scheduler.Connect()
         $context.Folder = $scheduler.GetFolder('\')
+        Open-AgentsChatInactiveRollbackTaskHistory $context
         $null = Assert-AgentsChatInactiveLostRuntimeEvidence $context
         return $context
     } catch {

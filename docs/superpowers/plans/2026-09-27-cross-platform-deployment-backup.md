@@ -14795,6 +14795,16 @@ rewritten, zero instances and unchanged security. Preserve original accepted
 state and all history. Interrupted task registration/reentry and final rollback
 closeout remain subsequent acceptance requirements.
 
+Causal `a74ac0fc / 39900001054` failed at the missing task policy restoration API.
+The native implementation derives original disabled XML with only the archived
+runtime action relocated, publishes a files-receipt-bound task intent before
+registration and a retained task receipt afterward. Every check requires empty
+runtime Jobs, zero task instances and unchanged security. Intent-bound recovery
+accepts only original staged or exact restored policy; a completed receipt
+accepts only restored policy. Node revalidates restored files before and after
+the native request. Repeated completion rechecks retained evidence without
+registering the task again. Actual task restoration acceptance is pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

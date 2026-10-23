@@ -15,6 +15,13 @@ export { restoreWindowsInactiveRollbackProject } from './windows-inactive-rollba
 export { restoreWindowsInactiveRollbackExternal } from './windows-inactive-rollback-external.mjs';
 
 const lostScopes = new WeakMap();
+export async function restoreWindowsInactiveRollbackTask(options) {
+  await prepareWindowsInactiveRollbackFilesReceipt(options);
+  const verified = await verifyWindowsInactiveRollbackFiles(options);
+  const result = await lostScopes.get(options.scope).request('restore-rollback-task', options.signal);
+  await verified.check();
+  return result;
+}
 export async function prepareWindowsInactiveRollbackFilesReceipt(options) {
   if (options.acceptDataLoss !== true) throw refused(new Error('Rollback receipt requires explicit data-loss acknowledgement.'));
   await assertWindowsInactiveLostRuntimeAuthority(options);
@@ -137,6 +144,17 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       if (method === 'close') {
         if (reply.value !== 'close') throw new Error('Unexpected completion recovery close acknowledgement.');
         return;
+      }
+      if (method === 'restore-rollback-task') {
+        const result = captureWorkerFields(reply.value,
+          ['status', 'taskName', 'priorRuntime', 'file', 'sha256'], 'inactive rollback task receipt');
+        if (!lost || result.status !== 'task-restored' || result.taskName !== observation.taskName
+          || result.priorRuntime !== 'stopped'
+          || result.file !== path.join(control, 'inactive-rollback-task-restored.json')
+          || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
+          throw new Error('Invalid inactive rollback task acknowledgement.');
+        }
+        return Object.freeze(result);
       }
       if (method === 'prepare-rollback' || method === 'rollback-files-restored') {
         const result = captureWorkerFields(reply.value, ['file', 'sha256'], 'inactive rollback intent');
