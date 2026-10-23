@@ -14895,6 +14895,16 @@ through staging; repeated staging must retain the same proposal and bytes.
 The next mutation will require separate handle-bound publication and crash
 reentry, not an ordinary unrestricted state transition from a terminal phase.
 
+Causal `ffa38c56 / 39957850215` confirmed missing stopped terminal state staging.
+Native staging now retains a create-only handoff-bound old/proposed state record
+before publishing `state.json.lock`. Only phase, previousPhase and canonical
+non-backdated updatedAt change; original state remains retained and unchanged.
+Existing staged bytes must match the recorded proposal, and an orphan stage
+without intent is refused. Reopening inspects existing staging without creating
+a missing stage; a subsequent explicit stage request can finish intent-only
+publication. Node verifies restored files before and after the native mutation.
+Actual terminal replacement remains unimplemented.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
