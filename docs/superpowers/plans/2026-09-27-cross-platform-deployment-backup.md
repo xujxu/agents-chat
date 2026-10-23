@@ -14764,6 +14764,16 @@ original accepted state or report task restoration from a files-only receipt.
 The fixture now requires the receipt API and exact fields before original scope
 closure and the previously accepted fresh-scope external reentry.
 
+Causal `3e03e7fa / 39892043682` failed at the missing files-restored receipt API.
+The implementation independently checks project inventory/content, Git source,
+project and relocated external ACLs, archived runtime bytes and retained native
+authority before requesting native create-only publication and again afterward.
+The native scope derives receipt fields from its retained original intent,
+retains the relocated configuration/helpers and exact receipt, and validates an
+existing receipt when reopening. A changed project file must refuse publication
+with no receipt created. Repeated publication must preserve bytes; final policy
+restoration remains unimplemented and is not implied by this record.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

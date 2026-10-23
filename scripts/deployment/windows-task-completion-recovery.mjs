@@ -9,11 +9,21 @@ import { captureWindowsTaskCompletionProof } from './windows-task-completion-rec
 import { verifyHttpReadiness } from './http-readiness.mjs';
 import { captureActivatedRuntime } from './windows-task-controller.mjs';
 import { inspectWindowsInactiveRollbackSnapshot } from './windows-inactive-rollback-snapshot.mjs';
+import { verifyWindowsInactiveRollbackFiles } from './windows-inactive-rollback-files.mjs';
 export { inspectWindowsInactiveRollbackSnapshot } from './windows-inactive-rollback-snapshot.mjs';
 export { restoreWindowsInactiveRollbackProject } from './windows-inactive-rollback-project.mjs';
 export { restoreWindowsInactiveRollbackExternal } from './windows-inactive-rollback-external.mjs';
 
 const lostScopes = new WeakMap();
+export async function prepareWindowsInactiveRollbackFilesReceipt(options) {
+  if (options.acceptDataLoss !== true) throw refused(new Error('Rollback receipt requires explicit data-loss acknowledgement.'));
+  await assertWindowsInactiveLostRuntimeAuthority(options);
+  await prepareWindowsInactiveRollbackIntent(options);
+  const verified = await verifyWindowsInactiveRollbackFiles(options);
+  const result = await lostScopes.get(options.scope).request('rollback-files-restored', options.signal);
+  await verified.check();
+  return result;
+}
 export async function prepareWindowsInactiveRollbackIntent(options) {
   if (options.acceptDataLoss !== true) throw refused(new Error('Rollback requires explicit data-loss acknowledgement.'));
   await assertWindowsInactiveLostRuntimeAuthority(options);
@@ -128,9 +138,10 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
         if (reply.value !== 'close') throw new Error('Unexpected completion recovery close acknowledgement.');
         return;
       }
-      if (method === 'prepare-rollback') {
+      if (method === 'prepare-rollback' || method === 'rollback-files-restored') {
         const result = captureWorkerFields(reply.value, ['file', 'sha256'], 'inactive rollback intent');
-        if (!lost || result.file !== path.join(control, 'inactive-rollback-intent.json')
+        const name = method === 'prepare-rollback' ? 'inactive-rollback-intent.json' : 'inactive-rollback-files-restored.json';
+        if (!lost || result.file !== path.join(control, name)
           || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
           throw new Error('Invalid inactive rollback intent acknowledgement.');
         }

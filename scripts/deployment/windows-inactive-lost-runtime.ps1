@@ -40,6 +40,40 @@ function Publish-AgentsChatInactiveRollbackIntent([hashtable]$Context) {
     return [pscustomobject]@{ file=$file; sha256=$intent.Sha256 }
 }
 
+function Publish-AgentsChatInactiveRollbackFilesReceipt([hashtable]$Context) {
+    $intent = Publish-AgentsChatInactiveRollbackIntent $Context
+    if ($Context.ContainsKey('RollbackFilesReceipt')) {
+        $Context.RollbackFilesReceipt.Check()
+        return [pscustomobject]@{ file=(Join-Path $Context.Control 'inactive-rollback-files-restored.json'); sha256=$Context.RollbackFilesReceipt.Sha256 }
+    }
+    $recorded = Read-AgentsChatMaintenanceFields ($Context.RollbackIntent.ReadText()) @(
+        'version', 'phase', 'operationId', 'stateSha256', 'completionSha256',
+        'backupId', 'sourceCommit', 'snapshotSha256', 'priorRuntime', 'acceptDataLoss')
+    $directory = Join-Path $Context.Control 'inactive-rollback-runtime'
+    $configuration = Join-Path $directory 'configuration.json'
+    $sha256 = $Context.Admission.configurationSha256.GetString()
+    Open-AgentsChatCompletionConfiguration $Context $configuration $sha256
+    $record = [ordered]@{
+        version=1; phase='files-restored'; operationId=$Context.OperationId
+        stateSha256=$Context.StateSha256; intentSha256=$intent.sha256
+        snapshotSha256=$recorded.snapshotSha256.GetString()
+        sourceCommit=$recorded.sourceCommit.GetString(); priorRuntime='stopped'
+        runtimeBundle=[ordered]@{ directory=$directory; configuration=$configuration; sha256=$sha256 }
+    }
+    $text = $record | ConvertTo-Json -Depth 4 -Compress
+    $file = Join-Path $Context.Control 'inactive-rollback-files-restored.json'
+    if (Test-Path -LiteralPath $file) {
+        $receipt = Open-AgentsChatCompletionFile $Context $file ''
+        if ($receipt.ReadText() -cne $text) { throw 'Rollback files receipt differs from retained original evidence.' }
+    } else {
+        $receipt = [Deployment.WindowsPrivateFile]::Publish($file, $text)
+        $Context.Files.Add($receipt)
+    }
+    $Context.RollbackFilesReceipt = $receipt
+    $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
+    return [pscustomobject]@{ file=$file; sha256=$receipt.Sha256 }
+}
+
 function Open-AgentsChatInactiveLostRuntimeAuthority([string]$Control) {
     $context = Open-AgentsChatInactiveLostRuntimeEvidence $Control
     try {
@@ -58,6 +92,9 @@ function Open-AgentsChatInactiveLostRuntimeAuthority([string]$Control) {
         $null = Assert-AgentsChatInactiveLostRuntimeEvidence $context
         if (Test-Path -LiteralPath (Join-Path $Control 'inactive-rollback-intent.json')) {
             $null = Publish-AgentsChatInactiveRollbackIntent $context
+        }
+        if (Test-Path -LiteralPath (Join-Path $Control 'inactive-rollback-files-restored.json')) {
+            $null = Publish-AgentsChatInactiveRollbackFilesReceipt $context
         }
         return $context
     } catch {

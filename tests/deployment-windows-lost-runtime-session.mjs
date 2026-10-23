@@ -131,6 +131,14 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await assert.rejects(api.prepareWindowsInactiveRollbackFilesReceipt({
         ...receiptOptions, scope: { ...scope },
       }));
+      const changedFile = path.join(original.project, 'package.json');
+      const originalBytes = await readFile(changedFile);
+      await writeFile(changedFile, Buffer.concat([originalBytes, Buffer.from('\n')]));
+      try {
+        await assert.rejects(api.prepareWindowsInactiveRollbackFilesReceipt(receiptOptions),
+          /Rollback project (inventory|content) differs/);
+        await assert.rejects(readFile(path.join(control, 'inactive-rollback-files-restored.json')), { code: 'ENOENT' });
+      } finally { await writeFile(changedFile, originalBytes); }
       const receipt = await api.prepareWindowsInactiveRollbackFilesReceipt(receiptOptions);
       assert.equal(receipt.file, path.join(control, 'inactive-rollback-files-restored.json'));
       const receiptBytes = await readFile(receipt.file);
