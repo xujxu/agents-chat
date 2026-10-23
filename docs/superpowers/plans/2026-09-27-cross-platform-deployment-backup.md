@@ -14873,6 +14873,15 @@ must leave accepted state and original lock/history unchanged. Terminal state
 replacement and retirement remain separate mutations requiring this handoff;
 preparation alone must not report completed rollback or fabricate a live owner.
 
+Causal `468790fe / 39945809834` confirmed the missing stopped terminal handoff.
+The native publisher now requires exclusive authority and completed retained
+task/files/rollback receipts, preserves exact original state text and inode
+identity, and publishes a create-only stopped-outcome handoff. Existing handoff
+bytes must match freshly derived retained evidence on reopening. Node verifies
+restored files before and after preparation, rejects copied scope and absent
+acknowledgement, and never rewrites state or retires history during preparation.
+Terminal publication and cleanup remain pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

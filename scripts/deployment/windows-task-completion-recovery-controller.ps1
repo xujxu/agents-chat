@@ -45,8 +45,8 @@ try {
         $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'advance', 'close', 'prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task')) { throw 'Invalid recovery request.' }
-        if ($method -cin @('prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task') -and -not $LostRuntime) { throw 'Rollback intent requires lost-runtime authority.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'advance', 'close', 'prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal')) { throw 'Invalid recovery request.' }
+        if ($method -cin @('prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal') -and -not $LostRuntime) { throw 'Rollback intent requires lost-runtime authority.' }
         if ($LostRuntime -and $method -ceq 'advance') { throw 'Lost-runtime evidence cannot advance live completion.' }
         $sequence = $id
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
@@ -65,6 +65,8 @@ try {
             $value = Restore-AgentsChatInactiveRollbackTask $scope
         } elseif ($method -ceq 'advance-rollback-task') {
             $value = Restore-AgentsChatInactiveRollbackTask $scope -SingleStep
+        } elseif ($method -ceq 'prepare-rollback-terminal') {
+            $value = Publish-AgentsChatInactiveRollbackTerminal $scope
         } elseif ($method -ceq 'advance') {
             $value = if ($Inactive) { Advance-AgentsChatInactiveCompletionRecovery $scope }
                 else { Advance-AgentsChatTaskCompletionRecovery $scope }

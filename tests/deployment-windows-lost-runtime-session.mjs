@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile, readdir, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -59,12 +60,30 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal(handoff.priorRuntime, 'stopped');
       assert.equal(handoff.restoredRuntime, 'stopped');
       assert.equal(handoff.taskReceiptSha256, restored.sha256);
+      for (const [key, name] of [
+        ['rollbackIntentSha256', 'inactive-rollback-intent.json'],
+        ['filesReceiptSha256', 'inactive-rollback-files-restored.json'],
+        ['taskIntentSha256', 'inactive-rollback-task-intent.json'],
+      ]) {
+        assert.equal(handoff[key], createHash('sha256').update(await readFile(path.join(control, name))).digest('hex'));
+      }
+      assert.equal(handoff.stateIdentity.bytes, state.length);
       assert.deepEqual(handoff.runtimeBundle, record.runtimeBundle);
       assert.deepEqual(await api.prepareWindowsInactiveRollbackTerminalIntent(terminalOptions), terminal);
       assert.deepEqual(await readFile(terminal.file), terminalBytes);
       assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
     } finally { await scope.close(); }
     assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
+    const terminalFile = path.join(control, 'inactive-rollback-terminal.json');
+    const terminalBefore = await readFile(terminalFile);
+    const reopened = await api.openWindowsInactiveLostRuntimeAuthority(options);
+    try {
+      const terminal = await api.prepareWindowsInactiveRollbackTerminalIntent({
+        ...options, scope: reopened, runtimeBundle: record.runtimeBundle, acceptDataLoss: true,
+      });
+      assert.equal(terminal.file, terminalFile);
+      assert.deepEqual(await readFile(terminalFile), terminalBefore);
+    } finally { await reopened.close(); }
     return;
   }
   await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority({ ...options, admission: {} }));

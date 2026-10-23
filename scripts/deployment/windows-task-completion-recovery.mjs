@@ -15,6 +15,14 @@ export { restoreWindowsInactiveRollbackProject } from './windows-inactive-rollba
 export { restoreWindowsInactiveRollbackExternal } from './windows-inactive-rollback-external.mjs';
 
 const lostScopes = new WeakMap();
+export async function prepareWindowsInactiveRollbackTerminalIntent(options) {
+  if (options.acceptDataLoss !== true) throw refused(new Error('Terminal handoff requires explicit data-loss acknowledgement.'));
+  await assertWindowsInactiveLostRuntimeAuthority(options);
+  const verified = await verifyWindowsInactiveRollbackFiles(options);
+  const result = await lostScopes.get(options.scope).request('prepare-rollback-terminal', options.signal);
+  await verified.check();
+  return result;
+}
 export async function restoreWindowsInactiveRollbackTask(options) {
   return restoreInactiveRollbackTask(options, 'restore-rollback-task');
 }
@@ -169,9 +177,10 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
         }
         return Object.freeze(result);
       }
-      if (method === 'prepare-rollback' || method === 'rollback-files-restored') {
+      if (method === 'prepare-rollback' || method === 'rollback-files-restored' || method === 'prepare-rollback-terminal') {
         const result = captureWorkerFields(reply.value, ['file', 'sha256'], 'inactive rollback intent');
-        const name = method === 'prepare-rollback' ? 'inactive-rollback-intent.json' : 'inactive-rollback-files-restored.json';
+        const name = method === 'prepare-rollback' ? 'inactive-rollback-intent.json'
+          : method === 'rollback-files-restored' ? 'inactive-rollback-files-restored.json' : 'inactive-rollback-terminal.json';
         if (!lost || result.file !== path.join(control, name)
           || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
           throw new Error('Invalid inactive rollback intent acknowledgement.');
