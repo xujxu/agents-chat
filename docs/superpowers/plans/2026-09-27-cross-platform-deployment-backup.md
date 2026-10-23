@@ -14905,6 +14905,19 @@ a missing stage; a subsequent explicit stage request can finish intent-only
 publication. Node verifies restored files before and after the native mutation.
 Actual terminal replacement remains unimplemented.
 
+Terminal staging passed at `4251b836 / 39963817111`. Next require actual
+handle-bound replacement of original `state.json` by its acknowledged staged
+inode, reusing `WindowsPrivateFile.PublishSourceFile` and the existing cold
+terminal identity-based retained-handle release mechanism. Require exact
+old/proposed state binding and native stopped-task/file evidence before mutation.
+After publication, no competing `state.json.lock` may remain, and the original
+staged inode must now be the state inode. Both same-scope repeat and fresh-scope
+reentry must verify the published state without replacing it again. Retained
+original history must be validated against the terminal handoff's original
+state text, while physical state is restricted to the exact authorized old
+inode or exact proposed state. Do not loosen ordinary inactive admission or
+enable arbitrary terminal transitions. Retirement remains a separate step.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

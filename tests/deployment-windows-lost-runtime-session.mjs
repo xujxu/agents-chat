@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile, readdir, writeFile, unlink } from 'node:fs/promises';
+import { readFile, readdir, writeFile, unlink, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -12,6 +12,7 @@ const { processIdentity } = await load('process-identity.mjs');
 assert.equal(typeof api.openWindowsInactiveLostRuntimeAuthority, 'function',
   'Missing owned inactive lost-runtime transport');
 const state = await readFile(path.join(control, 'state.json'));
+let expectedFinalState = state;
 const holdTask = async (scope, step) => {
   if (mode !== 'crash-task' || step !== crashStep) return;
   console.log(`INACTIVE_ROLLBACK_TASK_HELD ${JSON.stringify({ ...scope.identity, step })}`);
@@ -108,7 +109,32 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual(await readFile(staged.file), stagedBytes);
       assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
       assert.deepEqual(await reopened.check(), reopened.observation);
+      assert.equal(typeof api.publishWindowsInactiveRollbackTerminalState, 'function',
+        'Missing actual stopped rollback terminal state publication');
+      await assert.rejects(api.publishWindowsInactiveRollbackTerminalState({ ...stageOptions, acceptDataLoss: false }));
+      await assert.rejects(api.publishWindowsInactiveRollbackTerminalState({ ...stageOptions, scope: { ...reopened } }));
+      const stageIdentity = await lstat(staged.file, { bigint: true });
+      const published = await api.publishWindowsInactiveRollbackTerminalState(stageOptions);
+      assert.equal(published.status, 'inactive-terminal-state-published');
+      assert.equal(published.file, path.join(control, 'state.json'));
+      assert.equal(published.sha256, staged.sha256);
+      assert.deepEqual(await readFile(published.file), stagedBytes);
+      const publishedIdentity = await lstat(published.file, { bigint: true });
+      assert.equal(publishedIdentity.dev, stageIdentity.dev);
+      assert.equal(publishedIdentity.ino, stageIdentity.ino);
+      await assert.rejects(readFile(staged.file), { code: 'ENOENT' });
+      assert.deepEqual(await api.publishWindowsInactiveRollbackTerminalState(stageOptions), published);
+      assert.deepEqual(await reopened.check(), reopened.observation);
+      expectedFinalState = stagedBytes;
     } finally { await reopened.close(); }
+    const completed = await api.openWindowsInactiveLostRuntimeAuthority(options);
+    try {
+      const published = await api.publishWindowsInactiveRollbackTerminalState({
+        ...options, scope: completed, runtimeBundle: record.runtimeBundle, acceptDataLoss: true,
+      });
+      assert.equal(published.status, 'inactive-terminal-state-published');
+      assert.deepEqual(await readFile(published.file), expectedFinalState);
+    } finally { await completed.close(); }
     return;
   }
   await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority({ ...options, admission: {} }));
@@ -318,5 +344,5 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     assert.notEqual(await processIdentity(next.identity.pid), next.identity.processIdentity);
   }
 });
-assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
-console.log('PASS: owned lost-runtime authority rejects substitution and concurrent access without granting completion or changing state');
+assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
+console.log('PASS: owned lost-runtime rollback rejects foreign authority and preserves only its authorized state outcome');
