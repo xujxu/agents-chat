@@ -16,6 +16,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority({ ...options, admission: {} }));
   await assert.rejects(api.openWindowsInactiveTaskCompletionRecovery(options));
   const scope = await api.openWindowsInactiveLostRuntimeAuthority(options);
+  let restoredBundle;
   try {
     assert.ok(Object.isFrozen(scope));
     assert.ok(Object.isFrozen(scope.observation));
@@ -107,6 +108,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         ...options, scope: { ...scope }, acceptDataLoss: true,
       }));
       const external = await api.restoreWindowsInactiveRollbackExternal({ ...options, scope, acceptDataLoss: true });
+      restoredBundle = external.runtimeBundle;
       assert.equal(external.status, 'external-restored');
       assert.equal(external.runtimeBundle.sha256, binding.runtime.task.configurationSha256);
       assert.notEqual(external.runtimeBundle.configuration, binding.runtime.task.configuration);
@@ -127,6 +129,18 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   } finally { await scope.close(); }
   assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
   await assert.rejects(scope.check());
+  if (restoredBundle) {
+    const next = await api.openWindowsInactiveLostRuntimeAuthority(options);
+    try {
+      const resumed = await api.restoreWindowsInactiveRollbackExternal({
+        ...options, scope: next, acceptDataLoss: true,
+      });
+      assert.equal(resumed.status, 'external-restored');
+      assert.deepEqual(resumed.runtimeBundle, restoredBundle);
+      assert.deepEqual(await next.check(), next.observation);
+    } finally { await next.close(); }
+    assert.notEqual(await processIdentity(next.identity.pid), next.identity.processIdentity);
+  }
 });
 assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
 console.log('PASS: owned lost-runtime authority rejects substitution and concurrent access without granting completion or changing state');

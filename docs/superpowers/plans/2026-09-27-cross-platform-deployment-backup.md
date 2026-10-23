@@ -14732,6 +14732,16 @@ Publication is guarded by the original exclusive scope and durable rollback
 intent. Existing or incomplete publication is refused rather than overwritten;
 durable publication reentry and final task restoration are not yet implemented.
 
+External restoration passed at `dade513d / 39881566078`, including independent
+relocated configuration/helper verification while original native evidence,
+accepted state and intent remain unchanged. Next require reopening a fresh
+exclusive scope after the original bridge has exited and repeating external
+restoration using the exact existing complete bundle. The causal fixture now
+requires that real reentry, not a fabricated receipt or deleted directory.
+Only an independently verified complete bundle may be reused; foreign,
+incomplete or changed publication must remain refused. This bounded reentry
+does not prove abrupt publication recovery or final rollback completion.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
