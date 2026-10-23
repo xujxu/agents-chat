@@ -15,7 +15,8 @@ try {
     Add-Type -Path @(
         (Join-Path $PSScriptRoot 'WindowsWorkerJob.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeDomain.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimePipe.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeControl.cs'),
-        (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
+        (Join-Path $PSScriptRoot 'WindowsPrivateFile.cs'), (Join-Path $PSScriptRoot 'WindowsPrivateFile.SourceSecurity.cs'),
+        (Join-Path $PSScriptRoot 'WindowsRuntimeLease.cs'),
         (Join-Path $PSScriptRoot 'WindowsRuntimeHost.cs'), (Join-Path $PSScriptRoot 'WindowsRuntimeListener.cs'))
     . (Join-Path $PSScriptRoot 'windows-task-completion-recovery.ps1')
     if ($Inactive) { . (Join-Path $PSScriptRoot 'windows-inactive-completion-recovery.ps1') }

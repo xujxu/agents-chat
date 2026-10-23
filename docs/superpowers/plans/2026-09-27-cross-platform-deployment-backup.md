@@ -14930,6 +14930,15 @@ is included in the saved worker dependency closure. Causal run
 `f6865fd6 / 39971779328` is still running; implementation acceptance and genuine
 publication-crash coverage remain pending.
 
+Implementation `3b6f0f68 / 39977976458` reached actual publication but refused
+before replacement because the completion bridge compiled only the base
+`WindowsPrivateFile` class, without its source-security partial class. Include
+`WindowsPrivateFile.SourceSecurity.cs` in both bridge compilation and the saved
+worker closure, matching the existing stopped-restore controller. This supplies
+the existing capture/replacement primitives without changing authority checks.
+The causal gate had confirmed the missing API at `f6865fd6 / 39971779328`.
+Native acceptance of the corrected compilation remains pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
