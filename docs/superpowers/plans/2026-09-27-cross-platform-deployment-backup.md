@@ -14782,6 +14782,19 @@ Boundary coverage requires acceptance at the file limit and refusal at the next
 entry while both manifests remain below the byte cap. Receipt acceptance remains
 pending; this failure did not reach receipt publication.
 
+Files-restored receipt and shared inventory boundaries passed at
+`9ce4c1dd / 39896110204`. Continue with actual original stopped task restoration:
+require the registered scope, verified files receipt and exact relocated bundle;
+persist task restoration intent before Scheduler mutation and a matching
+`inactive-rollback-task-restored.json` afterward. Restore the original disabled
+policy and security with only the verified runtime action relocated. Never run
+or enable the task. The Node fixture requires refusal of copied scope/missing
+acknowledgement, actual completion and repeat stability; the independent parent
+compares live Scheduler XML against original policy with only action paths
+rewritten, zero instances and unchanged security. Preserve original accepted
+state and all history. Interrupted task registration/reentry and final rollback
+closeout remain subsequent acceptance requirements.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

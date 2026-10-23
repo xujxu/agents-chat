@@ -179,6 +179,23 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal(resumed.status, 'external-restored');
       assert.deepEqual(resumed.runtimeBundle, restoredBundle);
       assert.deepEqual(await next.check(), next.observation);
+      assert.equal(typeof api.restoreWindowsInactiveRollbackTask, 'function',
+        'Missing actual inactive rollback task policy restoration');
+      const taskOptions = { ...options, scope: next, runtimeBundle: restoredBundle, acceptDataLoss: true };
+      await assert.rejects(api.restoreWindowsInactiveRollbackTask({ ...taskOptions, acceptDataLoss: false }));
+      await assert.rejects(api.restoreWindowsInactiveRollbackTask({ ...taskOptions, scope: { ...next } }));
+      const task = await api.restoreWindowsInactiveRollbackTask(taskOptions);
+      assert.equal(task.status, 'task-restored');
+      assert.equal(task.taskName, next.observation.taskName);
+      assert.equal(task.priorRuntime, 'stopped');
+      assert.equal(task.file, path.join(control, 'inactive-rollback-task-restored.json'));
+      const taskBytes = await readFile(task.file);
+      const taskRecord = JSON.parse(taskBytes);
+      assert.equal(taskRecord.phase, 'task-restored');
+      assert.deepEqual(taskRecord.runtimeBundle, restoredBundle);
+      assert.deepEqual(await api.restoreWindowsInactiveRollbackTask(taskOptions), task);
+      assert.deepEqual(await readFile(task.file), taskBytes);
+      assert.deepEqual(await next.check(), next.observation);
     } finally { await next.close(); }
     assert.notEqual(await processIdentity(next.identity.pid), next.identity.processIdentity);
   }

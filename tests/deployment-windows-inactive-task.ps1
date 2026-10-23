@@ -309,8 +309,28 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             $prepared = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-prepared.json') -Raw |
                 ConvertFrom-Json
             $finalDefinition = [string]$folder.GetTask($TaskName).Xml
-            Assert (([xml]$finalDefinition).OuterXml -ceq ([xml]$prepared.stagedDefinition).OuterXml) `
-                'Unreleased inactive interruption changed staged disabled policy'
+            if ([IO.Path]::GetDirectoryName($ReadyFile) -cne $Project) {
+                $rollback = Get-Content -LiteralPath (Join-Path $control 'inactive-rollback-task-restored.json') -Raw |
+                    ConvertFrom-Json
+                $original = [xml]$definition
+                $namespaces = [Xml.XmlNamespaceManager]::new($original.NameTable)
+                $namespaces.AddNamespace('t', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+                $bundle = Join-Path $control 'inactive-rollback-runtime'
+                $configuration = Join-Path $bundle 'configuration.json'
+                $sha256 = (Get-FileHash -LiteralPath $configuration -Algorithm SHA256).Hash.ToLowerInvariant()
+                $original.SelectSingleNode('/t:Task/t:Actions/t:Exec/t:Arguments', $namespaces).InnerText = `
+                    "-NoProfile -NonInteractive -File `"$(Join-Path $bundle 'windows-runtime-host.ps1')`" -Configuration `"$configuration`" -Sha256 $sha256"
+                $original.SelectSingleNode('/t:Task/t:Actions/t:Exec/t:WorkingDirectory', $namespaces).InnerText = $bundle
+                Assert ($rollback.phase -ceq 'task-restored' -and
+                    ([xml]$finalDefinition).OuterXml -ceq $original.OuterXml -and
+                    ([xml]$rollback.definition).OuterXml -ceq $original.OuterXml -and
+                    -not $folder.GetTask($TaskName).Enabled -and
+                    $folder.GetTask($TaskName).GetInstances(0).Count -eq 0) `
+                    'Rollback did not restore original stopped task policy with only runtime relocation'
+            } else {
+                Assert (([xml]$finalDefinition).OuterXml -ceq ([xml]$prepared.stagedDefinition).OuterXml) `
+                    'Unreleased inactive interruption changed staged disabled policy'
+            }
         }
         if ($Complete) {
             Assert ([bool](Get-Command Open-AgentsChatInactiveCompletionProof -ErrorAction SilentlyContinue)) `
