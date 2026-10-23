@@ -14964,6 +14964,19 @@ changed shared completion-record parsing and bridge native compilation. Terminal
 completion receipts, retirement and lock release remain unimplemented for this
 stopped rollback path; this acceptance is not full public application delivery.
 
+Shared regression `d06528ef / 39996068735` passed both selected jobs: native
+earlier-startup recovery (started) and actual Windows live deployment
+(commands-only). Proceed to a durable stopped rollback completion receipt before
+retirement. Require `prepareWindowsInactiveRollbackCompletionReceipt` under the
+original registered scope and explicit data-loss acknowledgement. After independent
+restored-file verification and native published-state/stopped-policy checks, publish
+create-only `inactive-rollback-complete.json` binding operation, published state,
+terminal handoff, state intent and task receipt digests, with stopped origin and
+stopped outcome. Repetition and fresh-scope reopening must preserve exact receipt
+bytes. The fixture requires this after both genuine terminal actor crash boundaries.
+Receipt publication must not delete original history, release the lock or claim a
+live runtime. Implementation and Actions acceptance are pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

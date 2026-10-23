@@ -54,7 +54,39 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await assert.rejects(readFile(path.join(control, 'state.json.lock')), { code: 'ENOENT' });
       for (const [name, bytes] of retained) assert.deepEqual(await readFile(path.join(control, name)), bytes);
       assert.deepEqual(await scope.check(), scope.observation);
+      assert.equal(typeof api.prepareWindowsInactiveRollbackCompletionReceipt, 'function',
+        'Missing durable stopped rollback completion receipt');
+      await assert.rejects(api.prepareWindowsInactiveRollbackCompletionReceipt({
+        ...publishOptions, acceptDataLoss: false,
+      }));
+      await assert.rejects(api.prepareWindowsInactiveRollbackCompletionReceipt({
+        ...publishOptions, scope: { ...scope },
+      }));
+      const complete = await api.prepareWindowsInactiveRollbackCompletionReceipt(publishOptions);
+      assert.equal(complete.status, 'inactive-rollback-complete');
+      assert.equal(complete.file, path.join(control, 'inactive-rollback-complete.json'));
+      const bytes = await readFile(complete.file);
+      assert.equal(complete.sha256, createHash('sha256').update(bytes).digest('hex'));
+      assert.deepEqual(JSON.parse(bytes), {
+        version: 1, phase: 'rollback-complete', operationId: scope.observation.operationId,
+        stateSha256: published.sha256, priorRuntime: 'stopped', restoredRuntime: 'stopped',
+        terminalSha256: createHash('sha256').update(retained.get('inactive-rollback-terminal.json')).digest('hex'),
+        stateIntentSha256: createHash('sha256').update(retained.get('inactive-rollback-state-intent.json')).digest('hex'),
+        taskReceiptSha256: createHash('sha256').update(retained.get('inactive-rollback-task-restored.json')).digest('hex'),
+      });
+      assert.deepEqual(await api.prepareWindowsInactiveRollbackCompletionReceipt(publishOptions), complete);
+      assert.deepEqual(await readFile(complete.file), bytes);
+      assert.deepEqual(await scope.check(), scope.observation);
     } finally { await scope.close(); }
+    const receiptBefore = await readFile(path.join(control, 'inactive-rollback-complete.json'));
+    const reopened = await api.openWindowsInactiveLostRuntimeAuthority(options);
+    try {
+      await api.prepareWindowsInactiveRollbackCompletionReceipt({
+        ...options, scope: reopened, runtimeBundle: record.runtimeBundle, acceptDataLoss: true,
+      });
+      assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-complete.json')), receiptBefore);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
+    } finally { await reopened.close(); }
     return;
   }
   if (mode === 'resume-task') {
