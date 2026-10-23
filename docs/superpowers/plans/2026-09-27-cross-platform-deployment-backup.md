@@ -14952,6 +14952,18 @@ and task receipt bytes, and publishes or repeats without changing the staged or
 already-published inode. No receipt deletion or synthetic interruption is used.
 These two additional real terminal crash boundaries are pending Actions acceptance.
 
+Real terminal crash acceptance passed at `fc086f36 / 39987992684`. Both the
+staged-state and published-state actors were actually killed; their pinned native
+bridges exited, and fresh actors completed or repeated publication while preserving
+the original inode and retained receipt bytes. The third task-crash variant also
+kept uninterrupted terminal publication and fresh-scope repetition coverage.
+The watcher briefly lost the GitHub jobs API to HTTP 502; monitoring resumed on
+the same run, without rerunning or replacing the validation.
+Next run the shared active/cold Windows command regression because publication
+changed shared completion-record parsing and bridge native compilation. Terminal
+completion receipts, retirement and lock release remain unimplemented for this
+stopped rollback path; this acceptance is not full public application delivery.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
