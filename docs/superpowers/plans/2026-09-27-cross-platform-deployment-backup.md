@@ -14860,6 +14860,19 @@ saved recovery inventory and native scope handling changed across this sequence.
 This acceptance does not cover rollback terminal-state publication or retirement,
 project-internal retained evidence, or incomplete runtime-bundle publication.
 
+Shared active/cold regression `de05e1c8 / 39929984982` passed both selected jobs.
+Proceed with a stopped-specific durable terminal evidence handoff, not the
+running cold-restore handoff that requires a live runtime/listener. The fixture
+now requires `prepareWindowsInactiveRollbackTerminalIntent` after real crash
+reentry and restored task verification. Bind original operation/state digest
+and exact original state text, source commit, files/task/rollback intent receipt
+digests, exact relocated bundle, stopped origin and stopped restored outcome.
+Require original registered scope and acknowledgement; publish create-only
+`inactive-rollback-terminal.json`, preserving exact bytes on repeat. Preparation
+must leave accepted state and original lock/history unchanged. Terminal state
+replacement and retirement remain separate mutations requiring this handoff;
+preparation alone must not report completed rollback or fabricate a live owner.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

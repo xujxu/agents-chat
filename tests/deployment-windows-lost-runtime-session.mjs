@@ -37,6 +37,32 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       else assert.equal(JSON.parse(await readFile(file)).phase, 'task-restored');
       assert.deepEqual(await readFile(intentFile), intentBefore);
       assert.deepEqual(await scope.check(), scope.observation);
+      assert.equal(typeof api.prepareWindowsInactiveRollbackTerminalIntent, 'function',
+        'Missing stopped rollback terminal evidence handoff');
+      const terminalOptions = { ...options, scope, runtimeBundle: record.runtimeBundle, acceptDataLoss: true };
+      await assert.rejects(api.prepareWindowsInactiveRollbackTerminalIntent({
+        ...terminalOptions, acceptDataLoss: false,
+      }));
+      await assert.rejects(api.prepareWindowsInactiveRollbackTerminalIntent({
+        ...terminalOptions, scope: { ...scope },
+      }));
+      const terminal = await api.prepareWindowsInactiveRollbackTerminalIntent(terminalOptions);
+      assert.equal(terminal.file, path.join(control, 'inactive-rollback-terminal.json'));
+      const terminalBytes = await readFile(terminal.file);
+      const handoff = JSON.parse(terminalBytes);
+      assert.equal(handoff.version, 1);
+      assert.equal(handoff.phase, 'terminal-prepared');
+      assert.equal(handoff.operationId, JSON.parse(state).operationId);
+      assert.equal(handoff.stateSha256, scope.observation.stateSha256);
+      assert.equal(handoff.oldState, state.toString('utf8'));
+      assert.equal(handoff.sourceCommit, JSON.parse(state).sourceCommit);
+      assert.equal(handoff.priorRuntime, 'stopped');
+      assert.equal(handoff.restoredRuntime, 'stopped');
+      assert.equal(handoff.taskReceiptSha256, restored.sha256);
+      assert.deepEqual(handoff.runtimeBundle, record.runtimeBundle);
+      assert.deepEqual(await api.prepareWindowsInactiveRollbackTerminalIntent(terminalOptions), terminal);
+      assert.deepEqual(await readFile(terminal.file), terminalBytes);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
     } finally { await scope.close(); }
     assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
     return;
