@@ -14939,6 +14939,19 @@ the existing capture/replacement primitives without changing authority checks.
 The causal gate had confirmed the missing API at `f6865fd6 / 39971779328`.
 Native acceptance of the corrected compilation remains pending.
 
+Corrected publication passed at `e2be695c / 39981943657`: actual staged inode
+replacement, absent competing stage, same-scope repeat and fresh-scope published
+reentry all passed. This does not yet accept retirement or public full-application
+restore. Next extend the existing three rollback task crash fixtures: the first
+fresh actor additionally dies after acknowledged state staging, the second after
+actual state publication, and the third retains uninterrupted publication/reentry.
+The parent independently checks physical state, staging presence and exact stopped
+Scheduler policy, pins the native bridge before killing the actor, and requires
+bridge exit. A further fresh actor consumes the real prefix, preserves terminal
+and task receipt bytes, and publishes or repeats without changing the staged or
+already-published inode. No receipt deletion or synthetic interruption is used.
+These two additional real terminal crash boundaries are pending Actions acceptance.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

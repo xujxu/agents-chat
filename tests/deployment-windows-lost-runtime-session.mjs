@@ -4,7 +4,7 @@ import { readFile, readdir, writeFile, unlink, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored'] = process.argv.slice(2);
+const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored', terminalCrashStep = ''] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
 const api = await load('windows-task-completion-recovery.mjs');
 const { withWindowsAdmission } = await load('windows-admission.mjs');
@@ -19,8 +19,44 @@ const holdTask = async (scope, step) => {
   const timer = setInterval(() => {}, 1000);
   try { await new Promise(() => {}); } finally { clearInterval(timer); }
 };
+const holdTerminal = async (scope, step) => {
+  if (step !== terminalCrashStep) return;
+  console.log(`INACTIVE_ROLLBACK_TERMINAL_HELD ${JSON.stringify({ ...scope.identity, step })}`);
+  const timer = setInterval(() => {}, 1000);
+  try { await new Promise(() => {}); } finally { clearInterval(timer); }
+};
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
+  if (mode === 'resume-terminal') {
+    const retained = new Map();
+    for (const name of ['inactive-rollback-terminal.json', 'inactive-rollback-state-intent.json',
+      'inactive-rollback-task-intent.json', 'inactive-rollback-task-restored.json',
+      'inactive-rollback-files-restored.json']) {
+      retained.set(name, await readFile(path.join(control, name)));
+    }
+    const intent = JSON.parse(retained.get('inactive-rollback-state-intent.json'));
+    const record = JSON.parse(retained.get('inactive-rollback-files-restored.json'));
+    const wasPublished = terminalCrashStep === 'state-published';
+    assert.ok(wasPublished || terminalCrashStep === 'state-staged');
+    assert.equal(state.toString('utf8'), wasPublished ? intent.nextState : intent.oldState);
+    const inode = await lstat(path.join(control, wasPublished ? 'state.json' : 'state.json.lock'), { bigint: true });
+    const scope = await api.openWindowsInactiveLostRuntimeAuthority(options);
+    try {
+      const publishOptions = { ...options, scope, runtimeBundle: record.runtimeBundle, acceptDataLoss: true };
+      const published = await api.publishWindowsInactiveRollbackTerminalState(publishOptions);
+      assert.equal(published.status, 'inactive-terminal-state-published');
+      assert.deepEqual(await api.publishWindowsInactiveRollbackTerminalState(publishOptions), published);
+      expectedFinalState = Buffer.from(intent.nextState);
+      assert.deepEqual(await readFile(published.file), expectedFinalState);
+      const actual = await lstat(published.file, { bigint: true });
+      assert.equal(actual.dev, inode.dev);
+      assert.equal(actual.ino, inode.ino);
+      await assert.rejects(readFile(path.join(control, 'state.json.lock')), { code: 'ENOENT' });
+      for (const [name, bytes] of retained) assert.deepEqual(await readFile(path.join(control, name)), bytes);
+      assert.deepEqual(await scope.check(), scope.observation);
+    } finally { await scope.close(); }
+    return;
+  }
   if (mode === 'resume-task') {
     const file = path.join(control, 'inactive-rollback-task-restored.json');
     const before = crashStep === 'task-restored' ? await readFile(file) : null;
@@ -114,6 +150,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await assert.rejects(api.publishWindowsInactiveRollbackTerminalState({ ...stageOptions, acceptDataLoss: false }));
       await assert.rejects(api.publishWindowsInactiveRollbackTerminalState({ ...stageOptions, scope: { ...reopened } }));
       const stageIdentity = await lstat(staged.file, { bigint: true });
+      await holdTerminal(reopened, 'state-staged');
       const published = await api.publishWindowsInactiveRollbackTerminalState(stageOptions);
       assert.equal(published.status, 'inactive-terminal-state-published');
       assert.equal(published.file, path.join(control, 'state.json'));
@@ -123,6 +160,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal(publishedIdentity.dev, stageIdentity.dev);
       assert.equal(publishedIdentity.ino, stageIdentity.ino);
       await assert.rejects(readFile(staged.file), { code: 'ENOENT' });
+      await holdTerminal(reopened, 'state-published');
       assert.deepEqual(await api.publishWindowsInactiveRollbackTerminalState(stageOptions), published);
       const repeatedIdentity = await lstat(published.file, { bigint: true });
       assert.equal(repeatedIdentity.dev, stageIdentity.dev);

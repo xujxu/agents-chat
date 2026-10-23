@@ -224,19 +224,77 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 if ($errors) { [Console]::Error.WriteLine($errors) }
             } finally { $lostActor.Dispose() }
             if ($crashRollback) {
+                $terminalStep = switch ($RollbackStep) {
+                    'task-restore-requested' { 'state-staged' }
+                    'task-registered' { 'state-published' }
+                    default { '' }
+                }
                 $resumed = [Deployment.WindowsControllerProcess]::Start($node,
                     @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
-                        $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, 'resume-task', $RollbackStep),
+                        $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                        'resume-task', $RollbackStep, $terminalStep),
                     $control, $environment)
                 try {
-                    $output = $resumed.StandardOutput.ReadToEndAsync()
                     $diagnostic = $resumed.StandardError.ReadToEndAsync()
-                    Assert ($resumed.WaitForExit(120000)) 'Rollback fresh actor reentry timed out'
-                    Write-Output $output.GetAwaiter().GetResult()
+                    if ($terminalStep) {
+                        $line = $resumed.StandardOutput.ReadLineAsync()
+                        Assert ($line.Wait(180000)) 'Terminal rollback actor did not reach publication boundary'
+                        $held = $line.GetAwaiter().GetResult()
+                        if ($null -eq $held) {
+                            Assert ($resumed.WaitForExit(15000)) 'Terminal actor closed output without exiting'
+                            $errors = $diagnostic.GetAwaiter().GetResult()
+                            if ($errors) { [Console]::Error.WriteLine($errors) }
+                        }
+                        Assert ($null -ne $held -and $held.StartsWith('INACTIVE_ROLLBACK_TERMINAL_HELD ')) `
+                            'Terminal actor exited before the requested publication boundary'
+                        $identity = $held.Substring('INACTIVE_ROLLBACK_TERMINAL_HELD '.Length) | ConvertFrom-Json
+                        Assert ($identity.step -ceq $terminalStep) 'Terminal actor held a different boundary'
+                        $intent = Get-Content -LiteralPath (Join-Path $control 'inactive-rollback-state-intent.json') -Raw |
+                            ConvertFrom-Json
+                        $expected = if ($terminalStep -ceq 'state-published') { $intent.nextState } else { $intent.oldState }
+                        Assert ([IO.File]::ReadAllText((Join-Path $control 'state.json')) -ceq $expected) `
+                            'Physical terminal state differs at actual crash boundary'
+                        Assert ((Test-Path -LiteralPath (Join-Path $control 'state.json.lock')) -eq
+                            ($terminalStep -ceq 'state-staged')) 'Terminal boundary has unexpected staging'
+                        $task = $folder.GetTask($TaskName)
+                        $taskIntent = Get-Content -LiteralPath (Join-Path $control 'inactive-rollback-task-intent.json') -Raw |
+                            ConvertFrom-Json
+                        Assert (-not $task.Enabled -and $task.GetInstances(0).Count -eq 0 -and
+                            ([xml][string]$task.Xml).OuterXml -ceq ([xml]$taskIntent.definition).OuterXml -and
+                            [string]$task.GetSecurityDescriptor(7) -ceq $security) 'Terminal boundary changed stopped task policy'
+                        $bridge = [Diagnostics.Process]::GetProcessById($identity.pid)
+                        try {
+                            $null = $bridge.Handle
+                            Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($identity.pid) -ceq $identity.processIdentity) `
+                                'Terminal bridge changed before actor interruption'
+                            $resumed.Kill()
+                            Assert ($resumed.WaitForExit(15000) -and $resumed.ExitCode -ne 0) 'Terminal actor did not die abruptly'
+                            Assert ($bridge.WaitForExit(15000)) 'Terminal bridge survived actor death'
+                        } finally { $bridge.Dispose() }
+                    } else {
+                        $output = $resumed.StandardOutput.ReadToEndAsync()
+                        Assert ($resumed.WaitForExit(120000)) 'Rollback fresh actor reentry timed out'
+                        Write-Output $output.GetAwaiter().GetResult()
+                        Assert ($resumed.ExitCode -eq 0) 'Rollback fresh actor could not consume actual restored task history'
+                    }
                     $errors = $diagnostic.GetAwaiter().GetResult()
                     if ($errors) { [Console]::Error.WriteLine($errors) }
-                    Assert ($resumed.ExitCode -eq 0) 'Rollback fresh actor could not consume actual restored task history'
                 } finally { $resumed.Dispose() }
+                if ($terminalStep) {
+                    $terminalActor = [Deployment.WindowsControllerProcess]::Start($node,
+                        @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                            $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                            'resume-terminal', $RollbackStep, $terminalStep), $control, $environment)
+                    try {
+                        $output = $terminalActor.StandardOutput.ReadToEndAsync()
+                        $diagnostic = $terminalActor.StandardError.ReadToEndAsync()
+                        Assert ($terminalActor.WaitForExit(120000)) 'Terminal fresh actor reentry timed out'
+                        Write-Output $output.GetAwaiter().GetResult()
+                        $errors = $diagnostic.GetAwaiter().GetResult()
+                        if ($errors) { [Console]::Error.WriteLine($errors) }
+                        Assert ($terminalActor.ExitCode -eq 0) 'Terminal fresh actor failed to consume actual publication history'
+                    } finally { $terminalActor.Dispose() }
+                }
             }
             $Recover = $false
             $Complete = $false
