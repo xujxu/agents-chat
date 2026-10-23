@@ -14850,6 +14850,16 @@ state, produce completion only where absent, and pass independent live Scheduler
 policy/security/zero-instance checks. No completed receipt is deleted to emulate
 interruption. The previously accepted post-receipt crash remains in the matrix.
 
+All three actual task rollback interruption boundaries passed at
+`7baba4ec / 39923696008`: intent-only staged task, registered restored task with
+no completion receipt, and completed task receipt. Fresh actors completed each
+real prefix while preserving original intent/state and independently checked
+disabled, stopped Scheduler policy. Run the shared active/cold commands-only
+regression before terminal rollback integration, because completion transport,
+saved recovery inventory and native scope handling changed across this sequence.
+This acceptance does not cover rollback terminal-state publication or retirement,
+project-internal retained evidence, or incomplete runtime-bundle publication.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
