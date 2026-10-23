@@ -14840,6 +14840,16 @@ registration receipt; completed requests recheck evidence without repeating
 registration. Node exposes the finite step responses through the original
 registered scope and retains before/after restored-files verification.
 
+Deterministic task restoration passed at `19617bb7 / 39918484293`. The external
+fixture now runs genuine actor death at all three acknowledged boundaries:
+intent persisted, task registered with no completion receipt, and task receipt
+persisted. Each parent checks the exact held boundary and receipt presence,
+pins the native bridge, kills its owning Node actor, requires bridge exit and
+starts a fresh actor. Resume must preserve original intent bytes and accepted
+state, produce completion only where absent, and pass independent live Scheduler
+policy/security/zero-instance checks. No completed receipt is deleted to emulate
+interruption. The previously accepted post-receipt crash remains in the matrix.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

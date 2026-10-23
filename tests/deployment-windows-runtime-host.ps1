@@ -23,6 +23,8 @@ param([ValidateSet('stop', 'configuration-change', 'task-inhibition', 'durable-s
     [switch]$InactiveCompletion,
     [switch]$InactiveCompletionRecovery,
     [switch]$ExternalInactiveRuntime,
+    [ValidateSet('task-restore-requested', 'task-registered', 'task-restored')]
+    [string]$InactiveRollbackCrashStep = 'task-restored',
     [ValidateSet('release-requested', 'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')]
     [string]$InactiveCompletionRecoveryStep = 'lease-released',
     [ValidateSet('observed', 'started', 'requested', 'registered', 'enabled')][string]$ColdStartupStep = 'observed',
@@ -435,7 +437,7 @@ if (process.argv[2] === 'child') {
             . (Join-Path $PSScriptRoot 'deployment-windows-inactive-task.ps1')
             Test-AgentsChatInactiveTask -Source $source -TaskName $taskName -Project $project -ReadyFile $readyFile `
                 -Complete:($InactiveCompletion -or $InactiveCompletionRecovery) -Recover:$InactiveCompletionRecovery `
-                -RecoveryStep $InactiveCompletionRecoveryStep
+                -RecoveryStep $InactiveCompletionRecoveryStep -RollbackStep $InactiveRollbackCrashStep
             Write-Output 'PASS: native inhibition preserves original owner settlement and refuses restart after retirement'
         }
     }

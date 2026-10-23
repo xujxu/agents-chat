@@ -3,7 +3,7 @@ import { readFile, readdir, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const [source, control, pwsh, mode = 'complete'] = process.argv.slice(2);
+const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored'] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
 const api = await load('windows-task-completion-recovery.mjs');
 const { withWindowsAdmission } = await load('windows-admission.mjs');
@@ -11,12 +11,21 @@ const { processIdentity } = await load('process-identity.mjs');
 assert.equal(typeof api.openWindowsInactiveLostRuntimeAuthority, 'function',
   'Missing owned inactive lost-runtime transport');
 const state = await readFile(path.join(control, 'state.json'));
+const holdTask = async (scope, step) => {
+  if (mode !== 'crash-task' || step !== crashStep) return;
+  console.log(`INACTIVE_ROLLBACK_TASK_HELD ${JSON.stringify({ ...scope.identity, step })}`);
+  const timer = setInterval(() => {}, 1000);
+  try { await new Promise(() => {}); } finally { clearInterval(timer); }
+};
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
   if (mode === 'resume-task') {
     const file = path.join(control, 'inactive-rollback-task-restored.json');
-    const before = await readFile(file);
-    const record = JSON.parse(before);
+    const before = crashStep === 'task-restored' ? await readFile(file) : null;
+    if (!before) await assert.rejects(readFile(file), { code: 'ENOENT' });
+    const intentFile = path.join(control, 'inactive-rollback-task-intent.json');
+    const intentBefore = await readFile(intentFile);
+    const record = JSON.parse(await readFile(path.join(control, 'inactive-rollback-files-restored.json')));
     const scope = await api.openWindowsInactiveLostRuntimeAuthority(options);
     try {
       const restored = await api.restoreWindowsInactiveRollbackTask({
@@ -24,7 +33,9 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       });
       assert.equal(restored.status, 'task-restored');
       assert.equal(restored.file, file);
-      assert.deepEqual(await readFile(file), before);
+      if (before) assert.deepEqual(await readFile(file), before);
+      else assert.equal(JSON.parse(await readFile(file)).phase, 'task-restored');
+      assert.deepEqual(await readFile(intentFile), intentBefore);
       assert.deepEqual(await scope.check(), scope.observation);
     } finally { await scope.close(); }
     assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
@@ -210,10 +221,12 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       const taskIntent = path.join(control, 'inactive-rollback-task-intent.json');
       const requestedBytes = await readFile(taskIntent);
       await assert.rejects(readFile(path.join(control, 'inactive-rollback-task-restored.json')), { code: 'ENOENT' });
+      await holdTask(next, 'task-restore-requested');
       const registered = await api.advanceWindowsInactiveRollbackTask(taskOptions);
       assert.equal(registered.step, 'task-registered');
       assert.deepEqual(await readFile(taskIntent), requestedBytes);
       await assert.rejects(readFile(path.join(control, 'inactive-rollback-task-restored.json')), { code: 'ENOENT' });
+      await holdTask(next, 'task-registered');
       const completed = await api.advanceWindowsInactiveRollbackTask(taskOptions);
       assert.equal(completed.step, 'task-restored');
       const task = await api.restoreWindowsInactiveRollbackTask(taskOptions);
@@ -230,11 +243,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual(await api.restoreWindowsInactiveRollbackTask(taskOptions), task);
       assert.deepEqual(await readFile(task.file), taskBytes);
       assert.deepEqual(await next.check(), next.observation);
-      if (mode === 'crash-task') {
-        console.log(`INACTIVE_ROLLBACK_TASK_HELD ${JSON.stringify(next.identity)}`);
-        const timer = setInterval(() => {}, 1000);
-        try { await new Promise(() => {}); } finally { clearInterval(timer); }
-      }
+      await holdTask(next, 'task-restored');
     } finally { await next.close(); }
     assert.notEqual(await processIdentity(next.identity.pid), next.identity.processIdentity);
   }

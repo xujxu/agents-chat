@@ -1,7 +1,9 @@
 function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string]$Project, [string]$ReadyFile,
     [switch]$Complete, [switch]$Recover,
     [ValidateSet('release-requested', 'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')]
-    [string]$RecoveryStep = 'lease-released') {
+    [string]$RecoveryStep = 'lease-released',
+    [ValidateSet('task-restore-requested', 'task-registered', 'task-restored')]
+    [string]$RollbackStep = 'task-restored') {
     . (Join-Path $Source 'windows-inactive-task.ps1')
     $scheduler = New-Object -ComObject 'Schedule.Service'
     $scheduler.Connect()
@@ -171,7 +173,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             $lostActor = [Deployment.WindowsControllerProcess]::Start($node,
                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
-                    $(if ($crashRollback) { 'crash-task' } else { 'complete' })),
+                    $(if ($crashRollback) { 'crash-task' } else { 'complete' }), $RollbackStep),
                 $control, $environment)
             try {
                 $diagnostic = $lostActor.StandardError.ReadToEndAsync()
@@ -187,6 +189,22 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     Assert ($null -ne $held -and $held.StartsWith('INACTIVE_ROLLBACK_TASK_HELD ')) `
                         'Rollback actor exited before its actual task-restored receipt'
                     $identity = $held.Substring('INACTIVE_ROLLBACK_TASK_HELD '.Length) | ConvertFrom-Json
+                    Assert ($identity.step -ceq $RollbackStep) 'Rollback actor stopped at a different native boundary'
+                    $completedPath = Join-Path $control 'inactive-rollback-task-restored.json'
+                    Assert ((Test-Path -LiteralPath $completedPath) -eq ($RollbackStep -ceq 'task-restored')) `
+                        'Rollback crash boundary has an unexpected completion receipt'
+                    $boundaryDefinition = if ($RollbackStep -ceq 'task-restore-requested') {
+                        (Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-prepared.json') -Raw |
+                            ConvertFrom-Json).stagedDefinition
+                    } else {
+                        (Get-Content -LiteralPath (Join-Path $control 'inactive-rollback-task-intent.json') -Raw |
+                            ConvertFrom-Json).definition
+                    }
+                    $boundaryTask = $folder.GetTask($TaskName)
+                    Assert (([xml][string]$boundaryTask.Xml).OuterXml -ceq ([xml]$boundaryDefinition).OuterXml -and
+                        -not $boundaryTask.Enabled -and $boundaryTask.GetInstances(0).Count -eq 0 -and
+                        [string]$boundaryTask.GetSecurityDescriptor(7) -ceq $security) `
+                        'Actual rollback policy does not match its held interruption boundary'
                     $bridge = [Diagnostics.Process]::GetProcessById($identity.pid)
                     try {
                         $null = $bridge.Handle
@@ -208,7 +226,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             if ($crashRollback) {
                 $resumed = [Deployment.WindowsControllerProcess]::Start($node,
                     @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
-                        $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, 'resume-task'),
+                        $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, 'resume-task', $RollbackStep),
                     $control, $environment)
                 try {
                     $output = $resumed.StandardOutput.ReadToEndAsync()
