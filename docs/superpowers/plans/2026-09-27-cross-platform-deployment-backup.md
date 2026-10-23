@@ -14805,6 +14805,15 @@ accepts only restored policy. Node revalidates restored files before and after
 the native request. Repeated completion rechecks retained evidence without
 registering the task again. Actual task restoration acceptance is pending.
 
+Actual original stopped-task restoration passed at `7e0302fe / 39903544950`,
+including independent Scheduler XML, security and zero-instance checks. Next
+the external-layout actor holds after its real task-restored receipt; the parent
+pins its native bridge identity, abruptly kills the actor, requires bridge exit,
+then launches a fresh actor to reopen retained history and repeat completion
+without changing receipt bytes or original accepted state. No receipt deletion
+or synthetic history is used. This covers post-receipt actor loss; interruption
+between task intent, native registration and receipt remains outstanding.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

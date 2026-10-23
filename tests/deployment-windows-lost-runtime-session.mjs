@@ -3,7 +3,7 @@ import { readFile, readdir, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const [source, control, pwsh] = process.argv.slice(2);
+const [source, control, pwsh, mode = 'complete'] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
 const api = await load('windows-task-completion-recovery.mjs');
 const { withWindowsAdmission } = await load('windows-admission.mjs');
@@ -13,6 +13,23 @@ assert.equal(typeof api.openWindowsInactiveLostRuntimeAuthority, 'function',
 const state = await readFile(path.join(control, 'state.json'));
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
+  if (mode === 'resume-task') {
+    const file = path.join(control, 'inactive-rollback-task-restored.json');
+    const before = await readFile(file);
+    const record = JSON.parse(before);
+    const scope = await api.openWindowsInactiveLostRuntimeAuthority(options);
+    try {
+      const restored = await api.restoreWindowsInactiveRollbackTask({
+        ...options, scope, runtimeBundle: record.runtimeBundle, acceptDataLoss: true,
+      });
+      assert.equal(restored.status, 'task-restored');
+      assert.equal(restored.file, file);
+      assert.deepEqual(await readFile(file), before);
+      assert.deepEqual(await scope.check(), scope.observation);
+    } finally { await scope.close(); }
+    assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
+    return;
+  }
   await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority({ ...options, admission: {} }));
   await assert.rejects(api.openWindowsInactiveTaskCompletionRecovery(options));
   const scope = await api.openWindowsInactiveLostRuntimeAuthority(options);
@@ -196,6 +213,11 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual(await api.restoreWindowsInactiveRollbackTask(taskOptions), task);
       assert.deepEqual(await readFile(task.file), taskBytes);
       assert.deepEqual(await next.check(), next.observation);
+      if (mode === 'crash-task') {
+        console.log(`INACTIVE_ROLLBACK_TASK_HELD ${JSON.stringify(next.identity)}`);
+        const timer = setInterval(() => {}, 1000);
+        try { await new Promise(() => {}); } finally { clearInterval(timer); }
+      }
     } finally { await next.close(); }
     assert.notEqual(await processIdentity(next.identity.pid), next.identity.processIdentity);
   }

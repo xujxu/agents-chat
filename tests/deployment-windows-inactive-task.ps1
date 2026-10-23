@@ -167,19 +167,54 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             finally { Close-AgentsChatTaskCompletionProof $authority }
             Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash -ceq $stateBefore) `
                 'Exclusive lost-runtime evidence changed accepted state'
+            $crashRollback = [IO.Path]::GetDirectoryName($ReadyFile) -cne $Project
             $lostActor = [Deployment.WindowsControllerProcess]::Start($node,
                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
-                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName),
+                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                    $(if ($crashRollback) { 'crash-task' } else { 'complete' })),
                 $control, $environment)
             try {
-                $output = $lostActor.StandardOutput.ReadToEndAsync()
                 $diagnostic = $lostActor.StandardError.ReadToEndAsync()
-                Assert ($lostActor.WaitForExit(120000)) 'Lost-runtime transport actor timed out'
-                Write-Output $output.GetAwaiter().GetResult()
+                if ($crashRollback) {
+                    $line = $lostActor.StandardOutput.ReadLineAsync()
+                    Assert ($line.Wait(180000)) 'Rollback actor did not reach the actual task-restored boundary'
+                    $held = $line.GetAwaiter().GetResult()
+                    Assert ($null -ne $held -and $held.StartsWith('INACTIVE_ROLLBACK_TASK_HELD ')) `
+                        'Rollback actor exited before its actual task-restored receipt'
+                    $identity = $held.Substring('INACTIVE_ROLLBACK_TASK_HELD '.Length) | ConvertFrom-Json
+                    $bridge = [Diagnostics.Process]::GetProcessById($identity.pid)
+                    try {
+                        $null = $bridge.Handle
+                        Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($identity.pid) -ceq $identity.processIdentity) `
+                            'Rollback bridge identity changed before interruption'
+                        $lostActor.Kill()
+                        Assert ($lostActor.WaitForExit(15000) -and $lostActor.ExitCode -ne 0) 'Rollback actor did not die abruptly'
+                        Assert ($bridge.WaitForExit(15000)) 'Rollback bridge survived original actor death'
+                    } finally { $bridge.Dispose() }
+                } else {
+                    $output = $lostActor.StandardOutput.ReadToEndAsync()
+                    Assert ($lostActor.WaitForExit(120000)) 'Lost-runtime transport actor timed out'
+                    Write-Output $output.GetAwaiter().GetResult()
+                    Assert ($lostActor.ExitCode -eq 0) 'Lost-runtime transport actor failed'
+                }
                 $errors = $diagnostic.GetAwaiter().GetResult()
                 if ($errors) { [Console]::Error.WriteLine($errors) }
-                Assert ($lostActor.ExitCode -eq 0) 'Lost-runtime transport actor failed'
             } finally { $lostActor.Dispose() }
+            if ($crashRollback) {
+                $resumed = [Deployment.WindowsControllerProcess]::Start($node,
+                    @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                        $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName, 'resume-task'),
+                    $control, $environment)
+                try {
+                    $output = $resumed.StandardOutput.ReadToEndAsync()
+                    $diagnostic = $resumed.StandardError.ReadToEndAsync()
+                    Assert ($resumed.WaitForExit(120000)) 'Rollback fresh actor reentry timed out'
+                    Write-Output $output.GetAwaiter().GetResult()
+                    $errors = $diagnostic.GetAwaiter().GetResult()
+                    if ($errors) { [Console]::Error.WriteLine($errors) }
+                    Assert ($resumed.ExitCode -eq 0) 'Rollback fresh actor could not consume actual restored task history'
+                } finally { $resumed.Dispose() }
+            }
             $Recover = $false
             $Complete = $false
             Write-Output 'PASS: actual pre-release controller death settles guarded runtime; release intent alone cannot authorize released recovery'
