@@ -11,6 +11,7 @@ import { captureActivatedRuntime } from './windows-task-controller.mjs';
 import { inspectWindowsInactiveRollbackSnapshot } from './windows-inactive-rollback-snapshot.mjs';
 export { inspectWindowsInactiveRollbackSnapshot } from './windows-inactive-rollback-snapshot.mjs';
 export { restoreWindowsInactiveRollbackProject } from './windows-inactive-rollback-project.mjs';
+export { restoreWindowsInactiveRollbackExternal } from './windows-inactive-rollback-external.mjs';
 
 const lostScopes = new WeakMap();
 export async function prepareWindowsInactiveRollbackIntent(options) {

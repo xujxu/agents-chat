@@ -14722,6 +14722,16 @@ Report only `external-restored`; original task policy and durable finalization
 are not implied. Interrupted publication and co-located evidence handoff remain
 explicit follow-up requirements.
 
+Causal `9acdc901 / 39878430717` failed at the missing external restoration API.
+The focused external module now publishes the original verified archive into
+create-only `inactive-rollback-runtime` beneath control, preserving both retained
+runtime bundles. It reuses `restoreExternalSnapshot` with exact authorized paths,
+runtime relocation and native-bound stopped checks, then verifies relocated
+files and original snapshot/evidence before returning `external-restored`.
+Publication is guarded by the original exclusive scope and durable rollback
+intent. Existing or incomplete publication is refused rather than overwritten;
+durable publication reentry and final task restoration are not yet implemented.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
