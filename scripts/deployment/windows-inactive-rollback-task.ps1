@@ -42,7 +42,7 @@ function Open-AgentsChatInactiveRollbackTaskHistory([hashtable]$Context) {
     }
 }
 
-function Restore-AgentsChatInactiveRollbackTask([hashtable]$Context) {
+function Restore-AgentsChatInactiveRollbackTask([hashtable]$Context, [switch]$SingleStep) {
     $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
     if (-not $Context.ContainsKey('ExclusiveLostRuntime') -or -not $Context.ExclusiveLostRuntime -or
         -not $Context.ContainsKey('RollbackFilesReceipt')) {
@@ -56,15 +56,21 @@ function Restore-AgentsChatInactiveRollbackTask([hashtable]$Context) {
         $Context.Files.Add($Context.RollbackTaskIntent)
         $Context.RollbackTaskDefinition = ($text | ConvertFrom-Json).definition
         $Context.RollbackTaskComplete = $false
+        if ($SingleStep) {
+            $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
+            return [pscustomobject]@{ step='task-restore-requested' }
+        }
     }
     $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
     if (-not $Context.RollbackTaskComplete) {
         $task = $Context.Folder.GetTask($Context.TaskName)
+        $registered = $false
         if (([xml][string]$task.Xml).OuterXml -cne ([xml]$Context.RollbackTaskDefinition).OuterXml) {
             $principal = $task.Definition.Principal
             if ([int]$principal.LogonType -notin @(2, 3)) { throw 'Unsupported rollback task logon policy.' }
             $null = $Context.Folder.RegisterTask($Context.TaskName, $Context.RollbackTaskDefinition,
                 (4 -bor 16 -bor 32), [string]$principal.UserId, $null, [int]$principal.LogonType, $null)
+            $registered = $true
         }
         $task = $Context.Folder.GetTask($Context.TaskName)
         if (([xml][string]$task.Xml).OuterXml -cne ([xml]$Context.RollbackTaskDefinition).OuterXml -or
@@ -73,6 +79,9 @@ function Restore-AgentsChatInactiveRollbackTask([hashtable]$Context) {
             throw 'Restored inactive task differs from original stopped policy.'
         }
         $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
+        if ($SingleStep -and $registered) {
+            return [pscustomobject]@{ step='task-registered' }
+        }
         $Context.RollbackTaskReceipt = [Deployment.WindowsPrivateFile]::Publish(
             (Join-Path $Context.Control 'inactive-rollback-task-restored.json'),
             (Get-AgentsChatInactiveRollbackTaskText $Context 'task-restored'))
@@ -80,6 +89,7 @@ function Restore-AgentsChatInactiveRollbackTask([hashtable]$Context) {
         $Context.RollbackTaskComplete = $true
     }
     $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
+    if ($SingleStep) { return [pscustomobject]@{ step='task-restored' } }
     return [pscustomobject]@{
         status='task-restored'; taskName=$Context.TaskName; priorRuntime='stopped'
         file=(Join-Path $Context.Control 'inactive-rollback-task-restored.json')

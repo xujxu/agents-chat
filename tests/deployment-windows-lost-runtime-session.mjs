@@ -222,6 +222,8 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal(task.priorRuntime, 'stopped');
       assert.equal(task.file, path.join(control, 'inactive-rollback-task-restored.json'));
       const taskBytes = await readFile(task.file);
+      assert.deepEqual(await api.advanceWindowsInactiveRollbackTask(taskOptions), completed);
+      assert.deepEqual(await readFile(task.file), taskBytes);
       const taskRecord = JSON.parse(taskBytes);
       assert.equal(taskRecord.phase, 'task-restored');
       assert.deepEqual(taskRecord.runtimeBundle, restoredBundle);

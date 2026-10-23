@@ -14831,6 +14831,15 @@ the fixture now waits boundedly for actor exit and prints its diagnostic before
 asserting the missing boundary. Rerun the causal gate with visible child failure
 before claiming its cause or implementing stage advancement.
 
+Diagnostic rerun `cab11d11 / 39913968083` confirmed the missing deterministic
+task advancement assertion. The existing native restoration now supports one
+verified boundary per request: publish intent, register actual disabled policy,
+then publish completion. The ordinary restore API still drains the remainder.
+Reopened history resolves registration from actual exact XML, not a fabricated
+registration receipt; completed requests recheck evidence without repeating
+registration. Node exposes the finite step responses through the original
+registered scope and retains before/after restored-files verification.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

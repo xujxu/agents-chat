@@ -16,9 +16,15 @@ export { restoreWindowsInactiveRollbackExternal } from './windows-inactive-rollb
 
 const lostScopes = new WeakMap();
 export async function restoreWindowsInactiveRollbackTask(options) {
+  return restoreInactiveRollbackTask(options, 'restore-rollback-task');
+}
+export async function advanceWindowsInactiveRollbackTask(options) {
+  return restoreInactiveRollbackTask(options, 'advance-rollback-task');
+}
+async function restoreInactiveRollbackTask(options, method) {
   await prepareWindowsInactiveRollbackFilesReceipt(options);
   const verified = await verifyWindowsInactiveRollbackFiles(options);
-  const result = await lostScopes.get(options.scope).request('restore-rollback-task', options.signal);
+  const result = await lostScopes.get(options.scope).request(method, options.signal);
   await verified.check();
   return result;
 }
@@ -144,6 +150,13 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       if (method === 'close') {
         if (reply.value !== 'close') throw new Error('Unexpected completion recovery close acknowledgement.');
         return;
+      }
+      if (method === 'advance-rollback-task') {
+        const result = captureWorkerFields(reply.value, ['step'], 'inactive rollback task advancement');
+        if (!lost || !['task-restore-requested', 'task-registered', 'task-restored'].includes(result.step)) {
+          throw new Error('Invalid inactive rollback task advancement.');
+        }
+        return Object.freeze(result);
       }
       if (method === 'restore-rollback-task') {
         const result = captureWorkerFields(reply.value,
