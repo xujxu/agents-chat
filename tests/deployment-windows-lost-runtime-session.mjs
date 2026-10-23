@@ -83,6 +83,31 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       });
       assert.equal(terminal.file, terminalFile);
       assert.deepEqual(await readFile(terminalFile), terminalBefore);
+      assert.equal(typeof api.stageWindowsInactiveRollbackTerminalState, 'function',
+        'Missing stopped rollback terminal state staging');
+      const stageOptions = { ...options, scope: reopened, runtimeBundle: record.runtimeBundle, acceptDataLoss: true };
+      await assert.rejects(api.stageWindowsInactiveRollbackTerminalState({ ...stageOptions, acceptDataLoss: false }));
+      await assert.rejects(api.stageWindowsInactiveRollbackTerminalState({ ...stageOptions, scope: { ...reopened } }));
+      const staged = await api.stageWindowsInactiveRollbackTerminalState(stageOptions);
+      assert.equal(staged.status, 'inactive-terminal-state-staged');
+      assert.equal(staged.file, path.join(control, 'state.json.lock'));
+      const stagedBytes = await readFile(staged.file);
+      const proposed = JSON.parse(stagedBytes);
+      const original = JSON.parse(state);
+      assert.deepEqual(proposed, {
+        ...original, phase: 'restored', previousPhase: 'accepted', updatedAt: proposed.updatedAt,
+      });
+      assert.equal(new Date(proposed.updatedAt).toISOString(), proposed.updatedAt);
+      assert.ok(Date.parse(proposed.updatedAt) >= Date.parse(original.updatedAt));
+      assert.equal(staged.sha256, createHash('sha256').update(stagedBytes).digest('hex'));
+      const stateIntent = JSON.parse(await readFile(path.join(control, 'inactive-rollback-state-intent.json')));
+      assert.equal(stateIntent.terminalSha256, terminal.sha256);
+      assert.equal(stateIntent.oldState, state.toString('utf8'));
+      assert.equal(stateIntent.nextState, stagedBytes.toString('utf8'));
+      assert.deepEqual(await api.stageWindowsInactiveRollbackTerminalState(stageOptions), staged);
+      assert.deepEqual(await readFile(staged.file), stagedBytes);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      assert.deepEqual(await reopened.check(), reopened.observation);
     } finally { await reopened.close(); }
     return;
   }

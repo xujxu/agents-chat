@@ -14882,6 +14882,19 @@ restored files before and after preparation, rejects copied scope and absent
 acknowledgement, and never rewrites state or retires history during preparation.
 Terminal publication and cleanup remain pending.
 
+Stopped terminal evidence preparation passed at `8957a175 / 39950706815`,
+including exact receipt bindings, original state identity and fresh-scope
+reopening. Next stage the terminal state without replacing original state:
+persist `inactive-rollback-state-intent.json` bound to the terminal handoff digest,
+exact old text and exact proposed text before creating `state.json.lock`.
+The stopped rollback proposal preserves all original operation/source/target
+history fields, changing only phase to `restored`, previousPhase to `accepted`
+and a non-backdated canonical updatedAt. Do not fabricate restore activation
+or a live runtime. Preserve the original accepted inode and all native evidence
+through staging; repeated staging must retain the same proposal and bytes.
+The next mutation will require separate handle-bound publication and crash
+reentry, not an ordinary unrestricted state transition from a terminal phase.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
