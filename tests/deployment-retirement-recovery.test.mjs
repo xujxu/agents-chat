@@ -12,7 +12,7 @@ import { temporaryDeployment, acquireLock, releaseLock, recoverRetirement,
 import { reconcileInterruptedOperation } from '../scripts/deployment/state.mjs';
 import { saveRecoveryEngine, verifyRecoveryEngine } from '../scripts/deployment/saved-recovery-engine.mjs';
 import { readRecoveryEngineManifest, locateRecoveryEngine, recoveryDigest,
-  recoveryManifestMaximumBytes } from '../scripts/deployment/recovery-engine-files.mjs';
+  recoveryManifestMaximumBytes, recoveryManifestMaximumFiles } from '../scripts/deployment/recovery-engine-files.mjs';
 
 const sourceTree = fileURLToPath(new URL('../scripts/deployment/', import.meta.url));
 const execute = promisify(execFile);
@@ -35,6 +35,23 @@ test('recovery manifest admits bounded inventories beyond 32KiB and rejects byte
   assert.equal(await locateRecoveryEngine({ control: root, manifestSha256: recoveryDigest(bytes) }), directory);
   await writeFile(file, Buffer.alloc(recoveryManifestMaximumBytes + 1, 32));
   await assert.rejects(readRecoveryEngineManifest({ directory }), /Invalid worker file/);
+});
+
+test('recovery manifests admit the expanded file inventory but reject its next entry', async t => {
+  const directory = await temporaryDeployment(t);
+  const files = ['linux-restore-entry.mjs', 'saved-recovery-engine.mjs',
+    ...Array.from({ length: recoveryManifestMaximumFiles - 2 }, (_, index) => `h${index}.mjs`)]
+    .map(name => ({ name, bytes: 1, sha256: 'a'.repeat(64) }));
+  const file = path.join(directory, 'manifest.json');
+  const bytes = Buffer.from(JSON.stringify({ version: 1, files }));
+  assert.ok(bytes.length <= recoveryManifestMaximumBytes);
+  await writeFile(file, bytes, { mode: 0o600 });
+  assert.equal((await readRecoveryEngineManifest({ directory })).manifest.files.length, files.length);
+  files.push({ name: 'overflow.mjs', bytes: 1, sha256: 'b'.repeat(64) });
+  const overflow = Buffer.from(JSON.stringify({ version: 1, files }));
+  assert.ok(overflow.length <= recoveryManifestMaximumBytes);
+  await writeFile(file, overflow);
+  await assert.rejects(readRecoveryEngineManifest({ directory }), /Unsupported saved recovery manifest/);
 });
 
 test('changed recovery controllers publish an immutable generation without replacing the legacy engine', async t => {

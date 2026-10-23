@@ -14774,6 +14774,14 @@ existing receipt when reopening. A changed project file must refuse publication
 with no receipt created. Repeated publication must preserve bytes; final policy
 restoration remains unimplemented and is not implied by this record.
 
+Receipt implementation run `785f921a / 39895664392` failed earlier during saved
+recovery engine capture: the additional dependency crosses the old 256-file
+inventory limit. Writer and reader now share a bounded 512-file limit, retaining
+the existing 64KiB manifest, 1MiB per-helper and 16MiB aggregate byte caps.
+Boundary coverage requires acceptance at the file limit and refusal at the next
+entry while both manifests remain below the byte cap. Receipt acceptance remains
+pending; this failure did not reach receipt publication.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

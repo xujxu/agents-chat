@@ -6,6 +6,7 @@ import { captureWorkerFields } from './worker-identity.mjs';
 
 export const recoveryDigest = bytes => createHash('sha256').update(bytes).digest('hex');
 export const recoveryManifestMaximumBytes = 65536;
+export const recoveryManifestMaximumFiles = 512;
 
 export async function locateRecoveryEngine({ control, manifestSha256 }) {
   const { root } = await canonicalWorkerDirectory(control, { privateMode: true });
@@ -32,7 +33,7 @@ export async function readRecoveryEngineManifest({ directory, manifestSha256 }) 
   const manifest = captureWorkerFields(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)),
     ['version', 'files'], 'saved restore manifest');
   if (manifest.version !== 1 || !Array.isArray(manifest.files)
-    || !manifest.files.length || manifest.files.length > 256) throw new Error('Unsupported saved recovery manifest.');
+    || !manifest.files.length || manifest.files.length > recoveryManifestMaximumFiles) throw new Error('Unsupported saved recovery manifest.');
   const names = new Set();
   let total = 0;
   for (const item of manifest.files) {
