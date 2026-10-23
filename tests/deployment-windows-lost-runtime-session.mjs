@@ -87,6 +87,19 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual(await readFile(receiptFile), foreignReceipt);
       assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
     } finally { await writeFile(receiptFile, receiptBefore); }
+    const history = path.join(control, 'task-maintenance');
+    const names = (await readdir(history)).sort();
+    const entries = [];
+    for (const name of names) {
+      const file = path.join(history, name);
+      const info = await lstat(file, { bigint: true });
+      assert.ok(info.isFile());
+      const bytes = await readFile(file);
+      entries.push({
+        path: path.join('task-maintenance', name), dev: String(info.dev), ino: String(info.ino),
+        bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'),
+      });
+    }
     const reopened = await api.openWindowsInactiveLostRuntimeAuthority(options);
     try {
       await api.prepareWindowsInactiveRollbackCompletionReceipt({
@@ -105,19 +118,6 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await assert.rejects(api.prepareWindowsInactiveRollbackRetirementIntent({
         ...retirementOptions, scope: { ...reopened },
       }));
-      const history = path.join(control, 'task-maintenance');
-      const names = (await readdir(history)).sort();
-      const entries = [];
-      for (const name of names) {
-        const file = path.join(history, name);
-        const info = await lstat(file, { bigint: true });
-        assert.ok(info.isFile());
-        const bytes = await readFile(file);
-        entries.push({
-          path: path.join('task-maintenance', name), dev: String(info.dev), ino: String(info.ino),
-          bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'),
-        });
-      }
       const prepared = await api.prepareWindowsInactiveRollbackRetirementIntent(retirementOptions);
       assert.equal(prepared.file, path.join(control, 'inactive-rollback-retirement.json'));
       const preparedBytes = await readFile(prepared.file);

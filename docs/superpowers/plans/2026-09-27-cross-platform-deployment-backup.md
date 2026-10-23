@@ -15019,6 +15019,13 @@ The fixture includes same-scope repetition and fresh-scope stable reentry.
 Saved worker closure includes the new focused helper. Actions acceptance remains
 pending; no history deletion or lock release is performed by this preparation.
 
+Run `03d1be23 / 40034477603` exposed a fixture error before retirement preparation:
+its independent file digest scan tried to reopen the release-intent file while
+the native authority correctly held it exclusively, resulting in EBUSY. Capture
+the independent expected descriptors after closing the previous scope and before
+opening the next exclusive scope. Do not weaken native sharing or release its
+authority handle to accommodate the test. Corrected Actions acceptance is pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
