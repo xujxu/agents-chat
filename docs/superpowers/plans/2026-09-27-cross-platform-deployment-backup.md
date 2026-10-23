@@ -14709,6 +14709,19 @@ project rollback, rather than silently changing the existing scenario.
 Co-located project restoration remains an explicit implementation gap, not an
 accepted recovery path. Both layouts must retain original state and intent.
 
+Both bounded layout cases passed at `9c54f539 / 39874665872`: real project
+restoration with external retained runtime evidence, and refusal without file
+changes for co-located evidence. This does not accept co-located restoration.
+Next the external fixture requires `restoreWindowsInactiveRollbackExternal`,
+rejecting missing data-loss acknowledgement and copied scope before writes.
+Require actual archived runtime publication to a distinct private bundle,
+external restoration with the verified destination allowlist and existing ACL
+restoration engine, then independent relocation verification and byte-for-byte
+helper comparison. Preserve original native evidence, accepted state and intent.
+Report only `external-restored`; original task policy and durable finalization
+are not implied. Interrupted publication and co-located evidence handoff remain
+explicit follow-up requirements.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

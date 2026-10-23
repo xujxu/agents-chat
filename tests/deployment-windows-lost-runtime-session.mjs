@@ -100,6 +100,27 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         assert.deepEqual(await readFile(path.join(original.project, entry.path)),
           await readFile(path.join(control, 'backup/files', entry.path)), `Rollback did not restore ${entry.path}`);
       }
+      assert.equal(typeof api.restoreWindowsInactiveRollbackExternal, 'function',
+        'Missing actual inactive rollback external restoration');
+      await assert.rejects(api.restoreWindowsInactiveRollbackExternal({ ...options, scope, acceptDataLoss: false }));
+      await assert.rejects(api.restoreWindowsInactiveRollbackExternal({
+        ...options, scope: { ...scope }, acceptDataLoss: true,
+      }));
+      const external = await api.restoreWindowsInactiveRollbackExternal({ ...options, scope, acceptDataLoss: true });
+      assert.equal(external.status, 'external-restored');
+      assert.equal(external.runtimeBundle.sha256, binding.runtime.task.configurationSha256);
+      assert.notEqual(external.runtimeBundle.configuration, binding.runtime.task.configuration);
+      const { inspectWindowsRuntimeRelocation } = await load('windows-runtime-relocation.mjs');
+      const relocation = await inspectWindowsRuntimeRelocation({
+        project: original.project, backup: path.join(control, 'backup'),
+        snapshot: binding.snapshot, runtimeBundle: external.runtimeBundle,
+      });
+      await relocation.verify();
+      for (const file of binding.runtime.files) {
+        assert.deepEqual(await readFile(path.join(external.runtimeBundle.directory, file.name)),
+          await readFile(file.file), `Rollback did not relocate ${file.name}`);
+      }
+      assert.deepEqual(await scope.check(), scope.observation);
     }
     assert.deepEqual(await readFile(intent.file), intentBytes);
     assert.deepEqual(await scope.check(), scope.observation);
