@@ -10,21 +10,21 @@ function Publish-AgentsChatInactiveRollbackTerminal([hashtable]$Context) {
         $Context.RollbackTerminal.Check()
         return [pscustomobject]@{ file=$path; sha256=$Context.RollbackTerminal.Sha256 }
     }
-    $state = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'state.json') $Context.StateSha256
-    $identity = $state.CaptureIdentity()
+    Assert-AgentsChatInactiveRollbackPhysicalState $Context
+    $identity = $Context.RollbackOriginalIdentity
     $task = $Context.RollbackTaskReceipt.ReadText() | ConvertFrom-Json
     $intent = $Context.RollbackIntent.ReadText() | ConvertFrom-Json
     $record = [ordered]@{
         version=1; phase='terminal-prepared'; project=$Context.Project; operationId=$Context.OperationId
         taskName=$Context.TaskName; stateSha256=$Context.StateSha256
-        oldState=$state.ReadText(); sourceCommit=$intent.sourceCommit
+        oldState=$Context.RollbackOriginalState; sourceCommit=$intent.sourceCommit
         priorRuntime='stopped'; restoredRuntime='stopped'
         rollbackIntentSha256=$Context.RollbackIntent.Sha256
         filesReceiptSha256=$Context.RollbackFilesReceipt.Sha256
         taskIntentSha256=$Context.RollbackTaskIntent.Sha256
         taskReceiptSha256=$Context.RollbackTaskReceipt.Sha256
         runtimeBundle=$task.runtimeBundle
-        stateIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino; bytes=$state.ByteLength }
+        stateIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino; bytes=$identity.Bytes }
     }
     $text = $record | ConvertTo-Json -Depth 5 -Compress
     if (Test-Path -LiteralPath $path) {

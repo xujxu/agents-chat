@@ -124,9 +124,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal(publishedIdentity.ino, stageIdentity.ino);
       await assert.rejects(readFile(staged.file), { code: 'ENOENT' });
       assert.deepEqual(await api.publishWindowsInactiveRollbackTerminalState(stageOptions), published);
+      const repeatedIdentity = await lstat(published.file, { bigint: true });
+      assert.equal(repeatedIdentity.dev, stageIdentity.dev);
+      assert.equal(repeatedIdentity.ino, stageIdentity.ino);
       assert.deepEqual(await reopened.check(), reopened.observation);
       expectedFinalState = stagedBytes;
     } finally { await reopened.close(); }
+    const finalIdentity = await lstat(path.join(control, 'state.json'), { bigint: true });
     const completed = await api.openWindowsInactiveLostRuntimeAuthority(options);
     try {
       const published = await api.publishWindowsInactiveRollbackTerminalState({
@@ -134,6 +138,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       });
       assert.equal(published.status, 'inactive-terminal-state-published');
       assert.deepEqual(await readFile(published.file), expectedFinalState);
+      const reopenedIdentity = await lstat(published.file, { bigint: true });
+      assert.equal(reopenedIdentity.dev, finalIdentity.dev);
+      assert.equal(reopenedIdentity.ino, finalIdentity.ino);
+      await assert.rejects(readFile(path.join(control, 'state.json.lock')), { code: 'ENOENT' });
     } finally { await completed.close(); }
     return;
   }

@@ -126,6 +126,7 @@ function Assert-AgentsChatInactiveLostRuntimeState([hashtable]$Context) {
         }
     }
     foreach ($file in $Context.Files) { $file.Check() }
+    Assert-AgentsChatInactiveRollbackPhysicalState $Context
     $runtime = $Context.Runtime
     Assert-AgentsChatCompletionProcessAbsent $runtime.pid $runtime.identity
     [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$runtime.generation, $runtime.sessionId)

@@ -7,11 +7,28 @@ import { validateState } from './state.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { inspectWindowsSnapshotRuntime } from './windows-snapshot-runtime.mjs';
 
+async function readInactiveRollbackState(control, terminalPublication) {
+  const physical = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
+  if (!terminalPublication) return physical;
+  const decode = bytes => new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  const terminalBytes = await readWorkerFile(path.join(control, 'inactive-rollback-terminal.json'),
+    1048576, { privateMode: true });
+  const terminal = JSON.parse(decode(terminalBytes));
+  const intent = JSON.parse(decode(await readWorkerFile(
+    path.join(control, 'inactive-rollback-state-intent.json'), 262144, { privateMode: true })));
+  if (typeof terminal.oldState !== 'string' || typeof intent.nextState !== 'string'
+    || intent.oldState !== terminal.oldState
+    || intent.terminalSha256 !== createHash('sha256').update(terminalBytes).digest('hex')
+    || ![terminal.oldState, intent.nextState].includes(decode(physical))) {
+    throw new Error('Inactive terminal publication differs from its retained original state proposal.');
+  }
+  return Buffer.from(terminal.oldState, 'utf8');
+}
+
 export async function inspectWindowsInactiveRollbackSnapshot(options) {
   const { control, signal } = options;
   const observed = await assertWindowsInactiveLostRuntimeAuthority(options);
-  const stateFile = path.join(control, 'state.json');
-  const stateBytes = await readWorkerFile(stateFile, 65536, { privateMode: true });
+  const stateBytes = await readInactiveRollbackState(control, options.terminalPublication === true);
   const state = validateState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(stateBytes)));
   if (createHash('sha256').update(stateBytes).digest('hex') !== observed.stateSha256
     || state.operationId !== observed.operationId || state.operation !== 'update'
@@ -55,7 +72,7 @@ export async function inspectWindowsInactiveRollbackSnapshot(options) {
     if (currentDirectory.info.dev !== directory.info.dev || currentDirectory.info.ino !== directory.info.ino) {
       throw new Error('Original inactive rollback backup directory was replaced.');
     }
-    if (!(await readWorkerFile(stateFile, 65536, { privateMode: true })).equals(stateBytes)
+    if (!(await readInactiveRollbackState(control, options.terminalPublication === true)).equals(stateBytes)
       || !same(await verifySnapshot(backup, { signal: checkSignal }), retained)) {
       throw new Error('Inactive rollback state or verified snapshot changed.');
     }

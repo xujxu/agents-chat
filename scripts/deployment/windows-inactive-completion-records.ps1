@@ -158,8 +158,22 @@ function Read-AgentsChatInactiveCompletionRecords([hashtable]$Context, [switch]$
     }
     $statePath = Join-Path $Context.Control 'state.json'
     if ((Get-Item -LiteralPath $statePath -Force).Length -gt 65536) { throw 'Oversized inactive accepted state.' }
-    $stateFile = Open-AgentsChatCompletionFile $Context $statePath $completed.stateSha256.GetString()
-    $state = ConvertFrom-AgentsChatTaskTransactionState $scope ($stateFile.ReadText()) -InactiveCompletion
+    $stateHash = $completed.stateSha256.GetString()
+    if ($Context.ContainsKey('LostRuntime') -and $Context.LostRuntime -and
+        (Test-Path -LiteralPath (Join-Path $Context.Control 'inactive-rollback-terminal.json'))) {
+        $stateText = Read-AgentsChatInactiveRollbackSource $Context $stateHash
+    } else {
+        $stateFile = Open-AgentsChatCompletionFile $Context $statePath $stateHash
+        $stateText = $stateFile.ReadText()
+        if ($Context.ContainsKey('LostRuntime') -and $Context.LostRuntime) {
+            $identity = $stateFile.CaptureIdentity()
+            $Context.RollbackPhysicalState = $stateFile
+            $Context.RollbackOriginalState = $stateText
+            $Context.RollbackOriginalIdentity = @{ Dev=$identity.Dev; Ino=$identity.Ino; Bytes=$stateFile.ByteLength }
+            $Context.RollbackPublished = $false
+        }
+    }
+    $state = ConvertFrom-AgentsChatTaskTransactionState $scope $stateText -InactiveCompletion
     if ([string]::CompareOrdinal($state.updatedAt, $prior.updatedAt) -lt 0) { throw 'Inactive accepted state predates activation.' }
     foreach ($key in $prior.Keys) {
         if ($key -cnotin @('phase', 'previousPhase', 'updatedAt') -and $state[$key] -cne $prior[$key]) {
@@ -172,11 +186,11 @@ function Read-AgentsChatInactiveCompletionRecords([hashtable]$Context, [switch]$
             'activatingStateSha256', 'activatingState', 'runtime', 'definition', 'stagedDefinition', 'enabled',
             'port', 'providers', 'listenerPid', 'listenerIdentity', 'listenerCreatedAt', 'listenerAddress', 'listenerPairedRecords')
         if (($name -ceq 'complete-prepared' -and $record.stateSha256.ValueKind -ne [Text.Json.JsonValueKind]::Null) -or
-            ($name -cne 'complete-prepared' -and $record.stateSha256.GetString() -cne $stateFile.Sha256)) {
+            ($name -cne 'complete-prepared' -and $record.stateSha256.GetString() -cne $stateHash)) {
             throw 'Inactive accepted state digest differs.'
         }
     }
-    $Context.StateSha256 = $stateFile.Sha256
+    $Context.StateSha256 = $stateHash
     $Context.Definition = $replacement.definition.GetString()
     $Context.Enabled = $false
     $Context.Completed = $completed

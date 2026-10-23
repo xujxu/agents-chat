@@ -15,6 +15,14 @@ export { restoreWindowsInactiveRollbackProject } from './windows-inactive-rollba
 export { restoreWindowsInactiveRollbackExternal } from './windows-inactive-rollback-external.mjs';
 
 const lostScopes = new WeakMap();
+export async function publishWindowsInactiveRollbackTerminalState(options) {
+  if (options.acceptDataLoss !== true) throw refused(new Error('Terminal publication requires explicit data-loss acknowledgement.'));
+  await assertWindowsInactiveLostRuntimeAuthority(options);
+  const verified = await verifyWindowsInactiveRollbackFiles({ ...options, terminalPublication: true });
+  const result = await lostScopes.get(options.scope).request('publish-rollback-state', options.signal);
+  await verified.check();
+  return result;
+}
 export async function stageWindowsInactiveRollbackTerminalState(options) {
   await prepareWindowsInactiveRollbackTerminalIntent(options);
   const verified = await verifyWindowsInactiveRollbackFiles(options);
@@ -166,10 +174,11 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
         if (reply.value !== 'close') throw new Error('Unexpected completion recovery close acknowledgement.');
         return;
       }
-      if (method === 'stage-rollback-state') {
+      if (method === 'stage-rollback-state' || method === 'publish-rollback-state') {
+        const published = method === 'publish-rollback-state';
         const result = captureWorkerFields(reply.value, ['status', 'file', 'sha256'], 'inactive staged terminal state');
-        if (!lost || result.status !== 'inactive-terminal-state-staged'
-          || result.file !== path.join(control, 'state.json.lock')
+        if (!lost || result.status !== (published ? 'inactive-terminal-state-published' : 'inactive-terminal-state-staged')
+          || result.file !== path.join(control, published ? 'state.json' : 'state.json.lock')
           || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
           throw new Error('Invalid inactive terminal staging acknowledgement.');
         }

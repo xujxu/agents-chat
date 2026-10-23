@@ -45,8 +45,8 @@ try {
         $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'advance', 'close', 'prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state')) { throw 'Invalid recovery request.' }
-        if ($method -cin @('prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state') -and -not $LostRuntime) { throw 'Rollback intent requires lost-runtime authority.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'advance', 'close', 'prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state', 'publish-rollback-state')) { throw 'Invalid recovery request.' }
+        if ($method -cin @('prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state', 'publish-rollback-state') -and -not $LostRuntime) { throw 'Rollback intent requires lost-runtime authority.' }
         if ($LostRuntime -and $method -ceq 'advance') { throw 'Lost-runtime evidence cannot advance live completion.' }
         $sequence = $id
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
@@ -69,6 +69,8 @@ try {
             $value = Publish-AgentsChatInactiveRollbackTerminal $scope
         } elseif ($method -ceq 'stage-rollback-state') {
             $value = Stage-AgentsChatInactiveRollbackState $scope
+        } elseif ($method -ceq 'publish-rollback-state') {
+            $value = Publish-AgentsChatInactiveRollbackState $scope
         } elseif ($method -ceq 'advance') {
             $value = if ($Inactive) { Advance-AgentsChatInactiveCompletionRecovery $scope }
                 else { Advance-AgentsChatTaskCompletionRecovery $scope }

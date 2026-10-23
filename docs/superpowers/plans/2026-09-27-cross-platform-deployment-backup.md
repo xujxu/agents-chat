@@ -14918,6 +14918,18 @@ state text, while physical state is restricted to the exact authorized old
 inode or exact proposed state. Do not loosen ordinary inactive admission or
 enable arbitrary terminal transitions. Retirement remains a separate step.
 
+Publication implementation now uses the original exclusive lost-runtime scope,
+independent restored-file verification and the existing native identity-bound
+replacement primitive. Only explicit publication verification reads original
+state text from the retained handoff; ordinary snapshot admission still requires
+physical accepted state. Fresh native authority validates original state against
+completion history, reconstructs the terminal receipt from original rollback
+receipts, and checks physical state against the original inode or exact proposed
+bytes. Published repetition does not recreate staging. The shared native helper
+is included in the saved worker dependency closure. Causal run
+`f6865fd6 / 39971779328` is still running; implementation acceptance and genuine
+publication-crash coverage remain pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
