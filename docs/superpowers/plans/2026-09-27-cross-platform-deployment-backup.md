@@ -14814,6 +14814,16 @@ without changing receipt bytes or original accepted state. No receipt deletion
 or synthetic history is used. This covers post-receipt actor loss; interruption
 between task intent, native registration and receipt remains outstanding.
 
+Actual post-task-receipt actor death and fresh-actor reentry passed at
+`010f9b85 / 39907546656`. Next expose deterministic native task restoration
+advancement through `task-restore-requested`, `task-registered`, `task-restored`,
+while retaining the ordinary draining restore API. The fixture requires real
+intent publication first, registration next with no completed receipt, then
+receipt publication; original intent bytes must remain stable. Each request must
+retain original scope and verify files and native task state. This permits the
+next genuine actor-death cases at the intent and registration boundaries without
+sleep-based races or deleting completed receipts. No public routing is enabled.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

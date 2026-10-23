@@ -201,6 +201,21 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       const taskOptions = { ...options, scope: next, runtimeBundle: restoredBundle, acceptDataLoss: true };
       await assert.rejects(api.restoreWindowsInactiveRollbackTask({ ...taskOptions, acceptDataLoss: false }));
       await assert.rejects(api.restoreWindowsInactiveRollbackTask({ ...taskOptions, scope: { ...next } }));
+      assert.equal(typeof api.advanceWindowsInactiveRollbackTask, 'function',
+        'Missing deterministic inactive rollback task advancement');
+      await assert.rejects(api.advanceWindowsInactiveRollbackTask({ ...taskOptions, acceptDataLoss: false }));
+      await assert.rejects(api.advanceWindowsInactiveRollbackTask({ ...taskOptions, scope: { ...next } }));
+      const requested = await api.advanceWindowsInactiveRollbackTask(taskOptions);
+      assert.equal(requested.step, 'task-restore-requested');
+      const taskIntent = path.join(control, 'inactive-rollback-task-intent.json');
+      const requestedBytes = await readFile(taskIntent);
+      await assert.rejects(readFile(path.join(control, 'inactive-rollback-task-restored.json')), { code: 'ENOENT' });
+      const registered = await api.advanceWindowsInactiveRollbackTask(taskOptions);
+      assert.equal(registered.step, 'task-registered');
+      assert.deepEqual(await readFile(taskIntent), requestedBytes);
+      await assert.rejects(readFile(path.join(control, 'inactive-rollback-task-restored.json')), { code: 'ENOENT' });
+      const completed = await api.advanceWindowsInactiveRollbackTask(taskOptions);
+      assert.equal(completed.step, 'task-restored');
       const task = await api.restoreWindowsInactiveRollbackTask(taskOptions);
       assert.equal(task.status, 'task-restored');
       assert.equal(task.taskName, next.observation.taskName);
