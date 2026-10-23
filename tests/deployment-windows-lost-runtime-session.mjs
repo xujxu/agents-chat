@@ -79,6 +79,14 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual(await scope.check(), scope.observation);
     } finally { await scope.close(); }
     const receiptBefore = await readFile(path.join(control, 'inactive-rollback-complete.json'));
+    const receiptFile = path.join(control, 'inactive-rollback-complete.json');
+    const foreignReceipt = Buffer.from(JSON.stringify({ ...JSON.parse(receiptBefore), restoredRuntime: 'running' }));
+    await writeFile(receiptFile, foreignReceipt);
+    try {
+      await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority(options));
+      assert.deepEqual(await readFile(receiptFile), foreignReceipt);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
+    } finally { await writeFile(receiptFile, receiptBefore); }
     const reopened = await api.openWindowsInactiveLostRuntimeAuthority(options);
     try {
       await api.prepareWindowsInactiveRollbackCompletionReceipt({

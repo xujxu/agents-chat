@@ -14977,6 +14977,15 @@ bytes. The fixture requires this after both genuine terminal actor crash boundar
 Receipt publication must not delete original history, release the lock or claim a
 live runtime. Implementation and Actions acceptance are pending.
 
+Causal `8ff75225 / 40010894968` confirmed the missing completion receipt API.
+The implementation now verifies restored files before and after the native
+create-only receipt operation, requires published physical state and original
+exclusive authority, and revalidates any existing receipt during authority reopen.
+The fixture also changes its own closed receipt to claim a running outcome and
+requires reopening to refuse without overwriting that evidence or changing state,
+then restores its test-owned bytes for valid reentry. Actions implementation
+acceptance remains pending; no retirement or lock release is added by this step.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

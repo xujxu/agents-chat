@@ -1,3 +1,36 @@
+function Publish-AgentsChatInactiveRollbackCompletion([hashtable]$Context) {
+    $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
+    if (-not $Context.ExclusiveLostRuntime -or -not $Context.RollbackPublished -or
+        -not $Context.RollbackTaskComplete -or -not $Context.ContainsKey('RollbackTerminal') -or
+        -not $Context.ContainsKey('RollbackStateIntent')) {
+        throw 'Stopped rollback completion requires exclusive published state and completed task evidence.'
+    }
+    $path = Join-Path $Context.Control 'inactive-rollback-complete.json'
+    $record = [ordered]@{
+        version=1; phase='rollback-complete'; operationId=$Context.OperationId
+        stateSha256=$Context.RollbackPhysicalState.Sha256
+        priorRuntime='stopped'; restoredRuntime='stopped'
+        terminalSha256=$Context.RollbackTerminal.Sha256
+        stateIntentSha256=$Context.RollbackStateIntent.Sha256
+        taskReceiptSha256=$Context.RollbackTaskReceipt.Sha256
+    }
+    $text = $record | ConvertTo-Json -Compress
+    if ($Context.ContainsKey('RollbackCompletionReceipt')) {
+        $held = $Context.RollbackCompletionReceipt
+    } elseif (Test-Path -LiteralPath $path) {
+        $held = Open-AgentsChatCompletionFile $Context $path ''
+    } else {
+        $held = [Deployment.WindowsPrivateFile]::Publish($path, $text)
+        $Context.Files.Add($held)
+    }
+    if ($held.ReadText() -cne $text) { throw 'Stopped rollback completion differs from its retained evidence.' }
+    $Context.RollbackCompletionReceipt = $held
+    $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
+    return [pscustomobject]@{
+        status='inactive-rollback-complete'; file=$path; sha256=$held.Sha256
+    }
+}
+
 function Publish-AgentsChatInactiveRollbackTerminal([hashtable]$Context) {
     $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
     if (-not $Context.ContainsKey('ExclusiveLostRuntime') -or -not $Context.ExclusiveLostRuntime -or

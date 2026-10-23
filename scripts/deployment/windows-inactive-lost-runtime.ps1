@@ -106,6 +106,9 @@ function Open-AgentsChatInactiveLostRuntimeAuthority([string]$Control) {
             (Test-Path -LiteralPath (Join-Path $Control 'state.json.lock'))) {
             $null = Stage-AgentsChatInactiveRollbackState $context -InspectOnly
         }
+        if (Test-Path -LiteralPath (Join-Path $Control 'inactive-rollback-complete.json')) {
+            $null = Publish-AgentsChatInactiveRollbackCompletion $context
+        }
         return $context
     } catch {
         $failure = $_.Exception
