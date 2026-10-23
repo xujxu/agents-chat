@@ -133,6 +133,15 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual((await readdir(history)).sort(), names);
       assert.deepEqual(await reopened.check(), reopened.observation);
     } finally { await reopened.close(); }
+    const retirementBefore = await readFile(path.join(control, 'inactive-rollback-retirement.json'));
+    const retirementScope = await api.openWindowsInactiveLostRuntimeAuthority(options);
+    try {
+      await api.prepareWindowsInactiveRollbackRetirementIntent({
+        ...options, scope: retirementScope, runtimeBundle: record.runtimeBundle, acceptDataLoss: true,
+      });
+      assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
+    } finally { await retirementScope.close(); }
     return;
   }
   if (mode === 'resume-task') {

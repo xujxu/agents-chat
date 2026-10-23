@@ -15,6 +15,14 @@ export { restoreWindowsInactiveRollbackProject } from './windows-inactive-rollba
 export { restoreWindowsInactiveRollbackExternal } from './windows-inactive-rollback-external.mjs';
 
 const lostScopes = new WeakMap();
+export async function prepareWindowsInactiveRollbackRetirementIntent(options) {
+  if (options.acceptDataLoss !== true) throw refused(new Error('Rollback retirement requires explicit data-loss acknowledgement.'));
+  await assertWindowsInactiveLostRuntimeAuthority(options);
+  const verified = await verifyWindowsInactiveRollbackFiles({ ...options, terminalPublication: true });
+  const result = await lostScopes.get(options.scope).request('prepare-rollback-retirement', options.signal);
+  await verified.check();
+  return result;
+}
 export async function prepareWindowsInactiveRollbackCompletionReceipt(options) {
   if (options.acceptDataLoss !== true) throw refused(new Error('Rollback completion requires explicit data-loss acknowledgement.'));
   await assertWindowsInactiveLostRuntimeAuthority(options);
@@ -181,6 +189,14 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       if (method === 'close') {
         if (reply.value !== 'close') throw new Error('Unexpected completion recovery close acknowledgement.');
         return;
+      }
+      if (method === 'prepare-rollback-retirement') {
+        const result = captureWorkerFields(reply.value, ['file', 'sha256'], 'inactive rollback retirement intent');
+        if (!lost || result.file !== path.join(control, 'inactive-rollback-retirement.json')
+          || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
+          throw new Error('Invalid inactive rollback retirement acknowledgement.');
+        }
+        return Object.freeze(result);
       }
       if (method === 'complete-rollback') {
         const result = captureWorkerFields(reply.value, ['status', 'file', 'sha256'], 'inactive rollback completion receipt');

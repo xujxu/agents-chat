@@ -15010,6 +15010,15 @@ and requires stable repeated preparation with no inventory change. Retain origin
 authority and leave worker history, backup, runtime, state, receipt and lock intact.
 Actual prefix deletion and its independent reentry proof are subsequent work.
 
+Causal `ce317120 / 40029838952` confirmed the missing task-history retirement
+intent API. The implementation now captures only the original admitted inventory,
+reuses retained exclusive release-intent identity, binds the task directory identity
+and completed rollback receipts, and publishes a create-only intent. Reopening
+reconstructs the intent from still-retained original evidence and refuses differences.
+The fixture includes same-scope repetition and fresh-scope stable reentry.
+Saved worker closure includes the new focused helper. Actions acceptance remains
+pending; no history deletion or lock release is performed by this preparation.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
