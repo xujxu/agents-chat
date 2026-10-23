@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -132,6 +132,15 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   if (restoredBundle) {
     const next = await api.openWindowsInactiveLostRuntimeAuthority(options);
     try {
+      const foreign = path.join(restoredBundle.directory, 'foreign-reentry-test.txt');
+      await writeFile(foreign, 'untrusted publication', { flag: 'wx' });
+      try {
+        await assert.rejects(api.restoreWindowsInactiveRollbackExternal({
+          ...options, scope: next, acceptDataLoss: true,
+        }), /exactly the archived configuration and helpers/);
+        assert.equal(await readFile(foreign, 'utf8'), 'untrusted publication');
+        assert.deepEqual(await next.check(), next.observation);
+      } finally { await unlink(foreign); }
       const resumed = await api.restoreWindowsInactiveRollbackExternal({
         ...options, scope: next, acceptDataLoss: true,
       });

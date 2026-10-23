@@ -14742,6 +14742,15 @@ Only an independently verified complete bundle may be reused; foreign,
 incomplete or changed publication must remain refused. This bounded reentry
 does not prove abrupt publication recovery or final rollback completion.
 
+Causal `8eab5f55 / 39885795333` failed at create-only runtime publication
+(`private-destination`) after the original scope had closed. Reentry now
+independently inspects an existing deterministic rollback bundle against the
+original verified archive before any external restoration. Only absence permits
+new publication; inspection failures never fall back to replacement. The fixture
+also injects an extra file, requires refusal without deleting it or invalidating
+the original native evidence, removes only that test-owned file, then requires
+successful fresh-scope reentry. Incomplete bundle repair remains unsupported.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
