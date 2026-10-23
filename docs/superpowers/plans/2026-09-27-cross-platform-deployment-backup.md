@@ -14824,6 +14824,13 @@ retain original scope and verify files and native task state. This permits the
 next genuine actor-death cases at the intent and registration boundaries without
 sleep-based races or deleting completed receipts. No public routing is enabled.
 
+Run `01d8e611 / 39911224265` failed when the rollback actor exited before its
+hold marker, but the parent assertion masked the child's already captured
+stderr. This does not confirm the intended missing-API assertion. On output EOF
+the fixture now waits boundedly for actor exit and prints its diagnostic before
+asserting the missing boundary. Rerun the causal gate with visible child failure
+before claiming its cause or implementing stage advancement.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

@@ -179,6 +179,11 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $line = $lostActor.StandardOutput.ReadLineAsync()
                     Assert ($line.Wait(180000)) 'Rollback actor did not reach the actual task-restored boundary'
                     $held = $line.GetAwaiter().GetResult()
+                    if ($null -eq $held) {
+                        Assert ($lostActor.WaitForExit(15000)) 'Rollback actor closed output without exiting'
+                        $errors = $diagnostic.GetAwaiter().GetResult()
+                        if ($errors) { [Console]::Error.WriteLine($errors) }
+                    }
                     Assert ($null -ne $held -and $held.StartsWith('INACTIVE_ROLLBACK_TASK_HELD ')) `
                         'Rollback actor exited before its actual task-restored receipt'
                     $identity = $held.Substring('INACTIVE_ROLLBACK_TASK_HELD '.Length) | ConvertFrom-Json
