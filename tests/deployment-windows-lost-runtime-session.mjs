@@ -122,6 +122,30 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         assert.deepEqual(await readFile(path.join(external.runtimeBundle.directory, file.name)),
           await readFile(file.file), `Rollback did not relocate ${file.name}`);
       }
+      assert.equal(typeof api.prepareWindowsInactiveRollbackFilesReceipt, 'function',
+        'Missing durable inactive rollback files-restored receipt');
+      const receiptOptions = { ...options, scope, runtimeBundle: external.runtimeBundle, acceptDataLoss: true };
+      await assert.rejects(api.prepareWindowsInactiveRollbackFilesReceipt({
+        ...receiptOptions, acceptDataLoss: false,
+      }));
+      await assert.rejects(api.prepareWindowsInactiveRollbackFilesReceipt({
+        ...receiptOptions, scope: { ...scope },
+      }));
+      const receipt = await api.prepareWindowsInactiveRollbackFilesReceipt(receiptOptions);
+      assert.equal(receipt.file, path.join(control, 'inactive-rollback-files-restored.json'));
+      const receiptBytes = await readFile(receipt.file);
+      const completedFiles = JSON.parse(receiptBytes);
+      assert.equal(completedFiles.version, 1);
+      assert.equal(completedFiles.phase, 'files-restored');
+      assert.equal(completedFiles.operationId, original.operationId);
+      assert.equal(completedFiles.stateSha256, scope.observation.stateSha256);
+      assert.equal(completedFiles.intentSha256, intent.sha256);
+      assert.equal(completedFiles.snapshotSha256, record.snapshotSha256);
+      assert.equal(completedFiles.sourceCommit, original.sourceCommit);
+      assert.equal(completedFiles.priorRuntime, 'stopped');
+      assert.deepEqual(completedFiles.runtimeBundle, external.runtimeBundle);
+      assert.deepEqual(await api.prepareWindowsInactiveRollbackFilesReceipt(receiptOptions), receipt);
+      assert.deepEqual(await readFile(receipt.file), receiptBytes);
       assert.deepEqual(await scope.check(), scope.observation);
     }
     assert.deepEqual(await readFile(intent.file), intentBytes);

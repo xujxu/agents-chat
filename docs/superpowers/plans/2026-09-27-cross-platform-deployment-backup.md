@@ -14751,6 +14751,19 @@ also injects an extra file, requires refusal without deleting it or invalidating
 the original native evidence, removes only that test-owned file, then requires
 successful fresh-scope reentry. Incomplete bundle repair remains unsupported.
 
+Fresh-scope reentry and foreign-inventory refusal passed at
+`8ab5bbed / 39888336437`. Next require a create-only durable
+`inactive-rollback-files-restored.json` under control before task-policy recovery.
+The receipt must bind original operation/state, rollback intent and snapshot
+digests, source commit, stopped origin and exact verified relocated bundle.
+Only the registered exclusive scope with explicit data-loss acknowledgement may
+publish it, after independently verifying restored project content and relocated
+external files. Repeated publication must return the same receipt and bytes;
+fresh scope opening must validate retained receipt evidence. Do not rewrite the
+original accepted state or report task restoration from a files-only receipt.
+The fixture now requires the receipt API and exact fields before original scope
+closure and the previously accepted fresh-scope external reentry.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
