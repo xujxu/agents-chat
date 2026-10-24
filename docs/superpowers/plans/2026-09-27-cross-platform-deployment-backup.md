@@ -15394,6 +15394,14 @@ policy before killing that actor. Keep all replay assertions in uninterrupted
 actors and retain the existing timeout; do not delay the crash boundary with
 unrelated post-boundary verification.
 
+Gate `39c83c41 / 40139340185` passed the external cleanup step and proved
+actual co-located first-file interruption plus fresh project/runtime
+restoration. The resumed fixture then hit a JavaScript `ReferenceError`:
+the later release-receipt assertion referenced `original`, declared only
+inside the earlier scope's `try` block. Keep the same parsed accepted-state
+record in the enclosing callback scope for both original and fresh native
+authority assertions. Full co-located task/terminal cleanup is still pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

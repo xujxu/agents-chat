@@ -514,6 +514,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   await assert.rejects(api.openWindowsInactiveTaskCompletionRecovery(options));
   progress('opening-original-authority');
   const scope = await api.openWindowsInactiveLostRuntimeAuthority(options);
+  const original = JSON.parse(state);
   let restoredBundle;
   let preparedHandoff;
   try {
@@ -534,7 +535,6 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     await assert.rejects(inspect({ scope: { ...scope } }));
     const binding = await inspect();
     progress('snapshot-inspected');
-    const original = JSON.parse(state);
     assert.equal(binding.mutationAuthority, false);
     assert.equal(binding.snapshot.id, original.backupId);
     assert.equal(binding.snapshot.project, original.project);
