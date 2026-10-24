@@ -15178,6 +15178,13 @@ Native cleanup uses its separate checkpoint admission and remains able to resume
 Admission/archival of a fully retired previous operation for subsequent public
 deploy/update is still required during the compatibility/entry integration stage.
 
+Move the three existing external stopped rollback interruption cases ahead of
+the already-passed inactive completion/released-prefix regression cases in the
+same native command gate. Every existing command remains enabled once; the new
+cleanup path now fails early instead of waiting behind roughly thirty minutes
+of prior regression setup. Do not cancel or duplicate the already running gate;
+the new ordering applies only to subsequent dispatches.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

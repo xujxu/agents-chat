@@ -248,6 +248,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native supervisor protocol contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-public-command.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Public Windows command contracts failed.' }
+          foreach ($step in @('task-restore-requested', 'task-registered', 'task-restored')) {
+            & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep release-requested -ExternalInactiveRuntime -InactiveRollbackCrashStep $step
+            if ($LASTEXITCODE -ne 0) { throw "Inactive Windows external-runtime rollback failed at $step." }
+          }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition
           if ($LASTEXITCODE -ne 0) { throw 'Inactive Windows task observation contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletion
@@ -255,10 +259,6 @@ jobs:
           foreach ($step in @('release-requested', 'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')) {
             & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep $step
             if ($LASTEXITCODE -ne 0) { throw "Inactive Windows completion recovery failed at $step." }
-          }
-          foreach ($step in @('task-restore-requested', 'task-registered', 'task-restored')) {
-            & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep release-requested -ExternalInactiveRuntime -InactiveRollbackCrashStep $step
-            if ($LASTEXITCODE -ne 0) { throw "Inactive Windows external-runtime rollback failed at $step." }
           }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-private-runner.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Private Windows test runner diagnostics failed.' }
