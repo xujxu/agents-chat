@@ -123,11 +123,17 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       const preparedBytes = await readFile(prepared.file);
       assert.equal(prepared.sha256, createHash('sha256').update(preparedBytes).digest('hex'));
       const retirement = JSON.parse(preparedBytes);
+      assert.equal(retirement.version, 2);
       assert.equal(retirement.phase, 'task-retirement-prepared');
       assert.equal(retirement.operationId, reopened.observation.operationId);
       assert.equal(retirement.completionSha256, createHash('sha256').update(receiptBefore).digest('hex'));
       assert.equal(retirement.stateSha256, createHash('sha256').update(expectedFinalState).digest('hex'));
       assert.deepEqual(retirement.entries, entries);
+      const admissionEntry = entries.find(entry => entry.path === path.join('task-maintenance', 'admission.json'));
+      assert.equal(createHash('sha256').update(retirement.checkpoint.admission).digest('hex'), admissionEntry.sha256);
+      assert.equal(retirement.checkpoint.state.sha256, retirement.stateSha256);
+      assert.equal(retirement.checkpoint.completion.sha256, retirement.completionSha256);
+      assert.equal(retirement.checkpoint.taskReceipt.sha256, retirement.taskReceiptSha256);
       assert.deepEqual(await api.prepareWindowsInactiveRollbackRetirementIntent(retirementOptions), prepared);
       assert.deepEqual(await readFile(prepared.file), preparedBytes);
       assert.deepEqual((await readdir(history)).sort(), names);

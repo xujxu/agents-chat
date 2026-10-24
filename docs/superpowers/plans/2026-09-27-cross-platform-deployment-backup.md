@@ -15070,6 +15070,16 @@ checkpoint validation before enabling this deletion; simply forwarding deletion
 through the existing full-history proof cannot satisfy fresh-prefix reentry.
 Actual deletion and partial-prefix admission remain unimplemented.
 
+Causal `a6acebec / 40074790091` confirmed the missing identity-bound `advance`
+method. Before enabling it, extend the retirement intent to version two with
+the exact original admission text, original bridge and old/new runtime identities,
+control directory identity, and retained state/completion/task-receipt/lock file
+descriptors. These are the durable inputs needed when the first deleted history
+file is admission.json. The fixture binds admission text back to its independently
+captured original digest and checks receipt digests against the intent.
+This checkpoint extension is preparation only: partial-history admission and
+deletion remain unimplemented, and this change has not yet been validated.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

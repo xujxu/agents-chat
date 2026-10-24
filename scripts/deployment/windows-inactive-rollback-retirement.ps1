@@ -41,8 +41,9 @@ function Publish-AgentsChatInactiveRollbackRetirementIntent([hashtable]$Context)
             $entries.Add((Get-AgentsChatRetirementFile $Context $relative))
         }
     }
+    $admission = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Directory 'admission.json') ''
     $record = [ordered]@{
-        version=1; phase='task-retirement-prepared'; control=$Context.Control; project=$Context.Project
+        version=2; phase='task-retirement-prepared'; control=$Context.Control; project=$Context.Project
         operationId=$Context.OperationId; taskName=$Context.TaskName
         priorRuntime='stopped'; restoredRuntime='stopped'
         stateSha256=$Context.RollbackPhysicalState.Sha256
@@ -50,8 +51,18 @@ function Publish-AgentsChatInactiveRollbackRetirementIntent([hashtable]$Context)
         taskReceiptSha256=$Context.RollbackTaskReceipt.Sha256
         directory=(Get-AgentsChatRetirementDirectory $Context $Context.Directory)
         entries=$entries.ToArray()
+        checkpoint=[ordered]@{
+            admission=$admission.ReadText()
+            bridge=[ordered]@{ pid=$Context.BridgePid; processIdentity=$Context.BridgeIdentity }
+            runtime=$Context.Runtime; retiredRuntime=$Context.RetiredRuntime
+            controlIdentity=(Get-AgentsChatRetirementDirectory $Context $Context.Control)
+            state=(Get-AgentsChatRetirementFile $Context 'state.json')
+            completion=(Get-AgentsChatRetirementFile $Context 'inactive-rollback-complete.json')
+            taskReceipt=(Get-AgentsChatRetirementFile $Context 'inactive-rollback-task-restored.json')
+            lock=(Get-AgentsChatRetirementFile $Context 'lock\owner.json')
+        }
     }
-    $text = $record | ConvertTo-Json -Depth 5 -Compress
+    $text = $record | ConvertTo-Json -Depth 8 -Compress
     if (Test-Path -LiteralPath $path) {
         $held = Open-AgentsChatCompletionFile $Context $path ''
     } else {
