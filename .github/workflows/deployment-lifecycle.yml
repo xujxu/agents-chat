@@ -236,6 +236,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native process identity or command admission contracts failed.' }
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs') -NamePattern '^recovery manifest'
           if ($LASTEXITCODE -ne 0) { throw 'Saved recovery manifest budgets failed.' }
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-state.test.mjs') -NamePattern '^(inactive-rollback-|INACTIVE-ROLLBACK-)'
+          if ($LASTEXITCODE -ne 0) { throw 'Stopped rollback cleanup admission fences failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-cold-policy-definition.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Cold task policy executable binding contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-private-archive.ps1

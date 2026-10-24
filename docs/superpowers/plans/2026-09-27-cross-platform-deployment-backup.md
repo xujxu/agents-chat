@@ -15166,6 +15166,18 @@ to prove durable admission after actual lock deletion and idempotent final
 receipt publication. This test revision is pending its next Actions run; the
 currently running `8f951de1 / 40110255751` does not include this third boundary.
 
+Ordinary lock acquisition/release and automatic interruption reconciliation must
+also recognize stopped rollback evidence after the task directory or original
+lock disappears. Reserve the `inactive-rollback-*.json` evidence namespace in the
+existing maintenance guard, including Windows case folding. A final receipt is
+not by itself permission for generic JavaScript lock handling to discard native
+markers or treat an interrupted cleanup as idle. Reuse the state ownership
+tests for malformed/empty standalone markers, unchanged original owner bytes and
+refused fresh admission; run the new cases in the Windows private Actions runner.
+Native cleanup uses its separate checkpoint admission and remains able to resume.
+Admission/archival of a fully retired previous operation for subsequent public
+deploy/update is still required during the compatibility/entry integration stage.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
