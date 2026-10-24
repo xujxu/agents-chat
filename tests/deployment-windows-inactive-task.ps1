@@ -286,14 +286,56 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
                             'resume-terminal', $RollbackStep, $terminalStep), $control, $environment)
                     try {
-                        $output = $terminalActor.StandardOutput.ReadToEndAsync()
                         $diagnostic = $terminalActor.StandardError.ReadToEndAsync()
-                        Assert ($terminalActor.WaitForExit(120000)) 'Terminal fresh actor reentry timed out'
+                        $line = $terminalActor.StandardOutput.ReadLineAsync()
+                        Assert ($line.Wait(300000)) 'Stopped cleanup actor did not reach actual first deletion'
+                        $held = $line.GetAwaiter().GetResult()
+                        if ($null -eq $held) {
+                            Assert ($terminalActor.WaitForExit(15000)) 'Stopped cleanup closed output without exiting'
+                            $errors = $diagnostic.GetAwaiter().GetResult()
+                            if ($errors) { [Console]::Error.WriteLine($errors) }
+                        }
+                        Assert ($null -ne $held -and $held.StartsWith('INACTIVE_ROLLBACK_RETIREMENT_HELD ')) `
+                            'Stopped cleanup actor exited before actual deletion'
+                        $identity = $held.Substring('INACTIVE_ROLLBACK_RETIREMENT_HELD '.Length) | ConvertFrom-Json
+                        Assert ($identity.prefix -eq 1) 'Stopped cleanup actor skipped a deletion prefix'
+                        $bridge = [Diagnostics.Process]::GetProcessById($identity.pid)
+                        try {
+                            $null = $bridge.Handle
+                            Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($identity.pid) -ceq $identity.processIdentity) `
+                                'Stopped cleanup bridge changed before interruption'
+                            $terminalActor.Kill()
+                            Assert ($terminalActor.WaitForExit(15000) -and $terminalActor.ExitCode -ne 0) `
+                                'Stopped cleanup actor did not die abruptly'
+                            Assert ($bridge.WaitForExit(15000)) 'Stopped cleanup bridge survived actor death'
+                        } finally { $bridge.Dispose() }
+                        $errors = $diagnostic.GetAwaiter().GetResult()
+                        if ($errors) { [Console]::Error.WriteLine($errors) }
+                    } finally { $terminalActor.Dispose() }
+                    $retirement = Get-Content -LiteralPath (Join-Path $control 'inactive-rollback-retirement.json') -Raw |
+                        ConvertFrom-Json
+                    Assert (-not (Test-Path -LiteralPath (Join-Path $control $retirement.entries[0].path))) `
+                        'Stopped cleanup interruption did not retain actual first deletion'
+                    $remaining = @(Get-ChildItem -LiteralPath (Join-Path $control 'task-maintenance') -Force |
+                        Sort-Object Name | ForEach-Object Name)
+                    $expected = @($retirement.entries | Select-Object -Skip 1 |
+                        ForEach-Object { [IO.Path]::GetFileName($_.path) })
+                    Assert (($remaining -join "`n") -ceq ($expected -join "`n")) `
+                        'Stopped cleanup interruption changed more than its exact first entry'
+                    $fresh = [Deployment.WindowsControllerProcess]::Start($node,
+                        @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                            $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                            'resume-retirement'), $control, $environment)
+                    try {
+                        $output = $fresh.StandardOutput.ReadToEndAsync()
+                        $diagnostic = $fresh.StandardError.ReadToEndAsync()
+                        Assert ($fresh.WaitForExit(180000)) 'Stopped cleanup fresh actor timed out'
                         Write-Output $output.GetAwaiter().GetResult()
                         $errors = $diagnostic.GetAwaiter().GetResult()
                         if ($errors) { [Console]::Error.WriteLine($errors) }
-                        Assert ($terminalActor.ExitCode -eq 0) 'Terminal fresh actor failed to consume actual publication history'
-                    } finally { $terminalActor.Dispose() }
+                        Assert ($fresh.ExitCode -eq 0) 'Stopped cleanup fresh actor failed to retire remaining exact history'
+                    } finally { $fresh.Dispose() }
+                    Write-Output 'PASS: stopped rollback cleanup actor death retains actual prefix one; fresh actor retires exact remaining history'
                 }
             }
             $Recover = $false

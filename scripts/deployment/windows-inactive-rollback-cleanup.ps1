@@ -164,6 +164,13 @@ function Initialize-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
         (Get-AgentsChatColdTerminalHash $handoff.oldState.GetString()) -cne $handoff.stateSha256.GetString()) {
         throw 'Stopped cleanup original terminal handoff differs.'
     }
+    $accepted = ConvertFrom-AgentsChatTaskTransactionState @{
+        Project=$Context.Project; OperationId=$Context.OperationId
+        Generation=$Context.RetiredRuntime.generation; StartedAt=$lock.createdAt.GetString()
+    } $handoff.oldState.GetString() -InactiveCompletion
+    if ($accepted.sourceCommit -cne $handoff.sourceCommit.GetString()) {
+        throw 'Stopped cleanup original source differs.'
+    }
     $stateIntent = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'inactive-rollback-state-intent.json') $receipt.stateIntentSha256.GetString()
     $proposal = Read-AgentsChatMaintenanceFields ($stateIntent.ReadText()) @(
         'version', 'phase', 'operationId', 'terminalSha256', 'oldState', 'nextState')

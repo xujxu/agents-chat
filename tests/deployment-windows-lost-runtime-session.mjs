@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile, readdir, writeFile, unlink, lstat } from 'node:fs/promises';
+import { readFile, readdir, writeFile, unlink, lstat, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -25,8 +25,59 @@ const holdTerminal = async (scope, step) => {
   const timer = setInterval(() => {}, 1000);
   try { await new Promise(() => {}); } finally { clearInterval(timer); }
 };
+const drainRetirement = async (options, entries, expectedState, expectedReceipt, retirementBefore) => {
+  const history = path.join(control, 'task-maintenance');
+  const names = entries.map(entry => path.basename(entry.path));
+  const scope = await api.openWindowsInactiveRollbackRetirement(options);
+  try {
+    assert.equal((await scope.check()).retiredEntries, 1);
+    await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
+    for (let prefix = 2; prefix <= entries.length; prefix++) {
+      const advanced = await scope.advance();
+      assert.equal(advanced.retiredEntries, prefix);
+      assert.deepEqual(await scope.check(), advanced);
+      assert.deepEqual((await readdir(history)).sort(), names.slice(prefix));
+      await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority(options));
+    }
+    assert.deepEqual(await scope.advance(), await scope.check());
+  } finally { await scope.close(); }
+  const empty = await api.openWindowsInactiveRollbackRetirement(options);
+  try {
+    assert.equal((await empty.check()).retiredEntries, entries.length);
+    await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
+    assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedState);
+    assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-complete.json')), expectedReceipt);
+  } finally { await empty.close(); }
+  assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
+};
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
+  if (mode === 'resume-retirement') {
+    const marker = await readFile(path.join(control, 'inactive-rollback-retirement.json'));
+    const record = JSON.parse(marker);
+    const receipt = await readFile(path.join(control, 'inactive-rollback-complete.json'));
+    assert.equal(createHash('sha256').update(state).digest('hex'), record.stateSha256);
+    assert.equal(createHash('sha256').update(receipt).digest('hex'), record.completionSha256);
+    assert.deepEqual((await readdir(path.join(control, 'task-maintenance'))).sort(),
+      record.entries.slice(1).map(entry => path.basename(entry.path)));
+    const history = path.join(control, 'task-maintenance');
+    const foreign = path.join(history, 'foreign-retirement-fixture.json');
+    await writeFile(foreign, '{}', { flag: 'wx' });
+    try { await assert.rejects(api.openWindowsInactiveRollbackRetirement(options)); }
+    finally { await unlink(foreign); }
+    const target = path.join(control, record.entries[2].path);
+    const held = path.join(control, 'fixture-retirement-original.json');
+    const bytes = await readFile(target);
+    await rename(target, held);
+    try {
+      await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
+      await writeFile(target, bytes, { flag: 'wx' });
+      try { await assert.rejects(api.openWindowsInactiveRollbackRetirement(options)); }
+      finally { await unlink(target); }
+    } finally { await rename(held, target); }
+    await drainRetirement(options, record.entries, state, receipt, marker);
+    return;
+  }
   if (mode === 'resume-terminal') {
     const retained = new Map();
     for (const name of ['inactive-rollback-terminal.json', 'inactive-rollback-state-intent.json',
@@ -181,38 +232,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await assert.rejects(readFile(path.join(control, entries[0].path)), { code: 'ENOENT' });
       assert.deepEqual((await readdir(history)).sort(), names.slice(1));
       assert.deepEqual(await nextCleanup.check(), advanced);
+      console.log(`INACTIVE_ROLLBACK_RETIREMENT_HELD ${JSON.stringify({ ...nextCleanup.identity, prefix: 1 })}`);
+      const timer = setInterval(() => {}, 1000);
+      try { await new Promise(() => {}); } finally { clearInterval(timer); }
     } finally { await nextCleanup.close(); }
-    const partial = await api.openWindowsInactiveRollbackRetirement(options);
-    try {
-      const observed = await partial.check();
-      assert.equal(observed.retiredEntries, 1);
-      assert.equal(observed.totalEntries, entries.length);
-      await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
-      assert.deepEqual(await partial.check(), observed);
-      assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
-      assert.deepEqual(await readFile(receiptFile), receiptBefore);
-      assert.deepEqual((await readdir(history)).sort(), names.slice(1));
-    } finally { await partial.close(); }
-    assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
-    const completeCleanup = await api.openWindowsInactiveRollbackRetirement(options);
-    try {
-      for (let prefix = 2; prefix <= entries.length; prefix++) {
-        const advanced = await completeCleanup.advance();
-        assert.equal(advanced.retiredEntries, prefix);
-        assert.deepEqual(await completeCleanup.check(), advanced);
-        assert.deepEqual((await readdir(history)).sort(), names.slice(prefix));
-        await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority(options));
-      }
-      assert.deepEqual(await completeCleanup.advance(), await completeCleanup.check());
-    } finally { await completeCleanup.close(); }
-    const emptyCleanup = await api.openWindowsInactiveRollbackRetirement(options);
-    try {
-      assert.equal((await emptyCleanup.check()).retiredEntries, entries.length);
-      await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
-      assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
-      assert.deepEqual(await readFile(receiptFile), receiptBefore);
-    } finally { await emptyCleanup.close(); }
-    assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
     return;
   }
   if (mode === 'resume-task') {

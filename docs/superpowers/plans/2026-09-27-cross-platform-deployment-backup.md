@@ -15105,6 +15105,15 @@ bytes remain unchanged. This implementation is pending Actions acceptance;
 worker-history retirement, lock release, final durable receipt and genuine
 cleanup-actor interruption remain subsequent work, not claimed complete.
 
+The next fixture revision holds the actual native cleanup scope after its first
+deletion, pins the bridge identity in the parent, kills the Node actor and
+requires bridge exit. The parent independently verifies the remaining exact
+inventory before starting a new actor. That actor must reject a foreign file,
+a non-prefix gap and same-content replacement inode (negative fault injection
+restores original evidence, never simulates accepted cleanup progress), then
+drain the remaining task history. Both staged-state and published-state parent
+scenarios use this interruption. This revision is not yet Actions-verified.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
