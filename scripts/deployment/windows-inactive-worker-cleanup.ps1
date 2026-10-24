@@ -120,6 +120,10 @@ function Assert-AgentsChatStoppedWorkerCleanup([hashtable]$Context) {
             if ($Context.Target) { $Context.Target.Handle.Check() }
             Assert-AgentsChatStoppedWorkerInventory $Context
             Assert-AgentsChatStoppedRollbackRuntime $Context
+            if (-not $Context.ContainsKey('FinalReceipt') -and
+                (Test-Path -LiteralPath (Join-Path $Context.Control 'inactive-rollback-retired.json'))) {
+                throw 'Unexpected stopped rollback final retirement publication.'
+            }
             if ($Context.ContainsKey('FinalReceipt') -and
                 ($Context.Prefix -ne $Context.Record.entries.Count -or
                     $Context.FinalReceipt.ReadText() -cne (Get-AgentsChatStoppedWorkerCompletionText $Context))) {

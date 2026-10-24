@@ -103,6 +103,8 @@ function Initialize-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
     $checkpoint = $record.checkpoint
     Assert-AgentsChatRetirementFields $checkpoint @('admission', 'bridge', 'runtime', 'retiredRuntime',
         'controlIdentity', 'lockIdentity', 'state', 'completion', 'taskReceipt', 'lock')
+    Assert-AgentsChatRetirementIdentity $checkpoint.lockIdentity
+    Assert-AgentsChatRetirementIdentity $record.directory
     Open-AgentsChatRetirementDirectory $Context $Context.Control $checkpoint.controlIdentity
     $workerMode = $Context.ContainsKey('WorkerMode') -and $Context.WorkerMode
     if (-not $workerMode) {
@@ -122,6 +124,22 @@ function Initialize-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
     $admission = Read-AgentsChatMaintenanceFields $checkpoint.admission @(
         'version', 'kind', 'operationId', 'controllerPid', 'controllerIdentity', 'taskName', 'definition',
         'securityDescriptor', 'configuration', 'configurationSha256', 'retiredRuntime')
+    $paths = [string[]]@('admission.json', 'inactive-activation-prepared.json',
+        'inactive-replacement-requested.json', 'inactive-replacement-complete.json',
+        'inactive-start-requested.json', 'inactive-start-running.json', 'inactive-complete-prepared.json',
+        'inactive-complete-policy-requested.json', 'inactive-complete-policy-staged.json',
+        'inactive-complete-release-requested.json')
+    [Array]::Sort($paths, [StringComparer]::Ordinal)
+    if ($record.entries -isnot [array] -or $record.entries.Count -ne $paths.Count) {
+        throw 'Invalid stopped checkpoint task inventory.'
+    }
+    for ($index = 0; $index -lt $paths.Count; $index++) {
+        Assert-AgentsChatRetirementDescriptor $record.entries[$index] (Join-Path 'task-maintenance' $paths[$index])
+    }
+    if ($record.entries[0].sha256 -cne (Get-AgentsChatColdTerminalHash $checkpoint.admission) -or
+        $record.entries[0].bytes -ne [Text.Encoding]::UTF8.GetByteCount($checkpoint.admission)) {
+        throw 'Stopped checkpoint admission descriptor differs.'
+    }
     if ($admission.version.GetInt32() -ne 2 -or $admission.kind.GetString() -cne 'inactive' -or
         $admission.operationId.GetString() -cne $record.operationId -or
         $admission.taskName.GetString() -cne $record.taskName -or
@@ -187,6 +205,13 @@ function Initialize-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
         $handoff.taskReceiptSha256.GetString() -cne $taskReceipt.Sha256 -or
         (Get-AgentsChatColdTerminalHash $handoff.oldState.GetString()) -cne $handoff.stateSha256.GetString()) {
         throw 'Stopped cleanup original terminal handoff differs.'
+    }
+    $originalIdentity = Read-AgentsChatMaintenanceFields $handoff.stateIdentity.GetRawText() @('dev', 'ino', 'bytes')
+    Assert-AgentsChatRetirementIdentity @{
+        dev=$originalIdentity.dev.GetString(); ino=$originalIdentity.ino.GetString()
+    }
+    if ($originalIdentity.bytes.GetInt32() -ne [Text.Encoding]::UTF8.GetByteCount($handoff.oldState.GetString())) {
+        throw 'Stopped cleanup original state identity differs.'
     }
     $accepted = ConvertFrom-AgentsChatTaskTransactionState @{
         Project=$Context.Project; OperationId=$Context.OperationId
@@ -273,22 +298,10 @@ function Open-AgentsChatInactiveRollbackCleanup([string]$Control) {
         $context.Files.Add($context.Marker)
         Initialize-AgentsChatInactiveRollbackCleanup $context
         $entries = $context.Record.entries
-        $names = @('admission.json', 'inactive-activation-prepared.json') +
-            @('replacement-requested', 'replacement-complete', 'start-requested', 'start-running',
-                'complete-prepared', 'complete-policy-requested', 'complete-policy-staged', 'complete-release-requested' |
-                ForEach-Object { "inactive-$_.json" })
-        $sorted = [string[]]$names
-        [Array]::Sort($sorted, [StringComparer]::Ordinal)
-        if ($entries -isnot [array] -or $entries.Count -ne $sorted.Count) { throw 'Invalid stopped task history list.' }
         $context.Entries = [object[]]::new($entries.Count)
         $remaining = $false
         for ($index = 0; $index -lt $entries.Count; $index++) {
             $entry = $entries[$index]
-            Assert-AgentsChatRetirementDescriptor $entry (Join-Path 'task-maintenance' $sorted[$index])
-            if ($index -eq 0 -and ($entry.sha256 -cne (Get-AgentsChatColdTerminalHash $context.Record.checkpoint.admission) -or
-                $entry.bytes -ne [Text.Encoding]::UTF8.GetByteCount($context.Record.checkpoint.admission))) {
-                throw 'Stopped checkpoint admission differs from original descriptor.'
-            }
             $file = Join-Path $Control $entry.path
             $entry.kind = 'file'
             if (-not (Test-Path -LiteralPath $file)) {
@@ -297,7 +310,7 @@ function Open-AgentsChatInactiveRollbackCleanup([string]$Control) {
                 continue
             }
             $remaining = $true
-            if ($sorted[$index] -ceq 'inactive-complete-release-requested.json') {
+            if ([IO.Path]::GetFileName($entry.path) -ceq 'inactive-complete-release-requested.json') {
                 $held = [Deployment.WindowsPrivateFile]::OpenExclusive($file, $entry.sha256, $entry.dev, $entry.ino, $entry.bytes)
                 $context.Files.Add($held)
             } else {

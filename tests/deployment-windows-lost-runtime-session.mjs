@@ -70,6 +70,9 @@ const finishWorkers = async options => {
   } finally { await reopened.close(); }
   assert.deepEqual(await readFile(workerFile), before);
   assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), taskBefore);
+  await writeFile(finalFile, Buffer.from(JSON.stringify({ ...JSON.parse(finalBefore), restoredRuntime: 'running' })));
+  try { await assert.rejects(api.openWindowsInactiveRollbackWorkerRetirement(options)); }
+  finally { await writeFile(finalFile, finalBefore); }
 };
 const drainRetirement = async (options, entries, expectedState, expectedReceipt, retirementBefore) => {
   const history = path.join(control, 'task-maintenance');
