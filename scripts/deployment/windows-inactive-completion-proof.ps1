@@ -19,6 +19,7 @@ function Assert-AgentsChatInactiveCompletionHistory([hashtable]$Context) {
     Assert-AgentsChatCompletionProcessAbsent $old.pid $old.identity
     [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$old.generation, $old.sessionId)
     $bundle = [IO.Path]::GetDirectoryName($admission.configuration.GetString())
+    if ($Context.ContainsKey('RuntimeHandoffReleased')) { $bundle = $Context.RuntimeHandoffDirectory }
     $entries = @(Get-ChildItem -LiteralPath $bundle -Force | Where-Object Name -Match '^(runtime|launch)-.*\.json$')
     if ($entries.Count -ne 1 -or $entries[0].PSIsContainer -or
         $entries[0].Name -cne "runtime-$($old.identity.Replace(':', '-')).json") {

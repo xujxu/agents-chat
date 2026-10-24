@@ -15272,13 +15272,27 @@ These changes await Actions validation.
 Focused preparation validation is dispatched at
 `89260c54 / 40123257547`, independently of the accepted partial publication run.
 
-This stage deliberately retains the original runtime handles and preserves
-the project-restore write-before-refusal. It does not yet grant authority to
-delete the co-located source. The next stage must atomically switch retained
-bundle/readiness checks to the checkpoint archive under the existing exclusive
-release-intent lock, admit fresh scopes after original paths disappear, and
-teach independent task/worker cleanup to use that same archive. Actual project
-restoration and actor-death tests must pass before removing the refusal.
+Preparation alone deliberately retains the original runtime handles.
+The separate explicit release operation now validates the complete prepared
+archive through the shared strict native descriptor schema and original
+configuration/helper/readiness parsers. Retain the archive, publish immutable
+`inactive-rollback-runtime-released.json` binding the exact prepared digest,
+then dispose only tracked original retired-bundle handles under the existing
+exclusive release-intent lock. Fresh lost-runtime scopes with a release receipt
+open the archive instead of the old configuration and use the archive for the
+original runtime-history inventory. All original controller/Job/task checks
+remain in place. Repeat preparation/release does not rewrite either receipt.
+
+The fixture removes the original configuration and readiness paths after the
+switch, checks the still-live native scope, kills that exact retained native
+bridge, then requires a fresh bridge to admit and repeat both receipts while
+the original paths remain absent. Restore fixture paths afterward; this is not
+yet an actual project-restore test. Release/switch changes await their next
+Actions dispatch, separate from the running preparation-only gate.
+
+The project-restore write-before-refusal remains. Independent task/worker
+cleanup must also use the archive and actual project restoration/death tests
+must pass before removing that refusal.
 
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active

@@ -184,6 +184,7 @@ function Open-AgentsChatInactiveLostRuntimeEvidence([string]$Control) {
     $context = @{
         Control=$Control; Directory=(Join-Path $Control 'task-maintenance')
         Files=[Collections.Generic.List[IDisposable]]::new()
+        RetiredBundleFiles=[Collections.Generic.List[IDisposable]]::new()
         Closed=$false; Poisoned=$false; Busy=$false; Owner=$null; Instance=$null; Folder=$null
         LostRuntime=$true; Stage='input'
     }
@@ -200,7 +201,6 @@ function Open-AgentsChatInactiveLostRuntimeEvidence([string]$Control) {
         if ($context.Phase -cne 'release-requested') {
             throw 'Lost-runtime evidence requires the original unacknowledged release intent.'
         }
-        Assert-AgentsChatInactiveCompletionHistory $context
         $runtime = ConvertFrom-AgentsChatCompletionRuntime $context.Completed.runtime.GetRawText()
         if ($runtime.generation -ceq $context.RetiredRuntime.generation -or
             $runtime.identity -ceq $context.RetiredRuntime.identity -or
@@ -208,8 +208,16 @@ function Open-AgentsChatInactiveLostRuntimeEvidence([string]$Control) {
             throw 'Lost-runtime evidence does not identify its distinct new runtime.'
         }
         $context.Runtime = $runtime
-        Open-AgentsChatCompletionBundle $context $context.Admission.configuration.GetString() `
-            $context.Admission.configurationSha256.GetString() $context.RetiredRuntime
+        if (Test-Path -LiteralPath (Join-Path $Control 'inactive-rollback-runtime-released.json')) {
+            $null = Open-AgentsChatRuntimeHandoffArchive $context
+        } else {
+            $start = $context.Files.Count
+            Open-AgentsChatCompletionBundle $context $context.Admission.configuration.GetString() `
+                $context.Admission.configurationSha256.GetString() $context.RetiredRuntime
+            foreach ($file in $context.Files.GetRange($start, $context.Files.Count - $start)) {
+                $context.RetiredBundleFiles.Add($file)
+            }
+        }
         Open-AgentsChatCompletionBundle $context $context.Configuration $context.ConfigurationSha256 $runtime
         $scheduler = New-Object -ComObject 'Schedule.Service'
         $scheduler.Connect()

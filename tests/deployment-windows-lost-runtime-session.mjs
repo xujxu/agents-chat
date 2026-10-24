@@ -682,6 +682,56 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       }), handoff);
       assert.deepEqual(await readFile(handoff.file), bytes);
       assert.deepEqual(await next.check(), next.observation);
+      assert.equal(typeof api.releaseWindowsInactiveRollbackRuntimeHandoff, 'function',
+        'Missing retained runtime handoff before original configuration removal');
+      await assert.rejects(api.releaseWindowsInactiveRollbackRuntimeHandoff({
+        ...options, scope: next, acceptDataLoss: false,
+      }));
+      await assert.rejects(api.releaseWindowsInactiveRollbackRuntimeHandoff({
+        ...options, scope: { ...next }, acceptDataLoss: true,
+      }));
+      const released = await api.releaseWindowsInactiveRollbackRuntimeHandoff({
+        ...options, scope: next, acceptDataLoss: true,
+      });
+      assert.equal(released.file, path.join(control, 'inactive-rollback-runtime-released.json'));
+      const releasedBytes = await readFile(released.file);
+      assert.equal(released.sha256, createHash('sha256').update(releasedBytes).digest('hex'));
+      const releaseRecord = JSON.parse(releasedBytes);
+      assert.equal(releaseRecord.phase, 'runtime-evidence-released');
+      assert.equal(releaseRecord.preparedSha256, handoff.sha256);
+      assert.equal(releaseRecord.operationId, original.operationId);
+      const missing = path.join(control, 'original-runtime-configuration-fixture');
+      const readiness = path.join(path.dirname(checkpoint.configuration),
+        `runtime-${checkpoint.runtimeIdentity.replaceAll(':', '-')}.json`);
+      const missingReadiness = path.join(control, 'original-runtime-readiness-fixture');
+      await rename(checkpoint.configuration, missing);
+      let readinessMoved = false;
+      try {
+        await rename(readiness, missingReadiness);
+        readinessMoved = true;
+        await assert.rejects(readFile(checkpoint.configuration), { code: 'ENOENT' });
+        await assert.rejects(readFile(readiness), { code: 'ENOENT' });
+        assert.deepEqual(await next.check(), next.observation);
+        assert.equal(await processIdentity(next.identity.pid), next.identity.processIdentity);
+        assert.equal(process.kill(next.identity.pid, 'SIGKILL'), true);
+        await assert.rejects(next.check(), { code: 'DEPLOYMENT_WINDOWS_COMPLETION_RECOVERY_REFUSED' });
+        assert.notEqual(await processIdentity(next.identity.pid), next.identity.processIdentity);
+        const fresh = await api.openWindowsInactiveLostRuntimeAuthority(options);
+        try {
+          assert.deepEqual(await api.prepareWindowsInactiveRollbackRuntimeHandoff({
+            ...options, scope: fresh, acceptDataLoss: true,
+          }), handoff);
+          assert.deepEqual(await api.releaseWindowsInactiveRollbackRuntimeHandoff({
+            ...options, scope: fresh, acceptDataLoss: true,
+          }), released);
+          assert.deepEqual(await readFile(handoff.file), bytes);
+          assert.deepEqual(await readFile(released.file), releasedBytes);
+          assert.deepEqual(await fresh.check(), fresh.observation);
+        } finally { await fresh.close(); }
+      } finally {
+        try { if (readinessMoved) await rename(missingReadiness, readiness); }
+        finally { await rename(missing, checkpoint.configuration); }
+      }
     } finally { await next.close(); }
   }
   if (restoredBundle) {
