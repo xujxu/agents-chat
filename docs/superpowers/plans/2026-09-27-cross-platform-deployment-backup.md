@@ -15132,6 +15132,25 @@ Actions `40106819393` still validates the earlier task-history implementation
 at `b677be3d`; neither the real-interruption revision nor this worker stage has
 passed Actions yet.
 
+Stopped worker cleanup now has its own independent opener. It retains both
+immutable retirement markers exclusively, revalidates the original stopped
+runtime/task evidence using the checkpoint-bound lock text, and accepts only
+the exact remaining continuous worker prefix. The task directory, settled
+journals, saved helper files, helper directory, worker operation journal, original
+lock owner and lock directory retire in that order through native identity-bound
+removal. Shared stopped-runtime checks do not require an already deleted lock
+or task directory. Final `inactive-rollback-retired.json` publication is a
+separate repeatable step after every declared entry is absent; both markers,
+state, rollback completion, backup and restored runtime bundle remain.
+
+The fixture now kills a second real actor after worker prefix two, verifies its
+bridge exit and actual remaining paths in the parent, and starts a final fresh
+actor to drain the worker inventory, release the actual lock and publish/reopen
+the final receipt. Parent postconditions retain the independently captured
+original startup records before cleanup instead of rereading deliberately
+deleted history. All of this worker deletion and final publication remains
+pending GitHub Actions; no local validation has been run.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

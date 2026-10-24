@@ -110,8 +110,12 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         $errors = $diagnostic.GetAwaiter().GetResult()
         if ($errors) { [Console]::Error.WriteLine($errors) }
         if (-not $Recover) { Assert ($controller.ExitCode -eq 0) 'Inactive task Node bridge failed' }
+        $runningEvidence = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-start-running.json') -Raw |
+            ConvertFrom-Json
         $unreleased = $Recover -and $RecoveryStep -ceq 'release-requested'
         if ($unreleased) {
+            $preparedEvidence = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-prepared.json') -Raw |
+                ConvertFrom-Json
             $runningBefore = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-start-running.json') -Raw |
                 ConvertFrom-Json
             [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty(
@@ -327,15 +331,52 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
                             'resume-retirement'), $control, $environment)
                     try {
-                        $output = $fresh.StandardOutput.ReadToEndAsync()
                         $diagnostic = $fresh.StandardError.ReadToEndAsync()
-                        Assert ($fresh.WaitForExit(180000)) 'Stopped cleanup fresh actor timed out'
+                        $line = $fresh.StandardOutput.ReadLineAsync()
+                        Assert ($line.Wait(300000)) 'Stopped worker actor did not reach its actual deletion prefix'
+                        $held = $line.GetAwaiter().GetResult()
+                        if ($null -eq $held) {
+                            Assert ($fresh.WaitForExit(15000)) 'Stopped worker actor closed output without exiting'
+                            $errors = $diagnostic.GetAwaiter().GetResult()
+                            if ($errors) { [Console]::Error.WriteLine($errors) }
+                        }
+                        Assert ($null -ne $held -and $held.StartsWith('INACTIVE_ROLLBACK_WORKERS_HELD ')) `
+                            'Stopped worker actor exited before actual deletion'
+                        $identity = $held.Substring('INACTIVE_ROLLBACK_WORKERS_HELD '.Length) | ConvertFrom-Json
+                        Assert ($identity.prefix -eq 2) 'Stopped worker actor skipped its actual deletion boundary'
+                        $bridge = [Diagnostics.Process]::GetProcessById($identity.pid)
+                        try {
+                            $null = $bridge.Handle
+                            Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($identity.pid) -ceq $identity.processIdentity) `
+                                'Stopped worker bridge changed before interruption'
+                            $fresh.Kill()
+                            Assert ($fresh.WaitForExit(15000) -and $fresh.ExitCode -ne 0) `
+                                'Stopped worker actor did not die abruptly'
+                            Assert ($bridge.WaitForExit(15000)) 'Stopped worker bridge survived actor death'
+                        } finally { $bridge.Dispose() }
+                        $errors = $diagnostic.GetAwaiter().GetResult()
+                        if ($errors) { [Console]::Error.WriteLine($errors) }
+                    } finally { $fresh.Dispose() }
+                    $workers = Get-Content -LiteralPath (Join-Path $control 'inactive-rollback-workers.json') -Raw |
+                        ConvertFrom-Json
+                    for ($index = 0; $index -lt $workers.entries.Count; $index++) {
+                        Assert ((Test-Path -LiteralPath (Join-Path $control $workers.entries[$index].path)) -eq ($index -ge 2)) `
+                            'Actual stopped worker interruption differs from its exact prefix'
+                    }
+                    $last = [Deployment.WindowsControllerProcess]::Start($node,
+                        @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                            $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                            'resume-workers'), $control, $environment)
+                    try {
+                        $output = $last.StandardOutput.ReadToEndAsync()
+                        $diagnostic = $last.StandardError.ReadToEndAsync()
+                        Assert ($last.WaitForExit(300000)) 'Stopped worker final cleanup actor timed out'
                         Write-Output $output.GetAwaiter().GetResult()
                         $errors = $diagnostic.GetAwaiter().GetResult()
                         if ($errors) { [Console]::Error.WriteLine($errors) }
-                        Assert ($fresh.ExitCode -eq 0) 'Stopped cleanup fresh actor failed to retire remaining exact history'
-                    } finally { $fresh.Dispose() }
-                    Write-Output 'PASS: stopped rollback cleanup actor death retains actual prefix one; fresh actor retires exact remaining history'
+                        Assert ($last.ExitCode -eq 0) 'Stopped worker fresh actor failed to retire history and release original lock'
+                    } finally { $last.Dispose() }
+                    Write-Output 'PASS: stopped task and worker cleanup survive real actor death, retire exact history, release original lock and retain final receipt'
                 }
             }
             $Recover = $false
@@ -460,12 +501,10 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         }
         $state = Get-Content -LiteralPath (Join-Path $control 'state.json') -Raw | ConvertFrom-Json
         $expectedBundle = Join-Path $control "runtime-$($state.operationId)"
-        $running = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-start-running.json') -Raw |
-            ConvertFrom-Json
+        $running = $runningEvidence
         $finalDefinition = $running.definition
         if ($unreleased) {
-            $prepared = Get-Content -LiteralPath (Join-Path $control 'task-maintenance/inactive-complete-prepared.json') -Raw |
-                ConvertFrom-Json
+            $prepared = $preparedEvidence
             $finalDefinition = [string]$folder.GetTask($TaskName).Xml
             if ([IO.Path]::GetDirectoryName($ReadyFile) -cne $Project) {
                 $rollback = Get-Content -LiteralPath (Join-Path $control 'inactive-rollback-task-restored.json') -Raw |

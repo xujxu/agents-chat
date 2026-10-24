@@ -25,6 +25,52 @@ const holdTerminal = async (scope, step) => {
   const timer = setInterval(() => {}, 1000);
   try { await new Promise(() => {}); } finally { clearInterval(timer); }
 };
+const finishWorkers = async options => {
+  const workerFile = path.join(control, 'inactive-rollback-workers.json');
+  const before = await readFile(workerFile);
+  const record = JSON.parse(before);
+  const taskBefore = await readFile(path.join(control, 'inactive-rollback-retirement.json'));
+  const stateBefore = await readFile(path.join(control, 'state.json'));
+  const receiptBefore = await readFile(path.join(control, 'inactive-rollback-complete.json'));
+  const backupBefore = await readFile(path.join(control, 'backup', 'manifest.json'));
+  const configurationBefore = await readFile(path.join(control, 'inactive-rollback-runtime', 'configuration.json'));
+  const scope = await api.openWindowsInactiveRollbackWorkerRetirement(options);
+  try {
+    const initial = await scope.check();
+    assert.equal(initial.retiredEntries, 2);
+    assert.equal(initial.totalEntries, record.entries.length);
+    await assert.rejects(api.openWindowsInactiveRollbackWorkerRetirement(options));
+    await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
+    for (let prefix = 3; prefix <= record.entries.length; prefix++) {
+      const next = await scope.advance();
+      assert.equal(next.status, 'retiring-workers');
+      assert.equal(next.retiredEntries, prefix);
+      assert.deepEqual(await scope.check(), next);
+      await assert.rejects(lstat(path.join(control, record.entries[prefix - 1].path)), { code: 'ENOENT' });
+    }
+    const complete = await scope.advance();
+    assert.equal(complete.status, 'retired');
+    assert.deepEqual(await scope.check(), complete);
+    assert.deepEqual(await scope.advance(), complete);
+    await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
+    await assert.rejects(lstat(path.join(control, 'worker-engine')), { code: 'ENOENT' });
+    await assert.rejects(lstat(path.join(control, 'task-maintenance')), { code: 'ENOENT' });
+  } finally { await scope.close(); }
+  const finalFile = path.join(control, 'inactive-rollback-retired.json');
+  const finalBefore = await readFile(finalFile);
+  const reopened = await api.openWindowsInactiveRollbackWorkerRetirement(options);
+  try {
+    assert.equal((await reopened.check()).status, 'retired');
+    assert.deepEqual(await reopened.advance(), await reopened.check());
+    assert.deepEqual(await readFile(finalFile), finalBefore);
+    assert.deepEqual(await readFile(path.join(control, 'state.json')), stateBefore);
+    assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-complete.json')), receiptBefore);
+    assert.deepEqual(await readFile(path.join(control, 'backup', 'manifest.json')), backupBefore);
+    assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-runtime', 'configuration.json')), configurationBefore);
+  } finally { await reopened.close(); }
+  assert.deepEqual(await readFile(workerFile), before);
+  assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), taskBefore);
+};
 const drainRetirement = async (options, entries, expectedState, expectedReceipt, retirementBefore) => {
   const history = path.join(control, 'task-maintenance');
   const names = entries.map(entry => path.basename(entry.path));
@@ -50,6 +96,7 @@ const drainRetirement = async (options, entries, expectedState, expectedReceipt,
     assert.equal(prepared.file, path.join(control, 'inactive-rollback-workers.json'));
     assert.match(prepared.sha256, /^[a-f0-9]{64}$/);
     assert.deepEqual(await empty.prepareWorkers(), prepared);
+    await assert.rejects(api.openWindowsInactiveRollbackWorkerRetirement(options));
   } finally { await empty.close(); }
   await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
   assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedState);
@@ -64,9 +111,26 @@ const drainRetirement = async (options, entries, expectedState, expectedReceipt,
   assert.equal(worker.entries.at(-2).path, path.join('lock', 'owner.json'));
   assert.equal(worker.entries.at(-1).path, 'lock');
   assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
+  assert.equal(typeof api.openWindowsInactiveRollbackWorkerRetirement, 'function',
+    'Missing independent stopped worker cleanup resumption');
+  const workers = await api.openWindowsInactiveRollbackWorkerRetirement(options);
+  try {
+    assert.equal((await workers.check()).retiredEntries, 0);
+    for (let prefix = 1; prefix <= 2; prefix++) {
+      assert.equal((await workers.advance()).retiredEntries, prefix);
+      await assert.rejects(lstat(path.join(control, worker.entries[prefix - 1].path)), { code: 'ENOENT' });
+    }
+    console.log(`INACTIVE_ROLLBACK_WORKERS_HELD ${JSON.stringify({ ...workers.identity, prefix: 2 })}`);
+    const timer = setInterval(() => {}, 1000);
+    try { await new Promise(() => {}); } finally { clearInterval(timer); }
+  } finally { await workers.close(); }
 };
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
+  if (mode === 'resume-workers') {
+    await finishWorkers(options);
+    return;
+  }
   if (mode === 'resume-retirement') {
     const marker = await readFile(path.join(control, 'inactive-rollback-retirement.json'));
     const record = JSON.parse(marker);

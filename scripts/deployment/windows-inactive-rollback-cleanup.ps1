@@ -35,6 +35,33 @@ function Get-AgentsChatInactiveRollbackCleanupObservation([hashtable]$Context) {
     }
 }
 
+function Assert-AgentsChatStoppedRollbackRuntime([hashtable]$Context) {
+    Assert-AgentsChatCompletionProcessAbsent $Context.Admission.controllerPid.GetInt32() $Context.Admission.controllerIdentity.GetString()
+    Assert-AgentsChatCompletionProcessAbsent $Context.OriginalBridge.pid $Context.OriginalBridge.processIdentity
+    foreach ($runtime in @($Context.Runtime, $Context.RetiredRuntime)) {
+        Assert-AgentsChatCompletionProcessAbsent $runtime.pid $runtime.identity
+        [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$runtime.generation, $runtime.sessionId)
+    }
+    if ($Context.ContainsKey('WorkerDomains')) {
+        foreach ($domain in $Context.WorkerDomains) {
+            [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$domain.generation, $domain.sessionId)
+        }
+    }
+    $priorBundle = [IO.Path]::GetDirectoryName($Context.Admission.configuration.GetString())
+    $runtimeFiles = @(Get-ChildItem -LiteralPath $priorBundle -Force |
+        Where-Object Name -Match '^(runtime|launch)-.*\.json$')
+    if ($runtimeFiles.Count -ne 1 -or $runtimeFiles[0].PSIsContainer -or
+        $runtimeFiles[0].Name -cne "runtime-$($Context.RetiredRuntime.identity.Replace(':', '-')).json") {
+        throw 'Stopped cleanup original runtime history changed.'
+    }
+    $task = $Context.Folder.GetTask($Context.TaskName)
+    if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
+        ([xml][string]$task.Xml).OuterXml -cne ([xml]$Context.Definition).OuterXml -or
+        [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor) {
+        throw 'Stopped cleanup lost original disabled task policy.'
+    }
+}
+
 function Assert-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
     if ($Context.Closed -or $Context.Poisoned -or $Context.Busy) { throw 'Stopped cleanup authority is unavailable.' }
     $Context.Busy = $true
@@ -43,30 +70,7 @@ function Assert-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
             foreach ($file in $Context.Files) { $file.Check() }
             if ($Context.Target) { $Context.Target.Handle.Check() }
             Assert-AgentsChatInactiveRollbackCleanupInventory $Context
-            Assert-AgentsChatCompletionProcessAbsent $Context.Admission.controllerPid.GetInt32() $Context.Admission.controllerIdentity.GetString()
-            Assert-AgentsChatCompletionProcessAbsent $Context.Record.checkpoint.bridge.pid $Context.Record.checkpoint.bridge.processIdentity
-            foreach ($runtime in @($Context.Runtime, $Context.RetiredRuntime)) {
-                Assert-AgentsChatCompletionProcessAbsent $runtime.pid $runtime.identity
-                [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$runtime.generation, $runtime.sessionId)
-            }
-            if ($Context.ContainsKey('WorkerDomains')) {
-                foreach ($domain in $Context.WorkerDomains) {
-                    [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$domain.generation, $domain.sessionId)
-                }
-            }
-            $priorBundle = [IO.Path]::GetDirectoryName($Context.Admission.configuration.GetString())
-            $runtimeFiles = @(Get-ChildItem -LiteralPath $priorBundle -Force |
-                Where-Object Name -Match '^(runtime|launch)-.*\.json$')
-            if ($runtimeFiles.Count -ne 1 -or $runtimeFiles[0].PSIsContainer -or
-                $runtimeFiles[0].Name -cne "runtime-$($Context.RetiredRuntime.identity.Replace(':', '-')).json") {
-                throw 'Stopped cleanup original runtime history changed.'
-            }
-            $task = $Context.Folder.GetTask($Context.TaskName)
-            if ($task.Enabled -or $task.GetInstances(0).Count -ne 0 -or
-                ([xml][string]$task.Xml).OuterXml -cne ([xml]$Context.Definition).OuterXml -or
-                [string]$task.GetSecurityDescriptor(7) -cne $Context.SecurityDescriptor) {
-                throw 'Stopped cleanup lost original disabled task policy.'
-            }
+            Assert-AgentsChatStoppedRollbackRuntime $Context
         }
         return Get-AgentsChatInactiveRollbackCleanupObservation $Context
     } catch {
@@ -100,12 +104,15 @@ function Initialize-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
     Assert-AgentsChatRetirementFields $checkpoint @('admission', 'bridge', 'runtime', 'retiredRuntime',
         'controlIdentity', 'lockIdentity', 'state', 'completion', 'taskReceipt', 'lock')
     Open-AgentsChatRetirementDirectory $Context $Context.Control $checkpoint.controlIdentity
-    Open-AgentsChatRetirementDirectory $Context $Context.Directory $record.directory
-    Open-AgentsChatRetirementDirectory $Context (Join-Path $Context.Control 'lock') `
-        $checkpoint.lockIdentity
+    $workerMode = $Context.ContainsKey('WorkerMode') -and $Context.WorkerMode
+    if (-not $workerMode) {
+        Open-AgentsChatRetirementDirectory $Context $Context.Directory $record.directory
+        Open-AgentsChatRetirementDirectory $Context (Join-Path $Context.Control 'lock') $checkpoint.lockIdentity
+    }
     Assert-AgentsChatRetirementFields $checkpoint.bridge @('pid', 'processIdentity')
     if ($checkpoint.bridge.pid -isnot [int]) { throw 'Invalid stopped original bridge.' }
     Assert-AgentsChatCompletionProcessAbsent $checkpoint.bridge.pid $checkpoint.bridge.processIdentity
+    $Context.OriginalBridge = $checkpoint.bridge
     $Context.Runtime = ConvertFrom-AgentsChatCompletionRuntime ($checkpoint.runtime | ConvertTo-Json -Compress)
     $Context.RetiredRuntime = ConvertFrom-AgentsChatRetiredRuntime ($checkpoint.retiredRuntime | ConvertTo-Json -Compress)
     if ($Context.Runtime.generation -ceq $Context.RetiredRuntime.generation -or
@@ -136,10 +143,21 @@ function Initialize-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
     $state = Open-AgentsChatRetirementFile $Context $checkpoint.state 'state.json'
     $completion = Open-AgentsChatRetirementFile $Context $checkpoint.completion 'inactive-rollback-complete.json'
     $taskReceipt = Open-AgentsChatRetirementFile $Context $checkpoint.taskReceipt 'inactive-rollback-task-restored.json'
-    $lockFile = Open-AgentsChatRetirementFile $Context $checkpoint.lock 'lock\owner.json'
+    $lockText = if ($workerMode) {
+        Assert-AgentsChatRetirementDescriptor $checkpoint.lock 'lock\owner.json'
+        if ($Context.StoredLockText -isnot [string] -or
+            [Text.Encoding]::UTF8.GetByteCount($Context.StoredLockText) -ne $checkpoint.lock.bytes -or
+            (Get-AgentsChatColdTerminalHash $Context.StoredLockText) -cne $checkpoint.lock.sha256) {
+            throw 'Stopped worker cleanup durable lock differs.'
+        }
+        $Context.StoredLockText
+    } else {
+        $lockFile = Open-AgentsChatRetirementFile $Context $checkpoint.lock 'lock\owner.json'
+        $lockFile.ReadText()
+    }
     if ($record.stateSha256 -cne $state.Sha256 -or $record.completionSha256 -cne $completion.Sha256 -or
         $record.taskReceiptSha256 -cne $taskReceipt.Sha256) { throw 'Stopped cleanup receipt digest differs.' }
-    $lock = Read-AgentsChatMaintenanceFields ($lockFile.ReadText()) @(
+    $lock = Read-AgentsChatMaintenanceFields $lockText @(
         'version', 'token', 'project', 'operationId', 'pid', 'processIdentity', 'createdAt')
     Assert-AgentsChatCompletionGuid $lock.token.GetString()
     if ($lock.version.GetInt32() -ne 1 -or $lock.operationId.GetString() -cne $Context.OperationId -or
