@@ -103,7 +103,7 @@ function Open-AgentsChatRuntimeHandoffArchive(
 
 function Release-AgentsChatInactiveRollbackRuntimeHandoff([hashtable]$Context) {
     $null = Publish-AgentsChatInactiveRollbackRuntimeHandoff $Context
-    $prepared = Open-AgentsChatRuntimeHandoffArchive $Context -RequireReleased
+    $prepared = Open-AgentsChatRuntimeHandoffArchive $Context
     $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
     $path = Join-Path $Context.Control 'inactive-rollback-runtime-released.json'
     if (-not $Context.ContainsKey('RuntimeHandoffReleased')) {
@@ -127,7 +127,7 @@ function Release-AgentsChatInactiveRollbackRuntimeHandoff([hashtable]$Context) {
 function Publish-AgentsChatInactiveRollbackRuntimeHandoff([hashtable]$Context) {
     $null = Publish-AgentsChatInactiveRollbackIntent $Context
     if ($Context.ContainsKey('RuntimeHandoffReleased')) {
-        $prepared = Open-AgentsChatRuntimeHandoffArchive $Context
+        $prepared = Open-AgentsChatRuntimeHandoffArchive $Context -RequireReleased
         $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
         return [pscustomobject]@{
             file=(Join-Path $Context.Control 'inactive-rollback-runtime-handoff.json'); sha256=$prepared.Sha256

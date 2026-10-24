@@ -15333,6 +15333,15 @@ two-minute refusal-only actor budget. This integration awaits Actions;
 an actual mid-project-copy actor-death boundary and terminal cleanup of that
 specific co-located case remain separate follow-through.
 
+First release/integration gate `84008c8e / 40128300664` refused before
+project mutation: the initial explicit release incorrectly required its own
+not-yet-published release receipt when opening prepared evidence. Keep that
+requirement on already-released/fresh admissions and independent cleanup,
+but allow the initial explicit operation to validate the prepared archive
+before publishing release. The existing first external rollback case exposed
+this causal ordering bug. Do not loosen archive validation or fabricate a
+release acknowledgement; rerun only after pushing the corrected call sites.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
