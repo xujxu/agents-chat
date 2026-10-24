@@ -1,6 +1,7 @@
 import path from 'node:path';
 import {
   assertWindowsInactiveLostRuntimeAuthority, prepareWindowsInactiveRollbackIntent,
+  releaseWindowsInactiveRollbackRuntimeHandoff,
 } from './windows-task-completion-recovery.mjs';
 import { inspectWindowsInactiveRollbackSnapshot } from './windows-inactive-rollback-snapshot.mjs';
 import { restoreProjectSnapshot } from './restore-project.mjs';
@@ -23,7 +24,7 @@ export async function restoreWindowsInactiveRollbackProject(options) {
       const binding = await inspectWindowsInactiveRollbackSnapshot(retained);
       const relative = path.relative(binding.snapshot.project, binding.runtime.task.configuration);
       if (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
-        throw new Error('Inactive project rollback requires external retained runtime evidence; co-located evidence needs a durable handoff before mutation.');
+        await releaseWindowsInactiveRollbackRuntimeHandoff(retained);
       }
       await prepareWindowsInactiveRollbackIntent(retained);
       await binding.check({ signal: stageSignal });

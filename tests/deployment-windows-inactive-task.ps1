@@ -220,7 +220,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     } finally { $bridge.Dispose() }
                 } else {
                     $output = $lostActor.StandardOutput.ReadToEndAsync()
-                    Assert ($lostActor.WaitForExit(120000)) 'Lost-runtime transport actor timed out'
+                    Assert ($lostActor.WaitForExit(300000)) 'Lost-runtime co-located rollback actor timed out'
                     Write-Output $output.GetAwaiter().GetResult()
                     Assert ($lostActor.ExitCode -eq 0) 'Lost-runtime transport actor failed'
                 }
@@ -541,7 +541,8 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         if ($unreleased) {
             $prepared = $preparedEvidence
             $finalDefinition = [string]$folder.GetTask($TaskName).Xml
-            if ([IO.Path]::GetDirectoryName($ReadyFile) -cne $Project) {
+            if ([IO.Path]::GetDirectoryName($ReadyFile) -cne $Project -or
+                (Test-Path -LiteralPath (Join-Path $control 'inactive-rollback-runtime-released.json'))) {
                 $rollback = Get-Content -LiteralPath (Join-Path $control 'inactive-rollback-task-restored.json') -Raw |
                     ConvertFrom-Json
                 $original = [xml]$definition

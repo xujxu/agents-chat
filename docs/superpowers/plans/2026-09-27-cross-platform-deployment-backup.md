@@ -15306,8 +15306,23 @@ Each new actor verifies persistent absence/custody rather than recreating the
 original paths. Restore fixture paths only after all final-receipt repeat and
 tamper-refusal assertions. These integration changes await Actions.
 
-The project-restore write-before-refusal remains until actual co-located
-project restoration/death tests pass.
+Co-located project restoration now replaces the blanket refusal with the
+explicit native release operation before any project write. It still requires
+the original accepted update, verified snapshot, data-loss acknowledgement,
+exclusive original authority and a successfully pinned durable handoff.
+Unacknowledged/foreign-scope calls remain write-before-refusal. Failure to
+prepare, validate or release evidence cannot fall through to project mutation.
+
+The co-located fixture now exercises actual project byte restoration, runtime
+relocation, files-restored receipt/tamper refusal and disabled task-policy
+restoration through the same assertions as the external-runtime fixture.
+It also retains the prepared archive identity/reentry and real bridge-death
+checks with original configuration/readiness absent. Parent assertions require
+the relocated original disabled policy when a durable runtime release exists.
+Allow five minutes for this complete co-located actor instead of the previous
+two-minute refusal-only actor budget. This integration awaits Actions;
+an actual mid-project-copy actor-death boundary and terminal cleanup of that
+specific co-located case remain separate follow-through.
 
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active

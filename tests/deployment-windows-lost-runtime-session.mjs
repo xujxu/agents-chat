@@ -609,77 +609,75 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
           const file = path.join(entry.parentPath, entry.name);
           return [file, await readFile(file)];
         }));
-      await assert.rejects(api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: true }),
-        /co-located evidence needs a durable handoff/);
+      await assert.rejects(api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: false }));
       assert.deepEqual((await readdir(original.project, { recursive: true })).sort(), names);
       for (const [file, bytes] of files) {
         assert.deepEqual(await readFile(file), bytes);
       }
-    } else {
-      await api.releaseWindowsInactiveRollbackRuntimeHandoff({ ...options, scope, acceptDataLoss: true });
-      assert.deepEqual(await scope.check(), scope.observation);
-      const restored = await api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: true });
-      assert.equal(restored.status, 'project-restored');
-      assert.equal(restored.sourceCommit, original.sourceCommit);
-      for (const entry of binding.snapshot.entries.filter(entry => entry.kind === 'file')) {
-        assert.deepEqual(await readFile(path.join(original.project, entry.path)),
-          await readFile(path.join(control, 'backup/files', entry.path)), `Rollback did not restore ${entry.path}`);
-      }
-      assert.equal(typeof api.restoreWindowsInactiveRollbackExternal, 'function',
-        'Missing actual inactive rollback external restoration');
-      await assert.rejects(api.restoreWindowsInactiveRollbackExternal({ ...options, scope, acceptDataLoss: false }));
-      await assert.rejects(api.restoreWindowsInactiveRollbackExternal({
-        ...options, scope: { ...scope }, acceptDataLoss: true,
-      }));
-      const external = await api.restoreWindowsInactiveRollbackExternal({ ...options, scope, acceptDataLoss: true });
-      restoredBundle = external.runtimeBundle;
-      assert.equal(external.status, 'external-restored');
-      assert.equal(external.runtimeBundle.sha256, binding.runtime.task.configurationSha256);
-      assert.notEqual(external.runtimeBundle.configuration, binding.runtime.task.configuration);
-      const { inspectWindowsRuntimeRelocation } = await load('windows-runtime-relocation.mjs');
-      const relocation = await inspectWindowsRuntimeRelocation({
-        project: original.project, backup: path.join(control, 'backup'),
-        snapshot: binding.snapshot, runtimeBundle: external.runtimeBundle,
-      });
-      await relocation.verify();
-      for (const file of binding.runtime.files) {
-        assert.deepEqual(await readFile(path.join(external.runtimeBundle.directory, file.name)),
-          await readFile(file.file), `Rollback did not relocate ${file.name}`);
-      }
-      assert.equal(typeof api.prepareWindowsInactiveRollbackFilesReceipt, 'function',
-        'Missing durable inactive rollback files-restored receipt');
-      const receiptOptions = { ...options, scope, runtimeBundle: external.runtimeBundle, acceptDataLoss: true };
-      await assert.rejects(api.prepareWindowsInactiveRollbackFilesReceipt({
-        ...receiptOptions, acceptDataLoss: false,
-      }));
-      await assert.rejects(api.prepareWindowsInactiveRollbackFilesReceipt({
-        ...receiptOptions, scope: { ...scope },
-      }));
-      const changedFile = path.join(original.project, 'package.json');
-      const originalBytes = await readFile(changedFile);
-      await writeFile(changedFile, Buffer.concat([originalBytes, Buffer.from('\n')]));
-      try {
-        await assert.rejects(api.prepareWindowsInactiveRollbackFilesReceipt(receiptOptions),
-          /Rollback project (inventory|content) differs/);
-        await assert.rejects(readFile(path.join(control, 'inactive-rollback-files-restored.json')), { code: 'ENOENT' });
-      } finally { await writeFile(changedFile, originalBytes); }
-      const receipt = await api.prepareWindowsInactiveRollbackFilesReceipt(receiptOptions);
-      assert.equal(receipt.file, path.join(control, 'inactive-rollback-files-restored.json'));
-      const receiptBytes = await readFile(receipt.file);
-      const completedFiles = JSON.parse(receiptBytes);
-      assert.equal(completedFiles.version, 1);
-      assert.equal(completedFiles.phase, 'files-restored');
-      assert.equal(completedFiles.operationId, original.operationId);
-      assert.equal(completedFiles.stateSha256, scope.observation.stateSha256);
-      assert.equal(completedFiles.intentSha256, intent.sha256);
-      assert.equal(completedFiles.snapshotSha256, record.snapshotSha256);
-      assert.equal(completedFiles.sourceCommit, original.sourceCommit);
-      assert.equal(completedFiles.priorRuntime, 'stopped');
-      assert.deepEqual(completedFiles.runtimeBundle, external.runtimeBundle);
-      assert.deepEqual(await api.prepareWindowsInactiveRollbackFilesReceipt(receiptOptions), receipt);
-      assert.deepEqual(await readFile(receipt.file), receiptBytes);
-      assert.deepEqual(await scope.check(), scope.observation);
     }
+    if (!preparedHandoff) {
+      await api.releaseWindowsInactiveRollbackRuntimeHandoff({ ...options, scope, acceptDataLoss: true });
+    }
+    const restored = await api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: true });
+    assert.equal(restored.status, 'project-restored');
+    assert.equal(restored.sourceCommit, original.sourceCommit);
+    for (const entry of binding.snapshot.entries.filter(entry => entry.kind === 'file')) {
+      assert.deepEqual(await readFile(path.join(original.project, entry.path)),
+        await readFile(path.join(control, 'backup/files', entry.path)), `Rollback did not restore ${entry.path}`);
+    }
+    assert.equal(typeof api.restoreWindowsInactiveRollbackExternal, 'function',
+      'Missing actual inactive rollback external restoration');
+    await assert.rejects(api.restoreWindowsInactiveRollbackExternal({ ...options, scope, acceptDataLoss: false }));
+    await assert.rejects(api.restoreWindowsInactiveRollbackExternal({
+      ...options, scope: { ...scope }, acceptDataLoss: true,
+    }));
+    const external = await api.restoreWindowsInactiveRollbackExternal({ ...options, scope, acceptDataLoss: true });
+    restoredBundle = external.runtimeBundle;
+    assert.equal(external.status, 'external-restored');
+    assert.equal(external.runtimeBundle.sha256, binding.runtime.task.configurationSha256);
+    assert.notEqual(external.runtimeBundle.configuration, binding.runtime.task.configuration);
+    const { inspectWindowsRuntimeRelocation } = await load('windows-runtime-relocation.mjs');
+    const relocation = await inspectWindowsRuntimeRelocation({
+      project: original.project, backup: path.join(control, 'backup'),
+      snapshot: binding.snapshot, runtimeBundle: external.runtimeBundle,
+    });
+    await relocation.verify();
+    for (const file of binding.runtime.files) {
+      assert.deepEqual(await readFile(path.join(external.runtimeBundle.directory, file.name)),
+        await readFile(file.file), `Rollback did not relocate ${file.name}`);
+    }
+    assert.equal(typeof api.prepareWindowsInactiveRollbackFilesReceipt, 'function',
+      'Missing durable inactive rollback files-restored receipt');
+    const receiptOptions = { ...options, scope, runtimeBundle: external.runtimeBundle, acceptDataLoss: true };
+    await assert.rejects(api.prepareWindowsInactiveRollbackFilesReceipt({
+      ...receiptOptions, acceptDataLoss: false,
+    }));
+    await assert.rejects(api.prepareWindowsInactiveRollbackFilesReceipt({
+      ...receiptOptions, scope: { ...scope },
+    }));
+    const changedFile = path.join(original.project, 'package.json');
+    const originalBytes = await readFile(changedFile);
+    await writeFile(changedFile, Buffer.concat([originalBytes, Buffer.from('\n')]));
+    try {
+      await assert.rejects(api.prepareWindowsInactiveRollbackFilesReceipt(receiptOptions),
+        /Rollback project (inventory|content) differs/);
+      await assert.rejects(readFile(path.join(control, 'inactive-rollback-files-restored.json')), { code: 'ENOENT' });
+    } finally { await writeFile(changedFile, originalBytes); }
+    const receipt = await api.prepareWindowsInactiveRollbackFilesReceipt(receiptOptions);
+    assert.equal(receipt.file, path.join(control, 'inactive-rollback-files-restored.json'));
+    const receiptBytes = await readFile(receipt.file);
+    const completedFiles = JSON.parse(receiptBytes);
+    assert.equal(completedFiles.version, 1);
+    assert.equal(completedFiles.phase, 'files-restored');
+    assert.equal(completedFiles.operationId, original.operationId);
+    assert.equal(completedFiles.stateSha256, scope.observation.stateSha256);
+    assert.equal(completedFiles.intentSha256, intent.sha256);
+    assert.equal(completedFiles.snapshotSha256, record.snapshotSha256);
+    assert.equal(completedFiles.sourceCommit, original.sourceCommit);
+    assert.equal(completedFiles.priorRuntime, 'stopped');
+    assert.deepEqual(completedFiles.runtimeBundle, external.runtimeBundle);
+    assert.deepEqual(await api.prepareWindowsInactiveRollbackFilesReceipt(receiptOptions), receipt);
+    assert.deepEqual(await readFile(receipt.file), receiptBytes);
     assert.deepEqual(await readFile(intent.file), intentBytes);
     assert.deepEqual(await scope.check(), scope.observation);
   } finally { await scope.close(); }
