@@ -1,8 +1,37 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { access, readFile, readdir, mkdir, copyFile, writeFile, unlink, lstat } from 'node:fs/promises';
+import { access, readFile, readdir, writeFile, unlink, lstat } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+async function interruptPublication({ control, configuration, sha256, directory, pwsh }) {
+  const load = name => import(pathToFileURL(path.join(control, 'recovery-engine', name)).href);
+  const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
+  const { processIdentity } = await load('process-identity.mjs');
+  const controllerIdentity = await processIdentity(process.pid);
+  assert.ok(controllerIdentity);
+  const bridge = windowsControllerTransport({
+    pwsh, label: 'Interrupted runtime publication fixture',
+    refused: cause => new Error('Interrupted runtime publication fixture failed.', { cause }),
+    args: ['-NoProfile', '-NonInteractive', '-File',
+      fileURLToPath(new URL('./deployment-windows-runtime-publication-crash.ps1', import.meta.url)),
+      '-Script', path.join(control, 'recovery-engine', 'windows-runtime-publication.ps1'),
+      '-Configuration', configuration, '-Sha256', sha256, '-Directory', directory,
+      '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
+  });
+  try {
+    const held = await bridge.wire.receive({ timeoutMs: 60000 });
+    assert.equal(held.type, 'publication-held');
+    assert.equal(held.pid, bridge.child.pid);
+    assert.equal(held.processIdentity, await processIdentity(held.pid));
+    await assert.rejects(access(path.join(directory, 'configuration.json')), { code: 'ENOENT' });
+    assert.equal(bridge.child.kill(), true);
+    const result = await bridge.waitForExit();
+    assert.ok(result.signal !== null || result.code !== 0, 'Publisher must actually die before publication');
+    assert.notEqual(await processIdentity(held.pid), held.processIdentity);
+    bridge.wire.close();
+  } catch (cause) { throw await bridge.abandon(cause); }
+}
 
 export async function verifyWindowsRuntimePublication({ control, project, taskName, lock, node, pwsh, inactive = false }) {
   const entry = path.join(control, 'recovery-engine', 'windows-runtime-publication.mjs');
@@ -34,11 +63,17 @@ export async function verifyWindowsRuntimePublication({ control, project, taskNa
     await assert.rejects(prepareWindowsRuntimeBundle(input));
     assert.deepEqual(await readFile(bundle.configuration), bytes);
     const partial = path.join(control, 'runtime-resumption-fixture');
-    await mkdir(partial, { mode: 0o700 });
-    const helper = Object.keys(JSON.parse(bytes).helpers)[0];
+    await interruptPublication({
+      control, configuration: scope.observation.configuration,
+      sha256: scope.observation.configurationSha256, directory: partial, pwsh,
+    });
+    const partialNames = (await readdir(partial)).sort();
+    assert.equal(partialNames.length, 1, 'Publisher must die after the first helper copy');
+    const helper = partialNames[0];
+    assert.ok(Object.hasOwn(JSON.parse(bytes).helpers, helper));
     const target = path.join(partial, helper);
     const helperBytes = await readFile(path.join(directory, helper));
-    await copyFile(path.join(directory, helper), target);
+    assert.deepEqual(await readFile(target), helperBytes);
     const retained = await lstat(target, { bigint: true });
     const resume = () => publication.publishWindowsRuntimeBundle({
       directory: partial, sourceConfiguration: scope.observation.configuration,
@@ -49,12 +84,12 @@ export async function verifyWindowsRuntimePublication({ control, project, taskNa
     await writeFile(foreign, '{}', { flag: 'wx' });
     try {
       await assert.rejects(resume());
-      assert.deepEqual((await readdir(partial)).sort(), [helper, path.basename(foreign)].sort());
+      assert.deepEqual((await readdir(partial)).sort(), [...partialNames, path.basename(foreign)].sort());
     } finally { await unlink(foreign); }
     await writeFile(target, 'invalid helper');
     try {
       await assert.rejects(resume());
-      assert.deepEqual(await readdir(partial), [helper]);
+      assert.deepEqual((await readdir(partial)).sort(), partialNames);
       assert.equal(await readFile(target, 'utf8'), 'invalid helper');
     } finally { await writeFile(target, helperBytes); }
     const resumed = await resume();
@@ -73,7 +108,7 @@ export async function verifyWindowsRuntimePublication({ control, project, taskNa
     assert.deepEqual(await readFile(scope.observation.configuration), bytes);
     assert.deepEqual(await readFile(stateFile), state);
     assert.deepEqual(await scope.check(), scope.observation);
-    console.error(`PASS: private runtime publication preserves exact configuration and helpers, refuses foreign authority and never overwrites an existing bundle or changes the ${inactive ? 'inactive' : 'running'} task`);
+    console.error(`PASS: private runtime publication survives real publisher death before configuration, repairs only missing members, refuses foreign authority and never overwrites an existing bundle or changes the ${inactive ? 'inactive' : 'running'} task`);
     return bundle;
   } finally { await scope.close(); }
 }

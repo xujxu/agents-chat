@@ -15206,12 +15206,18 @@ the existing create-only native copy operation. Complete inventory and retained
 identities are checked before readiness and close. Ordinary deploy/update bundle
 publication remains create-only unless resumption is explicitly requested.
 
-The existing real-runtime fixture now seeds a partial private destination from
-an actually published helper, rejects a foreign member and a changed helper
-without filling missing files, then requires exact repair, repeat admission and
-preserved existing helper inode plus unchanged task/source/state. This tests
-partial input repair; genuine publisher-death interruption is still a separate
-remaining case. These changes are pending their next Actions dispatch.
+The existing real-runtime fixture now invokes the unchanged saved native
+publisher through a test-only PowerShell debugger breakpoint immediately after
+its first actual helper copy. Pin the publisher PID/identity, require no
+configuration publication, kill that exact process and await actual exit.
+Require exactly one genuine helper to remain. Fresh native publication must
+reject a foreign member and a changed helper without filling missing files,
+then repair the missing members with exact bytes, repeat admission and preserve
+the existing helper inode plus unchanged task/source/state. The breakpoint is
+located from the original script AST and refuses unexpected copy boundaries;
+no production fault flag or alternate copy implementation is introduced.
+These changes are pending their next Actions dispatch, including whether the
+noninteractive native debugger fixture reaches its intended boundary.
 
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
