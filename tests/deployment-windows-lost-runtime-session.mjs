@@ -194,6 +194,25 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual((await readdir(history)).sort(), names.slice(1));
     } finally { await partial.close(); }
     assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
+    const completeCleanup = await api.openWindowsInactiveRollbackRetirement(options);
+    try {
+      for (let prefix = 2; prefix <= entries.length; prefix++) {
+        const advanced = await completeCleanup.advance();
+        assert.equal(advanced.retiredEntries, prefix);
+        assert.deepEqual(await completeCleanup.check(), advanced);
+        assert.deepEqual((await readdir(history)).sort(), names.slice(prefix));
+        await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority(options));
+      }
+      assert.deepEqual(await completeCleanup.advance(), await completeCleanup.check());
+    } finally { await completeCleanup.close(); }
+    const emptyCleanup = await api.openWindowsInactiveRollbackRetirement(options);
+    try {
+      assert.equal((await emptyCleanup.check()).retiredEntries, entries.length);
+      await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
+      assert.deepEqual(await readFile(receiptFile), receiptBefore);
+    } finally { await emptyCleanup.close(); }
+    assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
     return;
   }
   if (mode === 'resume-task') {

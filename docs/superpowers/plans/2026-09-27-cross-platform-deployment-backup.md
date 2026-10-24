@@ -15080,6 +15080,31 @@ captured original digest and checks receipt digests against the intent.
 This checkpoint extension is preparation only: partial-history admission and
 deletion remain unimplemented, and this change has not yet been validated.
 
+### Stopped rollback actual task-history retirement (2026-10-24 continuation)
+
+The independent stopped cleanup bridge now reads the version-two checkpoint
+without reopening admission.json. It retains an exclusive immutable retirement
+marker, validates original state/completion/task/lock descriptors, original
+controller and bridge absence, both empty runtime Jobs, original runtime bundles,
+and the exact restored disabled Scheduler policy. The checkpoint additionally
+pins the original lock directory. Version one is refused, never overwritten.
+
+Remaining task history must match the exact sorted descriptor inventory after
+a continuous missing prefix. Each advance rechecks native evidence, releases
+only its target handle, acquires identity-bound RetainForRetirement, checks
+again, deletes one entry and observes the new prefix. The original release
+intent remains exclusively held while present; the durable retirement marker
+continues mutual exclusion after that task-history entry is removed. Original
+lost-runtime admission still requires its entire history and cannot reopen
+after deletion. No live listener or invented running origin is used.
+
+The existing causal fixture now covers first-entry deletion and fresh reentry,
+then drains all declared task entries, checks each exact remaining inventory,
+and opens a fresh scope at the empty prefix. State, completion and retirement
+bytes remain unchanged. This implementation is pending Actions acceptance;
+worker-history retirement, lock release, final durable receipt and genuine
+cleanup-actor interruption remain subsequent work, not claimed complete.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][string]$ControllerIdentity,
     [switch]$Inactive,
-    [switch]$LostRuntime
+    [switch]$LostRuntime,
+    [switch]$StoppedRetirement
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -24,13 +25,19 @@ try {
         if (-not $Inactive) { throw 'Lost-runtime mode requires explicit inactive history.' }
         . (Join-Path $PSScriptRoot 'windows-inactive-lost-runtime.ps1')
     }
+    if ($StoppedRetirement) {
+        if (-not $Inactive -or $LostRuntime) { throw 'Stopped cleanup requires its independent inactive mode.' }
+        . (Join-Path $PSScriptRoot 'windows-inactive-rollback-cleanup.ps1')
+    }
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'recovery-open'
-    $scope = if ($LostRuntime) { Open-AgentsChatInactiveLostRuntimeAuthority $Control }
+    $scope = if ($StoppedRetirement) { Open-AgentsChatInactiveRollbackCleanup $Control }
+        elseif ($LostRuntime) { Open-AgentsChatInactiveLostRuntimeAuthority $Control }
         elseif ($Inactive) { Open-AgentsChatInactiveCompletionRecovery $Control }
         else { Open-AgentsChatTaskCompletionRecovery $Control }
-    $observation = if ($LostRuntime) { Assert-AgentsChatInactiveLostRuntimeEvidence $scope }
+    $observation = if ($StoppedRetirement) { Assert-AgentsChatInactiveRollbackCleanup $scope }
+        elseif ($LostRuntime) { Assert-AgentsChatInactiveLostRuntimeEvidence $scope }
         elseif ($Inactive) { Assert-AgentsChatInactiveCompletionRecovery $scope }
         else { Assert-AgentsChatTaskCompletionRecovery $scope }
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
@@ -47,6 +54,7 @@ try {
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
         if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'advance', 'close', 'prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state', 'publish-rollback-state', 'complete-rollback', 'prepare-rollback-retirement', 'check-rollback-retirement')) { throw 'Invalid recovery request.' }
+        if ($StoppedRetirement -and $method -cnotin @('check', 'advance', 'close')) { throw 'Stopped cleanup cannot mutate rollback receipts.' }
         if ($method -cin @('prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state', 'publish-rollback-state', 'complete-rollback', 'prepare-rollback-retirement', 'check-rollback-retirement') -and -not $LostRuntime) { throw 'Rollback intent requires lost-runtime authority.' }
         if ($LostRuntime -and $method -ceq 'advance') { throw 'Lost-runtime evidence cannot advance live completion.' }
         $sequence = $id
@@ -58,6 +66,9 @@ try {
             Close-AgentsChatTaskCompletionProof $scope
             $scope = $null
             $value = 'close'
+        } elseif ($StoppedRetirement) {
+            $value = if ($method -ceq 'advance') { Remove-AgentsChatNextInactiveRollbackEntry $scope }
+                else { Assert-AgentsChatInactiveRollbackCleanup $scope }
         } elseif ($method -ceq 'prepare-rollback') {
             $value = Publish-AgentsChatInactiveRollbackIntent $scope
         } elseif ($method -ceq 'rollback-files-restored') {

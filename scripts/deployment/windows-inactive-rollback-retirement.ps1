@@ -56,6 +56,7 @@ function Publish-AgentsChatInactiveRollbackRetirementIntent([hashtable]$Context)
             bridge=[ordered]@{ pid=$Context.BridgePid; processIdentity=$Context.BridgeIdentity }
             runtime=$Context.Runtime; retiredRuntime=$Context.RetiredRuntime
             controlIdentity=(Get-AgentsChatRetirementDirectory $Context $Context.Control)
+            lockIdentity=(Get-AgentsChatRetirementDirectory $Context (Join-Path $Context.Control 'lock'))
             state=(Get-AgentsChatRetirementFile $Context 'state.json')
             completion=(Get-AgentsChatRetirementFile $Context 'inactive-rollback-complete.json')
             taskReceipt=(Get-AgentsChatRetirementFile $Context 'inactive-rollback-task-restored.json')

@@ -15,19 +15,7 @@ export { restoreWindowsInactiveRollbackProject } from './windows-inactive-rollba
 export { restoreWindowsInactiveRollbackExternal } from './windows-inactive-rollback-external.mjs';
 
 const lostScopes = new WeakMap();
-export async function openWindowsInactiveRollbackRetirement(options) {
-  const original = await openWindowsInactiveLostRuntimeAuthority(options);
-  try {
-    const { request } = lostScopes.get(original);
-    const check = ({ signal = options.signal } = {}) => request('check-rollback-retirement', signal);
-    await check();
-    return Object.freeze({ identity: original.identity, check, close: () => original.close() });
-  } catch (error) {
-    try { await original.close(); }
-    catch (cleanup) { throw new AggregateError([error, cleanup], 'Stopped retirement admission and cleanup failed.'); }
-    throw error;
-  }
-}
+export const openWindowsInactiveRollbackRetirement = options => openCompletionRecovery(options, true, false, true);
 export async function prepareWindowsInactiveRollbackRetirementIntent(options) {
   if (options.acceptDataLoss !== true) throw refused(new Error('Rollback retirement requires explicit data-loss acknowledgement.'));
   await assertWindowsInactiveLostRuntimeAuthority(options);
@@ -156,11 +144,28 @@ export const openWindowsTaskCompletionRecovery = options => openCompletionRecove
 export const openWindowsInactiveTaskCompletionRecovery = options => openCompletionRecovery(options, true);
 export const openWindowsInactiveLostRuntimeAuthority = options => openCompletionRecovery(options, true, true);
 
-async function openCompletionRecovery({ control, pwsh, admission, signal }, inactive, lost = false) {
+function captureStoppedRetirement(value) {
+  const result = captureWorkerFields(value,
+    ['status', 'operationId', 'stateSha256', 'completionSha256', 'retiredEntries', 'totalEntries'],
+    'stopped rollback retirement');
+  if (result.status !== 'retiring' || typeof result.operationId !== 'string'
+    || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(result.operationId)
+    || !Number.isSafeInteger(result.totalEntries) || result.totalEntries < 1
+    || !Number.isSafeInteger(result.retiredEntries) || result.retiredEntries < 0
+    || result.retiredEntries > result.totalEntries
+    || ![result.stateSha256, result.completionSha256].every(hash =>
+      typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash))) {
+    throw new Error('Invalid stopped rollback retirement progress.');
+  }
+  return Object.freeze(result);
+}
+
+async function openCompletionRecovery({ control, pwsh, admission, signal }, inactive, lost = false, retirement = false) {
   const progression = inactive
     ? ['release-requested', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete']
     : steps;
-  const captureObservation = value => lost ? captureLostRuntime(value) : capture(value, progression);
+  const captureObservation = value => retirement ? captureStoppedRetirement(value)
+    : lost ? captureLostRuntime(value) : capture(value, progression);
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value =>
     typeof value === 'string' && value.length <= 4096 && path.isAbsolute(value)
@@ -175,7 +180,8 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
     pwsh, refused, label: 'Native completion recovery controller',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
       '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
-      ...(inactive ? ['-Inactive'] : []), ...(lost ? ['-LostRuntime'] : [])],
+      ...(inactive ? ['-Inactive'] : []), ...(lost ? ['-LostRuntime'] : []),
+      ...(retirement ? ['-StoppedRetirement'] : [])],
   });
   let closed = false;
   let busy = false;
@@ -202,6 +208,15 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       if (method === 'close') {
         if (reply.value !== 'close') throw new Error('Unexpected completion recovery close acknowledgement.');
         return;
+      }
+      if (retirement) {
+        const next = captureStoppedRetirement(reply.value);
+        const expected = method === 'advance'
+          ? { ...observation, retiredEntries: Math.min(observation.retiredEntries + 1, observation.totalEntries) }
+          : observation;
+        if (!isDeepStrictEqual(next, expected)) throw new Error('Stopped cleanup changed bindings or skipped a prefix.');
+        observation = next;
+        return next;
       }
       if (method === 'check-rollback-retirement') {
         const result = captureWorkerFields(reply.value,
@@ -293,7 +308,7 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
         requestSignal?.throwIfAborted();
         if (child.exitCode !== null || child.signalCode !== null) throw new Error('Original recovery bridge exited.');
         if (method !== 'close') await assertWindowsAdmission(control, admission, { signal: requestSignal });
-        if (method === 'advance') {
+        if (method === 'advance' && !retirement) {
           await exchange('check', requestSignal);
           await verifyHttpReadiness({ port: observation.port, providers: observation.providers, signal: requestSignal });
           await assertWindowsAdmission(control, admission, { signal: requestSignal });
