@@ -15342,6 +15342,23 @@ before publishing release. The existing first external rollback case exposed
 this causal ordering bug. Do not loosen archive validation or fabricate a
 release acknowledgement; rerun only after pushing the corrected call sites.
 
+The corrected release ordering is dispatched at `14973386 / 40128858292`;
+its outcome is still pending. The next fixture replaces uninterrupted
+co-located copying with a real actor death immediately after the first actual
+destination file stream finishes. A test-only stream wrapper records the
+original actor/bridge identities and unchanged state, manifest and release
+digests, then kills its own process. No production fault switch is added.
+The native parent verifies exact first-file bytes, a missing later file,
+absence of a files-restored receipt and disappearance of the original bridge
+before launching a fresh actor. Fresh admission independently checks the
+original proof and missing later file; archived bytes are compared with the
+verified backup, never with project paths already removed by partial copying.
+The recovered co-located case then traverses the existing terminal-state,
+task-prefix, worker-prefix and lock-deleted actor-death cleanup chain.
+Its original readiness payload must remain exact; unlike observation-only
+cases, actual snapshot restoration may recreate the readiness file and change
+its filesystem write time. All of this additional coverage awaits Actions.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

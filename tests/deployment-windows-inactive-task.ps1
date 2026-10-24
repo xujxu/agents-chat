@@ -37,6 +37,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
     $control = "$Project-inactive-control"
     [Deployment.WindowsPrivateFile]::CreateDirectory($control).Dispose()
     $controller = $null
+    $copyRecovered = $false
     try {
         $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
         $environment.Add('SystemRoot', $env:SystemRoot)
@@ -177,8 +178,11 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
             $lostActor = [Deployment.WindowsControllerProcess]::Start($node,
                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
-                    $(if ($crashRollback) { 'crash-task' } else { 'complete' }), $RollbackStep),
+                    $(if ($crashRollback) { 'crash-task' } else { 'crash-project' }), $RollbackStep),
                 $control, $environment)
+            $copyActorIdentity = if (-not $crashRollback) {
+                [Deployment.WindowsWorkerJob]::ProcessIdentity($lostActor.Id)
+            } else { $null }
             try {
                 $diagnostic = $lostActor.StandardError.ReadToEndAsync()
                 if ($crashRollback) {
@@ -222,16 +226,57 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $output = $lostActor.StandardOutput.ReadToEndAsync()
                     Assert ($lostActor.WaitForExit(300000)) 'Lost-runtime co-located rollback actor timed out'
                     Write-Output $output.GetAwaiter().GetResult()
-                    Assert ($lostActor.ExitCode -eq 0) 'Lost-runtime transport actor failed'
+                    Assert ($lostActor.ExitCode -ne 0) 'Co-located copy actor did not actually die'
                 }
                 $errors = $diagnostic.GetAwaiter().GetResult()
                 if ($errors) { [Console]::Error.WriteLine($errors) }
             } finally { $lostActor.Dispose() }
+            if (-not $crashRollback) {
+                $copy = Get-Content -LiteralPath (Join-Path $control 'inactive-copy-crash-fixture.json') -Raw |
+                    ConvertFrom-Json
+                $manifest = Join-Path $control 'backup/manifest.json'
+                $snapshot = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
+                $files = @($snapshot.entries | Where-Object kind -CEQ 'file')
+                Assert ($files.Count -gt 1 -and $copy.version -eq 1 -and $copy.phase -ceq 'project-file-copy' -and
+                    $copy.pid -eq $lostActor.Id -and $copy.processIdentity -ceq $copyActorIdentity -and
+                    $copy.copiedPath -ceq $files[0].path -and $copy.pendingPath -ceq $files[-1].path) `
+                    'Co-located copy interruption differs from the original actor or exact copy boundary'
+                Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($copy.bridge.pid) -cne $copy.bridge.processIdentity) `
+                    'Co-located copy bridge survived original actor cleanup'
+                Assert ((Get-FileHash -LiteralPath (Join-Path $Project $copy.copiedPath)).Hash.ToLowerInvariant() -ceq
+                    $files[0].sha256 -and -not (Test-Path -LiteralPath (Join-Path $Project $copy.pendingPath))) `
+                    'Co-located interruption did not retain an exact copied file and an absent later file'
+                Assert ($copy.stateSha256 -ceq $stateBefore.ToLowerInvariant() -and
+                    (Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash -ceq $stateBefore -and
+                    $copy.snapshotSha256 -ceq (Get-FileHash -LiteralPath $manifest).Hash.ToLowerInvariant() -and
+                    $copy.releaseSha256 -ceq (Get-FileHash -LiteralPath
+                        (Join-Path $control 'inactive-rollback-runtime-released.json')).Hash.ToLowerInvariant() -and
+                    -not (Test-Path -LiteralPath (Join-Path $control 'inactive-rollback-files-restored.json'))) `
+                    'Co-located copy interruption changed original state/backup/release or fabricated file completion'
+                $resumed = [Deployment.WindowsControllerProcess]::Start($node,
+                    @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                        $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                        'resume-project', $RollbackStep), $control, $environment)
+                try {
+                    $output = $resumed.StandardOutput.ReadToEndAsync()
+                    $diagnostic = $resumed.StandardError.ReadToEndAsync()
+                    Assert ($resumed.WaitForExit(300000)) 'Fresh co-located project copy recovery timed out'
+                    Write-Output $output.GetAwaiter().GetResult()
+                    $errors = $diagnostic.GetAwaiter().GetResult()
+                    if ($errors) { [Console]::Error.WriteLine($errors) }
+                    Assert ($resumed.ExitCode -eq 0) 'Fresh co-located actor could not complete actual interrupted copy'
+                } finally { $resumed.Dispose() }
+                $copyRecovered = $true
+                $crashRollback = $true
+                Write-Output 'PASS: co-located project copy survives actual actor death after an exact first file and resumes from durable runtime evidence'
+            }
             if ($crashRollback) {
-                $terminalStep = switch ($RollbackStep) {
-                    'task-restore-requested' { 'state-staged' }
-                    'task-registered' { 'state-published' }
-                    default { '' }
+                $terminalStep = if ($copyRecovered) { 'state-staged' } else {
+                    switch ($RollbackStep) {
+                        'task-restore-requested' { 'state-staged' }
+                        'task-registered' { 'state-published' }
+                        default { '' }
+                    }
                 }
                 $resumed = [Deployment.WindowsControllerProcess]::Start($node,
                     @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
@@ -759,7 +804,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
         [string]$task.GetSecurityDescriptor(7) -ceq $security -and
         $task.GetInstances(0).Count -eq 0 -and -not $task.Enabled) 'Inactive startup guard did not settle with its exact disabled policy'
     [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$running.runtime.generation, $running.runtime.sessionId)
-    Assert ((Get-Item -LiteralPath $ReadyFile).LastWriteTimeUtc.Ticks -eq $mtime -and
+    Assert (($copyRecovered -or (Get-Item -LiteralPath $ReadyFile).LastWriteTimeUtc.Ticks -eq $mtime) -and
         (Get-FileHash -LiteralPath $ReadyFile -Algorithm SHA256).Hash -ceq $hash) 'Inactive observation changed original readiness'
     Write-Output 'PASS: native inactive guarded startup preserves original retired readiness and settles its actual new instance with exact disabled policy'
 }

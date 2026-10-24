@@ -13,6 +13,18 @@ assert.equal(typeof api.openWindowsInactiveLostRuntimeAuthority, 'function',
   'Missing owned inactive lost-runtime transport');
 const state = await readFile(path.join(control, 'state.json'));
 let expectedFinalState = state;
+if (mode === 'resume-project') {
+  const proof = JSON.parse(await readFile(path.join(control, 'inactive-copy-crash-fixture.json')));
+  assert.equal(proof.phase, 'project-file-copy');
+  assert.notEqual(await processIdentity(process.pid), proof.processIdentity);
+  assert.notEqual(await processIdentity(proof.bridge.pid), proof.bridge.processIdentity);
+  assert.equal(createHash('sha256').update(state).digest('hex'), proof.stateSha256);
+  assert.equal(createHash('sha256').update(await readFile(path.join(control, 'backup', 'manifest.json'))).digest('hex'),
+    proof.snapshotSha256);
+  assert.equal(createHash('sha256').update(await readFile(
+    path.join(control, 'inactive-rollback-runtime-released.json'))).digest('hex'), proof.releaseSha256);
+  await assert.rejects(lstat(path.join(JSON.parse(state).project, proof.pendingPath)), { code: 'ENOENT' });
+}
 const holdTask = async (scope, step) => {
   if (mode !== 'crash-task' || step !== crashStep) return;
   console.log(`INACTIVE_ROLLBACK_TASK_HELD ${JSON.stringify({ ...scope.identity, step })}`);
@@ -593,9 +605,16 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         const archived = path.join(control, entry.path);
         assert.equal(createHash('sha256').update(await readFile(archived)).digest('hex'), entry.sha256);
         const name = path.basename(entry.path);
-        assert.deepEqual(await readFile(archived),
-          await readFile(name === 'configuration.json' ? checkpoint.configuration
-            : path.join(path.dirname(checkpoint.configuration), name)));
+        const member = binding.runtime.files.find(file => file.name === name);
+        let expected = member?.file;
+        if (!member) {
+          assert.equal(name, `runtime-${checkpoint.runtimeIdentity.replaceAll(':', '-')}.json`);
+          const relative = path.relative(original.project, path.join(path.dirname(checkpoint.configuration), name));
+          assert.ok(binding.snapshot.entries.some(entry => entry.path === relative.split(path.sep).join('/')
+            && entry.sha256 === checkpoint.readySha256));
+          expected = path.join(control, 'backup', 'files', relative);
+        }
+        assert.deepEqual(await readFile(archived), await readFile(expected));
         const info = await lstat(archived, { bigint: true });
         assert.equal(String(info.dev), entry.dev);
         assert.equal(String(info.ino), entry.ino);
@@ -618,7 +637,20 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     if (!preparedHandoff) {
       await api.releaseWindowsInactiveRollbackRuntimeHandoff({ ...options, scope, acceptDataLoss: true });
     }
-    const restored = await api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: true });
+    let restored;
+    let copyCrash;
+    if (mode === 'crash-project') {
+      assert.ok(preparedHandoff, 'Copy crash must exercise the original co-located runtime');
+      const { armWindowsInactiveCopyCrash } = await import('./deployment-windows-inactive-copy-crash.mjs');
+      copyCrash = armWindowsInactiveCopyCrash({
+        project: original.project, control, snapshot: binding.snapshot, scope,
+        actorIdentity: await processIdentity(process.pid),
+      });
+    }
+    try {
+      restored = await api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: true });
+    } finally { copyCrash?.close(); }
+    assert.notEqual(mode, 'crash-project', 'Original co-located copy actor returned without actually dying');
     assert.equal(restored.status, 'project-restored');
     assert.equal(restored.sourceCommit, original.sourceCommit);
     for (const entry of binding.snapshot.entries.filter(entry => entry.kind === 'file')) {
