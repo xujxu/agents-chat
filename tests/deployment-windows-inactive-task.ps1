@@ -235,6 +235,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 $copy = Get-Content -LiteralPath (Join-Path $control 'inactive-copy-crash-fixture.json') -Raw |
                     ConvertFrom-Json
                 $manifest = Join-Path $control 'backup/manifest.json'
+                $releaseFile = Join-Path $control 'inactive-rollback-runtime-released.json'
                 $snapshot = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
                 $files = @($snapshot.entries | Where-Object kind -CEQ 'file')
                 Assert ($files.Count -gt 1 -and $copy.version -eq 1 -and $copy.phase -ceq 'project-file-copy' -and
@@ -249,8 +250,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 Assert ($copy.stateSha256 -ceq $stateBefore.ToLowerInvariant() -and
                     (Get-FileHash -LiteralPath (Join-Path $control 'state.json')).Hash -ceq $stateBefore -and
                     $copy.snapshotSha256 -ceq (Get-FileHash -LiteralPath $manifest).Hash.ToLowerInvariant() -and
-                    $copy.releaseSha256 -ceq (Get-FileHash -LiteralPath
-                        (Join-Path $control 'inactive-rollback-runtime-released.json')).Hash.ToLowerInvariant() -and
+                    $copy.releaseSha256 -ceq (Get-FileHash -LiteralPath $releaseFile).Hash.ToLowerInvariant() -and
                     -not (Test-Path -LiteralPath (Join-Path $control 'inactive-rollback-files-restored.json'))) `
                     'Co-located copy interruption changed original state/backup/release or fabricated file completion'
                 $resumed = [Deployment.WindowsControllerProcess]::Start($node,

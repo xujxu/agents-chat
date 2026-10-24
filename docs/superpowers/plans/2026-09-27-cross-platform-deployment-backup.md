@@ -15359,6 +15359,12 @@ Its original readiness payload must remain exact; unlike observation-only
 cases, actual snapshot restoration may recreate the readiness file and change
 its filesystem write time. All of this additional coverage awaits Actions.
 
+Gate `8c7f186b / 40131904098` stopped at a fixture PowerShell parser error,
+before external rollback execution: a command parameter was split from its
+argument across a newline inside a parenthesized command. Bind the release
+receipt path separately and keep that command on one line. This is not
+evidence of a production rollback failure or a successful copy-death case.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
