@@ -187,7 +187,12 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 $diagnostic = $lostActor.StandardError.ReadToEndAsync()
                 if ($crashRollback) {
                     $line = $lostActor.StandardOutput.ReadLineAsync()
-                    Assert ($line.Wait(180000)) 'Rollback actor did not reach the actual task-restored boundary'
+                    if (-not $line.Wait(180000)) {
+                        $lostActor.Kill()
+                        $errors = $diagnostic.GetAwaiter().GetResult()
+                        if ($errors) { [Console]::Error.WriteLine($errors) }
+                        throw "Rollback actor timed out before its actual $RollbackStep boundary"
+                    }
                     $held = $line.GetAwaiter().GetResult()
                     if ($null -eq $held) {
                         Assert ($lostActor.WaitForExit(15000)) 'Rollback actor closed output without exiting'
@@ -224,7 +229,12 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     } finally { $bridge.Dispose() }
                 } else {
                     $output = $lostActor.StandardOutput.ReadToEndAsync()
-                    Assert ($lostActor.WaitForExit(300000)) 'Lost-runtime co-located rollback actor timed out'
+                    if (-not $lostActor.WaitForExit(300000)) {
+                        $lostActor.Kill()
+                        $errors = $diagnostic.GetAwaiter().GetResult()
+                        if ($errors) { [Console]::Error.WriteLine($errors) }
+                        throw 'Lost-runtime co-located rollback actor timed out'
+                    }
                     Write-Output $output.GetAwaiter().GetResult()
                     Assert ($lostActor.ExitCode -ne 0) 'Co-located copy actor did not actually die'
                 }

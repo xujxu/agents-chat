@@ -15365,6 +15365,16 @@ argument across a newline inside a parenthesized command. Bind the release
 receipt path separately and keep that command on one line. This is not
 evidence of a production rollback failure or a successful copy-death case.
 
+Gate `41d21c09 / 40132311448` executed and passed the first two external
+rollback/deletion chains, then the third actor exceeded its existing
+180-second task-restored boundary wait. The timeout discarded its stderr,
+so no causal phase was available. Retain the existing deadlines, terminate
+the exact supervised actor Job on timeout, and drain its stderr before
+throwing. Add test-only elapsed phase diagnostics around original authority,
+snapshot/intent, evidence preparation and actual project/runtime/task
+restoration. Do not infer a production cause or increase timeouts without
+the missing phase evidence.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

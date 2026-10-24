@@ -13,6 +13,9 @@ assert.equal(typeof api.openWindowsInactiveLostRuntimeAuthority, 'function',
   'Missing owned inactive lost-runtime transport');
 const state = await readFile(path.join(control, 'state.json'));
 let expectedFinalState = state;
+const progress = phase => console.error(`INACTIVE_ROLLBACK_PHASE ${JSON.stringify({
+  mode, phase, elapsedMs: Math.round(performance.now()),
+})}`);
 if (mode === 'resume-project') {
   const proof = JSON.parse(await readFile(path.join(control, 'inactive-copy-crash-fixture.json')));
   assert.equal(proof.phase, 'project-file-copy');
@@ -509,6 +512,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   }
   await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority({ ...options, admission: {} }));
   await assert.rejects(api.openWindowsInactiveTaskCompletionRecovery(options));
+  progress('opening-original-authority');
   const scope = await api.openWindowsInactiveLostRuntimeAuthority(options);
   let restoredBundle;
   let preparedHandoff;
@@ -529,6 +533,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     const inspect = extra => api.inspectWindowsInactiveRollbackSnapshot({ ...options, scope, ...extra });
     await assert.rejects(inspect({ scope: { ...scope } }));
     const binding = await inspect();
+    progress('snapshot-inspected');
     const original = JSON.parse(state);
     assert.equal(binding.mutationAuthority, false);
     assert.equal(binding.snapshot.id, original.backupId);
@@ -553,6 +558,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       ...options, scope: { ...scope }, acceptDataLoss: true,
     }));
     const intent = await api.prepareWindowsInactiveRollbackIntent({ ...options, scope, acceptDataLoss: true });
+    progress('intent-prepared');
     assert.equal(intent.file, path.join(control, 'inactive-rollback-intent.json'));
     const intentBytes = await readFile(intent.file);
     const record = JSON.parse(intentBytes);
@@ -586,6 +592,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         ...handoffOptions, scope: { ...scope },
       }));
       const handoff = await api.prepareWindowsInactiveRollbackRuntimeHandoff(handoffOptions);
+      progress('runtime-evidence-prepared');
       assert.equal(handoff.file, path.join(control, 'inactive-rollback-runtime-handoff.json'));
       const handoffBytes = await readFile(handoff.file);
       assert.equal(handoff.sha256, createHash('sha256').update(handoffBytes).digest('hex'));
@@ -648,10 +655,12 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       });
     }
     try {
+      progress('restoring-project');
       restored = await api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: true });
     } finally { copyCrash?.close(); }
     assert.notEqual(mode, 'crash-project', 'Original co-located copy actor returned without actually dying');
     assert.equal(restored.status, 'project-restored');
+    progress('project-restored');
     assert.equal(restored.sourceCommit, original.sourceCommit);
     for (const entry of binding.snapshot.entries.filter(entry => entry.kind === 'file')) {
       assert.deepEqual(await readFile(path.join(original.project, entry.path)),
@@ -664,6 +673,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       ...options, scope: { ...scope }, acceptDataLoss: true,
     }));
     const external = await api.restoreWindowsInactiveRollbackExternal({ ...options, scope, acceptDataLoss: true });
+    progress('runtime-restored');
     restoredBundle = external.runtimeBundle;
     assert.equal(external.status, 'external-restored');
     assert.equal(external.runtimeBundle.sha256, binding.runtime.task.configurationSha256);
@@ -842,6 +852,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       const completed = await api.advanceWindowsInactiveRollbackTask(taskOptions);
       assert.equal(completed.step, 'task-restored');
       const task = await api.restoreWindowsInactiveRollbackTask(taskOptions);
+      progress('task-restored');
       assert.equal(task.status, 'task-restored');
       assert.equal(task.taskName, next.observation.taskName);
       assert.equal(task.priorRuntime, 'stopped');
