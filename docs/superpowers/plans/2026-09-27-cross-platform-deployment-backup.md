@@ -15237,6 +15237,15 @@ no production fault flag or alternate copy implementation is introduced.
 These changes are pending their next Actions dispatch, including whether the
 noninteractive native debugger fixture reaches its intended boundary.
 
+Accepted `ddbb1ae7 / 40119662898`: original Actions logs confirm the
+noninteractive debugger fixture paused the unchanged native publisher after
+its first actual helper copy, killed that exact process, then repaired missing
+members without replacing the surviving helper. Foreign members, corrupt
+helpers and corrupt existing configuration were refused before repair.
+Stopped rollback cleanup and the original released-prefix/native restore
+regressions passed in the same commands-only gate. This remains native
+acceptance, not public full-application or dual-platform acceptance.
+
 ### Co-located stopped runtime evidence preparation
 
 The first handoff stage copies the original retired runtime's exact
@@ -15260,6 +15269,8 @@ new foreign entry both in the current scope and during fresh admission.
 Use the explicitly admitted original configuration path as the copy source,
 even if its original basename is not the canonical archive basename.
 These changes await Actions validation.
+Focused preparation validation is dispatched at
+`89260c54 / 40123257547`, independently of the accepted partial publication run.
 
 This stage deliberately retains the original runtime handles and preserves
 the project-restore write-before-refusal. It does not yet grant authority to
