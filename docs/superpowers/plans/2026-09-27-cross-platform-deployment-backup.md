@@ -15037,6 +15037,17 @@ its original admission requires the complete history and would make the first
 deletion unrecoverable. Prefix validation, exact stopped task policy, original
 process absence and exclusive cleanup authority must precede actual deletion.
 
+The next causal fixture requires `openWindowsInactiveRollbackRetirement` after
+the original lost-runtime bridge closes. At the intact prefix, it must report
+`status: retiring`, original operation/state/completion bindings, zero retired
+entries and the exact task-history entry count. Reject foreign admission,
+concurrent cleanup admission and concurrent original lost-runtime authority.
+Repeated checks and a subsequent fresh cleanup scope must leave history, state,
+completion receipt and retirement intent unchanged. This first independent
+admission gate does not authorize or test deletion yet. The cleanup implementation
+must serialize against the existing lost-runtime authority rather than introducing
+an unrelated lock that allows both mutation authorities to coexist.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

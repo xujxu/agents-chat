@@ -142,6 +142,32 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
       assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
     } finally { await retirementScope.close(); }
+    assert.equal(typeof api.openWindowsInactiveRollbackRetirement, 'function',
+      'Missing independent stopped rollback retirement authority');
+    await assert.rejects(api.openWindowsInactiveRollbackRetirement({ ...options, admission: {} }));
+    const cleanup = await api.openWindowsInactiveRollbackRetirement(options);
+    try {
+      assert.ok(Object.isFrozen(cleanup));
+      const observed = await cleanup.check();
+      assert.equal(observed.status, 'retiring');
+      assert.equal(observed.operationId, JSON.parse(expectedFinalState).operationId);
+      assert.equal(observed.retiredEntries, 0);
+      assert.equal(observed.totalEntries, entries.length);
+      assert.equal(observed.stateSha256, createHash('sha256').update(expectedFinalState).digest('hex'));
+      assert.equal(observed.completionSha256, createHash('sha256').update(receiptBefore).digest('hex'));
+      await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
+      await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority(options));
+      assert.deepEqual(await cleanup.check(), observed);
+      assert.deepEqual((await readdir(history)).sort(), names);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
+      assert.deepEqual(await readFile(receiptFile), receiptBefore);
+    } finally { await cleanup.close(); }
+    assert.notEqual(await processIdentity(cleanup.identity.pid), cleanup.identity.processIdentity);
+    const nextCleanup = await api.openWindowsInactiveRollbackRetirement(options);
+    try {
+      assert.equal((await nextCleanup.check()).retiredEntries, 0);
+    } finally { await nextCleanup.close(); }
+    assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
     return;
   }
   if (mode === 'resume-task') {
