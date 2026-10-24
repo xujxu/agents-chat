@@ -138,7 +138,7 @@ try {
     Assert-RuntimePublicationInventory $true
 } catch {
     $failure = $_.Exception
-    [Console]::Error.WriteLine("Runtime publication refused: $stage. Retain any incomplete destination.")
+    [Console]::Error.WriteLine("Runtime publication refused: $stage. $($failure.GetBaseException().Message) Retain any incomplete destination.")
 } finally {
     $closing = $resources.ToArray()
     [array]::Reverse($closing)

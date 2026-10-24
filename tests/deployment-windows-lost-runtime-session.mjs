@@ -616,7 +616,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       try {
         await assert.rejects(api.restoreWindowsInactiveRollbackExternal({
           ...options, scope: next, acceptDataLoss: true,
-        }), /exactly the archived configuration and helpers/);
+        }), { code: 'DEPLOYMENT_WINDOWS_RUNTIME_PUBLICATION_REFUSED' });
         assert.equal(await readFile(foreign, 'utf8'), 'untrusted publication');
         assert.deepEqual(await next.check(), next.observation);
       } finally { await unlink(foreign); }
