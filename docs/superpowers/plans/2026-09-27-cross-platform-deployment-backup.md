@@ -15159,6 +15159,13 @@ field order, preserving exact-byte intent comparison and refusing old mismatched
 evidence rather than overwriting it. The existing fresh-process reopening test
 exercises this bug; the fixture also requires canonical runtime field order.
 
+The worker fixture additionally holds after the last actual deletion, with both
+the original lock and worker-engine absent and no final receipt yet. The parent
+pins and kills this actor, requires bridge exit, then starts a distinct publisher
+to prove durable admission after actual lock deletion and idempotent final
+receipt publication. This test revision is pending its next Actions run; the
+currently running `8f951de1 / 40110255751` does not include this third boundary.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

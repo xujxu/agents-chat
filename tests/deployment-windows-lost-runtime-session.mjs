@@ -34,19 +34,29 @@ const finishWorkers = async options => {
   const receiptBefore = await readFile(path.join(control, 'inactive-rollback-complete.json'));
   const backupBefore = await readFile(path.join(control, 'backup', 'manifest.json'));
   const configurationBefore = await readFile(path.join(control, 'inactive-rollback-runtime', 'configuration.json'));
+  const publication = mode === 'resume-worker-publication';
   const scope = await api.openWindowsInactiveRollbackWorkerRetirement(options);
   try {
     const initial = await scope.check();
-    assert.equal(initial.retiredEntries, 2);
+    assert.equal(initial.status, 'retiring-workers');
+    assert.equal(initial.retiredEntries, publication ? record.entries.length : 2);
     assert.equal(initial.totalEntries, record.entries.length);
     await assert.rejects(api.openWindowsInactiveRollbackWorkerRetirement(options));
     await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
-    for (let prefix = 3; prefix <= record.entries.length; prefix++) {
-      const next = await scope.advance();
-      assert.equal(next.status, 'retiring-workers');
-      assert.equal(next.retiredEntries, prefix);
-      assert.deepEqual(await scope.check(), next);
-      await assert.rejects(lstat(path.join(control, record.entries[prefix - 1].path)), { code: 'ENOENT' });
+    if (!publication) {
+      for (let prefix = 3; prefix <= record.entries.length; prefix++) {
+        const next = await scope.advance();
+        assert.equal(next.status, 'retiring-workers');
+        assert.equal(next.retiredEntries, prefix);
+        assert.deepEqual(await scope.check(), next);
+        await assert.rejects(lstat(path.join(control, record.entries[prefix - 1].path)), { code: 'ENOENT' });
+      }
+      await assert.rejects(readFile(path.join(control, 'inactive-rollback-retired.json')), { code: 'ENOENT' });
+      console.log(`INACTIVE_ROLLBACK_WORKERS_RETIRED_HELD ${JSON.stringify({
+        ...scope.identity, prefix: record.entries.length,
+      })}`);
+      const timer = setInterval(() => {}, 1000);
+      try { await new Promise(() => {}); } finally { clearInterval(timer); }
     }
     const complete = await scope.advance();
     assert.equal(complete.status, 'retired');
@@ -130,7 +140,7 @@ const drainRetirement = async (options, entries, expectedState, expectedReceipt,
 };
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
-  if (mode === 'resume-workers') {
+  if (mode === 'resume-workers' || mode === 'resume-worker-publication') {
     await finishWorkers(options);
     return;
   }

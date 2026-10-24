@@ -368,14 +368,49 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
                             'resume-workers'), $control, $environment)
                     try {
-                        $output = $last.StandardOutput.ReadToEndAsync()
                         $diagnostic = $last.StandardError.ReadToEndAsync()
-                        Assert ($last.WaitForExit(300000)) 'Stopped worker final cleanup actor timed out'
+                        $line = $last.StandardOutput.ReadLineAsync()
+                        Assert ($line.Wait(300000)) 'Stopped worker actor did not reach actual lock release'
+                        $held = $line.GetAwaiter().GetResult()
+                        if ($null -eq $held) {
+                            Assert ($last.WaitForExit(15000)) 'Stopped worker actor closed output without exiting'
+                            $errors = $diagnostic.GetAwaiter().GetResult()
+                            if ($errors) { [Console]::Error.WriteLine($errors) }
+                        }
+                        Assert ($null -ne $held -and $held.StartsWith('INACTIVE_ROLLBACK_WORKERS_RETIRED_HELD ')) `
+                            'Stopped worker actor exited before actual lock release'
+                        $identity = $held.Substring('INACTIVE_ROLLBACK_WORKERS_RETIRED_HELD '.Length) | ConvertFrom-Json
+                        Assert ($identity.prefix -eq $workers.entries.Count) 'Stopped worker actor held wrong final prefix'
+                        Assert (-not (Test-Path -LiteralPath (Join-Path $control 'lock')) -and
+                            -not (Test-Path -LiteralPath (Join-Path $control 'worker-engine')) -and
+                            -not (Test-Path -LiteralPath (Join-Path $control 'inactive-rollback-retired.json'))) `
+                            'Stopped worker actor did not actually release lock before final receipt'
+                        $bridge = [Diagnostics.Process]::GetProcessById($identity.pid)
+                        try {
+                            $null = $bridge.Handle
+                            Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($identity.pid) -ceq $identity.processIdentity) `
+                                'Stopped worker final bridge changed before interruption'
+                            $last.Kill()
+                            Assert ($last.WaitForExit(15000) -and $last.ExitCode -ne 0) `
+                                'Stopped worker final actor did not die abruptly'
+                            Assert ($bridge.WaitForExit(15000)) 'Stopped worker final bridge survived actor death'
+                        } finally { $bridge.Dispose() }
+                        $errors = $diagnostic.GetAwaiter().GetResult()
+                        if ($errors) { [Console]::Error.WriteLine($errors) }
+                    } finally { $last.Dispose() }
+                    $publisher = [Deployment.WindowsControllerProcess]::Start($node,
+                        @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                            $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                            'resume-worker-publication'), $control, $environment)
+                    try {
+                        $output = $publisher.StandardOutput.ReadToEndAsync()
+                        $diagnostic = $publisher.StandardError.ReadToEndAsync()
+                        Assert ($publisher.WaitForExit(120000)) 'Stopped retirement publication reentry timed out'
                         Write-Output $output.GetAwaiter().GetResult()
                         $errors = $diagnostic.GetAwaiter().GetResult()
                         if ($errors) { [Console]::Error.WriteLine($errors) }
-                        Assert ($last.ExitCode -eq 0) 'Stopped worker fresh actor failed to retire history and release original lock'
-                    } finally { $last.Dispose() }
+                        Assert ($publisher.ExitCode -eq 0) 'Stopped retirement could not resume after actual lock deletion'
+                    } finally { $publisher.Dispose() }
                     Write-Output 'PASS: stopped task and worker cleanup survive real actor death, retire exact history, release original lock and retain final receipt'
                 }
             }
