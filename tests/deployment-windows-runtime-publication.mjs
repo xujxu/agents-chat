@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { access, readFile, readdir } from 'node:fs/promises';
+import { access, readFile, readdir, mkdir, copyFile, writeFile, unlink, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -33,6 +33,43 @@ export async function verifyWindowsRuntimePublication({ control, project, taskNa
     assert.deepEqual((await readdir(directory)).sort(), [...Object.keys(JSON.parse(bytes).helpers), 'configuration.json'].sort());
     await assert.rejects(prepareWindowsRuntimeBundle(input));
     assert.deepEqual(await readFile(bundle.configuration), bytes);
+    const partial = path.join(control, 'runtime-resumption-fixture');
+    await mkdir(partial, { mode: 0o700 });
+    const helper = Object.keys(JSON.parse(bytes).helpers)[0];
+    const target = path.join(partial, helper);
+    const helperBytes = await readFile(path.join(directory, helper));
+    await copyFile(path.join(directory, helper), target);
+    const retained = await lstat(target, { bigint: true });
+    const resume = () => publication.publishWindowsRuntimeBundle({
+      directory: partial, sourceConfiguration: scope.observation.configuration,
+      sha256: scope.observation.configurationSha256, pwsh, resumeExisting: true,
+      check: () => scope.check(),
+    });
+    const foreign = path.join(partial, 'foreign-fixture.json');
+    await writeFile(foreign, '{}', { flag: 'wx' });
+    try {
+      await assert.rejects(resume());
+      assert.deepEqual((await readdir(partial)).sort(), [helper, path.basename(foreign)].sort());
+    } finally { await unlink(foreign); }
+    await writeFile(target, 'invalid helper');
+    try {
+      await assert.rejects(resume());
+      assert.deepEqual(await readdir(partial), [helper]);
+      assert.equal(await readFile(target, 'utf8'), 'invalid helper');
+    } finally { await writeFile(target, helperBytes); }
+    const resumed = await resume();
+    assert.deepEqual(resumed, {
+      directory: partial, configuration: path.join(partial, 'configuration.json'),
+      sha256: scope.observation.configurationSha256,
+    });
+    assert.deepEqual((await readdir(partial)).sort(), (await readdir(directory)).sort());
+    for (const name of await readdir(directory)) {
+      assert.deepEqual(await readFile(path.join(partial, name)), await readFile(path.join(directory, name)));
+    }
+    assert.deepEqual(await resume(), resumed);
+    const after = await lstat(target, { bigint: true });
+    assert.equal(after.dev, retained.dev);
+    assert.equal(after.ino, retained.ino);
     assert.deepEqual(await readFile(scope.observation.configuration), bytes);
     assert.deepEqual(await readFile(stateFile), state);
     assert.deepEqual(await scope.check(), scope.observation);

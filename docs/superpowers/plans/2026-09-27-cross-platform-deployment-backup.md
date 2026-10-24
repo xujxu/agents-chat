@@ -15185,6 +15185,34 @@ cleanup path now fails early instead of waiting behind roughly thirty minutes
 of prior regression setup. Do not cancel or duplicate the already running gate;
 the new ordering applies only to subsequent dispatches.
 
+Stopped task-history and worker retirement passed at
+`8f951de1 / 40110255751`: both terminal publication interruption scenarios
+survived real task-cleanup and worker-cleanup actor death, drained the exact
+native inventories, released the original lock and retained the final receipt.
+This remains a focused commands-only native gate, not public full Next.js
+application or dual-platform acceptance. Latest additional lock-deleted
+publication interruption, maintenance fences and reordered gate are separately
+running at `45494b05 / 40114867886`.
+
+### Incomplete stopped rollback runtime bundle repair
+
+The stopped external rollback path now explicitly permits resuming its fixed
+private runtime destination. Native publication first retains and verifies the
+original source/archive and destination directory, rejects all foreign members,
+and validates every existing member against the expected helper/configuration
+digest before writing anything. Existing private members remain pinned and are
+never overwritten or deleted; only absent declared members are created with
+the existing create-only native copy operation. Complete inventory and retained
+identities are checked before readiness and close. Ordinary deploy/update bundle
+publication remains create-only unless resumption is explicitly requested.
+
+The existing real-runtime fixture now seeds a partial private destination from
+an actually published helper, rejects a foreign member and a changed helper
+without filling missing files, then requires exact repair, repeat admission and
+preserved existing helper inode plus unchanged task/source/state. This tests
+partial input repair; genuine publisher-death interruption is still a separate
+remaining case. These changes are pending their next Actions dispatch.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

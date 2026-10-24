@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { lstat } from 'node:fs/promises';
 import {
   assertWindowsInactiveLostRuntimeAuthority, prepareWindowsInactiveRollbackIntent,
 } from './windows-task-completion-recovery.mjs';
@@ -29,29 +28,12 @@ export async function restoreWindowsInactiveRollbackExternal(options) {
       await check();
       const directory = path.join(control, 'inactive-rollback-runtime');
       const backup = path.join(control, 'backup');
-      let existing;
-      try { existing = await lstat(directory); }
-      catch (error) { if (error.code !== 'ENOENT') throw error; }
-      let runtimeBundle;
-      if (existing) {
-        runtimeBundle = Object.freeze({
-          directory, configuration: path.join(directory, 'configuration.json'),
-          sha256: binding.runtime.task.configurationSha256,
-        });
-        const existingRelocation = await inspectWindowsRuntimeRelocation({
-          project: binding.snapshot.project, backup, snapshot: binding.snapshot,
-          runtimeBundle, signal: stageSignal,
-        });
-        await existingRelocation.verify();
-        await check();
-      } else {
-        runtimeBundle = await publishWindowsRuntimeBundle({
-          directory,
-          sourceConfiguration: binding.runtime.files.find(file => file.name === 'configuration.json').file,
-          sha256: binding.runtime.task.configurationSha256,
-          archiveFiles: binding.runtime.files, pwsh, signal: stageSignal, check,
-        });
-      }
+      const runtimeBundle = await publishWindowsRuntimeBundle({
+        directory,
+        sourceConfiguration: binding.runtime.files.find(file => file.name === 'configuration.json').file,
+        sha256: binding.runtime.task.configurationSha256,
+        archiveFiles: binding.runtime.files, pwsh, signal: stageSignal, check, resumeExisting: true,
+      });
       const checkStopped = async ({ signal: checkSignal = stageSignal } = {}) => {
         checkSignal.throwIfAborted();
         const observation = await assertWindowsInactiveLostRuntimeAuthority({

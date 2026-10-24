@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory)][string]$Sha256,
     [Parameter(Mandatory)][string]$Directory,
     [switch]$Archived,
+    [switch]$ResumeExisting,
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][string]$ControllerIdentity
 )
@@ -12,6 +13,17 @@ $resources = [Collections.Generic.List[IDisposable]]::new()
 $copies = [Collections.Generic.List[IDisposable]]::new()
 $failure = $null
 $stage = 'bootstrap'
+function Assert-RuntimePublicationInventory([bool]$Complete) {
+    $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($name in [Deployment.WindowsRuntimeHost]::HelperFiles) { $null = $names.Add($name) }
+    $null = $names.Add('configuration.json')
+    foreach ($item in Get-ChildItem -LiteralPath $Directory -Force) {
+        if ($item.PSIsContainer -or -not $names.Remove($item.Name)) {
+            throw 'Runtime destination contains foreign or duplicate members.'
+        }
+    }
+    if ($Complete -and $names.Count) { throw 'Runtime destination is incomplete.' }
+}
 try {
     if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7) { throw 'Unsupported runtime publisher.' }
     Add-Type -Path @(
@@ -68,22 +80,36 @@ try {
     }
     $resources.Add($original)
     $stage = 'private-destination'
-    $destination = [Deployment.WindowsPrivateFile]::CreateDirectory($Directory)
+    $destination = if ($ResumeExisting -and (Test-Path -LiteralPath $Directory)) {
+        [Deployment.WindowsPrivateFile]::OpenDirectory($Directory)
+    } else { [Deployment.WindowsPrivateFile]::CreateDirectory($Directory) }
     $resources.Add($destination)
+    $existing = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    Assert-RuntimePublicationInventory $false
+    foreach ($item in Get-ChildItem -LiteralPath $Directory -Force) {
+        $digest = if ($item.Name -ceq 'configuration.json') { $Sha256 } else { $hashes.GetProperty($item.Name).GetString() }
+        $held = [Deployment.WindowsPrivateFile]::Open($item.FullName, $digest)
+        $resources.Add($held)
+        $copies.Add($held)
+        $null = $existing.Add($item.Name)
+    }
     $stage = 'copy'
     foreach ($name in [Deployment.WindowsRuntimeHost]::HelperFiles) {
         $sourceDirectory.Check()
         $original.Check()
         $destination.Check()
+        if ($existing.Contains($name)) { continue }
         $copy = [Deployment.WindowsPrivateFile]::CopyTrustedSource(
             $sources[$name], $hashes.GetProperty($name).GetString(), (Join-Path $Directory $name))
         $resources.Add($copy)
         $copies.Add($copy)
     }
     $publishedConfiguration = Join-Path $Directory 'configuration.json'
-    $copy = [Deployment.WindowsPrivateFile]::CopyTrustedSource($Configuration, $Sha256, $publishedConfiguration)
-    $resources.Add($copy)
-    $copies.Add($copy)
+    if (-not $existing.Contains('configuration.json')) {
+        $copy = [Deployment.WindowsPrivateFile]::CopyTrustedSource($Configuration, $Sha256, $publishedConfiguration)
+        $resources.Add($copy)
+        $copies.Add($copy)
+    }
     $stage = 'destination-validation'
     $published = [Deployment.WindowsRuntimeHost]::Open($publishedConfiguration, $Sha256, $Directory)
     $resources.Add($published)
@@ -91,6 +117,7 @@ try {
     $sourceDirectory.Check()
     $original.Check()
     $destination.Check()
+    Assert-RuntimePublicationInventory $true
     [Console]::Out.WriteLine((@{
         type='ready'; pid=$PID; processIdentity=$identity; controllerIdentity=$ControllerIdentity
         directory=$Directory; configuration=$publishedConfiguration; sha256=$Sha256
@@ -108,6 +135,7 @@ try {
     $original.Check()
     $destination.Check()
     $published.Check()
+    Assert-RuntimePublicationInventory $true
 } catch {
     $failure = $_.Exception
     [Console]::Error.WriteLine("Runtime publication refused: $stage. Retain any incomplete destination.")

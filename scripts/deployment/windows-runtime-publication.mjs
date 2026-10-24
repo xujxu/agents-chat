@@ -81,11 +81,12 @@ async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, 
 }
 
 export async function publishWindowsRuntimeBundle({
-  directory, sourceConfiguration, sha256, archiveFiles, pwsh, signal, check,
+  directory, sourceConfiguration, sha256, archiveFiles, pwsh, signal, check, resumeExisting = false,
 }) {
   signal?.throwIfAborted();
   let bridge;
   try {
+    if (typeof resumeExisting !== 'boolean') throw new Error('Runtime resumption must be explicitly boolean.');
     await check();
     const configuration = path.join(directory, 'configuration.json');
     const controllerIdentity = await processIdentity(process.pid);
@@ -94,6 +95,7 @@ export async function publishWindowsRuntimeBundle({
       pwsh, refused, label: 'Native runtime publisher',
       args: ['-NoProfile', '-NonInteractive', '-File', script, '-Configuration', sourceConfiguration,
         '-Sha256', sha256, '-Directory', directory, ...(archiveFiles ? ['-Archived'] : []),
+        ...(resumeExisting ? ['-ResumeExisting'] : []),
         '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
     });
     if (archiveFiles) await bridge.wire.send({ id: 0, method: 'archive', files: archiveFiles });
