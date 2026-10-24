@@ -166,7 +166,27 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     const nextCleanup = await api.openWindowsInactiveRollbackRetirement(options);
     try {
       assert.equal((await nextCleanup.check()).retiredEntries, 0);
+      assert.equal(typeof nextCleanup.advance, 'function',
+        'Missing identity-bound stopped task history retirement step');
+      const advanced = await nextCleanup.advance();
+      assert.equal(advanced.status, 'retiring');
+      assert.equal(advanced.retiredEntries, 1);
+      assert.equal(advanced.totalEntries, entries.length);
+      await assert.rejects(readFile(path.join(control, entries[0].path)), { code: 'ENOENT' });
+      assert.deepEqual((await readdir(history)).sort(), names.slice(1));
+      assert.deepEqual(await nextCleanup.check(), advanced);
     } finally { await nextCleanup.close(); }
+    const partial = await api.openWindowsInactiveRollbackRetirement(options);
+    try {
+      const observed = await partial.check();
+      assert.equal(observed.retiredEntries, 1);
+      assert.equal(observed.totalEntries, entries.length);
+      await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
+      assert.deepEqual(await partial.check(), observed);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
+      assert.deepEqual(await readFile(receiptFile), receiptBefore);
+      assert.deepEqual((await readdir(history)).sort(), names.slice(1));
+    } finally { await partial.close(); }
     assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
     return;
   }

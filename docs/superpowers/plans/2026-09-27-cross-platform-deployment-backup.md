@@ -15058,6 +15058,18 @@ validation. It is not a partial-history recovery implementation and cannot delet
 entries yet. The next destructive stage still requires a durable authority
 handoff that remains valid after original evidence disappears.
 
+Intact cleanup admission passed at `8c6f0d66 / 40071525969`, including independent
+reopening, rejection of overlapping cleanup and original recovery scopes, and
+unchanged original history/state/receipts. Next require one actual identity-bound
+`advance()` deletion of the first declared task-history entry, exact remaining
+inventory, and a fresh independent scope accepting that real one-entry prefix.
+The fixture must not delete evidence to simulate progress. State, completion
+receipt and retirement intent must remain byte-identical. The implementation
+must replace intact-history-only admission with stopped-specific retained
+checkpoint validation before enabling this deletion; simply forwarding deletion
+through the existing full-history proof cannot satisfy fresh-prefix reentry.
+Actual deletion and partial-prefix admission remain unimplemented.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
