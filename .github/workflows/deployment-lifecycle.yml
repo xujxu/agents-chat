@@ -248,10 +248,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native supervisor protocol contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-public-command.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Public Windows command contracts failed.' }
+      - name: Verify stopped rollback interruption and actual cleanup
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           foreach ($step in @('task-restore-requested', 'task-registered', 'task-restored')) {
             & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep release-requested -ExternalInactiveRuntime -InactiveRollbackCrashStep $step
             if ($LASTEXITCODE -ne 0) { throw "Inactive Windows external-runtime rollback failed at $step." }
           }
+      - name: Verify inactive task observation and released-prefix recovery
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition
           if ($LASTEXITCODE -ne 0) { throw 'Inactive Windows task observation contracts failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletion
@@ -260,6 +268,10 @@ jobs:
             & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep $step
             if ($LASTEXITCODE -ne 0) { throw "Inactive Windows completion recovery failed at $step." }
           }
+      - name: Verify native recovery and original restore regressions
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-private-runner.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Private Windows test runner diagnostics failed.' }
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-process-lifetime.ps1

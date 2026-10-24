@@ -15194,6 +15194,14 @@ application or dual-platform acceptance. Latest additional lock-deleted
 publication interruption, maintenance fences and reordered gate are separately
 running at `45494b05 / 40114867886`.
 
+That run still reports the original monolithic native command step; the job
+API confirms it is executing, but GitHub refuses unfinished job log downloads.
+For subsequent runs, expose existing contracts, stopped rollback cleanup,
+inactive released-prefix recovery and original restore regressions as distinct
+Actions steps. Preserve every command, its order and PowerShell environment.
+This allows completion/failure attribution through the live job API without
+repeating tests, cancelling an active gate or claiming an unfinished result.
+
 ### Incomplete stopped rollback runtime bundle repair
 
 The stopped external rollback path now explicitly permits resuming its fixed
