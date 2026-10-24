@@ -15211,7 +15211,8 @@ publisher through a test-only PowerShell debugger breakpoint immediately after
 its first actual helper copy. Pin the publisher PID/identity, require no
 configuration publication, kill that exact process and await actual exit.
 Require exactly one genuine helper to remain. Fresh native publication must
-reject a foreign member and a changed helper without filling missing files,
+reject a foreign member, a changed helper and an invalid existing configuration
+with the native publication refusal code and without filling missing files,
 then repair the missing members with exact bytes, repeat admission and preserve
 the existing helper inode plus unchanged task/source/state. The breakpoint is
 located from the original script AST and refuses unexpected copy boundaries;

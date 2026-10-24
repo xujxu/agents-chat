@@ -83,15 +83,23 @@ export async function verifyWindowsRuntimePublication({ control, project, taskNa
     const foreign = path.join(partial, 'foreign-fixture.json');
     await writeFile(foreign, '{}', { flag: 'wx' });
     try {
-      await assert.rejects(resume());
+      await assert.rejects(resume(), { code: 'DEPLOYMENT_WINDOWS_RUNTIME_PUBLICATION_REFUSED' });
       assert.deepEqual((await readdir(partial)).sort(), [...partialNames, path.basename(foreign)].sort());
     } finally { await unlink(foreign); }
     await writeFile(target, 'invalid helper');
     try {
-      await assert.rejects(resume());
+      await assert.rejects(resume(), { code: 'DEPLOYMENT_WINDOWS_RUNTIME_PUBLICATION_REFUSED' });
       assert.deepEqual((await readdir(partial)).sort(), partialNames);
       assert.equal(await readFile(target, 'utf8'), 'invalid helper');
     } finally { await writeFile(target, helperBytes); }
+    const invalidConfiguration = path.join(partial, 'configuration.json');
+    await writeFile(invalidConfiguration, '{}', { flag: 'wx' });
+    try {
+      await assert.rejects(resume(), { code: 'DEPLOYMENT_WINDOWS_RUNTIME_PUBLICATION_REFUSED' });
+      assert.deepEqual((await readdir(partial)).sort(), [...partialNames, 'configuration.json'].sort());
+      assert.equal(await readFile(invalidConfiguration, 'utf8'), '{}');
+      assert.deepEqual(await readFile(target), helperBytes);
+    } finally { await unlink(invalidConfiguration); }
     const resumed = await resume();
     assert.deepEqual(resumed, {
       directory: partial, configuration: path.join(partial, 'configuration.json'),
