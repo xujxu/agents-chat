@@ -42,6 +42,13 @@ function Publish-AgentsChatInactiveRollbackRetirementIntent([hashtable]$Context)
         }
     }
     $admission = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Directory 'admission.json') ''
+    $runtime = [ordered]@{}
+    $retiredRuntime = [ordered]@{}
+    foreach ($name in @('pid', 'identity', 'generation', 'instanceGuid', 'sessionId',
+        'configurationSha256', 'launcherPid', 'readySha256')) {
+        $runtime[$name] = $Context.Runtime[$name]
+        if ($name -cne 'instanceGuid') { $retiredRuntime[$name] = $Context.RetiredRuntime[$name] }
+    }
     $record = [ordered]@{
         version=2; phase='task-retirement-prepared'; control=$Context.Control; project=$Context.Project
         operationId=$Context.OperationId; taskName=$Context.TaskName
@@ -54,7 +61,7 @@ function Publish-AgentsChatInactiveRollbackRetirementIntent([hashtable]$Context)
         checkpoint=[ordered]@{
             admission=$admission.ReadText()
             bridge=[ordered]@{ pid=$Context.BridgePid; processIdentity=$Context.BridgeIdentity }
-            runtime=$Context.Runtime; retiredRuntime=$Context.RetiredRuntime
+            runtime=$runtime; retiredRuntime=$retiredRuntime
             controlIdentity=(Get-AgentsChatRetirementDirectory $Context $Context.Control)
             lockIdentity=(Get-AgentsChatRetirementDirectory $Context (Join-Path $Context.Control 'lock'))
             state=(Get-AgentsChatRetirementFile $Context 'state.json')

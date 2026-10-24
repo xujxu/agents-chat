@@ -15151,6 +15151,14 @@ original startup records before cleanup instead of rereading deliberately
 deleted history. All of this worker deletion and final publication remains
 pending GitHub Actions; no local validation has been run.
 
+First actual-deletion run `b677be3d / 40106819393` failed before cleanup
+admission: reopening original lost-runtime authority rebuilt a retirement intent
+with a different byte order for unordered runtime hashtables. No deletion was
+accepted by that run. Serialize both runtime checkpoints with explicit stable
+field order, preserving exact-byte intent comparison and refusing old mismatched
+evidence rather than overwriting it. The existing fresh-process reopening test
+exercises this bug; the fixture also requires canonical runtime field order.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

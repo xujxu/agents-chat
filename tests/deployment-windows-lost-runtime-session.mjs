@@ -267,6 +267,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal(retirement.checkpoint.state.sha256, retirement.stateSha256);
       assert.equal(retirement.checkpoint.completion.sha256, retirement.completionSha256);
       assert.equal(retirement.checkpoint.taskReceipt.sha256, retirement.taskReceiptSha256);
+      assert.deepEqual(Object.keys(retirement.checkpoint.runtime),
+        ['pid', 'identity', 'generation', 'instanceGuid', 'sessionId', 'configurationSha256', 'launcherPid', 'readySha256']);
+      assert.deepEqual(Object.keys(retirement.checkpoint.retiredRuntime),
+        ['pid', 'identity', 'generation', 'sessionId', 'configurationSha256', 'launcherPid', 'readySha256']);
       assert.deepEqual(await api.prepareWindowsInactiveRollbackRetirementIntent(retirementOptions), prepared);
       assert.deepEqual(await readFile(prepared.file), preparedBytes);
       assert.deepEqual((await readdir(history)).sort(), names);
