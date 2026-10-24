@@ -15194,6 +15194,15 @@ application or dual-platform acceptance. Latest additional lock-deleted
 publication interruption, maintenance fences and reordered gate are separately
 running at `45494b05 / 40114867886`.
 
+Accepted `45494b05 / 40114867886`: original Actions logs confirm both
+terminal-interruption scenarios survived the additional actor death after
+actual worker/lock deletion, then admitted a fresh final-receipt publisher.
+The eight stopped-maintenance ownership fence cases also passed, including
+uppercase Windows evidence names, followed by the original native regressions.
+This closes the additional focused native cleanup/reentry gate, not public
+full-application or dual-platform acceptance. Next gate `ddbb1ae7 / 40119662898`
+separately validates partial bundle repair and genuine publisher death.
+
 That run still reports the original monolithic native command step; the job
 API confirms it is executing, but GitHub refuses unfinished job log downloads.
 For subsequent runs, expose existing contracts, stopped rollback cleanup,
