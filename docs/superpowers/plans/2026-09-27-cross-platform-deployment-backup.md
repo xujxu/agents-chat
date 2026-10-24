@@ -15384,6 +15384,16 @@ identity, accepts only genuine process absence or a different process
 identity, and propagates unrelated errors. This corrects the test's absence
 assertion, not the production handoff or the copy boundary.
 
+Gate `0eb2a7b5 / 40137234896` supplied the missing timeout evidence:
+the third external actor had already restored its task at 149614 ms, but
+then ran repeated restore/advance/observation checks before signalling the
+180-second crash boundary. Signal immediately after the real native
+`task-restored` advancement acknowledgement, as for the first two boundaries.
+The native parent still verifies the actual receipt and exact disabled task
+policy before killing that actor. Keep all replay assertions in uninterrupted
+actors and retain the existing timeout; do not delay the crash boundary with
+unrelated post-boundary verification.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

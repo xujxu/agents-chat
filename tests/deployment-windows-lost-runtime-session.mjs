@@ -851,6 +851,8 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await holdTask(next, 'task-registered');
       const completed = await api.advanceWindowsInactiveRollbackTask(taskOptions);
       assert.equal(completed.step, 'task-restored');
+      progress('task-restored-boundary');
+      await holdTask(next, 'task-restored');
       const task = await api.restoreWindowsInactiveRollbackTask(taskOptions);
       progress('task-restored');
       assert.equal(task.status, 'task-restored');
@@ -866,7 +868,6 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual(await api.restoreWindowsInactiveRollbackTask(taskOptions), task);
       assert.deepEqual(await readFile(task.file), taskBytes);
       assert.deepEqual(await next.check(), next.observation);
-      await holdTask(next, 'task-restored');
     } finally { await next.close(); }
     assert.notEqual(await processIdentity(next.identity.pid), next.identity.processIdentity);
   }
