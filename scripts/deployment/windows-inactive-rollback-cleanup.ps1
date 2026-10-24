@@ -3,6 +3,7 @@
 . (Join-Path $PSScriptRoot 'windows-task-replacement.ps1')
 . (Join-Path $PSScriptRoot 'windows-inactive-rollback-state.ps1')
 . (Join-Path $PSScriptRoot 'windows-retirement-entries.ps1')
+. (Join-Path $PSScriptRoot 'windows-inactive-rollback-workers.ps1')
 
 function Assert-AgentsChatInactiveRollbackCleanupInventory([hashtable]$Context) {
     $expected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -47,6 +48,11 @@ function Assert-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
             foreach ($runtime in @($Context.Runtime, $Context.RetiredRuntime)) {
                 Assert-AgentsChatCompletionProcessAbsent $runtime.pid $runtime.identity
                 [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$runtime.generation, $runtime.sessionId)
+            }
+            if ($Context.ContainsKey('WorkerDomains')) {
+                foreach ($domain in $Context.WorkerDomains) {
+                    [Deployment.WindowsWorkerJob]::AssertRuntimeJobEmpty([guid]$domain.generation, $domain.sessionId)
+                }
             }
             $priorBundle = [IO.Path]::GetDirectoryName($Context.Admission.configuration.GetString())
             $runtimeFiles = @(Get-ChildItem -LiteralPath $priorBundle -Force |
@@ -233,6 +239,9 @@ function Open-AgentsChatInactiveRollbackCleanup([string]$Control) {
             throw 'Stopped cleanup requires canonical Windows control.'
         }
         $context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory($Control))
+        if (Test-Path -LiteralPath (Join-Path $Control 'inactive-rollback-workers.json')) {
+            throw 'Stopped task cleanup has handed off to durable worker retirement.'
+        }
         $markerPath = Join-Path $Control 'inactive-rollback-retirement.json'
         $original = Open-AgentsChatCompletionFile $context $markerPath ''
         if ($original.ByteLength -gt 1048576) { throw 'Oversized stopped retirement checkpoint.' }

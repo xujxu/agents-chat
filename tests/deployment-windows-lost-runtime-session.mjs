@@ -45,9 +45,24 @@ const drainRetirement = async (options, entries, expectedState, expectedReceipt,
   try {
     assert.equal((await empty.check()).retiredEntries, entries.length);
     await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
-    assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedState);
-    assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-complete.json')), expectedReceipt);
+    assert.equal(typeof empty.prepareWorkers, 'function', 'Missing stopped rollback worker retirement checkpoint');
+    const prepared = await empty.prepareWorkers();
+    assert.equal(prepared.file, path.join(control, 'inactive-rollback-workers.json'));
+    assert.match(prepared.sha256, /^[a-f0-9]{64}$/);
+    assert.deepEqual(await empty.prepareWorkers(), prepared);
   } finally { await empty.close(); }
+  await assert.rejects(api.openWindowsInactiveRollbackRetirement(options));
+  assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedState);
+  assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-complete.json')), expectedReceipt);
+  const workerBytes = await readFile(path.join(control, 'inactive-rollback-workers.json'));
+  const worker = JSON.parse(workerBytes);
+  assert.equal(worker.version, 1);
+  assert.equal(worker.phase, 'stopped-worker-retirement-prepared');
+  assert.equal(worker.operationId, JSON.parse(expectedState).operationId);
+  assert.equal(worker.task.sha256, createHash('sha256').update(retirementBefore).digest('hex'));
+  assert.equal(worker.entries[0].path, 'task-maintenance');
+  assert.equal(worker.entries.at(-2).path, path.join('lock', 'owner.json'));
+  assert.equal(worker.entries.at(-1).path, 'lock');
   assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
 };
 await withWindowsAdmission(control, { pwsh }, async admission => {

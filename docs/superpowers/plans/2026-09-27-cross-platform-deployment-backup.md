@@ -15114,6 +15114,24 @@ restores original evidence, never simulates accepted cleanup progress), then
 drain the remaining task history. Both staged-state and published-state parent
 scenarios use this interruption. This revision is not yet Actions-verified.
 
+The following worker stage first captures a stopped-specific immutable
+`inactive-rollback-workers.json` checkpoint, only after the exact task-history
+prefix is fully retired. It binds the retained task marker, lock text, original
+worker manifest, enrolled journals, helper descriptors, directory identities and
+worker Job domains. Native validation requires sealed original enrollment,
+exact lock/manifest identity on every operation record, settled per-worker
+transitions and empty original Jobs. It does not infer settled workers merely
+from controller death or reuse running restore admission.
+
+`prepareWorkers` is repeatable only in the original retained scope; after its
+durable publication the old task-cleanup opener refuses reopening. This preserves
+a single forward handoff rather than allowing two cleanup authorities. Worker
+deletion/resumption and original lock release must consume this checkpoint next;
+the checkpoint alone is not final retirement or completed deployment acceptance.
+Actions `40106819393` still validates the earlier task-history implementation
+at `b677be3d`; neither the real-interruption revision nor this worker stage has
+passed Actions yet.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

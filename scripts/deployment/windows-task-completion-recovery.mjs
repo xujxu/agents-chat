@@ -210,6 +210,14 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
         return;
       }
       if (retirement) {
+        if (method === 'prepare-stopped-workers') {
+          const prepared = captureWorkerFields(reply.value, ['file', 'sha256'], 'stopped worker retirement checkpoint');
+          if (prepared.file !== path.join(control, 'inactive-rollback-workers.json')
+            || typeof prepared.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(prepared.sha256)) {
+            throw new Error('Invalid stopped worker retirement checkpoint acknowledgement.');
+          }
+          return Object.freeze(prepared);
+        }
         const next = captureStoppedRetirement(reply.value);
         const expected = method === 'advance'
           ? { ...observation, retiredEntries: Math.min(observation.retiredEntries + 1, observation.totalEntries) }
@@ -334,6 +342,9 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       identity,
       get observation() { return observation; },
       check: ({ signal: requestSignal } = {}) => request('check', requestSignal),
+      ...(retirement ? {
+        prepareWorkers: ({ signal: requestSignal } = {}) => request('prepare-stopped-workers', requestSignal),
+      } : {}),
       ...(lost ? {} : { advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal) }),
       close: async () => { if (!closed) await request('close'); },
     });
