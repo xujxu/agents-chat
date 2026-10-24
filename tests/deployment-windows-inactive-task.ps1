@@ -269,7 +269,13 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 try {
                     $output = $resumed.StandardOutput.ReadToEndAsync()
                     $diagnostic = $resumed.StandardError.ReadToEndAsync()
-                    Assert ($resumed.WaitForExit(300000)) 'Fresh co-located project copy recovery timed out'
+                    if (-not $resumed.WaitForExit(300000)) {
+                        $resumed.Kill()
+                        $errors = $diagnostic.GetAwaiter().GetResult()
+                        if ($errors) { [Console]::Error.WriteLine($errors) }
+                        Write-Output $output.GetAwaiter().GetResult()
+                        throw 'Fresh co-located project copy recovery timed out'
+                    }
                     Write-Output $output.GetAwaiter().GetResult()
                     $errors = $diagnostic.GetAwaiter().GetResult()
                     if ($errors) { [Console]::Error.WriteLine($errors) }

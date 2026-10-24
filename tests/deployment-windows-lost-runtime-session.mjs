@@ -726,6 +726,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
   await assert.rejects(scope.check());
   if (preparedHandoff) {
+    progress('checking-handoff-reentry');
     const { handoff, checkpoint, bytes } = preparedHandoff;
     const changed = await api.openWindowsInactiveLostRuntimeAuthority(options);
     const foreign = path.join(control, 'inactive-rollback-runtime-evidence', 'foreign-handoff-fixture');
@@ -770,6 +771,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       const released = await api.releaseWindowsInactiveRollbackRuntimeHandoff({
         ...options, scope: next, acceptDataLoss: true,
       });
+      progress('release-reentry-verified');
       assert.equal(released.file, path.join(control, 'inactive-rollback-runtime-released.json'));
       const releasedBytes = await readFile(released.file);
       assert.equal(released.sha256, createHash('sha256').update(releasedBytes).digest('hex'));
@@ -791,9 +793,11 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         assert.deepEqual(await next.check(), next.observation);
         assert.equal(await processIdentity(next.identity.pid), next.identity.processIdentity);
         assert.equal(process.kill(next.identity.pid, 'SIGKILL'), true);
+        progress('source-absent-bridge-killed');
         await assert.rejects(next.check(), { code: 'DEPLOYMENT_WINDOWS_COMPLETION_RECOVERY_REFUSED' });
         assert.notEqual(await processIdentity(next.identity.pid), next.identity.processIdentity);
         const fresh = await api.openWindowsInactiveLostRuntimeAuthority(options);
+        progress('source-absent-fresh-authority');
         try {
           assert.deepEqual(await api.prepareWindowsInactiveRollbackRuntimeHandoff({
             ...options, scope: fresh, acceptDataLoss: true,
@@ -812,6 +816,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     } finally { await next.close(); }
   }
   if (restoredBundle) {
+    progress('checking-runtime-reentry');
     const next = await api.openWindowsInactiveLostRuntimeAuthority(options);
     try {
       const foreign = path.join(restoredBundle.directory, 'foreign-reentry-test.txt');
@@ -832,6 +837,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal(typeof api.restoreWindowsInactiveRollbackTask, 'function',
         'Missing actual inactive rollback task policy restoration');
       const taskOptions = { ...options, scope: next, runtimeBundle: restoredBundle, acceptDataLoss: true };
+      progress('restoring-task');
       await assert.rejects(api.restoreWindowsInactiveRollbackTask({ ...taskOptions, acceptDataLoss: false }));
       await assert.rejects(api.restoreWindowsInactiveRollbackTask({ ...taskOptions, scope: { ...next } }));
       assert.equal(typeof api.advanceWindowsInactiveRollbackTask, 'function',
@@ -868,6 +874,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual(await api.restoreWindowsInactiveRollbackTask(taskOptions), task);
       assert.deepEqual(await readFile(task.file), taskBytes);
       assert.deepEqual(await next.check(), next.observation);
+      progress('task-replay-verified');
     } finally { await next.close(); }
     assert.notEqual(await processIdentity(next.identity.pid), next.identity.processIdentity);
   }

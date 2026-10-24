@@ -15402,6 +15402,14 @@ inside the earlier scope's `try` block. Keep the same parsed accepted-state
 record in the enclosing callback scope for both original and fresh native
 authority assertions. Full co-located task/terminal cleanup is still pending.
 
+Gate `7b0add67 / 40141935625` again passed external cleanup, but the fresh
+co-located actor exceeded its five-minute budget. Its separate parent wait
+also discarded stderr on timeout. Apply the same exact-Job termination and
+diagnostic drain there, retaining the existing budget. Record the handoff
+reentry, release reentry, source-absent bridge death/fresh authority, runtime
+reentry and task replay phases to distinguish actual recovery from later
+negative/replay assertions before changing any deadline or production logic.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
