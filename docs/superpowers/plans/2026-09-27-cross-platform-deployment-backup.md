@@ -15272,6 +15272,15 @@ These changes await Actions validation.
 Focused preparation validation is dispatched at
 `89260c54 / 40123257547`, independently of the accepted partial publication run.
 
+Accepted `89260c54 / 40123257547`: the original Actions run completed
+successfully with the co-located preparation assertions (exact archive bytes
+and descriptors, repeat preparation, current/fresh foreign-inventory refusal,
+same-byte replacement inode refusal and unchanged receipt on fresh admission)
+and the original native rollback/cleanup regressions. This accepts preparation
+only; it does not include original-handle release or actual co-located restore.
+Those later changes are separately dispatched at `84008c8e / 40128300664`,
+including persistent original-path absence through independent cleanup.
+
 Preparation alone deliberately retains the original runtime handles.
 The separate explicit release operation now validates the complete prepared
 archive through the shared strict native descriptor schema and original
