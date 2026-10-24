@@ -78,6 +78,14 @@ export async function prepareWindowsInactiveRollbackFilesReceipt(options) {
   await verified.check();
   return result;
 }
+export async function prepareWindowsInactiveRollbackRuntimeHandoff(options) {
+  await prepareWindowsInactiveRollbackIntent(options);
+  const binding = await inspectWindowsInactiveRollbackSnapshot(options);
+  await binding.check();
+  const result = await lostScopes.get(options.scope).request('prepare-rollback-runtime', options.signal);
+  await binding.check();
+  return result;
+}
 export async function prepareWindowsInactiveRollbackIntent(options) {
   if (options.acceptDataLoss !== true) throw refused(new Error('Rollback requires explicit data-loss acknowledgement.'));
   await assertWindowsInactiveLostRuntimeAuthority(options);
@@ -289,10 +297,12 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
         }
         return Object.freeze(result);
       }
-      if (method === 'prepare-rollback' || method === 'rollback-files-restored' || method === 'prepare-rollback-terminal') {
+      if (method === 'prepare-rollback' || method === 'rollback-files-restored' || method === 'prepare-rollback-terminal'
+        || method === 'prepare-rollback-runtime') {
         const result = captureWorkerFields(reply.value, ['file', 'sha256'], 'inactive rollback intent');
         const name = method === 'prepare-rollback' ? 'inactive-rollback-intent.json'
-          : method === 'rollback-files-restored' ? 'inactive-rollback-files-restored.json' : 'inactive-rollback-terminal.json';
+          : method === 'rollback-files-restored' ? 'inactive-rollback-files-restored.json'
+            : method === 'prepare-rollback-runtime' ? 'inactive-rollback-runtime-handoff.json' : 'inactive-rollback-terminal.json';
         if (!lost || result.file !== path.join(control, name)
           || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
           throw new Error('Invalid inactive rollback intent acknowledgement.');

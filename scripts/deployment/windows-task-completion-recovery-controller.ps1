@@ -60,11 +60,11 @@ try {
         $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'advance', 'close', 'prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state', 'publish-rollback-state', 'complete-rollback', 'prepare-rollback-retirement', 'check-rollback-retirement', 'prepare-stopped-workers')) { throw 'Invalid recovery request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'advance', 'close', 'prepare-rollback', 'prepare-rollback-runtime', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state', 'publish-rollback-state', 'complete-rollback', 'prepare-rollback-retirement', 'check-rollback-retirement', 'prepare-stopped-workers')) { throw 'Invalid recovery request.' }
         if ($method -ceq 'prepare-stopped-workers' -and -not $StoppedRetirement) { throw 'Worker checkpoint requires independent stopped cleanup.' }
         if ($StoppedRetirement -and $method -cnotin @('check', 'advance', 'close', 'prepare-stopped-workers')) { throw 'Stopped cleanup cannot mutate rollback receipts.' }
         if ($StoppedWorkers -and $method -cnotin @('check', 'advance', 'close')) { throw 'Stopped worker cleanup cannot mutate rollback receipts.' }
-        if ($method -cin @('prepare-rollback', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state', 'publish-rollback-state', 'complete-rollback', 'prepare-rollback-retirement', 'check-rollback-retirement') -and -not $LostRuntime) { throw 'Rollback intent requires lost-runtime authority.' }
+        if ($method -cin @('prepare-rollback', 'prepare-rollback-runtime', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state', 'publish-rollback-state', 'complete-rollback', 'prepare-rollback-retirement', 'check-rollback-retirement') -and -not $LostRuntime) { throw 'Rollback intent requires lost-runtime authority.' }
         if ($LostRuntime -and $method -ceq 'advance') { throw 'Lost-runtime evidence cannot advance live completion.' }
         $sequence = $id
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
@@ -84,6 +84,8 @@ try {
                 else { Assert-AgentsChatInactiveRollbackCleanup $scope }
         } elseif ($method -ceq 'prepare-rollback') {
             $value = Publish-AgentsChatInactiveRollbackIntent $scope
+        } elseif ($method -ceq 'prepare-rollback-runtime') {
+            $value = Publish-AgentsChatInactiveRollbackRuntimeHandoff $scope
         } elseif ($method -ceq 'rollback-files-restored') {
             $value = Publish-AgentsChatInactiveRollbackFilesReceipt $scope
         } elseif ($method -ceq 'restore-rollback-task') {

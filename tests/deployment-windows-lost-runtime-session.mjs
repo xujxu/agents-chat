@@ -464,6 +464,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   await assert.rejects(api.openWindowsInactiveTaskCompletionRecovery(options));
   const scope = await api.openWindowsInactiveLostRuntimeAuthority(options);
   let restoredBundle;
+  let preparedHandoff;
   try {
     assert.ok(Object.isFrozen(scope));
     assert.ok(Object.isFrozen(scope.observation));
@@ -542,6 +543,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       const handoffBytes = await readFile(handoff.file);
       assert.equal(handoff.sha256, createHash('sha256').update(handoffBytes).digest('hex'));
       const checkpoint = JSON.parse(handoffBytes);
+      preparedHandoff = { handoff, checkpoint, bytes: handoffBytes };
       assert.equal(checkpoint.version, 1);
       assert.equal(checkpoint.phase, 'runtime-evidence-prepared');
       assert.equal(checkpoint.operationId, original.operationId);
@@ -644,6 +646,30 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   } finally { await scope.close(); }
   assert.notEqual(await processIdentity(scope.identity.pid), scope.identity.processIdentity);
   await assert.rejects(scope.check());
+  if (preparedHandoff) {
+    const { handoff, checkpoint, bytes } = preparedHandoff;
+    const target = path.join(control, checkpoint.entries[0].path);
+    const originalEntry = path.join(control, 'runtime-handoff-inode-fixture');
+    const originalBytes = await readFile(target);
+    await rename(target, originalEntry);
+    try {
+      await writeFile(target, originalBytes, { flag: 'wx' });
+      await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority(options),
+        { code: 'DEPLOYMENT_WINDOWS_COMPLETION_RECOVERY_REFUSED' });
+      assert.deepEqual(await readFile(handoff.file), bytes);
+    } finally {
+      await unlink(target);
+      await rename(originalEntry, target);
+    }
+    const next = await api.openWindowsInactiveLostRuntimeAuthority(options);
+    try {
+      assert.deepEqual(await api.prepareWindowsInactiveRollbackRuntimeHandoff({
+        ...options, scope: next, acceptDataLoss: true,
+      }), handoff);
+      assert.deepEqual(await readFile(handoff.file), bytes);
+      assert.deepEqual(await next.check(), next.observation);
+    } finally { await next.close(); }
+  }
   if (restoredBundle) {
     const next = await api.openWindowsInactiveLostRuntimeAuthority(options);
     try {

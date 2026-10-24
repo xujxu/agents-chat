@@ -15237,6 +15237,34 @@ no production fault flag or alternate copy implementation is introduced.
 These changes are pending their next Actions dispatch, including whether the
 noninteractive native debugger fixture reaches its intended boundary.
 
+### Co-located stopped runtime evidence preparation
+
+The first handoff stage copies the original retired runtime's exact
+configuration, declared helpers and original readiness into a fixed private
+`inactive-rollback-runtime-evidence` directory outside the project. It runs
+under the original exclusive lost-runtime authority and explicit data-loss
+acknowledgement. Validate all existing members before filling missing entries;
+never overwrite or remove them. Publish immutable
+`inactive-rollback-runtime-handoff.json` only after every source/runtime/task
+check, complete archive inventory and retained file/directory identity check.
+The receipt binds the operation, original state/completion, configuration,
+retired generation/identity/readiness, archive directory identity and sorted
+native file descriptors.
+
+Fresh original-authority admission verifies any existing receipt and exact
+archive identities before proceeding. The co-located fixture checks genuine
+archive bytes, descriptors, repeat preparation, fresh bridge admission and
+refusal of same-byte replacement inode without rewriting the receipt.
+These changes await Actions validation.
+
+This stage deliberately retains the original runtime handles and preserves
+the project-restore write-before-refusal. It does not yet grant authority to
+delete the co-located source. The next stage must atomically switch retained
+bundle/readiness checks to the checkpoint archive under the existing exclusive
+release-intent lock, admit fresh scopes after original paths disappear, and
+teach independent task/worker cleanup to use that same archive. Actual project
+restoration and actor-death tests must pass before removing the refusal.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

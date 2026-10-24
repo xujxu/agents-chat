@@ -3,6 +3,7 @@
 . (Join-Path $PSScriptRoot 'windows-inactive-rollback-terminal.ps1')
 . (Join-Path $PSScriptRoot 'windows-inactive-rollback-state.ps1')
 . (Join-Path $PSScriptRoot 'windows-inactive-rollback-retirement.ps1')
+. (Join-Path $PSScriptRoot 'windows-inactive-rollback-runtime-handoff.ps1')
 
 function Publish-AgentsChatInactiveRollbackIntent([hashtable]$Context) {
     $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
@@ -96,6 +97,9 @@ function Open-AgentsChatInactiveLostRuntimeAuthority([string]$Control) {
         $null = Assert-AgentsChatInactiveLostRuntimeEvidence $context
         if (Test-Path -LiteralPath (Join-Path $Control 'inactive-rollback-intent.json')) {
             $null = Publish-AgentsChatInactiveRollbackIntent $context
+        }
+        if (Test-Path -LiteralPath (Join-Path $Control 'inactive-rollback-runtime-handoff.json')) {
+            $null = Publish-AgentsChatInactiveRollbackRuntimeHandoff $context
         }
         if (Test-Path -LiteralPath (Join-Path $Control 'inactive-rollback-files-restored.json')) {
             $null = Publish-AgentsChatInactiveRollbackFilesReceipt $context

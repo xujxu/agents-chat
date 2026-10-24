@@ -47,6 +47,7 @@ export const workerEngineFiles = Object.freeze([
   'windows-inactive-rollback-terminal.ps1',
   'windows-inactive-rollback-state.ps1',
   'windows-inactive-rollback-retirement.ps1',
+  'windows-inactive-rollback-runtime-handoff.ps1',
   'windows-inactive-rollback-cleanup.ps1',
   'windows-inactive-rollback-workers.ps1',
   'windows-inactive-worker-cleanup.ps1',
