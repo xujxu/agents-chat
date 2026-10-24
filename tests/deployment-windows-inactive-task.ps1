@@ -252,8 +252,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $copy.pid -eq $lostActor.Id -and $copy.processIdentity -ceq $copyActorIdentity -and
                     $copy.copiedPath -ceq $files[0].path -and $copy.pendingPath -ceq $files[-1].path) `
                     'Co-located copy interruption differs from the original actor or exact copy boundary'
-                Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($copy.bridge.pid) -cne $copy.bridge.processIdentity) `
-                    'Co-located copy bridge survived original actor cleanup'
+                Assert-AgentsChatCompletionProcessAbsent $copy.bridge.pid $copy.bridge.processIdentity
                 Assert ((Get-FileHash -LiteralPath (Join-Path $Project $copy.copiedPath)).Hash.ToLowerInvariant() -ceq
                     $files[0].sha256 -and -not (Test-Path -LiteralPath (Join-Path $Project $copy.pendingPath))) `
                     'Co-located interruption did not retain an exact copied file and an absent later file'

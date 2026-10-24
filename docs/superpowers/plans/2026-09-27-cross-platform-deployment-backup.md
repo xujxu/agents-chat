@@ -15375,6 +15375,15 @@ snapshot/intent, evidence preparation and actual project/runtime/task
 restoration. Do not infer a production cause or increase timeouts without
 the missing phase evidence.
 
+Gate `d5c14932 / 40134610173` advanced through external cleanup and reached
+the real co-located copy-death proof. Its parent then failed while checking
+the disappeared bridge with `WindowsWorkerJob.ProcessIdentity`, which throws
+for a nonexistent PID. Reuse the already-loaded native
+`Assert-AgentsChatCompletionProcessAbsent` helper: it validates the recorded
+identity, accepts only genuine process absence or a different process
+identity, and propagates unrelated errors. This corrects the test's absence
+assertion, not the production handoff or the copy boundary.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
