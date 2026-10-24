@@ -528,6 +528,42 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     }));
     const relative = path.relative(original.project, binding.runtime.task.configuration);
     if (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
+      assert.equal(typeof api.prepareWindowsInactiveRollbackRuntimeHandoff, 'function',
+        'Missing durable preparation of co-located runtime evidence');
+      const handoffOptions = { ...options, scope, acceptDataLoss: true };
+      await assert.rejects(api.prepareWindowsInactiveRollbackRuntimeHandoff({
+        ...handoffOptions, acceptDataLoss: false,
+      }));
+      await assert.rejects(api.prepareWindowsInactiveRollbackRuntimeHandoff({
+        ...handoffOptions, scope: { ...scope },
+      }));
+      const handoff = await api.prepareWindowsInactiveRollbackRuntimeHandoff(handoffOptions);
+      assert.equal(handoff.file, path.join(control, 'inactive-rollback-runtime-handoff.json'));
+      const handoffBytes = await readFile(handoff.file);
+      assert.equal(handoff.sha256, createHash('sha256').update(handoffBytes).digest('hex'));
+      const checkpoint = JSON.parse(handoffBytes);
+      assert.equal(checkpoint.version, 1);
+      assert.equal(checkpoint.phase, 'runtime-evidence-prepared');
+      assert.equal(checkpoint.operationId, original.operationId);
+      assert.equal(checkpoint.stateSha256, scope.observation.stateSha256);
+      assert.equal(checkpoint.completionSha256, scope.observation.completionSha256);
+      assert.equal(checkpoint.configuration, binding.runtime.task.configuration);
+      assert.equal(checkpoint.configurationSha256, binding.runtime.task.configurationSha256);
+      const evidence = path.join(control, 'inactive-rollback-runtime-evidence');
+      assert.deepEqual((await readdir(evidence)).sort(),
+        checkpoint.entries.map(entry => path.basename(entry.path)).sort());
+      for (const entry of checkpoint.entries) {
+        const archived = path.join(control, entry.path);
+        assert.equal(createHash('sha256').update(await readFile(archived)).digest('hex'), entry.sha256);
+        assert.deepEqual(await readFile(archived),
+          await readFile(path.join(path.dirname(checkpoint.configuration), path.basename(entry.path))));
+        const info = await lstat(archived, { bigint: true });
+        assert.equal(String(info.dev), entry.dev);
+        assert.equal(String(info.ino), entry.ino);
+      }
+      assert.deepEqual(await api.prepareWindowsInactiveRollbackRuntimeHandoff(handoffOptions), handoff);
+      assert.deepEqual(await readFile(handoff.file), handoffBytes);
+      assert.deepEqual(await scope.check(), scope.observation);
       const names = (await readdir(original.project, { recursive: true })).sort();
       const files = await Promise.all((await readdir(original.project, { recursive: true, withFileTypes: true }))
         .filter(entry => entry.isFile()).map(async entry => {
