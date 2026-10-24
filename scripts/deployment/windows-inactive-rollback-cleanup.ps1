@@ -4,6 +4,7 @@
 . (Join-Path $PSScriptRoot 'windows-inactive-rollback-state.ps1')
 . (Join-Path $PSScriptRoot 'windows-retirement-entries.ps1')
 . (Join-Path $PSScriptRoot 'windows-inactive-rollback-workers.ps1')
+. (Join-Path $PSScriptRoot 'windows-inactive-rollback-runtime-handoff.ps1')
 
 function Assert-AgentsChatInactiveRollbackCleanupInventory([hashtable]$Context) {
     $expected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -48,6 +49,10 @@ function Assert-AgentsChatStoppedRollbackRuntime([hashtable]$Context) {
         }
     }
     $priorBundle = [IO.Path]::GetDirectoryName($Context.Admission.configuration.GetString())
+    if ($Context.ContainsKey('RuntimeHandoffReleased')) {
+        $priorBundle = $Context.RuntimeHandoffDirectory
+        Assert-AgentsChatRuntimeHandoffInventory $priorBundle $Context.RuntimeHandoffNames -Complete
+    }
     $runtimeFiles = @(Get-ChildItem -LiteralPath $priorBundle -Force |
         Where-Object Name -Match '^(runtime|launch)-.*\.json$')
     if ($runtimeFiles.Count -ne 1 -or $runtimeFiles[0].PSIsContainer -or
@@ -261,8 +266,17 @@ function Initialize-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
     )) {
         $null = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control $binding[0]) $binding[1]
     }
-    Open-AgentsChatCompletionBundle $Context $admission.configuration.GetString() `
-        $admission.configurationSha256.GetString() $Context.RetiredRuntime
+    if (Test-Path -LiteralPath (Join-Path $Context.Control 'inactive-rollback-runtime-released.json')) {
+        $originalRelease = @($record.entries | Where-Object {
+            [IO.Path]::GetFileName($_.path) -ceq 'inactive-complete-release-requested.json'
+        })
+        if ($originalRelease.Count -ne 1) { throw 'Stopped cleanup lacks its original release descriptor.' }
+        $null = Open-AgentsChatRuntimeHandoffArchive $Context $handoff.stateSha256.GetString() `
+            $originalRelease[0].sha256 -RequireReleased
+    } else {
+        Open-AgentsChatCompletionBundle $Context $admission.configuration.GetString() `
+            $admission.configurationSha256.GetString() $Context.RetiredRuntime
+    }
     Open-AgentsChatCompletionBundle $Context `
         (Join-Path $Context.Control "runtime-$($Context.OperationId)\configuration.json") `
         $Context.Runtime.configurationSha256 $Context.Runtime

@@ -209,7 +209,7 @@ function Open-AgentsChatInactiveLostRuntimeEvidence([string]$Control) {
         }
         $context.Runtime = $runtime
         if (Test-Path -LiteralPath (Join-Path $Control 'inactive-rollback-runtime-released.json')) {
-            $null = Open-AgentsChatRuntimeHandoffArchive $context
+            $null = Open-AgentsChatRuntimeHandoffArchive $context -RequireReleased
         } else {
             $start = $context.Files.Count
             Open-AgentsChatCompletionBundle $context $context.Admission.configuration.GetString() `

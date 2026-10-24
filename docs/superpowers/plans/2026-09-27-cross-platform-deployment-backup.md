@@ -15290,9 +15290,24 @@ the original paths remain absent. Restore fixture paths afterward; this is not
 yet an actual project-restore test. Release/switch changes await their next
 Actions dispatch, separate from the running preparation-only gate.
 
-The project-restore write-before-refusal remains. Independent task/worker
-cleanup must also use the archive and actual project restoration/death tests
-must pass before removing that refusal.
+Independent task/worker cleanup now also opens a released handoff archive.
+Bind it to the original accepted-state digest from the verified terminal
+handoff and the original release-requested completion digest from the durable
+task-entry descriptor, not the later restored state/completion digests.
+Require the release receipt explicitly and use the same complete archive
+inventory for every stopped-runtime check. Existing histories without a
+release receipt retain their original source-bundle admission.
+
+The external rollback fixtures now prepare/release their original runtime too.
+Before fresh task cleanup, move the original configuration/readiness into
+digest-checked fixture custody and keep both paths absent across task cleanup,
+worker-prefix actor death, actual lock deletion and fresh final publication.
+Each new actor verifies persistent absence/custody rather than recreating the
+original paths. Restore fixture paths only after all final-receipt repeat and
+tamper-refusal assertions. These integration changes await Actions.
+
+The project-restore write-before-refusal remains until actual co-located
+project restoration/death tests pass.
 
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active

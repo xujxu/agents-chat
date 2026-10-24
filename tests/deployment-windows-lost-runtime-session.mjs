@@ -25,7 +25,40 @@ const holdTerminal = async (scope, step) => {
   const timer = setInterval(() => {}, 1000);
   try { await new Promise(() => {}); } finally { clearInterval(timer); }
 };
+const originalRuntimePaths = async () => {
+  const record = JSON.parse(await readFile(path.join(control, 'inactive-rollback-runtime-handoff.json')));
+  return [
+    { file: record.configuration, sha256: record.configurationSha256 },
+    { file: path.join(path.dirname(record.configuration),
+      `runtime-${record.runtimeIdentity.replaceAll(':', '-')}.json`), sha256: record.readySha256 },
+  ].map((entry, index) => ({ ...entry, saved: path.join(control, `absent-cleanup-runtime-fixture-${index}`) }));
+};
+const retainOriginalRuntimeAbsence = async () => {
+  for (const { file, saved, sha256 } of await originalRuntimePaths()) {
+    let missing = false;
+    try { await lstat(file); }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      missing = true;
+    }
+    if (!missing) {
+      await assert.rejects(lstat(saved), { code: 'ENOENT' });
+      assert.equal(createHash('sha256').update(await readFile(file)).digest('hex'), sha256);
+      await rename(file, saved);
+    }
+    assert.equal(createHash('sha256').update(await readFile(saved)).digest('hex'), sha256);
+    await assert.rejects(lstat(file), { code: 'ENOENT' });
+  }
+};
+const restoreOriginalRuntimePaths = async () => {
+  for (const { file, saved, sha256 } of await originalRuntimePaths()) {
+    await assert.rejects(lstat(file), { code: 'ENOENT' });
+    assert.equal(createHash('sha256').update(await readFile(saved)).digest('hex'), sha256);
+    await rename(saved, file);
+  }
+};
 const finishWorkers = async options => {
+  await retainOriginalRuntimeAbsence();
   const workerFile = path.join(control, 'inactive-rollback-workers.json');
   const before = await readFile(workerFile);
   const record = JSON.parse(before);
@@ -83,8 +116,10 @@ const finishWorkers = async options => {
   await writeFile(finalFile, Buffer.from(JSON.stringify({ ...JSON.parse(finalBefore), restoredRuntime: 'running' })));
   try { await assert.rejects(api.openWindowsInactiveRollbackWorkerRetirement(options)); }
   finally { await writeFile(finalFile, finalBefore); }
+  await restoreOriginalRuntimePaths();
 };
 const drainRetirement = async (options, entries, expectedState, expectedReceipt, retirementBefore) => {
+  await retainOriginalRuntimeAbsence();
   const history = path.join(control, 'task-maintenance');
   const names = entries.map(entry => path.basename(entry.path));
   const scope = await api.openWindowsInactiveRollbackRetirement(options);
@@ -581,6 +616,8 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         assert.deepEqual(await readFile(file), bytes);
       }
     } else {
+      await api.releaseWindowsInactiveRollbackRuntimeHandoff({ ...options, scope, acceptDataLoss: true });
+      assert.deepEqual(await scope.check(), scope.observation);
       const restored = await api.restoreWindowsInactiveRollbackProject({ ...options, scope, acceptDataLoss: true });
       assert.equal(restored.status, 'project-restored');
       assert.equal(restored.sourceCommit, original.sourceCommit);

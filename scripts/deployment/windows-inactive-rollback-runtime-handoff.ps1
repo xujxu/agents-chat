@@ -11,10 +11,14 @@ function Assert-AgentsChatRuntimeHandoffInventory([string]$Directory, [string[]]
     if ($Complete -and $remaining.Count) { throw 'Runtime evidence archive is incomplete.' }
 }
 
-function Get-AgentsChatRuntimeHandoffReleaseText([hashtable]$Context, [string]$PreparedSha256) {
+function Get-AgentsChatRuntimeHandoffReleaseText(
+    [hashtable]$Context, [string]$PreparedSha256,
+    [string]$OriginalStateSha256 = $Context.StateSha256,
+    [string]$OriginalCompletionSha256 = $Context.CompletionSha256
+) {
     return ([ordered]@{
         version=1; phase='runtime-evidence-released'; operationId=$Context.OperationId
-        stateSha256=$Context.StateSha256; completionSha256=$Context.CompletionSha256
+        stateSha256=$OriginalStateSha256; completionSha256=$OriginalCompletionSha256
         preparedSha256=$PreparedSha256
     } | ConvertTo-Json -Compress)
 }
@@ -33,7 +37,12 @@ function Get-AgentsChatRuntimeHandoffMembers([string]$Text, [string]$Sha256, [ha
     } finally { $document.Dispose() }
 }
 
-function Open-AgentsChatRuntimeHandoffArchive([hashtable]$Context) {
+function Open-AgentsChatRuntimeHandoffArchive(
+    [hashtable]$Context,
+    [string]$OriginalStateSha256 = $Context.StateSha256,
+    [string]$OriginalCompletionSha256 = $Context.CompletionSha256,
+    [switch]$RequireReleased
+) {
     $path = Join-Path $Context.Control 'inactive-rollback-runtime-handoff.json'
     $prepared = Open-AgentsChatCompletionFile $Context $path ''
     $record = Read-AgentsChatRetirementJson ($prepared.ReadText())
@@ -47,8 +56,8 @@ function Open-AgentsChatRuntimeHandoffArchive([hashtable]$Context) {
     if ($record.version -isnot [int] -or $record.version -ne 1 -or
         $record.phase -cne 'runtime-evidence-prepared' -or
         $record.operationId -cne $Context.OperationId -or $record.project -cne $Context.Project -or
-        $record.taskName -cne $Context.TaskName -or $record.stateSha256 -cne $Context.StateSha256 -or
-        $record.completionSha256 -cne $Context.CompletionSha256 -or
+        $record.taskName -cne $Context.TaskName -or $record.stateSha256 -cne $OriginalStateSha256 -or
+        $record.completionSha256 -cne $OriginalCompletionSha256 -or
         $record.configuration -cne $Context.Admission.configuration.GetString() -or
         $record.configurationSha256 -cne $Context.Admission.configurationSha256.GetString() -or
         $record.generation -cne $Context.RetiredRuntime.generation -or
@@ -80,18 +89,21 @@ function Open-AgentsChatRuntimeHandoffArchive([hashtable]$Context) {
     $releasedPath = Join-Path $Context.Control 'inactive-rollback-runtime-released.json'
     if (Test-Path -LiteralPath $releasedPath) {
         $released = Open-AgentsChatCompletionFile $Context $releasedPath ''
-        if ($released.ReadText() -cne (Get-AgentsChatRuntimeHandoffReleaseText $Context $prepared.Sha256)) {
+        if ($released.ReadText() -cne (Get-AgentsChatRuntimeHandoffReleaseText $Context $prepared.Sha256 `
+            $OriginalStateSha256 $OriginalCompletionSha256)) {
             throw 'Runtime handoff release differs from its exact prepared checkpoint.'
         }
         $Context.RuntimeHandoffReleased = $true
         $Context.RuntimeHandoffReleaseFile = $released
+    } elseif ($RequireReleased) {
+        throw 'Runtime handoff archive requires its durable original-path release.'
     }
     return $prepared
 }
 
 function Release-AgentsChatInactiveRollbackRuntimeHandoff([hashtable]$Context) {
     $null = Publish-AgentsChatInactiveRollbackRuntimeHandoff $Context
-    $prepared = Open-AgentsChatRuntimeHandoffArchive $Context
+    $prepared = Open-AgentsChatRuntimeHandoffArchive $Context -RequireReleased
     $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
     $path = Join-Path $Context.Control 'inactive-rollback-runtime-released.json'
     if (-not $Context.ContainsKey('RuntimeHandoffReleased')) {
