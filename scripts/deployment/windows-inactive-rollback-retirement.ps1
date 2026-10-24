@@ -1,5 +1,20 @@
 . (Join-Path $PSScriptRoot 'windows-task-retirement-intent.ps1')
 
+function Assert-AgentsChatInactiveRollbackRetirementAdmission([hashtable]$Context) {
+    $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
+    if (-not $Context.ExclusiveLostRuntime -or -not $Context.RollbackPublished -or
+        -not $Context.RollbackTaskComplete -or -not $Context.ContainsKey('RollbackCompletionReceipt') -or
+        -not $Context.ContainsKey('RollbackRetirementIntent')) {
+        throw 'Stopped retirement admission requires a previously prepared original intent.'
+    }
+    return [pscustomobject]@{
+        status='retiring'; operationId=$Context.OperationId
+        stateSha256=$Context.RollbackPhysicalState.Sha256
+        completionSha256=$Context.RollbackCompletionReceipt.Sha256
+        retiredEntries=0; totalEntries=$Context.Inventory.Count
+    }
+}
+
 function Publish-AgentsChatInactiveRollbackRetirementIntent([hashtable]$Context) {
     $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
     if (-not $Context.ExclusiveLostRuntime -or -not $Context.RollbackPublished -or

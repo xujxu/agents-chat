@@ -15,6 +15,19 @@ export { restoreWindowsInactiveRollbackProject } from './windows-inactive-rollba
 export { restoreWindowsInactiveRollbackExternal } from './windows-inactive-rollback-external.mjs';
 
 const lostScopes = new WeakMap();
+export async function openWindowsInactiveRollbackRetirement(options) {
+  const original = await openWindowsInactiveLostRuntimeAuthority(options);
+  try {
+    const { request } = lostScopes.get(original);
+    const check = ({ signal = options.signal } = {}) => request('check-rollback-retirement', signal);
+    await check();
+    return Object.freeze({ identity: original.identity, check, close: () => original.close() });
+  } catch (error) {
+    try { await original.close(); }
+    catch (cleanup) { throw new AggregateError([error, cleanup], 'Stopped retirement admission and cleanup failed.'); }
+    throw error;
+  }
+}
 export async function prepareWindowsInactiveRollbackRetirementIntent(options) {
   if (options.acceptDataLoss !== true) throw refused(new Error('Rollback retirement requires explicit data-loss acknowledgement.'));
   await assertWindowsInactiveLostRuntimeAuthority(options);
@@ -189,6 +202,18 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       if (method === 'close') {
         if (reply.value !== 'close') throw new Error('Unexpected completion recovery close acknowledgement.');
         return;
+      }
+      if (method === 'check-rollback-retirement') {
+        const result = captureWorkerFields(reply.value,
+          ['status', 'operationId', 'stateSha256', 'completionSha256', 'retiredEntries', 'totalEntries'],
+          'inactive rollback retirement admission');
+        if (!lost || result.status !== 'retiring' || result.operationId !== observation.operationId
+          || result.retiredEntries !== 0 || !Number.isSafeInteger(result.totalEntries) || result.totalEntries < 1
+          || ![result.stateSha256, result.completionSha256].every(value =>
+            typeof value === 'string' && /^[a-f0-9]{64}$/.test(value))) {
+          throw new Error('Invalid intact stopped retirement acknowledgement.');
+        }
+        return Object.freeze(result);
       }
       if (method === 'prepare-rollback-retirement') {
         const result = captureWorkerFields(reply.value, ['file', 'sha256'], 'inactive rollback retirement intent');

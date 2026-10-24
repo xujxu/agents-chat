@@ -15048,6 +15048,16 @@ admission gate does not authorize or test deletion yet. The cleanup implementati
 must serialize against the existing lost-runtime authority rather than introducing
 an unrelated lock that allows both mutation authorities to coexist.
 
+Causal `964fe34e / 40068595778` confirmed the missing independent cleanup API.
+The intact-history admission implementation reuses the original native evidence
+opener and exclusive release-intent handle, exposing only check/close through a
+separate frozen cleanup facade. Native admission requires an already validated
+retirement intent and completion receipt; it never prepares missing intent.
+This deliberately supports prefix zero only and retains full original history
+validation. It is not a partial-history recovery implementation and cannot delete
+entries yet. The next destructive stage still requires a durable authority
+handoff that remains valid after original evidence disappears.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
