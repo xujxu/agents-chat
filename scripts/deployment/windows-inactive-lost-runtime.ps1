@@ -137,6 +137,9 @@ function Assert-AgentsChatInactiveLostRuntimeState([hashtable]$Context) {
         }
     }
     foreach ($file in $Context.Files) { $file.Check() }
+    if ($Context.ContainsKey('RuntimeHandoffNames')) {
+        Assert-AgentsChatRuntimeHandoffInventory $Context.RuntimeHandoffDirectory $Context.RuntimeHandoffNames -Complete
+    }
     Assert-AgentsChatInactiveRollbackPhysicalState $Context
     $runtime = $Context.Runtime
     Assert-AgentsChatCompletionProcessAbsent $runtime.pid $runtime.identity

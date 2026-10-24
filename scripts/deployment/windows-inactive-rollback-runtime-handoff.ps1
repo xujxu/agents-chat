@@ -50,8 +50,9 @@ function Publish-AgentsChatInactiveRollbackRuntimeHandoff([hashtable]$Context) {
         $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
         $destination.Check()
         if (-not $existing.Contains($name)) {
+            $sourceFile = if ($name -ceq 'configuration.json') { $configuration } else { Join-Path $source $name }
             $copy = [Deployment.WindowsPrivateFile]::CopyTrustedSource(
-                (Join-Path $source $name), $members[$name], (Join-Path $directory $name))
+                $sourceFile, $members[$name], (Join-Path $directory $name))
             $Context.Files.Add($copy)
         }
     }
@@ -81,6 +82,8 @@ function Publish-AgentsChatInactiveRollbackRuntimeHandoff([hashtable]$Context) {
         $receipt = [Deployment.WindowsPrivateFile]::Publish($path, $text)
         $Context.Files.Add($receipt)
     }
+    $Context.RuntimeHandoffDirectory = $directory
+    $Context.RuntimeHandoffNames = $names
     $null = Assert-AgentsChatInactiveLostRuntimeEvidence $Context
     return [pscustomobject]@{ file=$path; sha256=$receipt.Sha256 }
 }

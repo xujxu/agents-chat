@@ -557,8 +557,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       for (const entry of checkpoint.entries) {
         const archived = path.join(control, entry.path);
         assert.equal(createHash('sha256').update(await readFile(archived)).digest('hex'), entry.sha256);
+        const name = path.basename(entry.path);
         assert.deepEqual(await readFile(archived),
-          await readFile(path.join(path.dirname(checkpoint.configuration), path.basename(entry.path))));
+          await readFile(name === 'configuration.json' ? checkpoint.configuration
+            : path.join(path.dirname(checkpoint.configuration), name)));
         const info = await lstat(archived, { bigint: true });
         assert.equal(String(info.dev), entry.dev);
         assert.equal(String(info.ino), entry.ino);
@@ -648,6 +650,18 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   await assert.rejects(scope.check());
   if (preparedHandoff) {
     const { handoff, checkpoint, bytes } = preparedHandoff;
+    const changed = await api.openWindowsInactiveLostRuntimeAuthority(options);
+    const foreign = path.join(control, 'inactive-rollback-runtime-evidence', 'foreign-handoff-fixture');
+    try {
+      await writeFile(foreign, 'foreign evidence', { flag: 'wx' });
+      await assert.rejects(changed.check(), { code: 'DEPLOYMENT_WINDOWS_COMPLETION_RECOVERY_REFUSED' });
+      await assert.rejects(api.openWindowsInactiveLostRuntimeAuthority(options),
+        { code: 'DEPLOYMENT_WINDOWS_COMPLETION_RECOVERY_REFUSED' });
+      assert.deepEqual(await readFile(handoff.file), bytes);
+    } finally {
+      await changed.close();
+      await unlink(foreign);
+    }
     const target = path.join(control, checkpoint.entries[0].path);
     const originalEntry = path.join(control, 'runtime-handoff-inode-fixture');
     const originalBytes = await readFile(target);

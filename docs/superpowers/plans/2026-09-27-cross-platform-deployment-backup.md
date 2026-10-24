@@ -15255,6 +15255,10 @@ Fresh original-authority admission verifies any existing receipt and exact
 archive identities before proceeding. The co-located fixture checks genuine
 archive bytes, descriptors, repeat preparation, fresh bridge admission and
 refusal of same-byte replacement inode without rewriting the receipt.
+Recheck complete archive inventory on every retained observation; reject a
+new foreign entry both in the current scope and during fresh admission.
+Use the explicitly admitted original configuration path as the copy source,
+even if its original basename is not the canonical archive basename.
 These changes await Actions validation.
 
 This stage deliberately retains the original runtime handles and preserves
