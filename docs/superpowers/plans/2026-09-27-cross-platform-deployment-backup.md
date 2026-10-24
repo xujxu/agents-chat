@@ -15026,6 +15026,17 @@ the independent expected descriptors after closing the previous scope and before
 opening the next exclusive scope. Do not weaken native sharing or release its
 authority handle to accommodate the test. Corrected Actions acceptance is pending.
 
+Corrected retirement-intent acceptance passed at `f6db4fef / 40038858204`.
+The actual task-history inventory matches every independently captured file
+identity, byte count and digest; repeated preparation and fresh-scope reopening
+preserve the intent and original history. No deletion or lock release occurred.
+Next implement an independent stopped retirement scope that can validate a
+partially removed original history from the durable intent and retained completion
+evidence. Do not simply remove a file through the current lost-runtime scope:
+its original admission requires the complete history and would make the first
+deletion unrecoverable. Prefix validation, exact stopped task policy, original
+process absence and exclusive cleanup authority must precede actual deletion.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
