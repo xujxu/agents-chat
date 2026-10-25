@@ -135,6 +135,9 @@ const finishWorkers = async options => {
   } finally { await scope.close(); }
   const finalFile = path.join(control, 'inactive-rollback-retired.json');
   const finalBefore = await readFile(finalFile);
+  const archiveNames = (await readdir(control)).filter(name =>
+    name.startsWith('inactive-rollback-') && name.endsWith('.json')).sort();
+  let archiveIntent;
   const reopened = await api.openWindowsInactiveRollbackWorkerRetirement(options);
   try {
     assert.equal((await reopened.check()).status, 'retired');
@@ -144,7 +147,37 @@ const finishWorkers = async options => {
     assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-complete.json')), receiptBefore);
     assert.deepEqual(await readFile(path.join(control, 'backup', 'manifest.json')), backupBefore);
     assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-runtime', 'configuration.json')), configurationBefore);
+    assert.equal(typeof reopened.prepareHistory, 'function', 'Missing exact stopped-history archival intent');
+    archiveIntent = await reopened.prepareHistory();
+    assert.equal(archiveIntent.file, path.join(control, 'inactive-rollback-history-intent.json'));
+    assert.deepEqual(await reopened.prepareHistory(), archiveIntent);
   } finally { await reopened.close(); }
+  const archiveBytes = await readFile(archiveIntent.file);
+  assert.equal(createHash('sha256').update(archiveBytes).digest('hex'), archiveIntent.sha256);
+  const archive = JSON.parse(archiveBytes);
+  assert.equal(archive.phase, 'stopped-history-archive-prepared');
+  assert.equal(archive.operationId, JSON.parse(stateBefore).operationId);
+  assert.equal(archive.stateSha256, createHash('sha256').update(stateBefore).digest('hex'));
+  assert.equal(archive.retiredSha256, createHash('sha256').update(finalBefore).digest('hex'));
+  assert.deepEqual(archive.entries.map(entry => entry.path), archiveNames);
+  for (const entry of archive.entries) {
+    const original = await readFile(path.join(control, entry.path));
+    assert.equal(entry.destination, `retired-${archive.operationId}-${entry.path}`);
+    assert.equal(entry.sha256, createHash('sha256').update(original).digest('hex'));
+    assert.equal(entry.bytes, original.length);
+    await assert.rejects(lstat(path.join(control, entry.destination)), { code: 'ENOENT' });
+  }
+  const freshHistory = await api.openWindowsInactiveRollbackWorkerRetirement(options);
+  try { assert.deepEqual(await freshHistory.prepareHistory(), archiveIntent); }
+  finally { await freshHistory.close(); }
+  const foreignHistory = path.join(control, 'inactive-rollback-foreign.json');
+  await writeFile(foreignHistory, '{}', { flag: 'wx' });
+  try {
+    const contaminated = await api.openWindowsInactiveRollbackWorkerRetirement(options);
+    try { await assert.rejects(contaminated.prepareHistory()); }
+    finally { await contaminated.close(); }
+  } finally { await unlink(foreignHistory); }
+  assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
   assert.deepEqual(await readFile(workerFile), before);
   assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), taskBefore);
   await writeFile(finalFile, Buffer.from(JSON.stringify({ ...JSON.parse(finalBefore), restoredRuntime: 'running' })));
