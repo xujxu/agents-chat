@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { createConnection, createServer } from 'node:net';
 import path from 'node:path';
 import test from 'node:test';
@@ -88,4 +89,16 @@ test('transport closure and concurrent receives cannot masquerade as valid respo
   client.destroy();
   await pending;
   await assert.rejects(wire.receive(), /closed/);
+});
+
+test('transport failure rejects a pending send even when its write callback never settles', { timeout: 1000 }, async () => {
+  for (const event of ['close', 'error']) {
+    const socket = new EventEmitter();
+    socket.write = () => true;
+    const wire = workerWire(socket);
+    const pending = assert.rejects(wire.send({ method: 'check' }), /closed|broken pipe/);
+    socket.emit(event, new Error('broken pipe'));
+    await pending;
+    await assert.rejects(wire.send({ method: 'check' }), /closed|broken pipe/);
+  }
 });

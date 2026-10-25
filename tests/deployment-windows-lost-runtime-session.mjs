@@ -795,7 +795,9 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         assert.equal(process.kill(next.identity.pid, 'SIGKILL'), true);
         progress('source-absent-bridge-killed');
         await assert.rejects(next.check(), { code: 'DEPLOYMENT_WINDOWS_COMPLETION_RECOVERY_REFUSED' });
+        progress('source-absent-dead-check-refused');
         assert.notEqual(await processIdentity(next.identity.pid), next.identity.processIdentity);
+        progress('source-absent-bridge-absence-verified');
         const fresh = await api.openWindowsInactiveLostRuntimeAuthority(options);
         progress('source-absent-fresh-authority');
         try {

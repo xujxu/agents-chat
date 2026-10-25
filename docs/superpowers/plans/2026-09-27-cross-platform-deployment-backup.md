@@ -15432,6 +15432,16 @@ saved module, including the newly listed inactive modules. Do not alias the
 expected list to production or weaken manifest equality. The matrix is still
 running; this fix awaits Actions validation after its remaining results.
 
+The same full matrix's Windows cancellation job stalled after the deliberate
+source-absent bridge kill at 79484 ms, not during project restoration.
+Add diagnostics after dead-scope refusal and process-absence verification
+to distinguish those remaining awaits. Inspection also found a concrete
+transport gap: `workerWire.send` awaits only the write callback, while socket
+failure rejects receives but not pending sends. Add a bounded causal unit
+case using a transport whose write callback remains pending, then emit close
+or error and require send refusal. Push this test before the production fix;
+it must fail in Actions without masking the existing native stall.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
