@@ -15498,6 +15498,16 @@ without reading payloads, altering production logging, or claiming a cause.
 Use the existing isolated first-application selector to diagnose while the
 separate full-matrix group continues.
 
+Isolated `e48af876 / 40160830847` succeeded in all four actual application
+cases: normal, receipt-loss after actor loss, default Interactive/AtLogOn
+policy and public-first. Original logs show real test execution with no skips,
+saved finalization and public update no-op. The earlier full-matrix receipt-loss
+timeout did not reproduce, so its root cause is not established and must not
+be described as fixed by diagnostics. Keep the 300-second closeout bound and
+require the next full matrix to pass it as well. API monitoring hit quota
+while two default-frequency watchers ran; resume only after the server reset
+and use `gh run watch --interval 180` for subsequent long runs.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
