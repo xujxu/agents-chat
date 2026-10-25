@@ -15517,6 +15517,31 @@ the combined complete-job budget too: 185 native + 105 application + 10
 cleanup = 300 minutes. Keep every inner deadline and the commands-only
 limits unchanged. The active run is not cancelled or replaced.
 
+### Stopped completed-closeout routing after original lock deletion
+
+The live job entered its actual application update/saved restore stage at
+06:36:14 UTC; its cold journal regressions have passed. The complete matrix
+still has the previously recorded receipt-loss failure and task-options
+cancellation, so it cannot provide final same-SHA acceptance.
+
+Extend the existing completed-closeout orchestration, not the public restore
+support claim, to reuse the independent stopped task/worker retirement APIs.
+Bind the exact original project, operation, restored-update state and digest
+under retained Windows admission. Resume the task prefix, publish its durable
+worker checkpoint, close that native scope, then resume the worker prefix and
+final receipt. Keep state and installed runtime bytes unchanged; retain all
+rollback markers so ordinary deploy/update admission remains conservatively
+closed until separate identity-bound historical archival is implemented.
+
+`ebde4b77` / Actions `40171184513` is the test-only causal run: after real
+lock deletion and actor death, the fresh actor now requires completed closeout,
+repeat success, cancellation/wrong-operation refusal without mutation, and
+continued validity of its supplied original admission. The implementation
+reuses the existing admission mechanism (including its private WeakMap
+validation), native checkpoint validation and ordered deletion APIs. The red
+run is still executing; neither red nor implementation acceptance is claimed.
+All existing per-file and actor-death assertions remain.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

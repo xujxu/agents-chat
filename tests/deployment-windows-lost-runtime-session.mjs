@@ -88,6 +88,8 @@ const finishWorkers = async options => {
     const accepted = JSON.parse(stateBefore);
     const closeout = { ...options, project: accepted.project, operationId: accepted.operationId };
     await assert.rejects(closeCompletedWindowsDeployment({ ...closeout, operationId: '00000000-0000-0000-0000-000000000000' }));
+    await assert.rejects(closeCompletedWindowsDeployment({ ...closeout, project: `${accepted.project}-foreign` }));
+    await assert.rejects(closeCompletedWindowsDeployment({ ...closeout, admission: { ...options.admission } }));
     const cancelled = new AbortController();
     cancelled.abort(new Error('Stopped closeout fixture cancellation'));
     await assert.rejects(closeCompletedWindowsDeployment({ ...closeout, signal: cancelled.signal }));

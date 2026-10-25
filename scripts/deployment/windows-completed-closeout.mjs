@@ -9,6 +9,9 @@ import { recoverWindowsFirstDeploymentReceipt } from './windows-first-receipt-re
 import { completeWindowsFirstDeployment } from './windows-first-cold-completion.mjs';
 import { openWindowsColdRetirementScope } from './windows-cold-retirement-scope.mjs';
 import {
+  openWindowsInactiveRollbackRetirement, openWindowsInactiveRollbackWorkerRetirement,
+} from './windows-task-completion-recovery.mjs';
+import {
   openWindowsTaskCompletionProof, beginWindowsTaskRetirement, openWindowsTaskRetirement,
   retireNextWindowsTaskFile, beginWindowsDeploymentRetirement, openWindowsDeploymentRetirement,
   retireNextWindowsDeploymentEntry,
@@ -25,7 +28,9 @@ async function hasMarker(control, name) {
   }
 }
 
-export async function closeCompletedWindowsDeployment({ control, project, operationId, pwsh, signal }) {
+export async function closeCompletedWindowsDeployment({
+  control, project, operationId, pwsh, signal, admission: retainedAdmission,
+}) {
   try {
     signal?.throwIfAborted();
     if (process.platform !== 'win32' || ![control, project, pwsh].every(value =>
@@ -35,7 +40,7 @@ export async function closeCompletedWindowsDeployment({ control, project, operat
       throw new Error('Completed Windows closeout requires explicit original project, operation and native paths.');
     }
     await externalWorkerDirectory(control, project);
-    return await withWindowsAdmission(control, { pwsh }, async admission => {
+    return await withWindowsAdmission(control, { pwsh, admission: retainedAdmission }, async admission => {
       signal?.throwIfAborted();
       const stateFile = path.join(control, 'state.json');
       const bytes = await readWorkerFile(stateFile, 65536, { privateMode: true });
@@ -61,6 +66,33 @@ export async function closeCompletedWindowsDeployment({ control, project, operat
       let scope;
       let failure;
       try {
+        if (state.priorRuntime === 'stopped') {
+          if (state.operation !== 'update' || state.phase !== 'restored' || state.previousPhase !== 'accepted') {
+            throw new Error('Stopped rollback closeout requires its exact original restored update.');
+          }
+          if (!await hasMarker(control, 'inactive-rollback-workers.json')) {
+            scope = await openWindowsInactiveRollbackRetirement({ control, pwsh, admission, signal });
+            checkProof(scope.observation);
+            let task = await scope.check({ signal });
+            while (task.retiredEntries < task.totalEntries) {
+              await checkState();
+              task = await scope.advance({ signal });
+            }
+            await checkState();
+            await scope.prepareWorkers({ signal });
+            await scope.close();
+            scope = undefined;
+          }
+          scope = await openWindowsInactiveRollbackWorkerRetirement({ control, pwsh, admission, signal });
+          checkProof(scope.observation);
+          let workers = await scope.check({ signal });
+          while (workers.status !== 'retired') {
+            await checkState();
+            workers = await scope.advance({ signal });
+          }
+          await checkState();
+          return Object.freeze({ status: 'completed', operationId, phase: state.phase });
+        }
         if (state.priorRuntime === 'absent') {
           if (state.operation !== 'deploy' || state.phase !== 'accepted'
             || state.previousPhase !== 'activating' || state.runtimeIdentity !== 'first-install-absent'
