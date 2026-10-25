@@ -15707,6 +15707,24 @@ concurrent-scope refusal and duplicate-name refusal, then restores only the
 deliberately moved fixture entry natively. Real archive advancement and
 ordinary reentry remain unsupported. Acceptance is pending in Actions.
 
+`708a36de / 40187956631` passes all seven native regression jobs, but the
+actual stopped-chain run `40188635178` fails earlier than history reopening:
+native `ArchiveTo` rejects the first moved completion file after the removed
+destination-collision fixture. Add the same removed-destination case to the
+small private-file gate, with bounded before/after metadata diagnostics
+(`5c5df557 / 40189867883`; pending Windows runner availability).
+
+The candidate fix accounts only for NTFS creation-time name tunneling after
+a successful same-parent native rename. Compare every other original
+metadata field before accepting that specific creation-time transition.
+Keep the exclusive original handle, parent checks, final-path check,
+content hash, original inode and ACL checks intact; do not relax ordinary
+retained-file checks or creation-time changes outside the authorized rename.
+The full-history fixture additionally moves every entry, exercising the
+exclusive worker/task checkpoints and released-runtime path resolution,
+then restores exactly those fixture moves. Neither the suspected cause nor
+the candidate fix is accepted until the corresponding Actions evidence.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

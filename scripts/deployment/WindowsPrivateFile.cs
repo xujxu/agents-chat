@@ -381,6 +381,9 @@ namespace Deployment
                 !String.Equals(Path.GetDirectoryName(original.file), Path.GetDirectoryName(destination),
                     StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Private " + kind + " archival requires a distinct same-parent destination.");
+            FileInformation before = original.Information();
+            if (kind == "file" && before.Identity() != original.metadata)
+                throw new InvalidDataException("Retained private configuration changed.");
             byte[] name = Encoding.Unicode.GetBytes(destination);
             int rootOffset = IntPtr.Size == 8 ? 8 : 4;
             int lengthOffset = rootOffset + IntPtr.Size;
@@ -399,9 +402,18 @@ namespace Deployment
             }
             finally { Marshal.FreeHGlobal(information); }
             original.file = destination;
-            if (kind == "file" && original.Information().Identity() != original.metadata)
-                throw new InvalidDataException("Private file archival metadata differs: before=" +
-                    original.metadata + "; after=" + original.Information().Identity());
+            if (kind == "file")
+            {
+                FileInformation renamed = original.Information();
+                FileInformation unchanged = renamed;
+                // NTFS name tunneling can inherit a recently deleted destination's creation time.
+                unchanged.CreationLow = before.CreationLow;
+                unchanged.CreationHigh = before.CreationHigh;
+                if (unchanged.Identity() != original.metadata)
+                    throw new InvalidDataException("Private file archival metadata differs: before=" +
+                        original.metadata + "; after=" + renamed.Identity());
+                original.metadata = renamed.Identity();
+            }
         }
         public sealed class RetirementFile : IDisposable
         {
