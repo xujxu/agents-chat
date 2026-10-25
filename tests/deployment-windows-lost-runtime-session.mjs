@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { readFile, readdir, writeFile, unlink, lstat, rename } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFile, readdir, writeFile, unlink, lstat, rename, mkdir, rmdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -312,6 +312,24 @@ const finishWorkers = async options => {
     try {
       const { requireNoServiceMaintenance } = await load('state.mjs');
       await assert.rejects(requireNoServiceMaintenance(control));
+      const foreignLock = path.join(control, 'lock');
+      const foreignOwner = Buffer.from(JSON.stringify({
+        project: JSON.parse(stateBefore).project, operationId: randomUUID(), pid: process.pid,
+        processIdentity: await processIdentity(process.pid), createdAt: new Date().toISOString(),
+      }));
+      await mkdir(foreignLock, { mode: 0o700 });
+      try {
+        await writeFile(path.join(foreignLock, 'owner.json'), foreignOwner, { flag: 'wx', mode: 0o600 });
+        const { archiveCompletedWindowsInactiveRollback } = await load('windows-completed-closeout.mjs');
+        await assert.rejects(archiveCompletedWindowsInactiveRollback({
+          ...options, project: JSON.parse(stateBefore).project, operationId: archive.operationId,
+        }));
+        assert.deepEqual(await readFile(path.join(foreignLock, 'owner.json')), foreignOwner);
+        assert.deepEqual(await readFile(path.join(control, 'state.json')), stateBefore);
+      } finally {
+        await unlink(path.join(foreignLock, 'owner.json'));
+        await rmdir(foreignLock);
+      }
       const archivedIntentFile = path.join(control,
         `retired-${archive.operationId}-inactive-rollback-history-intent.json`);
       await writeFile(archiveIntent.file, archiveBytes, { flag: 'wx' });

@@ -15880,6 +15880,14 @@ operation records its first phase, and keep release/reconciliation consistent.
 Do not enable an ordinary-admission exception while this transition remains
 unimplemented. The current finalization API intentionally stops short of it.
 
+Pin the next-lock rejection boundary in the real finalized archive fixture:
+create a distinct operation owner with the actual current actor identity,
+but without any authorized admission transfer. High-level archive reopening
+must reject that lock without deleting or rewriting its owner bytes or the
+old state. Explicit fixture cleanup then permits the unchanged archived
+read-only proof to reopen. A live actor identity alone is not a handoff.
+This focused negative awaits Actions; no ordinary gate is relaxed.
+
 Add a separate private high-level `archiveCompletedWindowsInactiveRollback`
 entry beside completed closeout, preserving the existing closeout default.
 Under one retained admission, bind the exact requested original stopped
