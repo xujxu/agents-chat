@@ -15851,6 +15851,15 @@ The opt-in job keeps the original application test, private wrapper and
 jobs and native-only dispatches are unchanged. This correction remains
 pending actual application verification; `accepted` alone is insufficient.
 
+The old `7cd74ddd / 40192441027` full matrix is now complete:
+52 successful jobs and two failures, with no cancellations. The final live
+and copy-crash actual application jobs succeeded. Its failures remain the
+old 45-second cold CLI aggregate and the actual failed-update public
+supervisor aggregate; later focused validation must not rewrite this
+historical result. Start the next complete matrix at the current implementation,
+including real archiver-death coverage, archived-intent read-only verification,
+the ordinary admission barrier and the trace-supported Contracts correction.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
