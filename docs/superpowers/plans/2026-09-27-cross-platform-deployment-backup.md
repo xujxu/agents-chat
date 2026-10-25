@@ -15867,6 +15867,20 @@ operation records its first phase, and keep release/reconciliation consistent.
 Do not enable an ordinary-admission exception while this transition remains
 unimplemented. The current finalization API intentionally stops short of it.
 
+Add a separate private high-level `archiveCompletedWindowsInactiveRollback`
+entry beside completed closeout, preserving the existing closeout default.
+Under one retained admission, bind the exact requested original stopped
+rollback state, finish any pending task/worker retirement, publish prepared
+history, resume its native archive prefix, finalize the intent and
+independently reopen the archived read-only proof. A previously finalized
+namespace follows only read-only verification. Keep exact state checks
+between mutations and existing error/cleanup propagation; never manufacture
+progress from pathname presence. Return explicit `history-archived`, not
+ordinary deployment admission. Extend actual fresh-actor tests to use this
+entry from both a partial archived prefix and post-finalization death,
+including repeated calls and wrong-project/copied-admission refusal.
+Production orchestration acceptance is pending; admission remains blocked.
+
 `e379efdf / 40215606774` passes all seven native regression jobs:
 completed-deployment closeout, four prior-runtime recovery phases, snapshot
 and restoration, and managed discovery. This preserves those existing

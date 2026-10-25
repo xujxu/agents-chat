@@ -430,10 +430,23 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.notEqual(await processIdentity(process.pid), previous.actorIdentity);
       assert.notEqual(await processIdentity(previous.pid), previous.processIdentity);
     }
-    if (!finalizedResume) {
+    if (mode === 'resume-history' || finalizedResume) {
+      const { archiveCompletedWindowsInactiveRollback } = await load('windows-completed-closeout.mjs');
+      assert.equal(typeof archiveCompletedWindowsInactiveRollback, 'function');
+      const originalState = JSON.parse(state);
+      const closeout = { ...options, project: originalState.project, operationId: originalState.operationId };
+      await assert.rejects(archiveCompletedWindowsInactiveRollback({ ...closeout, project: `${originalState.project}-foreign` }));
+      await assert.rejects(archiveCompletedWindowsInactiveRollback({ ...closeout, admission: { ...admission } }));
+      const cancelled = new AbortController();
+      cancelled.abort(new Error('Stopped archive closeout fixture cancellation'));
+      await assert.rejects(archiveCompletedWindowsInactiveRollback({ ...closeout, signal: cancelled.signal }));
+      const expected = { status: 'history-archived', operationId: originalState.operationId, phase: 'restored' };
+      assert.deepEqual(await archiveCompletedWindowsInactiveRollback(closeout), expected);
+      assert.deepEqual(await archiveCompletedWindowsInactiveRollback(closeout), expected);
+    } else {
       const writer = await api.openWindowsInactiveRollbackHistoryRetirement(options);
       try {
-        assert.equal(writer.observation.archivedEntries, mode === 'resume-history' ? 1 : 0);
+        assert.equal(writer.observation.archivedEntries, 0);
         if (mode === 'crash-history') {
           assert.equal((await writer.advance()).archivedEntries, 1);
           console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({

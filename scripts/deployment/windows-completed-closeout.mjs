@@ -10,6 +10,7 @@ import { completeWindowsFirstDeployment } from './windows-first-cold-completion.
 import { openWindowsColdRetirementScope } from './windows-cold-retirement-scope.mjs';
 import {
   openWindowsInactiveRollbackRetirement, openWindowsInactiveRollbackWorkerRetirement,
+  openWindowsInactiveRollbackHistoryArchive, openWindowsInactiveRollbackHistoryRetirement,
 } from './windows-task-completion-recovery.mjs';
 import {
   openWindowsTaskCompletionProof, beginWindowsTaskRetirement, openWindowsTaskRetirement,
@@ -28,9 +29,17 @@ async function hasMarker(control, name) {
   }
 }
 
-export async function closeCompletedWindowsDeployment({
+export function closeCompletedWindowsDeployment(options) {
+  return closeWindowsDeployment(options, false);
+}
+
+export function archiveCompletedWindowsInactiveRollback(options) {
+  return closeWindowsDeployment(options, true);
+}
+
+async function closeWindowsDeployment({
   control, project, operationId, pwsh, signal, admission: retainedAdmission,
-}) {
+}, archiveStoppedHistory) {
   try {
     signal?.throwIfAborted();
     if (process.platform !== 'win32' || ![control, project, pwsh].every(value =>
@@ -66,11 +75,18 @@ export async function closeCompletedWindowsDeployment({
       let scope;
       let failure;
       try {
+        if (archiveStoppedHistory && !(state.priorRuntime === 'stopped' && state.phase === 'restored'
+          && state.previousPhase === 'accepted' && state.operation === 'update')) {
+          throw new Error('History archival requires its exact original stopped rollback.');
+        }
         if (state.priorRuntime === 'stopped' && state.phase === 'restored' && state.previousPhase === 'accepted') {
           if (state.operation !== 'update') {
             throw new Error('Stopped rollback closeout requires its exact original restored update.');
           }
-          if (!await hasMarker(control, 'inactive-rollback-workers.json')) {
+          const historyPrepared = archiveStoppedHistory && await hasMarker(control, 'inactive-rollback-history-intent.json');
+          const historyFinalized = archiveStoppedHistory && await hasMarker(control,
+            `retired-${operationId}-inactive-rollback-history-intent.json`);
+          if (!historyPrepared && !historyFinalized && !await hasMarker(control, 'inactive-rollback-workers.json')) {
             scope = await openWindowsInactiveRollbackRetirement({ control, pwsh, admission, signal });
             checkProof(scope.observation);
             let task = await scope.check({ signal });
@@ -83,12 +99,40 @@ export async function closeCompletedWindowsDeployment({
             await scope.close();
             scope = undefined;
           }
-          scope = await openWindowsInactiveRollbackWorkerRetirement({ control, pwsh, admission, signal });
-          checkProof(scope.observation);
-          let workers = await scope.check({ signal });
-          while (workers.status !== 'retired') {
+          if (!historyPrepared && !historyFinalized) {
+            scope = await openWindowsInactiveRollbackWorkerRetirement({ control, pwsh, admission, signal });
+            checkProof(scope.observation);
+            let workers = await scope.check({ signal });
+            while (workers.status !== 'retired') {
+              await checkState();
+              workers = await scope.advance({ signal });
+            }
             await checkState();
-            workers = await scope.advance({ signal });
+            if (archiveStoppedHistory) {
+              await scope.prepareHistory({ signal });
+              await scope.close();
+              scope = undefined;
+            }
+          }
+          if (archiveStoppedHistory) {
+            if (!historyFinalized) {
+              scope = await openWindowsInactiveRollbackHistoryRetirement({ control, pwsh, admission, signal });
+              checkProof(scope.observation);
+              let history = await scope.check({ signal });
+              while (history.archivedEntries < history.totalEntries) {
+                await checkState();
+                history = await scope.advance({ signal });
+              }
+              await checkState();
+              await scope.finalizeHistory({ signal });
+              await scope.close();
+              scope = undefined;
+            }
+            scope = await openWindowsInactiveRollbackHistoryArchive({ control, pwsh, admission, signal });
+            checkProof(scope.observation);
+            await scope.check({ signal });
+            await checkState();
+            return Object.freeze({ status: 'history-archived', operationId, phase: state.phase });
           }
           await checkState();
           return Object.freeze({ status: 'completed', operationId, phase: state.phase });
