@@ -85,6 +85,42 @@ try {
     Assert ([IO.File]::ReadAllText($file) -ceq $text) 'Ordinary retirement disposal deleted or changed evidence'
     [IO.Directory]::Move($work, $moved)
     [IO.Directory]::Move($moved, $work)
+    $archive = Join-Path $work 'retired-receipt.json'
+    $originalSecurity = (Get-Acl -LiteralPath $file).Sddl
+    $retirement = Retain-Original
+    try {
+        Assert ($null -ne $retirement.GetType().GetMethod('ArchiveTo')) 'Missing identity-bound private file archival'
+        foreach ($destination in @($file, (Join-Path $root 'outside.json'))) {
+            Refuses { $retirement.ArchiveTo($destination) } `
+                'Private file archival requires a distinct same-parent destination.'
+            $retirement.Check()
+        }
+        $collision = $false
+        try { $retirement.ArchiveTo($neighbour) }
+        catch {
+            $failure = $_.Exception.GetBaseException()
+            $collision = $failure -is [ComponentModel.Win32Exception] -and $failure.NativeErrorCode -in @(80, 183)
+        }
+        Assert $collision 'Private file archival replaced existing evidence'
+        Assert ([IO.File]::ReadAllText($neighbour) -ceq '{"keep":true}') 'Archival collision changed neighbouring evidence'
+        $retirement.Check()
+        $retirement.ArchiveTo($archive)
+        $retirement.Check()
+        Assert (-not (Test-Path -LiteralPath $file) -and (Test-Path -LiteralPath $archive)) `
+            'Private archival did not move the original namespace'
+        Refuses-Sharing { [IO.File]::ReadAllText($archive) }
+        Refuses-Sharing { [IO.File]::WriteAllText($archive, 'changed') }
+    } finally { $retirement.Dispose() }
+    $archived = [Deployment.WindowsPrivateFile]::Open($archive, $sha256)
+    try {
+        $archivedIdentity = $archived.CaptureIdentity()
+        Assert ($archivedIdentity.Dev -ceq $identity.Dev -and $archivedIdentity.Ino -ceq $identity.Ino -and
+            $archived.ByteLength -eq $bytes -and $archived.ReadText() -ceq $text -and
+            (Get-Acl -LiteralPath $archive).Sddl -ceq $originalSecurity) `
+            'Private archival changed the original identity, bytes or permissions'
+    } finally { $archived.Dispose() }
+    [IO.File]::Move($archive, $file)
+    Write-Output 'PASS: exact private file archival preserves identity and permissions, refuses overwrite and keeps exclusive authority'
     $retirement = Retain-Original
     try {
         $retirement.Check()
