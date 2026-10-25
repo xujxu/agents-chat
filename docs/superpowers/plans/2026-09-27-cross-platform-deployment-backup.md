@@ -15725,6 +15725,16 @@ exclusive worker/task checkpoints and released-runtime path resolution,
 then restores exactly those fixture moves. Neither the suspected cause nor
 the candidate fix is accepted until the corresponding Actions evidence.
 
+The causal private-file gate in `40189867883` now fails precisely after
+the removed destination is reused. Its before/after native metadata differs
+only in `CreationLow` (`100282434` to `101688742`); attributes, creation-high,
+write time, volume, size, link count and original file index all remain
+identical. This confirms NTFS creation-time tunneling, not file replacement
+or content loss. The current actual-chain candidate run is `40190223204`
+at `7d73b9f6`; acceptance remains pending. The older full matrix
+`40189409790` also reproduces the pre-fix archival refusal and cannot be
+signed off, although its independent jobs still provide regression evidence.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
