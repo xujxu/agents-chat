@@ -15938,6 +15938,16 @@ preservation, repeated high-level completion and read-only method refusal.
 Fixture-only cleanup verifies exact receipt bytes before unlinking it and
 restoring original fixture paths. Actions acceptance is pending.
 
+`a0895ddb / 40236658829`, job `121299585203`, passes the focused native
+fixture with all three mandatory archive/death/saved-entry receipts.
+This accepts immutable completion publication, premature refusal, foreign
+completion preservation, fresh post-intent publisher recovery and repeated
+high-level completion. At the same SHA `40236661468`, job `121299593099`,
+passes the complete Windows Contracts workload and five recovery repeats,
+including lower/uppercase completion markers blocking lock acquisition,
+release and reconciliation. Full actual application acceptance at this
+implementation is still pending.
+
 `fae9048b / 40224702989`, job `121263501170`, passes the complete native
 commands/recovery run. Downloaded logs contain both actual first-entry
 death/fresh continuation and post-intent death/read-only actor receipts
