@@ -244,7 +244,7 @@ async function fixture(t, outcome = 'accepted') {
     try {
       return await execute(command.file, args, {
         env: windows ? { ...command.env, DEPLOYMENT_TEST_CLOSEOUT_TRACE: trace } : command.env,
-        timeout: 45000, maxBuffer: 8192,
+        timeout: windows ? 120000 : 45000, maxBuffer: 8192,
       });
     } catch (error) {
       if (windows) {

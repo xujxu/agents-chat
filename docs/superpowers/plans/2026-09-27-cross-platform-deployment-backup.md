@@ -15807,6 +15807,21 @@ before restoring the other fixture entries. Production intent finalization
 and normal deploy/update admission remain unsupported; Actions acceptance
 of this read-only boundary is pending.
 
+`d96e2e8b / 40203957456` reproduces both Windows cold-retirement aggregate
+timeouts with the bounded trace enabled. Native admission continues replying
+through 44.883 and 44.938 seconds, with repeated successful inventory-check
+pairs separated by roughly 0.2–0.5 seconds, rather than a pending transport
+request. The recovery implementation performs these checks around each
+ordered file deletion and has no unbounded retry loop. The expanded saved
+helper inventory makes the whole independent CLI exceed the old 45-second
+aggregate budget under the complete behavioral workload.
+
+Increase only that Windows test CLI aggregate to 120 seconds; Linux stays at
+45 seconds. Preserve all native request deadlines, deletion/identity checks,
+the complete behavioral suite, five repeat probes and the Windows Contracts
+25-minute outer cap. The archived-intent refusal cases passed in the failed
+run; acceptance of the aggregate-budget correction is pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
