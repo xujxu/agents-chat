@@ -15550,6 +15550,22 @@ tried to acquire a second one. Implementation `af84a3f3` is running in
 prior-runtime restoration and other saved-restore states on their original
 closeout paths rather than intercepting every stopped-origin state.
 
+Latest full `ab6d1664` / `40173227902` started after the original full group
+finished. The old live job ran 03:40:04–07:30:38 UTC and was cancelled at
+its 230-minute outer allowance, leaving only 54 minutes for the application's
+105-minute inner allowance. The new full includes the corrected 300 minutes.
+Old full final result: 51 success, one receipt-loss failure, two outer-budget
+cancellations (live and task options).
+
+The new full's completed-closeout native job `121108332333` timed out its
+saved CLI child after 120 seconds, with no output; its initial live-owner
+refusal passed. This is not an assertion proving a production regression
+or a reason to increase the fixture deadline. Add test-only Node preloading
+that records the last 32 controller spawn/send/receive/exit events and prints
+them only on failure, together with retained control names. It does not log
+protocol payloads, change production output, replace callbacks, or alter
+deadlines. Delete the fixture trace after the child settles.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

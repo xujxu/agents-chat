@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, readFile, readdir, writeFile } from 'node:fs/promises';
+import { lstat, readFile, readdir, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -70,9 +70,27 @@ if (mode === 'checkpoint') {
     control, manifestSha256: createHash('sha256').update(manifest).digest('hex'),
   });
   const command = retirementRecoveryInvocation(engine, { ...options, kind: 'task' });
-  const result = await promisify(execFile)(command.file, command.args, {
-    env: command.env, cwd: path.dirname(control), timeout: 120000, maxBuffer: 8192,
-  });
+  const trace = path.join(control, 'closeout-fixture-trace.json');
+  let result;
+  try {
+    result = await promisify(execFile)(command.file, [
+      '--import', fileURLToPath(new URL('./deployment-windows-closeout-trace.mjs', import.meta.url)),
+      ...command.args,
+    ], {
+      env: { ...command.env, DEPLOYMENT_TEST_CLOSEOUT_TRACE: trace },
+      cwd: path.dirname(control), timeout: 120000, maxBuffer: 8192,
+    });
+  } catch (error) {
+    const diagnostics = await readFile(trace, 'utf8').catch(failure => {
+      if (failure.code === 'ENOENT') return 'Trace was not created by the child preload.';
+      throw new AggregateError([error, failure], 'Closeout failure diagnostics could not be read.');
+    });
+    console.error(`Completed closeout native trace: ${diagnostics}`);
+    console.error(`Completed closeout retained entries: ${JSON.stringify((await readdir(control)).sort())}`);
+    throw error;
+  } finally {
+    await unlink(trace).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  }
   assert.equal(result.stderr, '');
   assert.deepEqual(JSON.parse(result.stdout), {
     status: 'completed', operationId: state.operationId, phase: state.phase,
