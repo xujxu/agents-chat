@@ -140,6 +140,17 @@ try {
     $published = [Deployment.WindowsPrivateFile]::Publish($file, $text)
     try { $identity = $published.CaptureIdentity() }
     finally { $published.Dispose() }
+    $creation = [IO.File]::GetCreationTimeUtc($file)
+    $retirement = Retain-Original
+    try {
+        [IO.File]::SetCreationTimeUtc($file, $creation.AddMinutes(-1))
+        Refuses { $retirement.Check() } 'Retained private configuration changed.'
+        Refuses { $retirement.ArchiveTo($archive) } 'Retained private configuration changed.'
+        Assert (-not (Test-Path -LiteralPath $archive)) 'Unrelated creation-time change allowed archival'
+    } finally {
+        $retirement.Dispose()
+        [IO.File]::SetCreationTimeUtc($file, $creation)
+    }
     $acl = Get-Acl -LiteralPath $file
     $public = Get-Acl -LiteralPath $file
     $public.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
