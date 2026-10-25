@@ -374,6 +374,32 @@ namespace Deployment
                 throw;
             }
         }
+        static void ArchiveRetained(WindowsPrivateFile original, string destination, string kind)
+        {
+            RequirePath(destination);
+            if (String.Equals(original.file, destination, StringComparison.OrdinalIgnoreCase) ||
+                !String.Equals(Path.GetDirectoryName(original.file), Path.GetDirectoryName(destination),
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Private " + kind + " archival requires a distinct same-parent destination.");
+            byte[] name = Encoding.Unicode.GetBytes(destination);
+            int rootOffset = IntPtr.Size == 8 ? 8 : 4;
+            int lengthOffset = rootOffset + IntPtr.Size;
+            int nameOffset = lengthOffset + 4;
+            int size = nameOffset + name.Length + 2;
+            IntPtr information = Marshal.AllocHGlobal(size);
+            try
+            {
+                // FileRenameInfoEx with zero flags never replaces existing evidence.
+                Marshal.Copy(new byte[size], 0, information, size);
+                Marshal.WriteIntPtr(information, rootOffset, IntPtr.Zero);
+                Marshal.WriteInt32(information, lengthOffset, name.Length);
+                Marshal.Copy(name, 0, IntPtr.Add(information, nameOffset), name.Length);
+                Native(SetPrivateDirectoryRename(original.handle, 22, information, checked((uint)size)),
+                    "Archive original private " + kind);
+            }
+            finally { Marshal.FreeHGlobal(information); }
+            original.file = destination;
+        }
         public sealed class RetirementFile : IDisposable
         {
             readonly WindowsPrivateFile original;
@@ -396,6 +422,13 @@ namespace Deployment
                 Native(SetFileInformationByHandle(original.handle, 4, ref disposition, 1),
                     "Retire original private file");
                 Dispose();
+            }
+            public void ArchiveTo(string destination)
+            {
+                RequirePath(destination);
+                Check();
+                ArchiveRetained(original, destination, "file");
+                Check();
             }
             public void Dispose()
             {
@@ -453,28 +486,7 @@ namespace Deployment
             {
                 RequirePath(destination);
                 Check();
-                if (String.Equals(original.file, destination, StringComparison.OrdinalIgnoreCase) ||
-                    !String.Equals(Path.GetDirectoryName(original.file), Path.GetDirectoryName(destination),
-                        StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("Private directory archival requires a distinct same-parent destination.");
-                byte[] name = Encoding.Unicode.GetBytes(destination);
-                int rootOffset = IntPtr.Size == 8 ? 8 : 4;
-                int lengthOffset = rootOffset + IntPtr.Size;
-                int nameOffset = lengthOffset + 4;
-                int size = nameOffset + name.Length + 2;
-                IntPtr information = Marshal.AllocHGlobal(size);
-                try
-                {
-                    // FileRenameInfoEx with zero flags never replaces an existing archive.
-                    Marshal.Copy(new byte[size], 0, information, size);
-                    Marshal.WriteIntPtr(information, rootOffset, IntPtr.Zero);
-                    Marshal.WriteInt32(information, lengthOffset, name.Length);
-                    Marshal.Copy(name, 0, IntPtr.Add(information, nameOffset), name.Length);
-                    Native(SetPrivateDirectoryRename(original.handle, 22, information, checked((uint)size)),
-                        "Archive original private directory");
-                }
-                finally { Marshal.FreeHGlobal(information); }
-                original.file = destination;
+                ArchiveRetained(original, destination, "directory");
                 Check();
             }
             public void Dispose()

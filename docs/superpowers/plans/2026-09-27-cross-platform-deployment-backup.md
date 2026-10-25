@@ -15638,6 +15638,25 @@ and all four prior-runtime recovery phases. The first-application budget
 run `1d525a55` / `40177051632` has passed normal, receipt-loss and default
 policy; public-first is still active at 08:55 UTC, so full success is pending.
 
+The first-application run subsequently completed all four cases successfully.
+Continue implementation of the separate historical admission prerequisite:
+identity-bound same-parent private **file** archival. Existing native
+retirement already retains original file/directory handles, but only the
+directory wrapper has non-overwriting `ArchiveTo`. Reuse that exact rename
+operation for the file wrapper, retaining the same pre/post file and parent
+checks and exclusive handle throughout. Preserve bytes, original inode,
+private ACL and all directory archival behavior; reject same path,
+different parent and existing destinations without mutation.
+
+Test-first `983020b3` / `40179690129` requires the missing file `ArchiveTo`
+in the existing private retirement fixture; it is also the first gate of
+the native completed-closeout job for focused Actions acceptance. The
+implementation shares the original Win32 rename encoding with directory
+archival rather than introducing JavaScript moves or copying receipts.
+File/parent ACL-change refusals remain required. This primitive does not
+archive rollback history itself, make partial archival resumable or enable
+ordinary deploy/update reentry; those integrations remain unfinished.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

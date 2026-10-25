@@ -150,6 +150,7 @@ try {
     $retirement = Retain-Original
     try {
         Set-Acl -LiteralPath $file -AclObject $public
+        Refuses { $retirement.ArchiveTo($archive) } 'Retained private configuration changed.'
         Refuses { $retirement.Delete() } 'Retained private configuration changed.'
     } finally { $retirement.Dispose() }
     Assert ([IO.File]::ReadAllText($file) -ceq $text) 'Changed permissions allowed deletion'
@@ -179,6 +180,7 @@ try {
     $retirement = Retain-Original
     try {
         Set-Acl -LiteralPath $work -AclObject $publicParent
+        Refuses { $retirement.ArchiveTo($archive) } 'Private publication directory changed.'
         Refuses { $retirement.Delete() } 'Private publication directory changed.'
     } finally { $retirement.Dispose() }
     Refuses { (Retain-Original).Dispose() } 'Private configuration permissions are unsupported.'
