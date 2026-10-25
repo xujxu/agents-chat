@@ -15850,6 +15850,18 @@ failed-update application phase with the bounded aggregate correction.
 This accepts that focused scenario, not the still-running full matrix or
 the separate stopped-history archive boundary.
 
+The newer full matrix `00b6f492 / 40207894040` has a distinct cancellation
+job failure (`121212675505`) in the inactive-task prelude, before actual
+application cancellation. The process identity query obtains a Process
+object for PID 6752 but its StartTime becomes null during exit; invoking
+ToUniversalTime then fails. Capture StartTime once and return the existing
+missing sentinel only if the retained Process confirms HasExited.
+Unavailable identity on a live process remains an explicit error. Dispose
+the retained Process in finally. Add real child-exit observations at four
+timings, accepting only the original identity or null and requiring null
+after exit. Focused Windows Contracts acceptance is pending; no cancellation
+application acceptance is inferred from this prelude failure.
+
 Run the exact failed-update actual-application test without repeating the
 already-validated long native prelude:
 

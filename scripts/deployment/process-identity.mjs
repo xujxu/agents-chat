@@ -33,9 +33,12 @@ export async function processIdentity(pid) {
     const powershell = path.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const { stdout } = await execute(powershell, [
       '-NoProfile', '-NonInteractive', '-Command',
-      `$ErrorActionPreference = 'Stop'; try { $p = [System.Diagnostics.Process]::GetProcessById(${pid}); ` +
-      `[Console]::Write($p.StartTime.ToUniversalTime().Ticks.ToString()) } ` +
-      `catch [System.ArgumentException] { [Console]::Write('missing') }`,
+      `$ErrorActionPreference = 'Stop'; $p = $null; try { $p = [System.Diagnostics.Process]::GetProcessById(${pid}); ` +
+      `$started = $p.StartTime; if ($null -eq $started) { ` +
+      `if (-not $p.HasExited) { throw 'Cannot read live Windows process start identity.' }; ` +
+      `[Console]::Write('missing') } else { [Console]::Write($started.ToUniversalTime().Ticks.ToString()) } } ` +
+      `catch [System.ArgumentException] { [Console]::Write('missing') } ` +
+      `finally { if ($null -ne $p) { $p.Dispose() } }`,
     ], { windowsHide: true, timeout: 30000, maxBuffer: 4096 });
     const identity = stdout.trim();
     if (identity === 'missing') return null;
