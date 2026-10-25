@@ -15822,6 +15822,35 @@ the complete behavioral suite, five repeat probes and the Windows Contracts
 25-minute outer cap. The archived-intent refusal cases passed in the failed
 run; acceptance of the aggregate-budget correction is pending.
 
+`f3ecd3de / 40204849741` passes the entire Windows behavioral suite and all
+five recovery repeats with that correction.
+
+The old `7cd74ddd / 40192441027` full matrix also has a separate actual
+failed-update application failure (`121166121754`): the public update reaches
+`accepted` after roughly twenty minutes, then its test-side 25-minute
+`execFile` aggregate kills the supervising PowerShell before return. The
+copying phase alone consumed about 11.5 minutes and dependencies 5.5 minutes.
+This is not the Contracts failure and must not be counted as application
+acceptance. Add bounded phase/remaining-worker diagnostics before retaining
+the existing unexpected-kill assertions. As a candidate correction, give this
+inner CLI 29 minutes within its existing 30-minute update actor budget;
+leave every production/per-command timeout, readiness check, outer actor,
+actual-operation and job budget unchanged.
+
+Run the exact failed-update actual-application test without repeating the
+already-validated long native prelude:
+
+```sh
+gh workflow run deployment-lifecycle.yml --ref feat/deployment-backup \
+  -f windows_application_only=true -f windows_live_only=true \
+  -f windows_failed_application_only=true
+```
+
+The opt-in job keeps the original application test, private wrapper and
+105-minute wrapper budget, in a separate concurrency group. Default/full
+jobs and native-only dispatches are unchanged. This correction remains
+pending actual application verification; `accepted` alone is insufficient.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

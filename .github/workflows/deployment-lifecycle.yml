@@ -44,6 +44,10 @@ on:
         description: With windows_application_only, omit the unrelated first-install suites
         type: boolean
         default: false
+      windows_failed_application_only:
+        description: With application/live flags, run only the actual failed-update application phase
+        type: boolean
+        default: false
       windows_commands_only:
         description: With windows_application_only, run native command contracts without application builds
         type: boolean
@@ -79,7 +83,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_live_only && '-windows-live' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && '-commands' || '' }}${{ inputs.windows_cold_started_only && format('-cold-{0}', inputs.windows_cold_startup_step || 'started') || '' }}${{ inputs.windows_restore_only && inputs.windows_contracts_only && '-contracts' || '' }}
+  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_live_only && '-windows-live' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && '-commands' || '' }}${{ inputs.windows_cold_started_only && format('-cold-{0}', inputs.windows_cold_startup_step || 'started') || '' }}${{ inputs.windows_restore_only && inputs.windows_contracts_only && '-contracts' || '' }}${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_failed_application_only && '-failed-application-only' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -203,7 +207,7 @@ jobs:
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdStartupCrash -ColdStartupStep $env:COLD_STARTUP_STEP
 
   windows-live-deployment:
-    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_cold_started_only) }}
+    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_failed_application_only) && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_cold_started_only) }}
     name: ${{ matrix.scenario == 'cancelled' && 'Actual Windows restore cancellation' || matrix.scenario == 'failed' && 'Actual Windows restore failure' || matrix.scenario == 'crashed' && 'Actual Windows restore crash' || matrix.scenario == 'copy-crashed' && 'Actual Windows file-copy restore crash' || matrix.scenario == 'offline' && 'Actual Windows restore egress denial' || 'Actual Windows live deployment' }}
     runs-on: windows-2022
     timeout-minutes: ${{ inputs.windows_application_only && inputs.windows_commands_only && ((matrix.scenario == 'complete' || contains(fromJSON('["cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered","cold-unlaunched"]'), inputs.windows_restore_scenario)) && 185 || matrix.scenario == 'copy-crashed' && 140 || 115) || (matrix.scenario == 'complete' || contains(fromJSON('["cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered","cold-unlaunched"]'), inputs.windows_restore_scenario)) && 300 || matrix.scenario == 'copy-crashed' && 255 || 230 }}
@@ -336,6 +340,30 @@ jobs:
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
           $timeoutSeconds = if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -in @('startup', 'launch', 'enabled', 'requested', 'registered', 'unlaunched')) { 10500 } elseif ($env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO -eq 'copy-crashed') { 7800 } else { 6300 }
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds' -TimeoutSeconds $timeoutSeconds
+
+  windows-failed-application:
+    if: ${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_failed_application_only }}
+    name: Actual Windows failed-update application phase
+    runs-on: windows-2022
+    timeout-minutes: 115
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Update actual application and verify failed saved restore outcome
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
+          $env:DEPLOYMENT_TEST_WINDOWS_LIVE = '1'
+          $env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO = 'failed'
+          $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY = 'terminal'
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds' -TimeoutSeconds 6300
 
   windows-first-native:
     if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only) }}

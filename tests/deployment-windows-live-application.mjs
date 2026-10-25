@@ -68,10 +68,28 @@ if (restoreModes.includes(mode)) {
         ] : [modulePath, 'update', project, control, taskName, pwsh, git, npmCli, ...args],
         { cwd: directory, env: supervise ? {
           ...process.env, PATH: [path.dirname(process.execPath), path.dirname(git), path.dirname(pwsh)].join(path.delimiter),
-        } : process.env, timeout: 1500000, maxBuffer: 16384 });
+        } : process.env, timeout: 1740000, maxBuffer: 16384 });
       pending.child.stderr.on('data', chunk => process.stderr.write(chunk));
       output = await pending;
     } catch (error) {
+      if (error.killed || error.signal !== null) {
+        try {
+          const current = await loadState(control);
+          const workers = path.join(control, 'worker-engine');
+          let inventory;
+          try {
+            const info = await lstat(workers);
+            inventory = { entries: (await readdir(workers)).length, modifiedAgoMs: Date.now() - info.mtimeMs };
+          } catch (diagnostic) {
+            if (diagnostic.code !== 'ENOENT') throw diagnostic;
+            inventory = { absent: true };
+          }
+          console.error('Public update timeout evidence:', JSON.stringify({
+            phase: current?.phase, operationId: current?.operationId, workers: inventory,
+            controlEntries: (await readdir(control)).sort(),
+          }));
+        } catch (diagnostic) { console.error('Public update diagnostics unavailable:', diagnostic.message); }
+      }
       assert.equal(error.killed, false);
       assert.equal(error.signal, null);
       assert.equal(error.code, 1);
