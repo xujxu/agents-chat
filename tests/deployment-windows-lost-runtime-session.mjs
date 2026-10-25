@@ -347,6 +347,49 @@ const drainRetirement = async (options, entries, expectedState, expectedReceipt,
 };
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
+  if (mode === 'crash-history' || mode === 'resume-history') {
+    await retainOriginalRuntimeAbsence();
+    const intentFile = path.join(control, 'inactive-rollback-history-intent.json');
+    const originalIntent = await readFile(intentFile);
+    const intent = JSON.parse(originalIntent);
+    if (mode === 'resume-history') {
+      const previous = JSON.parse(crashStep);
+      assert.notEqual(await processIdentity(process.pid), previous.actorIdentity);
+      assert.notEqual(await processIdentity(previous.pid), previous.processIdentity);
+    }
+    const writer = await api.openWindowsInactiveRollbackHistoryRetirement(options);
+    try {
+      assert.equal(writer.observation.archivedEntries, mode === 'crash-history' ? 0 : 1);
+      if (mode === 'crash-history') {
+        assert.equal((await writer.advance()).archivedEntries, 1);
+        console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({
+          ...writer.identity, actorIdentity: await processIdentity(process.pid),
+        })}`);
+        const timer = setInterval(() => {}, 1000);
+        try { await new Promise(() => {}); } finally { clearInterval(timer); }
+      }
+      for (let prefix = 2; prefix <= intent.entries.length; prefix++) {
+        const advanced = await writer.advance();
+        assert.equal(advanced.archivedEntries, prefix);
+        assert.deepEqual(await writer.check(), advanced);
+      }
+      assert.equal(writer.observation.status, 'archived');
+    } finally { await writer.close(); }
+    const proof = await api.openWindowsInactiveRollbackHistoryArchive(options);
+    try { assert.equal((await proof.check()).status, 'retired'); }
+    finally { await proof.close(); }
+    assert.deepEqual(await readFile(intentFile), originalIntent);
+    assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+    for (const entry of [...intent.entries].reverse()) {
+      const restored = await promisify(execFile)(pwsh, ['-NoProfile', '-NonInteractive', '-File',
+        fileURLToPath(new URL('./deployment-windows-history-archive-entry.ps1', import.meta.url)),
+        '-Source', source, '-Control', control, '-Name', entry.path, '-Restore'],
+      { timeout: 60000, maxBuffer: 8192 });
+      assert.equal(restored.stderr, '');
+    }
+    await restoreOriginalRuntimePaths();
+    return;
+  }
   if (mode === 'resume-workers' || mode === 'resume-worker-publication') {
     await finishWorkers(options);
     return;

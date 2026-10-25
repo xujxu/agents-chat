@@ -15758,6 +15758,18 @@ writer close, fresh writer continuation and complete read-only verification,
 with exact native fixture restoration afterward. Actual writer-death recovery,
 final archive handoff and ordinary deploy/update acceptance remain pending.
 
+Add a separate real process-death boundary after the existing successful
+publication actor: a fresh actor archives one original entry through the
+writer and holds its native scope. The host records actual actor/bridge
+identities, kills the actor, waits for the original bridge to exit, and
+verifies the archived original digest and absent active pathname. A distinct
+fresh admission actor must recognize prefix one, finish every exact native
+move and pass the independent read-only proof. Preserve original state and
+prepared intent bytes throughout; only afterward restore the named fixture
+entries natively and restore the original fixture runtime paths. This
+extends the existing actual stopped interruption variants, without a new
+synthetic success mode or production reentry bypass. Acceptance is pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
