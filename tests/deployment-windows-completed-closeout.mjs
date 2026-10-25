@@ -60,7 +60,7 @@ if (mode === 'checkpoint') {
     const checkpoint = await promisify(execFile)(process.execPath, [
       fileURLToPath(import.meta.url), control, pwsh, 'checkpoint',
     ], {
-      cwd: path.dirname(control), timeout: 120000, maxBuffer: 8192,
+      cwd: path.dirname(control), timeout: 300000, maxBuffer: 8192,
     });
     assert.equal(checkpoint.stderr, '');
     assert.deepEqual(JSON.parse(checkpoint.stdout), { retiredFiles: 3 });

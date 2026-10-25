@@ -15577,6 +15577,19 @@ bounded trace to first-application closeout, including first-runtime native
 controllers, before deciding whether the remaining delay is steady progress
 or a stalled operation. Do not classify it as fixed or extend deadlines.
 
+Corrected trace `8d6515f6` / `40175544111` establishes the native case:
+at 117–120 seconds the original completion bridge acknowledges successive
+`retire-deployment-next` requests about every 0.6 seconds. Admission checks
+also continue to receive replies. The remaining inventory has already lost
+worker-engine, with the durable retirement checkpoints still retained.
+This is a progressing enlarged retirement chain, not a pending transport
+write. Keep every per-entry native/transport deadline, proof and prefix
+assertion; give the complete saved-CLI fixture 300 seconds instead of 120.
+Its two-scenario job receives 15 minutes instead of 10 to accommodate both
+aggregate child allowances and setup. Leave the first-application 300-second
+child unchanged until its own native trace is available. Acceptance of the
+revised aggregate allowance is pending, not claimed from progress alone.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
