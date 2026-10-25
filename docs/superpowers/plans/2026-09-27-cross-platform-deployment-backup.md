@@ -15822,6 +15822,13 @@ read-only reopening, and unchanged state assertions. Runtime stays in place
 and the archived-intent maintenance inhibitor remains active. Acceptance
 of production finalization is pending.
 
+`00b6f492 / 40209125211`, job `121216376661`, passes the entire focused
+native command/recovery run, including fixture-native final intent movement,
+independent archived-intent read-only reopening, ordinary-admission refusal,
+and real history-actor death followed by fresh-actor continuation. This
+accepts the read-only boundary, not the later production finalization API
+or its additional negative cases.
+
 Extend the actual archived-intent fixture with duplicate active/archived
 intent and tampered archived-manifest refusal. Require refusal to preserve
 both duplicate originals or the exact foreign bytes, restore the fixture
