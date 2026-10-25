@@ -15862,6 +15862,12 @@ timings, accepting only the original identity or null and requiring null
 after exit. Focused Windows Contracts acceptance is pending; no cancellation
 application acceptance is inferred from this prelude failure.
 
+`72655d20 / 40211700787`, job `121224112314`, passes the entire Windows
+Contracts workload and all five recovery repeats, including the new real
+process-exit observations. Revalidate the original cancellation scenario
+with its full native prelude in the independent Windows-commands dispatch
+group; retain the ongoing history-boundary and full-matrix runs.
+
 Run the exact failed-update actual-application test without repeating the
 already-validated long native prelude:
 
