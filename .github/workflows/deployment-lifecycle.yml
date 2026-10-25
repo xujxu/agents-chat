@@ -202,7 +202,7 @@ jobs:
     if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_cold_started_only) }}
     name: ${{ matrix.scenario == 'cancelled' && 'Actual Windows restore cancellation' || matrix.scenario == 'failed' && 'Actual Windows restore failure' || matrix.scenario == 'crashed' && 'Actual Windows restore crash' || matrix.scenario == 'copy-crashed' && 'Actual Windows file-copy restore crash' || matrix.scenario == 'offline' && 'Actual Windows restore egress denial' || 'Actual Windows live deployment' }}
     runs-on: windows-2022
-    timeout-minutes: ${{ (inputs.windows_commands_only && matrix.scenario == 'complete' || contains(fromJSON('["cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered","cold-unlaunched"]'), inputs.windows_restore_scenario)) && 185 || matrix.scenario == 'copy-crashed' && 140 || 115 }}
+    timeout-minutes: ${{ inputs.windows_application_only && inputs.windows_commands_only && ((matrix.scenario == 'complete' || contains(fromJSON('["cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered","cold-unlaunched"]'), inputs.windows_restore_scenario)) && 185 || matrix.scenario == 'copy-crashed' && 140 || 115) || contains(fromJSON('["cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered","cold-unlaunched"]'), inputs.windows_restore_scenario) && 300 || matrix.scenario == 'copy-crashed' && 255 || 230 }}
     strategy:
       fail-fast: false
       matrix:

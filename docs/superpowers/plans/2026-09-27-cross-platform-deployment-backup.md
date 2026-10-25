@@ -15459,6 +15459,18 @@ that rejects receives. Remove each rejector after normal write completion or
 failure. Preserve wire framing and successful callback semantics; native
 post-kill recovery and Linux closure acceptance still await Actions.
 
+The full matrix's crash and egress jobs were cancelled at their exact
+115-minute overall job limit. Their application stage began only after
+roughly 75 minutes of native regression work, so the application wrapper's
+existing 105-minute budget was truncated to about 40 minutes. Keep all
+native operation, fixture and application deadlines unchanged. For combined
+jobs, budget the native suite's 115 minutes plus the existing application
+allowance and cleanup margin: 230 minutes normally, 255 for copy-crash,
+300 for earlier-startup application cases. Commands-only jobs retain their
+original 115/140/185-minute limits. These bounded totals remain below the
+runner limit and prevent matrix acceptance from being cut off by mismatched
+outer/inner budgets; they do not classify an unfinished application as passed.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
