@@ -15822,6 +15822,12 @@ read-only reopening, and unchanged state assertions. Runtime stays in place
 and the archived-intent maintenance inhibitor remains active. Acceptance
 of production finalization is pending.
 
+`e379efdf / 40215606774` passes all seven native regression jobs:
+completed-deployment closeout, four prior-runtime recovery phases, snapshot
+and restoration, and managed discovery. This preserves those existing
+boundaries; the actual production history-finalization fixture remains
+under separate run `40214300857` and is not yet accepted.
+
 `00b6f492 / 40209125211`, job `121216376661`, passes the entire focused
 native command/recovery run, including fixture-native final intent movement,
 independent archived-intent read-only reopening, ordinary-admission refusal,
