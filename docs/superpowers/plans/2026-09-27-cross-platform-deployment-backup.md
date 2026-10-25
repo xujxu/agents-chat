@@ -15421,6 +15421,17 @@ external rollback boundaries and the original native regressions passed too.
 This accepts the co-located cleanup chain, not public inactive application
 delivery, ordinary next-operation admission, or final dual-platform signoff.
 
+Full matrix `d177b3f7 / 40149709116` exposed the same saved-worker closure
+failure on Linux and Windows: inactive rollback modules were saved, but their
+snapshot/project-restore/runtime-publication/security dependencies were not.
+The independent expected inventory also predated the inactive helper set.
+Extend the explicit production closure through those modules and native
+security companions; update the independent expected inventory in the existing
+saved-worker tests. Keep the checkout-removal/import test exercising every
+saved module, including the newly listed inactive modules. Do not alias the
+expected list to production or weaken manifest equality. The matrix is still
+running; this fix awaits Actions validation after its remaining results.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
