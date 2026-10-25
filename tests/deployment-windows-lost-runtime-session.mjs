@@ -218,6 +218,10 @@ const finishWorkers = async options => {
       assert.equal(createHash('sha256').update(await readFile(path.join(control, mixedEntry.destination))).digest('hex'),
         mixedEntry.sha256);
     } finally { await mixed.close(); }
+    const duplicate = path.join(control, mixedEntry.path);
+    await writeFile(duplicate, await readFile(path.join(control, mixedEntry.destination)), { flag: 'wx' });
+    try { await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options)); }
+    finally { await unlink(duplicate); }
   } finally {
     const restored = await promisify(execFile)(pwsh, [...moveArgs, '-Restore'], { timeout: 60000, maxBuffer: 8192 });
     assert.equal(restored.stderr, '');

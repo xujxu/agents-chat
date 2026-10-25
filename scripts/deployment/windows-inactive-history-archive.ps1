@@ -12,12 +12,7 @@ function Assert-AgentsChatStoppedHistoryInventory([hashtable]$Context, [string[]
     if ($expected.Count) { throw 'Stopped history archival is missing original evidence.' }
 }
 
-function Publish-AgentsChatStoppedHistoryArchiveIntent([hashtable]$Context) {
-    $observation = Assert-AgentsChatStoppedWorkerCleanup $Context
-    if ($observation.status -cne 'retired' -or $Context.Prefix -ne $Context.Record.entries.Count -or
-        -not $Context.ContainsKey('FinalReceipt')) {
-        throw 'History archival requires final original stopped worker retirement.'
-    }
+function Get-AgentsChatStoppedHistoryNames([bool]$Released) {
     $names = [string[]]@(
         'inactive-rollback-intent.json', 'inactive-rollback-files-restored.json',
         'inactive-rollback-task-intent.json', 'inactive-rollback-task-restored.json',
@@ -25,10 +20,20 @@ function Publish-AgentsChatStoppedHistoryArchiveIntent([hashtable]$Context) {
         'inactive-rollback-complete.json', 'inactive-rollback-retirement.json',
         'inactive-rollback-workers.json', 'inactive-rollback-retired.json'
     )
-    if ($Context.ContainsKey('RuntimeHandoffReleased')) {
+    if ($Released) {
         $names += @('inactive-rollback-runtime-handoff.json', 'inactive-rollback-runtime-released.json')
     }
     [Array]::Sort($names, [StringComparer]::Ordinal)
+    return ,$names
+}
+
+function Publish-AgentsChatStoppedHistoryArchiveIntent([hashtable]$Context) {
+    $observation = Assert-AgentsChatStoppedWorkerCleanup $Context
+    if ($observation.status -cne 'retired' -or $Context.Prefix -ne $Context.Record.entries.Count -or
+        -not $Context.ContainsKey('FinalReceipt')) {
+        throw 'History archival requires final original stopped worker retirement.'
+    }
+    $names = Get-AgentsChatStoppedHistoryNames ($Context.ContainsKey('RuntimeHandoffReleased'))
     Assert-AgentsChatStoppedHistoryInventory $Context $names
     $entries = [Collections.Generic.List[object]]::new()
     foreach ($name in $names) {

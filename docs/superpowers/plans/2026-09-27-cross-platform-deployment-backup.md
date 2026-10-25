@@ -15685,6 +15685,28 @@ deliberately altered fixture files afterward. The final full-matrix live job
 entered actual update/saved restoration at 10:24:22 UTC; no final acceptance
 is claimed before its result.
 
+Test-first `967d6a7a` adds a real one-file native archive/restore fixture
+and requires an independent **read-only** mixed-namespace history scope.
+Implement a separate `StoppedHistory` bridge mode, still backed by the
+original stopped worker/task/checkpoint/runtime proof. Retain the prepared
+intent exclusively, validate its bounded exact schema and ordered names,
+and select exactly one original or operation-derived archive path per entry.
+Reject duplicates, missing entries and non-prefix archival before opening
+the original proof. Bind every selected file's original dev/ino/length/hash
+and the manifest's control/project/operation/state/final-retirement bindings.
+
+Only contexts created by this explicit native mode get a logical-path map.
+Normal completion, original cleanup and ordinary deployment admission do not
+gain fallback path acceptance. Resolve the two exclusive checkpoint paths,
+final receipt and released-runtime marker checks in that context, while
+leaving installed runtime/source paths unchanged. Recheck exact namespaces
+and pinned identities with every original native proof check. Both the JS
+facade and native dispatcher permit only check/close, not advance/preparation.
+The fixture verifies actual archived bytes, original-opener refusal,
+concurrent-scope refusal and duplicate-name refusal, then restores only the
+deliberately moved fixture entry natively. Real archive advancement and
+ordinary reentry remain unsupported. Acceptance is pending in Actions.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

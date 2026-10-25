@@ -86,7 +86,7 @@ function Open-AgentsChatRuntimeHandoffArchive(
     Open-AgentsChatCompletionBundle $Context $configuration $record.configurationSha256 $Context.RetiredRuntime
     $Context.RuntimeHandoffDirectory = $directory
     $Context.RuntimeHandoffNames = $names
-    $releasedPath = Join-Path $Context.Control 'inactive-rollback-runtime-released.json'
+    $releasedPath = Resolve-AgentsChatCompletionPath $Context (Join-Path $Context.Control 'inactive-rollback-runtime-released.json')
     if (Test-Path -LiteralPath $releasedPath) {
         $released = Open-AgentsChatCompletionFile $Context $releasedPath ''
         if ($released.ReadText() -cne (Get-AgentsChatRuntimeHandoffReleaseText $Context $prepared.Sha256 `

@@ -17,6 +17,7 @@ export { restoreWindowsInactiveRollbackExternal } from './windows-inactive-rollb
 const lostScopes = new WeakMap();
 export const openWindowsInactiveRollbackRetirement = options => openCompletionRecovery(options, true, false, true);
 export const openWindowsInactiveRollbackWorkerRetirement = options => openCompletionRecovery(options, true, false, false, true);
+export const openWindowsInactiveRollbackHistoryArchive = options => openCompletionRecovery(options, true, false, false, true, true);
 export async function prepareWindowsInactiveRollbackRetirementIntent(options) {
   if (options.acceptDataLoss !== true) throw refused(new Error('Rollback retirement requires explicit data-loss acknowledgement.'));
   await assertWindowsInactiveLostRuntimeAuthority(options);
@@ -179,7 +180,7 @@ function captureStoppedRetirement(value, workers = false) {
   return Object.freeze(result);
 }
 
-async function openCompletionRecovery({ control, pwsh, admission, signal }, inactive, lost = false, retirement = false, workers = false) {
+async function openCompletionRecovery({ control, pwsh, admission, signal }, inactive, lost = false, retirement = false, workers = false, history = false) {
   const progression = inactive
     ? ['release-requested', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete']
     : steps;
@@ -200,7 +201,8 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
       '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
       ...(inactive ? ['-Inactive'] : []), ...(lost ? ['-LostRuntime'] : []),
-      ...(retirement ? ['-StoppedRetirement'] : []), ...(workers ? ['-StoppedWorkers'] : [])],
+      ...(retirement ? ['-StoppedRetirement'] : []), ...(workers ? ['-StoppedWorkers'] : []),
+      ...(history ? ['-StoppedHistory'] : [])],
   });
   let closed = false;
   let busy = false;
@@ -371,10 +373,10 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       ...(retirement ? {
         prepareWorkers: ({ signal: requestSignal } = {}) => request('prepare-stopped-workers', requestSignal),
       } : {}),
-      ...(workers ? {
+      ...(workers && !history ? {
         prepareHistory: ({ signal: requestSignal } = {}) => request('prepare-stopped-history', requestSignal),
       } : {}),
-      ...(lost ? {} : { advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal) }),
+      ...(lost || history ? {} : { advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal) }),
       close: async () => { if (!closed) await request('close'); },
     });
     if (lost) lostScopes.set(scope, { control, pwsh, admission, request });

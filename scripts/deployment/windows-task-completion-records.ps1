@@ -2,7 +2,15 @@
 . (Join-Path $PSScriptRoot 'windows-task-transaction.ps1')
 . (Join-Path $PSScriptRoot 'windows-task-replacement.ps1')
 
+function Resolve-AgentsChatCompletionPath([hashtable]$Context, [string]$Path) {
+    if ($Context.ContainsKey('HistoryPaths') -and $Context.HistoryPaths.ContainsKey($Path)) {
+        return $Context.HistoryPaths[$Path]
+    }
+    return $Path
+}
+
 function Open-AgentsChatCompletionFile([hashtable]$Context, [string]$Path, [string]$Sha256) {
+    $Path = Resolve-AgentsChatCompletionPath $Context $Path
     if ((Get-Item -LiteralPath $Path -Force).Length -gt 4194304) { throw 'Oversized completion evidence.' }
     if (-not $Sha256) { $Sha256 = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
     $file = [Deployment.WindowsPrivateFile]::Open($Path, $Sha256)

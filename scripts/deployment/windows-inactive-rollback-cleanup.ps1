@@ -266,7 +266,8 @@ function Initialize-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
     )) {
         $null = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control $binding[0]) $binding[1]
     }
-    if (Test-Path -LiteralPath (Join-Path $Context.Control 'inactive-rollback-runtime-released.json')) {
+    if (Test-Path -LiteralPath (Resolve-AgentsChatCompletionPath $Context `
+        (Join-Path $Context.Control 'inactive-rollback-runtime-released.json'))) {
         $originalRelease = @($record.entries | Where-Object {
             [IO.Path]::GetFileName($_.path) -ceq 'inactive-complete-release-requested.json'
         })
