@@ -935,10 +935,10 @@ jobs:
       - name: Preserve original failure context through native recovery callbacks
         shell: pwsh
         run: node --test tests/deployment-transaction.test.mjs
-      - name: Diagnose independent saved cold worker retirement
+      - name: Diagnose independent cold recovery alongside native worker retirement
         shell: pwsh
         run: |
-          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs') -NamePattern '^(independent saved recovery finishes partial retirement|cold worker retirement preserves failed-update evidence)'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs', 'tests/deployment-worker-retirement.test.mjs') -NamePattern '^(independent saved recovery finishes partial retirement|cold worker retirement preserves failed-update evidence|completed live operation retires only worker artifacts|final marker deletion failure)'
       - name: Close completed Windows deployment through its saved entry
         shell: pwsh
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement -CompletedCloseout
