@@ -15410,6 +15410,17 @@ reentry, release reentry, source-absent bridge death/fresh authority, runtime
 reentry and task replay phases to distinguish actual recovery from later
 negative/replay assertions before changing any deadline or production logic.
 
+Accepted `1a856e9a / 40144739523`: the complete focused Windows native gate
+succeeded. Original logs confirm actual first-file copy actor death, exact
+partial-copy proof, fresh project/runtime/task recovery, original-source
+absence across bridge death and fresh admission, unchanged handoff receipts,
+and task replay. The same co-located case then completed terminal-state,
+task-prefix, worker-prefix and lock-deleted interruption recovery with actual
+history deletion, original lock release and retained final receipt. All three
+external rollback boundaries and the original native regressions passed too.
+This accepts the co-located cleanup chain, not public inactive application
+delivery, ordinary next-operation admission, or final dual-platform signoff.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
