@@ -15608,6 +15608,12 @@ and job budgets are unchanged. This corrects the aggregate fixture budget
 for a progressing expanded dependency closure, not a confirmed production
 deadlock. Require a successful fresh run before accepting the correction.
 
+`f3182128` / `40176464907` still hit 120 seconds because the edit matched
+the checkpoint child's identical options line, not the saved-CLI child.
+Restore checkpoint to its original 120 seconds and apply 300 seconds to
+the traced saved-CLI invocation. This run did not validate the intended
+aggregate correction. Its trace again shows live acknowledged advancement.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

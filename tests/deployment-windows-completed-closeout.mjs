@@ -60,7 +60,7 @@ if (mode === 'checkpoint') {
     const checkpoint = await promisify(execFile)(process.execPath, [
       fileURLToPath(import.meta.url), control, pwsh, 'checkpoint',
     ], {
-      cwd: path.dirname(control), timeout: 300000, maxBuffer: 8192,
+      cwd: path.dirname(control), timeout: 120000, maxBuffer: 8192,
     });
     assert.equal(checkpoint.stderr, '');
     assert.deepEqual(JSON.parse(checkpoint.stdout), { retiredFiles: 3 });
@@ -78,7 +78,7 @@ if (mode === 'checkpoint') {
       ...command.args,
     ], {
       env: { ...command.env, DEPLOYMENT_TEST_CLOSEOUT_TRACE: trace },
-      cwd: path.dirname(control), timeout: 120000, maxBuffer: 8192,
+      cwd: path.dirname(control), timeout: 300000, maxBuffer: 8192,
     });
   } catch (error) {
     const diagnostics = await readFile(trace, 'utf8').catch(failure => {
