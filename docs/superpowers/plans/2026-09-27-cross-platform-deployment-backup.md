@@ -15958,6 +15958,13 @@ run. Keep all existing actor deadlines and require a fourth explicit
 completion-publisher-death receipt in the focused job. This additional
 durability boundary awaits Actions.
 
+`61f2bc19 / 40239213808`, job `121307207933`, passes this additional
+durability boundary. Downloaded job logs contain all four mandatory
+receipts, including actual completion-publisher death followed by a
+distinct fresh actor preserving the original receipt bytes and dev/ino
+across repeated high-level reopening. This accepts native stopped-history
+recovery, not ordinary deployment admission or actual application behavior.
+
 `fae9048b / 40224702989`, job `121263501170`, passes the complete native
 commands/recovery run. Downloaded logs contain both actual first-entry
 death/fresh continuation and post-intent death/read-only actor receipts
