@@ -15614,6 +15614,15 @@ Restore checkpoint to its original 120 seconds and apply 300 seconds to
 the traced saved-CLI invocation. This run did not validate the intended
 aggregate correction. Its trace again shows live acknowledged advancement.
 
+The full matrix's separate task-receipt job is also an outer cancellation,
+not an assertion failure: update completed at 07:53:48, restore at 07:58:46,
+and the disabled-task case passed its checkpoint handoff at 08:01:05 before
+the job was stopped at 08:03:24. Each complete scenario takes about five
+minutes, so the old 15-minute job cannot cover all three plus setup/cleanup.
+Raise only that combined job allowance to 25 minutes; preserve all three
+commands, assertions and individual operation deadlines. The Windows
+Contracts 15-minute cancellation is separate and remains under investigation.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
