@@ -15861,6 +15861,13 @@ Run both the existing first-entry death boundary and this new post-intent
 death boundary without increasing their per-actor deadlines. Actions
 acceptance of the additional death boundary is pending.
 
+`21d8d7f5 / 40222057343` passes all three selected native jobs. The recovery
+job `121255556947` accepts both real first-entry death and real post-intent
+finalization death, including original bridge exit and a distinct actor's
+archived read-only proof, writer refusal and maintenance inhibition.
+The actual application step is skipped in this commands-only run. The
+later high-level orchestration refactor remains separately pending.
+
 Remaining admission-transfer constraint: the original stopped-history proof
 requires the old lock to be absent, while normal `acquireLockAdmitted`
 creates a new lock only after maintenance checks. `releaseLockAdmitted` and
