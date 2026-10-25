@@ -104,6 +104,8 @@ try {
         Assert $collision 'Private file archival replaced existing evidence'
         Assert ([IO.File]::ReadAllText($neighbour) -ceq '{"keep":true}') 'Archival collision changed neighbouring evidence'
         $retirement.Check()
+        [Deployment.WindowsPrivateFile]::Publish($archive, '{"foreign":true}').Dispose()
+        [IO.File]::Delete($archive)
         $retirement.ArchiveTo($archive)
         $retirement.Check()
         Assert (-not (Test-Path -LiteralPath $file) -and (Test-Path -LiteralPath $archive)) `

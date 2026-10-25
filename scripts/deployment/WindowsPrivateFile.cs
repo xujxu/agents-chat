@@ -399,6 +399,9 @@ namespace Deployment
             }
             finally { Marshal.FreeHGlobal(information); }
             original.file = destination;
+            if (kind == "file" && original.Information().Identity() != original.metadata)
+                throw new InvalidDataException("Private file archival metadata differs: before=" +
+                    original.metadata + "; after=" + original.Information().Identity());
         }
         public sealed class RetirementFile : IDisposable
         {
