@@ -15807,6 +15807,14 @@ before restoring the other fixture entries. Production intent finalization
 and normal deploy/update admission remain unsupported; Actions acceptance
 of this read-only boundary is pending.
 
+Extend the actual archived-intent fixture with duplicate active/archived
+intent and tampered archived-manifest refusal. Require refusal to preserve
+both duplicate originals or the exact foreign bytes, restore the fixture
+explicitly, then reopen the original read-only proof. Assert that it exposes
+neither advance nor preparation authority and retains exact state/intent
+bytes. These additional native negatives await Actions acceptance; do not
+replace or cancel the already running boundary run `40209125211`.
+
 `d96e2e8b / 40203957456` reproduces both Windows cold-retirement aggregate
 timeouts with the bounded trace enabled. Native admission continues replying
 through 44.883 and 44.938 seconds, with repeated successful inventory-check

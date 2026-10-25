@@ -288,10 +288,29 @@ const finishWorkers = async options => {
     try {
       const { requireNoServiceMaintenance } = await load('state.mjs');
       await assert.rejects(requireNoServiceMaintenance(control));
+      const archivedIntentFile = path.join(control,
+        `retired-${archive.operationId}-inactive-rollback-history-intent.json`);
+      await writeFile(archiveIntent.file, archiveBytes, { flag: 'wx' });
+      try {
+        await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
+        assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
+        assert.deepEqual(await readFile(archivedIntentFile), archiveBytes);
+      } finally { await unlink(archiveIntent.file); }
+      await writeFile(archivedIntentFile, changedArchive);
+      try {
+        await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
+        assert.deepEqual(await readFile(archivedIntentFile), changedArchive);
+      } finally { await writeFile(archivedIntentFile, archiveBytes); }
       const archivedIntent = await api.openWindowsInactiveRollbackHistoryArchive(options);
-      try { assert.equal((await archivedIntent.check()).status, 'retired'); }
+      try {
+        assert.equal((await archivedIntent.check()).status, 'retired');
+        assert.equal(archivedIntent.advance, undefined);
+        assert.equal(archivedIntent.prepareHistory, undefined);
+      }
       finally { await archivedIntent.close(); }
       await assert.rejects(api.openWindowsInactiveRollbackHistoryRetirement(options));
+      assert.deepEqual(await readFile(archivedIntentFile), archiveBytes);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), stateBefore);
     } finally {
       const restored = await promisify(execFile)(pwsh, [...intentArgs, '-Restore'], { timeout: 60000, maxBuffer: 8192 });
       assert.equal(restored.stderr, '');
