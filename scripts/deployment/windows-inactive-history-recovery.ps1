@@ -68,9 +68,17 @@ function Initialize-AgentsChatStoppedHistoryRecovery([hashtable]$Context) {
     $bytes = $original.ByteLength
     $original.Dispose()
     $null = $Context.Files.Remove($original)
-    $Context.HistoryIntent = [Deployment.WindowsPrivateFile]::OpenExclusive(
-        $path, $hash, $identity.Dev, $identity.Ino, $bytes)
+    $Context.HistoryIntent = if ($Context.ContainsKey('HistoryWriter') -and $Context.HistoryWriter) {
+        [Deployment.WindowsPrivateFile]::OpenForArchival($path, $hash)
+    } else {
+        [Deployment.WindowsPrivateFile]::OpenExclusive($path, $hash, $identity.Dev, $identity.Ino, $bytes)
+    }
     $Context.Files.Add($Context.HistoryIntent)
+    $retainedIdentity = $Context.HistoryIntent.CaptureIdentity()
+    if ($retainedIdentity.Dev -cne $identity.Dev -or $retainedIdentity.Ino -cne $identity.Ino -or
+        $Context.HistoryIntent.ByteLength -ne $bytes) {
+        throw 'Original stopped history intent was replaced.'
+    }
     $Context.HistoryRecord = $record
     $Context.HistoryIntentPath = $path
     $Context.HistoryPaths = $paths
@@ -159,5 +167,27 @@ function Move-AgentsChatNextStoppedHistoryEntry([hashtable]$Context) {
     } catch {
         $Context.Poisoned = $true
         throw [InvalidOperationException]::new('Stopped history archival failed; retain original prepared evidence.', $_.Exception)
+    }
+}
+
+function Complete-AgentsChatStoppedHistoryArchive([hashtable]$Context) {
+    if (-not $Context.ContainsKey('HistoryWriter') -or -not $Context.HistoryWriter) {
+        throw 'Stopped history verification is read-only.'
+    }
+    $progress = Get-AgentsChatStoppedHistoryProgress $Context
+    if ($progress.archivedEntries -ne $progress.totalEntries) {
+        throw 'Stopped history intent cannot move before all original entries.'
+    }
+    $destination = Join-Path $Context.Control "retired-$($Context.OperationId)-inactive-rollback-history-intent.json"
+    try {
+        if ($Context.HistoryIntentPath -cne $destination) {
+            $Context.HistoryIntent.ArchiveTo($destination)
+            $Context.HistoryIntentPath = $destination
+        }
+        $null = Get-AgentsChatStoppedHistoryProgress $Context
+        return @{ file=$destination; sha256=$Context.HistoryIntent.Sha256 }
+    } catch {
+        $Context.Poisoned = $true
+        throw [InvalidOperationException]::new('Stopped history intent archival failed; retain original evidence.', $_.Exception)
     }
 }

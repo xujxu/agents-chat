@@ -247,6 +247,15 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       }
       if (retirement || workers) {
         if (archive) {
+          if (method === 'finalize-stopped-history') {
+            const finalized = captureWorkerFields(reply.value, ['file', 'sha256'], 'final stopped history archive');
+            if (observation.archivedEntries !== observation.totalEntries
+              || finalized.file !== path.join(control, `retired-${observation.operationId}-inactive-rollback-history-intent.json`)
+              || typeof finalized.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(finalized.sha256)) {
+              throw new Error('Invalid final stopped history archive acknowledgement.');
+            }
+            return Object.freeze(finalized);
+          }
           const next = captureHistoryProgress(reply.value);
           const prefix = method === 'advance'
             ? Math.min(observation.archivedEntries + 1, observation.totalEntries) : observation.archivedEntries;
@@ -400,6 +409,9 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       } : {}),
       ...(workers && !history ? {
         prepareHistory: ({ signal: requestSignal } = {}) => request('prepare-stopped-history', requestSignal),
+      } : {}),
+      ...(archive ? {
+        finalizeHistory: ({ signal: requestSignal } = {}) => request('finalize-stopped-history', requestSignal),
       } : {}),
       ...(lost || (history && !archive) ? {} : { advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal) }),
       close: async () => { if (!closed) await request('close'); },

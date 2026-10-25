@@ -238,6 +238,12 @@ const finishWorkers = async options => {
   const archived = [];
   assert.equal(typeof api.openWindowsInactiveRollbackHistoryRetirement, 'function',
     'Missing identity-bound ordered native history archival');
+  const prematureFinalizer = await api.openWindowsInactiveRollbackHistoryRetirement(options);
+  try {
+    assert.equal(typeof prematureFinalizer.finalizeHistory, 'function');
+    await assert.rejects(prematureFinalizer.finalizeHistory());
+  } finally { await prematureFinalizer.close(); }
+  assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
   const blockedWriter = await api.openWindowsInactiveRollbackHistoryRetirement(options);
   try {
     await writeFile(collision, foreignBytes, { flag: 'wx' });
@@ -283,8 +289,26 @@ const finishWorkers = async options => {
     } finally { await fullyArchived.close(); }
     const intentArgs = [...moveArgs.slice(0, -1), 'inactive-rollback-history-intent.json',
       '-Intent', '-OperationId', archive.operationId];
-    const movedIntent = await promisify(execFile)(pwsh, intentArgs, { timeout: 60000, maxBuffer: 8192 });
-    assert.equal(movedIntent.stderr, '');
+    const finalIntentFile = path.join(control, `retired-${archive.operationId}-inactive-rollback-history-intent.json`);
+    const blockedFinalizer = await api.openWindowsInactiveRollbackHistoryRetirement(options);
+    try {
+      await writeFile(finalIntentFile, foreignBytes, { flag: 'wx' });
+      try {
+        await assert.rejects(blockedFinalizer.finalizeHistory());
+        assert.deepEqual(await readFile(finalIntentFile), foreignBytes);
+      } finally { await unlink(finalIntentFile); }
+    } finally { await blockedFinalizer.close(); }
+    assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
+    const finalizer = await api.openWindowsInactiveRollbackHistoryRetirement(options);
+    try {
+      const finalized = await finalizer.finalizeHistory();
+      assert.deepEqual(finalized, {
+        file: path.join(control, `retired-${archive.operationId}-inactive-rollback-history-intent.json`),
+        sha256: archiveIntent.sha256,
+      });
+      assert.deepEqual(await finalizer.finalizeHistory(), finalized);
+      assert.deepEqual(await finalizer.check(), finalizer.observation);
+    } finally { await finalizer.close(); }
     try {
       const { requireNoServiceMaintenance } = await load('state.mjs');
       await assert.rejects(requireNoServiceMaintenance(control));
@@ -306,6 +330,7 @@ const finishWorkers = async options => {
         assert.equal((await archivedIntent.check()).status, 'retired');
         assert.equal(archivedIntent.advance, undefined);
         assert.equal(archivedIntent.prepareHistory, undefined);
+        assert.equal(archivedIntent.finalizeHistory, undefined);
       }
       finally { await archivedIntent.close(); }
       await assert.rejects(api.openWindowsInactiveRollbackHistoryRetirement(options));

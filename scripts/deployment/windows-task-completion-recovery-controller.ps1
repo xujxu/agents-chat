@@ -65,13 +65,15 @@ try {
         $request = Read-AgentsChatMaintenanceFields ($line.GetAwaiter().GetResult()) @('id', 'method')
         $id = $request.id.GetInt32()
         $method = $request.method.GetString()
-        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'advance', 'close', 'prepare-rollback', 'prepare-rollback-runtime', 'release-rollback-runtime', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state', 'publish-rollback-state', 'complete-rollback', 'prepare-rollback-retirement', 'check-rollback-retirement', 'prepare-stopped-workers', 'prepare-stopped-history')) { throw 'Invalid recovery request.' }
+        if ($id -ne $sequence + 1 -or $method -cnotin @('check', 'advance', 'close', 'prepare-rollback', 'prepare-rollback-runtime', 'release-rollback-runtime', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state', 'publish-rollback-state', 'complete-rollback', 'prepare-rollback-retirement', 'check-rollback-retirement', 'prepare-stopped-workers', 'prepare-stopped-history', 'finalize-stopped-history')) { throw 'Invalid recovery request.' }
+        if ($method -ceq 'finalize-stopped-history' -and -not $StoppedHistoryWrite) { throw 'History finalization requires its original writer.' }
         if ($StoppedHistory -and $method -cnotin @('check', 'close') -and
-            (-not $StoppedHistoryWrite -or $method -cne 'advance')) { throw 'History verification is read-only.' }
+            (-not $StoppedHistoryWrite -or $method -cnotin @('advance', 'finalize-stopped-history'))) { throw 'History verification is read-only.' }
         if ($method -ceq 'prepare-stopped-history' -and -not $StoppedWorkers) { throw 'History archival requires final stopped worker authority.' }
         if ($method -ceq 'prepare-stopped-workers' -and -not $StoppedRetirement) { throw 'Worker checkpoint requires independent stopped cleanup.' }
         if ($StoppedRetirement -and $method -cnotin @('check', 'advance', 'close', 'prepare-stopped-workers')) { throw 'Stopped cleanup cannot mutate rollback receipts.' }
-        if ($StoppedWorkers -and $method -cnotin @('check', 'advance', 'close', 'prepare-stopped-history')) { throw 'Stopped worker cleanup cannot mutate rollback receipts.' }
+        if ($StoppedWorkers -and $method -cnotin @('check', 'advance', 'close', 'prepare-stopped-history') -and
+            (-not $StoppedHistoryWrite -or $method -cne 'finalize-stopped-history')) { throw 'Stopped worker cleanup cannot mutate rollback receipts.' }
         if ($method -cin @('prepare-rollback', 'prepare-rollback-runtime', 'release-rollback-runtime', 'rollback-files-restored', 'restore-rollback-task', 'advance-rollback-task', 'prepare-rollback-terminal', 'stage-rollback-state', 'publish-rollback-state', 'complete-rollback', 'prepare-rollback-retirement', 'check-rollback-retirement') -and -not $LostRuntime) { throw 'Rollback intent requires lost-runtime authority.' }
         if ($LostRuntime -and $method -ceq 'advance') { throw 'Lost-runtime evidence cannot advance live completion.' }
         $sequence = $id
@@ -85,6 +87,7 @@ try {
             $value = 'close'
         } elseif ($StoppedHistoryWrite) {
             $value = if ($method -ceq 'advance') { Move-AgentsChatNextStoppedHistoryEntry $scope }
+                elseif ($method -ceq 'finalize-stopped-history') { Complete-AgentsChatStoppedHistoryArchive $scope }
                 else { Get-AgentsChatStoppedHistoryProgress $scope }
         } elseif ($StoppedWorkers) {
             $value = if ($method -ceq 'advance') { Remove-AgentsChatNextStoppedWorkerEntry $scope }

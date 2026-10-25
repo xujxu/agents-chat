@@ -15803,9 +15803,24 @@ Reject duplicate active/archived intents and writer access to this finalized
 namespace. Ordinary Windows maintenance must continue to reject archived
 history intents, case-insensitively, until a dedicated verified admission
 handoff is implemented. The fixture restores the exact intent natively
-before restoring the other fixture entries. Production intent finalization
-and normal deploy/update admission remain unsupported; Actions acceptance
-of this read-only boundary is pending.
+before restoring the other fixture entries. Normal deploy/update admission
+remains unsupported; Actions acceptance of this read-only boundary is pending.
+
+Implement the next private production boundary as writer-only
+`finalizeHistory()`, without enabling ordinary admission. Retain the exact
+prepared intent with exclusive DELETE-capable native authority, comparing
+its original identity and size after acquisition. Only after every entry
+is archived and the complete original proof revalidates may its retained
+handle move the intent to the exact operation-bound same-parent destination,
+without overwrite. Revalidate the entire proof after moving; repeat calls
+on that same writer are idempotent. Reopening an archived namespace remains
+read-only. Entry progress continues to count entries, not intent publication;
+the explicit finalization acknowledgement binds the destination and digest.
+Add premature and occupied-destination refusals preserving original/foreign
+bytes, actual native finalization, same-writer repetition, independent
+read-only reopening, and unchanged state assertions. Runtime stays in place
+and the archived-intent maintenance inhibitor remains active. Acceptance
+of production finalization is pending.
 
 Extend the actual archived-intent fixture with duplicate active/archived
 intent and tampered archived-manifest refusal. Require refusal to preserve
