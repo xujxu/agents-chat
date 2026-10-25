@@ -15918,6 +15918,18 @@ the verified saved path successfully. This pins exact-entry enforcement
 for the new kind rather than merely checking its argv encoding. The extra
 negative awaits the next native run; do not replace active `40227357909`.
 
+Add an explicit focused dispatch selector `windows_history_only=true`,
+valid only with application/live/commands flags and scenario `failed`.
+Use an independent concurrency group and one native task-restored
+release-requested external-runtime fixture. That unchanged fixture exercises
+actual deletion, partial-prefix takeover, final intent movement, post-intent
+death, high-level closeout and the verified saved child plus repository-entry
+refusal. Keep its original actor deadlines and use the existing native-job
+60-minute cap. Default/full dispatches keep every original job, scenario
+and repetition; the focused job must not claim actual Next.js application
+acceptance. Dispatch the new selector to validate the extra exact-entry
+negative without replacing either active broad native recovery run.
+
 In the existing saved completed-closeout native fixture, require the new
 archive entry to reject ordinary accepted update/restore history through
 its exact stopped-rollback guard before any retirement. Preserve original
