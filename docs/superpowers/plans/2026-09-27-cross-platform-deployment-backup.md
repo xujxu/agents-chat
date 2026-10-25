@@ -15901,6 +15901,11 @@ control inventory identities and state bytes, then continue the unchanged
 saved closeout path. Run the existing seven native regression jobs to cover
 the shared closeout refactor independently of the long stopped-history run.
 
+`b8373357 / 40226031748` passes all seven native regression jobs, including
+the new stopped-only guard in saved completed closeout and the unchanged
+ordinary closeout path. This accepts the shared-helper regression boundary;
+the high-level stopped-history orchestration still awaits `40224702989`.
+
 `e379efdf / 40215606774` passes all seven native regression jobs:
 completed-deployment closeout, four prior-runtime recovery phases, snapshot
 and restoration, and managed discovery. This preserves those existing
