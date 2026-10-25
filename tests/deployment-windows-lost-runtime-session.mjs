@@ -444,10 +444,21 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         assert.deepEqual(await writer.check(), advanced);
       }
       assert.equal(writer.observation.status, 'archived');
+      assert.deepEqual(await writer.finalizeHistory(), {
+        file: path.join(control, `retired-${intent.operationId}-inactive-rollback-history-intent.json`),
+        sha256: createHash('sha256').update(originalIntent).digest('hex'),
+      });
     } finally { await writer.close(); }
     const proof = await api.openWindowsInactiveRollbackHistoryArchive(options);
     try { assert.equal((await proof.check()).status, 'retired'); }
     finally { await proof.close(); }
+    await assert.rejects(api.openWindowsInactiveRollbackHistoryRetirement(options));
+    const restoredIntent = await promisify(execFile)(pwsh, ['-NoProfile', '-NonInteractive', '-File',
+      fileURLToPath(new URL('./deployment-windows-history-archive-entry.ps1', import.meta.url)),
+      '-Source', source, '-Control', control, '-Name', 'inactive-rollback-history-intent.json',
+      '-Intent', '-OperationId', intent.operationId, '-Restore'],
+    { timeout: 60000, maxBuffer: 8192 });
+    assert.equal(restoredIntent.stderr, '');
     assert.deepEqual(await readFile(intentFile), originalIntent);
     assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
     for (const entry of [...intent.entries].reverse()) {

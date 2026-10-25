@@ -15822,6 +15822,14 @@ read-only reopening, and unchanged state assertions. Runtime stays in place
 and the archived-intent maintenance inhibitor remains active. Acceptance
 of production finalization is pending.
 
+Extend the existing actual history-actor death fixture: the distinct fresh
+resumer must finish the real archived prefix and invoke production
+`finalizeHistory()`, then close and independently reopen the archived
+read-only proof. Reject fresh writer access after finalization. Only after
+these assertions may the fixture natively restore the intent and entries,
+retaining the original host's exact state/intent assertions. This accepts
+neither ordinary admission nor an application restart; Actions is pending.
+
 `e379efdf / 40215606774` passes all seven native regression jobs:
 completed-deployment closeout, four prior-runtime recovery phases, snapshot
 and restoration, and managed discovery. This preserves those existing
