@@ -15623,6 +15623,21 @@ Raise only that combined job allowance to 25 minutes; preserve all three
 commands, assertions and individual operation deadlines. The Windows
 Contracts 15-minute cancellation is separate and remains under investigation.
 
+Windows Contracts cutoff is now located: its full behavioral suite passed
+in 500 seconds, followed by four complete successful independent saved
+recovery repetitions (72–81 seconds each). At exactly the 15-minute outer
+limit the fifth repetition's first case had also passed; its second case
+was cancelled with zero assertion failures. Preserve all five repetitions
+and raise only Windows' overall job allowance from 15 to 25 minutes. Linux
+remains 10 minutes, and every individual test/native deadline is unchanged.
+This is an outer sum-of-suites correction, not a retry or ignored failure.
+
+`db7b785c` / `40177396299` passed all seven native jobs, including actual
+saved completed closeout (both original update and partial restore history)
+and all four prior-runtime recovery phases. The first-application budget
+run `1d525a55` / `40177051632` has passed normal, receipt-loss and default
+policy; public-first is still active at 08:55 UTC, so full success is pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
