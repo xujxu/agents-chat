@@ -15953,6 +15953,13 @@ state-staged boundary and enters actual cleanup. Require all three exact
 history-death/finalized-death/saved-entry PASS receipts in the job in addition
 to exit zero, preventing another success-shaped coverage omission.
 
+`55649d93 / 40232147018`, job `121285957825`, passes the corrected focused
+fixture. Downloaded logs contain all three required actual acceptance
+receipts. This accepts partial and finalized actor-death recovery, high-level
+archive orchestration, real verified saved-entry completion and repository
+entry refusal with unchanged original intent/state. It is native acceptance,
+not full application or ordinary next-operation admission.
+
 In the existing saved completed-closeout native fixture, require the new
 archive entry to reject ordinary accepted update/restore history through
 its exact stopped-rollback guard before any retirement. Preserve original
