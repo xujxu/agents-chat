@@ -15905,6 +15905,12 @@ saved-entry child from a first-entry actor-death prefix, requiring exact
 state/intent assertions. This is saved private recovery, not a new public
 restore.ps1 support claim. Actions acceptance is pending.
 
+`ccdbd389 / 40227360390`, job `121271469832`, passes the entire Windows
+Contracts workload and five recovery repeats, including Windows-only
+stopped-history invocation and unchanged recovery-generation behavior.
+The actual saved-entry child and subsequent exact-entry negative retain
+separate native acceptance requirements.
+
 Before the saved-entry positive child, invoke the repository entry with
 the same valid saved manifest and arguments. Require explicit failure with
 no success output and exact unchanged prepared intent/state, then invoke
