@@ -15590,6 +15590,24 @@ aggregate child allowances and setup. Leave the first-application 300-second
 child unchanged until its own native trace is available. Acceptance of the
 revised aggregate allowance is pending, not claimed from progress alone.
 
+Stopped closeout implementation `af84a3f3` / `40172120759` completed
+successfully: actual stopped interruption/cleanup, inactive observation and
+released-prefix recovery, and native recovery/original restore regressions
+all passed. The stopped-evidence/cold-launch steps were selector skips,
+not additional acceptance.
+
+First receipt-loss trace `8d6515f6` / `40175363057` now establishes its
+own aggregate mismatch: at 297–300 seconds the first-retirement controller
+continues acknowledging `check` and `advance` requests, with each advance
+about 0.6 seconds and each check about 0.2 seconds. Thirteen worker-engine
+files remain, including its manifest; the receipt is already recovered.
+Increase only that complete first-closeout child's allowance from 300 to
+600 seconds. Keep every native per-entry deadline, HTTP readiness recheck,
+identity proof and ordered prefix assertion unchanged. Actual application
+and job budgets are unchanged. This corrects the aggregate fixture budget
+for a progressing expanded dependency closure, not a confirmed production
+deadlock. Require a successful fresh run before accepting the correction.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

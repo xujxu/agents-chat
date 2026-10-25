@@ -139,7 +139,7 @@ test(publicFirst
           ...command.args,
         ], {
           cwd: root, env: { ...command.env, DEPLOYMENT_TEST_CLOSEOUT_TRACE: trace },
-          timeout: 300000, maxBuffer: 32768,
+          timeout: 600000, maxBuffer: 32768,
         });
       } catch (cause) {
         const entries = await readdir(control);
