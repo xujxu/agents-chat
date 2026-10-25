@@ -237,7 +237,22 @@ async function fixture(t, outcome = 'accepted') {
   const invoke = () => retirementRecoveryInvocation(engine, { control, project, operationId: lock.operationId });
   const recover = async () => {
     const command = invoke();
-    return execute(command.file, command.args, { env: command.env, timeout: 45000, maxBuffer: 8192 });
+    const trace = path.join(root, 'cold-retirement-native-trace.json');
+    const windows = process.platform === 'win32';
+    const args = windows ? ['--import', new URL('./deployment-windows-closeout-trace.mjs', import.meta.url).href,
+      ...command.args] : command.args;
+    try {
+      return await execute(command.file, args, {
+        env: windows ? { ...command.env, DEPLOYMENT_TEST_CLOSEOUT_TRACE: trace } : command.env,
+        timeout: 45000, maxBuffer: 8192,
+      });
+    } catch (error) {
+      if (windows) {
+        try { console.error('Cold retirement native trace:', await readFile(trace, 'utf8')); }
+        catch (diagnostic) { console.error('Cold retirement trace unavailable:', diagnostic.message); }
+      }
+      throw error;
+    }
   };
   const kill = async () => { child.kill('SIGKILL'); await exited; };
   return { root, project, control, source, engine, lock, saved, kill, recover };
