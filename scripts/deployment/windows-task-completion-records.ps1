@@ -10,11 +10,22 @@ function Resolve-AgentsChatCompletionPath([hashtable]$Context, [string]$Path) {
 }
 
 function Open-AgentsChatCompletionFile([hashtable]$Context, [string]$Path, [string]$Sha256) {
+    $writer = $Context.ContainsKey('HistoryWriter') -and $Context.HistoryWriter -and
+        $Context.ContainsKey('HistoryPaths') -and $Context.HistoryPaths.ContainsKey($Path)
+    $name = [IO.Path]::GetFileName($Path)
+    if ($writer -and $Context.HistoryFiles.ContainsKey($name)) {
+        $held = $Context.HistoryFiles[$name]
+        $held.Check()
+        if ($Sha256 -and $held.Sha256 -cne $Sha256) { throw 'Original archival proof digest differs.' }
+        return $held
+    }
     $Path = Resolve-AgentsChatCompletionPath $Context $Path
     if ((Get-Item -LiteralPath $Path -Force).Length -gt 4194304) { throw 'Oversized completion evidence.' }
     if (-not $Sha256) { $Sha256 = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
-    $file = [Deployment.WindowsPrivateFile]::Open($Path, $Sha256)
+    $file = if ($writer) { [Deployment.WindowsPrivateFile]::OpenForArchival($Path, $Sha256) }
+        else { [Deployment.WindowsPrivateFile]::Open($Path, $Sha256) }
     $Context.Files.Add($file)
+    if ($writer) { $Context.HistoryFiles.Add($name, $file) }
     return $file
 }
 

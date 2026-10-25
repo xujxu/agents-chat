@@ -80,7 +80,7 @@ function Assert-AgentsChatStoppedHistoryRecovery([hashtable]$Context) {
                 elseif ($entry.path -ceq 'inactive-rollback-retirement.json') { $Context.TaskMarker }
                 elseif ($entry.path -ceq 'inactive-rollback-retired.json') { $Context.FinalReceipt }
                 else { Open-AgentsChatCompletionFile $Context $source $entry.sha256 }
-            $Context.HistoryFiles.Add($entry.path, $held)
+            $Context.HistoryFiles[$entry.path] = $held
         }
         $held = $Context.HistoryFiles[$entry.path]
         $held.Check()
@@ -100,4 +100,39 @@ function Assert-AgentsChatStoppedHistoryRecovery([hashtable]$Context) {
     }
     if ($expected.Count) { throw 'Stopped history archive namespace is incomplete.' }
     $Context.HistoryIntent.Check()
+}
+
+function Get-AgentsChatStoppedHistoryProgress([hashtable]$Context) {
+    $null = Assert-AgentsChatStoppedWorkerCleanup $Context
+    $prefix = 0
+    foreach ($entry in $Context.HistoryRecord.entries) {
+        $source = Join-Path $Context.Control $entry.path
+        if ($Context.HistoryPaths[$source] -ceq $source) { break }
+        $prefix++
+    }
+    return [ordered]@{
+        status=$(if ($prefix -eq $Context.HistoryRecord.entries.Count) { 'archived' } else { 'archiving' })
+        operationId=$Context.OperationId; stateSha256=$Context.TaskRecord.stateSha256
+        retiredSha256=$Context.FinalReceipt.Sha256
+        archivedEntries=$prefix; totalEntries=$Context.HistoryRecord.entries.Count
+    }
+}
+
+function Move-AgentsChatNextStoppedHistoryEntry([hashtable]$Context) {
+    if (-not $Context.ContainsKey('HistoryWriter') -or -not $Context.HistoryWriter) {
+        throw 'Stopped history verification is read-only.'
+    }
+    $progress = Get-AgentsChatStoppedHistoryProgress $Context
+    if ($progress.archivedEntries -eq $progress.totalEntries) { return $progress }
+    $entry = $Context.HistoryRecord.entries[$progress.archivedEntries]
+    $source = Join-Path $Context.Control $entry.path
+    $destination = Join-Path $Context.Control $entry.destination
+    try {
+        $Context.HistoryFiles[$entry.path].ArchiveTo($destination)
+        $Context.HistoryPaths[$source] = $destination
+        return Get-AgentsChatStoppedHistoryProgress $Context
+    } catch {
+        $Context.Poisoned = $true
+        throw [InvalidOperationException]::new('Stopped history archival failed; retain original prepared evidence.', $_.Exception)
+    }
 }

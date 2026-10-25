@@ -18,6 +18,20 @@ const lostScopes = new WeakMap();
 export const openWindowsInactiveRollbackRetirement = options => openCompletionRecovery(options, true, false, true);
 export const openWindowsInactiveRollbackWorkerRetirement = options => openCompletionRecovery(options, true, false, false, true);
 export const openWindowsInactiveRollbackHistoryArchive = options => openCompletionRecovery(options, true, false, false, true, true);
+export const openWindowsInactiveRollbackHistoryRetirement = options => openCompletionRecovery(options, true, false, false, true, true, true);
+
+function captureHistoryProgress(value) {
+  const progress = captureWorkerFields(value, ['status', 'operationId', 'stateSha256', 'retiredSha256',
+    'archivedEntries', 'totalEntries'], 'stopped history archival progress');
+  if (typeof progress.operationId !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(progress.operationId)
+    || ![progress.stateSha256, progress.retiredSha256].every(hash => typeof hash === 'string' && /^[a-f0-9]{64}$/.test(hash))
+    || !Number.isInteger(progress.archivedEntries) || ![10, 12].includes(progress.totalEntries)
+    || progress.archivedEntries < 0 || progress.archivedEntries > progress.totalEntries
+    || progress.status !== (progress.archivedEntries === progress.totalEntries ? 'archived' : 'archiving')) {
+    throw new Error('Invalid stopped history archival progress.');
+  }
+  return Object.freeze(progress);
+}
 export async function prepareWindowsInactiveRollbackRetirementIntent(options) {
   if (options.acceptDataLoss !== true) throw refused(new Error('Rollback retirement requires explicit data-loss acknowledgement.'));
   await assertWindowsInactiveLostRuntimeAuthority(options);
@@ -180,11 +194,12 @@ function captureStoppedRetirement(value, workers = false) {
   return Object.freeze(result);
 }
 
-async function openCompletionRecovery({ control, pwsh, admission, signal }, inactive, lost = false, retirement = false, workers = false, history = false) {
+async function openCompletionRecovery({ control, pwsh, admission, signal }, inactive, lost = false, retirement = false, workers = false, history = false, archive = false) {
   const progression = inactive
     ? ['release-requested', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete']
     : steps;
-  const captureObservation = value => retirement || workers ? captureStoppedRetirement(value, workers)
+  const captureObservation = value => archive ? captureHistoryProgress(value)
+    : retirement || workers ? captureStoppedRetirement(value, workers)
     : lost ? captureLostRuntime(value) : capture(value, progression);
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || ![control, pwsh].every(value =>
@@ -202,7 +217,7 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
       ...(inactive ? ['-Inactive'] : []), ...(lost ? ['-LostRuntime'] : []),
       ...(retirement ? ['-StoppedRetirement'] : []), ...(workers ? ['-StoppedWorkers'] : []),
-      ...(history ? ['-StoppedHistory'] : [])],
+      ...(history ? ['-StoppedHistory'] : []), ...(archive ? ['-StoppedHistoryWrite'] : [])],
   });
   let closed = false;
   let busy = false;
@@ -231,6 +246,16 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
         return;
       }
       if (retirement || workers) {
+        if (archive) {
+          const next = captureHistoryProgress(reply.value);
+          const prefix = method === 'advance'
+            ? Math.min(observation.archivedEntries + 1, observation.totalEntries) : observation.archivedEntries;
+          const expected = { ...observation, archivedEntries: prefix,
+            status: prefix === observation.totalEntries ? 'archived' : 'archiving' };
+          if (!isDeepStrictEqual(next, expected)) throw new Error('History archival changed bindings or skipped a prefix.');
+          observation = next;
+          return next;
+        }
         if (method === 'prepare-stopped-workers' || method === 'prepare-stopped-history') {
           const prepared = captureWorkerFields(reply.value, ['file', 'sha256'], 'stopped worker retirement checkpoint');
           if (prepared.file !== path.join(control, method === 'prepare-stopped-history'
@@ -376,7 +401,7 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       ...(workers && !history ? {
         prepareHistory: ({ signal: requestSignal } = {}) => request('prepare-stopped-history', requestSignal),
       } : {}),
-      ...(lost || history ? {} : { advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal) }),
+      ...(lost || (history && !archive) ? {} : { advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal) }),
       close: async () => { if (!closed) await request('close'); },
     });
     if (lost) lostScopes.set(scope, { control, pwsh, admission, request });

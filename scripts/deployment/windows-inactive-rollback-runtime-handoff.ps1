@@ -88,7 +88,7 @@ function Open-AgentsChatRuntimeHandoffArchive(
     $Context.RuntimeHandoffNames = $names
     $releasedPath = Resolve-AgentsChatCompletionPath $Context (Join-Path $Context.Control 'inactive-rollback-runtime-released.json')
     if (Test-Path -LiteralPath $releasedPath) {
-        $released = Open-AgentsChatCompletionFile $Context $releasedPath ''
+        $released = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'inactive-rollback-runtime-released.json') ''
         if ($released.ReadText() -cne (Get-AgentsChatRuntimeHandoffReleaseText $Context $prepared.Sha256 `
             $OriginalStateSha256 $OriginalCompletionSha256)) {
             throw 'Runtime handoff release differs from its exact prepared checkpoint.'

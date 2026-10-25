@@ -140,7 +140,7 @@ function Assert-AgentsChatStoppedWorkerCleanup([hashtable]$Context) {
     } finally { $Context.Busy = $false }
 }
 
-function Open-AgentsChatStoppedWorkerCleanup([string]$Control, [switch]$HistoryArchive) {
+function Open-AgentsChatStoppedWorkerCleanup([string]$Control, [switch]$HistoryArchive, [switch]$HistoryWrite) {
     $context = @{
         Control=$Control; Directory=(Join-Path $Control 'task-maintenance')
         Files=[Collections.Generic.List[IDisposable]]::new()
@@ -148,6 +148,8 @@ function Open-AgentsChatStoppedWorkerCleanup([string]$Control, [switch]$HistoryA
         Prefix=0; Target=$null; WorkerMode=$true
     }
     try {
+        if ($HistoryWrite -and -not $HistoryArchive) { throw 'History writer requires original archival proof.' }
+        if ($HistoryWrite) { $context.HistoryWriter = $true }
         if ($Control -cnotmatch '^[A-Za-z]:\\' -or $Control.Length -gt 4096 -or
             $Control -match '[\x00\r\n]' -or [IO.Path]::GetFullPath($Control) -cne $Control) {
             throw 'Stopped worker cleanup requires canonical Windows control.'
@@ -155,25 +157,31 @@ function Open-AgentsChatStoppedWorkerCleanup([string]$Control, [switch]$HistoryA
         $context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory($Control))
         if ($HistoryArchive) { Initialize-AgentsChatStoppedHistoryRecovery $context }
         $markerPath = Resolve-AgentsChatCompletionPath $context (Join-Path $Control 'inactive-rollback-workers.json')
-        $original = Open-AgentsChatCompletionFile $context $markerPath ''
+        $original = Open-AgentsChatCompletionFile $context (Join-Path $Control 'inactive-rollback-workers.json') ''
         if ($original.ByteLength -gt 1048576) { throw 'Oversized stopped worker checkpoint.' }
         $record = Read-AgentsChatRetirementJson ($original.ReadText())
         $identity = $original.CaptureIdentity()
         $hash = $original.Sha256
         $bytes = $original.ByteLength
-        $original.Dispose()
-        $null = $context.Files.Remove($original)
-        $context.Marker = [Deployment.WindowsPrivateFile]::OpenExclusive($markerPath, $hash, $identity.Dev, $identity.Ino, $bytes)
-        $context.Files.Add($context.Marker)
+        if ($HistoryWrite) { $context.Marker = $original }
+        else {
+            $original.Dispose()
+            $null = $context.Files.Remove($original)
+            $context.Marker = [Deployment.WindowsPrivateFile]::OpenExclusive($markerPath, $hash, $identity.Dev, $identity.Ino, $bytes)
+            $context.Files.Add($context.Marker)
+        }
         $task = Open-AgentsChatRetirementFile $context $record.task 'inactive-rollback-retirement.json'
         $taskIdentity = $task.CaptureIdentity()
         $context.Record = Read-AgentsChatRetirementJson ($task.ReadText())
-        $task.Dispose()
-        $null = $context.Files.Remove($task)
-        $context.TaskMarker = [Deployment.WindowsPrivateFile]::OpenExclusive(
-            (Resolve-AgentsChatCompletionPath $context (Join-Path $Control 'inactive-rollback-retirement.json')), $record.task.sha256,
-            $taskIdentity.Dev, $taskIdentity.Ino, $record.task.bytes)
-        $context.Files.Add($context.TaskMarker)
+        if ($HistoryWrite) { $context.TaskMarker = $task }
+        else {
+            $task.Dispose()
+            $null = $context.Files.Remove($task)
+            $context.TaskMarker = [Deployment.WindowsPrivateFile]::OpenExclusive(
+                (Resolve-AgentsChatCompletionPath $context (Join-Path $Control 'inactive-rollback-retirement.json')), $record.task.sha256,
+                $taskIdentity.Dev, $taskIdentity.Ino, $record.task.bytes)
+            $context.Files.Add($context.TaskMarker)
+        }
         $context.StoredLockText = $record.lockText
         Initialize-AgentsChatInactiveRollbackCleanup $context
         $context.TaskRecord = $context.Record
@@ -207,7 +215,7 @@ function Open-AgentsChatStoppedWorkerCleanup([string]$Control, [switch]$HistoryA
         $context.Folder = $scheduler.GetFolder('\')
         $receiptPath = Resolve-AgentsChatCompletionPath $context (Join-Path $Control 'inactive-rollback-retired.json')
         if (Test-Path -LiteralPath $receiptPath) {
-            $context.FinalReceipt = Open-AgentsChatCompletionFile $context $receiptPath ''
+            $context.FinalReceipt = Open-AgentsChatCompletionFile $context (Join-Path $Control 'inactive-rollback-retired.json') ''
         }
         $null = Assert-AgentsChatStoppedWorkerCleanup $context
         return $context

@@ -15735,6 +15735,29 @@ at `7d73b9f6`; acceptance remains pending. The older full matrix
 `40189409790` also reproduces the pre-fix archival refusal and cannot be
 signed off, although its independent jobs still provide regression evidence.
 
+`7d73b9f6 / 40190223204` now passes the complete actual stopped cleanup and
+released-prefix run, including partial and fully archived read-only reopening.
+`a4f3afb8 / 40194873372` passes all seven native regression jobs, including
+the isolated independent cold-retirement cases at their original 45-second
+deadline. The prior full-matrix Windows Contracts timeout therefore remains
+unexplained under combined load; keep the bounded native diagnostic and do
+not increase that deadline without progressing-chain evidence.
+
+Next, add explicit native history-writer scopes rather than changing the
+read-only API. All logical history files are retained with exclusive DELETE
+access and cached once, so the original checkpoint/state/runtime proof reads
+the same objects used for each native rename. Original worker/task markers
+keep those handles instead of disposing/reopening them. Every advance
+revalidates the complete original proof, moves exactly the next prepared
+same-parent entry, updates only the in-memory logical map, then revalidates.
+Report an exact bound progress record; reconstruction uses the existing
+prepared intent and physical prefix, not a guessed or repaired checkpoint.
+Read-only handles cannot invoke the native archive operation. Preserve all
+existing native/archive inhibitors and runtime directories. Test a one-entry
+writer close, fresh writer continuation and complete read-only verification,
+with exact native fixture restoration afterward. Actual writer-death recovery,
+final archive handoff and ordinary deploy/update acceptance remain pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

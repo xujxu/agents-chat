@@ -65,7 +65,10 @@ try {
     Remove-Item -LiteralPath $file
     [IO.File]::Move($old, $file)
     $proof = [Deployment.WindowsPrivateFile]::Open($file, $sha256)
-    try { Refuses-Sharing { (Retain-Original).Dispose() } }
+    try {
+        Refuses-Sharing { (Retain-Original).Dispose() }
+        Refuses { $proof.ArchiveTo((Join-Path $work 'readonly-archive.json')) } 'Original archival authority is required.'
+    }
     finally { $proof.Dispose() }
     $retirement = Retain-Original
     $moved = Join-Path $root 'moved'

@@ -236,13 +236,33 @@ const finishWorkers = async options => {
   }
   assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
   const archived = [];
+  assert.equal(typeof api.openWindowsInactiveRollbackHistoryRetirement, 'function',
+    'Missing identity-bound ordered native history archival');
   try {
-    for (const entry of archive.entries) {
-      const args = [...moveArgs.slice(0, -1), entry.path];
-      const moved = await promisify(execFile)(pwsh, args, { timeout: 60000, maxBuffer: 8192 });
-      archived.push(args);
-      assert.equal(moved.stderr, '');
-    }
+    const archiveWriter = await api.openWindowsInactiveRollbackHistoryRetirement(options);
+    try {
+      assert.equal(archiveWriter.observation.archivedEntries, 0);
+      const first = await archiveWriter.advance();
+      archived.push(moveArgs);
+      assert.equal(first.archivedEntries, 1);
+      assert.equal(first.totalEntries, archive.entries.length);
+      assert.equal(first.status, 'archiving');
+      assert.deepEqual(await archiveWriter.check(), first);
+      await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
+      await assert.rejects(lstat(path.join(control, mixedEntry.path)), { code: 'ENOENT' });
+    } finally { await archiveWriter.close(); }
+    const resumed = await api.openWindowsInactiveRollbackHistoryRetirement(options);
+    try {
+      assert.equal(resumed.observation.archivedEntries, 1);
+      for (let index = 1; index < archive.entries.length; index++) {
+        const next = await resumed.advance();
+        archived.push([...moveArgs.slice(0, -1), archive.entries[index].path]);
+        assert.equal(next.archivedEntries, index + 1);
+        assert.equal(next.status, index + 1 === archive.entries.length ? 'archived' : 'archiving');
+        assert.deepEqual(await resumed.check(), next);
+      }
+      assert.deepEqual(await resumed.advance(), resumed.observation);
+    } finally { await resumed.close(); }
     await assert.rejects(api.openWindowsInactiveRollbackWorkerRetirement(options));
     const fullyArchived = await api.openWindowsInactiveRollbackHistoryArchive(options);
     try {
