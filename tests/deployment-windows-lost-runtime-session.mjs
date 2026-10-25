@@ -235,6 +235,28 @@ const finishWorkers = async options => {
     assert.equal(restored.stderr, '');
   }
   assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
+  const archived = [];
+  try {
+    for (const entry of archive.entries) {
+      const args = [...moveArgs.slice(0, -1), entry.path];
+      const moved = await promisify(execFile)(pwsh, args, { timeout: 60000, maxBuffer: 8192 });
+      archived.push(args);
+      assert.equal(moved.stderr, '');
+    }
+    await assert.rejects(api.openWindowsInactiveRollbackWorkerRetirement(options));
+    const fullyArchived = await api.openWindowsInactiveRollbackHistoryArchive(options);
+    try {
+      assert.equal((await fullyArchived.check()).status, 'retired');
+      assert.equal(fullyArchived.advance, undefined);
+      assert.equal(fullyArchived.prepareHistory, undefined);
+    } finally { await fullyArchived.close(); }
+  } finally {
+    for (const args of archived.reverse()) {
+      const restored = await promisify(execFile)(pwsh, [...args, '-Restore'], { timeout: 60000, maxBuffer: 8192 });
+      assert.equal(restored.stderr, '');
+    }
+  }
+  assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
   assert.deepEqual(await readFile(workerFile), before);
   assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), taskBefore);
   await writeFile(finalFile, Buffer.from(JSON.stringify({ ...JSON.parse(finalBefore), restoredRuntime: 'running' })));
