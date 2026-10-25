@@ -369,28 +369,28 @@ namespace Deployment
                     throw new InvalidDataException("Original exclusive evidence identity or length differs.");
                 return retained;
             }
-            public static WindowsPrivateFile OpenForArchival(string file, string sha256)
-            {
-                WindowsPrivateFile original = OpenFile(file, sha256, true, retirement: true);
-                original.archival = true;
-                return original;
-            }
-            public void ArchiveTo(string destination)
-            {
-                if (!archival) throw new InvalidOperationException("Original archival authority is required.");
-                using (DirectoryLease parent = OpenDirectory(Path.GetDirectoryName(file)))
-                {
-                    parent.Check();
-                    Check();
-                    ArchiveRetained(this, destination, "file");
-                    Check();
-                    parent.Check();
-                }
-            }
             catch
             {
                 retained.Dispose();
                 throw;
+            }
+        }
+        public static WindowsPrivateFile OpenForArchival(string file, string sha256)
+        {
+            WindowsPrivateFile original = OpenFile(file, sha256, true, retirement: true);
+            original.archival = true;
+            return original;
+        }
+        public void ArchiveTo(string destination)
+        {
+            if (!archival) throw new InvalidOperationException("Original archival authority is required.");
+            using (DirectoryLease parent = OpenDirectory(Path.GetDirectoryName(file)))
+            {
+                parent.Check();
+                Check();
+                ArchiveRetained(this, destination, "file");
+                Check();
+                parent.Check();
             }
         }
         static void ArchiveRetained(WindowsPrivateFile original, string destination, string kind)
