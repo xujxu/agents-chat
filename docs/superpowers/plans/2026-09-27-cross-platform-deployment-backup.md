@@ -15770,6 +15770,24 @@ entries natively and restore the original fixture runtime paths. This
 extends the existing actual stopped interruption variants, without a new
 synthetic success mode or production reentry bypass. Acceptance is pending.
 
+`9a87508d / 40199825621` passes seven native jobs with the two traced cold
+recovery cases running alongside the existing heavy native worker cleanup
+cases, without extending deadlines. This does not reproduce the Windows
+Contracts failure and does not establish a fix. Add a focused dispatch for
+the **entire unchanged Windows Contracts job**, including all behavioral
+files and all five recovery repetitions, so the full runner-local workload
+can emit the already-added bounded failure trace without duplicating the
+remaining long-running application matrix:
+
+```sh
+gh workflow run deployment-lifecycle.yml --ref feat/deployment-backup \
+  -f windows_restore_only=true -f windows_contracts_only=true
+```
+
+The paired selector uses a distinct concurrency group and omits the normal
+seven restore jobs. Default/full dispatches retain both Contracts platforms
+and all existing jobs, test selections, repetitions and time budgets.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

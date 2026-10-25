@@ -32,6 +32,10 @@ on:
         description: Run only native Windows snapshot and restoration contracts
         type: boolean
         default: false
+      windows_contracts_only:
+        description: With windows_restore_only, select the complete Windows Contracts job instead
+        type: boolean
+        default: false
       windows_application_only:
         description: Run only the real Windows application lifecycle (takes precedence)
         type: boolean
@@ -75,7 +79,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_live_only && '-windows-live' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && '-commands' || '' }}${{ inputs.windows_cold_started_only && format('-cold-{0}', inputs.windows_cold_startup_step || 'started') || '' }}
+  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_live_only && '-windows-live' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && '-commands' || '' }}${{ inputs.windows_cold_started_only && format('-cold-{0}', inputs.windows_cold_startup_step || 'started') || '' }}${{ inputs.windows_restore_only && inputs.windows_contracts_only && '-contracts' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -459,7 +463,7 @@ jobs:
           sudo "$(command -v node)" --test tests/deployment-linux-data-worker.test.mjs tests/deployment-linux-compatibility.test.mjs tests/deployment-linux-snapshot.test.mjs tests/deployment-linux-readiness.test.mjs tests/deployment-linux-restore.test.mjs tests/deployment-linux-cold-restore.test.mjs tests/deployment-linux-acceptance.test.mjs
 
   windows-restore:
-    if: ${{ !inputs.windows_application_only }}
+    if: ${{ !inputs.windows_application_only && !(inputs.windows_restore_only && inputs.windows_contracts_only) }}
     name: Native Windows snapshot and restoration
     runs-on: windows-2022
     timeout-minutes: 15
@@ -491,14 +495,14 @@ jobs:
           )
 
   contracts:
-    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    if: ${{ !inputs.windows_application_only && (!inputs.windows_restore_only || inputs.windows_contracts_only) }}
     name: Contracts (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.os == 'windows-2022' && 25 || 10 }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022]
+        os: ${{ fromJSON(inputs.windows_restore_only && inputs.windows_contracts_only && '["windows-2022"]' || '["ubuntu-24.04","windows-2022"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -896,7 +900,7 @@ jobs:
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -CrashStep '${{ matrix.crash }}'
 
   windows-managed-discovery:
-    if: ${{ !inputs.windows_application_only }}
+    if: ${{ !inputs.windows_application_only && !(inputs.windows_restore_only && inputs.windows_contracts_only) }}
     name: Native Windows managed discovery (${{ matrix.scenario }})
     runs-on: windows-2022
     timeout-minutes: 15
@@ -920,7 +924,7 @@ jobs:
         run: ./tests/deployment-windows-controller-capture.ps1
 
   windows-completed-closeout:
-    if: ${{ !inputs.windows_application_only }}
+    if: ${{ !inputs.windows_application_only && !(inputs.windows_restore_only && inputs.windows_contracts_only) }}
     name: Native Windows completed deployment closeout
     runs-on: windows-2022
     timeout-minutes: 15
@@ -947,7 +951,7 @@ jobs:
         run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-restore -CompletedCloseout
 
   windows-prior-runtime-recovery:
-    if: ${{ !inputs.windows_application_only }}
+    if: ${{ !inputs.windows_application_only && !(inputs.windows_restore_only && inputs.windows_contracts_only) }}
     name: Native Windows prior runtime recovery (${{ matrix.phase }})
     runs-on: windows-2022
     timeout-minutes: 10
