@@ -244,6 +244,14 @@ const finishWorkers = async options => {
     await assert.rejects(prematureFinalizer.finalizeHistory());
   } finally { await prematureFinalizer.close(); }
   assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
+  const prematureCompletion = await api.openWindowsInactiveRollbackHistoryCompletion(options);
+  try {
+    assert.equal(prematureCompletion.advance, undefined);
+    assert.equal(prematureCompletion.finalizeHistory, undefined);
+    await assert.rejects(prematureCompletion.completeHistory());
+  } finally { await prematureCompletion.close(); }
+  await assert.rejects(lstat(path.join(control,
+    `retired-${archive.operationId}-inactive-rollback-history-complete.json`)), { code: 'ENOENT' });
   const blockedWriter = await api.openWindowsInactiveRollbackHistoryRetirement(options);
   try {
     await writeFile(collision, foreignBytes, { flag: 'wx' });
@@ -517,12 +525,29 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         }
       } finally { await writer.close(); }
     }
+    const completionFile = path.join(control, `retired-${intent.operationId}-inactive-rollback-history-complete.json`);
+    const completionBytes = await readFile(completionFile);
+    const completion = JSON.parse(completionBytes);
+    assert.equal(completion.phase, 'stopped-history-archive-complete');
+    assert.equal(completion.operationId, intent.operationId);
+    assert.equal(completion.intentSha256, createHash('sha256').update(originalIntent).digest('hex'));
+    const changedCompletion = Buffer.from(JSON.stringify({ ...completion, stateSha256: '0'.repeat(64) }));
+    await writeFile(completionFile, changedCompletion);
+    try {
+      await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
+      assert.deepEqual(await readFile(completionFile), changedCompletion);
+    } finally { await writeFile(completionFile, completionBytes); }
     const proof = await api.openWindowsInactiveRollbackHistoryArchive(options);
-    try { assert.equal((await proof.check()).status, 'retired'); }
+    try {
+      assert.equal((await proof.check()).status, 'retired');
+      assert.equal(proof.completeHistory, undefined);
+    }
     finally { await proof.close(); }
     await assert.rejects(api.openWindowsInactiveRollbackHistoryRetirement(options));
     const { requireNoServiceMaintenance } = await load('state.mjs');
     await assert.rejects(requireNoServiceMaintenance(control));
+    assert.deepEqual(await readFile(completionFile), completionBytes);
+    await unlink(completionFile);
     const restoredIntent = await promisify(execFile)(pwsh, ['-NoProfile', '-NonInteractive', '-File',
       fileURLToPath(new URL('./deployment-windows-history-archive-entry.ps1', import.meta.url)),
       '-Source', source, '-Control', control, '-Name', 'inactive-rollback-history-intent.json',

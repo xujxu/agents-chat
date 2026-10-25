@@ -99,10 +99,29 @@ function Assert-AgentsChatStoppedHistoryRecovery([hashtable]$Context) {
     if ($names.Count -ne $record.entries.Count) { throw 'Stopped history archive runtime inventory differs.' }
     $expected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $null = $expected.Add([IO.Path]::GetFileName($Context.HistoryIntentPath))
+    $completionPath = Join-Path $Context.Control "retired-$($Context.OperationId)-inactive-rollback-history-complete.json"
+    $completed = Test-Path -LiteralPath $completionPath
+    if ($completed) {
+        if ($Context.HistoryIntentPath -cne
+            (Join-Path $Context.Control "retired-$($Context.OperationId)-inactive-rollback-history-intent.json")) {
+            throw 'Stopped history completion requires an archived intent.'
+        }
+        if (-not $Context.ContainsKey('HistoryCompletion')) {
+            $Context.HistoryCompletion = Open-AgentsChatCompletionFile $Context $completionPath ''
+        }
+        if ($Context.HistoryCompletion.ByteLength -gt 65536 -or
+            $Context.HistoryCompletion.ReadText() -cne (Get-AgentsChatStoppedHistoryCompletionText $Context)) {
+            throw 'Stopped history completion differs from original archival proof.'
+        }
+        $null = $expected.Add([IO.Path]::GetFileName($completionPath))
+    } elseif ($Context.ContainsKey('HistoryCompletion')) {
+        throw 'Stopped history completion disappeared.'
+    }
     foreach ($entry in $record.entries) {
         $source = Join-Path $Context.Control $entry.path
         $destination = Join-Path $Context.Control $entry.destination
         $actual = Resolve-AgentsChatCompletionPath $Context $source
+        if ($completed -and $actual -cne $destination) { throw 'Stopped history completion has an active entry.' }
         if ((Test-Path -LiteralPath $source) -eq (Test-Path -LiteralPath $destination) -or
             -not (Test-Path -LiteralPath $actual)) {
             throw 'Stopped history archive namespace changed.'
@@ -190,4 +209,33 @@ function Complete-AgentsChatStoppedHistoryArchive([hashtable]$Context) {
         $Context.Poisoned = $true
         throw [InvalidOperationException]::new('Stopped history intent archival failed; retain original evidence.', $_.Exception)
     }
+}
+
+function Get-AgentsChatStoppedHistoryCompletionText([hashtable]$Context) {
+    return ([ordered]@{
+        version=1; phase='stopped-history-archive-complete'
+        control=$Context.Control; project=$Context.Project; operationId=$Context.OperationId
+        stateSha256=$Context.TaskRecord.stateSha256; retiredSha256=$Context.FinalReceipt.Sha256
+        intentSha256=$Context.HistoryIntent.Sha256; archivedEntries=$Context.HistoryRecord.entries.Count
+        controlIdentity=$Context.HistoryRecord.controlIdentity
+    } | ConvertTo-Json -Depth 4 -Compress)
+}
+
+function Publish-AgentsChatStoppedHistoryCompletion([hashtable]$Context) {
+    if (-not $Context.ContainsKey('HistoryCompletionWriter') -or -not $Context.HistoryCompletionWriter) {
+        throw 'Stopped history verification cannot publish completion.'
+    }
+    $progress = Get-AgentsChatStoppedHistoryProgress $Context
+    if ($progress.archivedEntries -ne $progress.totalEntries -or $Context.HistoryIntentPath -cne
+        (Join-Path $Context.Control "retired-$($Context.OperationId)-inactive-rollback-history-intent.json")) {
+        throw 'Stopped history completion requires the fully archived original namespace.'
+    }
+    $path = Join-Path $Context.Control "retired-$($Context.OperationId)-inactive-rollback-history-complete.json"
+    if (-not $Context.ContainsKey('HistoryCompletion')) {
+        $Context.HistoryCompletion = [Deployment.WindowsPrivateFile]::Publish(
+            $path, (Get-AgentsChatStoppedHistoryCompletionText $Context))
+        $Context.Files.Add($Context.HistoryCompletion)
+    }
+    $null = Get-AgentsChatStoppedHistoryProgress $Context
+    return @{ file=$path; sha256=$Context.HistoryCompletion.Sha256 }
 }

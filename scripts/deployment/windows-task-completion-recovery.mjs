@@ -19,6 +19,7 @@ export const openWindowsInactiveRollbackRetirement = options => openCompletionRe
 export const openWindowsInactiveRollbackWorkerRetirement = options => openCompletionRecovery(options, true, false, false, true);
 export const openWindowsInactiveRollbackHistoryArchive = options => openCompletionRecovery(options, true, false, false, true, true);
 export const openWindowsInactiveRollbackHistoryRetirement = options => openCompletionRecovery(options, true, false, false, true, true, true);
+export const openWindowsInactiveRollbackHistoryCompletion = options => openCompletionRecovery(options, true, false, false, true, true, false, true);
 
 function captureHistoryProgress(value) {
   const progress = captureWorkerFields(value, ['status', 'operationId', 'stateSha256', 'retiredSha256',
@@ -194,7 +195,7 @@ function captureStoppedRetirement(value, workers = false) {
   return Object.freeze(result);
 }
 
-async function openCompletionRecovery({ control, pwsh, admission, signal }, inactive, lost = false, retirement = false, workers = false, history = false, archive = false) {
+async function openCompletionRecovery({ control, pwsh, admission, signal }, inactive, lost = false, retirement = false, workers = false, history = false, archive = false, historyCompletion = false) {
   const progression = inactive
     ? ['release-requested', 'released', 'policy-restore-requested', 'permanent-policy-applied', 'complete']
     : steps;
@@ -217,7 +218,8 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
       ...(inactive ? ['-Inactive'] : []), ...(lost ? ['-LostRuntime'] : []),
       ...(retirement ? ['-StoppedRetirement'] : []), ...(workers ? ['-StoppedWorkers'] : []),
-      ...(history ? ['-StoppedHistory'] : []), ...(archive ? ['-StoppedHistoryWrite'] : [])],
+      ...(history ? ['-StoppedHistory'] : []), ...(archive ? ['-StoppedHistoryWrite'] : []),
+      ...(historyCompletion ? ['-StoppedHistoryCompletion'] : [])],
   });
   let closed = false;
   let busy = false;
@@ -246,6 +248,14 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
         return;
       }
       if (retirement || workers) {
+        if (historyCompletion && method === 'complete-stopped-history') {
+          const completed = captureWorkerFields(reply.value, ['file', 'sha256'], 'stopped history completion');
+          if (completed.file !== path.join(control, `retired-${observation.operationId}-inactive-rollback-history-complete.json`)
+            || typeof completed.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(completed.sha256)) {
+            throw new Error('Invalid stopped history completion acknowledgement.');
+          }
+          return Object.freeze(completed);
+        }
         if (archive) {
           if (method === 'finalize-stopped-history') {
             const finalized = captureWorkerFields(reply.value, ['file', 'sha256'], 'final stopped history archive');
@@ -412,6 +422,9 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       } : {}),
       ...(archive ? {
         finalizeHistory: ({ signal: requestSignal } = {}) => request('finalize-stopped-history', requestSignal),
+      } : {}),
+      ...(historyCompletion ? {
+        completeHistory: ({ signal: requestSignal } = {}) => request('complete-stopped-history', requestSignal),
       } : {}),
       ...(lost || (history && !archive) ? {} : { advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal) }),
       close: async () => { if (!closed) await request('close'); },

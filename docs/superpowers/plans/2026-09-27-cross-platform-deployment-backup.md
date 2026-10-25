@@ -15918,6 +15918,26 @@ entry from both a partial archived prefix and post-finalization death,
 including repeated calls and wrong-project/copied-admission refusal.
 Production orchestration acceptance is pending; admission remains blocked.
 
+Add a separate native completion publisher after intent finalization.
+Its explicit scope can only check, publish the immutable completion receipt,
+or close; it cannot advance entries or finalize the intent, and ordinary
+readers gain no publication method. The operation-bound
+`retired-<operation>-inactive-rollback-history-complete.json` binds original
+control/project/operation, exact state/final-retirement/intent hashes,
+entry count and control identity. Require the full archived namespace and
+original runtime/task proof before and after native create-only publication.
+Every archive reader validates an existing completion receipt against exact
+derived bytes; reject foreign/tampered or prematurely published receipts.
+The high-level helper can recreate a missing receipt after actual
+post-intent actor death using a fresh independently proven publisher, or
+verify/reuse an existing receipt. Keep all admission inhibitors active.
+The completion filename itself also blocks ordinary Windows ownership and
+reconciliation, case-insensitively, even if the intent is missing.
+Extend native tests with premature publication refusal, tampered completion
+preservation, repeated high-level completion and read-only method refusal.
+Fixture-only cleanup verifies exact receipt bytes before unlinking it and
+restoring original fixture paths. Actions acceptance is pending.
+
 `fae9048b / 40224702989`, job `121263501170`, passes the complete native
 commands/recovery run. Downloaded logs contain both actual first-entry
 death/fresh continuation and post-intent death/read-only actor receipts

@@ -367,7 +367,8 @@ function serviceMaintenanceEntry(name, allowLiveRetirement = false) {
   return entry.startsWith('service-')
     || (entry.startsWith('inactive-rollback-') && entry.endsWith('.json'))
     || (process.platform === 'win32' && entry.startsWith('retired-')
-      && entry.endsWith('-inactive-rollback-history-intent.json'))
+      && (entry.endsWith('-inactive-rollback-history-intent.json')
+        || entry.endsWith('-inactive-rollback-history-complete.json')))
     || ['task-maintenance', 'task-retirement.json', 'task-retirement-checkpoint.json'].includes(entry)
     || (!allowLiveRetirement && entry === 'live-retirement.json');
 }

@@ -11,6 +11,7 @@ import { openWindowsColdRetirementScope } from './windows-cold-retirement-scope.
 import {
   openWindowsInactiveRollbackRetirement, openWindowsInactiveRollbackWorkerRetirement,
   openWindowsInactiveRollbackHistoryArchive, openWindowsInactiveRollbackHistoryRetirement,
+  openWindowsInactiveRollbackHistoryCompletion,
 } from './windows-task-completion-recovery.mjs';
 import {
   openWindowsTaskCompletionProof, beginWindowsTaskRetirement, openWindowsTaskRetirement,
@@ -128,6 +129,12 @@ async function closeWindowsDeployment({
               await scope.close();
               scope = undefined;
             }
+            scope = await openWindowsInactiveRollbackHistoryCompletion({ control, pwsh, admission, signal });
+            checkProof(scope.observation);
+            await checkState();
+            await scope.completeHistory({ signal });
+            await scope.close();
+            scope = undefined;
             scope = await openWindowsInactiveRollbackHistoryArchive({ control, pwsh, admission, signal });
             checkProof(scope.observation);
             await scope.check({ signal });
