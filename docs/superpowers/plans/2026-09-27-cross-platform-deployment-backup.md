@@ -15887,6 +15887,13 @@ entry from both a partial archived prefix and post-finalization death,
 including repeated calls and wrong-project/copied-admission refusal.
 Production orchestration acceptance is pending; admission remains blocked.
 
+In the existing saved completed-closeout native fixture, require the new
+archive entry to reject ordinary accepted update/restore history through
+its exact stopped-rollback guard before any retirement. Preserve original
+control inventory identities and state bytes, then continue the unchanged
+saved closeout path. Run the existing seven native regression jobs to cover
+the shared closeout refactor independently of the long stopped-history run.
+
 `e379efdf / 40215606774` passes all seven native regression jobs:
 completed-deployment closeout, four prior-runtime recovery phases, snapshot
 and restoration, and managed discovery. This preserves those existing

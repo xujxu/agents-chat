@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 
 const [control, pwsh, mode] = process.argv.slice(2);
 const saved = name => import(pathToFileURL(path.join(control, 'recovery-engine', name)).href);
-const { closeCompletedWindowsDeployment } = await saved('windows-completed-closeout.mjs');
+const { closeCompletedWindowsDeployment, archiveCompletedWindowsInactiveRollback } = await saved('windows-completed-closeout.mjs');
 const { acquireLock, releaseLock, reconcileInterruptedOperation } = await saved('state.mjs');
 const { verifyRecoveryEngine, retirementRecoveryInvocation } = await saved('saved-recovery-engine.mjs');
 const bytes = await readFile(path.join(control, 'state.json'));
@@ -46,6 +46,11 @@ if (mode === 'checkpoint') {
     assert.deepEqual(await inventory(), initial);
     assert.deepEqual(await readFile(path.join(control, 'state.json')), bytes);
   }
+  await assert.rejects(archiveCompletedWindowsInactiveRollback(options), error =>
+    error.code === 'DEPLOYMENT_WINDOWS_COMPLETED_CLOSEOUT_REFUSED'
+    && error.cause?.message === 'History archival requires its exact original stopped rollback.');
+  assert.deepEqual(await inventory(), initial);
+  assert.deepEqual(await readFile(path.join(control, 'state.json')), bytes);
   for (const changed of [
     { phase: 'activation-unverified' },
     { updatedAt: new Date(Date.parse(state.updatedAt) + 1000).toISOString() },
