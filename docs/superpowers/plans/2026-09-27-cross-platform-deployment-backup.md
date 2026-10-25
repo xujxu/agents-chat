@@ -15676,6 +15676,15 @@ markers. Include the new PowerShell module in both explicit saved-worker
 closure lists. This is preparation only: partial archive recovery and
 deploy/update historical admission still require implementation.
 
+The archive-intent implementation run has passed its actual stopped cleanup
+phase and entered released-prefix regression at 10:33 UTC. Retain that run;
+add two focused safety cases for the next SHA: an occupied archive destination
+must be refused without overwriting foreign bytes, and a changed existing
+intent must be refused without repairing/replacing it. Restore only those
+deliberately altered fixture files afterward. The final full-matrix live job
+entered actual update/saved restoration at 10:24:22 UTC; no final acceptance
+is claimed before its result.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

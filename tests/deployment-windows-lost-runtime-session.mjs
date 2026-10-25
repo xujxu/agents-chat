@@ -177,6 +177,23 @@ const finishWorkers = async options => {
     try { await assert.rejects(contaminated.prepareHistory()); }
     finally { await contaminated.close(); }
   } finally { await unlink(foreignHistory); }
+  const collision = path.join(control, archive.entries[0].destination);
+  const foreignBytes = Buffer.from('foreign archive destination');
+  await writeFile(collision, foreignBytes, { flag: 'wx' });
+  try {
+    const occupied = await api.openWindowsInactiveRollbackWorkerRetirement(options);
+    try { await assert.rejects(occupied.prepareHistory()); }
+    finally { await occupied.close(); }
+    assert.deepEqual(await readFile(collision), foreignBytes);
+  } finally { await unlink(collision); }
+  const changedArchive = Buffer.from(JSON.stringify({ ...archive, retiredSha256: '0'.repeat(64) }));
+  await writeFile(archiveIntent.file, changedArchive);
+  try {
+    const changed = await api.openWindowsInactiveRollbackWorkerRetirement(options);
+    try { await assert.rejects(changed.prepareHistory()); }
+    finally { await changed.close(); }
+    assert.deepEqual(await readFile(archiveIntent.file), changedArchive);
+  } finally { await writeFile(archiveIntent.file, archiveBytes); }
   assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
   assert.deepEqual(await readFile(workerFile), before);
   assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), taskBefore);
