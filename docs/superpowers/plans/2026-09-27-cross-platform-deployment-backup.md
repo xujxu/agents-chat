@@ -15830,6 +15830,12 @@ premature/collision refusal, repeat finalization and archived read-only
 reopening. The job has reached its actual application update; whole-run
 acceptance and the newer post-crash finalization extension remain pending.
 
+The same `3ccefd40 / 40214300857` subsequently finishes successfully,
+including `Update actual application and verify saved restore outcome`.
+This accepts production finalization with its complete native prelude and
+actual failed-update application regression. Later post-intent actor-death
+and high-level archive orchestration changes retain separate pending runs.
+
 Extend the existing actual history-actor death fixture: the distinct fresh
 resumer must finish the real archived prefix and invoke production
 `finalizeHistory()`, then close and independently reopen the archived
