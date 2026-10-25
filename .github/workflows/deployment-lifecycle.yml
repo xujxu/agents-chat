@@ -226,8 +226,15 @@ jobs:
         shell: pwsh
         run: |
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
-          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep release-requested -ExternalInactiveRuntime -InactiveRollbackCrashStep task-restored
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep release-requested -ExternalInactiveRuntime -InactiveRollbackCrashStep task-restore-requested | Tee-Object -Variable historyOutput
           if ($LASTEXITCODE -ne 0) { throw 'Stopped-history native archival or saved-entry takeover failed.' }
+          foreach ($receipt in @(
+            'PASS: actual history writer death preserves its archived prefix and a distinct fresh actor completes exact native archival',
+            'PASS: death after final intent archival retains sealed evidence for a distinct fresh read-only actor',
+            'PASS: the exact verified saved entry resumes stopped history archival after actual actor death'
+          )) {
+            if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
+          }
 
   windows-live-deployment:
     if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_failed_application_only) && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_cold_started_only) && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_history_only && inputs.windows_restore_scenario == 'failed') }}

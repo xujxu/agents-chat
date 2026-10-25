@@ -15920,7 +15920,7 @@ negative awaits the next native run; do not replace active `40227357909`.
 
 Add an explicit focused dispatch selector `windows_history_only=true`,
 valid only with application/live/commands flags and scenario `failed`.
-Use an independent concurrency group and one native task-restored
+Use an independent concurrency group and one native task-restore-requested
 release-requested external-runtime fixture. That unchanged fixture exercises
 actual deletion, partial-prefix takeover, final intent movement, post-intent
 death, high-level closeout and the verified saved child plus repository-entry
@@ -15929,6 +15929,14 @@ refusal. Keep its original actor deadlines and use the existing native-job
 and repetition; the focused job must not claim actual Next.js application
 acceptance. Dispatch the new selector to validate the extra exact-entry
 negative without replacing either active broad native recovery run.
+
+`00b581ee / 40231260941` is green but does not accept the intended history
+boundary: downloaded job `121283286706` logs show that task-restored selects
+no terminal publication interruption, so its cleanup/archive block never
+runs. Correct the selector to task-restore-requested, which holds the
+state-staged boundary and enters actual cleanup. Require all three exact
+history-death/finalized-death/saved-entry PASS receipts in the job in addition
+to exit zero, preventing another success-shaped coverage omission.
 
 In the existing saved completed-closeout native fixture, require the new
 archive entry to reject ordinary accepted update/restore history through
