@@ -15450,6 +15450,15 @@ without waiting for or duplicating the active full-matrix concurrency group.
 This also prevents future native-only gates from overlooking saved-worker
 dependency closure. No new workflow, test framework or local validation.
 
+Red gate `29e4bbb3 / 40153887421` confirmed the exact one-second pending-send
+test timeout. All existing saved-worker cases passed, including exact manifest
+inventory and importing every saved module after checkout removal, accepting
+the Windows dependency-closure correction. Track pending send rejectors in
+`workerWire` and reject/clear them on the same recorded socket error/closure
+that rejects receives. Remove each rejector after normal write completion or
+failure. Preserve wire framing and successful callback semantics; native
+post-kill recovery and Linux closure acceptance still await Actions.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

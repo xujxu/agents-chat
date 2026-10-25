@@ -28,9 +28,12 @@ export function workerWire(socket) {
   let failure;
   let waiter;
   const queue = [];
+  const pendingWrites = new Set();
   const fail = error => {
     failure ??= error;
     if (waiter) { waiter.reject(failure); waiter = undefined; }
+    for (const reject of pendingWrites) reject(failure);
+    pendingWrites.clear();
   };
   socket.on('error', fail);
   socket.on('close', () => fail(new Error('Native worker transport closed.')));
@@ -77,7 +80,14 @@ export function workerWire(socket) {
       if (failure) throw failure;
       const bytes = `${JSON.stringify(frame)}\n`;
       if (Buffer.byteLength(bytes) > 131072) throw new Error('Native worker frame exceeds limit.');
-      await new Promise((resolve, reject) => socket.write(bytes, error => error ? reject(error) : resolve()));
+      let rejectWrite;
+      try {
+        await new Promise((resolve, reject) => {
+          rejectWrite = reject;
+          pendingWrites.add(reject);
+          socket.write(bytes, error => error ? reject(error) : resolve());
+        });
+      } finally { pendingWrites.delete(rejectWrite); }
     },
     close() { socket.destroy(); },
   };
