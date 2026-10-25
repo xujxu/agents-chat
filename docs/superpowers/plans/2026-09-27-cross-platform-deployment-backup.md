@@ -15508,6 +15508,15 @@ require the next full matrix to pass it as well. API monitoring hit quota
 while two default-frequency watchers ran; resume only after the server reset
 and use `gh run watch --interval 180` for subsequent long runs.
 
+The corrected full matrix passed all five non-live Windows application
+scenarios; the final live (`complete`) job is still executing its additional
+unacknowledged cold-launch/journal archival regressions after 06:06 UTC.
+That scenario already has a distinct 185-minute commands-only allowance,
+unlike the 115-minute failed selector. Include that existing allowance in
+the combined complete-job budget too: 185 native + 105 application + 10
+cleanup = 300 minutes. Keep every inner deadline and the commands-only
+limits unchanged. The active run is not cancelled or replaced.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
