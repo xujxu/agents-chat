@@ -15919,6 +15919,13 @@ stopped-history invocation and unchanged recovery-generation behavior.
 The actual saved-entry child and subsequent exact-entry negative retain
 separate native acceptance requirements.
 
+`ccdbd389 / 40227357909` passes all three selected native jobs.
+Downloaded recovery job `121271462295` logs contain the exact verified
+saved-entry actor-death takeover receipt three times, accepting the real
+saved child from a partial prefix through finalization and independent
+proof. This commands-only run does not accept actual application behavior
+or the later repository-entry refusal negative.
+
 Before the saved-entry positive child, invoke the repository entry with
 the same valid saved manifest and arguments. Require explicit failure with
 no success output and exact unchanged prepared intent/state, then invoke
