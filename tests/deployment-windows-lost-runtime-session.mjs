@@ -281,6 +281,21 @@ const finishWorkers = async options => {
       assert.equal(fullyArchived.advance, undefined);
       assert.equal(fullyArchived.prepareHistory, undefined);
     } finally { await fullyArchived.close(); }
+    const intentArgs = [...moveArgs.slice(0, -1), 'inactive-rollback-history-intent.json',
+      '-Intent', '-OperationId', archive.operationId];
+    const movedIntent = await promisify(execFile)(pwsh, intentArgs, { timeout: 60000, maxBuffer: 8192 });
+    assert.equal(movedIntent.stderr, '');
+    try {
+      const { requireNoServiceMaintenance } = await load('state.mjs');
+      await assert.rejects(requireNoServiceMaintenance(control));
+      const archivedIntent = await api.openWindowsInactiveRollbackHistoryArchive(options);
+      try { assert.equal((await archivedIntent.check()).status, 'retired'); }
+      finally { await archivedIntent.close(); }
+      await assert.rejects(api.openWindowsInactiveRollbackHistoryRetirement(options));
+    } finally {
+      const restored = await promisify(execFile)(pwsh, [...intentArgs, '-Restore'], { timeout: 60000, maxBuffer: 8192 });
+      assert.equal(restored.stderr, '');
+    }
   } finally {
     for (const args of archived.reverse()) {
       const restored = await promisify(execFile)(pwsh, [...args, '-Restore'], { timeout: 60000, maxBuffer: 8192 });

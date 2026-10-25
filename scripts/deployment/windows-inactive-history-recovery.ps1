@@ -1,5 +1,23 @@
 function Initialize-AgentsChatStoppedHistoryRecovery([hashtable]$Context) {
     $path = Join-Path $Context.Control 'inactive-rollback-history-intent.json'
+    $archivedIntent = -not (Test-Path -LiteralPath $path)
+    if ($archivedIntent) {
+        if ($Context.ContainsKey('HistoryWriter') -and $Context.HistoryWriter) {
+            throw 'Archived history intent requires independent read-only verification.'
+        }
+        $state = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'state.json') ''
+        $document = [Text.Json.JsonDocument]::Parse($state.ReadText())
+        try {
+            $fields = @($document.RootElement.EnumerateObject() | Where-Object { $_.Name -ieq 'operationId' })
+            if ($fields.Count -ne 1 -or $fields[0].Name -cne 'operationId' -or
+                $fields[0].Value.ValueKind -ne [Text.Json.JsonValueKind]::String) {
+                throw 'Archived history requires one exact original state operation.'
+            }
+            $operation = $fields[0].Value.GetString()
+            Assert-AgentsChatCompletionGuid $operation
+            $path = Join-Path $Context.Control "retired-$operation-inactive-rollback-history-intent.json"
+        } finally { $document.Dispose() }
+    }
     $original = Open-AgentsChatCompletionFile $Context $path ''
     if ($original.ByteLength -gt 65536) { throw 'Oversized stopped history archive intent.' }
     $record = Read-AgentsChatRetirementJson ($original.ReadText())
@@ -15,6 +33,11 @@ function Initialize-AgentsChatStoppedHistoryRecovery([hashtable]$Context) {
         throw 'Invalid stopped history archive scope.'
     }
     Assert-AgentsChatCompletionGuid $record.operationId
+    if ($archivedIntent -and $record.operationId -cne $operation) { throw 'Archived history operation differs.' }
+    if (-not $archivedIntent -and
+        (Test-Path -LiteralPath (Join-Path $Context.Control "retired-$($record.operationId)-inactive-rollback-history-intent.json"))) {
+        throw 'Duplicate stopped history archive intent.'
+    }
     Assert-AgentsChatRetirementIdentity $record.controlIdentity
     $names = Get-AgentsChatStoppedHistoryNames ($record.entries.Count -eq 12)
     $paths = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
@@ -33,7 +56,8 @@ function Initialize-AgentsChatStoppedHistoryRecovery([hashtable]$Context) {
         $destination = Join-Path $Context.Control $entry.destination
         $sourcePresent = Test-Path -LiteralPath $source
         $archivePresent = Test-Path -LiteralPath $destination
-        if ($sourcePresent -eq $archivePresent -or ($archivePresent -and $active)) {
+        if ($sourcePresent -eq $archivePresent -or ($archivePresent -and $active) -or
+            ($archivedIntent -and $sourcePresent)) {
             throw 'Stopped history archive has a missing, duplicate or non-prefix entry.'
         }
         if ($sourcePresent) { $active = $true }
@@ -48,6 +72,7 @@ function Initialize-AgentsChatStoppedHistoryRecovery([hashtable]$Context) {
         $path, $hash, $identity.Dev, $identity.Ino, $bytes)
     $Context.Files.Add($Context.HistoryIntent)
     $Context.HistoryRecord = $record
+    $Context.HistoryIntentPath = $path
     $Context.HistoryPaths = $paths
     $Context.HistoryFiles = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
 }
@@ -65,7 +90,7 @@ function Assert-AgentsChatStoppedHistoryRecovery([hashtable]$Context) {
     $names = Get-AgentsChatStoppedHistoryNames ($Context.ContainsKey('RuntimeHandoffReleased'))
     if ($names.Count -ne $record.entries.Count) { throw 'Stopped history archive runtime inventory differs.' }
     $expected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    $null = $expected.Add('inactive-rollback-history-intent.json')
+    $null = $expected.Add([IO.Path]::GetFileName($Context.HistoryIntentPath))
     foreach ($entry in $record.entries) {
         $source = Join-Path $Context.Control $entry.path
         $destination = Join-Path $Context.Control $entry.destination

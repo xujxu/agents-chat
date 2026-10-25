@@ -34,7 +34,9 @@ test('native task maintenance evidence blocks unlock, new admission and automati
 
 for (const marker of ['task-retirement.json', 'task-retirement-checkpoint.json',
   'inactive-rollback-intent.json', 'inactive-rollback-retirement.json',
-  'inactive-rollback-workers.json', 'inactive-rollback-retired.json']
+  'inactive-rollback-workers.json', 'inactive-rollback-retired.json',
+  ...(process.platform === 'win32'
+    ? ['retired-12345678-1234-1234-1234-123456789abc-inactive-rollback-history-intent.json'] : [])]
   .flatMap(name => process.platform === 'win32' ? [name, name.toUpperCase()] : [name])) {
   test(`${marker} blocks ordinary ownership even without the task receipt directory`, async t => {
     const root = await temporaryDeployment(t);

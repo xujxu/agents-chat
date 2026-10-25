@@ -15788,6 +15788,25 @@ The paired selector uses a distinct concurrency group and omits the normal
 seven restore jobs. Default/full dispatches retain both Contracts platforms
 and all existing jobs, test selections, repetitions and time budgets.
 
+`0980e9a3 / 40202482025` passes the complete Windows Contracts workload and
+all five recovery repetitions unchanged. Keep the failure-only cold trace:
+this is an acceptance receipt, not a demonstrated root-cause fix for the
+earlier full-matrix timeout.
+
+Prepare the final archive-handoff verification boundary without enabling
+ordinary reentry or moving the production intent. A fixture moves the
+prepared intent last, after all entries are archived. The independent
+read-only opener selects only the exact archived intent named by the pinned
+current state's single canonical operation ID, then still validates the
+entire original worker/task/state/runtime proof and complete archived prefix.
+Reject duplicate active/archived intents and writer access to this finalized
+namespace. Ordinary Windows maintenance must continue to reject archived
+history intents, case-insensitively, until a dedicated verified admission
+handoff is implemented. The fixture restores the exact intent natively
+before restoring the other fixture entries. Production intent finalization
+and normal deploy/update admission remain unsupported; Actions acceptance
+of this read-only boundary is pending.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
