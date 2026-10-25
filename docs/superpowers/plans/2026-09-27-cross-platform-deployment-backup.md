@@ -15916,6 +15916,14 @@ process-exit observations. Revalidate the original cancellation scenario
 with its full native prelude in the independent Windows-commands dispatch
 group; retain the ongoing history-boundary and full-matrix runs.
 
+`75343531 / 40212977738` passes all three selected jobs, including the
+previously failing inactive-task prelude and duplicate/tampered archived
+intent negatives. Step-level inspection confirms that commands-only mode
+skipped `Update actual application and verify saved restore outcome`;
+therefore this is prelude acceptance, not actual cancellation acceptance.
+Dispatch cancellation again without commands-only mode in the independent
+Windows-application group to exercise the actual application outcome.
+
 Run the exact failed-update actual-application test without repeating the
 already-validated long native prelude:
 
