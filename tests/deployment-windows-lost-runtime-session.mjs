@@ -228,6 +228,12 @@ const drainRetirement = async (options, entries, expectedState, expectedReceipt,
   assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), retirementBefore);
   assert.equal(typeof api.openWindowsInactiveRollbackWorkerRetirement, 'function',
     'Missing independent stopped worker cleanup resumption');
+  const prematureHistory = await api.openWindowsInactiveRollbackWorkerRetirement(options);
+  try {
+    assert.equal(typeof prematureHistory.prepareHistory, 'function', 'Missing stopped history retirement guard');
+    await assert.rejects(prematureHistory.prepareHistory());
+  } finally { await prematureHistory.close(); }
+  await assert.rejects(lstat(path.join(control, 'inactive-rollback-history-intent.json')), { code: 'ENOENT' });
   const workers = await api.openWindowsInactiveRollbackWorkerRetirement(options);
   try {
     assert.equal((await workers.check()).retiredEntries, 0);

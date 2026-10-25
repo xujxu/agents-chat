@@ -56,6 +56,7 @@ const files = [
   'windows-inactive-rollback-cleanup.ps1',
   'windows-inactive-rollback-workers.ps1',
   'windows-inactive-worker-cleanup.ps1',
+  'windows-inactive-history-archive.ps1',
   'windows-cold-terminal-state.ps1',
   'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-copy.mjs', 'snapshot-scope.mjs',
   'snapshot-external.mjs', 'snapshot-rotation.mjs', 'snapshot-git.mjs',

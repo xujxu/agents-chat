@@ -15657,6 +15657,25 @@ File/parent ACL-change refusals remain required. This primitive does not
 archive rollback history itself, make partial archival resumable or enable
 ordinary deploy/update reentry; those integrations remain unfinished.
 
+Native archival primitive `817ce943` / `40180470586` passed all seven
+focused jobs, including the new private-file archival gate and both saved
+completed-closeout scenarios. Proceed with the next bounded prerequisite:
+prepare an immutable original-history manifest only after final stopped
+worker retirement. Test-first `d34b8856` / `40181986701` requires exact
+ordered original names, hashes/lengths and operation-bound same-parent
+destinations, repeat/fresh-scope byte stability, no actual moves, and unknown
+history refusal. Implementation additionally rejects preparation before the
+final retirement receipt and preserves its original lock-free state.
+
+The new native helper captures worker/task checkpoints from the existing
+exclusive handles, not pathname reopens. It binds original control identity,
+project/operation, state digest and final retirement digest; scans the exact
+bounded rollback inventory before capture/publication and after publication.
+It preserves installed runtime directories, source files and all original
+markers. Include the new PowerShell module in both explicit saved-worker
+closure lists. This is preparation only: partial archive recovery and
+deploy/update historical admission still require implementation.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

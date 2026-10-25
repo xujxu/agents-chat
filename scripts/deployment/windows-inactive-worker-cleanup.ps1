@@ -1,5 +1,6 @@
 . (Join-Path $PSScriptRoot 'windows-inactive-rollback-cleanup.ps1')
 . (Join-Path $PSScriptRoot 'windows-deployment-retirement.ps1')
+. (Join-Path $PSScriptRoot 'windows-inactive-history-archive.ps1')
 
 function Assert-AgentsChatStoppedWorkerPlan([hashtable]$Context, $Record) {
     Assert-AgentsChatRetirementFields $Record @('version', 'phase', 'control', 'project', 'operationId',

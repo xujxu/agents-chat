@@ -229,9 +229,10 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
         return;
       }
       if (retirement || workers) {
-        if (method === 'prepare-stopped-workers') {
+        if (method === 'prepare-stopped-workers' || method === 'prepare-stopped-history') {
           const prepared = captureWorkerFields(reply.value, ['file', 'sha256'], 'stopped worker retirement checkpoint');
-          if (prepared.file !== path.join(control, 'inactive-rollback-workers.json')
+          if (prepared.file !== path.join(control, method === 'prepare-stopped-history'
+            ? 'inactive-rollback-history-intent.json' : 'inactive-rollback-workers.json')
             || typeof prepared.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(prepared.sha256)) {
             throw new Error('Invalid stopped worker retirement checkpoint acknowledgement.');
           }
@@ -369,6 +370,9 @@ async function openCompletionRecovery({ control, pwsh, admission, signal }, inac
       check: ({ signal: requestSignal } = {}) => request('check', requestSignal),
       ...(retirement ? {
         prepareWorkers: ({ signal: requestSignal } = {}) => request('prepare-stopped-workers', requestSignal),
+      } : {}),
+      ...(workers ? {
+        prepareHistory: ({ signal: requestSignal } = {}) => request('prepare-stopped-history', requestSignal),
       } : {}),
       ...(lost ? {} : { advance: ({ signal: requestSignal } = {}) => request('advance', requestSignal) }),
       close: async () => { if (!closed) await request('close'); },
