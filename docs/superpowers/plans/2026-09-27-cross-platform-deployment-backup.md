@@ -15942,6 +15942,15 @@ therefore this is prelude acceptance, not actual cancellation acceptance.
 Dispatch cancellation again without commands-only mode in the independent
 Windows-application group to exercise the actual application outcome.
 
+The old `00b6f492 / 40207894040` full matrix finishes with 53 successes,
+one failure and no cancellation. Actual live, failed, crashed, copy-crashed
+and offline application jobs all pass. Its sole failure remains the
+inactive-task process-exit identity race in cancellation's native prelude,
+fixed and independently accepted afterward. Do not call this a green
+matrix or combine different SHAs into same-commit acceptance. Run the
+unchanged full dual-platform matrix again at the current implementation,
+including production finalization and post-intent death recovery coverage.
+
 Run the exact failed-update actual-application test without repeating the
 already-validated long native prelude:
 
