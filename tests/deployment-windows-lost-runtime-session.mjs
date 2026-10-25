@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile, readdir, writeFile, unlink, lstat, rename } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 
 const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored', terminalCrashStep = ''] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
@@ -195,6 +197,31 @@ const finishWorkers = async options => {
     assert.deepEqual(await readFile(archiveIntent.file), changedArchive);
   } finally { await writeFile(archiveIntent.file, archiveBytes); }
   assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
+  assert.equal(typeof api.openWindowsInactiveRollbackHistoryArchive, 'function',
+    'Missing independent mixed-namespace stopped history verification');
+  const mixedEntry = archive.entries[0];
+  const moveArgs = ['-NoProfile', '-NonInteractive', '-File',
+    fileURLToPath(new URL('./deployment-windows-history-archive-entry.ps1', import.meta.url)),
+    '-Source', source, '-Control', control, '-Name', mixedEntry.path];
+  const moved = await promisify(execFile)(pwsh, moveArgs, { timeout: 60000, maxBuffer: 8192 });
+  assert.equal(moved.stderr, '');
+  try {
+    await assert.rejects(api.openWindowsInactiveRollbackWorkerRetirement(options));
+    const mixed = await api.openWindowsInactiveRollbackHistoryArchive(options);
+    try {
+      assert.equal((await mixed.check()).status, 'retired');
+      assert.equal(mixed.advance, undefined);
+      assert.equal(mixed.prepareHistory, undefined);
+      await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
+      assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
+      await assert.rejects(lstat(path.join(control, mixedEntry.path)), { code: 'ENOENT' });
+      assert.equal(createHash('sha256').update(await readFile(path.join(control, mixedEntry.destination))).digest('hex'),
+        mixedEntry.sha256);
+    } finally { await mixed.close(); }
+  } finally {
+    const restored = await promisify(execFile)(pwsh, [...moveArgs, '-Restore'], { timeout: 60000, maxBuffer: 8192 });
+    assert.equal(restored.stderr, '');
+  }
   assert.deepEqual(await readFile(workerFile), before);
   assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), taskBefore);
   await writeFile(finalFile, Buffer.from(JSON.stringify({ ...JSON.parse(finalBefore), restoredRuntime: 'running' })));
