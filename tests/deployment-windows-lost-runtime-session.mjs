@@ -238,6 +238,17 @@ const finishWorkers = async options => {
   const archived = [];
   assert.equal(typeof api.openWindowsInactiveRollbackHistoryRetirement, 'function',
     'Missing identity-bound ordered native history archival');
+  const blockedWriter = await api.openWindowsInactiveRollbackHistoryRetirement(options);
+  try {
+    await writeFile(collision, foreignBytes, { flag: 'wx' });
+    try {
+      await assert.rejects(blockedWriter.advance());
+      assert.deepEqual(await readFile(collision), foreignBytes);
+    } finally { await unlink(collision); }
+  } finally { await blockedWriter.close(); }
+  assert.equal(createHash('sha256').update(await readFile(path.join(control, mixedEntry.path))).digest('hex'),
+    mixedEntry.sha256);
+  assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
   try {
     const archiveWriter = await api.openWindowsInactiveRollbackHistoryRetirement(options);
     try {
