@@ -15822,6 +15822,14 @@ read-only reopening, and unchanged state assertions. Runtime stays in place
 and the archived-intent maintenance inhibitor remains active. Acceptance
 of production finalization is pending.
 
+Step-level acceptance at `3ccefd40 / 40214300857`, job `121232012625`:
+stopped rollback interruption/actual cleanup, inactive task observation/
+released-prefix recovery, and native recovery/original restore regressions
+all pass. These stages exercise actual production intent finalization,
+premature/collision refusal, repeat finalization and archived read-only
+reopening. The job has reached its actual application update; whole-run
+acceptance and the newer post-crash finalization extension remain pending.
+
 Extend the existing actual history-actor death fixture: the distinct fresh
 resumer must finish the real archived prefix and invoke production
 `finalizeHistory()`, then close and independently reopen the archived
