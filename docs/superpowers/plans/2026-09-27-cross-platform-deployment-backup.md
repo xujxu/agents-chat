@@ -15830,6 +15830,18 @@ these assertions may the fixture natively restore the intent and entries,
 retaining the original host's exact state/intent assertions. This accepts
 neither ordinary admission nor an application restart; Actions is pending.
 
+Remaining admission-transfer constraint: the original stopped-history proof
+requires the old lock to be absent, while normal `acquireLockAdmitted`
+creates a new lock only after maintenance checks. `releaseLockAdmitted` and
+interrupted-operation reconciliation also enforce those checks. Therefore
+neither a general archived-intent exception nor closing the proof and then
+creating an unbound lock is sufficient. Any subsequent transfer must bind
+the exact new owner under retained Windows admission, define recovery for
+death before/after lock publication, preserve the old state until the new
+operation records its first phase, and keep release/reconciliation consistent.
+Do not enable an ordinary-admission exception while this transition remains
+unimplemented. The current finalization API intentionally stops short of it.
+
 `e379efdf / 40215606774` passes all seven native regression jobs:
 completed-deployment closeout, four prior-runtime recovery phases, snapshot
 and restoration, and managed discovery. This preserves those existing
