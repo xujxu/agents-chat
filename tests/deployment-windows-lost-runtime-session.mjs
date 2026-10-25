@@ -422,6 +422,16 @@ if (mode === 'resume-history-saved') {
   const command = retirementRecoveryInvocation(saved, {
     control, project: originalState.project, operationId: originalState.operationId, kind: 'stopped-history', pwsh,
   });
+  const preparedIntent = await readFile(path.join(control, 'inactive-rollback-history-intent.json'));
+  await assert.rejects(promisify(execFile)(command.file, [
+    fileURLToPath(new URL('../scripts/deployment/retirement-recovery-entry.mjs', import.meta.url)),
+    ...command.args.slice(1),
+  ], {
+    env: command.env, cwd: control, timeout: 120000, maxBuffer: 8192,
+  }), error => error.code === 1 && error.stdout === ''
+    && error.stderr.startsWith('Retirement recovery failed; retain lock and evidence for inspection.'));
+  assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-history-intent.json')), preparedIntent);
+  assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
   const result = await promisify(execFile)(command.file, command.args, {
     env: command.env, cwd: control, timeout: 120000, maxBuffer: 8192,
   });

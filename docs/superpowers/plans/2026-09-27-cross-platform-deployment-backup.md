@@ -15905,6 +15905,13 @@ saved-entry child from a first-entry actor-death prefix, requiring exact
 state/intent assertions. This is saved private recovery, not a new public
 restore.ps1 support claim. Actions acceptance is pending.
 
+Before the saved-entry positive child, invoke the repository entry with
+the same valid saved manifest and arguments. Require explicit failure with
+no success output and exact unchanged prepared intent/state, then invoke
+the verified saved path successfully. This pins exact-entry enforcement
+for the new kind rather than merely checking its argv encoding. The extra
+negative awaits the next native run; do not replace active `40227357909`.
+
 In the existing saved completed-closeout native fixture, require the new
 archive entry to reject ordinary accepted update/restore history through
 its exact stopped-rollback guard before any retirement. Preserve original
