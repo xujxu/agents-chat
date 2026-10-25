@@ -15894,6 +15894,14 @@ entry from both a partial archived prefix and post-finalization death,
 including repeated calls and wrong-project/copied-admission refusal.
 Production orchestration acceptance is pending; admission remains blocked.
 
+`fae9048b / 40224702989`, job `121263501170`, passes the complete native
+commands/recovery run. Downloaded logs contain both actual first-entry
+death/fresh continuation and post-intent death/read-only actor receipts
+three times, exercising the high-level helper's partial and finalized
+paths, repetition and refusal cases. The actual application step is
+skipped. This accepts private high-level orchestration, not the later
+verified saved child or ordinary deployment admission.
+
 Wire that private archive helper through the exact verified saved recovery
 entry with an explicit Windows-only `stopped-history` kind. Preserve
 worker/task/service defaults, canonical PowerShell requirements, sanitized
