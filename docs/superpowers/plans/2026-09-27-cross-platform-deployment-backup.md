@@ -15838,6 +15838,16 @@ these assertions may the fixture natively restore the intent and entries,
 retaining the original host's exact state/intent assertions. This accepts
 neither ordinary admission nor an application restart; Actions is pending.
 
+Also kill a real writer after production finalization has moved the intent,
+while its native bridge still retains the sealed proof. Require both actor
+and bridge to exit, exact archived intent digest and absent active intent.
+A different fresh actor must then open only the archived read-only proof,
+reject writer access and ordinary maintenance admission, and preserve exact
+original state. The fixture restores original paths only after acceptance.
+Run both the existing first-entry death boundary and this new post-intent
+death boundary without increasing their per-actor deadlines. Actions
+acceptance of the additional death boundary is pending.
+
 Remaining admission-transfer constraint: the original stopped-history proof
 requires the old lock to be absent, while normal `acquireLockAdmitted`
 creates a new lock only after maintenance checks. `releaseLockAdmitted` and

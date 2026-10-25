@@ -475,56 +475,65 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $history = Get-Content -LiteralPath $historyIntent -Raw | ConvertFrom-Json
                     $historyHash = (Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash
                     $historyStateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
-                    $archiver = [Deployment.WindowsControllerProcess]::Start($node,
-                        @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
-                            $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
-                            'crash-history'), $control, $environment)
-                    try {
-                        $diagnostic = $archiver.StandardError.ReadToEndAsync()
-                        $line = $archiver.StandardOutput.ReadLineAsync()
-                        Assert ($line.Wait(120000)) 'History writer did not reach its actual archived prefix'
-                        $text = $line.GetAwaiter().GetResult()
-                        if ($null -eq $text) {
-                            Assert ($archiver.WaitForExit(15000)) 'History writer closed output without exiting'
-                            [Console]::Error.WriteLine($diagnostic.GetAwaiter().GetResult())
-                        }
-                        Assert ($null -ne $text -and $text.StartsWith('INACTIVE_HISTORY_ARCHIVE_HELD ')) `
-                            'History writer exited before its held native archive'
-                        $historyActor = $text.Substring('INACTIVE_HISTORY_ARCHIVE_HELD '.Length)
-                        $held = $historyActor | ConvertFrom-Json
-                        Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($held.pid) -ceq $held.processIdentity) `
-                            'History writer did not retain its original native bridge'
-                        $bridge = [Diagnostics.Process]::GetProcessById($held.pid)
+                    foreach ($historyBoundary in @('history', 'finalized-history')) {
+                        $archiver = [Deployment.WindowsControllerProcess]::Start($node,
+                            @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                                $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                                "crash-$historyBoundary"), $control, $environment)
                         try {
-                            $archiver.Kill()
-                            Assert ($archiver.WaitForExit(15000)) 'History writer survived actual actor death'
-                            Assert ($bridge.WaitForExit(15000)) 'History bridge survived original actor death'
-                        } finally { $bridge.Dispose() }
-                        $errors = $diagnostic.GetAwaiter().GetResult()
-                        if ($errors) { [Console]::Error.WriteLine($errors) }
-                    } finally { $archiver.Dispose() }
-                    $entry = $history.entries[0]
-                    Assert (-not (Test-Path -LiteralPath (Join-Path $control $entry.path))) `
-                        'Writer death restored the original history pathname'
-                    Assert ((Get-FileHash -LiteralPath (Join-Path $control $entry.destination) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $entry.sha256) `
-                        'Writer death lost the exact archived original'
-                    $historyResumer = [Deployment.WindowsControllerProcess]::Start($node,
-                        @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
-                            $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
-                            'resume-history', $historyActor), $control, $environment)
-                    try {
-                        $output = $historyResumer.StandardOutput.ReadToEndAsync()
-                        $diagnostic = $historyResumer.StandardError.ReadToEndAsync()
-                        Assert ($historyResumer.WaitForExit(120000)) 'Fresh history actor takeover timed out'
-                        Write-Output $output.GetAwaiter().GetResult()
-                        $errors = $diagnostic.GetAwaiter().GetResult()
-                        if ($errors) { [Console]::Error.WriteLine($errors) }
-                        Assert ($historyResumer.ExitCode -eq 0) 'Fresh actor could not resume actual history archival'
-                    } finally { $historyResumer.Dispose() }
-                    Assert ((Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash -ceq $historyHash -and
-                        (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq $historyStateHash) `
-                        'History actor takeover changed prepared intent or original state'
+                            $diagnostic = $archiver.StandardError.ReadToEndAsync()
+                            $line = $archiver.StandardOutput.ReadLineAsync()
+                            Assert ($line.Wait(120000)) 'History writer did not reach its actual archived prefix'
+                            $text = $line.GetAwaiter().GetResult()
+                            if ($null -eq $text) {
+                                Assert ($archiver.WaitForExit(15000)) 'History writer closed output without exiting'
+                                [Console]::Error.WriteLine($diagnostic.GetAwaiter().GetResult())
+                            }
+                            Assert ($null -ne $text -and $text.StartsWith('INACTIVE_HISTORY_ARCHIVE_HELD ')) `
+                                'History writer exited before its held native archive'
+                            $historyActor = $text.Substring('INACTIVE_HISTORY_ARCHIVE_HELD '.Length)
+                            $held = $historyActor | ConvertFrom-Json
+                            Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($held.pid) -ceq $held.processIdentity) `
+                                'History writer did not retain its original native bridge'
+                            $bridge = [Diagnostics.Process]::GetProcessById($held.pid)
+                            try {
+                                $archiver.Kill()
+                                Assert ($archiver.WaitForExit(15000)) 'History writer survived actual actor death'
+                                Assert ($bridge.WaitForExit(15000)) 'History bridge survived original actor death'
+                            } finally { $bridge.Dispose() }
+                            $errors = $diagnostic.GetAwaiter().GetResult()
+                            if ($errors) { [Console]::Error.WriteLine($errors) }
+                        } finally { $archiver.Dispose() }
+                        $entry = $history.entries[0]
+                        Assert (-not (Test-Path -LiteralPath (Join-Path $control $entry.path))) `
+                            'Writer death restored the original history pathname'
+                        Assert ((Get-FileHash -LiteralPath (Join-Path $control $entry.destination) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $entry.sha256) `
+                            'Writer death lost the exact archived original'
+                        if ($historyBoundary -ceq 'finalized-history') {
+                            Assert (-not (Test-Path -LiteralPath $historyIntent)) 'Finalized actor death restored active intent'
+                            $archivedIntent = Join-Path $control "retired-$($history.operationId)-inactive-rollback-history-intent.json"
+                            Assert ((Get-FileHash -LiteralPath $archivedIntent -Algorithm SHA256).Hash -ceq $historyHash) `
+                                'Finalized actor death lost the original archived intent'
+                        }
+                        $historyResumer = [Deployment.WindowsControllerProcess]::Start($node,
+                            @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                                $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                                "resume-$historyBoundary", $historyActor), $control, $environment)
+                        try {
+                            $output = $historyResumer.StandardOutput.ReadToEndAsync()
+                            $diagnostic = $historyResumer.StandardError.ReadToEndAsync()
+                            Assert ($historyResumer.WaitForExit(120000)) 'Fresh history actor takeover timed out'
+                            Write-Output $output.GetAwaiter().GetResult()
+                            $errors = $diagnostic.GetAwaiter().GetResult()
+                            if ($errors) { [Console]::Error.WriteLine($errors) }
+                            Assert ($historyResumer.ExitCode -eq 0) 'Fresh actor could not resume actual history archival'
+                        } finally { $historyResumer.Dispose() }
+                        Assert ((Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash -ceq $historyHash -and
+                            (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq $historyStateHash) `
+                            'History actor takeover changed prepared intent or original state'
+                    }
                     Write-Output 'PASS: actual history writer death preserves its archived prefix and a distinct fresh actor completes exact native archival'
+                    Write-Output 'PASS: death after final intent archival retains sealed evidence for a distinct fresh read-only actor'
                     Write-Output 'PASS: stopped task and worker cleanup survive real actor death, retire exact history, release original lock and retain final receipt'
                 }
             }

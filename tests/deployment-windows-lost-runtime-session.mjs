@@ -417,42 +417,56 @@ const drainRetirement = async (options, entries, expectedState, expectedReceipt,
 };
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
-  if (mode === 'crash-history' || mode === 'resume-history') {
-    await retainOriginalRuntimeAbsence();
+  if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history'].includes(mode)) {
+    if (mode !== 'resume-finalized-history') await retainOriginalRuntimeAbsence();
     const intentFile = path.join(control, 'inactive-rollback-history-intent.json');
-    const originalIntent = await readFile(intentFile);
+    const finalizedResume = mode === 'resume-finalized-history';
+    const originalIntent = await readFile(finalizedResume
+      ? path.join(control, `retired-${JSON.parse(state).operationId}-inactive-rollback-history-intent.json`)
+      : intentFile);
     const intent = JSON.parse(originalIntent);
-    if (mode === 'resume-history') {
+    if (mode === 'resume-history' || finalizedResume) {
       const previous = JSON.parse(crashStep);
       assert.notEqual(await processIdentity(process.pid), previous.actorIdentity);
       assert.notEqual(await processIdentity(previous.pid), previous.processIdentity);
     }
-    const writer = await api.openWindowsInactiveRollbackHistoryRetirement(options);
-    try {
-      assert.equal(writer.observation.archivedEntries, mode === 'crash-history' ? 0 : 1);
-      if (mode === 'crash-history') {
-        assert.equal((await writer.advance()).archivedEntries, 1);
-        console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({
-          ...writer.identity, actorIdentity: await processIdentity(process.pid),
-        })}`);
-        const timer = setInterval(() => {}, 1000);
-        try { await new Promise(() => {}); } finally { clearInterval(timer); }
-      }
-      for (let prefix = 2; prefix <= intent.entries.length; prefix++) {
-        const advanced = await writer.advance();
-        assert.equal(advanced.archivedEntries, prefix);
-        assert.deepEqual(await writer.check(), advanced);
-      }
-      assert.equal(writer.observation.status, 'archived');
-      assert.deepEqual(await writer.finalizeHistory(), {
-        file: path.join(control, `retired-${intent.operationId}-inactive-rollback-history-intent.json`),
-        sha256: createHash('sha256').update(originalIntent).digest('hex'),
-      });
-    } finally { await writer.close(); }
+    if (!finalizedResume) {
+      const writer = await api.openWindowsInactiveRollbackHistoryRetirement(options);
+      try {
+        assert.equal(writer.observation.archivedEntries, mode === 'resume-history' ? 1 : 0);
+        if (mode === 'crash-history') {
+          assert.equal((await writer.advance()).archivedEntries, 1);
+          console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({
+            ...writer.identity, actorIdentity: await processIdentity(process.pid),
+          })}`);
+          const timer = setInterval(() => {}, 1000);
+          try { await new Promise(() => {}); } finally { clearInterval(timer); }
+        }
+        for (let prefix = writer.observation.archivedEntries + 1; prefix <= intent.entries.length; prefix++) {
+          const advanced = await writer.advance();
+          assert.equal(advanced.archivedEntries, prefix);
+          assert.deepEqual(await writer.check(), advanced);
+        }
+        assert.equal(writer.observation.status, 'archived');
+        assert.deepEqual(await writer.finalizeHistory(), {
+          file: path.join(control, `retired-${intent.operationId}-inactive-rollback-history-intent.json`),
+          sha256: createHash('sha256').update(originalIntent).digest('hex'),
+        });
+        if (mode === 'crash-finalized-history') {
+          console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({
+            ...writer.identity, actorIdentity: await processIdentity(process.pid),
+          })}`);
+          const timer = setInterval(() => {}, 1000);
+          try { await new Promise(() => {}); } finally { clearInterval(timer); }
+        }
+      } finally { await writer.close(); }
+    }
     const proof = await api.openWindowsInactiveRollbackHistoryArchive(options);
     try { assert.equal((await proof.check()).status, 'retired'); }
     finally { await proof.close(); }
     await assert.rejects(api.openWindowsInactiveRollbackHistoryRetirement(options));
+    const { requireNoServiceMaintenance } = await load('state.mjs');
+    await assert.rejects(requireNoServiceMaintenance(control));
     const restoredIntent = await promisify(execFile)(pwsh, ['-NoProfile', '-NonInteractive', '-File',
       fileURLToPath(new URL('./deployment-windows-history-archive-entry.ps1', import.meta.url)),
       '-Source', source, '-Control', control, '-Name', 'inactive-rollback-history-intent.json',
