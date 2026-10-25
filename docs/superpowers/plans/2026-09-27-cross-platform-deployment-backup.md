@@ -15542,6 +15542,14 @@ validation), native checkpoint validation and ordered deletion APIs. The red
 run is still executing; neither red nor implementation acceptance is claimed.
 All existing per-file and actor-death assertions remain.
 
+The causal run ended with the expected native `acquire/busy` refusal in
+`finishWorkers`: the old helper ignored the supplied retained admission and
+tried to acquire a second one. Implementation `af84a3f3` is running in
+`40172120759`. Restrict the new dispatch itself to
+`stopped/restored/previousPhase=accepted`; leave accepted deployments,
+prior-runtime restoration and other saved-restore states on their original
+closeout paths rather than intercepting every stopped-origin state.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

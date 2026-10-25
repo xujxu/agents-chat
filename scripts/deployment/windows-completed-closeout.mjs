@@ -66,8 +66,8 @@ export async function closeCompletedWindowsDeployment({
       let scope;
       let failure;
       try {
-        if (state.priorRuntime === 'stopped') {
-          if (state.operation !== 'update' || state.phase !== 'restored' || state.previousPhase !== 'accepted') {
+        if (state.priorRuntime === 'stopped' && state.phase === 'restored' && state.previousPhase === 'accepted') {
+          if (state.operation !== 'update') {
             throw new Error('Stopped rollback closeout requires its exact original restored update.');
           }
           if (!await hasMarker(control, 'inactive-rollback-workers.json')) {
