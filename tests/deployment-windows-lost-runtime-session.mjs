@@ -213,11 +213,11 @@ const finishWorkers = async options => {
       assert.equal(mixed.advance, undefined);
       assert.equal(mixed.prepareHistory, undefined);
       await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
-      assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
       await assert.rejects(lstat(path.join(control, mixedEntry.path)), { code: 'ENOENT' });
       assert.equal(createHash('sha256').update(await readFile(path.join(control, mixedEntry.destination))).digest('hex'),
         mixedEntry.sha256);
     } finally { await mixed.close(); }
+    assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
     const duplicate = path.join(control, mixedEntry.path);
     await writeFile(duplicate, await readFile(path.join(control, mixedEntry.destination)), { flag: 'wx' });
     try { await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options)); }
@@ -226,6 +226,15 @@ const finishWorkers = async options => {
     const restored = await promisify(execFile)(pwsh, [...moveArgs, '-Restore'], { timeout: 60000, maxBuffer: 8192 });
     assert.equal(restored.stderr, '');
   }
+  const nonPrefixArgs = [...moveArgs.slice(0, -1), archive.entries[1].path];
+  const nonPrefixMove = await promisify(execFile)(pwsh, nonPrefixArgs, { timeout: 60000, maxBuffer: 8192 });
+  assert.equal(nonPrefixMove.stderr, '');
+  try { await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options)); }
+  finally {
+    const restored = await promisify(execFile)(pwsh, [...nonPrefixArgs, '-Restore'], { timeout: 60000, maxBuffer: 8192 });
+    assert.equal(restored.stderr, '');
+  }
+  assert.deepEqual(await readFile(archiveIntent.file), archiveBytes);
   assert.deepEqual(await readFile(workerFile), before);
   assert.deepEqual(await readFile(path.join(control, 'inactive-rollback-retirement.json')), taskBefore);
   await writeFile(finalFile, Buffer.from(JSON.stringify({ ...JSON.parse(finalBefore), restoredRuntime: 'running' })));
