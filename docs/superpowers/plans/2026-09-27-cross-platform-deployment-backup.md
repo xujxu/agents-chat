@@ -15880,6 +15880,16 @@ operation records its first phase, and keep release/reconciliation consistent.
 Do not enable an ordinary-admission exception while this transition remains
 unimplemented. The current finalization API intentionally stops short of it.
 
+Public integration has two independent fences: deployment command routing
+calls `reconcileInterruptedOperation` before task discovery or lock creation,
+and subsequently requires `inspectWindowsManagedTask` plus the running-only
+live deployment driver. Therefore changing `acquireLock` alone cannot
+admit an archived originally disabled/stopped task. Keep archive settlement,
+next-owner lock transfer, reconciliation/release semantics and installed
+inactive transaction routing as explicit separate requirements. Reuse the
+already verified inactive transaction primitives rather than describing
+archive completion as a public deploy/update capability.
+
 Pin the next-lock rejection boundary in the real finalized archive fixture:
 create a distinct operation owner with the actual current actor identity,
 but without any authorized admission transfer. High-level archive reopening
