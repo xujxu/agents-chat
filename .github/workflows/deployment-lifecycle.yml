@@ -228,6 +228,11 @@ jobs:
           }
           & (Get-Command node).Source ./tests/deployment-windows-egress-probe.mjs allowed $guard.Address
           if ($LASTEXITCODE -ne 0) { throw 'External connectivity was not restored after firewall fixture cleanup.' }
+      - name: Verify saved worker dependencies and transport failure contracts
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-saved-worker.test.mjs', 'tests/deployment-worker-wire.test.mjs')
+          if ($LASTEXITCODE -ne 0) { throw 'Saved worker dependency or transport failure contracts failed.' }
       - name: Verify native Windows command contracts
         shell: pwsh
         run: |

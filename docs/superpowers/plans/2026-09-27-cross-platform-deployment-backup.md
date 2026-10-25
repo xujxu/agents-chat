@@ -15442,6 +15442,14 @@ case using a transport whose write callback remains pending, then emit close
 or error and require send refusal. Push this test before the production fix;
 it must fail in Actions without masking the existing native stall.
 
+The full matrix now reproduces that post-kill stall in cancellation, failure
+and live-deployment jobs. Add the existing saved-worker and worker-wire unit
+files as a private Windows step before native command execution. The focused
+commands selector can then establish the causal transport failure quickly,
+without waiting for or duplicating the active full-matrix concurrency group.
+This also prevents future native-only gates from overlooking saved-worker
+dependency closure. No new workflow, test framework or local validation.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
