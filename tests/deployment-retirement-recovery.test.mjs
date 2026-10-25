@@ -70,9 +70,15 @@ test('changed recovery controllers publish an immutable generation without repla
     assert.deepEqual(direct(legacy, {
       ...options, kind: 'task', pwsh: process.env.DEPLOYMENT_TEST_PWSH,
     }).args.slice(-2), ['task', process.env.DEPLOYMENT_TEST_PWSH]);
+    assert.deepEqual(direct(legacy, {
+      ...options, kind: 'stopped-history', pwsh: process.env.DEPLOYMENT_TEST_PWSH,
+    }).args.slice(-2), ['stopped-history', process.env.DEPLOYMENT_TEST_PWSH]);
   } else {
     assert.throws(() => retirementRecoveryInvocation(legacy, {
       control, project: path.join(root, 'app'), operationId: 'runtime-binding', kind: 'task',
+    }), /Invalid saved recovery invocation/);
+    assert.throws(() => retirementRecoveryInvocation(legacy, {
+      control, project: path.join(root, 'app'), operationId: 'runtime-binding', kind: 'stopped-history',
     }), /Invalid saved recovery invocation/);
   }
   const original = await readFile(path.join(legacy.directory, 'manifest.json'));

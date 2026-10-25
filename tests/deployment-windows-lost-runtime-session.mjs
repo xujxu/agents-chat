@@ -415,12 +415,27 @@ const drainRetirement = async (options, entries, expectedState, expectedReceipt,
     try { await new Promise(() => {}); } finally { clearInterval(timer); }
   } finally { await workers.close(); }
 };
+if (mode === 'resume-history-saved') {
+  const { saveRecoveryEngine, retirementRecoveryInvocation } = await load('saved-recovery-engine.mjs');
+  const saved = await saveRecoveryEngine({ source, control, allowVersionChange: true });
+  const originalState = JSON.parse(state);
+  const command = retirementRecoveryInvocation(saved, {
+    control, project: originalState.project, operationId: originalState.operationId, kind: 'stopped-history', pwsh,
+  });
+  const result = await promisify(execFile)(command.file, command.args, {
+    env: command.env, cwd: control, timeout: 120000, maxBuffer: 8192,
+  });
+  assert.equal(result.stderr, '');
+  assert.deepEqual(JSON.parse(result.stdout), {
+    status: 'history-archived', operationId: originalState.operationId, phase: 'restored',
+  });
+}
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
-  if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history'].includes(mode)) {
-    if (mode !== 'resume-finalized-history') await retainOriginalRuntimeAbsence();
+  if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history', 'resume-history-saved'].includes(mode)) {
+    if (!['resume-finalized-history', 'resume-history-saved'].includes(mode)) await retainOriginalRuntimeAbsence();
     const intentFile = path.join(control, 'inactive-rollback-history-intent.json');
-    const finalizedResume = mode === 'resume-finalized-history';
+    const finalizedResume = ['resume-finalized-history', 'resume-history-saved'].includes(mode);
     const originalIntent = await readFile(finalizedResume
       ? path.join(control, `retired-${JSON.parse(state).operationId}-inactive-rollback-history-intent.json`)
       : intentFile);

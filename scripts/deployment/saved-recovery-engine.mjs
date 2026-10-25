@@ -167,7 +167,7 @@ export async function saveRecoveryEngine({ source, control, allowVersionChange =
 
 export function retirementRecoveryInvocation(saved, { control, project, operationId, kind = 'worker', pwsh }) {
   const fields = captureWorkerFields(saved, ['directory', 'entrypoint', 'manifestSha256'], 'saved recovery engine');
-  const kinds = process.platform === 'win32' ? ['worker', 'task'] : ['worker', 'service'];
+  const kinds = process.platform === 'win32' ? ['worker', 'task', 'stopped-history'] : ['worker', 'service'];
   if (!kinds.includes(kind) || !path.isAbsolute(control) || path.resolve(control) !== control
     || !path.isAbsolute(project) || path.resolve(project) !== project
     || typeof operationId !== 'string' || !operationId || operationId.length > 4096 || /[\0\r\n]/.test(operationId)

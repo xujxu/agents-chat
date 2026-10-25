@@ -15894,6 +15894,17 @@ entry from both a partial archived prefix and post-finalization death,
 including repeated calls and wrong-project/copied-admission refusal.
 Production orchestration acceptance is pending; admission remains blocked.
 
+Wire that private archive helper through the exact verified saved recovery
+entry with an explicit Windows-only `stopped-history` kind. Preserve
+worker/task/service defaults, canonical PowerShell requirements, sanitized
+child environment and exact-entry verification. The existing saved engine
+closure already owns every dependency; do not run an unverified installed
+helper instead. Add invocation admission/rejection contracts and a real
+saved-entry child from a first-entry actor-death prefix, requiring exact
+`history-archived` output before independent native proof and unchanged
+state/intent assertions. This is saved private recovery, not a new public
+restore.ps1 support claim. Actions acceptance is pending.
+
 In the existing saved completed-closeout native fixture, require the new
 archive entry to reject ordinary accepted update/restore history through
 its exact stopped-rollback guard before any retirement. Preserve original
@@ -15987,6 +15998,11 @@ skipped `Update actual application and verify saved restore outcome`;
 therefore this is prelude acceptance, not actual cancellation acceptance.
 Dispatch cancellation again without commands-only mode in the independent
 Windows-application group to exercise the actual application outcome.
+
+`00e16a28 / 40219405056` passes all eight selected jobs. Cancellation job
+`121247491580` explicitly passes `Update actual application and verify saved
+restore outcome`, accepting the actual cancellation path after the identity
+race fix. This is not a replacement for the newer full same-SHA matrix.
 
 The old `00b6f492 / 40207894040` full matrix finishes with 53 successes,
 one failure and no cancellation. Actual live, failed, crashed, copy-crashed

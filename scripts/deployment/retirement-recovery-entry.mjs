@@ -4,20 +4,22 @@ import { fileURLToPath } from 'node:url';
 try {
   const [control, manifestSha256, project, operationId, kind = 'worker', ...extra] = process.argv.slice(2);
   const pwsh = process.platform === 'win32' ? extra[0] : undefined;
-  const kinds = process.platform === 'win32' ? ['worker', 'task'] : ['worker', 'service'];
+  const kinds = process.platform === 'win32' ? ['worker', 'task', 'stopped-history'] : ['worker', 'service'];
   if (!project || !operationId || !kinds.includes(kind)
     || (process.platform === 'win32' ? extra.length !== 1 || !pwsh : extra.length !== 0)) {
     throw new Error('Invalid recovery arguments.');
   }
   const engine = await verifyRecoveryEngine({ control, manifestSha256 });
-  if (kind === 'task' && fileURLToPath(import.meta.url) !== engine.entrypoint) {
+  if (['task', 'stopped-history'].includes(kind) && fileURLToPath(import.meta.url) !== engine.entrypoint) {
     throw new Error('Windows task closeout requires the exact verified saved entry.');
   }
-  const recover = kind === 'service'
-    ? (await import('./linux-service-recovery.mjs')).recoverLinuxServiceRetirement
-    : kind === 'task'
-      ? (await import('./windows-completed-closeout.mjs')).closeCompletedWindowsDeployment
-      : (await import('./retirement-recovery.mjs')).recoverRetirement;
+  const recover = kind === 'stopped-history'
+    ? (await import('./windows-completed-closeout.mjs')).archiveCompletedWindowsInactiveRollback
+    : kind === 'service'
+      ? (await import('./linux-service-recovery.mjs')).recoverLinuxServiceRetirement
+      : kind === 'task'
+        ? (await import('./windows-completed-closeout.mjs')).closeCompletedWindowsDeployment
+        : (await import('./retirement-recovery.mjs')).recoverRetirement;
   const result = await recover({ control, project, operationId, ...(pwsh ? { pwsh } : {}) });
   process.stdout.write(`${JSON.stringify(result)}\n`);
 } catch (error) {

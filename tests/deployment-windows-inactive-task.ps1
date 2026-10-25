@@ -475,11 +475,13 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $history = Get-Content -LiteralPath $historyIntent -Raw | ConvertFrom-Json
                     $historyHash = (Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash
                     $historyStateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
-                    foreach ($historyBoundary in @('history', 'finalized-history')) {
+                    foreach ($historyBoundary in @('history', 'finalized-history', 'saved-history')) {
+                        $crashMode = if ($historyBoundary -ceq 'finalized-history') { 'crash-finalized-history' } else { 'crash-history' }
+                        $resumeMode = if ($historyBoundary -ceq 'saved-history') { 'resume-history-saved' } else { "resume-$historyBoundary" }
                         $archiver = [Deployment.WindowsControllerProcess]::Start($node,
                             @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                 $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
-                                "crash-$historyBoundary"), $control, $environment)
+                                $crashMode), $control, $environment)
                         try {
                             $diagnostic = $archiver.StandardError.ReadToEndAsync()
                             $line = $archiver.StandardOutput.ReadLineAsync()
@@ -518,7 +520,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                         $historyResumer = [Deployment.WindowsControllerProcess]::Start($node,
                             @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                 $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
-                                "resume-$historyBoundary", $historyActor), $control, $environment)
+                                $resumeMode, $historyActor), $control, $environment)
                         try {
                             $output = $historyResumer.StandardOutput.ReadToEndAsync()
                             $diagnostic = $historyResumer.StandardError.ReadToEndAsync()
@@ -534,6 +536,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     }
                     Write-Output 'PASS: actual history writer death preserves its archived prefix and a distinct fresh actor completes exact native archival'
                     Write-Output 'PASS: death after final intent archival retains sealed evidence for a distinct fresh read-only actor'
+                    Write-Output 'PASS: the exact verified saved entry resumes stopped history archival after actual actor death'
                     Write-Output 'PASS: stopped task and worker cleanup survive real actor death, retire exact history, release original lock and retain final receipt'
                 }
             }
