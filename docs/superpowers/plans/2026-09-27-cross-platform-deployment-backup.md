@@ -15838,6 +15838,13 @@ these assertions may the fixture natively restore the intent and entries,
 retaining the original host's exact state/intent assertions. This accepts
 neither ordinary admission nor an application restart; Actions is pending.
 
+`e16acfd3 / 40216917750`, job `121239937484`, passes the complete
+commands-only native run, including real first-entry actor death, distinct
+fresh-actor continuation through production finalization, and independent
+archived read-only reopening. The actual application step is intentionally
+skipped in this run. This accepts the native fresh-actor finalization path,
+not actual application behavior or the later post-intent death extension.
+
 Also kill a real writer after production finalization has moved the intent,
 while its native bridge still retains the sealed proof. Require both actor
 and bridge to exit, exact archived intent digest and absent active intent.
