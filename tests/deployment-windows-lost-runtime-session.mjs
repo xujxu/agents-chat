@@ -83,10 +83,27 @@ const finishWorkers = async options => {
   const backupBefore = await readFile(path.join(control, 'backup', 'manifest.json'));
   const configurationBefore = await readFile(path.join(control, 'inactive-rollback-runtime', 'configuration.json'));
   const publication = mode === 'resume-worker-publication';
+  if (publication) {
+    const { closeCompletedWindowsDeployment } = await load('windows-completed-closeout.mjs');
+    const accepted = JSON.parse(stateBefore);
+    const closeout = { ...options, project: accepted.project, operationId: accepted.operationId };
+    await assert.rejects(closeCompletedWindowsDeployment({ ...closeout, operationId: '00000000-0000-0000-0000-000000000000' }));
+    const cancelled = new AbortController();
+    cancelled.abort(new Error('Stopped closeout fixture cancellation'));
+    await assert.rejects(closeCompletedWindowsDeployment({ ...closeout, signal: cancelled.signal }));
+    await assert.rejects(lstat(path.join(control, 'inactive-rollback-retired.json')), { code: 'ENOENT' });
+    assert.deepEqual(await readFile(workerFile), before);
+    assert.deepEqual(await readFile(path.join(control, 'state.json')), stateBefore);
+    const expected = { status: 'completed', operationId: accepted.operationId, phase: 'restored' };
+    assert.deepEqual(await closeCompletedWindowsDeployment(closeout), expected,
+      'Completed closeout must resume stopped worker retirement after original lock deletion');
+    assert.deepEqual(await closeCompletedWindowsDeployment(closeout), expected);
+    await options.admission.check();
+  }
   const scope = await api.openWindowsInactiveRollbackWorkerRetirement(options);
   try {
     const initial = await scope.check();
-    assert.equal(initial.status, 'retiring-workers');
+    assert.equal(initial.status, publication ? 'retired' : 'retiring-workers');
     assert.equal(initial.retiredEntries, publication ? record.entries.length : 2);
     assert.equal(initial.totalEntries, record.entries.length);
     await assert.rejects(api.openWindowsInactiveRollbackWorkerRetirement(options));
