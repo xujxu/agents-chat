@@ -15845,6 +15845,11 @@ inner CLI 29 minutes within its existing 30-minute update actor budget;
 leave every production/per-command timeout, readiness check, outer actor,
 actual-operation and job budget unchanged.
 
+`ac448cb9 / 40206609547`, job `121208784999`, passes the actual public
+failed-update application phase with the bounded aggregate correction.
+This accepts that focused scenario, not the still-running full matrix or
+the separate stopped-history archive boundary.
+
 Run the exact failed-update actual-application test without repeating the
 already-validated long native prelude:
 
