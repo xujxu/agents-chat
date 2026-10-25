@@ -15480,6 +15480,14 @@ and subsequent task/worker/lock-deleted cleanup passed again. This accepts the
 Windows transport and closure corrections with native regressions; the latest
 full matrix and public application paths still require separate acceptance.
 
+Corrected full matrix `8b993df8 / 40159047447` exposed another outer budget:
+`Native Windows task options` completed all steps through disabled restore
+replacement (step 28), then was cancelled at exactly ten minutes in step 29.
+No assertion failed. Retain every command and operation deadline; allow this
+30-step native job fifteen minutes so its final configuration/path refusals
+are not truncated. This workflow-only change awaits separate validation;
+the active matrix continues unchanged and is not cancelled.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
