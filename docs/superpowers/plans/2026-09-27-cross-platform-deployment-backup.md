@@ -15471,6 +15471,15 @@ original 115/140/185-minute limits. These bounded totals remain below the
 runner limit and prevent matrix acceptance from being cut off by mismatched
 outer/inner budgets; they do not classify an unfinished application as passed.
 
+Accepted `49155332 / 40154074802`: the complete focused native gate passed.
+The causal pending-send case now completes successfully (0.868 ms), all
+saved-worker dependency/manifest/checkout-removal cases passed, and original
+logs explicitly show source-absent dead-scope refusal followed by verified
+bridge absence and fresh authority. Actual co-located interrupted-copy recovery
+and subsequent task/worker/lock-deleted cleanup passed again. This accepts the
+Windows transport and closure corrections with native regressions; the latest
+full matrix and public application paths still require separate acceptance.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
