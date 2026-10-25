@@ -15948,6 +15948,16 @@ including lower/uppercase completion markers blocking lock acquisition,
 release and reconciliation. Full actual application acceptance at this
 implementation is still pending.
 
+Extend the real interruption fixture beyond missing-completion recovery:
+publish the completion receipt and hold its independent native publisher,
+then kill the actual actor and wait for its bridge to exit. The host binds
+the retained receipt digest; a distinct fresh actor must complete/repeat
+high-level reopening with exactly the same receipt bytes and dev/ino.
+Only after those assertions may fixture tamper/refusal and exact cleanup
+run. Keep all existing actor deadlines and require a fourth explicit
+completion-publisher-death receipt in the focused job. This additional
+durability boundary awaits Actions.
+
 `fae9048b / 40224702989`, job `121263501170`, passes the complete native
 commands/recovery run. Downloaded logs contain both actual first-entry
 death/fresh continuation and post-intent death/read-only actor receipts

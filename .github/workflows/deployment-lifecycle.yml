@@ -231,7 +231,8 @@ jobs:
           foreach ($receipt in @(
             'PASS: actual history writer death preserves its archived prefix and a distinct fresh actor completes exact native archival',
             'PASS: death after final intent archival retains sealed evidence for a distinct fresh read-only actor',
-            'PASS: the exact verified saved entry resumes stopped history archival after actual actor death'
+            'PASS: the exact verified saved entry resumes stopped history archival after actual actor death',
+            'PASS: completion publisher death preserves original receipt bytes and identity for a distinct fresh actor'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }

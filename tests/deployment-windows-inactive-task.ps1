@@ -475,8 +475,12 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $history = Get-Content -LiteralPath $historyIntent -Raw | ConvertFrom-Json
                     $historyHash = (Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash
                     $historyStateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
-                    foreach ($historyBoundary in @('history', 'finalized-history', 'saved-history')) {
-                        $crashMode = if ($historyBoundary -ceq 'finalized-history') { 'crash-finalized-history' } else { 'crash-history' }
+                    foreach ($historyBoundary in @('history', 'finalized-history', 'saved-history', 'completed-history')) {
+                        $crashMode = switch ($historyBoundary) {
+                            'finalized-history' { 'crash-finalized-history' }
+                            'completed-history' { 'crash-completed-history' }
+                            default { 'crash-history' }
+                        }
                         $resumeMode = if ($historyBoundary -ceq 'saved-history') { 'resume-history-saved' } else { "resume-$historyBoundary" }
                         $archiver = [Deployment.WindowsControllerProcess]::Start($node,
                             @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
@@ -511,11 +515,16 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             'Writer death restored the original history pathname'
                         Assert ((Get-FileHash -LiteralPath (Join-Path $control $entry.destination) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $entry.sha256) `
                             'Writer death lost the exact archived original'
-                        if ($historyBoundary -ceq 'finalized-history') {
+                        if ($historyBoundary -cin @('finalized-history', 'completed-history')) {
                             Assert (-not (Test-Path -LiteralPath $historyIntent)) 'Finalized actor death restored active intent'
                             $archivedIntent = Join-Path $control "retired-$($history.operationId)-inactive-rollback-history-intent.json"
                             Assert ((Get-FileHash -LiteralPath $archivedIntent -Algorithm SHA256).Hash -ceq $historyHash) `
                                 'Finalized actor death lost the original archived intent'
+                        }
+                        if ($historyBoundary -ceq 'completed-history') {
+                            $completed = Join-Path $control "retired-$($history.operationId)-inactive-rollback-history-complete.json"
+                            Assert ((Get-FileHash -LiteralPath $completed -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $held.completionSha256) `
+                                'Completion publisher death changed the original completion receipt'
                         }
                         $historyResumer = [Deployment.WindowsControllerProcess]::Start($node,
                             @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
@@ -537,6 +546,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     Write-Output 'PASS: actual history writer death preserves its archived prefix and a distinct fresh actor completes exact native archival'
                     Write-Output 'PASS: death after final intent archival retains sealed evidence for a distinct fresh read-only actor'
                     Write-Output 'PASS: the exact verified saved entry resumes stopped history archival after actual actor death'
+                    Write-Output 'PASS: completion publisher death preserves original receipt bytes and identity for a distinct fresh actor'
                     Write-Output 'PASS: stopped task and worker cleanup survive real actor death, retire exact history, release original lock and retain final receipt'
                 }
             }

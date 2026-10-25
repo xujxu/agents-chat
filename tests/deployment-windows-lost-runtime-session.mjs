@@ -468,14 +468,19 @@ if (mode === 'resume-history-saved') {
 }
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
-  if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history', 'resume-history-saved'].includes(mode)) {
-    if (!['resume-finalized-history', 'resume-history-saved'].includes(mode)) await retainOriginalRuntimeAbsence();
+  if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
+    'resume-history-saved', 'crash-completed-history', 'resume-completed-history'].includes(mode)) {
+    const finalizedResume = ['resume-finalized-history', 'resume-history-saved', 'resume-completed-history'].includes(mode);
+    if (!finalizedResume) await retainOriginalRuntimeAbsence();
     const intentFile = path.join(control, 'inactive-rollback-history-intent.json');
-    const finalizedResume = ['resume-finalized-history', 'resume-history-saved'].includes(mode);
     const originalIntent = await readFile(finalizedResume
       ? path.join(control, `retired-${JSON.parse(state).operationId}-inactive-rollback-history-intent.json`)
       : intentFile);
     const intent = JSON.parse(originalIntent);
+    const completionFile = path.join(control, `retired-${intent.operationId}-inactive-rollback-history-complete.json`);
+    const retainedCompletion = mode === 'resume-completed-history' ? {
+      bytes: await readFile(completionFile), identity: await lstat(completionFile, { bigint: true }),
+    } : undefined;
     if (mode === 'resume-history' || finalizedResume) {
       const previous = JSON.parse(crashStep);
       assert.notEqual(await processIdentity(process.pid), previous.actorIdentity);
@@ -525,8 +530,24 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         }
       } finally { await writer.close(); }
     }
-    const completionFile = path.join(control, `retired-${intent.operationId}-inactive-rollback-history-complete.json`);
+    if (mode === 'crash-completed-history') {
+      const publisher = await api.openWindowsInactiveRollbackHistoryCompletion(options);
+      try {
+        const completed = await publisher.completeHistory();
+        console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({
+          ...publisher.identity, actorIdentity: await processIdentity(process.pid), completionSha256: completed.sha256,
+        })}`);
+        const timer = setInterval(() => {}, 1000);
+        try { await new Promise(() => {}); } finally { clearInterval(timer); }
+      } finally { await publisher.close(); }
+    }
     const completionBytes = await readFile(completionFile);
+    if (retainedCompletion) {
+      assert.deepEqual(completionBytes, retainedCompletion.bytes);
+      const current = await lstat(completionFile, { bigint: true });
+      assert.equal(current.dev, retainedCompletion.identity.dev);
+      assert.equal(current.ino, retainedCompletion.identity.ino);
+    }
     const completion = JSON.parse(completionBytes);
     assert.equal(completion.phase, 'stopped-history-archive-complete');
     assert.equal(completion.operationId, intent.operationId);
