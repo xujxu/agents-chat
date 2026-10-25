@@ -15888,6 +15888,12 @@ old state. Explicit fixture cleanup then permits the unchanged archived
 read-only proof to reopen. A live actor identity alone is not a handoff.
 This focused negative awaits Actions; no ordinary gate is relaxed.
 
+`78db9b66 / 40233824851`, job `121291016717`, passes the receipt-enforced
+native fixture including untransferred new-owner refusal and exact
+owner/state preservation. It also retains all three archive-death and
+verified saved-entry acceptance receipts. Ordinary admission is still
+unsupported; this is the required negative boundary, not a handoff grant.
+
 Add a separate private high-level `archiveCompletedWindowsInactiveRollback`
 entry beside completed closeout, preserving the existing closeout default.
 Under one retained admission, bind the exact requested original stopped
