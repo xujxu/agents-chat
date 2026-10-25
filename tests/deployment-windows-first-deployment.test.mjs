@@ -131,9 +131,19 @@ test(publicFirst
     const engine = await verifyRecoveryEngine({ control, manifestSha256: result.recoveryEngine });
     if (!publicFirst) {
       const command = retirementRecoveryInvocation(engine, { control, project, operationId, pwsh, kind: 'task' });
-      const final = await execute(command.file, command.args, {
-        cwd: root, env: command.env, timeout: 300000, maxBuffer: 32768,
-      });
+      let final;
+      try {
+        final = await execute(command.file, command.args, {
+          cwd: root, env: command.env, timeout: 300000, maxBuffer: 32768,
+        });
+      } catch (cause) {
+        const entries = await readdir(control);
+        const directories = entries.filter(name => name === 'worker-engine' || name.startsWith('first-task-'));
+        const retained = Object.fromEntries(await Promise.all(directories.map(async name =>
+          [name, await readdir(path.join(control, name))])));
+        throw new Error(`Saved first closeout failed; retained evidence: ${JSON.stringify({ entries, retained })}`,
+          { cause });
+      }
       assert.equal(final.stderr, '');
       assert.deepEqual(JSON.parse(final.stdout), { status: 'completed', operationId, phase: 'accepted' });
     }

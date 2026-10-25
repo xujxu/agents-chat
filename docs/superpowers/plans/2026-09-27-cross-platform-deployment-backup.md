@@ -15488,6 +15488,16 @@ No assertion failed. Retain every command and operation deadline; allow this
 are not truncated. This workflow-only change awaits separate validation;
 the active matrix continues unchanged and is not cancelled.
 
+The corrected matrix's actual first-application receipt-loss case reached
+saved closeout, but its exact saved entry exceeded the existing 300-second
+child deadline with empty stdout/stderr. Preserve that deadline and add
+test-only failure diagnostics listing retained control entries plus the
+remaining first-task and worker-engine member names before fixture cleanup.
+This distinguishes receipt/completion work from actual retirement progress
+without reading payloads, altering production logging, or claiming a cause.
+Use the existing isolated first-application selector to diagnose while the
+separate full-matrix group continues.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact
