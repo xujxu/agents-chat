@@ -74,7 +74,7 @@ if (mode === 'checkpoint') {
   let result;
   try {
     result = await promisify(execFile)(command.file, [
-      '--import', fileURLToPath(new URL('./deployment-windows-closeout-trace.mjs', import.meta.url)),
+      '--import', new URL('./deployment-windows-closeout-trace.mjs', import.meta.url).href,
       ...command.args,
     ], {
       env: { ...command.env, DEPLOYMENT_TEST_CLOSEOUT_TRACE: trace },

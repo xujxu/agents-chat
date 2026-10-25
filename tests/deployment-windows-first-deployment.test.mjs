@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -131,18 +131,29 @@ test(publicFirst
     const engine = await verifyRecoveryEngine({ control, manifestSha256: result.recoveryEngine });
     if (!publicFirst) {
       const command = retirementRecoveryInvocation(engine, { control, project, operationId, pwsh, kind: 'task' });
+      const trace = path.join(control, 'closeout-fixture-trace.json');
       let final;
       try {
-        final = await execute(command.file, command.args, {
-          cwd: root, env: command.env, timeout: 300000, maxBuffer: 32768,
+        final = await execute(command.file, [
+          '--import', new URL('./deployment-windows-closeout-trace.mjs', import.meta.url).href,
+          ...command.args,
+        ], {
+          cwd: root, env: { ...command.env, DEPLOYMENT_TEST_CLOSEOUT_TRACE: trace },
+          timeout: 300000, maxBuffer: 32768,
         });
       } catch (cause) {
         const entries = await readdir(control);
         const directories = entries.filter(name => name === 'worker-engine' || name.startsWith('first-task-'));
         const retained = Object.fromEntries(await Promise.all(directories.map(async name =>
           [name, await readdir(path.join(control, name))])));
-        throw new Error(`Saved first closeout failed; retained evidence: ${JSON.stringify({ entries, retained })}`,
+        const nativeTrace = await readFile(trace, 'utf8').catch(failure => {
+          if (failure.code === 'ENOENT') return 'Trace was not created by the child preload.';
+          throw new AggregateError([cause, failure], 'First closeout failure diagnostics could not be read.');
+        });
+        throw new Error(`Saved first closeout failed; retained evidence: ${JSON.stringify({ entries, retained, nativeTrace })}`,
           { cause });
+      } finally {
+        await unlink(trace).catch(error => { if (error.code !== 'ENOENT') throw error; });
       }
       assert.equal(final.stderr, '');
       assert.deepEqual(JSON.parse(final.stdout), { status: 'completed', operationId, phase: 'accepted' });

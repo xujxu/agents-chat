@@ -15566,6 +15566,17 @@ them only on failure, together with retained control names. It does not log
 protocol payloads, change production output, replace callbacks, or alter
 deadlines. Delete the fixture trace after the child settles.
 
+The first diagnostic run exposed a fixture startup error:
+Windows `--import` requires the `file:` URL, not the drive-letter pathname.
+Use the URL's `href`; no production module is changed. Its copying and
+backup-ready failures share this same fixture error, not evidence of new
+production recovery failures. The full run's receipt-loss diagnostics now
+show actual progress through worker retirement: only two helpers and the
+manifest remained at its unchanged 300-second child timeout. Add the same
+bounded trace to first-application closeout, including first-runtime native
+controllers, before deciding whether the remaining delay is steady progress
+or a stalled operation. Do not classify it as fixed or extend deadlines.
+
 - [ ] Extend the genuine inactive fixture to require
   `transaction.advanceCompletion({ stateSha256 })`, following the active
   completion step API. Check every actual native acknowledgement and exact

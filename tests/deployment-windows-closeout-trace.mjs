@@ -17,7 +17,7 @@ const spawn = childProcess.spawn;
 childProcess.spawn = function (file, args, options) {
   const child = spawn.call(this, file, args, options);
   const script = args?.find(value => typeof value === 'string'
-    && /(?:windows-admission|windows-task-completion-controller|windows-task-completion-recovery-controller)\.ps1$/i.test(value));
+    && /windows-(?:admission|[a-z-]+-controller)\.ps1$/i.test(value));
   if (!script) return child;
   const context = { pid: child.pid, script: path.basename(script) };
   record({ ...context, event: 'spawn' });
