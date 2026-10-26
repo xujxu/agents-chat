@@ -16,10 +16,10 @@
 - Modify: `tests/deployment-windows-history-handoff-entry.ps1`
 - Modify: `tests/deployment-windows-lost-runtime-session.mjs`
 
-- [ ] Permit `-Abandon -Hold`, retaining the existing controller watcher,
+- [x] Permit `-Abandon -Hold`, retaining the existing controller watcher,
   archive scope and small descriptor-only ready frame. Continue refusing
   every command after readiness and require either Publish or Abandon for Hold.
-- [ ] Add `crash-abandoned-history` as a finalized-history resumer. Reuse the
+- [x] Add `crash-abandoned-history` as a finalized-history resumer. Reuse the
   accepted original prepared observation and fresh-attempt refusal checks.
   Launch the existing native fixture through `windowsControllerTransport`
   with abandonment arguments and Hold. Check native ready PID/start identity
@@ -44,15 +44,15 @@ console.log(`INACTIVE_HISTORY_ABANDONED_HELD ${JSON.stringify({
 - Modify: `tests/deployment-windows-lost-runtime-session.mjs`
 - Modify: `.github/workflows/deployment-lifecycle.yml`
 
-- [ ] Add `abandoned-history` boundary using the existing actual preparation
+- [x] Add `abandoned-history` boundary using the existing actual preparation
   actor death first. Include it in all original archive/completion/prepared
   preservation assertions. Start `crash-abandoned-history` as the second
   actor; forward its existing PASS lines until its exact held marker.
-- [ ] Verify its native bridge identity, kill only that specific Node actor,
+- [x] Verify its native bridge identity, kill only that specific Node actor,
   wait for both actor and bridge to exit, and verify original terminal digest.
   Start `resume-abandoned-history` as the third actor using the held payload.
   Preserve current per-actor 120-second and bridge 15-second budgets.
-- [ ] Third actor checks original prepared and terminal bytes/hash/dev/ino,
+- [x] Third actor checks original prepared and terminal bytes/hash/dev/ino,
   exact creator identity matching the now-dead second actor, absence of both
   old native identities, unchanged state and no lock. Invoke the real native
   abandonment publisher again with the same attempt and original descriptor:
@@ -65,7 +65,7 @@ await assert.rejects(promisify(execFile)(pwsh, abandonArgs, {
 
   Require both files unchanged after refusal, then perform fixture-only exact
   terminal/prepared deletion and existing archive restore.
-- [ ] Add tenth required executed receipt:
+- [x] Add tenth required executed receipt:
 
 ```text
 PASS: actual abandoned publisher death retains exact terminal evidence and a third actor cannot claim lock authority
@@ -73,7 +73,7 @@ PASS: actual abandoned publisher death retains exact terminal evidence and a thi
 
 ### Task 3: Actions-only acceptance
 
-- [ ] Commit/push fixture coverage with required trailers and dispatch:
+- [x] Commit/push fixture coverage with required trailers and dispatch:
 
 ```bash
 gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -83,8 +83,22 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   -f windows_history_only=true
 ```
 
-- [ ] Download actual job logs; require all ten executed receipts and the
+- [x] Download actual job logs; require all ten executed receipts and the
   complete focused job green. Record SHA/run/job and push the evidence.
+
+## Execution evidence
+
+`8fcc39d5 / 40403014243`, actual stopped-history job `121853520355`,
+succeeds. Downloaded execution logs contain all ten required actual receipts,
+including the second publisher's real death and the third actor's exact
+terminal preservation/refusal receipt. Both specific actors are killed and
+their exact native bridges must exit before the next actor starts.
+
+The third actor preserves original terminal/prepared bytes/hash/dev/ino,
+original state and completion evidence, and no lock is created. Fixture-only
+cleanup then restores the original archive for the remaining lifecycle test.
+This accepts retained evidence and refusal, not native terminal reopening or
+application lifecycle coverage.
 
 ## Self-review
 
