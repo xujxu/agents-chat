@@ -113,6 +113,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
 - Create: `scripts/deployment/windows-stopped-history-handoff.mjs`
 - Modify: `scripts/deployment/windows-stopped-history-handoff-record.mjs`
 - Modify: `scripts/deployment/saved-worker-engine.mjs`
+- Modify: `tests/deployment-saved-worker.test.mjs`
 
 - [ ] Add the descriptor export using the existing identity/descriptor
   validators; retain 65536-byte limit for old archive descriptors, allowing
@@ -141,7 +142,9 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   new JS API/controller, prepared JS record, native owner, record,
   preparation and JSON comparator. Existing completion proof, archive and
   transport dependencies are already included. Existing saved-engine tests
-  must enforce file inventory and bounded manifest.
+  must enforce file inventory and bounded manifest. Add those same seven
+  explicit names to the test's independently maintained closed helper set;
+  retain source-removed import validation for every listed JS module.
 
 - [ ] Commit/push; repeat focused and Contracts-only on the same SHA.
   Require all twelve actual history receipts, original production bridge
