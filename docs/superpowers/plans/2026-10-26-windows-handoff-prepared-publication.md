@@ -27,13 +27,13 @@ publication-death recovery are separate mandatory gates before lock work.
 
 ## Task 1: Real-fixture red phase
 
-- [ ] Preserve the native derivation argument list as `preparedArgs`.
+- [x] Preserve the native derivation argument list as `preparedArgs`.
   Add `-Publish` to the fixture parameter block. Only that branch loads the
   new publication module, sets `$scope.HistoryHandoffPreparer = $true`, and
   calls `Publish-AgentsChatStoppedHistoryHandoffPrepared` instead of the
   existing record derivation function. Both calls take the same scalar args.
 
-- [ ] After the existing no-publication derivation assertions, add:
+- [x] After the existing no-publication derivation assertions, add:
 
 ```js
 const publication = await promisify(execFile)(pwsh, [...preparedArgs, '-Publish'],
@@ -63,7 +63,7 @@ console.log('PASS: native stopped-history preparation publishes one exact create
 The unlink is fixture-only, after exact-byte/identity assertions and native
 scope exit. Production publication never removes a prepared record.
 
-- [ ] Add that exact PASS string to the focused job's receipt array.
+- [x] Add that exact PASS string to the focused job's receipt array.
   Commit/push with required trailers and dispatch:
 
 ```bash
@@ -74,13 +74,13 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   -f windows_history_only=true
 ```
 
-- [ ] Watch the returned run at 180-second intervals. Require downloaded
+- [x] Watch the returned run at 180-second intervals. Require downloaded
   logs to show failure at the missing preparation module, after the existing
   native derivation assertion succeeds.
 
 ## Task 2: Native create-only publication
 
-- [ ] Create the production module with this complete implementation:
+- [x] Create the production module with this complete implementation:
 
 ```powershell
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-record.ps1')
@@ -119,12 +119,12 @@ function Publish-AgentsChatStoppedHistoryHandoffPrepared(
 }
 ```
 
-- [ ] Extend `Get-AgentsChatStoppedHandoffDescriptor` with optional
+- [x] Extend `Get-AgentsChatStoppedHandoffDescriptor` with optional
   `[int]$MaximumBytes = 65536` and pass that parameter to
   `Assert-AgentsChatRetirementDescriptor`. Archive descriptors retain their
   65536-byte default; the native-derived prepared record is bounded at 1MiB.
 
-- [ ] Commit/push with required trailers and repeat the exact dispatch.
+- [x] Commit/push with required trailers and repeat the exact dispatch.
   Require all six actual PASS receipts and original native scope invariants.
   Record red/green SHAs, run IDs and job IDs here; commit/push evidence.
 
@@ -135,6 +135,14 @@ real completed-history resumer. Downloaded logs show actual native derivation
 success followed by the `-Publish` fixture failing because
 `windows-stopped-history-handoff-preparation.ps1` is missing. Native create-only
 publication is now implemented; green-phase acceptance is pending.
+
+Green phase: `c5de95d8 / 40372677472`, job `121747287726`, passes.
+Downloaded logs contain all six actual execution receipts, including exact
+create-only publication. The completed-history actor independently verifies
+published bytes, digest and native dev/ino, rejects a repeated publication,
+and preserves the original record identity and old state before fixture-only
+cleanup. This accepts normally closed publication only, not actual
+preparation-publisher death, a retained production bridge or lock authority.
 
 ## Self-review and remaining gates
 
