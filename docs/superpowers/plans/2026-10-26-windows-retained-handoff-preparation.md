@@ -17,14 +17,14 @@
 - Modify: `tests/deployment-windows-lost-runtime-session.mjs`
 - Modify: `.github/workflows/deployment-lifecycle.yml`
 
-- [ ] Add a focused descriptor contract for exported
+- [x] Add a focused descriptor contract for exported
   `captureWindowsStoppedHistoryHandoffPreparedDescriptor(input, attemptId)`.
   Accept an exact prepared filename and native identities up to 1 MiB;
   reject overflow, fractional byte counts, foreign filename, noncanonical
   decimal identities and identity integer overflow. Returned record must be
   detached/frozen.
 
-- [ ] In `resume-completed-history`, after existing fixture publication
+- [x] In `resume-completed-history`, after existing fixture publication
   verification and exact fixture-only cleanup, call:
 
 ```javascript
@@ -43,19 +43,19 @@ const scope = await openWindowsStoppedHistoryHandoffPreparation({
   After close, require unchanged evidence and no lock, then fixture-only
   cleanup.
 
-- [ ] Replace the raw `-Publish -Hold` transport in `crash-prepared-history`
+- [x] Replace the raw `-Publish -Hold` transport in `crash-prepared-history`
   with this production scope. Retain the same small held payload containing
   scope.identity and the published descriptor. Existing actual prepared and
   abandoned publisher death boundaries must keep passing without fixture
   publication being misrepresented as production bridge coverage.
 
-- [ ] Add twelfth required actual receipt:
+- [x] Add twelfth required actual receipt:
 
 ```text
 PASS: production retained native preparation bridge publishes descriptor-only evidence under original admission without lock authority
 ```
 
-- [ ] Commit/push tests and dispatch both focused history and Contracts-only.
+- [x] Commit/push tests and dispatch both focused history and Contracts-only.
   Require actual missing-production-module/export red, not a fixture failure.
 
 ```bash
@@ -74,7 +74,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
 **Files:**
 - Create: `scripts/deployment/windows-stopped-history-handoff-controller.ps1`
 
-- [ ] Follow existing native controller bootstrap, Add-Type list, exact
+- [x] Follow existing native controller bootstrap, Add-Type list, exact
   controller watcher, stage-aware stderr and aggregate cleanup pattern.
   Accept Control, ControllerPid/Identity, AttemptId, OperationId, Token,
   CreatedAt scalar startup parameters. Open completed original archive and
@@ -92,7 +92,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
 }
 ```
 
-- [ ] Read maximum 4096-byte exact id/method frames. Require strictly next id
+- [x] Read maximum 4096-byte exact id/method frames. Require strictly next id
   and one of check/publish/close. Check original actor identity every request.
   Publish invokes only the accepted native create-only preparer, pins the
   returned descriptor, and retains it until close or actor death.
@@ -115,10 +115,10 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
 - Modify: `scripts/deployment/saved-worker-engine.mjs`
 - Modify: `tests/deployment-saved-worker.test.mjs`
 
-- [ ] Add the descriptor export using the existing identity/descriptor
+- [x] Add the descriptor export using the existing identity/descriptor
   validators; retain 65536-byte limit for old archive descriptors, allowing
   1 MiB only for the prepared file.
-- [ ] Export `openWindowsStoppedHistoryHandoffPreparation(options)`.
+- [x] Export `openWindowsStoppedHistoryHandoffPreparation(options)`.
   Require canonical Windows paths, explicit update operation, distinct
   canonical nonzero attempt/previous/new-operation GUIDs, native Node identity
   and a structurally captured lock owner for token/project/createdAt.
@@ -138,7 +138,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   preserve diagnostic and make later close report failure. Close waits for
   clean native exit; do not swallow failure.
 
-- [ ] Add only direct bridge dependency files to workerEngineFiles:
+- [x] Add only direct bridge dependency files to workerEngineFiles:
   new JS API/controller, prepared JS record, native owner, record,
   preparation and JSON comparator. Existing completion proof, archive and
   transport dependencies are already included. Existing saved-engine tests
@@ -146,10 +146,36 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   explicit names to the test's independently maintained closed helper set;
   retain source-removed import validation for every listed JS module.
 
-- [ ] Commit/push; repeat focused and Contracts-only on the same SHA.
+- [x] Commit/push; repeat focused and Contracts-only on the same SHA.
   Require all twelve actual history receipts, original production bridge
   death coverage and full Contracts success. Record actual job logs and
   commit/push acceptance.
+
+## Execution evidence
+
+Red tests: `ed56b034`. Focused `40410893202`, job `121881022320`,
+fails with ERR_MODULE_NOT_FOUND for the production JS API after existing
+native fixture publication passes. Contracts `40410897470`, job
+`121881034914`, fails the exact new descriptor test because its export is
+missing. Downloaded logs verify both expected boundaries.
+
+Initial implementation `7d7adbaa`: focused `40413196265`, job
+`121888840621`, passes all twelve actual receipts including production
+preparation and subsequent real actor/bridge death. Contracts `40413200506`,
+job `121888854087`, exposes the independently maintained saved helper test
+list missing the seven intentional new dependencies. The inventory contract
+was updated explicitly, without weakening closed-set checks.
+
+Accepted corrected SHA `beda927f`: focused `40415720335`, actual job
+`121897426209`, succeeds with all twelve actual receipts. Contracts
+`40414640911`, job `121893761673`, succeeds. Downloaded logs confirm the
+bounded/detached descriptor test, exact closed helper inventory, source-removed
+saved-module import checks and all native owner/JSON receipts.
+
+Preparation uses the production scope in both real prepared-publisher death
+boundaries. Original evidence, disabled task and original state remain intact,
+and no lock is created. This commands-only acceptance does not represent an
+actual application lifecycle or the final same-SHA cross-platform matrix.
 
 ## Self-review
 
