@@ -20,16 +20,21 @@ function captureIdentity(input) {
   return value;
 }
 
-function captureDescriptor(input, name) {
+function captureDescriptor(input, name, maximumBytes = 65536) {
   const value = captureWorkerFields(input, ['path', 'dev', 'ino', 'bytes', 'sha256'],
     'handoff descriptor');
   captureIdentity({ dev: value.dev, ino: value.ino });
   if (value.path !== name || !Number.isSafeInteger(value.bytes)
-    || value.bytes < 1 || value.bytes > 65536
+    || value.bytes < 1 || value.bytes > maximumBytes
     || typeof value.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(value.sha256)) {
     throw new Error('Invalid stopped history handoff descriptor.');
   }
   return value;
+}
+
+export function captureWindowsStoppedHistoryHandoffPreparedDescriptor(input, attemptId) {
+  if (!guid(attemptId)) throw new Error('Invalid stopped history handoff attempt.');
+  return captureDescriptor(input, `inactive-handoff-${attemptId}-prepared.json`, 1048576);
 }
 
 export function captureWindowsStoppedHistoryHandoffPrepared(input) {
