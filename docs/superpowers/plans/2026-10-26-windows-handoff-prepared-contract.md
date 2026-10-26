@@ -32,13 +32,13 @@ archive completeness, and reject duplicate JSON fields.
 
 ## Task 1: Add failing prepared-record contracts
 
-- [ ] Add the crypto import to the existing test file:
+- [x] Add the crypto import to the existing test file:
 
 ```js
 import { createHash } from 'node:crypto';
 ```
 
-- [ ] Append these fixtures and behavioral tests:
+- [x] Append these fixtures and behavioral tests:
 
 ```js
 const handoffInput = () => {
@@ -114,7 +114,7 @@ test('prepared history handoff rejects foreign, incomplete and inconsistent requ
 });
 ```
 
-- [ ] Commit and push the test-only change with required session trailers.
+- [x] Commit and push the test-only change with required session trailers.
   Dispatch Windows Contracts:
 
 ```bash
@@ -123,13 +123,13 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   -f windows_restore_only=true -f windows_contracts_only=true
 ```
 
-- [ ] Watch the returned run ID at 180-second intervals and inspect failed
+- [x] Watch the returned run ID at 180-second intervals and inspect failed
   logs. Expected: the two new tests fail because the requested module is
   missing. Do not execute Node or the test harness locally.
 
 ## Task 2: Implement structural capture, without authority
 
-- [ ] Create the module with the following complete implementation:
+- [x] Create the module with the following complete implementation:
 
 ```js
 import { createHash } from 'node:crypto';
@@ -206,11 +206,11 @@ export function captureWindowsStoppedHistoryHandoffPrepared(input) {
 }
 ```
 
-- [ ] Commit and push the module with required session trailers. Dispatch
+- [x] Commit and push the module with required session trailers. Dispatch
   Windows Contracts with the exact command from Task 1, watch at 180-second
   intervals and inspect the actual two test results. Expected: both pass,
   existing inactive and lock-admission contracts remain green.
-- [ ] Record red and green SHAs/run IDs/job IDs here and commit the evidence.
+- [x] Record red and green SHAs/run IDs/job IDs here and commit the evidence.
 
 ## Execution evidence
 
@@ -227,6 +227,13 @@ fails both exact prepared-handoff tests with `ERR_MODULE_NOT_FOUND` for
 existing inactive observation/admission tests passing. This establishes
 actual coverage and the expected missing-implementation failure. The pure
 capture module is ready for green-phase Actions acceptance.
+
+Green phase: `45657b72 / 40345255354`, job `121650368212`, passes the
+complete Windows Contracts selection. Downloaded job logs explicitly show
+both prepared-handoff tests passing, accepting exact prior-byte binding,
+detached frozen captures and rejection of the enumerated inconsistent
+requests. This does not accept native descriptor/process verification,
+publication or next-operation admission.
 
 ## Self-review and remaining gates
 
