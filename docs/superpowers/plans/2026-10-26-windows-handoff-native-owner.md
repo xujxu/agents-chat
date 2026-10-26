@@ -185,7 +185,7 @@ This is the prerequisite for sealing an abandoned prepared attempt, not
 abandonment publication or ownership transfer. Reuse the original native
 absence proof; do not treat a missing JS process identity as authorization.
 
-- [ ] In the native test script, add a refusal assertion for a live original
+- [x] In the native test script, add a refusal assertion for a live original
   actor using the new retired-owner function:
 
 ```powershell
@@ -200,7 +200,7 @@ function Assert-RetiredOwnerRefused([hashtable]$Request) {
 Assert-RetiredOwnerRefused $request
 ```
 
-- [ ] Retain `$liveChild = New-AgentsChatStoppedHistoryHandoffOwner @exited`
+- [x] Retain `$liveChild = New-AgentsChatStoppedHistoryHandoffOwner @exited`
   before the existing child kill. After its actual exit and existing live
   owner refusal, add:
 
@@ -212,12 +212,12 @@ foreach ($key in $liveChild.Keys) {
 Write-Host 'PASS: native retired handoff owner requires actual original actor absence without granting authority'
 ```
 
-- [ ] Commit/push tests with required trailers and dispatch the existing
+- [x] Commit/push tests with required trailers and dispatch the existing
   Windows Contracts-only selection. Inspect the actual native owner step:
   expected red is a missing retired-owner function, not acceptance of a live
   actor or unrelated tool failure.
 
-- [ ] Refactor the existing native owner helper: load
+- [x] Refactor the existing native owner helper: load
   `windows-task-completion-proof.ps1` instead of its records-only source;
   rename the existing validation body to
   `Get-AgentsChatStoppedHistoryHandoffOwnerRecord` and remove only its live
@@ -259,10 +259,23 @@ function Get-AgentsChatStoppedHistoryHandoffRetiredOwner(
 }
 ```
 
-- [ ] Commit/push and repeat Windows Contracts-only validation. Require the
+- [x] Commit/push and repeat Windows Contracts-only validation. Require the
   existing live/foreign/exited receipt plus the new retired-owner receipt.
   Record SHA/run/job evidence here and commit/push it.
 
 The new function returns an observation only. A future abandonment publisher
 must also pin the exact prepared record, reprove the original archived state,
 bind the acting recovery controller and preserve all existing evidence.
+
+### Retired-owner execution evidence
+
+Red: `6256d69f / 40382967258`, Windows Contracts job `121783767031`.
+Downloaded actual logs show the native owner test fails because
+`Get-AgentsChatStoppedHistoryHandoffRetiredOwner` is not recognized.
+
+Green: `ae01fb9e / 40384914098`, Windows Contracts job `121790535521`.
+The complete job and dedicated native owner step succeed. Downloaded
+execution logs contain both the original live/foreign/exited owner receipt
+and the new actual-original-actor-absence receipt. The seven captured owner
+fields survive real child termination unchanged. No lock, prepared-record
+reopening or abandonment publication is authorized by this observation.
