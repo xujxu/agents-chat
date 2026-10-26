@@ -17,7 +17,7 @@
 - Modify: `tests/deployment-windows-lost-runtime-session.mjs`
 - Modify: `.github/workflows/deployment-lifecycle.yml`
 
-- [ ] Add mutually exclusive `-ObserveRetired` mode to the existing native
+- [x] Add mutually exclusive `-ObserveRetired` mode to the existing native
   fixture. It takes scalar prepared descriptor fields, retains the same
   archive scope and fresh controller watcher, then calls:
 
@@ -32,7 +32,7 @@ Get-AgentsChatStoppedHistoryHandoffRetiredPrepared $scope @{
   Keep publication and held-publication branches unchanged. Observation
   returns a small status/descriptor response, never the entire prepared JSON.
 
-- [ ] In `resume-prepared-history`, after JS capture and original actor
+- [x] In `resume-prepared-history`, after JS capture and original actor
   absence, call the native fixture using the original exact descriptor:
 
 ```javascript
@@ -48,13 +48,13 @@ assert.equal(observed.lockAuthority, false);
   bytes/hash/dev/ino/state/no-lock assertions, fresh-attempt refusal, and
   fixture-only deletion after all checks.
 
-- [ ] Add this eighth required executed receipt to the focused job:
+- [x] Add this eighth required executed receipt to the focused job:
 
 ```text
 PASS: native retired prepared observation pins exact evidence after actual actor death without lock authority
 ```
 
-- [ ] Commit/push the tests and run the existing focused scenario:
+- [x] Commit/push the tests and run the existing focused scenario:
 
 ```bash
 gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -73,7 +73,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
 - Modify: `scripts/deployment/windows-stopped-history-handoff-record.ps1`
 - Create: `scripts/deployment/windows-stopped-history-handoff-observation.ps1`
 
-- [ ] Extract `Get-AgentsChatStoppedHistoryHandoffBinding(Context,AttemptId,Owner)`
+- [x] Extract `Get-AgentsChatStoppedHistoryHandoffBinding(Context,AttemptId,Owner)`
   from the existing record function. Move its archive completion precondition,
   pinned old state, native task/SID/configuration observation and exact record
   construction together; retain native cleanup checks and the 1 MiB limit.
@@ -83,7 +83,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   derive the live owner from the current original state updatedAt, and repeat
   live owner proof after construction.
 
-- [ ] Implement the independent observer with this interface:
+- [x] Implement the independent observer with this interface:
 
 ```powershell
 function Get-AgentsChatStoppedHistoryHandoffRetiredPrepared(
@@ -121,12 +121,31 @@ throw [InvalidOperationException]::new('Retired prepared handoff observation fai
 }
 ```
 
-- [ ] Commit/push and repeat the focused Actions selection. Require all eight
+- [x] Commit/push and repeat the focused Actions selection. Require all eight
   executed receipts and the complete focused job green, not application
   acceptance (commands-only intentionally skips actual application).
-- [ ] Run Windows Contracts-only for the changed native derivation and
+- [x] Run Windows Contracts-only for the changed native derivation and
   existing JS/owner/comparison contracts. Record both actual jobs and receipts
   before committing the acceptance evidence.
+
+## Execution evidence
+
+Red: `35c49668 / 40392405495`, actual stopped-history job `121816517008`.
+Downloaded execution logs reach the distinct actor's `-ObserveRetired`
+invocation after real prepared publisher death, then fail because the native
+observation module is missing.
+
+Green: `868802d7 / 40394833865`, actual job `121825003688`.
+The focused job and actual archival/saved-entry takeover step succeed.
+Downloaded execution logs contain all eight required execution receipts,
+including native retired prepared observation and the original fresh-attempt
+refusal. Correct original identity is accepted; incorrect inode is rejected;
+original prepared bytes/dev/ino, state and absence of lock remain verified.
+This commands-only selection is not actual application acceptance.
+
+Same-SHA Windows Contracts: `40394838736`, job `121825029210`, succeeds.
+Downloaded logs confirm executed live-owner, retired-owner and strict JSON
+binding receipts. Both required native steps succeed.
 
 ## Self-review
 
