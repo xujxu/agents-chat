@@ -221,6 +221,13 @@ Contracts list, despite its inclusion in native command validation.
 This is not red-phase acceptance. Add it to the actual Contracts list and
 repeat the test-only red phase before publishing the implementation.
 
+Corrected red phase: `9b76f020 / 40343460573`, job `121644028782`,
+fails both exact prepared-handoff tests with `ERR_MODULE_NOT_FOUND` for
+`windows-stopped-history-handoff-record.mjs`. Downloaded logs also show the
+existing inactive observation/admission tests passing. This establishes
+actual coverage and the expected missing-implementation failure. The pure
+capture module is ready for green-phase Actions acceptance.
+
 ## Self-review and remaining gates
 
 Only the prepared schema is stabilized here. No committed-record schema is
