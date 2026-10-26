@@ -549,35 +549,21 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       } finally { await publisher.close(); }
     }
     if (mode === 'crash-prepared-history') {
-      const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
-      const { captureWorkerFields } = await load('worker-identity.mjs');
+      const { openWindowsStoppedHistoryHandoffPreparation } = await load('windows-stopped-history-handoff.mjs');
       const actorIdentity = await processIdentity(process.pid);
       const attemptId = randomUUID();
       const completionSha256 = createHash('sha256').update(await readFile(completionFile)).digest('hex');
-      const transport = windowsControllerTransport({
-        pwsh, label: 'Held native preparation fixture',
-        refused: cause => new Error('Held native preparation fixture failed.', { cause }),
-        args: ['-NoProfile', '-NonInteractive', '-File',
-          fileURLToPath(new URL('./deployment-windows-history-handoff-entry.ps1', import.meta.url)),
-          '-Source', source, '-Control', control,
-          '-ControllerPid', String(process.pid), '-ControllerIdentity', actorIdentity,
-          '-AttemptId', attemptId, '-OperationId', randomUUID(), '-Token', randomUUID(),
-          '-CreatedAt', new Date().toISOString(), '-Publish', '-Hold'],
+      const originalState = JSON.parse(state);
+      const scope = await openWindowsStoppedHistoryHandoffPreparation({
+        ...options, project: originalState.project, previousOperationId: originalState.operationId,
+        operation: 'update', attemptId, operationId: randomUUID(), token: randomUUID(),
+        createdAt: new Date().toISOString(),
       });
-      let ready;
-      try {
-        ready = captureWorkerFields(await transport.wire.receive({ timeoutMs: 60000 }),
-          ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held preparation');
-        assert.equal(ready.type, 'ready');
-        assert.equal(ready.pid, transport.child.pid);
-        assert.equal(ready.processIdentity, await processIdentity(ready.pid));
-        assert.equal(ready.control, control);
-        assert.equal(ready.controllerIdentity, actorIdentity);
-        assert.equal(ready.value.path, `inactive-handoff-${attemptId}-prepared.json`);
-      } catch (cause) { throw await transport.abandon(cause); }
+      const descriptor = await scope.publish();
+      assert.deepEqual((await scope.check()).prepared, descriptor);
+      assert.equal(scope.identity.processIdentity, await processIdentity(scope.identity.pid));
       console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({
-        pid: ready.pid, processIdentity: ready.processIdentity,
-        actorIdentity, actorPid: process.pid, attemptId, prepared: ready.value,
+        ...scope.identity, actorIdentity, actorPid: process.pid, attemptId, prepared: descriptor,
         completionSha256,
       })}`);
       const timer = setInterval(() => {}, 1000);
@@ -857,6 +843,63 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
       await unlink(preparedFile);
       console.log('PASS: native stopped-history preparation publishes one exact create-only record without lock authority');
+      const { openWindowsStoppedHistoryHandoffPreparation } = await load('windows-stopped-history-handoff.mjs');
+      const handoffOptions = {
+        ...options, project: prepared.project, previousOperationId: prepared.previousOperationId,
+        operation: 'update', attemptId: randomUUID(), operationId: randomUUID(), token: randomUUID(),
+        createdAt: new Date().toISOString(),
+      };
+      await assert.rejects(openWindowsStoppedHistoryHandoffPreparation({
+        ...handoffOptions, admission: { ...admission },
+      }));
+      const cancelled = new AbortController();
+      cancelled.abort(new Error('Preparation fixture cancelled'));
+      await assert.rejects(openWindowsStoppedHistoryHandoffPreparation({
+        ...handoffOptions, signal: cancelled.signal,
+      }), /Preparation fixture cancelled/);
+      const scope = await openWindowsStoppedHistoryHandoffPreparation(handoffOptions);
+      let retainedBytes;
+      let retainedDescriptor;
+      let retainedFile;
+      let retainedFileIdentity;
+      try {
+        assert.deepEqual(await scope.check(), {
+          status: 'stopped-history-handoff-ready', attemptId: handoffOptions.attemptId,
+          previousOperationId: prepared.previousOperationId, project: prepared.project, prepared: null,
+        });
+        assert.equal(scope.identity.processIdentity, await processIdentity(scope.identity.pid));
+        retainedDescriptor = await scope.publish();
+        assert.deepEqual(Object.keys(retainedDescriptor).sort(), ['path', 'dev', 'ino', 'bytes', 'sha256'].sort());
+        assert.equal(retainedDescriptor.path, `inactive-handoff-${handoffOptions.attemptId}-prepared.json`);
+        retainedFile = path.join(control, retainedDescriptor.path);
+        retainedBytes = await readFile(retainedFile);
+        retainedFileIdentity = await lstat(retainedFile, { bigint: true });
+        assert.equal(retainedDescriptor.bytes, retainedBytes.length);
+        assert.equal(retainedDescriptor.sha256, createHash('sha256').update(retainedBytes).digest('hex'));
+        assert.equal(retainedDescriptor.dev, retainedFileIdentity.dev.toString());
+        assert.equal(retainedDescriptor.ino, retainedFileIdentity.ino.toString());
+        const captured = captureWindowsStoppedHistoryHandoffPrepared(JSON.parse(retainedBytes));
+        assert.equal(captured.oldState, state.toString('utf8'));
+        assert.equal(captured.newOwner.pid, process.pid);
+        assert.equal(captured.newOwner.processIdentity, await processIdentity(process.pid));
+        assert.equal(captured.newOwner.operationId, handoffOptions.operationId);
+        assert.equal(captured.newOwner.token, handoffOptions.token);
+        assert.equal(captured.newOwner.createdAt, handoffOptions.createdAt);
+        assert.deepEqual(await scope.check(), {
+          ...scope.observation, status: 'stopped-history-handoff-prepared', prepared: retainedDescriptor,
+        });
+        await assert.rejects(scope.publish(), error => error.code === 'DEPLOYMENT_WINDOWS_HANDOFF_PREPARATION_REFUSED');
+        assert.deepEqual((await scope.check()).prepared, retainedDescriptor);
+      } finally { await scope.close(); }
+      await assert.rejects(openWindowsStoppedHistoryHandoffPreparation(handoffOptions));
+      assert.deepEqual(await readFile(retainedFile), retainedBytes);
+      const afterClose = await lstat(retainedFile, { bigint: true });
+      assert.equal(afterClose.dev, retainedFileIdentity.dev);
+      assert.equal(afterClose.ino, retainedFileIdentity.ino);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      assert.equal((await readdir(control)).includes('lock'), false);
+      await unlink(retainedFile);
+      console.log('PASS: production retained native preparation bridge publishes descriptor-only evidence under original admission without lock authority');
     }
     if (retainedCompletion) {
       assert.deepEqual(completionBytes, retainedCompletion.bytes);

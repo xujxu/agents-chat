@@ -6,6 +6,27 @@ import test from 'node:test';
 const project = path.resolve('inactive-project');
 const taskName = 'Agents-Chat-Inactive-Test';
 const configurationSha256 = 'a'.repeat(64);
+test('prepared handoff bridge descriptor is exact, bounded and detached', async () => {
+  const { captureWindowsStoppedHistoryHandoffPreparedDescriptor: read } =
+    await import('../scripts/deployment/windows-stopped-history-handoff-record.mjs');
+  const attemptId = '22222222-2222-4222-8222-222222222222';
+  const input = {
+    path: `inactive-handoff-${attemptId}-prepared.json`,
+    dev: '4294967295', ino: '18446744073709551615', bytes: 1048576, sha256: 'a'.repeat(64),
+  };
+  const captured = read(input, attemptId);
+  assert.deepEqual(captured, input);
+  assert.ok(Object.isFrozen(captured));
+  input.bytes = 1;
+  assert.equal(captured.bytes, 1048576);
+  for (const patch of [
+    { bytes: 1048577 }, { bytes: 1.5 }, { bytes: 0 },
+    { path: `inactive-handoff-${attemptId}-abandoned.json` },
+    { dev: '01' }, { ino: '01' }, { dev: '4294967296' }, { ino: '18446744073709551616' },
+    { extra: true },
+  ]) assert.throws(() => read({ ...input, ...patch }, attemptId));
+  assert.throws(() => read(input, '00000000-0000-0000-0000-000000000000'));
+});
 const retiredRuntime = {
   pid: 1234, identity: '1234:638900000000000000',
   generation: '11111111-1111-4111-8111-111111111111',
