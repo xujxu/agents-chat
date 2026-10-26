@@ -921,6 +921,94 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         await assert.rejects(reopened.publish(), error => error.code === 'DEPLOYMENT_WINDOWS_HANDOFF_PREPARATION_REFUSED');
         assert.deepEqual((await reopened.check()).prepared, retainedDescriptor);
       } finally { await reopened.close(); }
+      const commitArgs = [
+        '-NoProfile', '-NonInteractive', '-File',
+        fileURLToPath(new URL('./deployment-windows-history-handoff-commit.ps1', import.meta.url)),
+        '-Source', source, '-Control', control,
+        '-ControllerPid', String(process.pid), '-ControllerIdentity', await processIdentity(process.pid),
+        '-AttemptId', handoffOptions.attemptId, '-OperationId', handoffOptions.operationId,
+        '-CreatedAt', handoffOptions.createdAt, '-PreparedDev', retainedDescriptor.dev,
+        '-PreparedIno', retainedDescriptor.ino, '-PreparedBytes', String(retainedDescriptor.bytes),
+        '-PreparedSha256', retainedDescriptor.sha256,
+      ];
+      await assert.rejects(promisify(execFile)(pwsh, [...commitArgs, '-Token', randomUUID()],
+        { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
+      error => error.message.includes('Handoff lock commit failed; retain evidence.'));
+      assert.equal((await readdir(control)).includes('lock'), false);
+      const committedPublication = await promisify(execFile)(pwsh,
+        [...commitArgs, '-Token', handoffOptions.token],
+        { timeout: 45000, maxBuffer: 131072, windowsHide: true });
+      assert.equal(committedPublication.stderr, '');
+      const committedDescriptor = JSON.parse(committedPublication.stdout);
+      assert.equal(committedDescriptor.path, `inactive-handoff-${handoffOptions.attemptId}-committed.json`);
+      const committedFile = path.join(control, committedDescriptor.path);
+      const committedBytes = await readFile(committedFile);
+      const committedIdentity = await lstat(committedFile, { bigint: true });
+      assert.equal(committedDescriptor.bytes, committedBytes.length);
+      assert.equal(committedDescriptor.sha256, createHash('sha256').update(committedBytes).digest('hex'));
+      assert.equal(committedDescriptor.dev, committedIdentity.dev.toString());
+      assert.equal(committedDescriptor.ino, committedIdentity.ino.toString());
+      const committed = JSON.parse(committedBytes);
+      const retainedRecord = captureWindowsStoppedHistoryHandoffPrepared(JSON.parse(retainedBytes));
+      assert.deepEqual(Object.keys(committed).sort(), [
+        'version', 'phase', 'attemptId', 'control', 'project', 'controlIdentity', 'previousOperationId',
+        'prepared', 'newOwner', 'lockIdentity', 'lock', 'creator', 'committedAt',
+      ].sort());
+      assert.equal(committed.version, 1);
+      assert.equal(committed.phase, 'stopped-history-handoff-committed');
+      assert.equal(committed.attemptId, handoffOptions.attemptId);
+      assert.equal(committed.control, control);
+      assert.equal(committed.project, retainedRecord.project);
+      assert.deepEqual(committed.controlIdentity, retainedRecord.controlIdentity);
+      assert.equal(committed.previousOperationId, retainedRecord.previousOperationId);
+      assert.deepEqual(committed.prepared, retainedDescriptor);
+      assert.deepEqual(committed.newOwner, retainedRecord.newOwner);
+      assert.deepEqual(Object.keys(committed.creator).sort(),
+        ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'].sort());
+      assert.equal(committed.creator.pid, process.pid);
+      assert.equal(committed.creator.processIdentity, await processIdentity(process.pid));
+      assert.notEqual(committed.creator.bridgePid, process.pid);
+      assert.match(committed.creator.bridgeIdentity, new RegExp(`^${committed.creator.bridgePid}:[1-9][0-9]*$`));
+      assert.match(committed.committedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      assert.ok(Date.parse(committed.committedAt) >= Date.parse(retainedRecord.newOwner.createdAt));
+      const lockDirectory = path.join(control, 'lock');
+      const lockFile = path.join(lockDirectory, 'owner.json');
+      const lockBytes = await readFile(lockFile);
+      const lockIdentity = await lstat(lockDirectory, { bigint: true });
+      const ownerIdentity = await lstat(lockFile, { bigint: true });
+      assert.deepEqual(committed.lockIdentity, { dev: lockIdentity.dev.toString(), ino: lockIdentity.ino.toString() });
+      assert.deepEqual(committed.lock, {
+        path: 'lock\\owner.json', dev: ownerIdentity.dev.toString(), ino: ownerIdentity.ino.toString(),
+        bytes: lockBytes.length, sha256: createHash('sha256').update(lockBytes).digest('hex'),
+      });
+      const actualOwner = JSON.parse(lockBytes);
+      assert.deepEqual(actualOwner, retainedRecord.newOwner);
+      await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
+      const { releaseLock } = await load('state.mjs');
+      await assert.rejects(releaseLock(control, actualOwner, { pwsh, admission }));
+      await assert.rejects(promisify(execFile)(pwsh, [...commitArgs, '-Token', handoffOptions.token],
+        { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
+      error => error.message.includes('Unexpected stopped worker retirement inventory.'));
+      assert.deepEqual(await readFile(committedFile), committedBytes);
+      const committedAfter = await lstat(committedFile, { bigint: true });
+      assert.equal(committedAfter.dev, committedIdentity.dev);
+      assert.equal(committedAfter.ino, committedIdentity.ino);
+      assert.deepEqual(await readFile(lockFile), lockBytes);
+      const ownerAfter = await lstat(lockFile, { bigint: true });
+      assert.equal(ownerAfter.dev, ownerIdentity.dev);
+      assert.equal(ownerAfter.ino, ownerIdentity.ino);
+      const directoryAfter = await lstat(lockDirectory, { bigint: true });
+      assert.equal(directoryAfter.dev, lockIdentity.dev);
+      assert.equal(directoryAfter.ino, lockIdentity.ino);
+      assert.deepEqual(await readFile(retainedFile), retainedBytes);
+      const preparedAfterCommit = await lstat(retainedFile, { bigint: true });
+      assert.equal(preparedAfterCommit.dev, retainedFileIdentity.dev);
+      assert.equal(preparedAfterCommit.ino, retainedFileIdentity.ino);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      await unlink(committedFile);
+      await unlink(lockFile);
+      await rmdir(lockDirectory);
+      console.log('PASS: native handoff commit publishes exact new owner lock and immutable receipt while preserving old state and ordinary refusal gates');
       assert.deepEqual(await readFile(retainedFile), retainedBytes);
       const afterClose = await lstat(retainedFile, { bigint: true });
       assert.equal(afterClose.dev, retainedFileIdentity.dev);
