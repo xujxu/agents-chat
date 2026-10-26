@@ -29,7 +29,7 @@ separate accepted Windows Contracts evidence. Execution remains inline.
 
 ## Task 1: Real-fixture red phase
 
-- [ ] Add a fixture entry taking Source, Control, ControllerPid,
+- [x] Add a fixture entry taking Source, Control, ControllerPid,
   ControllerIdentity, AttemptId, OperationId, Token and CreatedAt. Load the
   existing native controller's Add-Type closure, then the worker cleanup and
   new record modules. Retain an owner watcher, open
@@ -104,7 +104,7 @@ assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
 console.log('PASS: native stopped-history preparation derives exact archive and live prospective owner without publication');
 ```
 
-- [ ] Commit test/fixture/workflow changes with required trailers and push.
+- [x] Commit test/fixture/workflow changes with required trailers and push.
   Dispatch the exact focused fixture:
 
 ```bash
@@ -115,13 +115,13 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   -f windows_history_only=true
 ```
 
-- [ ] Watch the returned run at 180-second intervals. Download job logs;
+- [x] Watch the returned run at 180-second intervals. Download job logs;
   require failure because the new native record module is missing, not
   because an earlier fixture boundary or tool setup failed.
 
 ## Task 2: Native derivation
 
-- [ ] Create the native record module with this complete implementation:
+- [x] Create the native record module with this complete implementation:
 
 ```powershell
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-owner.ps1')
@@ -204,10 +204,10 @@ command input before reusing it for public deploy; do not claim deploy
 support from this fixture. The builder's output is not published or accepted
 by ordinary admission.
 
-- [ ] Commit/push with required trailers and repeat the focused dispatch.
+- [x] Commit/push with required trailers and repeat the focused dispatch.
   Inspect actual logs for all existing four required death receipts plus
   the new derivation receipt. Require the focused native job green.
-- [ ] Record exact red/green SHAs, run IDs and actual job IDs here and
+- [x] Record exact red/green SHAs, run IDs and actual job IDs here and
   commit/push the evidence.
 
 ## Execution evidence
@@ -218,6 +218,14 @@ Red phase: `db57b371 / 40364975288`, job `121720106994`, reaches
 show actual original controller identity and new prospective owner GUIDs
 at this intended boundary, not an earlier archive failure. Native derivation
 is now implemented; green-phase acceptance is pending.
+
+Green phase: `bfddb336 / 40367482087`, job `121729021973`, passes.
+Downloaded job logs contain all five actual PASS receipts after execution,
+not just their echoed workflow definitions. This accepts native derivation
+from a real finalized archive, matching the JS prepared contract and exact
+original state/intent/completion digests, with current actor binding and no
+handoff files published. Existing partial, finalized, saved-entry and
+completion-publisher death recovery receipts remain present.
 
 ## Self-review and next gate
 
