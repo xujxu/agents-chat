@@ -11,9 +11,8 @@ function Get-AgentsChatStoppedHandoffDescriptor($File, [string]$Name, [int]$Maxi
     return $descriptor
 }
 
-function Get-AgentsChatStoppedHistoryHandoffPreparedRecord(
-    [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
-    [string]$AttemptId, [string]$OperationId, [string]$Token, [string]$CreatedAt
+function Get-AgentsChatStoppedHistoryHandoffBinding(
+    [hashtable]$Context, [string]$AttemptId, $Owner
 ) {
     $null = Assert-AgentsChatStoppedWorkerCleanup $Context
     $intentName = "retired-$($Context.OperationId)-inactive-rollback-history-intent.json"
@@ -22,20 +21,8 @@ function Get-AgentsChatStoppedHistoryHandoffPreparedRecord(
         $Context.HistoryIntentPath -cne (Join-Path $Context.Control $intentName)) {
         throw 'Native handoff preparation requires completed original archival.'
     }
-    foreach ($item in Get-ChildItem -LiteralPath $Context.Control -Force) {
-        if ($item.Name -like 'inactive-handoff-*') { throw 'Existing handoff requires explicit settlement.' }
-    }
     $state = Open-AgentsChatRetirementFile $Context $Context.TaskRecord.checkpoint.state 'state.json'
     $oldState = $state.ReadText()
-    $document = [Text.Json.JsonDocument]::Parse($oldState)
-    try { $updated = $document.RootElement.GetProperty('updatedAt').GetString() }
-    finally { $document.Dispose() }
-    $request = @{
-        Project=$Context.Project; PreviousOperationId=$Context.OperationId
-        AttemptId=$AttemptId; OperationId=$OperationId; Token=$Token; CreatedAt=$CreatedAt
-        PreviousUpdatedAt=$updated; ControllerPid=$ControllerPid; ControllerIdentity=$ControllerIdentity
-    }
-    $owner = New-AgentsChatStoppedHistoryHandoffOwner @request
     $task = $Context.Folder.GetTask($Context.TaskName)
     $user = [string]$task.Definition.Principal.UserId
     $sid = if ($user -match '^S-1-') { [Security.Principal.SecurityIdentifier]::new($user) }
@@ -52,7 +39,7 @@ function Get-AgentsChatStoppedHistoryHandoffPreparedRecord(
         state=(Get-AgentsChatStoppedHandoffDescriptor $state 'state.json')
         intent=(Get-AgentsChatStoppedHandoffDescriptor $Context.HistoryIntent $intentName)
         completion=(Get-AgentsChatStoppedHandoffDescriptor $Context.HistoryCompletion $completionName)
-        newOwner=$owner
+        newOwner=$Owner
         observation=[ordered]@{
             status='inactive-task-observed'; runtimeAuthority=$false
             project=$Context.Project; taskName=$Context.TaskName; definition=$Context.Definition
@@ -64,6 +51,33 @@ function Get-AgentsChatStoppedHistoryHandoffPreparedRecord(
     if ([Text.Encoding]::UTF8.GetByteCount(($record | ConvertTo-Json -Depth 12 -Compress)) -gt 1048576) {
         throw 'Native prepared handoff response is oversized.'
     }
+    $null = Assert-AgentsChatStoppedWorkerCleanup $Context
+    return $record
+}
+
+function Get-AgentsChatStoppedHistoryHandoffStateUpdatedAt([hashtable]$Context) {
+    $state = Open-AgentsChatRetirementFile $Context $Context.TaskRecord.checkpoint.state 'state.json'
+    $document = [Text.Json.JsonDocument]::Parse($state.ReadText())
+    try { return $document.RootElement.GetProperty('updatedAt').GetString() }
+    finally { $document.Dispose() }
+}
+
+function Get-AgentsChatStoppedHistoryHandoffPreparedRecord(
+    [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
+    [string]$AttemptId, [string]$OperationId, [string]$Token, [string]$CreatedAt
+) {
+    $null = Assert-AgentsChatStoppedWorkerCleanup $Context
+    foreach ($item in Get-ChildItem -LiteralPath $Context.Control -Force) {
+        if ($item.Name -like 'inactive-handoff-*') { throw 'Existing handoff requires explicit settlement.' }
+    }
+    $request = @{
+        Project=$Context.Project; PreviousOperationId=$Context.OperationId
+        AttemptId=$AttemptId; OperationId=$OperationId; Token=$Token; CreatedAt=$CreatedAt
+        PreviousUpdatedAt=(Get-AgentsChatStoppedHistoryHandoffStateUpdatedAt $Context)
+        ControllerPid=$ControllerPid; ControllerIdentity=$ControllerIdentity
+    }
+    $owner = New-AgentsChatStoppedHistoryHandoffOwner @request
+    $record = Get-AgentsChatStoppedHistoryHandoffBinding $Context $AttemptId $owner
     $null = New-AgentsChatStoppedHistoryHandoffOwner @request
     $null = Assert-AgentsChatStoppedWorkerCleanup $Context
     foreach ($item in Get-ChildItem -LiteralPath $Context.Control -Force) {
