@@ -1,6 +1,6 @@
-. (Join-Path $PSScriptRoot 'windows-task-completion-records.ps1')
+. (Join-Path $PSScriptRoot 'windows-task-completion-proof.ps1')
 
-function New-AgentsChatStoppedHistoryHandoffOwner(
+function Get-AgentsChatStoppedHistoryHandoffOwnerRecord(
     [string]$Project, [string]$PreviousOperationId, [string]$AttemptId,
     [string]$OperationId, [string]$Token, [string]$CreatedAt,
     [string]$PreviousUpdatedAt, [int]$ControllerPid, [string]$ControllerIdentity
@@ -20,6 +20,18 @@ function New-AgentsChatStoppedHistoryHandoffOwner(
     $created = [DateTimeOffset]::ParseExact($CreatedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ', $culture, $style)
     $previous = [DateTimeOffset]::ParseExact($PreviousUpdatedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ', $culture, $style)
     if ($created -lt $previous) { throw 'Handoff prospective owner timestamp is backdated.' }
+    return [ordered]@{
+        version=1; token=$Token; project=$Project; operationId=$OperationId
+        pid=$ControllerPid; processIdentity=$ControllerIdentity; createdAt=$CreatedAt
+    }
+}
+
+function New-AgentsChatStoppedHistoryHandoffOwner(
+    [string]$Project, [string]$PreviousOperationId, [string]$AttemptId,
+    [string]$OperationId, [string]$Token, [string]$CreatedAt,
+    [string]$PreviousUpdatedAt, [int]$ControllerPid, [string]$ControllerIdentity
+) {
+    $owner = Get-AgentsChatStoppedHistoryHandoffOwnerRecord @PSBoundParameters
     foreach ($pass in @(1, 2)) {
         try { $actual = [Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) }
         catch {
@@ -27,8 +39,20 @@ function New-AgentsChatStoppedHistoryHandoffOwner(
         }
         if ($actual -cne $ControllerIdentity) { throw 'Handoff prospective owner identity differs.' }
     }
-    return [ordered]@{
-        version=1; token=$Token; project=$Project; operationId=$OperationId
-        pid=$ControllerPid; processIdentity=$ControllerIdentity; createdAt=$CreatedAt
+    return $owner
+}
+
+function Get-AgentsChatStoppedHistoryHandoffRetiredOwner(
+    [string]$Project, [string]$PreviousOperationId, [string]$AttemptId,
+    [string]$OperationId, [string]$Token, [string]$CreatedAt,
+    [string]$PreviousUpdatedAt, [int]$ControllerPid, [string]$ControllerIdentity
+) {
+    $owner = Get-AgentsChatStoppedHistoryHandoffOwnerRecord @PSBoundParameters
+    foreach ($pass in @(1, 2)) {
+        try { Assert-AgentsChatCompletionProcessAbsent $ControllerPid $ControllerIdentity }
+        catch {
+            throw [InvalidOperationException]::new('Handoff retired owner remains live or unverifiable.', $_.Exception)
+        }
     }
+    return $owner
 }
