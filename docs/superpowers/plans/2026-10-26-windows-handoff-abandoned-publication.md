@@ -17,7 +17,7 @@
 - Modify: `tests/deployment-windows-lost-runtime-session.mjs`
 - Modify: `.github/workflows/deployment-lifecycle.yml`
 
-- [ ] Add `-Abandon` fixture mode, mutually exclusive with Publish/Hold/
+- [x] Add `-Abandon` fixture mode, mutually exclusive with Publish/Hold/
   ObserveRetired. Load `windows-stopped-history-handoff-abandonment.ps1`.
   Only this branch sets `$scope.HistoryHandoffAbandoner = $true`, then invokes:
 
@@ -28,7 +28,7 @@ Publish-AgentsChatStoppedHistoryHandoffAbandoned $scope @{
 } $AttemptId $ControllerPid $ControllerIdentity
 ```
 
-- [ ] Extend `resume-prepared-history` after all current observation,
+- [x] Extend `resume-prepared-history` after all current observation,
   incorrect-inode and fresh-attempt refusal checks. Call `-Abandon` with
   original descriptor scalars. Read returned terminal descriptor and verify
   file hash/dev/ino/byte length, exact original prepared descriptor, original
@@ -41,13 +41,13 @@ Publish-AgentsChatStoppedHistoryHandoffAbandoned $scope @{
   may the fixture remove the exact terminal and prepared files and continue
   original archive restoration.
 
-- [ ] Add ninth required executed receipt:
+- [x] Add ninth required executed receipt:
 
 ```text
 PASS: native abandoned handoff publication seals one exact dead attempt without replacing evidence or granting lock authority
 ```
 
-- [ ] Commit/push tests and dispatch:
+- [x] Commit/push tests and dispatch:
 
 ```bash
 gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -66,20 +66,20 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
 - Modify: `scripts/deployment/windows-stopped-history-handoff-observation.ps1`
 - Create: `scripts/deployment/windows-stopped-history-handoff-abandonment.ps1`
 
-- [ ] Extract `Assert-AgentsChatStoppedHistoryHandoffRetiredPreparedBinding`
+- [x] Extract `Assert-AgentsChatStoppedHistoryHandoffRetiredPreparedBinding`
   taking Context, pinned File, AttemptId, ControllerPid and ControllerIdentity.
   Preserve the current exact JSON/owner parsing, two original-actor absence
   checks per pass, complete independent native binding derivation, fresh
   controller checks and document disposal. It performs no namespace allowance
   or publication.
 
-- [ ] Extract exact inventory helper taking Context and expected filenames:
+- [x] Extract exact inventory helper taking Context and expected filenames:
   use an ordinal HashSet; enumerate every `inactive-handoff-*` entry, reject
   directories, unexpected names/casing/duplicates and missing names.
   The accepted observer still requires only its original prepared filename
   before and after the binding check. Preserve contextual failure/poisoning.
 
-- [ ] Implement this independent publisher:
+- [x] Implement this independent publisher:
 
 ```powershell
 function Publish-AgentsChatStoppedHistoryHandoffAbandoned(
@@ -118,9 +118,29 @@ function Publish-AgentsChatStoppedHistoryHandoffAbandoned(
   Never delete evidence on production failure. Repeated publication is
   deliberately refused; existing terminal-record reopening is a later step.
 
-- [ ] Commit/push and repeat the exact focused Actions selection. Require
+- [x] Commit/push and repeat the exact focused Actions selection. Require
   all nine actual receipts. Also run Windows Contracts-only on the same SHA.
-- [ ] Record real red/green SHA/run/job evidence and push the acceptance.
+- [x] Record real red/green SHA/run/job evidence and push the acceptance.
+
+## Execution evidence
+
+Red: `743c2c0b / 40397977194`, actual job `121835999438`. Downloaded
+logs confirm the accepted retired prepared observation executes successfully,
+then `-Abandon` fails because the native abandonment module is missing.
+
+Green: `152ba14a / 40400392666`, actual job `121844379080`, succeeds.
+Downloaded logs contain all nine required executed receipts. The terminal
+receipt binds the exact prepared descriptor, original archive control identity
+and operation, fresh controller identity, actual native bridge identity and
+UTC settlement time. Missing publisher role and repeat publication are
+refused. Original state, prepared bytes/dev/ino, terminal bytes/dev/ino and
+absence of a lock remain verified. This commands-only job does not accept
+the actual application lifecycle.
+
+Same-SHA Windows Contracts: `40400396693`, job `121844417055`, succeeds.
+Downloaded execution logs confirm native live-owner, retired-owner and strict
+JSON binding receipts. Existing contracts remain green after extraction of
+the shared retained binding and exact namespace checks.
 
 ## Self-review
 
