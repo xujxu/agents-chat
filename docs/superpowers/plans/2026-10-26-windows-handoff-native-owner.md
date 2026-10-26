@@ -156,6 +156,14 @@ function New-AgentsChatStoppedHistoryHandoffOwner(
 - [ ] Record red/green SHAs, run IDs and actual job IDs in this plan; commit
   and push the evidence.
 
+## Execution evidence
+
+Red phase: `32418d56 / 40357058979`, Windows Contracts job
+`121692259874`, fails in the exact new native owner step because
+`windows-stopped-history-handoff-owner.ps1` does not exist. Downloaded failed
+logs confirm this expected missing-implementation boundary. The native
+owner helper is now implemented; green-phase acceptance is pending.
+
 ## Self-review
 
 The process identity lookup is native and failures are explicit, with their
