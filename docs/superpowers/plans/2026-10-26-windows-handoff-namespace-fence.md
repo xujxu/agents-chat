@@ -34,7 +34,7 @@ must not make ordinary admission succeed.
 
 ## Task 1: Establish failing ownership-preservation contracts
 
-- [ ] Add the following entries to the Windows-only array immediately after
+- [x] Add the following entries to the Windows-only array immediately after
   the existing archived history-complete marker in
   `tests/deployment-state.test.mjs`:
 
@@ -52,7 +52,7 @@ Its test body already checks refused release, refused fresh acquisition,
 blocked reconciliation, refusal even with `allowLiveRetirement`, and exact
 owner bytes retained. Reuse it rather than duplicate its fixtures.
 
-- [ ] Commit tests with the required session trailers and push:
+- [x] Commit tests with the required session trailers and push:
 
 ```bash
 git add tests/deployment-state.test.mjs
@@ -65,7 +65,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   -f windows_restore_only=true -f windows_contracts_only=true
 ```
 
-- [ ] Watch the returned run ID with `gh run watch <returned-id> -R
+- [x] Watch the returned run ID with `gh run watch <returned-id> -R
   xujxu/agents-chat --interval 180 --exit-status`. Expected: Windows
   Contracts fails because release unexpectedly succeeds for the new marker.
   Download that job's logs and confirm this assertion, not an infrastructure
@@ -73,7 +73,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
 
 ## Task 2: Add the shared maintenance fence
 
-- [ ] In `serviceMaintenanceEntry`, immediately after the existing
+- [x] In `serviceMaintenanceEntry`, immediately after the existing
   inactive-rollback predicate, add:
 
 ```js
@@ -85,7 +85,7 @@ The function already lowercases Windows names. Do not change Linux behavior,
 `acquireLock`, `releaseLock`, reconciliation or their error messages.
 They already share this classifier, so the new predicate must be sufficient.
 
-- [ ] Commit the implementation with the required trailers and push:
+- [x] Commit the implementation with the required trailers and push:
 
 ```bash
 git add scripts/deployment/state.mjs
@@ -98,12 +98,12 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   -f windows_restore_only=true -f windows_contracts_only=true
 ```
 
-- [ ] Watch the returned run at 180-second intervals. Expected: complete
+- [x] Watch the returned run at 180-second intervals. Expected: complete
   Windows Contracts succeeds, including both casings of all six artifacts.
   Inspect downloaded job logs for the new test titles and passing results.
   Never infer coverage solely from a green run.
 
-- [ ] Record both SHAs, run IDs, actual job IDs and observed red/green
+- [x] Record both SHAs, run IDs, actual job IDs and observed red/green
   assertions here; commit and push the evidence with required trailers.
   Keep the already-running full matrix intact: it validates its own earlier
   SHA, not this new behavior.
@@ -115,8 +115,14 @@ Red phase: `e8bf8c58 / 40333764593`, Windows Contracts job
 `tests/deployment-state.test.mjs:54`. Downloaded failed logs confirm the
 new handoff markers allow ordinary release before the shared fence exists.
 This is the intended behavioral failure, not an infrastructure failure.
-The shared Windows-only classifier predicate is now implemented; green
-Actions acceptance is pending.
+Green phase: `73ba5b74 / 40335404387`, Windows Contracts job
+`121615521843`, succeeds. Downloaded actual job logs contain all twelve
+passing handoff cases: both casings of prepared, committed, snapshot,
+state-transition, abandoned and malformed names. The existing test body
+also verifies fresh acquisition refusal, blocked reconciliation,
+`allowLiveRetirement` refusal and unchanged original owner bytes.
+This completes only the namespace fence; no publisher or new-operation
+authority has been added.
 
 ## Self-review and remaining gates
 
