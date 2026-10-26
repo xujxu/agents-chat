@@ -210,6 +210,15 @@ by ordinary admission.
 - [ ] Record exact red/green SHAs, run IDs and actual job IDs here and
   commit/push the evidence.
 
+## Execution evidence
+
+Red phase: `db57b371 / 40364975288`, job `121720106994`, reaches
+`resume-completed-history` and fails at the fixture invocation because
+`windows-stopped-history-handoff-record.ps1` is missing. Downloaded logs
+show actual original controller identity and new prospective owner GUIDs
+at this intended boundary, not an earlier archive failure. Native derivation
+is now implemented; green-phase acceptance is pending.
+
 ## Self-review and next gate
 
 Original state and archive metadata are derived from pinned native files.
