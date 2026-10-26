@@ -656,6 +656,12 @@ jobs:
         run: |
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-handoff-owner.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Native handoff owner identity contracts failed.' }
+      - name: Verify native prepared handoff JSON binding
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-handoff-json.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native handoff JSON binding contracts failed.' }
       - name: Probe Windows cold retirement stability
         if: runner.os == 'Windows'
         shell: pwsh
