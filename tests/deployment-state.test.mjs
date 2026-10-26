@@ -37,7 +37,13 @@ for (const marker of ['task-retirement.json', 'task-retirement-checkpoint.json',
   'inactive-rollback-workers.json', 'inactive-rollback-retired.json',
   ...(process.platform === 'win32'
     ? ['retired-12345678-1234-1234-1234-123456789abc-inactive-rollback-history-intent.json',
-      'retired-12345678-1234-1234-1234-123456789abc-inactive-rollback-history-complete.json'] : [])]
+      'retired-12345678-1234-1234-1234-123456789abc-inactive-rollback-history-complete.json',
+      'inactive-handoff-12345678-1234-1234-1234-123456789abc-prepared.json',
+      'inactive-handoff-12345678-1234-1234-1234-123456789abc-committed.json',
+      'inactive-handoff-12345678-1234-1234-1234-123456789abc-snapshot.json',
+      'inactive-handoff-12345678-1234-1234-1234-123456789abc-state-transition.json',
+      'inactive-handoff-12345678-1234-1234-1234-123456789abc-abandoned.json',
+      'inactive-handoff-malformed.json'] : [])]
   .flatMap(name => process.platform === 'win32' ? [name, name.toUpperCase()] : [name])) {
   test(`${marker} blocks ordinary ownership even without the task receipt directory`, async t => {
     const root = await temporaryDeployment(t);
