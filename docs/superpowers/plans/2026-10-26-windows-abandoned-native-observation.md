@@ -17,7 +17,7 @@
 - Modify: `tests/deployment-windows-lost-runtime-session.mjs`
 - Modify: `.github/workflows/deployment-lifecycle.yml`
 
-- [ ] Add mutually exclusive `-ObserveAbandoned` fixture mode and scalar
+- [x] Add mutually exclusive `-ObserveAbandoned` fixture mode and scalar
   `TerminalDev`, `TerminalIno`, `TerminalBytes`, `TerminalSha256` parameters.
   Load `windows-stopped-history-handoff-abandoned-observation.ps1` only for
   this branch and invoke:
@@ -32,7 +32,7 @@ Get-AgentsChatStoppedHistoryHandoffAbandoned $scope @{
 } $AttemptId $ControllerPid $ControllerIdentity
 ```
 
-- [ ] Extend `resume-abandoned-history` after actual publisher/bridge absence
+- [x] Extend `resume-abandoned-history` after actual publisher/bridge absence
   checks. Invoke the native observer with both original descriptors and assert:
 
 ```javascript
@@ -49,13 +49,13 @@ assert.equal(observed.lockAuthority, false);
   fresh-publisher refusal, unchanged bytes/dev/ino/state/no-lock assertions
   remain in place before fixture-only cleanup.
 
-- [ ] Add eleventh required executed receipt:
+- [x] Add eleventh required executed receipt:
 
 ```text
 PASS: native abandoned handoff observation revalidates exact terminal and prepared evidence under a third actor without lock authority
 ```
 
-- [ ] Commit/push tests; dispatch the focused scenario below. Download actual
+- [x] Commit/push tests; dispatch the focused scenario below. Download actual
   logs and require red because the new native observation module is missing
   after actual terminal publisher death.
 
@@ -72,7 +72,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
 **Files:**
 - Create: `scripts/deployment/windows-stopped-history-handoff-abandoned-observation.ps1`
 
-- [ ] Implement:
+- [x] Implement:
 
 ```powershell
 function Get-AgentsChatStoppedHistoryHandoffAbandoned(
@@ -116,9 +116,28 @@ function Get-AgentsChatStoppedHistoryHandoffAbandoned(
   Return only the two freshly captured descriptors, attemptId, status
   `abandoned-handoff-observed`, runtimeAuthority false and lockAuthority false.
 
-- [ ] Commit/push and repeat focused Actions; require all eleven executed
+- [x] Commit/push and repeat focused Actions; require all eleven executed
   receipts and complete job green. Run Windows Contracts-only on the same SHA.
-- [ ] Record real SHA/run/job evidence and push acceptance.
+- [x] Record real SHA/run/job evidence and push acceptance.
+
+## Execution evidence
+
+Red: `ad803328 / 40405838028`, actual job `121863240394`.
+Downloaded logs reach the third actor's `-ObserveAbandoned` invocation after
+actual preparation and terminal publisher death, then fail because the new
+native abandoned observation module is missing.
+
+Green: `45628d69 / 40408006376`, actual job `121870658724`, succeeds.
+Downloaded logs contain all eleven actual required receipts. The third
+actor's native observation revalidates both exact descriptors and original
+archive/prepared binding, rejects an incorrect terminal inode, and preserves
+both files and original state without granting lock authority. Fresh
+publication remains refused. Commands-only does not accept actual application
+behavior.
+
+Same-SHA Windows Contracts: `40408010581`, job `121870673814`, succeeds.
+Downloaded execution logs retain the native live-owner, retired-owner and
+strict JSON binding receipts.
 
 ## Self-review
 
