@@ -1,8 +1,20 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-record.ps1')
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-json.ps1')
 
-function Get-AgentsChatStoppedHistoryHandoffRetiredPrepared(
-    [hashtable]$Context, $Descriptor, [string]$AttemptId,
+function Assert-AgentsChatStoppedHistoryHandoffNamespace([hashtable]$Context, [string[]]$Names) {
+    $expected = [Collections.Generic.HashSet[string]]::new($Names, [StringComparer]::Ordinal)
+    if ($expected.Count -ne $Names.Count) { throw 'Duplicate expected handoff namespace entry.' }
+    foreach ($entry in Get-ChildItem -LiteralPath $Context.Control -Force) {
+        if ($entry.Name -notlike 'inactive-handoff-*') { continue }
+        if ($entry.PSIsContainer -or -not $expected.Remove($entry.Name)) {
+            throw 'Retired prepared handoff namespace differs.'
+        }
+    }
+    if ($expected.Count) { throw 'Retired prepared handoff namespace is incomplete.' }
+}
+
+function Assert-AgentsChatStoppedHistoryHandoffRetiredPreparedBinding(
+    [hashtable]$Context, $File, [string]$AttemptId,
     [int]$ControllerPid, [string]$ControllerIdentity
 ) {
     $document = $null
@@ -10,9 +22,7 @@ function Get-AgentsChatStoppedHistoryHandoffRetiredPrepared(
         $null = Assert-AgentsChatStoppedWorkerCleanup $Context
         Assert-AgentsChatCompletionGuid $AttemptId
         Assert-AgentsChatCompletionProcessIdentity $ControllerPid $ControllerIdentity
-        $name = "inactive-handoff-$AttemptId-prepared.json"
-        Assert-AgentsChatRetirementDescriptor $Descriptor $name 1048576
-        $held = Open-AgentsChatRetirementFile $Context $Descriptor $name
+        $held = $File
         $text = $held.ReadText()
         $fields = Read-AgentsChatMaintenanceFields $text @(
             'version', 'phase', 'attemptId', 'control', 'project', 'controlIdentity',
@@ -36,11 +46,6 @@ function Get-AgentsChatStoppedHistoryHandoffRetiredPrepared(
             if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
                 throw 'Retired prepared observer identity differs.'
             }
-            $entries = @(Get-ChildItem -LiteralPath $Context.Control -Force |
-                Where-Object { $_.Name -like 'inactive-handoff-*' })
-            if ($entries.Count -ne 1 -or $entries[0].PSIsContainer -or $entries[0].Name -cne $name) {
-                throw 'Retired prepared handoff namespace differs.'
-            }
             $held.Check()
             if ($held.ReadText() -cne $text) { throw 'Retired prepared handoff bytes changed.' }
             $owner = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request
@@ -54,6 +59,25 @@ function Get-AgentsChatStoppedHistoryHandoffRetiredPrepared(
                 throw 'Retired prepared observer changed during observation.'
             }
         }
+    } finally {
+        if ($document) { $document.Dispose() }
+    }
+}
+
+function Get-AgentsChatStoppedHistoryHandoffRetiredPrepared(
+    [hashtable]$Context, $Descriptor, [string]$AttemptId,
+    [int]$ControllerPid, [string]$ControllerIdentity
+) {
+    try {
+        $null = Assert-AgentsChatStoppedWorkerCleanup $Context
+        Assert-AgentsChatCompletionGuid $AttemptId
+        $name = "inactive-handoff-$AttemptId-prepared.json"
+        Assert-AgentsChatRetirementDescriptor $Descriptor $name 1048576
+        $held = Open-AgentsChatRetirementFile $Context $Descriptor $name
+        Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($name)
+        Assert-AgentsChatStoppedHistoryHandoffRetiredPreparedBinding $Context $held $AttemptId `
+            $ControllerPid $ControllerIdentity
+        Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($name)
         return [ordered]@{
             status='retired-prepared-handoff-observed'; attemptId=$AttemptId
             prepared=(Get-AgentsChatStoppedHandoffDescriptor $held $name 1048576)
@@ -62,7 +86,5 @@ function Get-AgentsChatStoppedHistoryHandoffRetiredPrepared(
     } catch {
         $Context.Poisoned = $true
         throw [InvalidOperationException]::new('Retired prepared handoff observation failed; retain evidence.', $_.Exception)
-    } finally {
-        if ($document) { $document.Dispose() }
     }
 }

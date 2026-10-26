@@ -36,6 +36,17 @@ try {
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $scope = Open-AgentsChatStoppedWorkerCleanup $Control -HistoryArchive
     $record = if ($Abandon) {
+        $refused = $false
+        try {
+            $null = Publish-AgentsChatStoppedHistoryHandoffAbandoned $scope @{
+                path="inactive-handoff-$AttemptId-prepared.json"
+                dev=$PreparedDev; ino=$PreparedIno; bytes=$PreparedBytes; sha256=$PreparedSha256
+            } $AttemptId $ControllerPid $ControllerIdentity
+        } catch {
+            if ($_.Exception.Message -cne 'Abandoned handoff publication requires its independent native role.') { throw }
+            $refused = $true
+        }
+        if (-not $refused) { throw 'Abandonment publication accepted a non-publisher scope.' }
         $scope.HistoryHandoffAbandoner = $true
         $published = Publish-AgentsChatStoppedHistoryHandoffAbandoned $scope @{
             path="inactive-handoff-$AttemptId-prepared.json"
