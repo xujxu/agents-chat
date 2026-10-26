@@ -616,6 +616,7 @@ jobs:
             'tests/deployment-process-identity.test.mjs',
             'tests/deployment-windows-command.test.mjs',
             'tests/deployment-windows-command-entry.test.mjs',
+            'tests/deployment-windows-inactive-task.test.mjs',
             'tests/deployment-cli.test.mjs',
             'tests/deployment-snapshot.test.mjs',
             'tests/deployment-snapshot-copy.test.mjs',

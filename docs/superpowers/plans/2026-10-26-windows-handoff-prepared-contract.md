@@ -19,8 +19,10 @@ The user selected continued inline execution.
 - Create `scripts/deployment/windows-stopped-history-handoff-record.mjs`:
   prepared-record structural capture only, with no I/O or admission API.
 - Modify `tests/deployment-windows-inactive-task.test.mjs`: reuse the existing
-  project, observation and admission-input fixtures. This file already runs
-  in Windows Contracts.
+  project, observation and admission-input fixtures.
+- Modify `.github/workflows/deployment-lifecycle.yml`: add that test file
+  to the explicit private Windows Contracts list. Its existing inclusion
+  in native command contracts does not cover the Contracts-only selector.
 - Modify this plan with actual Actions red/green evidence.
 
 The helper accepts an already decoded object. It is not a JSON parser or a
@@ -209,6 +211,15 @@ export function captureWindowsStoppedHistoryHandoffPrepared(input) {
   intervals and inspect the actual two test results. Expected: both pass,
   existing inactive and lock-admission contracts remain green.
 - [ ] Record red and green SHAs/run IDs/job IDs here and commit the evidence.
+
+## Execution evidence
+
+`57938b0e / 40338806633`, job `121634671099`, unexpectedly succeeds.
+Downloaded logs contain neither new prepared-handoff test. Inspection of
+the workflow confirms the test file is absent from the explicit Windows
+Contracts list, despite its inclusion in native command validation.
+This is not red-phase acceptance. Add it to the actual Contracts list and
+repeat the test-only red phase before publishing the implementation.
 
 ## Self-review and remaining gates
 
