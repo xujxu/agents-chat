@@ -647,6 +647,12 @@ jobs:
             'tests/deployment-cold-runtime-completion.test.mjs',
             'tests/deployment-cold-retirement.test.mjs'
           )
+      - name: Verify native prospective handoff owner identity
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-handoff-owner.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native handoff owner identity contracts failed.' }
       - name: Probe Windows cold retirement stability
         if: runner.os == 'Windows'
         shell: pwsh
