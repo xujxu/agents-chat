@@ -5,7 +5,12 @@ param(
     [Parameter(Mandatory)][string]$AttemptId,
     [Parameter(Mandatory)][string]$OperationId,
     [Parameter(Mandatory)][string]$Token,
-    [Parameter(Mandatory)][string]$CreatedAt
+    [Parameter(Mandatory)][string]$CreatedAt,
+    [switch]$ReopenPrepared,
+    [string]$PreparedDev,
+    [string]$PreparedIno,
+    [int]$PreparedBytes,
+    [string]$PreparedSha256
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -81,6 +86,16 @@ try {
         ControllerPid=$ControllerPid; ControllerIdentity=$ControllerIdentity
     }
     $descriptor = $file = $null
+    if ($ReopenPrepared) {
+        Assert-AgentsChatCompletionGuid $AttemptId
+        $name = "inactive-handoff-$AttemptId-prepared.json"
+        $descriptor = @{
+            path=$name; dev=$PreparedDev; ino=$PreparedIno
+            bytes=$PreparedBytes; sha256=$PreparedSha256
+        }
+        Assert-AgentsChatRetirementDescriptor $descriptor $name 1048576
+        $file = Open-AgentsChatRetirementFile $scope $descriptor $name
+    }
     $value = Get-AgentsChatHandoffPreparationObservation $scope $preparation $ownerRequest $descriptor $file
     $identity = [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
     [Console]::Out.WriteLine((@{

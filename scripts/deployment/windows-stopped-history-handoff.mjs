@@ -18,10 +18,18 @@ function refused(cause) {
   });
 }
 
-export async function openWindowsStoppedHistoryHandoffPreparation({
+export function openWindowsStoppedHistoryHandoffPreparation(options) {
+  return openPreparation(options, false);
+}
+
+export function reopenWindowsStoppedHistoryHandoffPreparation(options) {
+  return openPreparation(options, true);
+}
+
+async function openPreparation({
   control, pwsh, admission, signal, project, previousOperationId,
-  operation, attemptId, operationId, token, createdAt,
-}) {
+  operation, attemptId, operationId, token, createdAt, prepared,
+}, reopen) {
   signal?.throwIfAborted();
   let transport;
   let closed = false;
@@ -43,6 +51,9 @@ export async function openWindowsStoppedHistoryHandoffPreparation({
       || !Number.isFinite(Date.parse(createdAt)) || new Date(createdAt).toISOString() !== createdAt) {
       throw new Error('Explicit canonical Windows stopped-history preparation identity is required.');
     }
+    if (!reopen && prepared !== undefined) throw new Error('Prepared evidence requires explicit controlled reopen.');
+    const preparedDescriptor = reopen
+      ? captureWindowsStoppedHistoryHandoffPreparedDescriptor(prepared, attemptId) : undefined;
     await assertWindowsAdmission(control, admission, { signal });
     const controllerIdentity = await processIdentity(process.pid);
     if (!controllerIdentity) throw new Error('Original preparation actor identity is unavailable.');
@@ -53,7 +64,10 @@ export async function openWindowsStoppedHistoryHandoffPreparation({
       pwsh, refused, label: 'Native stopped-history preparation controller',
       args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
         '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
-        '-AttemptId', attemptId, '-OperationId', operationId, '-Token', token, '-CreatedAt', createdAt],
+        '-AttemptId', attemptId, '-OperationId', operationId, '-Token', token, '-CreatedAt', createdAt,
+        ...(reopen ? ['-ReopenPrepared', '-PreparedDev', preparedDescriptor.dev,
+          '-PreparedIno', preparedDescriptor.ino, '-PreparedBytes', String(preparedDescriptor.bytes),
+          '-PreparedSha256', preparedDescriptor.sha256] : [])],
     });
     const captureObservation = value => {
       const observed = captureWorkerFields(value,
@@ -75,7 +89,10 @@ export async function openWindowsStoppedHistoryHandoffPreparation({
       throw new Error('Original native preparation bridge differs.');
     }
     let observation = captureObservation(ready.value);
-    if (observation.prepared !== null) throw new Error('Native preparation bridge did not start unprepared.');
+    if (reopen !== (observation.prepared !== null)
+      || (reopen && !isDeepStrictEqual(observation.prepared, preparedDescriptor))) {
+      throw new Error('Native preparation bridge initial evidence differs.');
+    }
     const identity = Object.freeze({ pid: ready.pid, processIdentity: ready.processIdentity });
     const request = async (method, requestSignal) => {
       if (busy) throw refused(new Error('A handoff preparation request is already active.'));
