@@ -30,6 +30,15 @@ if ($owner.pid -ne $PID -or $owner.processIdentity -cne $request.ControllerIdent
 $foreign = $request.Clone()
 $foreign.ControllerIdentity = "$PID`:1"
 Assert-OwnerRefused $foreign
+function Assert-RetiredOwnerRefused([hashtable]$Request) {
+    try { $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @Request }
+    catch {
+        if ($_.Exception.Message -notmatch 'Handoff retired owner') { throw }
+        return
+    }
+    throw 'Expected live original actor to prevent retired owner observation.'
+}
+Assert-RetiredOwnerRefused $request
 $child = $null
 try {
     $start = [Diagnostics.ProcessStartInfo]::new()
@@ -42,10 +51,15 @@ try {
     $exited = $request.Clone()
     $exited.ControllerPid = $child.Id
     $exited.ControllerIdentity = [Deployment.WindowsWorkerJob]::ProcessIdentity($child.Id)
-    $null = New-AgentsChatStoppedHistoryHandoffOwner @exited
+    $liveChild = New-AgentsChatStoppedHistoryHandoffOwner @exited
     $child.Kill()
     if (-not $child.WaitForExit(15000)) { throw 'Original test process did not exit.' }
     Assert-OwnerRefused $exited
+    $retired = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @exited
+    foreach ($key in $liveChild.Keys) {
+        if ($retired[$key] -cne $liveChild[$key]) { throw 'Retired owner fields changed after actual actor exit.' }
+    }
+    Write-Host 'PASS: native retired handoff owner requires actual original actor absence without granting authority'
 } finally {
     if ($child) {
         if (-not $child.HasExited) { $child.Kill(); $child.WaitForExit() }

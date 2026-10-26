@@ -178,3 +178,91 @@ original cause retained. No missing-process sentinel or guessed identity is
 accepted. This proof is only an observation: the subsequent preparation role
 must retain its owner watcher and recheck identity at publication boundaries.
 The helper never writes state, lock or receipt files.
+
+## Follow-on task: Native retired-owner observation
+
+This is the prerequisite for sealing an abandoned prepared attempt, not
+abandonment publication or ownership transfer. Reuse the original native
+absence proof; do not treat a missing JS process identity as authorization.
+
+- [ ] In the native test script, add a refusal assertion for a live original
+  actor using the new retired-owner function:
+
+```powershell
+function Assert-RetiredOwnerRefused([hashtable]$Request) {
+    try { $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @Request }
+    catch {
+        if ($_.Exception.Message -notmatch 'Handoff retired owner') { throw }
+        return
+    }
+    throw 'Expected live original actor to prevent retired owner observation.'
+}
+Assert-RetiredOwnerRefused $request
+```
+
+- [ ] Retain `$liveChild = New-AgentsChatStoppedHistoryHandoffOwner @exited`
+  before the existing child kill. After its actual exit and existing live
+  owner refusal, add:
+
+```powershell
+$retired = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @exited
+foreach ($key in $liveChild.Keys) {
+    if ($retired[$key] -cne $liveChild[$key]) { throw 'Retired owner fields changed after actual actor exit.' }
+}
+Write-Host 'PASS: native retired handoff owner requires actual original actor absence without granting authority'
+```
+
+- [ ] Commit/push tests with required trailers and dispatch the existing
+  Windows Contracts-only selection. Inspect the actual native owner step:
+  expected red is a missing retired-owner function, not acceptance of a live
+  actor or unrelated tool failure.
+
+- [ ] Refactor the existing native owner helper: load
+  `windows-task-completion-proof.ps1` instead of its records-only source;
+  rename the existing validation body to
+  `Get-AgentsChatStoppedHistoryHandoffOwnerRecord` and remove only its live
+  identity loop. Keep all GUID, path, timestamp and identity-shape validation
+  and the exact seven returned owner fields unchanged.
+
+Add these complete wrappers, retaining the original live API signature:
+
+```powershell
+function New-AgentsChatStoppedHistoryHandoffOwner(
+    [string]$Project, [string]$PreviousOperationId, [string]$AttemptId,
+    [string]$OperationId, [string]$Token, [string]$CreatedAt,
+    [string]$PreviousUpdatedAt, [int]$ControllerPid, [string]$ControllerIdentity
+) {
+    $owner = Get-AgentsChatStoppedHistoryHandoffOwnerRecord @PSBoundParameters
+    foreach ($pass in @(1, 2)) {
+        try { $actual = [Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) }
+        catch {
+            throw [InvalidOperationException]::new('Handoff prospective owner is unavailable.', $_.Exception)
+        }
+        if ($actual -cne $ControllerIdentity) { throw 'Handoff prospective owner identity differs.' }
+    }
+    return $owner
+}
+
+function Get-AgentsChatStoppedHistoryHandoffRetiredOwner(
+    [string]$Project, [string]$PreviousOperationId, [string]$AttemptId,
+    [string]$OperationId, [string]$Token, [string]$CreatedAt,
+    [string]$PreviousUpdatedAt, [int]$ControllerPid, [string]$ControllerIdentity
+) {
+    $owner = Get-AgentsChatStoppedHistoryHandoffOwnerRecord @PSBoundParameters
+    foreach ($pass in @(1, 2)) {
+        try { Assert-AgentsChatCompletionProcessAbsent $ControllerPid $ControllerIdentity }
+        catch {
+            throw [InvalidOperationException]::new('Handoff retired owner remains live or unverifiable.', $_.Exception)
+        }
+    }
+    return $owner
+}
+```
+
+- [ ] Commit/push and repeat Windows Contracts-only validation. Require the
+  existing live/foreign/exited receipt plus the new retired-owner receipt.
+  Record SHA/run/job evidence here and commit/push it.
+
+The new function returns an observation only. A future abandonment publisher
+must also pin the exact prepared record, reprove the original archived state,
+bind the acting recovery controller and preserve all existing evidence.
