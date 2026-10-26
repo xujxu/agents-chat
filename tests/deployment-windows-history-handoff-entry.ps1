@@ -11,16 +11,24 @@ param(
     [switch]$Hold,
     [switch]$ObserveRetired,
     [switch]$Abandon,
+    [switch]$ObserveAbandoned,
     [string]$PreparedDev,
     [string]$PreparedIno,
     [int]$PreparedBytes,
-    [string]$PreparedSha256
+    [string]$PreparedSha256,
+    [string]$TerminalDev,
+    [string]$TerminalIno,
+    [int]$TerminalBytes,
+    [string]$TerminalSha256
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($Hold -and -not ($Publish -or $Abandon)) { throw 'Held handoff requires explicit publication.' }
 if ($ObserveRetired -and ($Publish -or $Hold)) { throw 'Retired observation cannot publish preparation.' }
 if ($Abandon -and ($Publish -or $ObserveRetired)) { throw 'Abandonment requires its independent fixture branch.' }
+if ($ObserveAbandoned -and ($Publish -or $Hold -or $ObserveRetired -or $Abandon)) {
+    throw 'Abandoned observation requires its independent fixture branch.'
+}
 Add-Type -Path @(
     'WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
     'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsPrivateFile.SourceSecurity.cs',
@@ -31,11 +39,20 @@ Add-Type -Path @(
 if ($Publish) { . (Join-Path $Source 'windows-stopped-history-handoff-preparation.ps1') }
 if ($ObserveRetired) { . (Join-Path $Source 'windows-stopped-history-handoff-observation.ps1') }
 if ($Abandon) { . (Join-Path $Source 'windows-stopped-history-handoff-abandonment.ps1') }
+if ($ObserveAbandoned) { . (Join-Path $Source 'windows-stopped-history-handoff-abandoned-observation.ps1') }
 $scope = $watch = $null
 try {
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $scope = Open-AgentsChatStoppedWorkerCleanup $Control -HistoryArchive
-    $record = if ($Abandon) {
+    $record = if ($ObserveAbandoned) {
+        Get-AgentsChatStoppedHistoryHandoffAbandoned $scope @{
+            path="inactive-handoff-$AttemptId-prepared.json"
+            dev=$PreparedDev; ino=$PreparedIno; bytes=$PreparedBytes; sha256=$PreparedSha256
+        } @{
+            path="inactive-handoff-$AttemptId-abandoned.json"
+            dev=$TerminalDev; ino=$TerminalIno; bytes=$TerminalBytes; sha256=$TerminalSha256
+        } $AttemptId $ControllerPid $ControllerIdentity
+    } elseif ($Abandon) {
         $refused = $false
         try {
             $null = Publish-AgentsChatStoppedHistoryHandoffAbandoned $scope @{

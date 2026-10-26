@@ -631,6 +631,25 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         '-Abandon', '-PreparedDev', previous.prepared.dev, '-PreparedIno', previous.prepared.ino,
         '-PreparedBytes', String(previous.prepared.bytes), '-PreparedSha256', previous.prepared.sha256,
       ];
+      const observeArgs = abandonArgs.filter(argument => argument !== '-Abandon');
+      observeArgs.push('-ObserveAbandoned', '-TerminalDev', previous.terminal.dev,
+        '-TerminalBytes', String(previous.terminal.bytes), '-TerminalSha256', previous.terminal.sha256);
+      const nativeObservation = await promisify(execFile)(pwsh,
+        [...observeArgs, '-TerminalIno', previous.terminal.ino],
+        { timeout: 45000, maxBuffer: 131072, windowsHide: true });
+      assert.equal(nativeObservation.stderr, '');
+      const observed = JSON.parse(nativeObservation.stdout);
+      assert.equal(observed.status, 'abandoned-handoff-observed');
+      assert.equal(observed.attemptId, previous.attemptId);
+      assert.deepEqual(observed.prepared, previous.prepared);
+      assert.deepEqual(observed.terminal, previous.terminal);
+      assert.equal(observed.runtimeAuthority, false);
+      assert.equal(observed.lockAuthority, false);
+      const wrongIno = previous.terminal.ino === '1' ? '2' : '1';
+      await assert.rejects(promisify(execFile)(pwsh, [...observeArgs, '-TerminalIno', wrongIno],
+        { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
+      error => error.message.includes('Abandoned handoff observation failed; retain evidence.'));
+      console.log('PASS: native abandoned handoff observation revalidates exact terminal and prepared evidence under a third actor without lock authority');
       await assert.rejects(promisify(execFile)(pwsh, abandonArgs,
         { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
       error => error.message.includes('Abandoned handoff publication failed; retain evidence.'));
