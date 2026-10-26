@@ -542,6 +542,35 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       } finally { await publisher.close(); }
     }
     const completionBytes = await readFile(completionFile);
+    if (mode === 'resume-completed-history') {
+      const attemptId = randomUUID();
+      const operationId = randomUUID();
+      const token = randomUUID();
+      const actorIdentity = await processIdentity(process.pid);
+      const nativeRecord = await promisify(execFile)(pwsh, [
+        '-NoProfile', '-NonInteractive', '-File',
+        fileURLToPath(new URL('./deployment-windows-history-handoff-entry.ps1', import.meta.url)),
+        '-Source', source, '-Control', control,
+        '-ControllerPid', String(process.pid), '-ControllerIdentity', actorIdentity,
+        '-AttemptId', attemptId, '-OperationId', operationId,
+        '-Token', token, '-CreatedAt', new Date().toISOString(),
+      ], { timeout: 45000, maxBuffer: 2 * 1024 ** 2, windowsHide: true });
+      assert.equal(nativeRecord.stderr, '');
+      const { captureWindowsStoppedHistoryHandoffPrepared } =
+        await load('windows-stopped-history-handoff-record.mjs');
+      const prepared = captureWindowsStoppedHistoryHandoffPrepared(JSON.parse(nativeRecord.stdout));
+      assert.equal(prepared.attemptId, attemptId);
+      assert.equal(prepared.newOwner.operationId, operationId);
+      assert.equal(prepared.newOwner.token, token);
+      assert.equal(prepared.newOwner.pid, process.pid);
+      assert.equal(prepared.newOwner.processIdentity, actorIdentity);
+      assert.equal(prepared.oldState, state.toString('utf8'));
+      assert.equal(prepared.intent.sha256, createHash('sha256').update(originalIntent).digest('hex'));
+      assert.equal(prepared.completion.sha256, createHash('sha256').update(completionBytes).digest('hex'));
+      assert.equal((await readdir(control)).some(name => name.toLowerCase().startsWith('inactive-handoff-')), false);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      console.log('PASS: native stopped-history preparation derives exact archive and live prospective owner without publication');
+    }
     if (retainedCompletion) {
       assert.deepEqual(completionBytes, retainedCompletion.bytes);
       const current = await lstat(completionFile, { bigint: true });
