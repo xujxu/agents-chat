@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -82,6 +83,78 @@ const admissionInput = () => {
 };
 const admissionBuilder = async () => (await import('../scripts/deployment/windows-inactive-task-admission.mjs'))
   .createWindowsInactiveTaskAdmissionRecord;
+
+const handoffInput = () => {
+  const prior = admissionInput();
+  const oldState = JSON.stringify({
+    ...prior.state, phase: 'restored', previousPhase: 'accepted',
+    sourceCommit: 'a'.repeat(40), targetCommit: 'b'.repeat(40), backupId: 'original-backup',
+  });
+  const descriptor = (name, bytes = 1, sha256 = 'c'.repeat(64)) => ({
+    path: name, dev: '1', ino: '2', bytes, sha256,
+  });
+  return {
+    version: 1, phase: 'stopped-history-handoff-prepared',
+    attemptId: '66666666-6666-4666-8666-666666666666',
+    control: path.resolve('inactive-control'), project,
+    controlIdentity: { dev: '1', ino: '3' },
+    previousOperationId: prior.state.operationId, operation: 'update',
+    oldState,
+    state: descriptor('state.json', Buffer.byteLength(oldState),
+      createHash('sha256').update(oldState).digest('hex')),
+    intent: descriptor(`retired-${prior.state.operationId}-inactive-rollback-history-intent.json`),
+    completion: descriptor(`retired-${prior.state.operationId}-inactive-rollback-history-complete.json`),
+    newOwner: { ...prior.lock, operationId: '55555555-5555-4555-8555-555555555555' },
+    observation: observation(),
+  };
+};
+const handoffCapture = async () =>
+  (await import('../scripts/deployment/windows-stopped-history-handoff-record.mjs'))
+    .captureWindowsStoppedHistoryHandoffPrepared;
+
+test('prepared history handoff binds exact prior bytes and detached inactive owner request', async () => {
+  const capture = await handoffCapture();
+  const input = handoffInput();
+  const record = capture(input);
+  assert.deepEqual(record, input);
+  for (const value of [record, record.controlIdentity, record.state, record.intent,
+    record.completion, record.newOwner, record.observation, record.observation.retiredRuntime]) {
+    assert.ok(Object.isFrozen(value));
+  }
+  input.newOwner.pid = 99;
+  input.state.sha256 = '0'.repeat(64);
+  input.observation.retiredRuntime.pid = 99;
+  assert.equal(record.newOwner.pid, 4321);
+  assert.notEqual(record.state.sha256, input.state.sha256);
+  assert.equal(record.observation.retiredRuntime.pid, 1234);
+});
+
+test('prepared history handoff rejects foreign, incomplete and inconsistent requests', async () => {
+  const capture = await handoffCapture();
+  const original = handoffInput();
+  const changedState = patch => {
+    const oldState = JSON.stringify({ ...JSON.parse(original.oldState), ...patch });
+    return { oldState, state: { ...original.state, bytes: Buffer.byteLength(oldState),
+      sha256: createHash('sha256').update(oldState).digest('hex') } };
+  };
+  for (const patch of [
+    { extra: true }, { version: 2 }, { phase: 'stopped-history-handoff-committed' },
+    { attemptId: original.previousOperationId }, { control: 'relative' },
+    { previousOperationId: original.newOwner.operationId }, { operation: 'restore' },
+    { controlIdentity: { dev: '4294967296', ino: '3' } },
+    { controlIdentity: { dev: '1', ino: '18446744073709551616' } },
+    { state: { ...original.state, sha256: '0'.repeat(64) } },
+    { intent: { ...original.intent, path: 'inactive-rollback-history-intent.json' } },
+    { completion: { ...original.completion, bytes: 65537 } },
+    { newOwner: { ...original.newOwner, processIdentity: '9999:638900000000000001' } },
+    { newOwner: { ...original.newOwner, project: `${project}-foreign` } },
+    { observation: { ...original.observation, enabled: true } },
+    changedState({ project: `${project}-foreign` }),
+    changedState({ phase: 'accepted' }),
+    changedState({ runtimeIdentity: 'unbound-generation' }),
+    changedState({ errorCode: 'FAILED' }),
+  ]) assert.throws(() => capture({ ...handoffInput(), ...patch }));
+});
 
 test('inactive admission record binds stopped preflight and its actual lock without a current task instance', async () => {
   const build = await admissionBuilder();
