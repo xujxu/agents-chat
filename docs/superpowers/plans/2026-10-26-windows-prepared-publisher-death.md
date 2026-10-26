@@ -28,7 +28,7 @@ adds a real interruption scenario.
 
 ## Task 1: Hold the real native publisher
 
-- [ ] Add `[switch]$Hold` to the fixture and refuse Hold without Publish.
+- [x] Add `[switch]$Hold` to the fixture and refuse Hold without Publish.
   After publication, emit this small readiness frame and wait for input while
   retaining the original scope and watcher:
 
@@ -50,9 +50,9 @@ No shared wire/frame limits change.
 
 ## Task 2: Real Node actor death and fresh refusal
 
-- [ ] Include both new modes in the history branch. Treat the resumer as
+- [x] Include both new modes in the history branch. Treat the resumer as
   finalized history and retain its completion bytes/identity.
-- [ ] The new crashing mode first completes normal archive finalization and
+- [x] The new crashing mode first completes normal archive finalization and
   completion publication, closing those scopes. Start the held preparation
   fixture through `windowsControllerTransport`, with fresh attempt/operation/
   token GUIDs and the actual current actor identity:
@@ -92,7 +92,7 @@ try { await new Promise(() => {}); } finally { clearInterval(timer); }
 On setup failure abandon the transport explicitly; never leave an unobserved
 native fixture alive.
 
-- [ ] In the resumer bind the old prepared descriptor to its exact attempt
+- [x] In the resumer bind the old prepared descriptor to its exact attempt
   name, read bytes and native identity, capture the accepted prepared schema,
   require its newOwner to be the dead original actor, and attempt fresh
   publication with a new GUID/current identity. Require explicit refusal,
@@ -106,15 +106,15 @@ console.log('PASS: actual prepared publisher death retains its exact record and 
 
 ## Task 3: Host bindings and Actions acceptance
 
-- [ ] Add `prepared-history` to the host's boundary list, mapping its
+- [x] Add `prepared-history` to the host's boundary list, mapping its
   crashing actor to `crash-prepared-history`. Include it in archived-intent
   and completed-receipt checks. Before starting its resumer, require its
   prepared descriptor path to match the exact attempt GUID and verify the
   native-published file digest. Preserve the existing specific actor kill,
   15-second bridge wait and 120-second resumer limits.
-- [ ] Require the new exact PASS receipt in the focused workflow, retaining
+- [x] Require the new exact PASS receipt in the focused workflow, retaining
   every existing required receipt.
-- [ ] Commit/push with required session trailers and dispatch:
+- [x] Commit/push with required session trailers and dispatch:
 
 ```bash
 gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -124,9 +124,19 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   -f windows_history_only=true
 ```
 
-- [ ] Watch at 180-second intervals and inspect actual job logs for all seven
+- [x] Watch at 180-second intervals and inspect actual job logs for all seven
   receipts. Diagnose failed identity/state/actor assertions before changing
   any budget. Record SHA/run/job evidence here and commit/push it.
+
+## Execution evidence
+
+`9a45a157 / 40377911324`, job `121765920982`, passes. Downloaded actual
+job logs contain all seven required execution receipts, including real
+preparation actor death, original bridge exit and a distinct actor's
+explicit republishing refusal. Prepared bytes, digest, dev/ino and old
+state remain exact before fixture-only cleanup; no new lock exists.
+Existing four archive/completion/saved death receipts and both native
+derivation/publication receipts remain present.
 
 ## Self-review and remaining scope
 
