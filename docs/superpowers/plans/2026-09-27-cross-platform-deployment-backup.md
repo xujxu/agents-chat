@@ -15965,6 +15965,23 @@ distinct fresh actor preserving the original receipt bytes and dev/ino
 across repeated high-level reopening. This accepts native stopped-history
 recovery, not ordinary deployment admission or actual application behavior.
 
+`1828499e / 40241632132`, job `121314481855`, passes the complete
+Windows Contracts selection. The earlier full matrix
+`8bd55d51 / 40223333874` also finishes successfully: 54 successful jobs,
+one intentionally skipped failed-update-only selector and no failures.
+Downloaded final live and copy-crash job logs (`121259430751` and
+`121259430785`) confirm real application restoration receipts, and both
+actual application steps succeed. That older SHA does not accept the later
+saved-entry, high-level archival and completion-publisher changes; a new
+full matrix remains necessary.
+
+The user approved pursuing the bound archive-to-next-owner handoff, first
+as a detailed design. This is approval to elaborate the protocol, not
+permission to bypass maintenance gates or claim public inactive support.
+Keep independent control generations and retaining the current refusal
+as alternatives; define exact-owner publication, preserved original state,
+crash recovery and release/reconciliation together before implementation.
+
 `fae9048b / 40224702989`, job `121263501170`, passes the complete native
 commands/recovery run. Downloaded logs contain both actual first-entry
 death/fresh continuation and post-intent death/read-only actor receipts
