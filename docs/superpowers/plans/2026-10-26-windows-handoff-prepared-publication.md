@@ -128,6 +128,14 @@ function Publish-AgentsChatStoppedHistoryHandoffPrepared(
   Require all six actual PASS receipts and original native scope invariants.
   Record red/green SHAs, run IDs and job IDs here; commit/push evidence.
 
+## Execution evidence
+
+Red phase: `b0bb7006 / 40370195473`, job `121738549402`, reaches the
+real completed-history resumer. Downloaded logs show actual native derivation
+success followed by the `-Publish` fixture failing because
+`windows-stopped-history-handoff-preparation.ps1` is missing. Native create-only
+publication is now implemented; green-phase acceptance is pending.
+
 ## Self-review and remaining gates
 
 The publication function derives all evidence natively, retains the created

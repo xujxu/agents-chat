@@ -1,13 +1,13 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-owner.ps1')
 
-function Get-AgentsChatStoppedHandoffDescriptor($File, [string]$Name) {
+function Get-AgentsChatStoppedHandoffDescriptor($File, [string]$Name, [int]$MaximumBytes = 65536) {
     $File.Check()
     $identity = $File.CaptureIdentity()
     $descriptor = [ordered]@{
         path=$Name; dev=$identity.Dev; ino=$identity.Ino
         bytes=$File.ByteLength; sha256=$File.Sha256
     }
-    Assert-AgentsChatRetirementDescriptor $descriptor $Name 65536
+    Assert-AgentsChatRetirementDescriptor $descriptor $Name $MaximumBytes
     return $descriptor
 }
 
