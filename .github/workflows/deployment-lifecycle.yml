@@ -233,7 +233,8 @@ jobs:
             'PASS: death after final intent archival retains sealed evidence for a distinct fresh read-only actor',
             'PASS: the exact verified saved entry resumes stopped history archival after actual actor death',
             'PASS: completion publisher death preserves original receipt bytes and identity for a distinct fresh actor',
-            'PASS: native stopped-history preparation derives exact archive and live prospective owner without publication'
+            'PASS: native stopped-history preparation derives exact archive and live prospective owner without publication',
+            'PASS: native stopped-history preparation publishes one exact create-only record without lock authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }

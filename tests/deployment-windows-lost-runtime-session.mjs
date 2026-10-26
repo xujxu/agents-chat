@@ -547,14 +547,16 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       const operationId = randomUUID();
       const token = randomUUID();
       const actorIdentity = await processIdentity(process.pid);
-      const nativeRecord = await promisify(execFile)(pwsh, [
+      const preparedArgs = [
         '-NoProfile', '-NonInteractive', '-File',
         fileURLToPath(new URL('./deployment-windows-history-handoff-entry.ps1', import.meta.url)),
         '-Source', source, '-Control', control,
         '-ControllerPid', String(process.pid), '-ControllerIdentity', actorIdentity,
         '-AttemptId', attemptId, '-OperationId', operationId,
         '-Token', token, '-CreatedAt', new Date().toISOString(),
-      ], { timeout: 45000, maxBuffer: 2 * 1024 ** 2, windowsHide: true });
+      ];
+      const nativeRecord = await promisify(execFile)(pwsh, preparedArgs,
+        { timeout: 45000, maxBuffer: 2 * 1024 ** 2, windowsHide: true });
       assert.equal(nativeRecord.stderr, '');
       const { captureWindowsStoppedHistoryHandoffPrepared } =
         await load('windows-stopped-history-handoff-record.mjs');
@@ -570,6 +572,28 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal((await readdir(control)).some(name => name.toLowerCase().startsWith('inactive-handoff-')), false);
       assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
       console.log('PASS: native stopped-history preparation derives exact archive and live prospective owner without publication');
+      const publication = await promisify(execFile)(pwsh, [...preparedArgs, '-Publish'],
+        { timeout: 45000, maxBuffer: 2 * 1024 ** 2, windowsHide: true });
+      assert.equal(publication.stderr, '');
+      const descriptor = JSON.parse(publication.stdout);
+      assert.equal(descriptor.path, `inactive-handoff-${attemptId}-prepared.json`);
+      const preparedFile = path.join(control, descriptor.path);
+      const publishedBytes = await readFile(preparedFile);
+      const publishedIdentity = await lstat(preparedFile, { bigint: true });
+      assert.equal(publishedBytes.length, descriptor.bytes);
+      assert.equal(createHash('sha256').update(publishedBytes).digest('hex'), descriptor.sha256);
+      assert.equal(publishedIdentity.dev.toString(), descriptor.dev);
+      assert.equal(publishedIdentity.ino.toString(), descriptor.ino);
+      assert.deepEqual(captureWindowsStoppedHistoryHandoffPrepared(JSON.parse(publishedBytes)), prepared);
+      await assert.rejects(promisify(execFile)(pwsh, [...preparedArgs, '-Publish'],
+        { timeout: 45000, maxBuffer: 2 * 1024 ** 2, windowsHide: true }));
+      assert.deepEqual(await readFile(preparedFile), publishedBytes);
+      const retainedIdentity = await lstat(preparedFile, { bigint: true });
+      assert.equal(retainedIdentity.dev, publishedIdentity.dev);
+      assert.equal(retainedIdentity.ino, publishedIdentity.ino);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      await unlink(preparedFile);
+      console.log('PASS: native stopped-history preparation publishes one exact create-only record without lock authority');
     }
     if (retainedCompletion) {
       assert.deepEqual(completionBytes, retainedCompletion.bytes);
