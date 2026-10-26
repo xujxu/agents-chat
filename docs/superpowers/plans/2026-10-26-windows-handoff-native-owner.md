@@ -26,7 +26,7 @@ Execution continues inline; every execution command is in Actions.
 
 ## Task 1: Establish the native red phase
 
-- [ ] Create the test script with the following content:
+- [x] Create the test script with the following content:
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -86,7 +86,7 @@ try {
 Write-Host 'PASS: native prospective handoff owner binds live identity and refuses foreign or exited actors'
 ```
 
-- [ ] Add a Windows-only Contracts step before the existing stability probe:
+- [x] Add a Windows-only Contracts step before the existing stability probe:
 
 ```yaml
       - name: Verify native prospective handoff owner identity
@@ -97,7 +97,7 @@ Write-Host 'PASS: native prospective handoff owner binds live identity and refus
           if ($LASTEXITCODE -ne 0) { throw 'Native handoff owner identity contracts failed.' }
 ```
 
-- [ ] Commit tests and workflow with required session trailers, push, dispatch:
+- [x] Commit tests and workflow with required session trailers, push, dispatch:
 
 ```bash
 gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -105,13 +105,13 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   -f windows_restore_only=true -f windows_contracts_only=true
 ```
 
-- [ ] Watch the returned run at 180-second intervals. Download the failing
+- [x] Watch the returned run at 180-second intervals. Download the failing
   job logs and confirm the new native step fails because the production
   owner helper is missing. An unrelated failure is not red-phase acceptance.
 
 ## Task 2: Implement the native owner proof
 
-- [ ] Create the production helper with the following complete content:
+- [x] Create the production helper with the following complete content:
 
 ```powershell
 . (Join-Path $PSScriptRoot 'windows-task-completion-records.ps1')
@@ -150,10 +150,10 @@ function New-AgentsChatStoppedHistoryHandoffOwner(
 }
 ```
 
-- [ ] Commit/push with required trailers and repeat the exact dispatch from
+- [x] Commit/push with required trailers and repeat the exact dispatch from
   Task 1. Watch at 180-second intervals, inspect the actual native step and
   required PASS receipt, and require the complete Windows Contracts job green.
-- [ ] Record red/green SHAs, run IDs and actual job IDs in this plan; commit
+- [x] Record red/green SHAs, run IDs and actual job IDs in this plan; commit
   and push the evidence.
 
 ## Execution evidence
@@ -163,6 +163,13 @@ Red phase: `32418d56 / 40357058979`, Windows Contracts job
 `windows-stopped-history-handoff-owner.ps1` does not exist. Downloaded failed
 logs confirm this expected missing-implementation boundary. The native
 owner helper is now implemented; green-phase acceptance is pending.
+
+Green phase: `c5c2233e / 40359173249`, job `121699658963`, passes the
+complete Windows Contracts selection and the dedicated native owner step.
+Downloaded actual job logs contain the required PASS receipt for a live
+identity, a foreign start identity and the same real process after exit.
+This accepts the native owner observation only; no preparation publication,
+retained handoff role or lock authority is added by this helper.
 
 ## Self-review
 
