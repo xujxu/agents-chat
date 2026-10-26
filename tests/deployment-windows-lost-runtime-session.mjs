@@ -637,6 +637,58 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal(retained.ino, identity.ino);
       assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
       assert.equal((await readdir(control)).includes('lock'), false);
+      const abandonArgs = observeArgs.filter(argument => argument !== '-ObserveRetired');
+      abandonArgs.push('-Abandon', '-PreparedIno', previous.prepared.ino);
+      const terminalPublication = await promisify(execFile)(pwsh, abandonArgs,
+        { timeout: 45000, maxBuffer: 131072, windowsHide: true });
+      assert.equal(terminalPublication.stderr, '');
+      const terminalDescriptor = JSON.parse(terminalPublication.stdout);
+      assert.equal(terminalDescriptor.path, `inactive-handoff-${previous.attemptId}-abandoned.json`);
+      const terminalFile = path.join(control, terminalDescriptor.path);
+      const terminalBytes = await readFile(terminalFile);
+      const terminalIdentity = await lstat(terminalFile, { bigint: true });
+      assert.equal(terminalDescriptor.bytes, terminalBytes.length);
+      assert.equal(terminalDescriptor.sha256, createHash('sha256').update(terminalBytes).digest('hex'));
+      assert.equal(terminalDescriptor.dev, terminalIdentity.dev.toString());
+      assert.equal(terminalDescriptor.ino, terminalIdentity.ino.toString());
+      const terminal = JSON.parse(terminalBytes);
+      assert.deepEqual(Object.keys(terminal).sort(), [
+        'version', 'phase', 'attemptId', 'control', 'project', 'controlIdentity',
+        'previousOperationId', 'prepared', 'creator', 'settledAt',
+      ].sort());
+      assert.equal(terminal.version, 1);
+      assert.equal(terminal.phase, 'stopped-history-handoff-abandoned');
+      assert.equal(terminal.attemptId, previous.attemptId);
+      assert.equal(terminal.control, control);
+      assert.equal(terminal.project, prepared.project);
+      assert.deepEqual(terminal.controlIdentity, prepared.controlIdentity);
+      assert.equal(terminal.previousOperationId, prepared.previousOperationId);
+      assert.deepEqual(terminal.prepared, previous.prepared);
+      assert.deepEqual(Object.keys(terminal.creator).sort(),
+        ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'].sort());
+      assert.equal(terminal.creator.pid, process.pid);
+      assert.equal(terminal.creator.processIdentity, await processIdentity(process.pid));
+      assert.notEqual(terminal.creator.pid, previous.actorPid);
+      assert.ok(Number.isInteger(terminal.creator.bridgePid) && terminal.creator.bridgePid > 0);
+      assert.notEqual(terminal.creator.bridgePid, process.pid);
+      assert.match(terminal.creator.bridgeIdentity, new RegExp(`^${terminal.creator.bridgePid}:[1-9][0-9]*$`));
+      assert.match(terminal.settledAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      assert.ok(Date.parse(terminal.settledAt) >= Date.parse(prepared.newOwner.createdAt));
+      await assert.rejects(promisify(execFile)(pwsh, abandonArgs,
+        { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
+      error => error.message.includes('Abandoned handoff publication failed; retain evidence.'));
+      assert.deepEqual(await readFile(terminalFile), terminalBytes);
+      const terminalRetained = await lstat(terminalFile, { bigint: true });
+      assert.equal(terminalRetained.dev, terminalIdentity.dev);
+      assert.equal(terminalRetained.ino, terminalIdentity.ino);
+      assert.deepEqual(await readFile(preparedFile), bytes);
+      const preparedRetained = await lstat(preparedFile, { bigint: true });
+      assert.equal(preparedRetained.dev, identity.dev);
+      assert.equal(preparedRetained.ino, identity.ino);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      assert.equal((await readdir(control)).includes('lock'), false);
+      console.log('PASS: native abandoned handoff publication seals one exact dead attempt without replacing evidence or granting lock authority');
+      await unlink(terminalFile);
       await unlink(preparedFile);
       console.log('PASS: actual prepared publisher death retains its exact record and a distinct actor cannot claim lock authority');
     }
