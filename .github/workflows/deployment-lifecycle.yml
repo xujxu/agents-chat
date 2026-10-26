@@ -240,7 +240,8 @@ jobs:
             'PASS: native abandoned handoff publication seals one exact dead attempt without replacing evidence or granting lock authority',
             'PASS: actual abandoned publisher death retains exact terminal evidence and a third actor cannot claim lock authority',
             'PASS: native abandoned handoff observation revalidates exact terminal and prepared evidence under a third actor without lock authority',
-            'PASS: production retained native preparation bridge publishes descriptor-only evidence under original admission without lock authority'
+            'PASS: production retained native preparation bridge publishes descriptor-only evidence under original admission without lock authority',
+            'PASS: controlled preparation reopen retains exact evidence for its original live owner and rejects a fresh actor'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }

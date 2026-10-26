@@ -667,6 +667,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal(prepared.newOwner.pid, previous.actorPid);
       assert.equal(prepared.newOwner.processIdentity, previous.actorIdentity);
       assert.notEqual(await processIdentity(previous.actorPid), previous.actorIdentity);
+      const { reopenWindowsStoppedHistoryHandoffPreparation } = await load('windows-stopped-history-handoff.mjs');
+      await assert.rejects(reopenWindowsStoppedHistoryHandoffPreparation({
+        ...options, project: prepared.project, previousOperationId: prepared.previousOperationId,
+        operation: 'update', attemptId: prepared.attemptId, operationId: prepared.newOwner.operationId,
+        token: prepared.newOwner.token, createdAt: prepared.newOwner.createdAt, prepared: previous.prepared,
+      }), error => error.code === 'DEPLOYMENT_WINDOWS_HANDOFF_PREPARATION_REFUSED'
+        && error.diagnostic?.includes('Prepared handoff JSON binding differs:'));
       const observeArgs = [
         '-NoProfile', '-NonInteractive', '-File',
         fileURLToPath(new URL('./deployment-windows-history-handoff-entry.ps1', import.meta.url)),
@@ -843,7 +850,8 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
       await unlink(preparedFile);
       console.log('PASS: native stopped-history preparation publishes one exact create-only record without lock authority');
-      const { openWindowsStoppedHistoryHandoffPreparation } = await load('windows-stopped-history-handoff.mjs');
+      const { openWindowsStoppedHistoryHandoffPreparation, reopenWindowsStoppedHistoryHandoffPreparation } =
+        await load('windows-stopped-history-handoff.mjs');
       const handoffOptions = {
         ...options, project: prepared.project, previousOperationId: prepared.previousOperationId,
         operation: 'update', attemptId: randomUUID(), operationId: randomUUID(), token: randomUUID(),
@@ -892,6 +900,27 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         assert.deepEqual((await scope.check()).prepared, retainedDescriptor);
       } finally { await scope.close(); }
       await assert.rejects(openWindowsStoppedHistoryHandoffPreparation(handoffOptions));
+      const reopenOptions = { ...handoffOptions, prepared: retainedDescriptor };
+      await assert.rejects(reopenWindowsStoppedHistoryHandoffPreparation({
+        ...reopenOptions, token: randomUUID(),
+      }), error => error.code === 'DEPLOYMENT_WINDOWS_HANDOFF_PREPARATION_REFUSED'
+        && error.diagnostic?.includes('Prepared handoff JSON binding differs:'));
+      const wrongIno = retainedDescriptor.ino === '1' ? '2' : '1';
+      await assert.rejects(reopenWindowsStoppedHistoryHandoffPreparation({
+        ...reopenOptions, prepared: { ...retainedDescriptor, ino: wrongIno },
+      }), error => error.code === 'DEPLOYMENT_WINDOWS_HANDOFF_PREPARATION_REFUSED'
+        && error.diagnostic?.includes('Original retirement evidence was replaced.'));
+      const reopened = await reopenWindowsStoppedHistoryHandoffPreparation(reopenOptions);
+      try {
+        assert.deepEqual(reopened.observation, {
+          status: 'stopped-history-handoff-prepared', attemptId: handoffOptions.attemptId,
+          previousOperationId: prepared.previousOperationId, project: prepared.project,
+          prepared: retainedDescriptor,
+        });
+        assert.deepEqual(await reopened.check(), reopened.observation);
+        await assert.rejects(reopened.publish(), error => error.code === 'DEPLOYMENT_WINDOWS_HANDOFF_PREPARATION_REFUSED');
+        assert.deepEqual((await reopened.check()).prepared, retainedDescriptor);
+      } finally { await reopened.close(); }
       assert.deepEqual(await readFile(retainedFile), retainedBytes);
       const afterClose = await lstat(retainedFile, { bigint: true });
       assert.equal(afterClose.dev, retainedFileIdentity.dev);
@@ -900,6 +929,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal((await readdir(control)).includes('lock'), false);
       await unlink(retainedFile);
       console.log('PASS: production retained native preparation bridge publishes descriptor-only evidence under original admission without lock authority');
+      console.log('PASS: controlled preparation reopen retains exact evidence for its original live owner and rejects a fresh actor');
     }
     if (retainedCompletion) {
       assert.deepEqual(completionBytes, retainedCompletion.bytes);
