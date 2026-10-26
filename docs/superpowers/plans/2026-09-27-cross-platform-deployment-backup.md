@@ -15975,6 +15975,18 @@ actual application steps succeed. That older SHA does not accept the later
 saved-entry, high-level archival and completion-publisher changes; a new
 full matrix remains necessary.
 
+That full matrix, `79b35620 / 40315287811`, now completes successfully:
+54 successful jobs and two intentionally skipped selector-only jobs, with
+no failures. Small-page job queries confirm the counts after the 100-job
+listing endpoint repeatedly returned HTTP 502. The final live job
+`121546231122` and copy-crash job `121546230787` both execute their actual
+application step successfully. Downloaded logs contain actual application
+API restoration and saved restore/closed/retirement receipts. This accepts
+the high-level archival, saved entry and completion-publisher implementation
+at that SHA; it does not accept the subsequent handoff namespace fence or
+prepared-record contract, which have their own later Windows Contracts
+evidence, or any not-yet-implemented native handoff/public inactive routing.
+
 The user approved pursuing the bound archive-to-next-owner handoff, first
 as a detailed design. This is approval to elaborate the protocol, not
 permission to bypass maintenance gates or claim public inactive support.
