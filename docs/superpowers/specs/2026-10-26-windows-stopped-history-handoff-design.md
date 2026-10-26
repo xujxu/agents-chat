@@ -58,6 +58,40 @@ Only a live exact owner, a committed record and a matching native recheck
 jointly authorize the handoff capability. Public paths must not accept a
 record alone, a copied capability or a merely matching operation GUID.
 
+## Native preparation boundary
+
+The native preparation role must derive the prepared record from retained
+proof, rather than accept a caller-supplied prepared JSON object as evidence.
+The caller supplies only the fresh attempt GUID, prospective owner token,
+operation GUID, command and creation timestamp. Its PID/start identity comes
+from the watched controller, not an independently supplied owner object.
+
+Reuse `Open-AgentsChatStoppedWorkerCleanup -HistoryArchive` and its complete
+`Assert-AgentsChatStoppedWorkerCleanup` checks. Require the final archived
+intent and existing pinned completion receipt; preparation must not create a
+missing archive completion receipt as a side effect. Derive original state
+bytes and descriptor from the retained state proof, intent/completion
+descriptors from their pinned handles, and task definition/security/runtime
+binding from the proved native context. Resolve the installed principal SID
+using the existing task principal conventions. If runtime handoff relocated
+the configuration, use that proved physical bundle, not the obsolete logical
+admission path.
+
+The current completion controller reads only 4096-byte method frames.
+Do not send full task definitions or state JSON through that method-only
+channel, widen its parser, or add preparation authority to an archive reader.
+Use a distinct preparation role with scalar owner-request inputs and an
+explicit bounded prepared-record response. Before and after create-only
+publication, recheck archive/task/runtime proof and actual controller identity.
+An existing same-attempt record is reusable only if its derived bytes and
+retained identity match; other handoff attempts remain conflicts.
+
+Preparation alone cannot create a lock. Its first native interruption test
+must kill the real preparation actor after publication, wait for the bridge
+to exit, then prove a distinct actor cannot treat the durable prepared record
+as committed authority. Preserve record/state bytes and identities. This
+boundary must pass before implementing native lock publication.
+
 ## State continuity
 
 Do not replace `state.json` as part of preparation or lock publication.
