@@ -16,7 +16,7 @@
 - Create: `tests/deployment-windows-handoff-json.ps1`
 - Modify: `.github/workflows/deployment-lifecycle.yml`
 
-- [ ] Create the native contract script. Parse a reference containing the
+- [x] Create the native contract script. Parse a reference containing the
   prepared record's nullable runtime shape; require object-order independence:
 
 ```powershell
@@ -33,14 +33,14 @@ try {
   Require explicit `Prepared handoff JSON binding differs` errors, not arbitrary
   exceptions. The fixture must dispose every JsonDocument.
 
-- [ ] Add one private Windows Contracts step after native owner identity:
+- [x] Add one private Windows Contracts step after native owner identity:
 
 ```powershell
 & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-handoff-json.ps1
 if ($LASTEXITCODE -ne 0) { throw 'Native handoff JSON binding contracts failed.' }
 ```
 
-- [ ] Commit/push tests and dispatch:
+- [x] Commit/push tests and dispatch:
 
 ```bash
 gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
@@ -56,7 +56,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
 **Files:**
 - Create: `scripts/deployment/windows-stopped-history-handoff-json.ps1`
 
-- [ ] Implement the complete recursive comparator:
+- [x] Implement the complete recursive comparator:
 
 ```powershell
 function Assert-AgentsChatStoppedHandoffJsonBinding(
@@ -116,9 +116,19 @@ function Assert-AgentsChatStoppedHandoffJsonBinding(
   forms. Native owner PID and descriptor byte counts are emitted as integers;
   alternate number spellings need not be accepted.
 
-- [ ] Commit/push production module and repeat the same Actions selection.
+- [x] Commit/push production module and repeat the same Actions selection.
   Require the complete Contracts job and actual new PASS receipt.
-- [ ] Record SHA/run/job evidence and push the accepted result.
+- [x] Record SHA/run/job evidence and push the accepted result.
+
+## Execution evidence
+
+Red: `d22d4b9e / 40387982604`, Windows Contracts job `121801223310`.
+The new native JSON step fails because the production comparator module is
+missing; downloaded logs confirm this exact expected failure.
+
+Green: `c3577652 / 40389425878`, job `121806228831`. The full Windows
+Contracts job and new native JSON step succeed. Downloaded execution logs
+contain the actual object-order/duplicate-key/typed-values PASS receipt.
 
 ## Self-review
 
