@@ -108,6 +108,16 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   Keep the already-running full matrix intact: it validates its own earlier
   SHA, not this new behavior.
 
+## Execution evidence
+
+Red phase: `e8bf8c58 / 40333764593`, Windows Contracts job
+`121609728591`, fails with `Missing expected rejection` at
+`tests/deployment-state.test.mjs:54`. Downloaded failed logs confirm the
+new handoff markers allow ordinary release before the shared fence exists.
+This is the intended behavioral failure, not an infrastructure failure.
+The shared Windows-only classifier predicate is now implemented; green
+Actions acceptance is pending.
+
 ## Self-review and remaining gates
 
 This prerequisite implements only the design's conservative ordinary-path

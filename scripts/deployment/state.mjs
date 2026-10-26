@@ -366,6 +366,8 @@ function serviceMaintenanceEntry(name, allowLiveRetirement = false) {
   const entry = process.platform === 'win32' ? name.toLowerCase() : name;
   return entry.startsWith('service-')
     || (entry.startsWith('inactive-rollback-') && entry.endsWith('.json'))
+    || (process.platform === 'win32'
+      && entry.startsWith('inactive-handoff-') && entry.endsWith('.json'))
     || (process.platform === 'win32' && entry.startsWith('retired-')
       && (entry.endsWith('-inactive-rollback-history-intent.json')
         || entry.endsWith('-inactive-rollback-history-complete.json')))
