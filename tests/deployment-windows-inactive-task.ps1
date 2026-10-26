@@ -475,11 +475,12 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $history = Get-Content -LiteralPath $historyIntent -Raw | ConvertFrom-Json
                     $historyHash = (Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash
                     $historyStateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
-                    foreach ($historyBoundary in @('history', 'finalized-history', 'saved-history', 'completed-history', 'prepared-history')) {
+                    foreach ($historyBoundary in @('history', 'finalized-history', 'saved-history', 'completed-history', 'prepared-history', 'abandoned-history')) {
                         $crashMode = switch ($historyBoundary) {
                             'finalized-history' { 'crash-finalized-history' }
                             'completed-history' { 'crash-completed-history' }
                             'prepared-history' { 'crash-prepared-history' }
+                            'abandoned-history' { 'crash-prepared-history' }
                             default { 'crash-history' }
                         }
                         $resumeMode = if ($historyBoundary -ceq 'saved-history') { 'resume-history-saved' } else { "resume-$historyBoundary" }
@@ -516,23 +517,67 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             'Writer death restored the original history pathname'
                         Assert ((Get-FileHash -LiteralPath (Join-Path $control $entry.destination) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $entry.sha256) `
                             'Writer death lost the exact archived original'
-                        if ($historyBoundary -cin @('finalized-history', 'completed-history', 'prepared-history')) {
+                        if ($historyBoundary -cin @('finalized-history', 'completed-history', 'prepared-history', 'abandoned-history')) {
                             Assert (-not (Test-Path -LiteralPath $historyIntent)) 'Finalized actor death restored active intent'
                             $archivedIntent = Join-Path $control "retired-$($history.operationId)-inactive-rollback-history-intent.json"
                             Assert ((Get-FileHash -LiteralPath $archivedIntent -Algorithm SHA256).Hash -ceq $historyHash) `
                                 'Finalized actor death lost the original archived intent'
                         }
-                        if ($historyBoundary -cin @('completed-history', 'prepared-history')) {
+                        if ($historyBoundary -cin @('completed-history', 'prepared-history', 'abandoned-history')) {
                             $completed = Join-Path $control "retired-$($history.operationId)-inactive-rollback-history-complete.json"
                             Assert ((Get-FileHash -LiteralPath $completed -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $held.completionSha256) `
                                 'Completion publisher death changed the original completion receipt'
                         }
-                        if ($historyBoundary -ceq 'prepared-history') {
+                        if ($historyBoundary -cin @('prepared-history', 'abandoned-history')) {
                             Assert ($held.attemptId -cmatch '^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$' -and
                                 $held.prepared.path -ceq "inactive-handoff-$($held.attemptId)-prepared.json") `
                                 'Preparation publisher descriptor is not bound to its exact attempt'
                             Assert ((Get-FileHash -LiteralPath (Join-Path $control $held.prepared.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $held.prepared.sha256) `
                                 'Preparation publisher death changed the original prepared record'
+                        }
+                        if ($historyBoundary -ceq 'abandoned-history') {
+                            $abandoner = [Deployment.WindowsControllerProcess]::Start($node,
+                                @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                                    'crash-abandoned-history', $historyActor), $control, $environment)
+                            try {
+                                $diagnostic = $abandoner.StandardError.ReadToEndAsync()
+                                $clock = [Diagnostics.Stopwatch]::StartNew()
+                                while ($true) {
+                                    $line = $abandoner.StandardOutput.ReadLineAsync()
+                                    $remaining = [Math]::Max(1, 120000 - $clock.ElapsedMilliseconds)
+                                    Assert ($line.Wait([int]$remaining)) 'Abandonment publisher did not reach its held boundary'
+                                    $text = $line.GetAwaiter().GetResult()
+                                    if ($null -eq $text) {
+                                        Assert ($abandoner.WaitForExit(15000)) 'Abandonment publisher closed output without exiting'
+                                        [Console]::Error.WriteLine($diagnostic.GetAwaiter().GetResult())
+                                        throw 'Abandonment publisher exited before held publication'
+                                    }
+                                    if ($text.StartsWith('INACTIVE_HISTORY_ABANDONED_HELD ')) { break }
+                                    Write-Output $text
+                                    Assert ($clock.ElapsedMilliseconds -lt 120000) 'Abandonment publisher readiness exceeded actor budget'
+                                }
+                                $historyActor = $text.Substring('INACTIVE_HISTORY_ABANDONED_HELD '.Length)
+                                $abandonedHeld = $historyActor | ConvertFrom-Json
+                                Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($abandonedHeld.pid) -ceq
+                                    $abandonedHeld.processIdentity) 'Abandonment publisher native bridge changed'
+                                $bridge = [Diagnostics.Process]::GetProcessById($abandonedHeld.pid)
+                                try {
+                                    $null = $bridge.Handle
+                                    $abandoner.Kill()
+                                    Assert ($abandoner.WaitForExit(15000)) 'Abandonment publisher survived actual actor death'
+                                    Assert ($bridge.WaitForExit(15000)) 'Abandonment native bridge survived actor death'
+                                } finally { $bridge.Dispose() }
+                                $errors = $diagnostic.GetAwaiter().GetResult()
+                                if ($errors) { [Console]::Error.WriteLine($errors) }
+                            } finally { $abandoner.Dispose() }
+                            foreach ($descriptor in @($abandonedHeld.prepared, $abandonedHeld.terminal)) {
+                                Assert ((Get-FileHash -LiteralPath (Join-Path $control $descriptor.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
+                                    $descriptor.sha256) 'Abandonment publisher death changed retained handoff evidence'
+                            }
+                            Assert ((Get-FileHash -LiteralPath $completed -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
+                                $abandonedHeld.completionSha256) 'Abandonment publisher death changed original completion receipt'
+                            $resumeMode = 'resume-abandoned-history'
                         }
                         $historyResumer = [Deployment.WindowsControllerProcess]::Start($node,
                             @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),

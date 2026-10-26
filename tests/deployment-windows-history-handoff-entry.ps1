@@ -18,9 +18,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-if ($Hold -and -not $Publish) { throw 'Held preparation requires explicit publication.' }
+if ($Hold -and -not ($Publish -or $Abandon)) { throw 'Held handoff requires explicit publication.' }
 if ($ObserveRetired -and ($Publish -or $Hold)) { throw 'Retired observation cannot publish preparation.' }
-if ($Abandon -and ($Publish -or $Hold -or $ObserveRetired)) { throw 'Abandonment requires its independent fixture branch.' }
+if ($Abandon -and ($Publish -or $ObserveRetired)) { throw 'Abandonment requires its independent fixture branch.' }
 Add-Type -Path @(
     'WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
     'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsPrivateFile.SourceSecurity.cs',

@@ -470,9 +470,11 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
-    'crash-prepared-history', 'resume-prepared-history'].includes(mode)) {
+    'crash-prepared-history', 'resume-prepared-history',
+    'crash-abandoned-history', 'resume-abandoned-history'].includes(mode)) {
     const finalizedResume = ['resume-finalized-history', 'resume-history-saved',
-      'resume-completed-history', 'resume-prepared-history'].includes(mode);
+      'resume-completed-history', 'resume-prepared-history',
+      'crash-abandoned-history', 'resume-abandoned-history'].includes(mode);
     if (!finalizedResume) await retainOriginalRuntimeAbsence();
     const intentFile = path.join(control, 'inactive-rollback-history-intent.json');
     const originalIntent = await readFile(finalizedResume
@@ -480,7 +482,8 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       : intentFile);
     const intent = JSON.parse(originalIntent);
     const completionFile = path.join(control, `retired-${intent.operationId}-inactive-rollback-history-complete.json`);
-    const retainedCompletion = ['resume-completed-history', 'resume-prepared-history'].includes(mode) ? {
+    const retainedCompletion = ['resume-completed-history', 'resume-prepared-history',
+      'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) ? {
       bytes: await readFile(completionFile), identity: await lstat(completionFile, { bigint: true }),
     } : undefined;
     if (mode === 'resume-history' || finalizedResume) {
@@ -581,7 +584,69 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       try { await new Promise(() => {}); } finally { clearInterval(timer); }
     }
     const completionBytes = await readFile(completionFile);
-    if (mode === 'resume-prepared-history') {
+    if (mode === 'resume-abandoned-history') {
+      const previous = JSON.parse(crashStep);
+      const preparedFile = path.join(control, previous.prepared.path);
+      const terminalFile = path.join(control, previous.terminal.path);
+      assert.equal(previous.prepared.path, `inactive-handoff-${previous.attemptId}-prepared.json`);
+      assert.equal(previous.terminal.path, `inactive-handoff-${previous.attemptId}-abandoned.json`);
+      const snapshots = [];
+      for (const descriptor of [previous.prepared, previous.terminal]) {
+        const file = path.join(control, descriptor.path);
+        const bytes = await readFile(file);
+        const identity = await lstat(file, { bigint: true });
+        assert.equal(bytes.length, descriptor.bytes);
+        assert.equal(createHash('sha256').update(bytes).digest('hex'), descriptor.sha256);
+        assert.equal(identity.dev.toString(), descriptor.dev);
+        assert.equal(identity.ino.toString(), descriptor.ino);
+        snapshots.push({ file, bytes, identity });
+      }
+      const terminal = JSON.parse(snapshots[1].bytes);
+      assert.equal(terminal.phase, 'stopped-history-handoff-abandoned');
+      assert.equal(terminal.attemptId, previous.attemptId);
+      assert.deepEqual(terminal.prepared, previous.prepared);
+      assert.equal(terminal.control, control);
+      assert.equal(terminal.previousOperationId, intent.operationId);
+      assert.equal(terminal.creator.pid, previous.actorPid);
+      assert.equal(terminal.creator.processIdentity, previous.actorIdentity);
+      assert.equal(terminal.creator.bridgePid, previous.pid);
+      assert.equal(terminal.creator.bridgeIdentity, previous.processIdentity);
+      assert.notEqual(await processIdentity(process.pid), previous.actorIdentity);
+      assert.notEqual(await processIdentity(previous.actorPid), previous.actorIdentity);
+      assert.notEqual(await processIdentity(previous.pid), previous.processIdentity);
+      const { captureWindowsStoppedHistoryHandoffPrepared } = await load('windows-stopped-history-handoff-record.mjs');
+      const prepared = captureWindowsStoppedHistoryHandoffPrepared(JSON.parse(snapshots[0].bytes));
+      assert.equal(terminal.project, prepared.project);
+      assert.deepEqual(terminal.controlIdentity, prepared.controlIdentity);
+      assert.equal(prepared.newOwner.pid, previous.preparedActor.actorPid);
+      assert.equal(prepared.newOwner.processIdentity, previous.preparedActor.actorIdentity);
+      assert.notEqual(await processIdentity(prepared.newOwner.pid), prepared.newOwner.processIdentity);
+      const abandonArgs = [
+        '-NoProfile', '-NonInteractive', '-File',
+        fileURLToPath(new URL('./deployment-windows-history-handoff-entry.ps1', import.meta.url)),
+        '-Source', source, '-Control', control,
+        '-ControllerPid', String(process.pid), '-ControllerIdentity', await processIdentity(process.pid),
+        '-AttemptId', previous.attemptId, '-OperationId', prepared.newOwner.operationId,
+        '-Token', prepared.newOwner.token, '-CreatedAt', prepared.newOwner.createdAt,
+        '-Abandon', '-PreparedDev', previous.prepared.dev, '-PreparedIno', previous.prepared.ino,
+        '-PreparedBytes', String(previous.prepared.bytes), '-PreparedSha256', previous.prepared.sha256,
+      ];
+      await assert.rejects(promisify(execFile)(pwsh, abandonArgs,
+        { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
+      error => error.message.includes('Abandoned handoff publication failed; retain evidence.'));
+      for (const snapshot of snapshots) {
+        assert.deepEqual(await readFile(snapshot.file), snapshot.bytes);
+        const retained = await lstat(snapshot.file, { bigint: true });
+        assert.equal(retained.dev, snapshot.identity.dev);
+        assert.equal(retained.ino, snapshot.identity.ino);
+      }
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      assert.equal((await readdir(control)).includes('lock'), false);
+      await unlink(terminalFile);
+      await unlink(preparedFile);
+      console.log('PASS: actual abandoned publisher death retains exact terminal evidence and a third actor cannot claim lock authority');
+    }
+    if (['resume-prepared-history', 'crash-abandoned-history'].includes(mode)) {
       const previous = JSON.parse(crashStep);
       assert.match(previous.attemptId, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
       assert.equal(previous.prepared.path, `inactive-handoff-${previous.attemptId}-prepared.json`);
@@ -639,6 +704,35 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal((await readdir(control)).includes('lock'), false);
       const abandonArgs = observeArgs.filter(argument => argument !== '-ObserveRetired');
       abandonArgs.push('-Abandon', '-PreparedIno', previous.prepared.ino);
+      if (mode === 'crash-abandoned-history') {
+        const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
+        const { captureWorkerFields } = await load('worker-identity.mjs');
+        const transport = windowsControllerTransport({
+          pwsh, label: 'Held native abandonment fixture',
+          refused: cause => new Error('Held native abandonment fixture failed.', { cause }),
+          args: [...abandonArgs, '-Hold'],
+        });
+        let ready;
+        try {
+          ready = captureWorkerFields(await transport.wire.receive({ timeoutMs: 60000 }),
+            ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held abandonment');
+          assert.equal(ready.type, 'ready');
+          assert.equal(ready.pid, transport.child.pid);
+          assert.equal(ready.processIdentity, await processIdentity(ready.pid));
+          assert.equal(ready.control, control);
+          assert.equal(ready.controllerIdentity, await processIdentity(process.pid));
+          assert.equal(ready.value.path, `inactive-handoff-${previous.attemptId}-abandoned.json`);
+        } catch (cause) { throw await transport.abandon(cause); }
+        console.log(`INACTIVE_HISTORY_ABANDONED_HELD ${JSON.stringify({
+          pid: ready.pid, processIdentity: ready.processIdentity,
+          actorPid: process.pid, actorIdentity: await processIdentity(process.pid),
+          attemptId: previous.attemptId, prepared: previous.prepared,
+          terminal: ready.value, preparedActor: previous,
+          completionSha256: previous.completionSha256,
+        })}`);
+        const timer = setInterval(() => {}, 1000);
+        try { await new Promise(() => {}); } finally { clearInterval(timer); }
+      }
       const terminalPublication = await promisify(execFile)(pwsh, abandonArgs,
         { timeout: 45000, maxBuffer: 131072, windowsHide: true });
       assert.equal(terminalPublication.stderr, '');
@@ -668,7 +762,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'].sort());
       assert.equal(terminal.creator.pid, process.pid);
       assert.equal(terminal.creator.processIdentity, await processIdentity(process.pid));
-      assert.notEqual(terminal.creator.pid, previous.actorPid);
+      assert.notEqual(terminal.creator.processIdentity, previous.actorIdentity);
       assert.ok(Number.isInteger(terminal.creator.bridgePid) && terminal.creator.bridgePid > 0);
       assert.notEqual(terminal.creator.bridgePid, process.pid);
       assert.match(terminal.creator.bridgeIdentity, new RegExp(`^${terminal.creator.bridgePid}:[1-9][0-9]*$`));

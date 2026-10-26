@@ -237,7 +237,8 @@ jobs:
             'PASS: native stopped-history preparation publishes one exact create-only record without lock authority',
             'PASS: actual prepared publisher death retains its exact record and a distinct actor cannot claim lock authority',
             'PASS: native retired prepared observation pins exact evidence after actual actor death without lock authority',
-            'PASS: native abandoned handoff publication seals one exact dead attempt without replacing evidence or granting lock authority'
+            'PASS: native abandoned handoff publication seals one exact dead attempt without replacing evidence or granting lock authority',
+            'PASS: actual abandoned publisher death retains exact terminal evidence and a third actor cannot claim lock authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }
