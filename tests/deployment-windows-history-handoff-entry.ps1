@@ -8,11 +8,17 @@ param(
     [Parameter(Mandatory)][string]$Token,
     [Parameter(Mandatory)][string]$CreatedAt,
     [switch]$Publish,
-    [switch]$Hold
+    [switch]$Hold,
+    [switch]$ObserveRetired,
+    [string]$PreparedDev,
+    [string]$PreparedIno,
+    [int]$PreparedBytes,
+    [string]$PreparedSha256
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($Hold -and -not $Publish) { throw 'Held preparation requires explicit publication.' }
+if ($ObserveRetired -and ($Publish -or $Hold)) { throw 'Retired observation cannot publish preparation.' }
 Add-Type -Path @(
     'WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
     'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsPrivateFile.SourceSecurity.cs',
@@ -21,11 +27,17 @@ Add-Type -Path @(
 . (Join-Path $Source 'windows-inactive-worker-cleanup.ps1')
 . (Join-Path $Source 'windows-stopped-history-handoff-record.ps1')
 if ($Publish) { . (Join-Path $Source 'windows-stopped-history-handoff-preparation.ps1') }
+if ($ObserveRetired) { . (Join-Path $Source 'windows-stopped-history-handoff-observation.ps1') }
 $scope = $watch = $null
 try {
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $scope = Open-AgentsChatStoppedWorkerCleanup $Control -HistoryArchive
-    $record = if ($Publish) {
+    $record = if ($ObserveRetired) {
+        Get-AgentsChatStoppedHistoryHandoffRetiredPrepared $scope @{
+            path="inactive-handoff-$AttemptId-prepared.json"
+            dev=$PreparedDev; ino=$PreparedIno; bytes=$PreparedBytes; sha256=$PreparedSha256
+        } $AttemptId $ControllerPid $ControllerIdentity
+    } elseif ($Publish) {
         $scope.HistoryHandoffPreparer = $true
         Publish-AgentsChatStoppedHistoryHandoffPrepared $scope $ControllerPid $ControllerIdentity `
             $AttemptId $OperationId $Token $CreatedAt

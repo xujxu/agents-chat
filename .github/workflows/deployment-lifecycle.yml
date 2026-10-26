@@ -235,7 +235,8 @@ jobs:
             'PASS: completion publisher death preserves original receipt bytes and identity for a distinct fresh actor',
             'PASS: native stopped-history preparation derives exact archive and live prospective owner without publication',
             'PASS: native stopped-history preparation publishes one exact create-only record without lock authority',
-            'PASS: actual prepared publisher death retains its exact record and a distinct actor cannot claim lock authority'
+            'PASS: actual prepared publisher death retains its exact record and a distinct actor cannot claim lock authority',
+            'PASS: native retired prepared observation pins exact evidence after actual actor death without lock authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }

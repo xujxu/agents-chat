@@ -597,6 +597,31 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal(prepared.newOwner.pid, previous.actorPid);
       assert.equal(prepared.newOwner.processIdentity, previous.actorIdentity);
       assert.notEqual(await processIdentity(previous.actorPid), previous.actorIdentity);
+      const observeArgs = [
+        '-NoProfile', '-NonInteractive', '-File',
+        fileURLToPath(new URL('./deployment-windows-history-handoff-entry.ps1', import.meta.url)),
+        '-Source', source, '-Control', control,
+        '-ControllerPid', String(process.pid), '-ControllerIdentity', await processIdentity(process.pid),
+        '-AttemptId', previous.attemptId, '-OperationId', prepared.newOwner.operationId,
+        '-Token', prepared.newOwner.token, '-CreatedAt', prepared.newOwner.createdAt,
+        '-ObserveRetired', '-PreparedDev', previous.prepared.dev,
+        '-PreparedBytes', String(previous.prepared.bytes), '-PreparedSha256', previous.prepared.sha256,
+      ];
+      const nativeObservation = await promisify(execFile)(pwsh,
+        [...observeArgs, '-PreparedIno', previous.prepared.ino],
+        { timeout: 45000, maxBuffer: 131072, windowsHide: true });
+      assert.equal(nativeObservation.stderr, '');
+      const observed = JSON.parse(nativeObservation.stdout);
+      assert.equal(observed.status, 'retired-prepared-handoff-observed');
+      assert.equal(observed.attemptId, previous.attemptId);
+      assert.deepEqual(observed.prepared, previous.prepared);
+      assert.equal(observed.runtimeAuthority, false);
+      assert.equal(observed.lockAuthority, false);
+      const wrongIno = previous.prepared.ino === '1' ? '2' : '1';
+      await assert.rejects(promisify(execFile)(pwsh, [...observeArgs, '-PreparedIno', wrongIno],
+        { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
+      error => error.message.includes('Retired prepared handoff observation failed; retain evidence.'));
+      console.log('PASS: native retired prepared observation pins exact evidence after actual actor death without lock authority');
       await assert.rejects(promisify(execFile)(pwsh, [
         '-NoProfile', '-NonInteractive', '-File',
         fileURLToPath(new URL('./deployment-windows-history-handoff-entry.ps1', import.meta.url)),
