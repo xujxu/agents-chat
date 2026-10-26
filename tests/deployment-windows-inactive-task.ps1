@@ -475,10 +475,11 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $history = Get-Content -LiteralPath $historyIntent -Raw | ConvertFrom-Json
                     $historyHash = (Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash
                     $historyStateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
-                    foreach ($historyBoundary in @('history', 'finalized-history', 'saved-history', 'completed-history')) {
+                    foreach ($historyBoundary in @('history', 'finalized-history', 'saved-history', 'completed-history', 'prepared-history')) {
                         $crashMode = switch ($historyBoundary) {
                             'finalized-history' { 'crash-finalized-history' }
                             'completed-history' { 'crash-completed-history' }
+                            'prepared-history' { 'crash-prepared-history' }
                             default { 'crash-history' }
                         }
                         $resumeMode = if ($historyBoundary -ceq 'saved-history') { 'resume-history-saved' } else { "resume-$historyBoundary" }
@@ -515,16 +516,23 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             'Writer death restored the original history pathname'
                         Assert ((Get-FileHash -LiteralPath (Join-Path $control $entry.destination) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $entry.sha256) `
                             'Writer death lost the exact archived original'
-                        if ($historyBoundary -cin @('finalized-history', 'completed-history')) {
+                        if ($historyBoundary -cin @('finalized-history', 'completed-history', 'prepared-history')) {
                             Assert (-not (Test-Path -LiteralPath $historyIntent)) 'Finalized actor death restored active intent'
                             $archivedIntent = Join-Path $control "retired-$($history.operationId)-inactive-rollback-history-intent.json"
                             Assert ((Get-FileHash -LiteralPath $archivedIntent -Algorithm SHA256).Hash -ceq $historyHash) `
                                 'Finalized actor death lost the original archived intent'
                         }
-                        if ($historyBoundary -ceq 'completed-history') {
+                        if ($historyBoundary -cin @('completed-history', 'prepared-history')) {
                             $completed = Join-Path $control "retired-$($history.operationId)-inactive-rollback-history-complete.json"
                             Assert ((Get-FileHash -LiteralPath $completed -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $held.completionSha256) `
                                 'Completion publisher death changed the original completion receipt'
+                        }
+                        if ($historyBoundary -ceq 'prepared-history') {
+                            Assert ($held.attemptId -cmatch '^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$' -and
+                                $held.prepared.path -ceq "inactive-handoff-$($held.attemptId)-prepared.json") `
+                                'Preparation publisher descriptor is not bound to its exact attempt'
+                            Assert ((Get-FileHash -LiteralPath (Join-Path $control $held.prepared.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $held.prepared.sha256) `
+                                'Preparation publisher death changed the original prepared record'
                         }
                         $historyResumer = [Deployment.WindowsControllerProcess]::Start($node,
                             @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),

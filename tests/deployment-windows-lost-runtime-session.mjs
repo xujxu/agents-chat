@@ -469,8 +469,10 @@ if (mode === 'resume-history-saved') {
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
-    'resume-history-saved', 'crash-completed-history', 'resume-completed-history'].includes(mode)) {
-    const finalizedResume = ['resume-finalized-history', 'resume-history-saved', 'resume-completed-history'].includes(mode);
+    'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
+    'crash-prepared-history', 'resume-prepared-history'].includes(mode)) {
+    const finalizedResume = ['resume-finalized-history', 'resume-history-saved',
+      'resume-completed-history', 'resume-prepared-history'].includes(mode);
     if (!finalizedResume) await retainOriginalRuntimeAbsence();
     const intentFile = path.join(control, 'inactive-rollback-history-intent.json');
     const originalIntent = await readFile(finalizedResume
@@ -478,7 +480,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       : intentFile);
     const intent = JSON.parse(originalIntent);
     const completionFile = path.join(control, `retired-${intent.operationId}-inactive-rollback-history-complete.json`);
-    const retainedCompletion = mode === 'resume-completed-history' ? {
+    const retainedCompletion = ['resume-completed-history', 'resume-prepared-history'].includes(mode) ? {
       bytes: await readFile(completionFile), identity: await lstat(completionFile, { bigint: true }),
     } : undefined;
     if (mode === 'resume-history' || finalizedResume) {
@@ -530,18 +532,89 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         }
       } finally { await writer.close(); }
     }
-    if (mode === 'crash-completed-history') {
+    if (['crash-completed-history', 'crash-prepared-history'].includes(mode)) {
       const publisher = await api.openWindowsInactiveRollbackHistoryCompletion(options);
       try {
         const completed = await publisher.completeHistory();
-        console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({
-          ...publisher.identity, actorIdentity: await processIdentity(process.pid), completionSha256: completed.sha256,
-        })}`);
-        const timer = setInterval(() => {}, 1000);
-        try { await new Promise(() => {}); } finally { clearInterval(timer); }
+        if (mode === 'crash-completed-history') {
+          console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({
+            ...publisher.identity, actorIdentity: await processIdentity(process.pid), completionSha256: completed.sha256,
+          })}`);
+          const timer = setInterval(() => {}, 1000);
+          try { await new Promise(() => {}); } finally { clearInterval(timer); }
+        }
       } finally { await publisher.close(); }
     }
+    if (mode === 'crash-prepared-history') {
+      const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
+      const { captureWorkerFields } = await load('worker-identity.mjs');
+      const actorIdentity = await processIdentity(process.pid);
+      const attemptId = randomUUID();
+      const completionSha256 = createHash('sha256').update(await readFile(completionFile)).digest('hex');
+      const transport = windowsControllerTransport({
+        pwsh, label: 'Held native preparation fixture',
+        refused: cause => new Error('Held native preparation fixture failed.', { cause }),
+        args: ['-NoProfile', '-NonInteractive', '-File',
+          fileURLToPath(new URL('./deployment-windows-history-handoff-entry.ps1', import.meta.url)),
+          '-Source', source, '-Control', control,
+          '-ControllerPid', String(process.pid), '-ControllerIdentity', actorIdentity,
+          '-AttemptId', attemptId, '-OperationId', randomUUID(), '-Token', randomUUID(),
+          '-CreatedAt', new Date().toISOString(), '-Publish', '-Hold'],
+      });
+      let ready;
+      try {
+        ready = captureWorkerFields(await transport.wire.receive({ timeoutMs: 60000 }),
+          ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held preparation');
+        assert.equal(ready.type, 'ready');
+        assert.equal(ready.pid, transport.child.pid);
+        assert.equal(ready.processIdentity, await processIdentity(ready.pid));
+        assert.equal(ready.control, control);
+        assert.equal(ready.controllerIdentity, actorIdentity);
+        assert.equal(ready.value.path, `inactive-handoff-${attemptId}-prepared.json`);
+      } catch (cause) { throw await transport.abandon(cause); }
+      console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({
+        pid: ready.pid, processIdentity: ready.processIdentity,
+        actorIdentity, actorPid: process.pid, attemptId, prepared: ready.value,
+        completionSha256,
+      })}`);
+      const timer = setInterval(() => {}, 1000);
+      try { await new Promise(() => {}); } finally { clearInterval(timer); }
+    }
     const completionBytes = await readFile(completionFile);
+    if (mode === 'resume-prepared-history') {
+      const previous = JSON.parse(crashStep);
+      assert.match(previous.attemptId, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
+      assert.equal(previous.prepared.path, `inactive-handoff-${previous.attemptId}-prepared.json`);
+      const preparedFile = path.join(control, previous.prepared.path);
+      const bytes = await readFile(preparedFile);
+      const identity = await lstat(preparedFile, { bigint: true });
+      assert.equal(bytes.length, previous.prepared.bytes);
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), previous.prepared.sha256);
+      assert.equal(identity.dev.toString(), previous.prepared.dev);
+      assert.equal(identity.ino.toString(), previous.prepared.ino);
+      const { captureWindowsStoppedHistoryHandoffPrepared } = await load('windows-stopped-history-handoff-record.mjs');
+      const prepared = captureWindowsStoppedHistoryHandoffPrepared(JSON.parse(bytes));
+      assert.equal(prepared.newOwner.pid, previous.actorPid);
+      assert.equal(prepared.newOwner.processIdentity, previous.actorIdentity);
+      assert.notEqual(await processIdentity(previous.actorPid), previous.actorIdentity);
+      await assert.rejects(promisify(execFile)(pwsh, [
+        '-NoProfile', '-NonInteractive', '-File',
+        fileURLToPath(new URL('./deployment-windows-history-handoff-entry.ps1', import.meta.url)),
+        '-Source', source, '-Control', control,
+        '-ControllerPid', String(process.pid), '-ControllerIdentity', await processIdentity(process.pid),
+        '-AttemptId', randomUUID(), '-OperationId', randomUUID(), '-Token', randomUUID(),
+        '-CreatedAt', new Date().toISOString(), '-Publish',
+      ], { timeout: 45000, maxBuffer: 2 * 1024 ** 2, windowsHide: true }),
+      error => error.message.includes('Existing handoff requires explicit settlement'));
+      assert.deepEqual(await readFile(preparedFile), bytes);
+      const retained = await lstat(preparedFile, { bigint: true });
+      assert.equal(retained.dev, identity.dev);
+      assert.equal(retained.ino, identity.ino);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      assert.equal((await readdir(control)).includes('lock'), false);
+      await unlink(preparedFile);
+      console.log('PASS: actual prepared publisher death retains its exact record and a distinct actor cannot claim lock authority');
+    }
     if (mode === 'resume-completed-history') {
       const attemptId = randomUUID();
       const operationId = randomUUID();
