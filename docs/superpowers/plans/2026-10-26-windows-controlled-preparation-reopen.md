@@ -16,7 +16,7 @@
 - Modify: `tests/deployment-windows-lost-runtime-session.mjs`
 - Modify: `.github/workflows/deployment-lifecycle.yml`
 
-- [ ] After normal production publication and close, keep the existing
+- [x] After normal production publication and close, keep the existing
   ordinary-open refusal. Import new
   `reopenWindowsStoppedHistoryHandoffPreparation(options)` and call it with
   the exact original options plus `prepared: retainedDescriptor`.
@@ -27,7 +27,7 @@
   check. Repeat publish stays refused; close leaves original bytes/hash/dev/
   ino/state and no-lock assertions unchanged before fixture-only cleanup.
 
-- [ ] In `resume-prepared-history` and the second abandonment actor, use
+- [x] In `resume-prepared-history` and the second abandonment actor, use
   every original attempt/owner scalar from the captured prepared record but
   the fresh current controller identity, then require reopen failure:
 
@@ -46,7 +46,7 @@ await assert.rejects(reopenWindowsStoppedHistoryHandoffPreparation({
   actual death boundaries unchanged. Fresh liveness and known token are not
   authority to impersonate the old owner.
 
-- [ ] Add thirteenth actual receipt:
+- [x] Add thirteenth actual receipt:
 
 ```text
 PASS: controlled preparation reopen retains exact evidence for its original live owner and rejects a fresh actor
@@ -55,7 +55,7 @@ PASS: controlled preparation reopen retains exact evidence for its original live
   Emit this receipt after positive reopen in the completed-history case;
   focused job must also complete both later fresh-actor refusal branches.
 
-- [ ] Commit/push tests and dispatch focused history. Download actual logs;
+- [x] Commit/push tests and dispatch focused history. Download actual logs;
   require a missing reopen export failure after accepted production publish,
   not an unrelated archived-state failure.
 
@@ -73,7 +73,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
 - Modify: `scripts/deployment/windows-stopped-history-handoff-controller.ps1`
 - Modify: `scripts/deployment/windows-stopped-history-handoff.mjs`
 
-- [ ] Add scalar native startup parameters:
+- [x] Add scalar native startup parameters:
 
 ```powershell
 [switch]$ReopenPrepared,
@@ -91,7 +91,7 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   Without ReopenPrepared, keep Descriptor/File null and require no existing
   handoff namespace.
 
-- [ ] Keep two distinct exported JS entry points, internally sharing client
+- [x] Keep two distinct exported JS entry points, internally sharing client
   lifecycle code. Ordinary open refuses a supplied prepared descriptor.
   Reopen requires a structurally captured exact prepared descriptor and
   supplies only its dev/ino/bytes/hash plus explicit native ReopenPrepared.
@@ -105,9 +105,30 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   mutation request, and native create-only publisher remains independently
   fail-closed.
 
-- [ ] Commit/push and run focused history plus Windows Contracts-only on the
+- [x] Commit/push and run focused history plus Windows Contracts-only on the
   same SHA. Require all thirteen executed receipts and both full jobs green.
-- [ ] Record real red/green SHA/run/job evidence and push acceptance.
+- [x] Record real red/green SHA/run/job evidence and push acceptance.
+
+## Execution evidence
+
+Red: `c51cddf9 / 40418103969`, actual job `121905395723`.
+Downloaded logs reach the new call after original publication/close and
+ordinary-open refusal, then fail because the reopen export is not a function.
+
+Green: `b26bdb40 / 40419990180`, actual job `121911751002`, succeeds
+with all thirteen actual receipts in downloaded logs. Correct same-owner
+reopen retains the original descriptor and bytes/dev/ino; changed token and
+incorrect inode fail natively. Both distinct post-death actors are refused
+despite supplying original attempt, operation, token, timestamp and descriptor.
+Original archive/state and no-lock checks remain intact.
+
+Same-SHA Contracts: `40420015620`, job `121911833345`, succeeds.
+Downloaded logs confirm source-removed saved module imports, descriptor
+bounds and native owner/JSON receipts. A transient dispatch HTTP 500 created
+no run; listing confirmed that before one successful retry.
+
+This accepts controlled preparation reopening, not ownership transfer,
+committed lock publication, state transition or actual application lifecycle.
 
 ## Self-review
 
