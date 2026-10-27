@@ -111,3 +111,15 @@ descriptor and full typed-record binding through the existing fresh
 restart binding. No ordinary reader receives an extra-name exception.
 Duplicate publication poisons the context and preserves bytes; no lock,
 task, runtime, committed record or state is changed.
+
+## Accepted seventh-file publication
+
+Implementation `15c059f714b5015b79434a35284d92303b67078a` passed focused
+run `40576269654` / job `122443434847`. All 35 required receipts from that
+exact SHA's workflow matched actual timestamped `Z PASS:` lines, including
+the new receipt at `2026-10-27T20:56:59.3661967Z`.
+Windows Contracts passed on the same SHA in run `40576274337` /
+job `122443449936`; both logs are retained.
+
+The normal live publication scenario stays separate from the next actual
+publisher-death scenario. No lock publication is authorized by this result.
