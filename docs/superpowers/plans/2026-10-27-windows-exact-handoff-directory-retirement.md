@@ -148,3 +148,30 @@ function Remove-AgentsChatStoppedHistoryHandoffLockDirectory(
   evidence. Native death after directory deletion, immutable terminal
   settlement, fresh attempt, state continuity and public repeat lifecycle
   are not accepted by this increment.
+
+## Exclusive-handle regression
+
+The first implementation `29edf802de8c910cb7d4dbb7df470c9f4478d8f4`
+passed Windows Contracts run `40452108390`, job `122016991059`, but focused
+history run `40452105603`, job `122016982953`, failed at actual directory
+retirement with a sharing violation. The native directory retirement factory
+intentionally opens with share mode zero; pathname child enumeration while
+that exclusive target is held cannot be used as proof. Do not relax sharing
+or skip empty-inventory verification.
+
+Add focused native regression assertions to the existing private-retirement
+fixture: repeated `CheckEmpty()` must succeed on an empty exclusive target,
+refuse a retained nonempty directory without changing its child, and refuse
+after disposal. Run this existing fixture before expensive focused history.
+Implement `RetirementDirectory.CheckEmpty()` using
+`GetFileInformationByHandleEx` with `FileFullDirectoryRestartInfo` (15) then
+`FileFullDirectoryInfo` (14), reading `FILE_FULL_DIR_INFO` directly from the
+same retained handle. Validate buffer bounds/alignment; permit only `.` and
+`..`; any other entry is a blocking child. Require native
+`ERROR_NO_MORE_FILES` (18) to finish, not an arbitrary failure. Check the
+retained directory and parent before and after enumeration. Use this proof
+instead of pathname enumeration only while the exact directory target is
+held; ordinary directory checks stay unchanged.
+
+Reference: [GetFileInformationByHandleEx](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex)
+and [FILE_FULL_DIR_INFO](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_full_dir_info).

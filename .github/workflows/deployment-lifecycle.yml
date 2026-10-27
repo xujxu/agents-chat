@@ -222,6 +222,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Verify native exclusive directory retirement before history takeover
+        shell: pwsh
+        run: ./tests/deployment-windows-private-file.ps1
       - name: Verify actual stopped-history deletion, finalization and saved-entry takeover
         shell: pwsh
         run: |

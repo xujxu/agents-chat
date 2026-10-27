@@ -241,6 +241,8 @@ try {
     $retained = Retain-Empty
     try {
         $retained.Check()
+        $retained.CheckEmpty()
+        $retained.CheckEmpty()
         Refuses-Sharing { [IO.Directory]::Move($empty, $movedEmpty) }
         Refuses-Sharing { [IO.Directory]::Delete($empty) }
         Refuses-Sharing { [IO.Directory]::Move($emptyParent, (Join-Path $root 'moved-parent')) }
@@ -250,6 +252,7 @@ try {
     [Deployment.WindowsPrivateFile]::Publish($child, '{"keep":true}').Dispose()
     $retained = Retain-Empty
     try {
+        Refuses { $retained.CheckEmpty() } 'Original retirement directory is not empty.'
         $code = 0
         try { $retained.Delete() }
         catch {
@@ -297,7 +300,7 @@ try {
     try {
         $retained.Delete()
         Assert (-not (Test-Path -LiteralPath $empty)) 'Original empty directory survived retirement'
-        foreach ($action in @({ $retained.Check() }, { $retained.Delete() })) {
+        foreach ($action in @({ $retained.Check() }, { $retained.CheckEmpty() }, { $retained.Delete() })) {
             $disposed = $false
             try { & $action }
             catch { $disposed = $_.Exception.GetBaseException() -is [ObjectDisposedException] }
