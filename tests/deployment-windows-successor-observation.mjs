@@ -14,25 +14,69 @@ function predecessor(previous) {
   };
 }
 
-export async function holdSuccessorPrepared({ source, control, pwsh, previous }) {
-  assert.equal(previous.directoryRetired, true);
+export async function runSuccessorPublication({ source, control, pwsh, identity, args, hold = false }) {
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
   const { captureWorkerFields } = await load('worker-identity.mjs');
-  const identity = await processIdentity(process.pid);
   const transport = windowsControllerTransport({
-    pwsh, label: 'Held native successor preparation fixture',
-    refused: cause => new Error('Held native successor preparation fixture failed.', { cause }),
+    pwsh, args: [...args, '-PhasedPublication'],
+    label: 'Phased native successor publication fixture',
+    refused: cause => new Error('Phased native successor publication fixture failed.', { cause }),
+  });
+  let diagnostic = '';
+  transport.child.stderr.on('data', bytes => { diagnostic = `${diagnostic}${bytes.toString('utf8')}`.slice(-4096); });
+  const receive = async type => {
+    const frame = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
+      ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], type);
+    assert.equal(frame.type, type);
+    assert.equal(frame.pid, transport.child.pid);
+    if (type !== 'publication-complete') {
+      assert.equal(frame.processIdentity, await processIdentity(frame.pid));
+    }
+    assert.equal(frame.control, control);
+    assert.equal(frame.controllerIdentity, identity);
+    return frame;
+  };
+  try {
+    const published = await receive('published');
+    assert.deepEqual(Object.keys(published.value).sort(), ['bytes', 'dev', 'ino', 'path', 'sha256']);
+    await transport.wire.send({ type: 'observe' });
+    const ready = await receive(hold ? 'ready' : 'publication-complete');
+    assert.equal(ready.pid, published.pid);
+    assert.equal(ready.processIdentity, published.processIdentity);
+    assert.deepEqual(ready.value.prepared, published.value);
+    assert.equal(diagnostic, '');
+    if (hold) return { transport, ready };
+    assert.deepEqual(Object.keys(ready.value).sort(), ['observation', 'prepared']);
+    const result = await transport.waitForExit();
+    assert.deepEqual(result, { code: 0, signal: null });
+    assert.equal(diagnostic, '');
+    transport.wire.close();
+    return {
+      ...ready.value,
+      record: JSON.parse(await readFile(path.join(control, published.value.path))),
+    };
+  } catch (cause) {
+    const error = await transport.abandon(cause);
+    if (error.diagnostic) console.error(error.diagnostic);
+    throw error;
+  }
+}
+
+export async function holdSuccessorPrepared({ source, control, pwsh, previous }) {
+  assert.equal(previous.directoryRetired, true);
+  const load = name => import(pathToFileURL(path.join(source, name)).href);
+  const { processIdentity } = await load('process-identity.mjs');
+  const identity = await processIdentity(process.pid);
+  const { transport, ready } = await runSuccessorPublication({
+    source, control, pwsh, identity, hold: true,
     args: [...fixtureArgs({ source, control, identity, previous }),
       '-ObserveRetirement', ...descriptorArgs('Retirement', previous.retirement),
       '-ObserveSettlement', ...descriptorArgs('Terminal', previous.terminal),
       '-PrepareSuccessor', '-PublishSuccessor', '-Hold'],
   });
-  let ready;
   try {
-    ready = captureWorkerFields(await transport.wire.receive({ timeoutMs: 60000 }),
-      ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held successor preparation');
     assert.equal(ready.type, 'ready');
     assert.equal(ready.pid, transport.child.pid);
     assert.equal(ready.processIdentity, await processIdentity(ready.pid));

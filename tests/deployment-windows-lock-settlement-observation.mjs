@@ -3,10 +3,10 @@ import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, lstat, writeFile, unlink, rename, mkdir, rmdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { fixtureArgs, descriptorArgs } from './deployment-windows-lock-retirement-observation.mjs';
+import { runSuccessorPublication } from './deployment-windows-successor-observation.mjs';
 
 export async function holdLockRetirementSettlement({ source, control, pwsh, previous }) {
   assert.equal(previous.directoryRetired, true);
@@ -93,29 +93,8 @@ export async function assertLockRetirementSettlementAfterDeath({
   const args = [...fixtureArgs({ source, control, identity, previous }), '-ObserveRetirement',
     ...descriptorArgs('Retirement', previous.retirement), '-ObserveSettlement',
     ...descriptorArgs('Terminal', previous.terminal)];
-  const observe = async input => {
-    if (!input.includes('-PublishSuccessor')) {
-      return promisify(execFile)(pwsh, input,
-        { timeout: 45000, maxBuffer: 2097152, windowsHide: true });
-    }
-    const trace = path.join(tmpdir(), `agents-chat-successor-publication-${randomUUID()}.trace`);
-    try {
-      return await promisify(execFile)(pwsh, input, {
-        timeout: 45000, maxBuffer: 2097152, windowsHide: true,
-        env: { ...process.env, AGENTS_CHAT_TEST_SUCCESSOR_TRACE: trace },
-      });
-    } catch (error) {
-      try { console.error(`Native successor publication stages:\n${await readFile(trace, 'utf8')}`); }
-      catch (traceError) {
-        if (traceError.code !== 'ENOENT') throw new AggregateError([error, traceError], 'Publication and trace read failed.');
-        console.error('Native successor publication did not enter the publication fixture.');
-      }
-      throw error;
-    } finally {
-      try { await unlink(trace); }
-      catch (error) { if (error.code !== 'ENOENT') throw error; }
-    }
-  };
+  const observe = input => promisify(execFile)(pwsh, input,
+    { timeout: 45000, maxBuffer: 2097152, windowsHide: true });
   const expected = {
     status: 'lock-retirement-settled', attemptId: previous.attemptId,
     previousOperationId: prepared.previousOperationId, project: prepared.project,
@@ -195,9 +174,9 @@ export async function assertLockRetirementSettlementAfterDeath({
     assertSuccessor(JSON.parse(successorResult.stdout));
   }
   if (stage !== 'proof') {
-    const publicationResult = await observe([...args, '-PrepareSuccessor', '-PublishSuccessor']);
-    assert.equal(publicationResult.stderr, '');
-    const publication = JSON.parse(publicationResult.stdout);
+    const publication = await runSuccessorPublication({
+      source, control, pwsh, identity, args: [...args, '-PrepareSuccessor', '-PublishSuccessor'],
+    });
     assert.deepEqual(Object.keys(publication).sort(), ['observation', 'prepared', 'record']);
     assertSuccessor(publication.record);
     assert.deepEqual(Object.keys(publication.prepared).sort(), ['bytes', 'dev', 'ino', 'path', 'sha256']);

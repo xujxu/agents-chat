@@ -21,6 +21,7 @@ param(
     [switch]$ObserveSettlement,
     [switch]$PrepareSuccessor,
     [switch]$PublishSuccessor,
+    [switch]$PhasedPublication,
     [switch]$ObserveSuccessor,
     [string]$SuccessorAttemptId,
     [string]$SuccessorDev,
@@ -41,6 +42,7 @@ Set-StrictMode -Version Latest
 $scope = $watch = $failure = $null
 try {
     if (($ObserveSuccessor -and (-not $ObserveSettlement -or $PrepareSuccessor -or $PublishSuccessor)) -or
+        ($PhasedPublication -and -not $PublishSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
         ($PrepareSuccessor -and -not $ObserveSettlement) -or
         ($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory -or $SettleRetirement -or $PublishSuccessor)) -or
@@ -223,7 +225,7 @@ try {
         if ($PublishSuccessor) {
             . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-successor-publication.ps1')
             $observation = Test-AgentsChatStoppedHistoryHandoffSuccessorPublication $Source $scope `
-                $ControllerPid $ControllerIdentity -Hold:$Hold
+                $ControllerPid $ControllerIdentity -Hold:$Hold -PhasedPublication:$PhasedPublication
         } else {
             . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-successor.ps1')
             $observation = Test-AgentsChatStoppedHistoryHandoffSuccessor $Source $scope $ControllerPid $ControllerIdentity
@@ -239,7 +241,15 @@ try {
         $null = [Console]::In.ReadLine()
         throw 'Held lock retirement fixture received unexpected controller input.'
     }
-    [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 14 -Compress))
+    if ($PhasedPublication) {
+        $observation.Remove('record')
+        [Console]::Out.WriteLine((@{
+            type='publication-complete'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+        } | ConvertTo-Json -Depth 8 -Compress))
+    } else {
+        [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 14 -Compress))
+    }
 } catch {
     $failure = $_.Exception
     [Console]::Error.WriteLine("Native committed handoff observation fixture failed: $($failure.Message) $($failure.GetBaseException().Message)")

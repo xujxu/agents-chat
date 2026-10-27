@@ -57,6 +57,37 @@ the sixth publisher's real death; earlier failure or timeout is not red.
 
 ### Task 2: Explicit five-record native reader
 
+The initial test-only run is not valid reader red. At SHA
+`fdf186834e1e4d762418f2e1aa3573c6ef825bfa`, run `40506192966`,
+job `122195995576`, the earlier normal publication invocation timed out
+before the new death boundary. Its trace shows entry at
+`2026-10-27T13:17:08.0661023Z` and successful publication return at
+`13:17:39.1007048Z`, then timeout before independent observation returned
+at `13:17:48Z`. This runner also took longer across preceding boundaries.
+Do not treat this failure as successor-observer red or start its native
+implementation on that basis.
+
+Separate the two actual native operations into explicitly acknowledged
+requests in the same retained process. The first request bootstraps and
+publishes, returning a bounded `published` descriptor frame. Only after
+the Node controller validates that bridge identity and descriptor does it
+send the exact `{"type":"observe"}` command. The second request runs the
+unchanged independent full observation and normal duplicate refusal, or
+holds the original publishing scope for actual death. Each response has
+its own 45-second bound; the host actor remains bounded by 120 seconds and
+bridge termination by 15 seconds. This is not a longer unacknowledged
+invocation or an automatic retry, and it retains every production proof.
+
+Use the existing native controller transport; require matching bridge,
+control and controller identities in both frames, exact response shapes,
+empty successful stderr and a clean normal exit. Wire frames contain only
+bounded descriptors/observations, not the up-to-1-MiB preparation. Native
+fixture scalar comparisons and strict native file binding remain intact;
+JS reads the actual descriptor-bound full record and keeps its complete
+original-template comparison and bytes/hash/dev/ino checks. Remove the
+superseded temporary trace plumbing. Rerun test-only until the missing
+reader module is the actual post-death failure.
+
 **Files:**
 - Create: `scripts/deployment/windows-stopped-history-handoff-successor-observation.ps1`
 - Modify: `scripts/deployment/windows-stopped-history-handoff-successor.ps1`

@@ -1,12 +1,8 @@
 function Test-AgentsChatStoppedHistoryHandoffSuccessorPublication(
     [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
-    [switch]$Hold
+    [switch]$Hold, [switch]$PhasedPublication
 ) {
     . (Join-Path $Source 'windows-stopped-history-handoff-successor-publication.ps1')
-    $trace = [Environment]::GetEnvironmentVariable('AGENTS_CHAT_TEST_SUCCESSOR_TRACE')
-    if ($trace) {
-        [IO.File]::AppendAllText($trace, "$([DateTime]::UtcNow.ToString('O')) publication-fixture-entered`n")
-    }
     $request = @{
         Context=$Context; ControllerPid=$ControllerPid; ControllerIdentity=$ControllerIdentity
         AttemptId=[guid]::NewGuid().ToString(); OperationId=[guid]::NewGuid().ToString()
@@ -23,7 +19,6 @@ function Test-AgentsChatStoppedHistoryHandoffSuccessorPublication(
     if (-not $refused) { throw 'Successor publication accepted a scope without its independent role.' }
     $Context.HistoryHandoffSuccessorPublisher = $true
     $descriptor = Publish-AgentsChatStoppedHistoryHandoffSuccessorPrepared @request
-    if ($trace) { [IO.File]::AppendAllText($trace, "$([DateTime]::UtcNow.ToString('O')) publication-returned`n") }
     $file = Join-Path $Context.Control $descriptor.path
     $Record = Read-AgentsChatRetirementJson ([IO.File]::ReadAllText($file)) -AllowNull
     if ($Record.attemptId -cne $request.AttemptId -or
@@ -32,8 +27,17 @@ function Test-AgentsChatStoppedHistoryHandoffSuccessorPublication(
         $Record.newOwner.processIdentity -cne $ControllerIdentity) {
         throw 'Published successor differs from its actual scalar request.'
     }
+    if ($PhasedPublication) {
+        [Console]::Out.WriteLine((@{
+            type='published'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            control=$Context.Control; controllerIdentity=$ControllerIdentity; value=$descriptor
+        } | ConvertTo-Json -Depth 8 -Compress))
+        [Console]::Out.Flush()
+        if ([Console]::In.ReadLine() -cne '{"type":"observe"}') {
+            throw 'Phased successor publication requires its exact observation command.'
+        }
+    }
     $observed = Get-AgentsChatStoppedHistoryHandoffSuccessorPreparedObservation $Context $ControllerPid $ControllerIdentity
-    if ($trace) { [IO.File]::AppendAllText($trace, "$([DateTime]::UtcNow.ToString('O')) observation-returned`n") }
     if ($Hold) { return [ordered]@{ prepared=$descriptor; record=$Record; observation=$observed } }
     $bytes = [IO.File]::ReadAllBytes($file)
     $refused = $false
