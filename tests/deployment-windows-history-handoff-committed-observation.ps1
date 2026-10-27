@@ -12,12 +12,21 @@ param(
     [Parameter(Mandatory)][string]$CommittedIno,
     [Parameter(Mandatory)][int]$CommittedBytes,
     [Parameter(Mandatory)][string]$CommittedSha256,
-    [switch]$PrepareRetirement
+    [switch]$PrepareRetirement,
+    [switch]$Hold,
+    [switch]$ObserveRetirement,
+    [string]$RetirementDev,
+    [string]$RetirementIno,
+    [int]$RetirementBytes,
+    [string]$RetirementSha256
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $scope = $watch = $failure = $null
 try {
+    if (($Hold -and -not $PrepareRetirement) -or ($ObserveRetirement -and ($PrepareRetirement -or $Hold))) {
+        throw 'Invalid native retirement fixture mode.'
+    }
     Add-Type -Path @(
         'WindowsWorkerJob.cs', 'WindowsRuntimeDomain.cs', 'WindowsRuntimePipe.cs',
         'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsPrivateFile.SourceSecurity.cs',
@@ -34,10 +43,22 @@ try {
         path="inactive-handoff-$AttemptId-committed.json"
         dev=$CommittedDev; ino=$CommittedIno; bytes=$CommittedBytes; sha256=$CommittedSha256
     }
-    $scope = Open-AgentsChatStoppedHistoryHandoffCommittedObservation $Control `
-        $ControllerPid $ControllerIdentity $AttemptId $prepared $committed
-    $observation = Get-AgentsChatStoppedHistoryHandoffCommittedObservation $scope `
-        $ControllerPid $ControllerIdentity
+    if ($ObserveRetirement) {
+        . (Join-Path $Source 'windows-stopped-history-handoff-lock-retirement-observation.ps1')
+        $retirement = @{
+            path="inactive-handoff-$AttemptId-lock-retirement.json"
+            dev=$RetirementDev; ino=$RetirementIno; bytes=$RetirementBytes; sha256=$RetirementSha256
+        }
+        $scope = Open-AgentsChatStoppedHistoryHandoffLockRetirementObservation $Control `
+            $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement
+        $observation = Get-AgentsChatStoppedHistoryHandoffLockRetirementObservation $scope `
+            $ControllerPid $ControllerIdentity
+    } else {
+        $scope = Open-AgentsChatStoppedHistoryHandoffCommittedObservation $Control `
+            $ControllerPid $ControllerIdentity $AttemptId $prepared $committed
+        $observation = Get-AgentsChatStoppedHistoryHandoffCommittedObservation $scope `
+            $ControllerPid $ControllerIdentity
+    }
     if ($PrepareRetirement) {
         . (Join-Path $Source 'windows-stopped-history-handoff-lock-retirement-intent.ps1')
         $refused = $false
@@ -59,6 +80,15 @@ try {
                 throw 'Lock retirement intent does not identify its actual native bridge.'
             }
         } finally { $document.Dispose() }
+        if ($Hold) {
+            [Console]::Out.WriteLine((@{
+                type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+                control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+            } | ConvertTo-Json -Depth 8 -Compress))
+            [Console]::Out.Flush()
+            $null = [Console]::In.ReadLine()
+            throw 'Held lock retirement fixture received unexpected controller input.'
+        }
     }
     [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 8 -Compress))
 } catch {

@@ -476,14 +476,15 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $historyHash = (Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash
                     $historyStateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
                     foreach ($historyBoundary in @('history', 'finalized-history', 'saved-history', 'completed-history', 'prepared-history', 'abandoned-history',
-                        'lock-directory-history', 'lock-owner-history', 'lock-committed-history')) {
-                        $lockBoundary = $historyBoundary -cin @('lock-directory-history', 'lock-owner-history', 'lock-committed-history')
+                        'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history')) {
+                        $lockBoundary = $historyBoundary -cin @('lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history')
                         $crashMode = switch ($historyBoundary) {
                             'finalized-history' { 'crash-finalized-history' }
                             'completed-history' { 'crash-completed-history' }
                             'prepared-history' { 'crash-prepared-history' }
                             'abandoned-history' { 'crash-prepared-history' }
-                            { $lockBoundary } { "crash-$historyBoundary" }
+                            'lock-retirement-history' { 'crash-lock-committed-history' }
+                            { $lockBoundary -and $_ -cne 'lock-retirement-history' } { "crash-$historyBoundary" }
                             default { 'crash-history' }
                         }
                         $resumeMode = if ($historyBoundary -ceq 'saved-history') { 'resume-history-saved' } else { "resume-$historyBoundary" }
@@ -582,6 +583,48 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             Assert ((Get-FileHash -LiteralPath $completed -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
                                 $abandonedHeld.completionSha256) 'Abandonment publisher death changed original completion receipt'
                             $resumeMode = 'resume-abandoned-history'
+                        }
+                        if ($historyBoundary -ceq 'lock-retirement-history') {
+                            $retirer = [Deployment.WindowsControllerProcess]::Start($node,
+                                @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                                    'crash-lock-retirement-history', $historyActor), $control, $environment)
+                            try {
+                                $diagnostic = $retirer.StandardError.ReadToEndAsync()
+                                $clock = [Diagnostics.Stopwatch]::StartNew()
+                                while ($true) {
+                                    $line = $retirer.StandardOutput.ReadLineAsync()
+                                    $remaining = [Math]::Max(1, 120000 - $clock.ElapsedMilliseconds)
+                                    Assert ($line.Wait([int]$remaining)) 'Lock retirement publisher did not reach its held boundary'
+                                    $text = $line.GetAwaiter().GetResult()
+                                    if ($null -eq $text) {
+                                        Assert ($retirer.WaitForExit(15000)) 'Lock retirement publisher closed output without exiting'
+                                        [Console]::Error.WriteLine($diagnostic.GetAwaiter().GetResult())
+                                        throw 'Lock retirement publisher exited before held publication'
+                                    }
+                                    if ($text.StartsWith('INACTIVE_HISTORY_LOCK_RETIREMENT_HELD ')) { break }
+                                    Write-Output $text
+                                    Assert ($clock.ElapsedMilliseconds -lt 120000) 'Lock retirement publisher exceeded actor budget'
+                                }
+                                $historyActor = $text.Substring('INACTIVE_HISTORY_LOCK_RETIREMENT_HELD '.Length)
+                                $retirementHeld = $historyActor | ConvertFrom-Json
+                                Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($retirementHeld.pid) -ceq
+                                    $retirementHeld.processIdentity) 'Lock retirement publisher native bridge changed'
+                                $bridge = [Diagnostics.Process]::GetProcessById($retirementHeld.pid)
+                                try {
+                                    $null = $bridge.Handle
+                                    $retirer.Kill()
+                                    Assert ($retirer.WaitForExit(15000)) 'Lock retirement publisher survived actual death'
+                                    Assert ($bridge.WaitForExit(15000)) 'Lock retirement native bridge survived actor death'
+                                } finally { $bridge.Dispose() }
+                                $errors = $diagnostic.GetAwaiter().GetResult()
+                                if ($errors) { [Console]::Error.WriteLine($errors) }
+                            } finally { $retirer.Dispose() }
+                            Assert ((Get-FileHash -LiteralPath (Join-Path $control $retirementHeld.retirement.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
+                                $retirementHeld.retirement.sha256) 'Publisher death changed exact lock retirement intent'
+                            Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq
+                                $historyStateHash) 'Lock retirement publisher death changed original state'
+                            $resumeMode = 'resume-lock-retirement-history'
                         }
                         $historyResumer = [Deployment.WindowsControllerProcess]::Start($node,
                             @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),

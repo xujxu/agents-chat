@@ -5,6 +5,7 @@ import { readFile, readdir, writeFile, unlink, lstat, rename, mkdir, rmdir } fro
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { holdLockRetirementIntent, assertLockRetirementIntentAfterDeath } from './deployment-windows-lock-retirement-observation.mjs';
 
 const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored', terminalCrashStep = ''] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
@@ -468,14 +469,17 @@ if (mode === 'resume-history-saved') {
 }
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
+  const retirementCrash = mode === 'crash-lock-retirement-history';
+  const retirementResume = mode === 'resume-lock-retirement-history';
   const lockStages = {
     'crash-lock-directory-history': 'Directory', 'resume-lock-directory-history': 'Directory',
     'crash-lock-owner-history': 'Owner', 'resume-lock-owner-history': 'Owner',
     'crash-lock-committed-history': 'Committed', 'resume-lock-committed-history': 'Committed',
+    'crash-lock-retirement-history': 'Committed', 'resume-lock-retirement-history': 'Committed',
   };
   const lockStage = lockStages[mode];
-  const lockCrash = Boolean(lockStage && mode.startsWith('crash-'));
-  const lockResume = Boolean(lockStage && mode.startsWith('resume-'));
+  const lockCrash = Boolean(lockStage && mode.startsWith('crash-') && !retirementCrash);
+  const lockResume = Boolean(lockStage && (mode.startsWith('resume-') || retirementCrash));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'crash-prepared-history', 'resume-prepared-history',
@@ -617,7 +621,11 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       try { await new Promise(() => {}); } finally { clearInterval(timer); }
     }
     const completionBytes = await readFile(completionFile);
-    if (lockResume) {
+    if (retirementResume) {
+      await assertLockRetirementIntentAfterDeath({
+        source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+      });
+    } else if (lockResume) {
       const previous = JSON.parse(crashStep);
       assert.equal(previous.stage, lockStage);
       assert.notEqual(await processIdentity(process.pid), previous.actorIdentity);
@@ -669,6 +677,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         assert.deepEqual(record.lock, previous.owner);
         assert.deepEqual(record.creator, { pid: previous.actorPid, processIdentity: previous.actorIdentity,
           bridgePid: previous.pid, bridgeIdentity: previous.processIdentity });
+        if (retirementCrash) {
+          await holdLockRetirementIntent({ source, control, pwsh, previous });
+          throw new Error('Held retirement publisher unexpectedly returned.');
+        }
         const observeArgs = [
           '-NoProfile', '-NonInteractive', '-File',
           fileURLToPath(new URL('./deployment-windows-history-handoff-committed-observation.ps1', import.meta.url)),
