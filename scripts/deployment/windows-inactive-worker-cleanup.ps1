@@ -144,7 +144,10 @@ function Assert-AgentsChatStoppedWorkerCleanup([hashtable]$Context) {
     } finally { $Context.Busy = $false }
 }
 
-function Open-AgentsChatStoppedWorkerCleanup([string]$Control, [switch]$HistoryArchive, [switch]$HistoryWrite) {
+function Open-AgentsChatStoppedWorkerCleanup(
+    [string]$Control, [switch]$HistoryArchive, [switch]$HistoryWrite,
+    [hashtable]$HistoryHandoffObservation
+) {
     $context = @{
         Control=$Control; Directory=(Join-Path $Control 'task-maintenance')
         Files=[Collections.Generic.List[IDisposable]]::new()
@@ -153,6 +156,9 @@ function Open-AgentsChatStoppedWorkerCleanup([string]$Control, [switch]$HistoryA
     }
     try {
         if ($HistoryWrite -and -not $HistoryArchive) { throw 'History writer requires original archival proof.' }
+        if ($null -ne $HistoryHandoffObservation -and (-not $HistoryArchive -or $HistoryWrite)) {
+            throw 'Handoff observation requires independent read-only archival proof.'
+        }
         if ($HistoryWrite) { $context.HistoryWriter = $true }
         if ($Control -cnotmatch '^[A-Za-z]:\\' -or $Control.Length -gt 4096 -or
             $Control -match '[\x00\r\n]' -or [IO.Path]::GetFullPath($Control) -cne $Control) {
@@ -192,10 +198,19 @@ function Open-AgentsChatStoppedWorkerCleanup([string]$Control, [switch]$HistoryA
         Assert-AgentsChatStoppedWorkerPlan $context $record
         $context.Record = $record
         $context.WorkerDomains = $record.domains
+        if ($null -ne $HistoryHandoffObservation) {
+            Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation $context $HistoryHandoffObservation
+        }
         $context.Entries = [object[]]::new($record.entries.Count)
         $remaining = $false
         for ($index = 0; $index -lt $record.entries.Count; $index++) {
             $entry = $record.entries[$index]
+            if ($context.ContainsKey('HistoryHandoffObservedCommit') -and
+                $entry.path -cin @('lock\owner.json', 'lock')) {
+                if ($remaining) { throw 'Non-prefix stopped worker cleanup history.' }
+                $context.Prefix++
+                continue
+            }
             $file = Join-Path $Control $entry.path
             if (-not (Test-Path -LiteralPath $file)) {
                 if ($remaining) { throw 'Non-prefix stopped worker cleanup history.' }
@@ -220,6 +235,9 @@ function Open-AgentsChatStoppedWorkerCleanup([string]$Control, [switch]$HistoryA
         $receiptPath = Resolve-AgentsChatCompletionPath $context (Join-Path $Control 'inactive-rollback-retired.json')
         if (Test-Path -LiteralPath $receiptPath) {
             $context.FinalReceipt = Open-AgentsChatCompletionFile $context (Join-Path $Control 'inactive-rollback-retired.json') ''
+        }
+        if ($context.ContainsKey('HistoryHandoffObservedCommit')) {
+            Assert-AgentsChatStoppedHistoryRecovery $context
         }
         $null = Assert-AgentsChatStoppedWorkerCleanup $context
         return $context
