@@ -94,8 +94,10 @@ export async function holdLockOwnerRetirement({ source, control, pwsh, previous 
 }
 
 export async function assertLockRetirementIntentAfterDeath({
-  source, control, pwsh, admission, previous, state, completionBytes, ownerRetired = false,
+  source, control, pwsh, admission, previous, state, completionBytes, ownerRetired = false, stage = 'complete',
 }) {
+  assert.ok(['complete', 'owner-proof', 'directory-removal'].includes(stage));
+  if (stage !== 'complete') assert.equal(ownerRetired, true);
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const original = previous.originalActor;
@@ -210,60 +212,62 @@ export async function assertLockRetirementIntentAfterDeath({
   assert.deepEqual(observed.lock, previous.owner);
   assert.equal(observed.runtimeAuthority, false);
   assert.equal(observed.lockAuthority, false);
-  await assert.rejects(observe(previous.retirement.ino === '1' ? '2' : '1'),
-    error => error.message.includes('Lock retirement observation failed; retain evidence.'));
-  if (ownerRetired) {
-    const foreign = path.join(directory, 'foreign-owner-retirement-fixture');
-    await writeFile(foreign, '{}', { flag: 'wx' });
-    const foreignIdentity = await lstat(foreign, { bigint: true });
-    try {
-      await assert.rejects(observe(previous.retirement.ino),
-        error => error.message.includes('Lock retirement observation failed; retain evidence.'));
-    } finally {
-      const current = await lstat(foreign, { bigint: true });
-      assert.equal(current.dev, foreignIdentity.dev);
-      assert.equal(current.ino, foreignIdentity.ino);
-      assert.equal(await readFile(foreign, 'utf8'), '{}');
-      await unlink(foreign);
-    }
-    const stateFile = path.join(control, 'state.json');
-    const changed = Buffer.concat([state, Buffer.from('\n')]);
-    await writeFile(stateFile, changed);
-    try {
-      await assert.rejects(observe(previous.retirement.ino),
-        error => error.message.includes('Lock retirement observation failed; retain evidence.'));
-      assert.deepEqual(await readFile(stateFile), changed);
-    } finally { await writeFile(stateFile, state); }
-    const repeated = await promisify(execFile)(pwsh,
-      [...observeArgs, '-RetirementIno', previous.retirement.ino, '-RetireOwner'],
-      { timeout: 45000, maxBuffer: 131072, windowsHide: true });
-    assert.equal(repeated.stderr, '');
-    assert.deepEqual(JSON.parse(repeated.stdout), observed);
-  } else {
-    const heldOwner = path.join(control, 'fixture-retirement-original-owner.json');
-    await rename(ownerFile, heldOwner);
-    let replacement;
-    try {
-      await writeFile(ownerFile, snapshots[2].bytes, { flag: 'wx' });
-      replacement = await lstat(ownerFile, { bigint: true });
-      assert.notEqual(replacement.ino, snapshots[2].identity.ino);
-      await assert.rejects(observe(previous.retirement.ino),
-        error => error.message.includes('Lock retirement observation failed; retain evidence.'));
-      assert.deepEqual(await readFile(ownerFile), snapshots[2].bytes);
-    } finally {
-      if (replacement) {
-        const current = await lstat(ownerFile, { bigint: true });
-        assert.equal(current.dev, replacement.dev);
-        assert.equal(current.ino, replacement.ino);
-        assert.deepEqual(await readFile(ownerFile), snapshots[2].bytes);
-        await unlink(ownerFile);
+  if (stage !== 'directory-removal') {
+    await assert.rejects(observe(previous.retirement.ino === '1' ? '2' : '1'),
+      error => error.message.includes('Lock retirement observation failed; retain evidence.'));
+    if (ownerRetired) {
+      const foreign = path.join(directory, 'foreign-owner-retirement-fixture');
+      await writeFile(foreign, '{}', { flag: 'wx' });
+      const foreignIdentity = await lstat(foreign, { bigint: true });
+      try {
+        await assert.rejects(observe(previous.retirement.ino),
+          error => error.message.includes('Lock retirement observation failed; retain evidence.'));
+      } finally {
+        const current = await lstat(foreign, { bigint: true });
+        assert.equal(current.dev, foreignIdentity.dev);
+        assert.equal(current.ino, foreignIdentity.ino);
+        assert.equal(await readFile(foreign, 'utf8'), '{}');
+        await unlink(foreign);
       }
-      await rename(heldOwner, ownerFile);
+      const stateFile = path.join(control, 'state.json');
+      const changed = Buffer.concat([state, Buffer.from('\n')]);
+      await writeFile(stateFile, changed);
+      try {
+        await assert.rejects(observe(previous.retirement.ino),
+          error => error.message.includes('Lock retirement observation failed; retain evidence.'));
+        assert.deepEqual(await readFile(stateFile), changed);
+      } finally { await writeFile(stateFile, state); }
+      const repeated = await promisify(execFile)(pwsh,
+        [...observeArgs, '-RetirementIno', previous.retirement.ino, '-RetireOwner'],
+        { timeout: 45000, maxBuffer: 131072, windowsHide: true });
+      assert.equal(repeated.stderr, '');
+      assert.deepEqual(JSON.parse(repeated.stdout), observed);
+    } else {
+      const heldOwner = path.join(control, 'fixture-retirement-original-owner.json');
+      await rename(ownerFile, heldOwner);
+      let replacement;
+      try {
+        await writeFile(ownerFile, snapshots[2].bytes, { flag: 'wx' });
+        replacement = await lstat(ownerFile, { bigint: true });
+        assert.notEqual(replacement.ino, snapshots[2].identity.ino);
+        await assert.rejects(observe(previous.retirement.ino),
+          error => error.message.includes('Lock retirement observation failed; retain evidence.'));
+        assert.deepEqual(await readFile(ownerFile), snapshots[2].bytes);
+      } finally {
+        if (replacement) {
+          const current = await lstat(ownerFile, { bigint: true });
+          assert.equal(current.dev, replacement.dev);
+          assert.equal(current.ino, replacement.ino);
+          assert.deepEqual(await readFile(ownerFile), snapshots[2].bytes);
+          await unlink(ownerFile);
+        }
+        await rename(heldOwner, ownerFile);
+      }
     }
+    await assert.rejects(promisify(execFile)(pwsh, baseArgs,
+      { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
+    error => error.message.includes('Committed handoff observation failed; retain evidence.'));
   }
-  await assert.rejects(promisify(execFile)(pwsh, baseArgs,
-    { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
-  error => error.message.includes('Committed handoff observation failed; retain evidence.'));
   const api = await load('windows-task-completion-recovery.mjs');
   const { acquireLock, releaseLock } = await load('state.mjs');
   await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive({ control, pwsh, admission }));
@@ -290,6 +294,10 @@ export async function assertLockRetirementIntentAfterDeath({
   const completionAfter = await lstat(completionFile, { bigint: true });
   assert.equal(completionAfter.dev, completionIdentity.dev);
   assert.equal(completionAfter.ino, completionIdentity.ino);
+  if (stage === 'owner-proof') {
+    console.log('PASS: actual owner retirement executor death leaves an exact empty directory for a fresh native partial-cleanup observer');
+    return;
+  }
   if (ownerRetired) {
     const retireArgs = [...observeArgs, '-RetirementIno', previous.retirement.ino, '-RetireDirectory'];
     const retire = () => promisify(execFile)(pwsh, retireArgs,

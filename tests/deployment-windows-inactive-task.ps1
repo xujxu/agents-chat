@@ -714,6 +714,21 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $historyStateHash) 'Directory executor death changed original state'
                             $resumeMode = 'resume-lock-directory-retired-history'
                         }
+                        if ($historyBoundary -ceq 'lock-owner-retired-history') {
+                            $ownerChecker = [Deployment.WindowsControllerProcess]::Start($node,
+                                @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                                    'check-lock-owner-retired-history', $historyActor), $control, $environment)
+                            try {
+                                $output = $ownerChecker.StandardOutput.ReadToEndAsync()
+                                $diagnostic = $ownerChecker.StandardError.ReadToEndAsync()
+                                Assert ($ownerChecker.WaitForExit(120000)) 'Fresh owner-retired proof actor timed out'
+                                Write-Output $output.GetAwaiter().GetResult()
+                                $errors = $diagnostic.GetAwaiter().GetResult()
+                                if ($errors) { [Console]::Error.WriteLine($errors) }
+                                Assert ($ownerChecker.ExitCode -eq 0) 'Fresh owner-retired proof actor failed'
+                            } finally { $ownerChecker.Dispose() }
+                        }
                         $historyResumer = [Deployment.WindowsControllerProcess]::Start($node,
                             @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                 $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,

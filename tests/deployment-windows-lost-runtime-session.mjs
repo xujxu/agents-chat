@@ -474,6 +474,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const retirementResume = mode === 'resume-lock-retirement-history';
   const ownerRetirementCrash = mode === 'crash-lock-owner-retired-history';
   const ownerRetirementResume = mode === 'resume-lock-owner-retired-history';
+  const ownerRetirementCheck = mode === 'check-lock-owner-retired-history';
   const directoryRetirementCrash = mode === 'crash-lock-directory-retired-history';
   const directoryRetirementResume = mode === 'resume-lock-directory-retired-history';
   const lockStages = {
@@ -482,13 +483,14 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'crash-lock-committed-history': 'Committed', 'resume-lock-committed-history': 'Committed',
     'crash-lock-retirement-history': 'Committed', 'resume-lock-retirement-history': 'Committed',
     'crash-lock-owner-retired-history': 'Committed', 'resume-lock-owner-retired-history': 'Committed',
+    'check-lock-owner-retired-history': 'Committed',
     'crash-lock-directory-retired-history': 'Committed', 'resume-lock-directory-retired-history': 'Committed',
   };
   const lockStage = lockStages[mode];
   const lockCrash = Boolean(lockStage && mode.startsWith('crash-') &&
     !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash);
   const lockResume = Boolean(lockStage &&
-    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash));
+    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'crash-prepared-history', 'resume-prepared-history',
@@ -640,11 +642,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     } else if (ownerRetirementCrash) {
       await holdLockOwnerRetirement({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held owner retirement executor unexpectedly returned.');
-    } else if (retirementResume || ownerRetirementResume) {
+    } else if (retirementResume || ownerRetirementResume || ownerRetirementCheck) {
       await assertLockRetirementIntentAfterDeath({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
-        ownerRetired: ownerRetirementResume,
+        ownerRetired: ownerRetirementResume || ownerRetirementCheck,
+        stage: ownerRetirementCheck ? 'owner-proof' : ownerRetirementResume ? 'directory-removal' : 'complete',
       });
+      if (ownerRetirementCheck) return;
     } else if (lockResume) {
       const previous = JSON.parse(crashStep);
       assert.equal(previous.stage, lockStage);

@@ -140,3 +140,21 @@ Fresh attempt settlement discovery, production committed capability, original
 state snapshot, first transition, handoff-aware release and public inactive
 deploy/update remain later gates. No terminal filename or record alone may
 clear any ordinary maintenance gate.
+
+## Precondition fixture budget
+
+Test-only `b5298508`, run `40459538657`, job `122040620600`, did not reach
+the expected missing terminal module. The earlier owner-retired resumer
+combined its partial-cleanup negative cases with the newly added directory
+deletion/replacement/reopen cases and subsequent archive restoration; it
+hit the existing 120-second actor budget. This is not accepted terminal red.
+
+Separate the owner-retired proof into its own `check-lock-owner-retired-history`
+actor. Retain all original identity/record/state/completion, foreign-child,
+changed-state, wrong-intent and idempotent-owner checks there, then exit
+without deleting any evidence. The following independent directory-removal
+actor reopens the full native proof and performs all directory deletion,
+replacement, fresh-read and retry checks plus existing fixture restoration.
+Keep each 120-second actor budget and every 15-second bridge-death budget
+unchanged. Push this fixture split with native terminal modules still absent,
+then require the actual missing-module red before committing implementation.
