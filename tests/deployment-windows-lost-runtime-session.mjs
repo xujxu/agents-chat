@@ -988,7 +988,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await assert.rejects(releaseLock(control, actualOwner, { pwsh, admission }));
       await assert.rejects(promisify(execFile)(pwsh, [...commitArgs, '-Token', handoffOptions.token],
         { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
-      error => error.message.includes('Unexpected stopped worker retirement inventory.'));
+      error => error.message.includes('Private configuration digest differs.'));
       assert.deepEqual(await readFile(committedFile), committedBytes);
       const committedAfter = await lstat(committedFile, { bigint: true });
       assert.equal(committedAfter.dev, committedIdentity.dev);
