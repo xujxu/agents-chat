@@ -51,9 +51,13 @@ assert.deepEqual(JSON.parse(retry.stdout), retired);
   records unchanged; observation and deletion must both refuse and preserve
   that directory's identity. Remove only this fixture-owned replacement and
   re-observe exact absence. Recheck all original record/state/completion
-  bytes and identities after deletion. Keep acquire/release and ordinary
-  archive refusal while immutable handoff records remain. Fixture cleanup
-  no longer removes the production-deleted directory.
+  bytes and identities after deletion. Keep acquire/release refusal while
+  immutable handoff records remain. With the directory absent, preserve
+  the ordinary archive reader's existing read-only behavior: status
+  `retired`, with no advance, preparation or completion methods. Its
+  refusal before deletion is caused by the new lock, not the handoff
+  filenames; do not introduce a new archive-reader restriction.
+  Fixture cleanup no longer removes the production-deleted directory.
 
 - [ ] Require both actual receipts:
 

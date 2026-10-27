@@ -11,19 +11,43 @@ function Assert-AgentsChatStoppedHistoryHandoffLock([hashtable]$Context) {
         throw 'Handoff lock lacks retained committed observation.'
     }
     $lock = $Context.HistoryHandoffLock
-    $lock.Directory.Check()
-    $identity = $lock.Directory.CaptureIdentity()
-    if ($identity.Dev -cne $lock.DirectoryIdentity.dev -or
-        $identity.Ino -cne $lock.DirectoryIdentity.ino) { throw 'Handoff lock directory identity differs.' }
-    $root = @(Get-ChildItem -LiteralPath $Context.Control -Force |
-        Where-Object { $_.Name -ieq 'lock' })
-    if ($root.Count -ne 1 -or $root[0].Name -cne 'lock' -or -not $root[0].PSIsContainer) {
-        throw 'Handoff lock root inventory differs.'
-    }
     $request = $lock.OwnerRequest
     $owner = if ($observer) { Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
         else { New-AgentsChatStoppedHistoryHandoffOwner @request }
     if (($owner | ConvertTo-Json -Compress) -cne $lock.OwnerText) { throw 'Handoff lock live owner differs.' }
+    $root = @(Get-ChildItem -LiteralPath $Context.Control -Force |
+        Where-Object { $_.Name -ieq 'lock' })
+    if ($lock.DirectoryRetired) {
+        if (-not $observer -or -not $lock.OwnerRetired -or $null -ne $lock.Directory -or
+            $null -ne $lock.DirectoryRetirement -or $null -ne $lock.OwnerFile -or
+            $null -ne $lock.OwnerRetirement -or
+            -not $Context.ContainsKey('HistoryHandoffLockRetirementObserver') -or
+            $Context.HistoryHandoffLockRetirementObserver -ne $true) {
+            throw 'Retired handoff directory lacks its explicit retained intent proof.'
+        }
+        Assert-AgentsChatStoppedHistoryHandoffLockRetirementIntent $Context
+        if ($root.Count) { throw 'Retired handoff directory unexpectedly exists.' }
+        $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request
+        return
+    }
+    $directoryTarget = $null -ne $lock.DirectoryRetirement
+    if ($directoryTarget) {
+        if (-not $observer -or -not $lock.OwnerRetired -or $null -ne $lock.Directory -or
+            $null -ne $lock.OwnerFile -or $null -ne $lock.OwnerRetirement -or
+            -not $Context.ContainsKey('HistoryHandoffLockDirectoryRetirementExecutor') -or
+            $Context.HistoryHandoffLockDirectoryRetirementExecutor -ne $true) {
+            throw 'Handoff directory target lacks its independent retained proof.'
+        }
+        $lock.DirectoryRetirement.Check()
+    } else {
+        $lock.Directory.Check()
+        $identity = $lock.Directory.CaptureIdentity()
+        if ($identity.Dev -cne $lock.DirectoryIdentity.dev -or
+            $identity.Ino -cne $lock.DirectoryIdentity.ino) { throw 'Handoff lock directory identity differs.' }
+    }
+    if ($root.Count -ne 1 -or $root[0].Name -cne 'lock' -or -not $root[0].PSIsContainer) {
+        throw 'Handoff lock root inventory differs.'
+    }
     $children = @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force)
     if ($null -ne $lock.OwnerRetirement) {
         if (-not $observer -or $lock.OwnerRetired -or $null -ne $lock.OwnerFile -or
@@ -61,7 +85,8 @@ function Assert-AgentsChatStoppedHistoryHandoffLock([hashtable]$Context) {
             if ($descriptor[$name] -cne $lock.OwnerDescriptor[$name]) { throw 'Handoff lock owner descriptor differs.' }
         }
     }
-    $lock.Directory.Check()
+    if ($directoryTarget) { $lock.DirectoryRetirement.Check() }
+    else { $lock.Directory.Check() }
     if ($observer) { $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
     else { $null = New-AgentsChatStoppedHistoryHandoffOwner @request }
 }

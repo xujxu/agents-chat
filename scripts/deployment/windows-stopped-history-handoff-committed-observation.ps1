@@ -67,17 +67,25 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     }
     Assert-AgentsChatRetirementIdentity $record.lockIdentity
     Assert-AgentsChatRetirementDescriptor $record.lock 'lock\owner.json' 65536
-    $directory = [Deployment.WindowsPrivateFile]::OpenDirectory((Join-Path $Context.Control 'lock'))
-    $Context.Files.Add($directory)
-    $identity = $directory.CaptureIdentity()
-    if ($identity.Dev -cne $record.lockIdentity.dev -or $identity.Ino -cne $record.lockIdentity.ino) {
-        throw 'Committed lock directory identity differs.'
+    $directory = $null
+    $directoryRetired = $hasRetirement -and -not (Test-Path -LiteralPath (Join-Path $Context.Control 'lock'))
+    $directoryIdentity = $record.lockIdentity
+    if (-not $directoryRetired) {
+        $directory = [Deployment.WindowsPrivateFile]::OpenDirectory((Join-Path $Context.Control 'lock'))
+        $Context.Files.Add($directory)
+        $identity = $directory.CaptureIdentity()
+        if ($identity.Dev -cne $record.lockIdentity.dev -or $identity.Ino -cne $record.lockIdentity.ino) {
+            throw 'Committed lock directory identity differs.'
+        }
+        $directoryIdentity = [ordered]@{ dev=$identity.Dev; ino=$identity.Ino }
     }
     $ownerText = $owner | ConvertTo-Json -Compress
     $ownerFile = $null
-    $ownerRetired = $hasRetirement -and -not (Test-Path -LiteralPath (Join-Path $Context.Control 'lock\owner.json'))
+    $ownerRetired = $directoryRetired -or
+        ($hasRetirement -and -not (Test-Path -LiteralPath (Join-Path $Context.Control 'lock\owner.json')))
     if ($ownerRetired) {
-        if (@(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force).Count) {
+        if (-not $directoryRetired -and
+            @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force).Count) {
             throw 'Retired owner directory has unexpected children.'
         }
         $ownerDescriptor = $record.lock
@@ -87,9 +95,10 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
         $ownerDescriptor = Get-AgentsChatStoppedHandoffDescriptor $ownerFile 'lock\owner.json'
     }
     $Context.HistoryHandoffLock = @{
-        Directory=$directory; DirectoryIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino }
+        Directory=$directory; DirectoryIdentity=$directoryIdentity
         OwnerRequest=$ownerRequest; OwnerText=$ownerText; OwnerFile=$ownerFile
         OwnerDescriptor=$ownerDescriptor; OwnerRetirement=$null; OwnerRetired=$ownerRetired
+        DirectoryRetirement=$null; DirectoryRetired=$directoryRetired
     }
     $Context.HistoryHandoffObservedCommit = @{
         AttemptId=$Request.attemptId; PreparedName=$preparedName; CommittedName=$committedName

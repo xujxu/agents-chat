@@ -337,7 +337,13 @@ export async function assertLockRetirementIntentAfterDeath({
     assert.equal(completionRetired.dev, completionIdentity.dev);
     assert.equal(completionRetired.ino, completionIdentity.ino);
     await assert.rejects(lstat(directory), { code: 'ENOENT' });
-    await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive({ control, pwsh, admission }));
+    const archive = await api.openWindowsInactiveRollbackHistoryArchive({ control, pwsh, admission });
+    try {
+      assert.equal((await archive.check()).status, 'retired');
+      assert.equal(archive.advance, undefined);
+      assert.equal(archive.prepareHistory, undefined);
+      assert.equal(archive.completeHistory, undefined);
+    } finally { await archive.close(); }
     await assert.rejects(acquireLock(control, { pwsh, admission, project: prepared.project, operationId: randomUUID() }));
     await assert.rejects(releaseLock(control, owner, { pwsh, admission }));
     console.log('PASS: fresh native directory-retired observation and idempotent retry preserve immutable evidence and reject replacement directories');
