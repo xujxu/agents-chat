@@ -78,6 +78,23 @@ PASS: native lock retirement intent binds exact dead committed lock without dele
 
 - [ ] Commit/push implementation and run focused history plus Windows Contracts on one SHA. Verify all eighteen prior actual receipts and the new nineteenth receipt. Record actual red/green SHA/run/job evidence and push it.
 
+## Executed evidence
+
+- Test-only `63d77524`: focused run `40436788174`, job `121967262079`,
+  failed because `windows-stopped-history-handoff-lock-retirement-intent.ps1`
+  did not exist, after the accepted native dead committed observation receipt.
+  The actual missing-module diagnostic was downloaded.
+- Implementation `33714d0159725fc6ed0483c9b185e1265c113b46`:
+  focused run `40438976030`, job `121974444362`, and Windows Contracts
+  `40438979251`, job `121974453093`, both passed on the same SHA.
+- Actual focused logs contain all nineteen required executed receipts.
+  At `2026-10-27T02:48:22Z`, the new intent receipt confirmed exact native
+  binding, repeated-entry refusal and unchanged original lock/state/evidence,
+  alongside all prior committed-observation and real death-boundary checks.
+- Actual Contracts logs confirm closed saved-helper inventory, strict native
+  JSON checks and zero failures. All validation ran in Actions; no local
+  validation/server, native lock deletion or continuation authority was added.
+
 ## Next recovery boundary
 
 Before native deletion is implemented, a distinct actor must reopen and fully verify this exact immutable intent after actual publisher death. Then guarded owner deletion and directory deletion each need durable-stage recovery and actual actor-death coverage. Directory-only states without such a validated intent remain blockers. Settlement and fresh-attempt admission remain separate; this preparatory record is not a terminal receipt or operation capability.
