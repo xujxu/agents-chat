@@ -668,6 +668,60 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         assert.deepEqual(record.lock, previous.owner);
         assert.deepEqual(record.creator, { pid: previous.actorPid, processIdentity: previous.actorIdentity,
           bridgePid: previous.pid, bridgeIdentity: previous.processIdentity });
+        const observeArgs = [
+          '-NoProfile', '-NonInteractive', '-File',
+          fileURLToPath(new URL('./deployment-windows-history-handoff-committed-observation.ps1', import.meta.url)),
+          '-Source', source, '-Control', control, '-ControllerPid', String(process.pid),
+          '-ControllerIdentity', await processIdentity(process.pid), '-AttemptId', previous.attemptId,
+          '-PreparedDev', previous.prepared.dev, '-PreparedIno', previous.prepared.ino,
+          '-PreparedBytes', String(previous.prepared.bytes), '-PreparedSha256', previous.prepared.sha256,
+          '-CommittedDev', previous.committed.dev, '-CommittedBytes', String(previous.committed.bytes),
+          '-CommittedSha256', previous.committed.sha256,
+        ];
+        const observe = ino => promisify(execFile)(pwsh, [...observeArgs, '-CommittedIno', ino],
+          { timeout: 45000, maxBuffer: 131072, windowsHide: true });
+        const native = await observe(previous.committed.ino);
+        assert.equal(native.stderr, '');
+        const observed = JSON.parse(native.stdout);
+        assert.deepEqual(Object.keys(observed).sort(), [
+          'status', 'attemptId', 'previousOperationId', 'project', 'prepared', 'committed',
+          'lockIdentity', 'lock', 'runtimeAuthority', 'lockAuthority',
+        ].sort());
+        assert.equal(observed.status, 'committed-handoff-observed');
+        assert.equal(observed.attemptId, previous.attemptId);
+        assert.equal(observed.previousOperationId, prepared.previousOperationId);
+        assert.equal(observed.project, prepared.project);
+        assert.deepEqual(observed.prepared, previous.prepared);
+        assert.deepEqual(observed.committed, previous.committed);
+        assert.deepEqual(observed.lockIdentity, previous.lockIdentity);
+        assert.deepEqual(observed.lock, previous.owner);
+        assert.equal(observed.runtimeAuthority, false);
+        assert.equal(observed.lockAuthority, false);
+        await assert.rejects(observe(previous.committed.ino === '1' ? '2' : '1'),
+          error => error.message.includes('Committed handoff observation failed; retain evidence.'));
+        const ownerFile = path.join(control, previous.owner.path);
+        const original = snapshots.find(snapshot => snapshot.file === ownerFile);
+        const heldOwner = path.join(control, 'fixture-handoff-original-owner.json');
+        await rename(ownerFile, heldOwner);
+        let replacement;
+        try {
+          await writeFile(ownerFile, original.bytes, { flag: 'wx' });
+          replacement = await lstat(ownerFile, { bigint: true });
+          assert.notEqual(replacement.ino, original.identity.ino);
+          await assert.rejects(observe(previous.committed.ino),
+            error => error.message.includes('Committed handoff observation failed; retain evidence.'));
+          assert.deepEqual(await readFile(ownerFile), original.bytes);
+        } finally {
+          if (replacement) {
+            const current = await lstat(ownerFile, { bigint: true });
+            assert.equal(current.dev, replacement.dev);
+            assert.equal(current.ino, replacement.ino);
+            assert.deepEqual(await readFile(ownerFile), original.bytes);
+            await unlink(ownerFile);
+          }
+          await rename(heldOwner, ownerFile);
+        }
+        console.log('PASS: native dead committed handoff observation pins exact lock and original archive under a distinct actor without authority');
       } else { assert.equal(previous.committed, null); }
       const names = [previous.prepared.path, ...(previous.committed ? [previous.committed.path] : [])].sort();
       assert.deepEqual((await readdir(control)).filter(name => name.toLowerCase().startsWith('inactive-handoff-')).sort(), names);

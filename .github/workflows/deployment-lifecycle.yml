@@ -245,7 +245,8 @@ jobs:
             'PASS: native handoff commit publishes exact new owner lock and immutable receipt while preserving old state and ordinary refusal gates',
             'PASS: actual handoff directory publisher death preserves an empty exact lock and ordinary refusal',
             'PASS: actual handoff owner publisher death preserves exact prepared owner evidence without committed authority',
-            'PASS: actual committed handoff publisher death preserves exact receipt and blocks ordinary continuation'
+            'PASS: actual committed handoff publisher death preserves exact receipt and blocks ordinary continuation',
+            'PASS: native dead committed handoff observation pins exact lock and original archive under a distinct actor without authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }
