@@ -140,3 +140,17 @@ still executes both complete terminal proofs. The read-only scope cannot
 prepare, publish a successor or publish abandonment. It grants no lock,
 runtime or state-write authority. Require same-SHA focused 33 receipts plus
 Contracts before acceptance.
+
+## Accepted six-record reopening
+
+Accepted SHA `8a6e9a8e8b49ee363b915f5f8b703b2d5f87ca76`.
+Focused `40546364628` / `122337988969` succeeded, with all 33 required
+receipts from that exact SHA's workflow matched to actual timestamped
+output. The new ninth-observer receipt occurred at
+`2026-10-27T17:45:10.6597517Z`. Same-SHA Contracts `40546370785` /
+`122337995657` succeeded. Both job logs are retained in session artifacts.
+
+This accepts actual eighth publisher/bridge death and fresh ninth native
+reopening of all six exact records, including refusal and unchanged-state
+cases. Fresh-attempt preparation/admission and production continuation
+remain separate, unaccepted capabilities.
