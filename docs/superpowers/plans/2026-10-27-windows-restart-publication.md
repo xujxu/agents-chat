@@ -90,3 +90,24 @@ PASS: native restart publication creates one exact seventh preparation while dup
 Actual publisher death and independent seven-record reopening remain the
 next boundary. No native lock publication, committed capability, state
 snapshot/transition or public deploy/update routing is accepted here.
+
+## Valid missing-publisher red
+
+Test-only `eaf3854ca2bd75a888cea397fb684288a3702d80`, run `40567938772`
+/ job `122414121555`, reached the final sixteenth boundary and its verified
+six-record bootstrap/explicit command, then failed at
+`2026-10-27T20:13:10Z` because the native
+`windows-stopped-history-handoff-restart-publication.ps1` module did not
+exist. The actor exited 1 rather than timing out; the prior preparation-only
+boundary remained separate and passed.
+
+## Native implementation
+
+The independent publisher brackets native derivation and create-only
+publication with complete six-record abandoned observation. It retains
+the seventh file's native handle, exact descriptor and scalar request.
+Only that retained cache extends the namespace, after nonrecursive
+descriptor and full typed-record binding through the existing fresh
+restart binding. No ordinary reader receives an extra-name exception.
+Duplicate publication poisons the context and preserves bytes; no lock,
+task, runtime, committed record or state is changed.
