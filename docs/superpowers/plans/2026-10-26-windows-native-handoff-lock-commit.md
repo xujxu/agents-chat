@@ -178,6 +178,31 @@ gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
   Require all fourteen executed receipts and full jobs green. Record and push
   red/green SHA/run/job evidence.
 
+## Executed evidence
+
+- Test-only `84237bdb`: focused run `40422809868`, job `121921129248`,
+  failed because the native commit module did not exist, after the existing
+  controlled preparation reopen had completed. The actual missing-module
+  diagnostic was downloaded, not inferred from job status.
+- Implementation `d6db35f7`: focused run `40424235945`, job `121925915824`,
+  published the committed receipt and passed ordinary archive/release refusal,
+  then failed only at the repeated-commit error predicate. Original archive
+  reopening checks the newly present lock owner against the old pinned digest
+  before reaching inventory validation, so the exact native refusal was
+  `Private configuration digest differs.` rather than the anticipated
+  inventory error. Windows Contracts `40424239224`, job `121925926588`,
+  passed at this SHA.
+- Corrected predicate `da7205201003ee52035413d439b9354a83005d68`:
+  focused run `40426107069`, job `121932161159`, and Windows Contracts
+  `40426110286`, job `121932171496`, both passed on that exact SHA.
+  Actual focused logs contain all fourteen required executed receipts,
+  including exact committed/lock descriptors, unchanged original prepared
+  bytes/identity and state, and preserved ordinary refusal gates. Contracts
+  logs confirm the closed saved-helper manifest and native owner/JSON checks.
+- Validation ran only in GitHub Actions. No local validation or server was
+  used. The result is a native descriptor-only publication role, not public
+  continuation or interrupted-lock recovery.
+
 ## Self-review and next gates
 
 The scoped inventory allowance is validated native evidence, never authority
