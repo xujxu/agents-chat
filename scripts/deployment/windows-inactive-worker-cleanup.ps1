@@ -68,11 +68,14 @@ function Assert-AgentsChatStoppedWorkerPlan([hashtable]$Context, $Record) {
 }
 
 function Assert-AgentsChatStoppedWorkerInventory([hashtable]$Context) {
+    $handoff = $Context.ContainsKey('HistoryHandoffLock')
+    if ($handoff) { Assert-AgentsChatStoppedHistoryHandoffLock $Context }
     $expected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     for ($index = $Context.Prefix; $index -lt $Context.Record.entries.Count; $index++) {
         $null = $expected.Add($Context.Record.entries[$index].path)
     }
     foreach ($item in Get-ChildItem -LiteralPath $Context.Control -Force) {
+        if ($handoff -and $item.Name -ceq 'lock') { continue }
         if ($item.Name -match '^(worker-|task-retirement|service-)' -or
             $item.Name -in @('task-maintenance', 'lock', 'recovery-lock', 'state.json.lock') -or
             $item.Name -like 'state.json.lock.pending-*') {
@@ -80,6 +83,7 @@ function Assert-AgentsChatStoppedWorkerInventory([hashtable]$Context) {
         }
     }
     foreach ($directory in @('task-maintenance', 'worker-engine', 'lock')) {
+        if ($handoff -and $directory -ceq 'lock') { continue }
         if (-not (Test-Path -LiteralPath (Join-Path $Context.Control $directory))) { continue }
         if ($Context.Target -and $Context.Target.Entry.kind -ceq 'directory' -and $Context.Target.Entry.path -ceq $directory) {
             $Context.Target.Handle.Check()

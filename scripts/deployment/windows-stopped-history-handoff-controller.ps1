@@ -15,14 +15,6 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-function Assert-AgentsChatHandoffPreparationNamespace([hashtable]$Context, $Descriptor) {
-    $entries = @(Get-ChildItem -LiteralPath $Context.Control -Force |
-        Where-Object { $_.Name -like 'inactive-handoff-*' })
-    if ($entries.Count -ne 1 -or $entries[0].PSIsContainer -or $entries[0].Name -cne $Descriptor.path) {
-        throw 'Retained preparation namespace differs.'
-    }
-}
-
 function Get-AgentsChatHandoffPreparationObservation(
     [hashtable]$Context, [hashtable]$Preparation, [hashtable]$OwnerRequest, $Descriptor, $File
 ) {
@@ -30,22 +22,9 @@ function Get-AgentsChatHandoffPreparationObservation(
         $null = Get-AgentsChatStoppedHistoryHandoffPreparedRecord @Preparation
     } else {
         foreach ($pass in @(1, 2)) {
-            Assert-AgentsChatHandoffPreparationNamespace $Context $Descriptor
-            $File.Check()
-            $owner = New-AgentsChatStoppedHistoryHandoffOwner @OwnerRequest
-            $binding = Get-AgentsChatStoppedHistoryHandoffBinding $Context $Preparation.AttemptId $owner
-            $actual = $expected = $null
-            try {
-                $actual = [Text.Json.JsonDocument]::Parse($File.ReadText())
-                $expected = [Text.Json.JsonDocument]::Parse(($binding | ConvertTo-Json -Depth 12 -Compress))
-                Assert-AgentsChatStoppedHandoffJsonBinding $actual.RootElement $expected.RootElement
-            } finally {
-                if ($actual) { $actual.Dispose() }
-                if ($expected) { $expected.Dispose() }
-            }
-            $null = New-AgentsChatStoppedHistoryHandoffOwner @OwnerRequest
-            $null = Assert-AgentsChatStoppedWorkerCleanup $Context
-            Assert-AgentsChatHandoffPreparationNamespace $Context $Descriptor
+            Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($Descriptor.path)
+            Assert-AgentsChatStoppedHistoryHandoffLivePreparedBinding $Context $Preparation.AttemptId $OwnerRequest $File
+            Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($Descriptor.path)
         }
     }
     return [ordered]@{
@@ -70,6 +49,8 @@ try {
     . (Join-Path $PSScriptRoot 'windows-inactive-worker-cleanup.ps1')
     . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-preparation.ps1')
     . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-json.ps1')
+    . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-namespace.ps1')
+    . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-live.ps1')
     $stage = 'controller'
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $stage = 'archive-open'
