@@ -175,3 +175,34 @@ held; ordinary directory checks stay unchanged.
 
 Reference: [GetFileInformationByHandleEx](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex)
 and [FILE_FULL_DIR_INFO](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_full_dir_info).
+
+## Accepted execution evidence
+
+- Initial missing-module red: tests `761ea7ed`, focused run
+  [40449839427](https://github.com/xujxu/agents-chat/actions/runs/40449839427),
+  job `122009724720`; actual failure named the missing directory retirement
+  module after successful owner removal and fresh owner-retired observation.
+- The first implementation's real sharing violation is recorded above.
+  Regression tests `23f6b412` then failed fast in run
+  [40454658398](https://github.com/xujxu/agents-chat/actions/runs/40454658398),
+  job `122025064971`, specifically because `RetirementDirectory` lacked
+  `CheckEmpty()`.
+- Accepted fix: `bf60f92ef3ed2d5dbd657dc42b333aadb54bc79f`.
+  Same-SHA focused history
+  [40454770873](https://github.com/xujxu/agents-chat/actions/runs/40454770873),
+  job `122025421251`, and Windows Contracts
+  [40454773932](https://github.com/xujxu/agents-chat/actions/runs/40454773932),
+  job `122025432287`, both succeeded.
+- The focused run first passed the native private-file/retirement fixture,
+  including repeated empty enumeration, nonempty refusal and disposed-handle
+  refusal. All 25 required history receipts were separately matched against
+  actual timestamped `Z PASS:` lines. Both directory deletion and fresh
+  native retry/replacement refusal receipts appeared at `05:43:51Z`.
+- Exact original record/state/completion bytes and identities survived
+  deletion. Ordinary acquisition/release remained blocked; the ordinary
+  archive reader retained its existing read-only behavior once the lock was
+  absent. No sharing restriction was relaxed and no terminal settlement,
+  state write, fresh attempt or public continuation was granted.
+- All validation ran in GitHub Actions. Directory-executor death and a fifth
+  actor remain the next gate, followed by terminal settlement and the later
+  production/public lifecycle gates; this is not the final full matrix.
