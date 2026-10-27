@@ -182,3 +182,20 @@ published file to those exact inputs, and retains the native observation,
 duplicate refusal and JS full-record/evidence checks. All preparation
 negative cases stay in the sixth actor. No production proof, assertion or
 45/120/15-second budget is removed or extended.
+
+## Diagnose the remaining bounded publication failure
+
+Fixture deduplication `a5f44cc2a26c1ea4234cc4fa9dac73bfd22703e3`
+passed Contracts `40495109806` / `122158489888`. Focused
+`40495106116` / `122158476831` retained the accepted preparation and
+terminal-publisher-death receipts at `2026-10-27T11:42:46Z`, but the
+publication invocation again reached the unchanged 45-second timeout at
+`11:43:48Z` with empty stdout/stderr. Publication remains unaccepted.
+
+Add test-only timestamped function-entry tracing via command breakpoints,
+enabled only by a per-invocation temporary trace path. On failure the Node
+fixture prints that trace; on success stdout remains the exact JSON response
+and stderr remains empty. Always remove the temporary trace. This diagnostic
+increment changes no production code, proof or time budget. Determine the
+actual slow phase before choosing the next correction; nested native proof
+passes are a hypothesis, not yet measured evidence.
