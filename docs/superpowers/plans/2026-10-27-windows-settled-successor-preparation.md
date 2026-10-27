@@ -112,6 +112,18 @@ successor publication must retain all predecessor files, explicitly bind
 the expanded namespace and cover actual publisher death before new-lock
 publication, committed capability or state continuity is implemented.
 
+## Accepted evidence
+
+- Implementation: `c5ea3f08ebaa583832643d6f365b208c269e5745`.
+- Same-SHA focused run `40476262515`, job `122095142472`, passed.
+  All 29 required receipts from the committed workflow were individually
+  matched to actual timestamped `Z PASS:` output in the downloaded log.
+  The new preparation receipt occurred at `2026-10-27T09:10:38.3550032Z`.
+- Same-SHA Windows Contracts run `40476266395`, job `122095156418`,
+  passed; its actual job log is retained separately.
+- This accepts native derivation only. No successor file, new lock,
+  state write, continuation capability or public admission was introduced.
+
 ## Implementation body after the missing-module red
 
 The production file remained absent in the test-only increment. After the
