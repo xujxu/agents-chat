@@ -223,3 +223,20 @@ duplicate refusal, every JS assertion and the 45/120/15-second budgets
 remain unchanged. Preparation-only and read-only observation fixtures keep
 their original bootstrap and observation paths. This correction is still
 subject to same-SHA Actions acceptance.
+
+## Accepted publication evidence
+
+Accepted implementation and fixture SHA:
+`68fc679aecb93ebf8a5345e7f166434118dbbc8b`.
+Focused run `40502416532`, job `122183125994`, succeeded. Every one of
+the 30 required receipts from this exact SHA's workflow matched actual
+timestamped `Z PASS:` output, not echoed source. The successor publication
+receipt occurred at `2026-10-27T12:40:42.3012929Z`.
+Same-SHA Windows Contracts `40502421454`, job `122183141640`, succeeded.
+Both job logs are retained in the session artifacts.
+
+This accepts create-only fifth-file publication with preserved predecessors,
+native live-owner binding, independent role refusal, unchanged state,
+ordinary acquire/release refusal and false continuation authority. It does
+not accept successor-publisher death, a five-record fresh observer, fresh
+lock admission or production continuation.
