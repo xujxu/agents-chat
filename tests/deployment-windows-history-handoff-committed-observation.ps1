@@ -173,12 +173,13 @@ try {
         } finally { $document.Dispose() }
     }
     if ($PrepareSuccessor) {
-        . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-successor.ps1')
-        $observation = Test-AgentsChatStoppedHistoryHandoffSuccessor $Source $scope $ControllerPid $ControllerIdentity
         if ($PublishSuccessor) {
             . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-successor-publication.ps1')
             $observation = Test-AgentsChatStoppedHistoryHandoffSuccessorPublication $Source $scope `
-                $ControllerPid $ControllerIdentity $observation
+                $ControllerPid $ControllerIdentity
+        } else {
+            . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-successor.ps1')
+            $observation = Test-AgentsChatStoppedHistoryHandoffSuccessor $Source $scope $ControllerPid $ControllerIdentity
         }
     }
     if ($Hold) {

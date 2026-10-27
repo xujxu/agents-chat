@@ -163,3 +163,22 @@ fixture checks for nested null preservation, unchanged default refusal and
 duplicate refusal in nullable mode. Do not replace strict parsing with
 PowerShell's permissive JSON conversion or weaken original native binding.
 This failed focused run is not accepted publication evidence.
+
+## Remove repeated preparation from the publication fixture
+
+Nullable fix `cc4d6dcdbdf6c8219e1bbb62502d449b476984c6` passed Contracts
+`40491137818` / `122145084093`. Focused `40491133396` /
+`122145067695` passed the sixth actor's complete derivation and settlement
+proof at `2026-10-27T11:11:33Z`, but the seventh actor's
+`-PrepareSuccessor -PublishSuccessor` invocation was killed by the unchanged
+45-second subprocess timeout.
+
+The publication fixture repeated the complete preparation test (already
+accepted in the sixth actor), then the actual publisher independently
+derived and rechecked the same binding again. Dispatch preparation-only
+and publication testing separately. The publication fixture supplies fresh
+scalar inputs directly to the real publisher, compares the actual
+published file to those exact inputs, and retains the native observation,
+duplicate refusal and JS full-record/evidence checks. All preparation
+negative cases stay in the sixth actor. No production proof, assertion or
+45/120/15-second budget is removed or extended.

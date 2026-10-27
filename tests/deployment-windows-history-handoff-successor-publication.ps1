@@ -1,12 +1,15 @@
 function Test-AgentsChatStoppedHistoryHandoffSuccessorPublication(
-    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity, $Record
+    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
+    [switch]$Hold
 ) {
     . (Join-Path $Source 'windows-stopped-history-handoff-successor-publication.ps1')
     $request = @{
         Context=$Context; ControllerPid=$ControllerPid; ControllerIdentity=$ControllerIdentity
-        AttemptId=$Record.attemptId; OperationId=$Record.newOwner.operationId
-        Token=$Record.newOwner.token; CreatedAt=$Record.newOwner.createdAt
+        AttemptId=[guid]::NewGuid().ToString(); OperationId=[guid]::NewGuid().ToString()
+        Token=[guid]::NewGuid().ToString()
+        CreatedAt=[DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ', [Globalization.CultureInfo]::InvariantCulture)
     }
+    $Context.HistoryHandoffSuccessorPreparer = $true
     $refused = $false
     try { $null = Publish-AgentsChatStoppedHistoryHandoffSuccessorPrepared @request }
     catch {
@@ -16,8 +19,16 @@ function Test-AgentsChatStoppedHistoryHandoffSuccessorPublication(
     if (-not $refused) { throw 'Successor publication accepted a scope without its independent role.' }
     $Context.HistoryHandoffSuccessorPublisher = $true
     $descriptor = Publish-AgentsChatStoppedHistoryHandoffSuccessorPrepared @request
-    $observed = Get-AgentsChatStoppedHistoryHandoffSuccessorPreparedObservation $Context $ControllerPid $ControllerIdentity
     $file = Join-Path $Context.Control $descriptor.path
+    $Record = Read-AgentsChatRetirementJson ([IO.File]::ReadAllText($file)) -AllowNull
+    if ($Record.attemptId -cne $request.AttemptId -or
+        $Record.newOwner.operationId -cne $request.OperationId -or $Record.newOwner.token -cne $request.Token -or
+        $Record.newOwner.createdAt -cne $request.CreatedAt -or $Record.newOwner.pid -ne $ControllerPid -or
+        $Record.newOwner.processIdentity -cne $ControllerIdentity) {
+        throw 'Published successor differs from its actual scalar request.'
+    }
+    $observed = Get-AgentsChatStoppedHistoryHandoffSuccessorPreparedObservation $Context $ControllerPid $ControllerIdentity
+    if ($Hold) { return [ordered]@{ prepared=$descriptor; record=$Record; observation=$observed } }
     $bytes = [IO.File]::ReadAllBytes($file)
     $refused = $false
     try { $null = Publish-AgentsChatStoppedHistoryHandoffSuccessorPrepared @request }
