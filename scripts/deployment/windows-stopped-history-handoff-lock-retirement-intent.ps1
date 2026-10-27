@@ -1,5 +1,15 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-committed-observation.ps1')
 
+function Assert-AgentsChatStoppedHistoryHandoffLockRetirementTime([string]$CreatedAt, [string]$CommittedAt) {
+    $culture = [Globalization.CultureInfo]::InvariantCulture
+    $style = [Globalization.DateTimeStyles]::AssumeUniversal
+    $created = [DateTimeOffset]::ParseExact($CreatedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ', $culture, $style)
+    $committed = [DateTimeOffset]::ParseExact($CommittedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ', $culture, $style)
+    if ($created -lt $committed -or $created.ToString('yyyy-MM-ddTHH:mm:ss.fffZ', $culture) -cne $CreatedAt) {
+        throw 'Lock retirement preparation predates commitment.'
+    }
+}
+
 function Get-AgentsChatStoppedHistoryHandoffLockRetirementIntentRecord(
     [hashtable]$Context, $Creator, [string]$CreatedAt
 ) {
@@ -8,13 +18,7 @@ function Get-AgentsChatStoppedHistoryHandoffLockRetirementIntentRecord(
         throw 'Lock retirement observer identity differs.'
     }
     Assert-AgentsChatRetirementCreator $Creator $retained.ControllerPid $retained.ControllerIdentity
-    $culture = [Globalization.CultureInfo]::InvariantCulture
-    $style = [Globalization.DateTimeStyles]::AssumeUniversal
-    $created = [DateTimeOffset]::ParseExact($CreatedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ', $culture, $style)
-    $committed = [DateTimeOffset]::ParseExact($retained.CommittedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ', $culture, $style)
-    if ($created -lt $committed -or $created.ToString('yyyy-MM-ddTHH:mm:ss.fffZ', $culture) -cne $CreatedAt) {
-        throw 'Lock retirement preparation predates commitment.'
-    }
+    Assert-AgentsChatStoppedHistoryHandoffLockRetirementTime $CreatedAt $retained.CommittedAt
     $lock = $Context.HistoryHandoffLock
     $request = $lock.OwnerRequest
     $owner = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request
@@ -33,8 +37,10 @@ function Get-AgentsChatStoppedHistoryHandoffLockRetirementIntentRecord(
 }
 
 function Assert-AgentsChatStoppedHistoryHandoffLockRetirementIntent([hashtable]$Context) {
-    if (-not $Context.ContainsKey('HistoryHandoffLockRetirer') -or
-        $Context.HistoryHandoffLockRetirer -ne $true -or
+    $retirer = $Context.ContainsKey('HistoryHandoffLockRetirer') -and $Context.HistoryHandoffLockRetirer -eq $true
+    $observer = $Context.ContainsKey('HistoryHandoffLockRetirementObserver') -and
+        $Context.HistoryHandoffLockRetirementObserver -eq $true
+    if ($retirer -eq $observer -or
         -not $Context.ContainsKey('HistoryHandoffLockObserver') -or
         $Context.HistoryHandoffLockObserver -ne $true -or
         -not $Context.ContainsKey('HistoryHandoffObservedCommit') -or
