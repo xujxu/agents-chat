@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, lstat, readdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 import { fixtureArgs, descriptorArgs } from './deployment-windows-lock-retirement-observation.mjs';
 
-export async function assertRestartPreparation({ source, control, pwsh, admission, previous, state, completionBytes }) {
+export async function assertRestartPreparation({
+  source, control, pwsh, admission, previous, state, completionBytes, publish = false,
+}) {
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
@@ -48,14 +52,16 @@ export async function assertRestartPreparation({ source, control, pwsh, admissio
   const completionFile = path.join(control, `retired-${original.previousOperationId}-inactive-rollback-history-complete.json`);
   const completionIdentity = await lstat(completionFile, { bigint: true });
   assert.equal(createHash('sha256').update(completionBytes).digest('hex'), previous.completionSha256);
+  const nativeArgs = [...fixtureArgs({ source, control, identity, previous }), '-ObserveRetirement',
+    ...descriptorArgs('Retirement', previous.retirement), '-ObserveSettlement',
+    ...descriptorArgs('Terminal', previous.terminal), '-ObserveSuccessor',
+    '-SuccessorAttemptId', previous.successorAttemptId, ...descriptorArgs('Successor', previous.successor),
+    '-ObserveSuccessorAbandoned', ...descriptorArgs('Abandoned', previous.successorAbandoned), '-PrepareRestart',
+    ...(publish ? ['-PublishRestart'] : [])];
   const transport = windowsControllerTransport({
     pwsh, label: 'Fresh native restart preparation fixture',
     refused: cause => new Error('Fresh native restart preparation fixture failed.', { cause }),
-    args: [...fixtureArgs({ source, control, identity, previous }), '-ObserveRetirement',
-      ...descriptorArgs('Retirement', previous.retirement), '-ObserveSettlement',
-      ...descriptorArgs('Terminal', previous.terminal), '-ObserveSuccessor',
-      '-SuccessorAttemptId', previous.successorAttemptId, ...descriptorArgs('Successor', previous.successor),
-      '-ObserveSuccessorAbandoned', ...descriptorArgs('Abandoned', previous.successorAbandoned), '-PrepareRestart'],
+    args: nativeArgs,
   });
   let diagnostic = '';
   let owner;
@@ -76,7 +82,9 @@ export async function assertRestartPreparation({ source, control, pwsh, admissio
       runtimeAuthority: false, lockAuthority: false,
     });
     await transport.wire.send({ type: 'prepare' });
-    const record = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
+    const response = await transport.wire.receive({ timeoutMs: 45000 });
+    const publication = publish ? captureWorkerFields(response, ['prepared', 'record'], 'restart publication') : null;
+    const record = captureWorkerFields(publication ? publication.record : response,
       ['version', 'phase', 'attemptId', 'newOwner', 'predecessor'], 'restart preparation');
     const identifiers = [record.attemptId, record.newOwner.operationId, record.newOwner.token];
     const oldIds = [original.previousOperationId, previous.attemptId, original.newOwner.operationId,
@@ -104,12 +112,36 @@ export async function assertRestartPreparation({ source, control, pwsh, admissio
     assert.deepEqual(await transport.waitForExit(), { code: 0, signal: null });
     assert.equal(diagnostic, '');
     transport.wire.close();
+    if (publication) {
+      const descriptor = captureWorkerFields(publication.prepared,
+        ['path', 'dev', 'ino', 'bytes', 'sha256'], 'published restart descriptor');
+      assert.equal(descriptor.path, `inactive-handoff-${record.attemptId}-prepared.json`);
+      const file = path.join(control, descriptor.path);
+      const bytes = await readFile(file);
+      const current = await lstat(file, { bigint: true });
+      assert.equal(bytes.length, descriptor.bytes);
+      assert.ok(bytes.length <= 1048576);
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), descriptor.sha256);
+      assert.equal(current.dev.toString(), descriptor.dev);
+      assert.equal(current.ino.toString(), descriptor.ino);
+      assert.deepEqual(JSON.parse(bytes), {
+        ...original, phase: record.phase, attemptId: record.attemptId,
+        newOwner: record.newOwner, predecessor: record.predecessor,
+      });
+      snapshots.push({ file, bytes, identity: current });
+    }
   } catch (cause) {
     const error = await transport.abandon(cause);
     if (error.diagnostic) console.error(error.diagnostic);
     throw error;
   }
   const { acquireLock, releaseLock } = await load('state.mjs');
+  if (publish) {
+    await assert.rejects(promisify(execFile)(pwsh,
+      nativeArgs.filter(arg => arg !== '-PrepareRestart' && arg !== '-PublishRestart'),
+      { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
+    error => error.message.includes('Successor abandoned observation failed; retain evidence.'));
+  }
   await assert.rejects(acquireLock(control, { pwsh, admission, project: original.project, operationId: randomUUID() }));
   await assert.rejects(releaseLock(control, owner, { pwsh, admission }));
   for (const snapshot of snapshots) {
@@ -130,5 +162,7 @@ export async function assertRestartPreparation({ source, control, pwsh, admissio
   }
   await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
   for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
-  console.log('PASS: native restart preparation derives a fresh live owner bound to settled six-record evidence without publication or authority');
+  console.log(publish
+    ? 'PASS: native restart publication creates one exact seventh preparation while duplicate publication and ordinary authority remain refused'
+    : 'PASS: native restart preparation derives a fresh live owner bound to settled six-record evidence without publication or authority');
 }

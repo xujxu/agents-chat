@@ -46,6 +46,14 @@ function Test-AgentsChatStoppedHistoryHandoffRestart(
         if (-not $refused) { throw 'Restart preparation accepted stale identifiers or time.' }
     }
     $record = Get-AgentsChatStoppedHistoryHandoffRestartRecord @request
+    return Get-AgentsChatTestRestartProjection $Context $ControllerPid $ControllerIdentity $request $record
+}
+
+function Get-AgentsChatTestRestartProjection(
+    [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
+    [hashtable]$Request, $Record
+) {
+    $settled = $Context.HistoryHandoffSuccessorAbandoned
     $expected = Read-AgentsChatRetirementJson ($Context.HistoryHandoffObservedCommit.Prepared.ReadText()) -AllowNull
     $expected.phase = 'stopped-history-handoff-restart-prepared'
     $expected.attemptId = $request.AttemptId

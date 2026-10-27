@@ -26,6 +26,7 @@ param(
     [switch]$SealSuccessor,
     [switch]$ObserveSuccessorAbandoned,
     [switch]$PrepareRestart,
+    [switch]$PublishRestart,
     [string]$AbandonedDev,
     [string]$AbandonedIno,
     [int]$AbandonedBytes,
@@ -51,6 +52,7 @@ try {
     if (($ObserveSuccessor -and (-not $ObserveSettlement -or $PrepareSuccessor -or $PublishSuccessor)) -or
         ($ObserveSuccessorAbandoned -and (-not $ObserveSuccessor -or $SealSuccessor)) -or
         ($PrepareRestart -and -not $ObserveSuccessorAbandoned) -or
+        ($PublishRestart -and -not $PrepareRestart) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -128,9 +130,15 @@ try {
                         if ([Console]::In.ReadLine() -cne '{"type":"prepare"}') {
                             throw 'Restart preparation requires its exact command.'
                         }
-                        . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart.ps1')
-                        $observation = Test-AgentsChatStoppedHistoryHandoffRestart $Source $scope `
-                            $ControllerPid $ControllerIdentity
+                        if ($PublishRestart) {
+                            . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-publication.ps1')
+                            $observation = Test-AgentsChatStoppedHistoryHandoffRestartPublication $Source $scope `
+                                $ControllerPid $ControllerIdentity
+                        } else {
+                            . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart.ps1')
+                            $observation = Test-AgentsChatStoppedHistoryHandoffRestart $Source $scope `
+                                $ControllerPid $ControllerIdentity
+                        }
                     }
                 } else {
                     $scope = Open-AgentsChatStoppedHistoryHandoffSuccessorObservation $Control `
