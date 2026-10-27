@@ -90,6 +90,24 @@ PASS: native dead committed handoff observation pins exact lock and original arc
 
 - [ ] Push implementation and run focused history plus Windows Contracts on one SHA. Verify all seventeen prior receipts plus the new native observation receipt, including changed-owner inode refusal. Record actual SHA/run/job evidence and push the plan update.
 
+## Executed evidence
+
+- Test-only `e2eeaafe`: focused run `40432410403`, job `121953024597`,
+  failed in the fresh committed resumer because the native
+  `windows-stopped-history-handoff-committed-observation.ps1` module did not
+  exist. Actual logs identify that missing module after real owner/bridge death.
+- Implementation `57b29684915ee3a8f856767572c8f20fe591af7b`:
+  focused run `40434669064`, job `121960373051`, and Windows Contracts
+  `40434671458`, job `121960381323`, both passed on the same SHA.
+- Actual focused logs contain all eighteen required executed receipts.
+  At `2026-10-27T02:05:04Z`, the distinct committed resumer reported native
+  observation, including wrong committed inode and identical-byte replacement
+  owner inode rejection, before preserving all prior death-boundary checks.
+- Actual Contracts logs confirm the saved-helper closed manifest, strict
+  native JSON binding and zero failures. Validation ran only in Actions.
+  No local validation/server, state write, lock deletion or continuation
+  authority was introduced.
+
 ## Subsequent destructive recovery gate
 
 Observation alone cannot retire a lock. Directory-only or malformed lock states remain explicit blockers. Before deleting an exact dead owner's file, a separate native retirement role must publish an immutable operation-bound retirement intent that survives owner deletion and directory deletion. Fresh actors must revalidate that intent, the original prepared/committed descriptors, exact directory identity and unchanged original archive/state before continuing either deletion. A terminal settlement record and its own real interruption coverage are required before fresh-attempt admission. No temporary rename, name-only allowance, generic state substitution or ordinary reader relaxation is an acceptable shortcut.
