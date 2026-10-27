@@ -78,6 +78,24 @@ return Complete-AgentsChatStoppedHistoryHandoffCommit $Context
 
 - [ ] Push implementation and dispatch focused history plus Windows Contracts on the same SHA. Verify all previous fourteen receipts and three new actual death receipts. Record run/job/SHA evidence in this plan and push it.
 
+## Executed evidence
+
+- Test-only `45d8df05`: focused run `40428135763`, job `121938941614`,
+  failed at the new directory boundary because
+  `New-AgentsChatStoppedHistoryHandoffLock` did not exist. The native fixture
+  diagnostic, rather than a timeout or missing receipt alone, established red.
+- Implementation `98ec82607cc006345bc55252bd65a1e809e13136`:
+  focused run `40430192385`, job `121945706424`, and Windows Contracts
+  `40430195586`, job `121945715236`, both passed on that exact SHA.
+- Actual focused logs contain all seventeen required executed receipts.
+  Directory, owner and committed death receipts were emitted at
+  `01:20:51Z`, `01:21:37Z` and `01:22:25Z` on 2026-10-27 respectively.
+  Each boundary killed its real Node owner and awaited its specific native
+  bridge before a distinct resumer checked exact evidence and ordinary refusal.
+- Contracts logs confirm the saved-helper closed manifest, native live/dead
+  owner checks and strict native JSON binding. All execution was in Actions;
+  no local validation or server was used.
+
 ## Required subsequent gates
 
 This increment proves interruption and refusal only. It does not implement native dead-owner lock retirement, reopen a committed capability, permit fresh-attempt admission after settlement, write state, start workers or relax public deploy/update. Exact native recovery, state snapshots/transition intents, handoff-aware release and actual application repeat lifecycles remain separate mandatory gates under the approved design.
