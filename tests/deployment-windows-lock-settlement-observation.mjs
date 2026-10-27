@@ -142,29 +142,54 @@ export async function assertLockRetirementSettlementAfterDeath({
   assert.deepEqual(JSON.parse(revalidated.stdout), expected);
   const successorResult = await observe([...args, '-PrepareSuccessor']);
   assert.equal(successorResult.stderr, '');
-  const successor = JSON.parse(successorResult.stdout);
-  const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-  for (const value of [successor.attemptId, successor.newOwner.operationId, successor.newOwner.token]) {
-    assert.match(value, guid);
-    assert.ok(![prepared.previousOperationId, previous.attemptId,
-      prepared.newOwner.operationId, prepared.newOwner.token].includes(value));
-  }
-  assert.equal(new Set([successor.attemptId, successor.newOwner.operationId, successor.newOwner.token]).size, 3);
-  assert.equal(new Date(successor.newOwner.createdAt).toISOString(), successor.newOwner.createdAt);
-  assert.ok(successor.newOwner.createdAt >= terminal.settledAt);
-  assert.deepEqual(successor, {
-    ...prepared, phase: 'stopped-history-handoff-successor-prepared',
-    attemptId: successor.attemptId,
-    newOwner: {
-      version: 1, token: successor.newOwner.token, project: prepared.project,
-      operationId: successor.newOwner.operationId, pid: process.pid,
-      processIdentity: identity, createdAt: successor.newOwner.createdAt,
-    },
-    predecessor: {
-      attemptId: previous.attemptId, prepared: previous.prepared, committed: previous.committed,
-      retirement: previous.retirement, terminal: previous.terminal,
-    },
+  const assertSuccessor = successor => {
+    const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+    for (const value of [successor.attemptId, successor.newOwner.operationId, successor.newOwner.token]) {
+      assert.match(value, guid);
+      assert.ok(![prepared.previousOperationId, previous.attemptId,
+        prepared.newOwner.operationId, prepared.newOwner.token].includes(value));
+    }
+    assert.equal(new Set([successor.attemptId, successor.newOwner.operationId, successor.newOwner.token]).size, 3);
+    assert.equal(new Date(successor.newOwner.createdAt).toISOString(), successor.newOwner.createdAt);
+    assert.ok(successor.newOwner.createdAt >= terminal.settledAt);
+    assert.deepEqual(successor, {
+      ...prepared, phase: 'stopped-history-handoff-successor-prepared',
+      attemptId: successor.attemptId,
+      newOwner: {
+        version: 1, token: successor.newOwner.token, project: prepared.project,
+        operationId: successor.newOwner.operationId, pid: process.pid,
+        processIdentity: identity, createdAt: successor.newOwner.createdAt,
+      },
+      predecessor: {
+        attemptId: previous.attemptId, prepared: previous.prepared, committed: previous.committed,
+        retirement: previous.retirement, terminal: previous.terminal,
+      },
+    });
+  };
+  assertSuccessor(JSON.parse(successorResult.stdout));
+  const publicationResult = await observe([...args, '-PrepareSuccessor', '-PublishSuccessor']);
+  assert.equal(publicationResult.stderr, '');
+  const publication = JSON.parse(publicationResult.stdout);
+  assert.deepEqual(Object.keys(publication).sort(), ['observation', 'prepared', 'record']);
+  assertSuccessor(publication.record);
+  assert.deepEqual(Object.keys(publication.prepared).sort(), ['bytes', 'dev', 'ino', 'path', 'sha256']);
+  assert.equal(publication.prepared.path, `inactive-handoff-${publication.record.attemptId}-prepared.json`);
+  const publishedFile = path.join(control, publication.prepared.path);
+  const publishedBytes = await readFile(publishedFile);
+  const publishedIdentity = await lstat(publishedFile, { bigint: true });
+  assert.equal(publishedBytes.length, publication.prepared.bytes);
+  assert.equal(createHash('sha256').update(publishedBytes).digest('hex'), publication.prepared.sha256);
+  assert.equal(publishedIdentity.dev.toString(), publication.prepared.dev);
+  assert.equal(publishedIdentity.ino.toString(), publication.prepared.ino);
+  assert.deepEqual(JSON.parse(publishedBytes), publication.record);
+  assert.deepEqual(publication.observation, {
+    status: 'successor-prepared', attemptId: publication.record.attemptId,
+    previousAttemptId: previous.attemptId, previousOperationId: prepared.previousOperationId,
+    project: prepared.project, prepared: publication.prepared, predecessor: publication.record.predecessor,
+    runtimeAuthority: false, lockAuthority: false,
   });
+  snapshots.push({ file: publishedFile, bytes: publishedBytes, identity: publishedIdentity });
+  await assert.rejects(observe(args), refused);
   const { acquireLock, releaseLock } = await load('state.mjs');
   await assert.rejects(acquireLock(control, { pwsh, admission, project: prepared.project, operationId: randomUUID() }));
   await assert.rejects(releaseLock(control, prepared.newOwner, { pwsh, admission }));
@@ -175,7 +200,8 @@ export async function assertLockRetirementSettlementAfterDeath({
     assert.equal(current.ino, snapshot.identity.ino);
   }
   assert.deepEqual((await readdir(control)).filter(name => name.toLowerCase().startsWith('inactive-handoff-')).sort(),
-    [previous.prepared.path, previous.committed.path, previous.retirement.path, previous.terminal.path].sort());
+    [previous.prepared.path, previous.committed.path, previous.retirement.path,
+      previous.terminal.path, publication.prepared.path].sort());
   for (const [file, bytes, originalIdentity] of [
     [stateFile, state, stateIdentity], [completionFile, completionBytes, completionIdentity],
   ]) {
@@ -186,6 +212,7 @@ export async function assertLockRetirementSettlementAfterDeath({
   }
   await assert.rejects(lstat(directory), { code: 'ENOENT' });
   console.log('PASS: fresh native successor preparation derives a distinct live owner from settled evidence without publication or authority');
+  console.log('PASS: native successor publication retains every predecessor and creates one exact preparation without continuation authority');
   for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
   console.log('PASS: actual lock settlement publisher death preserves exact terminal evidence for a distinct sixth native actor without continuation authority');
 }

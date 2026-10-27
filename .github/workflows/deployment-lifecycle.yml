@@ -260,7 +260,8 @@ jobs:
             'PASS: actual directory retirement executor death leaves exact immutable evidence for a distinct fifth native actor without authority',
             'PASS: native lock retirement settlement seals one exact terminal without changing evidence or granting continuation',
             'PASS: actual lock settlement publisher death preserves exact terminal evidence for a distinct sixth native actor without continuation authority',
-            'PASS: fresh native successor preparation derives a distinct live owner from settled evidence without publication or authority'
+            'PASS: fresh native successor preparation derives a distinct live owner from settled evidence without publication or authority',
+            'PASS: native successor publication retains every predecessor and creates one exact preparation without continuation authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }
