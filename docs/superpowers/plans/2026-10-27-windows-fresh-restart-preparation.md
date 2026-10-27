@@ -135,3 +135,15 @@ descriptors bind the six-record ancestry. Complete abandoned observation
 brackets derivation. No file, lock, task, runtime or state is published.
 The fixture compares the complete typed record before sending only its
 bounded five-field projection through the unchanged worker wire.
+
+## Accepted fresh live preparation
+
+Implementation `4d6aa3974bb3e8e852833bfb86e365cfad9df762` passed focused
+run `40560003654` / job `122386152085`. All 34 required receipts from that
+exact SHA's workflow matched actual timestamped `Z PASS:` log lines.
+The new fresh-owner preparation receipt is
+`2026-10-27T19:13:22.4746095Z`. Windows Contracts passed on the same SHA in
+run `40560008661` / job `122386169893`; both job logs are retained.
+
+This accepts only in-memory derivation after six-record settlement:
+no seventh file, lock, committed capability or state write is authorized.
