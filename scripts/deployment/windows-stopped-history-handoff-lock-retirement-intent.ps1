@@ -22,7 +22,10 @@ function Get-AgentsChatStoppedHistoryHandoffLockRetirementIntentRecord(
     $lock = $Context.HistoryHandoffLock
     $request = $lock.OwnerRequest
     $owner = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request
-    Assert-AgentsChatStoppedHistoryHandoffLock $Context
+    $ownerDescriptor = $lock.OwnerDescriptor
+    if ($null -ne $lock.OwnerFile) {
+        $ownerDescriptor = Get-AgentsChatStoppedHandoffDescriptor $lock.OwnerFile 'lock\owner.json'
+    }
     return [ordered]@{
         version=1; phase='stopped-history-handoff-lock-retirement-prepared'
         attemptId=$retained.AttemptId; control=$Context.Control; project=$Context.Project
@@ -31,7 +34,7 @@ function Get-AgentsChatStoppedHistoryHandoffLockRetirementIntentRecord(
         prepared=(Get-AgentsChatStoppedHandoffDescriptor $retained.Prepared $retained.PreparedName 1048576)
         committed=(Get-AgentsChatStoppedHandoffDescriptor $retained.Committed $retained.CommittedName)
         newOwner=$owner; lockIdentity=$lock.DirectoryIdentity
-        lock=(Get-AgentsChatStoppedHandoffDescriptor $lock.OwnerFile 'lock\owner.json')
+        lock=$ownerDescriptor
         creator=$Creator; createdAt=$CreatedAt
     }
 }
@@ -80,6 +83,7 @@ function Publish-AgentsChatStoppedHistoryHandoffLockRetirementIntent(
         }
         $createdAt = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ', [Globalization.CultureInfo]::InvariantCulture)
         $record = Get-AgentsChatStoppedHistoryHandoffLockRetirementIntentRecord $Context $creator $createdAt
+        Assert-AgentsChatStoppedHistoryHandoffLock $Context
         $name = "inactive-handoff-$($Context.HistoryHandoffObservedCommit.AttemptId)-lock-retirement.json"
         $text = $record | ConvertTo-Json -Depth 8 -Compress
         $held = [Deployment.WindowsPrivateFile]::Publish((Join-Path $Context.Control $name), $text)

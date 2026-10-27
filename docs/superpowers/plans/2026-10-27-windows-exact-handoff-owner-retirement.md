@@ -45,7 +45,9 @@ PASS: native exact dead handoff owner retirement deletes only its pinned owner u
 PASS: actual owner retirement executor death leaves an exact empty directory for a fresh native partial-cleanup observer
 ```
 
-  Commit/push tests, dispatch focused history and download actual red. Require the missing native owner-removal function after successful third-actor intent observation, not a timeout or changed older contract.
+  Commit/push tests, dispatch focused history and download actual red. Require
+  the missing native owner-removal module/function after successful
+  third-actor intent observation, not a timeout or changed older contract.
 
 ### Task 2: Explicit owner-retired native proof stage
 
@@ -61,14 +63,27 @@ PASS: actual owner retirement executor death leaves an exact empty directory for
 
 - [ ] Add a shared original-owner descriptor accessor: present owner uses its actual retained native descriptor; in-progress retirement uses the exact native retirement target's checked original descriptor; owner-absent stage requires explicit retained retirement-observer/intent proof and the exact recorded descriptor. Never substitute this descriptor in an ordinary context.
 
-  Use this accessor only in committed and retirement record reconstruction. Full strict comparisons of both pinned records, original prepared binding, original archive/state/task/runtime settlement and original actor/creator absence remain mandatory before an observer scope returns. Avoid recursive intent-verifier/record-builder calls.
+  Use the checked accessor in committed-record reconstruction. Keep the
+  retirement-record builder free of physical lock-verifier calls and rebuild
+  its original lock fields from the captured descriptor; this lets the
+  physical verifier require a strict intent assertion in partial stages
+  without recursion. Intent publication still explicitly checks the physical
+  lock immediately before its create-only write.
+
+  Full strict comparisons of both pinned records, original prepared binding,
+  original archive/state/task/runtime settlement and original actor/creator
+  absence remain mandatory before an observer scope returns.
 
 - [ ] Extend the exact native lock verifier with these tightly scoped stages:
   - present owner: unchanged actual file descriptor/text/inventory proof;
   - native retirement target: independent executor role, target handle Check, original descriptor and exactly one owner child;
   - owner absent: retained read-only retirement role plus pinned intent, original directory identity, zero children and absent original owner process.
 
-  Reject any other combination. The getter reports `lock-retirement-owner-retired` only for the verified owner-absent stage; existing owner-present responses retain their shape/status.
+  Require the complete strict intent assertion in both target-held and
+  owner-absent stages, not just role/marker presence. Reject any other
+  combination. The getter reports `lock-retirement-owner-retired` only for
+  the verified owner-absent stage; existing owner-present responses retain
+  their shape/status.
 
 ### Task 3: Native handle-bound owner deletion
 

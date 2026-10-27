@@ -73,13 +73,23 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     if ($identity.Dev -cne $record.lockIdentity.dev -or $identity.Ino -cne $record.lockIdentity.ino) {
         throw 'Committed lock directory identity differs.'
     }
-    $ownerFile = Open-AgentsChatRetirementFile $Context $record.lock 'lock\owner.json'
     $ownerText = $owner | ConvertTo-Json -Compress
-    if ($ownerFile.ReadText() -cne $ownerText) { throw 'Committed lock owner bytes differ.' }
+    $ownerFile = $null
+    $ownerRetired = $hasRetirement -and -not (Test-Path -LiteralPath (Join-Path $Context.Control 'lock\owner.json'))
+    if ($ownerRetired) {
+        if (@(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force).Count) {
+            throw 'Retired owner directory has unexpected children.'
+        }
+        $ownerDescriptor = $record.lock
+    } else {
+        $ownerFile = Open-AgentsChatRetirementFile $Context $record.lock 'lock\owner.json'
+        if ($ownerFile.ReadText() -cne $ownerText) { throw 'Committed lock owner bytes differ.' }
+        $ownerDescriptor = Get-AgentsChatStoppedHandoffDescriptor $ownerFile 'lock\owner.json'
+    }
     $Context.HistoryHandoffLock = @{
         Directory=$directory; DirectoryIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino }
         OwnerRequest=$ownerRequest; OwnerText=$ownerText; OwnerFile=$ownerFile
-        OwnerDescriptor=(Get-AgentsChatStoppedHandoffDescriptor $ownerFile 'lock\owner.json')
+        OwnerDescriptor=$ownerDescriptor; OwnerRetirement=$null; OwnerRetired=$ownerRetired
     }
     $Context.HistoryHandoffObservedCommit = @{
         AttemptId=$Request.attemptId; PreparedName=$preparedName; CommittedName=$committedName
@@ -137,7 +147,7 @@ function Get-AgentsChatStoppedHistoryHandoffCommittedObservation(
                 previousOperationId=$Context.OperationId
                 prepared=(Get-AgentsChatStoppedHandoffDescriptor $retained.Prepared $retained.PreparedName 1048576)
                 newOwner=$owner; lockIdentity=$lock.DirectoryIdentity
-                lock=(Get-AgentsChatStoppedHandoffDescriptor $lock.OwnerFile 'lock\owner.json')
+                lock=(Get-AgentsChatStoppedHistoryHandoffLockOwnerDescriptor $Context)
                 creator=$retained.Creator; committedAt=$retained.CommittedAt
             }
             $actual = $expected = $null

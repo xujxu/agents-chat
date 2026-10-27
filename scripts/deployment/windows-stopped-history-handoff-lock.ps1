@@ -25,13 +25,35 @@ function Assert-AgentsChatStoppedHistoryHandoffLock([hashtable]$Context) {
         else { New-AgentsChatStoppedHistoryHandoffOwner @request }
     if (($owner | ConvertTo-Json -Compress) -cne $lock.OwnerText) { throw 'Handoff lock live owner differs.' }
     $children = @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force)
-    if ($null -eq $lock.OwnerFile) {
-        if ($observer) { throw 'Committed handoff observation requires its exact owner.' }
+    if ($null -ne $lock.OwnerRetirement) {
+        if (-not $observer -or $lock.OwnerRetired -or $null -ne $lock.OwnerFile -or
+            -not $Context.ContainsKey('HistoryHandoffLockRetirementObserver') -or
+            $Context.HistoryHandoffLockRetirementObserver -ne $true -or
+            -not $Context.ContainsKey('HistoryHandoffLockRetirementExecutor') -or
+            $Context.HistoryHandoffLockRetirementExecutor -ne $true) {
+            throw 'Handoff owner retirement target lacks its independent retained proof.'
+        }
+        Assert-AgentsChatStoppedHistoryHandoffLockRetirementIntent $Context
+        if ($children.Count -ne 1 -or $children[0].PSIsContainer -or $children[0].Name -cne 'owner.json') {
+            throw 'Handoff retirement target inventory differs.'
+        }
+        $lock.OwnerRetirement.Check()
+    } elseif ($null -eq $lock.OwnerFile) {
+        if ($observer) {
+            if (-not $lock.OwnerRetired -or
+                -not $Context.ContainsKey('HistoryHandoffLockRetirementObserver') -or
+                $Context.HistoryHandoffLockRetirementObserver -ne $true) {
+                throw 'Committed handoff observation requires its exact owner.'
+            }
+            Assert-AgentsChatStoppedHistoryHandoffLockRetirementIntent $Context
+        } elseif ($lock.OwnerRetired) { throw 'Handoff publisher cannot adopt a retired owner.' }
         if ($children.Count) { throw 'Handoff lock directory is not empty.' }
     } else {
+        if ($lock.OwnerRetired) { throw 'Retired handoff owner unexpectedly exists.' }
         if ($children.Count -ne 1 -or $children[0].PSIsContainer -or $children[0].Name -cne 'owner.json') {
             throw 'Handoff lock owner inventory differs.'
         }
+
         $lock.OwnerFile.Check()
         if ($lock.OwnerFile.ReadText() -cne $lock.OwnerText) { throw 'Handoff lock owner bytes differ.' }
         $descriptor = Get-AgentsChatStoppedHandoffDescriptor $lock.OwnerFile 'lock\owner.json'
@@ -42,4 +64,17 @@ function Assert-AgentsChatStoppedHistoryHandoffLock([hashtable]$Context) {
     $lock.Directory.Check()
     if ($observer) { $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
     else { $null = New-AgentsChatStoppedHistoryHandoffOwner @request }
+}
+
+function Get-AgentsChatStoppedHistoryHandoffLockOwnerDescriptor([hashtable]$Context) {
+    Assert-AgentsChatStoppedHistoryHandoffLock $Context
+    $lock = $Context.HistoryHandoffLock
+    if ($null -ne $lock.OwnerFile) {
+        return Get-AgentsChatStoppedHandoffDescriptor $lock.OwnerFile 'lock\owner.json'
+    }
+    if (-not $lock.OwnerRetired -and $null -eq $lock.OwnerRetirement) {
+        throw 'Handoff original owner descriptor is unavailable.'
+    }
+    Assert-AgentsChatRetirementDescriptor $lock.OwnerDescriptor 'lock\owner.json' 65536
+    return $lock.OwnerDescriptor
 }

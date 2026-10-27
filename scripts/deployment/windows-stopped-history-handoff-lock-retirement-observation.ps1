@@ -49,7 +49,9 @@ function Get-AgentsChatStoppedHistoryHandoffLockRetirementObservation(
             Assert-AgentsChatCompletionProcessAbsent $creator.bridgePid $creator.bridgeIdentity
         }
         return [ordered]@{
-            status='lock-retirement-observed'; attemptId=$observed.attemptId
+            status=$(if ($Context.HistoryHandoffLock.OwnerRetired) { 'lock-retirement-owner-retired' }
+                else { 'lock-retirement-observed' })
+            attemptId=$observed.attemptId
             previousOperationId=$observed.previousOperationId; project=$observed.project
             prepared=$observed.prepared; committed=$observed.committed
             retirement=$Context.HistoryHandoffLockRetirementIntent.Descriptor

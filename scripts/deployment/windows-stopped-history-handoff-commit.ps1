@@ -39,7 +39,7 @@ function New-AgentsChatStoppedHistoryHandoffLock(
         $lock = @{
             Directory=$directory; DirectoryIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino }
             OwnerRequest=$request; OwnerText=($owner | ConvertTo-Json -Compress)
-            OwnerFile=$null; OwnerDescriptor=$null
+            OwnerFile=$null; OwnerDescriptor=$null; OwnerRetirement=$null; OwnerRetired=$false
         }
         $Context.HistoryHandoffLock = $lock
         $Context.HistoryHandoffCommit = @{
