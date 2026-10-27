@@ -44,6 +44,14 @@ Push test-only, dispatch focused history, and require an actual failure on
 the missing `windows-stopped-history-handoff-successor.ps1` module. Do not
 accept a timeout or an earlier boundary failure as this red.
 
+Accepted test-only red: `c730da606046014de333a9a5f74861a57feafcb1`,
+focused run `40472338026`, job `122082185595`. At
+`2026-10-27T08:48:47.8084965Z`, the actual sixth actor's explicit
+`-ObserveSettlement -PrepareSuccessor` invocation failed on missing
+`windows-stopped-history-handoff-successor.ps1`. It reached the new
+boundary after the settled-evidence negative/revalidation checks; there
+was no actor-budget relaxation or earlier-boundary failure.
+
 ### Task 2: Native derived record
 
 **Files:**
@@ -103,3 +111,59 @@ A derived in-memory preparation is not fresh-attempt admission. Durable
 successor publication must retain all predecessor files, explicitly bind
 the expanded namespace and cover actual publisher death before new-lock
 publication, committed capability or state continuity is implemented.
+
+## Implementation body after the missing-module red
+
+The production file remained absent in the test-only increment. After the
+accepted actual missing-module red, implementation uses this module:
+
+```powershell
+. (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-lock-settlement-observation.ps1')
+
+function Get-AgentsChatStoppedHistoryHandoffSuccessorRecord(
+    [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
+    [string]$AttemptId, [string]$OperationId, [string]$Token, [string]$CreatedAt
+) {
+    if (-not $Context.ContainsKey('HistoryHandoffSuccessorPreparer') -or
+        $Context.HistoryHandoffSuccessorPreparer -ne $true -or
+        -not $Context.ContainsKey('HistoryHandoffLockSettlementObserver') -or
+        $Context.HistoryHandoffLockSettlementObserver -ne $true -or
+        $Context.ContainsKey('HistoryHandoffLockSettler')) {
+        throw 'Successor preparation requires its independent native role.'
+    }
+    $previous = $Context.HistoryHandoffObservedCommit
+    $old = $Context.HistoryHandoffLock.OwnerRequest
+    $oldIds = @($Context.OperationId, $previous.AttemptId, $old.OperationId, $old.Token)
+    foreach ($value in @($AttemptId, $OperationId, $Token)) {
+        Assert-AgentsChatCompletionGuid $value
+        if ($value -cin $oldIds) {
+            throw 'Successor preparation requires fresh distinct owner identifiers.'
+        }
+    }
+    if (@($AttemptId, $OperationId, $Token | Select-Object -Unique).Count -ne 3) {
+        throw 'Successor preparation requires fresh distinct owner identifiers.'
+    }
+    Assert-AgentsChatStoppedHistoryHandoffLockRetirementTime $CreatedAt $Context.HistoryHandoffLockSettlement.SettledAt
+    $request = @{
+        Project=$Context.Project; PreviousOperationId=$Context.OperationId
+        AttemptId=$AttemptId; OperationId=$OperationId; Token=$Token; CreatedAt=$CreatedAt
+        PreviousUpdatedAt=(Get-AgentsChatStoppedHistoryHandoffStateUpdatedAt $Context)
+        ControllerPid=$ControllerPid; ControllerIdentity=$ControllerIdentity
+    }
+    $owner = New-AgentsChatStoppedHistoryHandoffOwner @request
+    $observed = Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation $Context $ControllerPid $ControllerIdentity
+    $record = Get-AgentsChatStoppedHistoryHandoffBinding $Context $AttemptId $owner
+    $record.phase = 'stopped-history-handoff-successor-prepared'
+    $record.predecessor = [ordered]@{
+        attemptId=$observed.attemptId
+        prepared=$observed.prepared; committed=$observed.committed
+        retirement=$observed.retirement; terminal=$observed.terminal
+    }
+    if ([Text.Encoding]::UTF8.GetByteCount(($record | ConvertTo-Json -Depth 12 -Compress)) -gt 1048576) {
+        throw 'Native successor preparation response is oversized.'
+    }
+    $null = Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation $Context $ControllerPid $ControllerIdentity
+    $null = New-AgentsChatStoppedHistoryHandoffOwner @request
+    return $record
+}
+```
