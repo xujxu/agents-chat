@@ -112,3 +112,26 @@ Publication and actual preparer death must pass separately before
 new-lock publication. Live committed capability, original-state snapshot,
 first state transition, handoff-aware release, public routing and actual
 application repeat lifecycle remain later gates.
+
+## Valid missing-factory red
+
+Test-only `401fadac637cbb12f45f472e3f71a1e117437d60`, focused run
+`40554490371` / job `122366776316`, reproduced the accepted ninth-actor
+six-record receipt at `2026-10-27T18:24:14.9188612Z` and preserved all six
+records for the actual distinct tenth actor. At
+`2026-10-27T18:24:40.1965469Z`, its verified six-record bootstrap and
+explicit prepare request reached the missing
+`windows-stopped-history-handoff-restart.ps1`. The missing module produced
+exit 1, not a timeout or earlier fixture failure.
+
+## Native implementation
+
+The independent restart-preparer derives a full fifteen-field record from
+the original pinned fourteen-field template. Scalar preflight excludes all
+seven old owner/attempt IDs and pairwise duplicate new IDs, binds the exact
+watched controller, and requires canonical time at or after abandonment.
+The existing live-owner helper verifies native identity; exact native file
+descriptors bind the six-record ancestry. Complete abandoned observation
+brackets derivation. No file, lock, task, runtime or state is published.
+The fixture compares the complete typed record before sending only its
+bounded five-field projection through the unchanged worker wire.

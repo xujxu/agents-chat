@@ -21,9 +21,14 @@ function Test-AgentsChatStoppedHistoryHandoffRestart(
         [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)
     foreach ($case in @(
         @{ key='AttemptId'; value=$Context.HistoryHandoffSuccessorPrepared.Request.AttemptId },
+        @{ key='AttemptId'; value=$Context.HistoryHandoffObservedCommit.AttemptId },
         @{ key='OperationId'; value=$Context.OperationId },
+        @{ key='OperationId'; value=$Context.HistoryHandoffLock.OwnerRequest.OperationId },
+        @{ key='Token'; value=$Context.HistoryHandoffLock.OwnerRequest.Token },
+        @{ key='OperationId'; value=$Context.HistoryHandoffSuccessorPrepared.Request.OperationId },
         @{ key='Token'; value=$Context.HistoryHandoffSuccessorPrepared.Request.Token },
         @{ key='Token'; value=$request.OperationId },
+        @{ key='ControllerPid'; value=$PID },
         @{ key='CreatedAt'; value=$timestamp.AddMilliseconds(-1).ToString('yyyy-MM-ddTHH:mm:ss.fffZ',
             [Globalization.CultureInfo]::InvariantCulture) }
     )) {
@@ -32,7 +37,8 @@ function Test-AgentsChatStoppedHistoryHandoffRestart(
         $refused = $false
         try { $null = Get-AgentsChatStoppedHistoryHandoffRestartRecord @bad }
         catch {
-            $message = if ($case.key -ceq 'CreatedAt') { 'Lock retirement preparation predates commitment.' }
+            $message = if ($case.key -ceq 'ControllerPid') { 'Restart preparation controller differs.' }
+                elseif ($case.key -ceq 'CreatedAt') { 'Lock retirement preparation predates commitment.' }
                 else { 'Restart preparation requires fresh distinct owner identifiers.' }
             if ($_.Exception.Message -cne $message) { throw }
             $refused = $true
