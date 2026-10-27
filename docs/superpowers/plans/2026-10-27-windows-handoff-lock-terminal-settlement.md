@@ -12,7 +12,7 @@
 
 ### Prerequisite gate
 
-- [ ] Accept actual directory-executor death and a distinct fifth actor from
+- [x] Accept actual directory-executor death and a distinct fifth actor from
   `2026-10-27-windows-directory-retirement-executor-death.md` before pushing
   this increment. Do not mix its acceptance with the earlier normal
   directory-retirement gate.
@@ -158,3 +158,22 @@ replacement, fresh-read and retry checks plus existing fixture restoration.
 Keep each 120-second actor budget and every 15-second bridge-death budget
 unchanged. Push this fixture split with native terminal modules still absent,
 then require the actual missing-module red before committing implementation.
+
+## Accepted validation evidence
+
+- Valid test-only red: `02d7fca9a1227b92783449f15773f06b1caa1b31`,
+  focused run `40462486777`, job `122050106669`. Both split actors passed;
+  the fifth actor reached settlement and failed on the missing native
+  `windows-stopped-history-handoff-lock-settlement.ps1` module.
+- Implementation: `21c332ea372be886428ff12c0625080b6619ee45`.
+  Same-SHA Windows Contracts run `40465603194`, job `122060123168`,
+  completed successfully. Its actual job log is retained in the session
+  artifacts.
+- Same-SHA focused run `40465600056`, job `122060112902`, completed
+  successfully. All 27 required receipts from that SHA's workflow were
+  individually matched to actual timestamped `Z PASS:` output in the
+  downloaded job log, not to workflow source echoes. The settlement receipt
+  occurred at `2026-10-27T07:40:42.1798010Z`.
+- Normal immutable terminal publication is accepted. It does not cover
+  terminal-publisher death, a sixth actor, fresh-attempt admission, state
+  continuity, public routing or actual repeat application lifecycle.
