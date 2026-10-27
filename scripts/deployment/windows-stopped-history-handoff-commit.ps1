@@ -2,7 +2,7 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-namespace.ps1')
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-lock.ps1')
 
-function Publish-AgentsChatStoppedHistoryHandoffCommitted(
+function New-AgentsChatStoppedHistoryHandoffLock(
     [hashtable]$Context, $Descriptor, [int]$ControllerPid, [string]$ControllerIdentity,
     [string]$AttemptId, [string]$OperationId, [string]$Token, [string]$CreatedAt
 ) {
@@ -11,6 +11,9 @@ function Publish-AgentsChatStoppedHistoryHandoffCommitted(
         throw 'Handoff lock commit requires its independent native role.'
     }
     try {
+        if ($Context.ContainsKey('HistoryHandoffCommit') -or $Context.ContainsKey('HistoryHandoffLock')) {
+            throw 'Handoff lock already retained.'
+        }
         $request = @{
             Project=$Context.Project; PreviousOperationId=$Context.OperationId
             AttemptId=$AttemptId; OperationId=$OperationId; Token=$Token; CreatedAt=$CreatedAt
@@ -30,7 +33,6 @@ function Publish-AgentsChatStoppedHistoryHandoffCommitted(
         $createdTime = [DateTimeOffset]::ParseExact($CreatedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ',
             [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)
         if ($createdTime -gt [DateTimeOffset]::UtcNow) { throw 'Handoff commit predates preparation.' }
-        if ($Context.ContainsKey('HistoryHandoffLock')) { throw 'Handoff lock already retained.' }
         $directory = [Deployment.WindowsPrivateFile]::CreateDirectory((Join-Path $Context.Control 'lock'))
         $Context.Files.Add($directory)
         $identity = $directory.CaptureIdentity()
@@ -40,26 +42,79 @@ function Publish-AgentsChatStoppedHistoryHandoffCommitted(
             OwnerFile=$null; OwnerDescriptor=$null
         }
         $Context.HistoryHandoffLock = $lock
+        $Context.HistoryHandoffCommit = @{
+            Prepared=$prepared; PreparedName=$preparedName; CommittedName=$committedName
+            AttemptId=$AttemptId; Request=$request; Owner=$owner; CreatedTime=$createdTime
+            Committed=$null
+        }
         $null = Assert-AgentsChatStoppedWorkerCleanup $Context
         Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName)
+        return $lock.DirectoryIdentity
+    } catch {
+        $Context.Poisoned = $true
+        throw [InvalidOperationException]::new('Handoff lock commit failed; retain evidence.', $_.Exception)
+    }
+}
+
+function Publish-AgentsChatStoppedHistoryHandoffLockOwner([hashtable]$Context) {
+    if (-not $Context.ContainsKey('HistoryHandoffLockPublisher') -or
+        $Context.HistoryHandoffLockPublisher -ne $true) {
+        throw 'Handoff lock commit requires its independent native role.'
+    }
+    try {
+        if (-not $Context.ContainsKey('HistoryHandoffCommit') -or
+            -not $Context.ContainsKey('HistoryHandoffLock')) { throw 'Handoff lock preparation is not retained.' }
+        $commit = $Context.HistoryHandoffCommit
+        $lock = $Context.HistoryHandoffLock
+        if ($null -ne $lock.OwnerFile -or $null -ne $commit.Committed) { throw 'Handoff lock owner already published.' }
+        foreach ($pass in @(1, 2)) {
+            Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($commit.PreparedName)
+            Assert-AgentsChatStoppedHistoryHandoffLivePreparedBinding $Context $commit.AttemptId $commit.Request $commit.Prepared
+            Assert-AgentsChatStoppedHistoryHandoffLock $Context
+        }
         $lock.OwnerFile = [Deployment.WindowsPrivateFile]::Publish(
             (Join-Path $Context.Control 'lock\owner.json'), $lock.OwnerText)
         $Context.Files.Add($lock.OwnerFile)
         $lock.OwnerDescriptor = Get-AgentsChatStoppedHandoffDescriptor $lock.OwnerFile 'lock\owner.json'
-        Assert-AgentsChatStoppedHistoryHandoffLivePreparedBinding $Context $AttemptId $request $prepared
+        Assert-AgentsChatStoppedHistoryHandoffLivePreparedBinding $Context $commit.AttemptId $commit.Request $commit.Prepared
         Assert-AgentsChatStoppedHistoryHandoffLock $Context
-        Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName)
+        Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($commit.PreparedName)
+        return $lock.OwnerDescriptor
+    } catch {
+        $Context.Poisoned = $true
+        throw [InvalidOperationException]::new('Handoff lock commit failed; retain evidence.', $_.Exception)
+    }
+}
+
+function Complete-AgentsChatStoppedHistoryHandoffCommit([hashtable]$Context) {
+    if (-not $Context.ContainsKey('HistoryHandoffLockPublisher') -or
+        $Context.HistoryHandoffLockPublisher -ne $true) {
+        throw 'Handoff lock commit requires its independent native role.'
+    }
+    try {
+        if (-not $Context.ContainsKey('HistoryHandoffCommit') -or
+            -not $Context.ContainsKey('HistoryHandoffLock')) { throw 'Handoff lock preparation is not retained.' }
+        $commit = $Context.HistoryHandoffCommit
+        $lock = $Context.HistoryHandoffLock
+        if ($null -eq $lock.OwnerFile -or $null -ne $commit.Committed) { throw 'Handoff commit requires its unpublished owner stage.' }
+        $preparedName = $commit.PreparedName
+        $committedName = $commit.CommittedName
+        foreach ($pass in @(1, 2)) {
+            Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName)
+            Assert-AgentsChatStoppedHistoryHandoffLivePreparedBinding $Context $commit.AttemptId $commit.Request $commit.Prepared
+            Assert-AgentsChatStoppedHistoryHandoffLock $Context
+        }
         $committedAt = [DateTimeOffset]::UtcNow
-        if ($createdTime -gt $committedAt) { throw 'Handoff commit predates preparation.' }
+        if ($commit.CreatedTime -gt $committedAt) { throw 'Handoff commit predates preparation.' }
         $record = [ordered]@{
-            version=1; phase='stopped-history-handoff-committed'; attemptId=$AttemptId
+            version=1; phase='stopped-history-handoff-committed'; attemptId=$commit.AttemptId
             control=$Context.Control; project=$Context.Project
             controlIdentity=$Context.HistoryRecord.controlIdentity
             previousOperationId=$Context.OperationId
-            prepared=(Get-AgentsChatStoppedHandoffDescriptor $prepared $preparedName 1048576)
-            newOwner=$owner; lockIdentity=$lock.DirectoryIdentity; lock=$lock.OwnerDescriptor
+            prepared=(Get-AgentsChatStoppedHandoffDescriptor $commit.Prepared $preparedName 1048576)
+            newOwner=$commit.Owner; lockIdentity=$lock.DirectoryIdentity; lock=$lock.OwnerDescriptor
             creator=[ordered]@{
-                pid=$ControllerPid; processIdentity=$ControllerIdentity
+                pid=$commit.Request.ControllerPid; processIdentity=$commit.Request.ControllerIdentity
                 bridgePid=$PID; bridgeIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
             }
             committedAt=$committedAt.ToString('yyyy-MM-ddTHH:mm:ss.fffZ', [Globalization.CultureInfo]::InvariantCulture)
@@ -68,6 +123,7 @@ function Publish-AgentsChatStoppedHistoryHandoffCommitted(
         $held = [Deployment.WindowsPrivateFile]::Publish((Join-Path $Context.Control $committedName), $text)
         $Context.Files.Add($held)
         $committed = Get-AgentsChatStoppedHandoffDescriptor $held $committedName
+        $commit.Committed = $committed
         foreach ($pass in @(1, 2)) {
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName, $committedName)
             $held.Check()
@@ -76,14 +132,25 @@ function Publish-AgentsChatStoppedHistoryHandoffCommitted(
             foreach ($name in @('path', 'dev', 'ino', 'bytes', 'sha256')) {
                 if ($actual[$name] -cne $committed[$name]) { throw 'Published committed handoff descriptor differs.' }
             }
-            Assert-AgentsChatStoppedHistoryHandoffLivePreparedBinding $Context $AttemptId $request $prepared
+            Assert-AgentsChatStoppedHistoryHandoffLivePreparedBinding $Context $commit.AttemptId $commit.Request $commit.Prepared
             Assert-AgentsChatStoppedHistoryHandoffLock $Context
             $null = Assert-AgentsChatStoppedWorkerCleanup $Context
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName, $committedName)
         }
+
         return $committed
     } catch {
         $Context.Poisoned = $true
         throw [InvalidOperationException]::new('Handoff lock commit failed; retain evidence.', $_.Exception)
     }
+}
+
+function Publish-AgentsChatStoppedHistoryHandoffCommitted(
+    [hashtable]$Context, $Descriptor, [int]$ControllerPid, [string]$ControllerIdentity,
+    [string]$AttemptId, [string]$OperationId, [string]$Token, [string]$CreatedAt
+) {
+    $null = New-AgentsChatStoppedHistoryHandoffLock $Context $Descriptor `
+        $ControllerPid $ControllerIdentity $AttemptId $OperationId $Token $CreatedAt
+    $null = Publish-AgentsChatStoppedHistoryHandoffLockOwner $Context
+    return Complete-AgentsChatStoppedHistoryHandoffCommit $Context
 }
